@@ -65,6 +65,7 @@ pmt-agent.workspace = true
 pmt-backup.workspace = true
 pmt-config.workspace = true
 pmt-core.workspace = true
+pmt-delegation.workspace = true
 pmt-gateway = { workspace = true, optional = true }
 qrcode = { workspace = true, optional = true }
 pmt-adapters-telegram = { workspace = true, optional = true }

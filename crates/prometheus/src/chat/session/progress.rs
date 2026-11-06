@@ -71,6 +71,7 @@ pub fn fallback_notice(from: &str, to: &str, reason: &str) -> String {
 pub struct Tee {
     inner: Arc<dyn EventSink>,
     notices: Notices,
+    tree: std::sync::Mutex<pmt_core::subagent_tree::TreeLines>,
 }
 
 impl Tee {
@@ -88,7 +89,15 @@ impl Tee {
             (None, None)
         };
         let notices = Notices { activity };
-        (Self { inner, notices }, rx)
+        let tree = std::sync::Mutex::default();
+        (
+            Self {
+                inner,
+                notices,
+                tree,
+            },
+            rx,
+        )
     }
 
     /// The session's notices.
@@ -117,6 +126,18 @@ impl EventSink for Tee {
             }),
             Event::AssistantMessage(message) => Some(Progress::Assistant(message.text.clone())),
             Event::AssistantReasoning(reasoning) => reasoning.text.clone().map(Progress::Reasoning),
+            Event::SubagentSpawned(_) | Event::SubagentProgress(_) | Event::SubagentFinished(_) => {
+                let payload = emit.event.payload();
+                let line = self
+                    .tree
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .line(emit.event.kind(), &payload);
+                if let Some(line) = line {
+                    self.notices.show(line);
+                }
+                None
+            }
             Event::ProviderFallback(fallback) => {
                 self.notices.show(fallback_notice(
                     &fallback.from,

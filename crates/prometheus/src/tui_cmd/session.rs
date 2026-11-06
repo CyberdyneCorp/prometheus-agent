@@ -104,6 +104,11 @@ impl Tui<'_> {
             Some("tool.call") => self.app.transcript.push(Kind::Tool, text("tool")),
             Some(COMMAND_NOTICE) => self.notice(text("text")),
             Some(PROCESS_NOTICE) => self.notice(format!("[background] {}", text("text"))),
+            Some(kind @ ("subagent.spawned" | "subagent.progress" | "subagent.finished")) => {
+                if let Some(line) = self.subagents.line(kind, &data["payload"]) {
+                    self.notice(line);
+                }
+            }
             _ => {}
         }
     }

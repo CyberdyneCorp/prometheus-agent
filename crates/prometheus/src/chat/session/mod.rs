@@ -8,6 +8,8 @@
 pub mod api_hooks;
 pub mod backend;
 pub mod browser;
+pub mod code;
+pub mod delegation;
 pub mod documents;
 pub mod downgrades;
 pub mod env;
@@ -17,6 +19,7 @@ mod lsp;
 mod mcp;
 pub mod modal;
 pub mod model;
+mod opening;
 mod plugins;
 pub mod processes;
 pub mod progress;
@@ -107,6 +110,9 @@ pub struct Clients {
     /// Asks the session's clients for the sudo password (`sudo.request`);
     /// `None` where nobody can answer securely.
     pub sudo: Option<Arc<dyn pmt_tools::terminal::sudo::SudoPrompt>>,
+    /// Where the session's background delegations deliver their
+    /// completions; `None`: its spawns wait for their children.
+    pub delegation: Option<Arc<dyn pmt_delegation::host::Completions>>,
 }
 
 /// What every session of this process shares.
@@ -153,6 +159,12 @@ pub struct Factory {
     /// `/plugins reload` can re-read `config.toml` through it (`None`: the
     /// daemon, whose own reloads keep the profile scope current).
     reread: Option<Vec<String>>,
+    /// The route flags the factory was opened with (its delegated children
+    /// open their own factories with them).
+    route_flags: delegation::OwnedFlags,
+    /// Where an in-process interactive chat takes background delegation
+    /// completions (a daemon session gets its sink from its clients).
+    delegation_inbox: Option<Arc<dyn pmt_delegation::host::Completions>>,
 }
 
 /// One running session.
@@ -194,7 +206,8 @@ pub struct Live {
     surface: &'static str,
     /// The plugin system-prompt sections the session's prompt carries.
     plugin_sections: Arc<Mutex<Vec<String>>>,
-    _plugin_llm: crate::plugins_host::llm::Registration,
+    /// Keeps the session's model and delegation reachable for plugin calls.
+    _plugin: plugins::Registrations,
     /// Notices to show once at start.
     pub notices: Vec<String>,
     /// What this run did (`--usage-file`).
@@ -219,6 +232,8 @@ pub struct Live {
     pub worktree: pmt_tools::snapshots::worktree::Worktree,
     /// Its allowed hardening downgrades (banner marker, `security.downgrade`).
     pub downgrades: downgrades::Downgrades,
+    /// The session's subagent delegation (`/stop all`, close, `/agents`).
+    pub delegation: Option<Arc<pmt_delegation::host::Delegator>>,
     _environment: pmt_tools::environments::Attachment,
     _skills: pmt_skills::session::Attachment,
 }
@@ -236,12 +251,30 @@ impl Factory {
         ad_hoc: Option<pmt_providers::resolve::AdHoc>,
         options: Options,
     ) -> Result<Self, Error> {
+        let store = Arc::new(Store::open(&scope)?);
+        Self::with_store(scope, store, launch, flags, ad_hoc, options)
+    }
+
+    /// Like [`Factory::new`] over an open `store`: a delegated child routed
+    /// to another profile keeps its session record and usage in the
+    /// launching profile's store.
+    ///
+    /// # Errors
+    ///
+    /// As [`Factory::new`].
+    pub fn with_store(
+        scope: ProfileScope,
+        store: Arc<Store>,
+        launch: &LaunchEnv,
+        flags: &RouteFlags<'_>,
+        ad_hoc: Option<pmt_providers::resolve::AdHoc>,
+        options: Options,
+    ) -> Result<Self, Error> {
         let config = scope.config();
         // Settings only a session acts on fail here, before any turn
         // (spec: execution-environments, Typed backend registry and
         // selection; memory, Context engine selection).
         pmt_agent::compress::engine::select(&config.context, &[])?;
-        let store = Arc::new(Store::open(&scope)?);
         let user_home = launch.user_home().map(PathBuf::as_path);
         let plugins = crate::plugins_host::for_session(&scope, &options.cwd);
         backend::registry(&plugins, &pmt_plugins::host::CallInfo::default())
@@ -291,6 +324,8 @@ impl Factory {
             daemon: None,
             plugins,
             reread: None,
+            route_flags: delegation::OwnedFlags::of(flags),
+            delegation_inbox: None,
         })
     }
 
@@ -367,6 +402,17 @@ impl Factory {
         notices: tokio::sync::mpsc::UnboundedSender<pmt_tools::terminal::process::Notice>,
     ) -> Self {
         self.notices = Some(notices);
+        self
+    }
+
+    /// Delivers the background delegations of this factory's sessions to
+    /// `inbox` (an in-process line chat runs them as its next input).
+    #[must_use]
+    pub fn with_delegation_inbox(
+        mut self,
+        inbox: Arc<dyn pmt_delegation::host::Completions>,
+    ) -> Self {
+        self.delegation_inbox = Some(inbox);
         self
     }
 
@@ -469,24 +515,29 @@ impl Factory {
         target: &pmt_providers::resolve::Target,
         clients: Option<Clients>,
     ) -> Result<Live, Error> {
-        let model = Arc::new(SwitchableModel::new(
-            target.clone(),
-            self.models.port(target).await?,
-        ));
+        self.open_inner(id, target, clients, None).await
+    }
+
+    /// Builds session `id`: a top-level session, or a delegated child
+    /// narrowed by `child` (its tools, capabilities, approvals, prompt and
+    /// budgets; spec: subagent-delegation, Child session isolation).
+    async fn open_inner(
+        &self,
+        id: SessionId,
+        target: &pmt_providers::resolve::Target,
+        clients: Option<Clients>,
+        child: Option<&delegation::ChildSpec>,
+    ) -> Result<Live, Error> {
+        let model = self.model_for(target, child).await?;
         self.maintain();
         let session = self.session_row(id, target)?;
         self.discover_mcp().await;
-        let (registry, selection, session_surface) = self.session_selection(&session)?;
+        let (registry, selection, session_surface) = self.selection_for(&session, child)?;
         let inline_shell = Arc::new(skills::DeferredShell::default());
-        let skills = Arc::new(SkillsSession::new(self.skills_setup(
-            id,
-            &selection,
-            &inline_shell,
-            clients.as_ref(),
-        )));
+        let skills = self.session_skills(id, &selection, &inline_shell, clients.as_ref());
         let attached = SkillSessions::process().attach(&id.to_string(), Arc::clone(&skills));
-        let capabilities = self.capabilities(id, &skills)?;
-        let current = SharedScope::new(self.scope.clone());
+        let capabilities = self.capabilities_for(id, &skills, child)?;
+        let current = SharedScope::new(self.scope_for(child));
         let environment = self.environment(
             &session,
             target,
@@ -498,43 +549,50 @@ impl Factory {
         let memory = Arc::new(MemorySession::new(self.memory_setup(id)?));
         let summarizer = self.models.summarizer(&model, id);
         let cards = shows_cards(self.options.interactive, &session_surface);
+        let delegation = self.delegation_for(
+            (&session, &model, &registry),
+            (child, clients.as_ref()),
+            &memory,
+            &environment,
+        );
         let (agent_tools, clarify) =
-            self.agent_tools(id, &memory, &summarizer, &capabilities, cards)?;
-        let gate = self.gate(id, Some(&model), Some(&environment))?;
+            self.agent_tools(id, &memory, &summarizer, &capabilities, cards, &delegation)?;
+        let gate = self.gate_for(id, child, &model, &environment)?;
         skills::bind_shell(&inline_shell, environment.commands.as_ref(), &gate.gate);
         let ports = (&gate.gate, &agent_tools, &model);
         let built = (registry, selection, &capabilities);
         let tool_state = self.tool_state(id, built, ports).await?;
         let tool_port = tool_state.tools();
+        delegation.parent_is(&tool_port, &capabilities, &gate.gate);
         let trajectory = self.trajectory(&session)?;
         let mut notices = Vec::new();
         let (prompt, plugin_sections) = self
-            .session_prompt(id, &skills, &memory, &mut notices)
+            .prompt_for(id, (&skills, &memory), &mut notices, child)
             .await;
-        let mut setup = AgentSetup::new(
-            self.scope.clone(),
-            Arc::clone(&self.store),
+        let (agent, progress, mcp) = self.agent_of(opening::AgentInputs {
             id,
-            Arc::clone(&model) as _,
-            Arc::clone(&tool_port) as _,
+            target,
+            session: &session,
+            child,
+            clients: clients.map(|c| c.events),
+            model: &model,
+            tools: &tool_port,
+            tool_state: &tool_state,
             prompt,
-        );
-        let events = events_to(trajectory.clone(), clients.map(|c| c.events));
-        let _ = environment.denials.set(Arc::downgrade(&events));
-        let events = self.with_lifecycle_hooks(id, &session, events);
-        let (tee, progress) = progress::Tee::new(events, self.options.interactive);
-        self.observe_model(&model, id, tee.notices());
-        let mcp = self.mcp_session(id, target, &model, tee.notices(), &agent_tools);
-        setup.events = Arc::new(tee);
-        self.memory_and_refresh(&mut setup, summarizer, &skills, &memory, &plugin_sections);
-        setup.compaction_boundary = Some(Arc::clone(&tool_state) as _);
-        self.surface_setup(&mut setup, id);
-        let agent = Agent::new(setup)?;
+            trajectory: trajectory.as_ref(),
+            environment: &environment,
+            agent_tools: &agent_tools,
+            delegation: &delegation,
+            summarizer,
+            skills: &skills,
+            memory: &memory,
+            plugin_sections: &plugin_sections,
+        })?;
         let live = Live {
-            scope: self.scope.clone(),
+            scope: self.scope_for(child),
             id,
             agent,
-            _plugin_llm: self.plugin_llm(id, &model),
+            _plugin: self.plugin_registrations(id, &model, delegation.delegator()),
             _mcp: mcp,
             model,
             tools: tool_port,
@@ -562,11 +620,19 @@ impl Factory {
             snapshots: environment.snapshots,
             worktree: environment.worktree,
             downgrades: environment.downgrades,
+            delegation: delegation.delegator(),
             _environment: environment.attachment,
             _skills: attached,
         };
         live.emit_start(&session, target).await;
         Ok(live)
+    }
+
+    /// The configuration a session runs with: the profile's, or for a
+    /// delegated child the profile's with the child's budget share as its
+    /// session budget (spec: subagent-delegation, Fan-out budget split).
+    fn scope_for(&self, child: Option<&delegation::ChildSpec>) -> ProfileScope {
+        child.map_or_else(|| self.scope.clone(), delegation::ChildSpec::scope)
     }
 
     /// Announces borrowed logins on `notices` and fires the API hooks
@@ -829,6 +895,7 @@ impl Factory {
         summarizer: &Arc<summarize::RouteSummarizer>,
         capabilities: &CapabilitySet,
         cards: bool,
+        delegation: &delegation::Wiring,
     ) -> Result<(Arc<AgentTools>, Option<ClarifyPrompts>), Error> {
         let (clarifier, clarify) = if self.options.interactive {
             let (clarifier, surface) =
@@ -854,6 +921,7 @@ impl Factory {
             Some(ports) => tools.with_messaging(ports.port(id, self.read_check(capabilities))),
             None => tools,
         };
+        let tools = delegation.equip(tools);
         Ok((Arc::new(tools), clarify))
     }
 
@@ -1289,8 +1357,11 @@ impl Live {
         // Webhooks of the session's last events go out before the process
         // that ran it may exit.
         crate::hooks_host::outbound::flush(crate::hooks_host::outbound::FLUSH).await;
-        let trajectory = self.trajectory;
-        drop(self.agent);
+        // Everything else the session holds (its agent, tools, delegation)
+        // may reach the writer through its event sinks: it is dropped
+        // first so the writer can be finished.
+        let trajectory = self.trajectory.clone();
+        drop(self);
         if let Some(writer) = trajectory.and_then(|t| Arc::try_unwrap(t).ok())
             && let Err(err) = writer.finish()
         {
@@ -1307,8 +1378,11 @@ impl Live {
         if let Some(browser) = &self.browser {
             browser.close_session(&self.id.to_string()).await;
         }
-        let trajectory = self.trajectory;
-        drop(self.agent);
+        // Everything else the session holds (its agent, tools, delegation)
+        // may reach the writer through its event sinks: it is dropped
+        // first so the writer can be finished.
+        let trajectory = self.trajectory.clone();
+        drop(self);
         if let Some(writer) = trajectory.and_then(|t| Arc::try_unwrap(t).ok())
             && let Err(err) = writer.finish()
         {
@@ -1320,6 +1394,9 @@ impl Live {
     /// leaving the trajectory file open: for a session something else
     /// still holds when the process stops (prefer [`Live::close`]).
     pub async fn end(&self, store: &Store, reason: EndReason) {
+        if let Some(delegation) = &self.delegation {
+            delegation.close();
+        }
         self.emit(Event::SessionEnd(SessionEnd {
             reason: reason.as_str().to_owned(),
         }))

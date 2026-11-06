@@ -32,10 +32,10 @@ use super::{DaemonHost, Loaded, Profile, finished, session_id, setup};
 
 /// An input waiting for its turn.
 pub(super) struct Queued {
-    input: TurnInput,
-    turn_id: String,
-    run_budget: Option<u64>,
-    link: Link,
+    pub(super) input: TurnInput,
+    pub(super) turn_id: String,
+    pub(super) run_budget: Option<u64>,
+    pub(super) link: Link,
 }
 
 impl DaemonHost {
@@ -118,7 +118,26 @@ impl DaemonHost {
         session: Arc<Loaded>,
         first: Queued,
     ) -> Result<(), Error> {
-        let turns = Arc::clone(&self.turns);
+        Self::start_with(
+            Arc::clone(&self.turns),
+            self.slots.clone(),
+            profile,
+            id,
+            session,
+            first,
+        )
+    }
+
+    /// [`Self::start`] with the daemon's turn counter and slots passed in
+    /// (a delegation completion starts its turn from outside a request).
+    pub(super) fn start_with(
+        turns: Arc<std::sync::atomic::AtomicUsize>,
+        slots: pmt_gateway::slots::Slots,
+        profile: Arc<Profile>,
+        id: SessionId,
+        session: Arc<Loaded>,
+        first: Queued,
+    ) -> Result<(), Error> {
         let mut record = match setup::record(&session.factory, &session.live) {
             Ok(record) => record,
             Err(err) => {
@@ -127,7 +146,6 @@ impl DaemonHost {
             }
         };
         turns.fetch_add(1, Ordering::AcqRel);
-        let slots = self.slots.clone();
         // In the submitting request's session span: the turn's records go
         // to the profile's logs.
         tokio::spawn(
@@ -237,6 +255,15 @@ impl DaemonHost {
     /// and its session ends `interrupted`; a session something still
     /// holds is ended in the store without closing its trajectory file.
     pub(super) async fn close_all(name: &str, profile: &Profile) {
+        // Stopping the daemon is not the sessions' end for their background
+        // subagents: their completions stay owed and the next start
+        // delivers them (spec: subagent-delegation, Durable background
+        // completions).
+        for session in profile.loaded.lock().await.values() {
+            if let Some(delegation) = &session.live.delegation {
+                delegation.suspend();
+            }
+        }
         let ids: Vec<SessionId> = profile.loaded.lock().await.keys().copied().collect();
         for id in ids {
             Self::close_at_stop(profile, id)

@@ -179,7 +179,7 @@ Prometheus reads and a `requires_prometheus` range that excludes it. The
 capability keys are `network`, `fs_read`, `fs_write`, `secrets`, `llm`,
 `tools_call`, `tools_override`, `hooks`, `prompt_section`, `commands`,
 `cli_commands`, `providers`, `providers_override`, `approval_transport`,
-`inject_messages`, `platform_actions`, `subprocess` and `ui`.
+`inject_messages`, `platform_actions`, `subprocess`, `ui` and `subagents`.
 
 ## The WIT worlds
 
@@ -188,10 +188,11 @@ The plugin interface is a set of WIT packages in `wit/`, one per world
 `context-engine`, `terminal-backend`, `ui-panel`, `delegation-router`) plus
 `wit/host`, the host interfaces every world imports: `log`, `state` (data
 under `<profile>/plugin-data/<id>/`), `http`, `secrets`, `llm`, `tools`,
-`events`, `config` (`plugins.entries.<id>.*`) and `session`; `tool` (1.1)
+`events`, `config` (`plugins.entries.<id>.*`) and `session`; `tool` (1.2)
 and `hook` (1.3) worlds also import `wit/messaging` (live messages,
-injection, platform actions), and `hook` imports `console` (a CLI
-command's streamed output). Each world
+injection, platform actions), `tool` imports `wit/subagents` (subagents of
+the calling session, with the `subagents` capability), and `hook` imports
+`console` (a CLI command's streamed output). Each world
 versions on its own; a component built against the current or the previous
 major version of a world loads. `plugins/samples/` holds a sample plugin for
 every world, built with `cargo component` (`cargo xtask plugin-samples`).

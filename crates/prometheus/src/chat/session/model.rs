@@ -104,6 +104,17 @@ impl PortMaker {
         let model = ProviderModel::start(self.setup.setup(), self.caller.clone(), target).await?;
         Ok(Arc::new(model))
     }
+
+    /// The port serving `target` alone, without the fallback chain.
+    ///
+    /// # Errors
+    ///
+    /// Resolution errors of the target.
+    pub(crate) async fn port_pinned(&self, target: &Target) -> Result<Arc<ProviderModel>, Error> {
+        let model =
+            ProviderModel::start_pinned(self.setup.setup(), self.caller.clone(), target).await?;
+        Ok(Arc::new(model))
+    }
 }
 
 /// The chat flags that pick the route.
@@ -256,6 +267,37 @@ impl Models {
             .resolve(&requested, &mut Trace::default())
             .await?;
         Ok(target_of(&route))
+    }
+
+    /// The port of `target` without the fallback chain (a delegated child
+    /// that pinned its model).
+    ///
+    /// # Errors
+    ///
+    /// Resolution errors of the target.
+    pub async fn port_pinned(&self, target: &Target) -> Result<Arc<ProviderModel>, Error> {
+        self.maker().port_pinned(target).await
+    }
+
+    /// The route `model` (`[<provider>/]<model>`, as `/model` reads it)
+    /// names, resolved: what a delegated child pinning a model runs on.
+    ///
+    /// # Errors
+    ///
+    /// `model.invalid_ref` when it does not parse; resolution errors.
+    pub async fn pinned_target(&self, model: &str) -> Result<Target, Error> {
+        let parts = &self.setup;
+        let target =
+            pmt_providers::target::parse(model, &parts.config.model, &parts.registry, None)?;
+        let route = parts
+            .resolver()
+            .resolve_target(&target, &mut Trace::default())
+            .await?;
+        Ok(Target {
+            provider: route.provider,
+            model: Some(route.model),
+            ..target
+        })
     }
 
     /// The route `-m` names on its own, with the `[<provider>/]<model>`

@@ -31,6 +31,7 @@ use tracing::Instrument as _;
 use super::turn::{SecretsToClients, SudoToClients, ToClients, approvals, clarify};
 
 mod commands;
+mod delegations;
 mod discovery;
 mod gateway;
 mod notify;
@@ -141,6 +142,9 @@ impl Profile {
     fn open(scope: ProfileScope) -> Result<Arc<Self>, Error> {
         let store = Arc::new(Store::open(&scope)?);
         crate::chat::session::backend::reap_orphans_in_background(&scope);
+        // Children a previous daemon left running end `interrupted`; their
+        // completions are owed to their sessions.
+        pmt_delegation::host::deliver::recover(&store);
         let state = reload::State::new(&scope);
         Ok(Arc::new(Self {
             current: SharedScope::new(scope),
@@ -284,7 +288,9 @@ impl DaemonHost {
                 runtime: tokio::runtime::Handle::current(),
             }) as Arc<dyn pmt_tools::terminal::sudo::SudoPrompt>
         });
+        let (inbox, delegation) = self.delegation_inbox(profile, &row, id, link, oneshot)?;
         let clients = Clients {
+            delegation: delegation.clone(),
             events: Arc::new(ToClients { link: link.clone() }),
             secrets: Arc::new(SecretsToClients {
                 link: link.clone(),
@@ -318,7 +324,50 @@ impl DaemonHost {
             oneshot,
         });
         loaded.insert(id, Arc::clone(&session));
+        if let Some(inbox) = &inbox {
+            inbox.bind(&session);
+        }
+        if let Some(delegation) = delegation {
+            delegations::deliver_owed(profile, &session, delegation);
+        }
         Ok(session)
+    }
+
+    /// Where a loaded session's background delegations deliver: a client
+    /// session gets a queued turn, a gateway chat an injected one; other
+    /// sessions (one-shot runs, cron, subagents) wait for their children.
+    #[allow(clippy::type_complexity)] // the inbox and its trait object
+    fn delegation_inbox(
+        &self,
+        profile: &Profile,
+        row: &pmt_store::Session,
+        id: SessionId,
+        link: &Link,
+        oneshot: bool,
+    ) -> Result<
+        (
+            Option<Arc<delegations::ClientInbox>>,
+            Option<Arc<dyn pmt_delegation::host::Completions>>,
+        ),
+        Error,
+    > {
+        let name = profile.scope().name().to_string();
+        Ok(match row.origin {
+            pmt_store::Origin::Gateway { .. } => (
+                None,
+                Some(Arc::new(delegations::ChatInbox {
+                    gateway: Arc::clone(&self.gateway),
+                    profile: name,
+                    session: id.to_string(),
+                }) as _),
+            ),
+            pmt_store::Origin::None if !oneshot => {
+                let inbox =
+                    delegations::ClientInbox::new(self, &self.profile(&name)?, id, link.clone());
+                (Some(Arc::clone(&inbox)), Some(inbox as _))
+            }
+            _ => (None, None),
+        })
     }
 
     /// Refuses a turn when a budget of the session is already spent

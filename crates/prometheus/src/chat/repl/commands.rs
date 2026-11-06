@@ -97,6 +97,14 @@ impl Repl {
         }
     }
 
+    /// `/stop all` between turns: every subagent of the session stops.
+    fn stop_all(&self) -> String {
+        if let Some(delegation) = self.live.as_ref().and_then(|l| l.delegation.as_ref()) {
+            delegation.stop_all();
+        }
+        "Stopped every subagent of this session.".to_owned()
+    }
+
     async fn run_builtin(&mut self, name: &str, args: &str) -> Flow {
         let result = match name {
             "exit" => return Flow::Exit,
@@ -106,6 +114,7 @@ impl Repl {
                 self.input.print("\x1b[2J\x1b[H");
                 self.new_session(None, None).await
             }
+            "stop" if args.trim() == "all" => Ok(self.stop_all()),
             "stop" => Ok("nothing is running".to_owned()),
             "fork" => self.fork(args).await,
             "resume" => self.resume(args).await,

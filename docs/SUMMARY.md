@@ -24,6 +24,7 @@
 - [Undo, checkpoints and verification](guide/snapshots.md)
 - [Browser automation](guide/browser.md)
 - [Tools and toolsets](guide/tools.md)
+- [Subagents and programmatic tool calls](guide/delegation.md)
 - [Skills](guide/skills.md)
 - [Memory](guide/memory.md)
 - [Capabilities, grants and redaction](guide/security.md)

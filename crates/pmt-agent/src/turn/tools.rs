@@ -169,13 +169,17 @@ impl AgentLoopCalls for LoopTools {
         &'a self,
         name: &'a str,
         arguments: Value,
-        _cancel: &'a CancelToken,
+        cancel: &'a CancelToken,
     ) -> SeamFuture<'a, ToolResult> {
-        // The dispatcher races the call against the cancel token.
+        // The dispatcher races the call against the cancel token; a
+        // delegation's synchronous children stop with it too.
         Box::pin(async move {
-            self.0.call(name, arguments).await.unwrap_or_else(|| {
-                ToolResult::error(format!("{name} must be handled by the agent loop"))
-            })
+            self.0
+                .call(name, arguments, cancel)
+                .await
+                .unwrap_or_else(|| {
+                    ToolResult::error(format!("{name} must be handled by the agent loop"))
+                })
         })
     }
 }

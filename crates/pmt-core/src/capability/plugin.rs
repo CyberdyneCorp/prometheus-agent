@@ -36,6 +36,9 @@ pub enum PluginRight {
     LlmModel,
     /// `plugin.llm_provider_override`: name a provider in `llm.complete`.
     LlmProviderOverride,
+    /// `plugin.subagents`: launch and control subagents through the
+    /// `subagents` host interface.
+    Subagents,
 }
 
 /// Every right with its name and whether it takes a target.
@@ -55,6 +58,7 @@ const RIGHTS: &[(PluginRight, &str, bool)] = &[
         "llm_provider_override",
         false,
     ),
+    (PluginRight::Subagents, "subagents", false),
 ];
 
 /// The verbs `plugin.platform_action` accepts.

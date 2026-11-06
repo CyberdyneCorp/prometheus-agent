@@ -31,6 +31,13 @@ use super::{Factory, Live, tools};
 use crate::plugins_host::ProfilePlugins;
 use crate::plugins_host::llm::{self, SessionModel};
 
+/// What keeps a session's model and delegation reachable for plugin calls
+/// (`llm.complete`, the `subagents` interface) while the session lives.
+pub(super) type Registrations = (
+    llm::Registration,
+    Option<crate::plugins_host::subagents::Registration>,
+);
+
 /// Locks a session-owned mutex (a poisoned one still holds valid data).
 pub(super) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
@@ -174,12 +181,17 @@ impl Factory {
     }
 
     /// Makes the session's route answer its plugins' model calls.
-    pub(super) fn plugin_llm(
+    pub(super) fn plugin_registrations(
         &self,
         id: SessionId,
         model: &Arc<SwitchableModel>,
-    ) -> llm::Registration {
-        llm::register(&id.to_string(), self.session_llm(id, model))
+        delegation: Option<Arc<pmt_delegation::host::Delegator>>,
+    ) -> Registrations {
+        let session = id.to_string();
+        (
+            llm::register(&session, self.session_llm(id, model)),
+            delegation.map(|d| crate::plugins_host::subagents::register(&session, &d)),
+        )
     }
 
     /// The session's model as plugins and MCP sampling call it.

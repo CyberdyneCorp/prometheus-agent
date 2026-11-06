@@ -237,9 +237,12 @@ impl Checker<'_> {
         }
         if !type_matches(schema, node) {
             let message = format!(
-                "{key}: expected {}, found {}",
+                "{key}: expected {}, found {}{}",
                 type_label(schema),
-                node.toml_type()
+                node.toml_type(),
+                accepted_range(schema)
+                    .map(|range| format!(" (accepted: {range})"))
+                    .unwrap_or_default()
             );
             return self.invalid(key, node, message);
         }
@@ -482,6 +485,15 @@ fn range_error(value: &Value, schema: &Value) -> Option<String> {
     })
 }
 
+/// The declared range of a numeric key (`1 to 64`), when it has both
+/// bounds: a wrongly typed value is told what it may be.
+fn accepted_range(schema: &Value) -> Option<String> {
+    let min = schema.get("minimum").and_then(Value::as_f64)?;
+    let max = schema.get("maximum").and_then(Value::as_f64)?;
+    let show = |n: f64| Value::from(n).to_string().trim_end_matches(".0").to_owned();
+    Some(format!("{} to {}", show(min), show(max)))
+}
+
 /// Bounds implied by an unsigned integer `format`.
 fn integer_bounds(schema: &Value) -> (Option<f64>, Option<f64>) {
     match schema.get("format").and_then(Value::as_str) {
@@ -623,6 +635,21 @@ mod tests {
                 )]
             );
         }
+    }
+
+    /// Scenario: Invalid value fails validation (subagent-delegation).
+    #[test]
+    fn a_wrongly_typed_delegation_limit_names_the_key_and_its_range() {
+        assert_eq!(
+            messages("[delegation]\nmax_concurrent_children = \"lots\"\n"),
+            [
+                "delegation.max_concurrent_children: expected integer, found string (accepted: 1 to 64)"
+            ]
+        );
+        assert_eq!(
+            messages("[delegation]\nmax_spawn_depth = 9\n"),
+            ["delegation.max_spawn_depth: must be between 1 and 4"]
+        );
     }
 
     #[test]

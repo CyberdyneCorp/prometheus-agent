@@ -48,6 +48,7 @@ pub mod prompt;
 pub mod prompt_cmd;
 pub mod rpc_cmd;
 pub mod runtimes_cmd;
+pub mod schema_cmd;
 pub mod secrets_cmd;
 pub mod security_cmd;
 pub mod self_test_cmd;

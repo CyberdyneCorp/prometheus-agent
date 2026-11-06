@@ -848,6 +848,45 @@ error_codes! {
     /// A language server install failed or was skipped.
     LSP_INSTALL = ("lsp.install", Unavailable,
         "The server's installer (npm, pnpm, yarn, go or pip) is missing or failed; the message names it. A `manual` server is installed by following the printed instructions.");
+    /// `delegate_task` input that breaks the tool contract or a task rule.
+    DELEGATION_INVALID_TASK = ("delegation.invalid_task", InvalidInput,
+        "A `delegate_task` call has an unknown field, a blank or placeholder goal, too much context, too many images or an invalid `output_schema`; the message names the task index and the rule. No child was built.");
+    /// Spawning is paused for the profile.
+    DELEGATION_PAUSED = ("delegation.paused", Unavailable,
+        "`/delegation pause` stopped new spawns for this profile; control actions still work. Resume with `/delegation resume`.");
+    /// The caller is already at `delegation.max_spawn_depth`.
+    DELEGATION_DEPTH_LIMIT = ("delegation.depth_limit", PermissionDenied,
+        "The calling session is a child at `delegation.max_spawn_depth`; raise the setting (1-4) to let children spawn their own children.");
+    /// The session is closing or closed.
+    DELEGATION_SESSION_CLOSED = ("delegation.session_closed", Unavailable,
+        "The session ended (`/stop all`, `/new`, close); its children were stopped and it cannot spawn more.");
+    /// A spawn or cost budget of the run or root lineage is used up.
+    DELEGATION_BUDGET_EXHAUSTED = ("delegation.budget_exhausted", BudgetExceeded,
+        "The one-shot run used `delegation.oneshot_max_children` subagents, or the root lineage's budget has nothing left to give a child.");
+    /// A task asks for a tool, path, host or secret the parent lacks.
+    DELEGATION_GRANT_BROADENING = ("delegation.grant_broadening", PermissionDenied,
+        "A child's grant can only narrow its parent's: the task named tools, paths, hosts or secrets the parent does not hold (all listed in the message).");
+    /// A task names an agent definition the session does not know.
+    DELEGATION_UNKNOWN_AGENT = ("delegation.unknown_agent", InvalidInput,
+        "The task's `agent` is not among the definitions loaded at session start (`<profile>/agents/<name>.md`); definitions added later apply to new sessions.");
+    /// The concurrency queue is full.
+    DELEGATION_AT_CAPACITY = ("delegation.at_capacity", Unavailable,
+        "`delegation.max_concurrent_children` children run and `delegation.max_queued` spawns wait already; retry when one finishes.");
+    /// The configured router is unknown or unavailable.
+    DELEGATION_ROUTER_UNAVAILABLE = ("delegation.router_unavailable", Unavailable,
+        "`delegation.router` names a router no enabled plugin provides (or its plugin failed); spawns never fall back to `default`.");
+    /// A control action names a subagent outside the caller's spawn tree.
+    DELEGATION_NOT_IN_TREE = ("delegation.not_in_tree", NotFound,
+        "The subagent id is not a live child in this conversation's spawn tree; `delegate_task(action=\"list\")` shows the ones you can control.");
+    /// A plugin lifecycle handle is forged, foreign or expired.
+    DELEGATION_UNKNOWN_HANDLE = ("delegation.unknown_handle", NotFound,
+        "The subagent handle failed its signature check, belongs to another conversation or its result expired (results are kept 3600 s).");
+    /// `execute_code` would expose no tool.
+    EXECUTE_CODE_NO_TOOLS = ("execute_code.no_tools", PermissionDenied,
+        "The intersection of `code_execution.allowed_tools` with the session's granted tools is empty, so no script ran.");
+    /// `execute_code` refused before running anything.
+    EXECUTE_CODE_REFUSED = ("execute_code.refused", PermissionDenied,
+        "No code, no resolvable sandbox policy, a command that stops the serving gateway, or an approval that was not given; nothing ran.");
     /// A client frame is not JSON (JSON-RPC -32700).
     RPC_PARSE = ("rpc.parse", InvalidInput,
         "A client protocol frame is not valid JSON (JSON-RPC `-32700`); the connection keeps serving.");

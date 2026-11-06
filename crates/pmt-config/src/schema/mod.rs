@@ -18,6 +18,7 @@
 
 mod agent;
 mod connectors;
+mod delegation;
 mod gateway;
 mod gateway_display;
 mod gateway_groups;
@@ -46,6 +47,9 @@ pub use agent::{
     VisionConfig,
 };
 pub use connectors::{ConnectorsConfig, DEFAULT_CONNECTOR_GATEWAY};
+pub use delegation::{
+    BackgroundMode, CODE_EXECUTION_TOOLS, ChildApproval, CodeExecutionConfig, DelegationConfig,
+};
 pub use gateway::{
     AgentCacheConfig, AllowBots, BackgroundNotifications, Batching, ChatPolicy, ChatToolProgress,
     DedupConfig, DeliveryConfig, EffectiveBots, EffectiveBusy, EffectiveDisplay, EffectiveGroups,
@@ -133,12 +137,16 @@ pub struct Config {
     pub cli: CliConfig,
     /// Context compression.
     pub compression: CompressionConfig,
+    /// Programmatic tool calling (`execute_code`).
+    pub code_execution: CodeExecutionConfig,
     /// Hosted app connectors (Gmail, Notion...) through the Nous gateway.
     pub connectors: ConnectorsConfig,
     /// Context engine selection.
     pub context: ContextConfig,
     /// Profile time zone (scheduler keys arrive with M2).
     pub cron: CronConfig,
+    /// Subagent delegation.
+    pub delegation: DelegationConfig,
     /// Display preferences of interactive surfaces.
     pub display: DisplayConfig,
     /// Provider fallback.
@@ -232,9 +240,11 @@ impl Default for Config {
             busy: BusyConfig::default(),
             cli: CliConfig::default(),
             compression: CompressionConfig::default(),
+            code_execution: CodeExecutionConfig::default(),
             connectors: ConnectorsConfig::default(),
             context: ContextConfig::default(),
             cron: CronConfig::default(),
+            delegation: DelegationConfig::default(),
             display: DisplayConfig::default(),
             fallback: FallbackConfig::default(),
             files: FilesConfig::default(),

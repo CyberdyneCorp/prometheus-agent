@@ -318,6 +318,12 @@ pub enum Command {
     /// in-process gateway that serves only this TUI.
     #[cfg(feature = "tui")]
     Tui(crate::tui_cmd::TuiArgs),
+    /// Print the JSON Schema of a published contract (`subagent-result`).
+    Schema {
+        /// The contract.
+        #[command(subcommand)]
+        command: crate::schema_cmd::SchemaCommand,
+    },
     /// The daemon's client protocol: `rpc schema` prints the schema this
     /// binary speaks.
     Rpc {

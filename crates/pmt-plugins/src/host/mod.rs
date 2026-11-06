@@ -16,6 +16,7 @@ pub mod imports;
 mod instance;
 pub mod ports;
 pub mod state;
+mod subagents;
 
 use std::time::Duration;
 
@@ -23,6 +24,7 @@ use pmt_config::schema::PluginsWasmConfig;
 use pmt_core::error::{Error, codes};
 use wasmtime::component::Component;
 
+pub use bindings::exports::prometheus::delegation_router::plugin as delegation_router_world;
 pub use bindings::exports::prometheus::hook::extensions as extensions_world;
 pub use bindings::exports::prometheus::hook::plugin as hook_world;
 pub use bindings::exports::prometheus::hook::surfaces as surfaces_world;

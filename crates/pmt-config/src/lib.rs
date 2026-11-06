@@ -17,6 +17,7 @@ pub mod catalog;
 pub mod credential;
 pub mod daemon;
 pub mod daemon_relay;
+pub mod delegation_check;
 mod edit;
 pub mod essential;
 pub mod gateway_check;

@@ -7,6 +7,7 @@
 
 mod background;
 mod browser;
+mod delegation;
 pub mod files;
 pub mod info;
 mod mcp;
@@ -93,6 +94,7 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "reload-skills" => Ok(pmt_skills::reload::reload(&ctx.live.skills).render()),
         "refine" => refine::refine(ctx, args).await,
         "background" => background::background(ctx, args).await,
+        "delegation" => delegation::delegation(ctx, args).await,
         "profile" => Ok(format!(
             "profile {} ({})",
             ctx.scope.name(),

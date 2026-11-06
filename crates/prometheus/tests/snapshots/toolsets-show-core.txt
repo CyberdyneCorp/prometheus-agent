@@ -23,8 +23,8 @@ todo                   exposed
 memory                 exposed
 session_search         exposed
 clarify                exposed
-execute_code           unregistered
-delegate_task          unregistered
+execute_code           exposed
+delegate_task          exposed
 cronjob                unregistered
 computer_use           unregistered
 manage_connections     exposed

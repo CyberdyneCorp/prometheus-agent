@@ -458,6 +458,12 @@ impl Agent {
         self.steers.push(text)
     }
 
+    /// Takes the steers no turn delivered (a delegated child that ended
+    /// before using them reports them as missed).
+    pub fn take_undelivered_steers(&self) -> Vec<String> {
+        self.steers.drain()
+    }
+
     /// Replaces the reference prefix, returning the previous one.
     fn swap_prefix(&self, next: Option<cache::Prefix>) -> Option<cache::Prefix> {
         std::mem::replace(

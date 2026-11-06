@@ -281,6 +281,19 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `lsp.unknown_server` | `usage` | 2 | The id is not a built-in language server or a custom server under `lsp.servers`; `prometheus lsp list` shows the ids. |
 | `lsp.not_found` | `not_found` | 66 | The language server is neither in `<PROMETHEUS_HOME>/runtimes/lsp/` nor on `PATH`, and no `lsp.servers.<id>.command` names one; `prometheus lsp install <id>` installs `npm`, `go` and `pip` servers. |
 | `lsp.install` | `unavailable` | 69 | The server's installer (npm, pnpm, yarn, go or pip) is missing or failed; the message names it. A `manual` server is installed by following the printed instructions. |
+| `delegation.invalid_task` | `invalid_input` | 65 | A `delegate_task` call has an unknown field, a blank or placeholder goal, too much context, too many images or an invalid `output_schema`; the message names the task index and the rule. No child was built. |
+| `delegation.paused` | `unavailable` | 69 | `/delegation pause` stopped new spawns for this profile; control actions still work. Resume with `/delegation resume`. |
+| `delegation.depth_limit` | `permission_denied` | 77 | The calling session is a child at `delegation.max_spawn_depth`; raise the setting (1-4) to let children spawn their own children. |
+| `delegation.session_closed` | `unavailable` | 69 | The session ended (`/stop all`, `/new`, close); its children were stopped and it cannot spawn more. |
+| `delegation.budget_exhausted` | `budget_exceeded` | 3 | The one-shot run used `delegation.oneshot_max_children` subagents, or the root lineage's budget has nothing left to give a child. |
+| `delegation.grant_broadening` | `permission_denied` | 77 | A child's grant can only narrow its parent's: the task named tools, paths, hosts or secrets the parent does not hold (all listed in the message). |
+| `delegation.unknown_agent` | `invalid_input` | 65 | The task's `agent` is not among the definitions loaded at session start (`<profile>/agents/<name>.md`); definitions added later apply to new sessions. |
+| `delegation.at_capacity` | `unavailable` | 69 | `delegation.max_concurrent_children` children run and `delegation.max_queued` spawns wait already; retry when one finishes. |
+| `delegation.router_unavailable` | `unavailable` | 69 | `delegation.router` names a router no enabled plugin provides (or its plugin failed); spawns never fall back to `default`. |
+| `delegation.not_in_tree` | `not_found` | 66 | The subagent id is not a live child in this conversation's spawn tree; `delegate_task(action="list")` shows the ones you can control. |
+| `delegation.unknown_handle` | `not_found` | 66 | The subagent handle failed its signature check, belongs to another conversation or its result expired (results are kept 3600 s). |
+| `execute_code.no_tools` | `permission_denied` | 77 | The intersection of `code_execution.allowed_tools` with the session's granted tools is empty, so no script ran. |
+| `execute_code.refused` | `permission_denied` | 77 | No code, no resolvable sandbox policy, a command that stops the serving gateway, or an approval that was not given; nothing ran. |
 | `rpc.parse` | `invalid_input` | 65 | A client protocol frame is not valid JSON (JSON-RPC `-32700`); the connection keeps serving. |
 | `rpc.invalid_request` | `invalid_input` | 65 | A client protocol frame is JSON but not a JSON-RPC 2.0 request object (JSON-RPC `-32600`). |
 | `rpc.unknown_method` | `usage` | 2 | The called method is not declared in the RPC catalog (`schema/rpc.json`); JSON-RPC `-32601`. |

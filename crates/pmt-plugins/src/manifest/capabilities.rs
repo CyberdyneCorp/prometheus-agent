@@ -31,6 +31,7 @@ const KEYS: &[&str] = &[
     "platform_actions",
     "subprocess",
     "ui",
+    "subagents",
 ];
 
 /// The keys of the `llm` table.
@@ -85,6 +86,8 @@ pub struct Declared {
     pub subprocess: bool,
     /// Shows a UI panel.
     pub ui: bool,
+    /// Launches subagents (the `subagents` host interface).
+    pub subagents: bool,
 }
 
 /// `llm = { enabled, allow_model_override, allow_provider_override, allowed_models }`.
@@ -145,6 +148,7 @@ impl Declared {
             platform_actions: strings(table, "platform_actions")?,
             subprocess: flag(table, "subprocess")?,
             ui: flag(table, "ui")?,
+            subagents: flag(table, "subagents")?,
         };
         declared.check()?;
         Ok(declared)
@@ -215,6 +219,7 @@ impl Declared {
             (self.approval_transport, "plugin.approval_transport"),
             (self.inject_messages, "plugin.inject_messages"),
             (self.subprocess, "process.spawn:*"),
+            (self.subagents, "plugin.subagents"),
         ] {
             if on {
                 texts.push(text.to_owned());
@@ -375,5 +380,6 @@ fn describe_right(right: PluginRight, target: Option<&str>) -> String {
         PluginRight::LlmModel if target == "*" => "choose any model".to_owned(),
         PluginRight::LlmModel => format!("choose the model {target}"),
         PluginRight::LlmProviderOverride => "choose the provider".to_owned(),
+        PluginRight::Subagents => "launch subagents in the calling session".to_owned(),
     }
 }

@@ -20,3 +20,4 @@ world = "tool"
 [package.metadata.component.target.dependencies]
 "prometheus:host" = { path = "../../../wit/host" }
 "prometheus:messaging" = { path = "../../../wit/messaging" }
+"prometheus:subagents" = { path = "../../../wit/subagents" }

@@ -2998,6 +2998,30 @@ name = "pmt-cron"
 version = "0.1.0"
 
 [[package]]
+name = "pmt-delegation"
+version = "0.1.0"
+dependencies = [
+ "getrandom 0.4.3",
+ "jiff",
+ "pmt-agent",
+ "pmt-config",
+ "pmt-core",
+ "pmt-obs",
+ "pmt-skills",
+ "pmt-store",
+ "pmt-tools",
+ "regex",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "ulid",
+]
+
+[[package]]
 name = "pmt-eval"
 version = "0.1.0"
 
@@ -3311,6 +3335,7 @@ dependencies = [
  "base64 0.23.1",
  "dunce",
  "futures-util",
+ "getrandom 0.4.3",
  "glob",
  "ignore",
  "image",
@@ -3523,6 +3548,7 @@ dependencies = [
  "pmt-backup",
  "pmt-config",
  "pmt-core",
+ "pmt-delegation",
  "pmt-gateway",
  "pmt-mcp",
  "pmt-memory",

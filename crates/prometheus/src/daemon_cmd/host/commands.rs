@@ -208,6 +208,14 @@ impl Run<'_> {
             }
         }
         match name {
+            "stop" if args.trim() == "all" => {
+                if let Some(delegation) = &session.live.delegation {
+                    delegation.stop_all();
+                }
+                Dispatched::Done {
+                    notice: "Stopped the turn and every subagent of this session.".to_owned(),
+                }
+            }
             "stop" => Dispatched::Done {
                 notice: "nothing is running".to_owned(),
             },

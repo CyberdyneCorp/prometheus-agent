@@ -85,13 +85,53 @@ pub fn gate(inputs: &GateInputs<'_>) -> Result<Gate, Error> {
     } else {
         (Channel::unattended(), None, Context::SingleQuery)
     };
+    Ok(Gate {
+        gate: Arc::new(build_gate(
+            inputs,
+            channel,
+            context,
+            config.approvals.clone(),
+        )?),
+        prompts,
+    })
+}
+
+/// A delegated child's gate (spec: subagent-delegation, Child approvals
+/// fail closed): every approval goes to `channel` (the child's forwarder,
+/// which denies or escalates), never decided by a policy, a guardian or
+/// `--yolo`; `approvals.mode` `off` or `smart` asks all the same.
+///
+/// # Errors
+///
+/// As [`gate`].
+pub fn child_gate(
+    inputs: &GateInputs<'_>,
+    channel: Channel<ApprovalRequest, Decision>,
+) -> Result<Arc<CommandGate>, Error> {
+    let mut approvals = inputs.scope.config().approvals.clone();
+    approvals.mode = pmt_config::schema::ApprovalMode::Manual;
+    Ok(Arc::new(build_gate(
+        inputs,
+        channel,
+        Context::Interactive,
+        approvals,
+    )?))
+}
+
+fn build_gate(
+    inputs: &GateInputs<'_>,
+    channel: Channel<ApprovalRequest, Decision>,
+    context: Context,
+    approvals: pmt_config::schema::ApprovalsConfig,
+) -> Result<CommandGate, Error> {
+    let config = inputs.scope.config();
     let binary = std::env::current_exe().ok();
     let floors = Floors::new(inputs.cwd)
         .user_home(inputs.user_home)
         .prometheus_home(inputs.scope.home())
         .binary(binary.as_deref());
     let gate = CommandGate::new(GateSetup {
-        approvals: config.approvals.clone(),
+        approvals,
         context,
         floors,
         grants: Arc::clone(inputs.grants),
@@ -112,13 +152,9 @@ pub fn gate(inputs: &GateInputs<'_>) -> Result<Gate, Error> {
         Some(previewer) => gate.with_previewer(previewer.clone()),
         None => gate,
     };
-    let gate = match &inputs.hosted {
+    Ok(match &inputs.hosted {
         Some((daemon, own)) => gate.hosted_by(daemon.clone(), Arc::clone(own)),
         None => gate,
-    };
-    Ok(Gate {
-        gate: Arc::new(gate),
-        prompts,
     })
 }
 

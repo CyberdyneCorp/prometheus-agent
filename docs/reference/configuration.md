@@ -106,6 +106,9 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `budgets.warn_ratio` | number | `0.8` | 0.0 to 1.0 | `live` | Fraction of a limit at which a budget warning is emitted. |
 | `busy.input_mode` | one of "queue", "steer", "interrupt" | `"queue"` | `"queue"`, `"steer"`, `"interrupt"` | `live` | What plain text typed while a turn runs does: `queue` runs it as the next turn, `steer` hands it to the running turn after its current tool step, `interrupt` stops the turn and then runs it. |
 | `cli.confirm_destructive` | boolean | `true` | any | `live` | Ask `once / always / cancel` before `/clear`, `/new`, `/undo` and `/rewind`. |
+| `code_execution.allowed_tools` | array of string | `["read_file","write_file","search_files","patch","terminal","web_search","web_extract"]` | any | `next_session` | Tools a script may call through its stubs; a session sees the intersection with its own granted tools. |
+| `code_execution.max_tool_calls` | integer | `50` | 1 to 10000 | `next_session` | Stub calls one execution may make. |
+| `code_execution.timeout_secs` | integer | `300` | 1 to 86400 | `next_session` | Seconds one execution may run. |
 | `compression.abort_on_summary_failure` | boolean | `false` | any | `next_session` | End the turn when the summary cannot be produced. |
 | `compression.enabled` | boolean | `true` | any | `next_session` | Compact the context automatically. |
 | `compression.max_attempts` | integer | `3` | 1 to 10 | `next_session` | Compaction attempts per turn. |
@@ -128,6 +131,20 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `connectors.gateway_url` | string | `"https://connector-gateway.nousresearch.com"` | any | `next_session` | The connector gateway's origin (a self-hosted gateway, or a test server); `https` except on loopback. |
 | `context.engine` | string | `"builtin"` | any | `next_session` | Context engine: `builtin` or an installed `context-engine` plugin. |
 | `cron.timezone` | string | unset | any | `live` | IANA time zone of this profile (`Europe/Lisbon`); unset uses the host's zone. |
+| `delegation.background` | one of "auto", "never" | `"auto"` | `"auto"`, `"never"` | `next_session` | `auto` runs top-level spawns in the background where the session can receive later completions; `never` always waits. |
+| `delegation.child_approval` | one of "deny", "escalate" | `"deny"` | `"deny"`, `"escalate"` | `next_session` | What an approval a child needs does: `deny` it, or `escalate` it to the root session's surface. |
+| `delegation.escalation_timeout_secs` | integer | `300` | 1 to 86400 | `next_session` | Seconds an escalated approval waits for an answer before it is denied. |
+| `delegation.inactivity_timeout_secs` | integer | `0` | ≥ 0 | `next_session` | Seconds without progress after which a child counts as stalled (`0` uses the built-in 450 s between iterations and 1200 s inside one tool call; otherwise at least 30). |
+| `delegation.max_concurrent_children` | integer | `8` | 1 to 64 | `next_session` | Children running at once across the profile, synchronous and background alike; further spawns queue. |
+| `delegation.max_iterations` | integer | `150` | 1 to 1000 | `next_session` | Model calls one child may make. |
+| `delegation.max_queued` | integer | `32` | 0 to 1024 | `next_session` | Spawns waiting for a free slot before new ones are refused with `delegation.at_capacity`. |
+| `delegation.max_spawn_depth` | integer | `1` | 1 to 4 | `next_session` | How deep children may spawn their own children; a child below this depth keeps the `delegation` toolset (an orchestrator), the others are leaves. |
+| `delegation.max_summary_chars` | integer | `24000` | ≥ 0 | `next_session` | Most characters of one child's summary inserted into the parent's context (`0` disables the cap); the full text stays readable. |
+| `delegation.max_tasks_per_call` | integer | `8` | 1 to 64 | `next_session` | Tasks one `delegate_task` call may carry. |
+| `delegation.model` | string | unset | any | `next_session` | The model children run on unless the task or its agent names one (`provider/model`); unset: the parent's current route. |
+| `delegation.oneshot_max_children` | integer | `2` | ≥ 0 | `next_session` | Children a finite one-shot run (`chat -z`, cron, eval) may spawn (`0` is unlimited); interactive and gateway sessions are never charged. |
+| `delegation.progress_events` | boolean | `true` | any | `next_session` | Publish `subagent.*` progress events on the root session's stream. |
+| `delegation.router` | string | `"default"` | any | `next_session` | The delegation router: `default`, or a router a plugin provides. An unavailable router refuses every spawn. |
 | `display.bell_on_complete` | boolean | `false` | any | `live` | Ring the terminal bell when a turn completes. |
 | `display.bell_on_prompt` | boolean | `false` | any | `live` | Ring the terminal bell when an approval or clarify prompt opens. |
 | `display.compact` | boolean | `false` | any | `live` | Compact layout. |

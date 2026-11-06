@@ -24,6 +24,7 @@ mod outside;
 mod ports;
 pub mod providers;
 pub mod reload;
+pub mod subagents;
 pub mod terminal;
 
 use std::collections::HashMap;

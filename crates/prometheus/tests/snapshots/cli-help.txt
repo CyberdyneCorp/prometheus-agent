@@ -44,6 +44,7 @@ Commands:
   mcp          MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
   plugins      Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
   tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
+  schema       Print the JSON Schema of a published contract (`subagent-result`)
   rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
   completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
   runtimes     List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile

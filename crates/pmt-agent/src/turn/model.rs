@@ -278,6 +278,27 @@ impl ProviderModel {
         Ok(Self::new(setup, caller, state))
     }
 
+    /// Like [`ProviderModel::start`] with no fallback chain: a delegated
+    /// child that pinned its own model fails on that model instead of
+    /// moving to the parent's chain (spec: subagent-delegation, Child model
+    /// routing).
+    ///
+    /// # Errors
+    ///
+    /// Resolution errors of `primary`.
+    pub async fn start_pinned(
+        setup: ProviderSetup,
+        caller: ModelCaller,
+        primary: &Target,
+    ) -> Result<Self, Error> {
+        let route = setup
+            .resolver()
+            .resolve_target(primary, &mut Trace::default())
+            .await?;
+        let state = Fallback::new(route, Vec::new(), setup.config.fallback.min_health);
+        Ok(Self::new(setup, caller, state))
+    }
+
     fn info(&self, route: &Route) -> RouteInfo {
         let (meta, _) =
             self.setup

@@ -2565,3 +2565,114 @@ capabilities = [
 
 [lsp-diagnostics."LSP CLI"]
 "Which missing server" = ["crates/prometheus/tests/lsp_cli.rs::which_names_a_missing_server_and_exits_66"]
+
+# Group 38 (subagent delegation: delegate_task, grants, definitions,
+# routing, approvals, dispatch, durability, control, results, budgets,
+# routers, execute_code)
+
+[subagent-delegation."delegate_task tool contract"]
+"Unknown task field rejected" = ["crates/pmt-delegation/src/contract.rs::an_unknown_task_field_is_refused_naming_it"]
+"Single task batch" = ["crates/pmt-delegation/tests/host.rs::a_single_task_spawns_exactly_one_child", "crates/prometheus/tests/delegation_chat.rs::a_leaf_child_runs_without_delegation_memory_or_clarify"]
+
+[subagent-delegation."Spawn preconditions and refusals"]
+"Depth limit reached" = ["crates/pmt-delegation/tests/host.rs::a_child_at_the_depth_limit_builds_nothing"]
+"Pause blocks only new spawns" = ["crates/pmt-delegation/tests/host.rs::a_pause_refuses_spawns_but_not_list"]
+
+[subagent-delegation."Task validation"]
+"Ninth image rejected" = ["crates/pmt-delegation/src/validate.rs::a_ninth_image_is_refused"]
+"Code-shaped brackets accepted" = ["crates/pmt-delegation/src/validate.rs::code_shaped_brackets_are_not_template_markers"]
+
+[subagent-delegation."Delegation configuration defaults"]
+"Invalid value fails validation" = ["crates/pmt-config/src/validate.rs::a_wrongly_typed_delegation_limit_names_the_key_and_its_range"]
+"Defaults documented from one source" = { tests = ["crates/pmt-config/src/delegation_check.rs::delegation_defaults_are_the_specified_ones", "crates/pmt-config/src/reference.rs::every_key_is_documented"], note = "the configuration reference is generated from the same schema `config schema --json` prints (`cargo xtask gen --check` keeps it current)" }
+
+[subagent-delegation."Role derived from depth only"]
+"Flat default yields leaf children" = ["crates/pmt-delegation/src/grant.rs::a_leaf_has_no_delegate_task_and_children_never_get_user_or_memory_tools", "crates/prometheus/tests/delegation_chat.rs::a_leaf_child_runs_without_delegation_memory_or_clarify"]
+
+[subagent-delegation."Child capability grant can only narrow (upgrade)"]
+"Composite narrowing is not falsely rejected" = ["crates/pmt-delegation/src/grant.rs::a_composite_parent_narrows_to_its_member_toolsets"]
+"Broadening refused" = ["crates/pmt-delegation/src/grant.rs::asking_for_a_toolset_the_parent_lacks_lists_every_tool", "crates/prometheus/tests/delegation_chat.rs::a_child_cannot_gain_a_toolset_its_parent_lacks"]
+"Child inherits the parent's filesystem limits" = ["crates/prometheus/tests/delegation_chat.rs::a_child_cannot_write_outside_its_parents_grant"]
+
+[subagent-delegation."Child session isolation"]
+"Child cannot write memory" = ["crates/pmt-delegation/tests/host.rs::children_get_the_frozen_memory_and_no_memory_tool", "crates/prometheus/tests/delegation_chat.rs::a_leaf_child_runs_without_delegation_memory_or_clarify"]
+
+[subagent-delegation."Named subagent definitions (upgrade)"]
+"Definition added mid-session" = ["crates/pmt-delegation/tests/host.rs::a_definition_added_mid_session_waits_for_the_next_session"]
+"Mismatched name rejected at load" = ["crates/pmt-delegation/src/agents.rs::a_name_that_differs_from_the_file_registers_neither"]
+
+[subagent-delegation."Child model routing"]
+"Pinned child does not inherit fallback" = ["crates/prometheus/tests/delegation_chat.rs::a_pinned_child_fails_on_its_own_route_without_the_parents_chain"]
+
+[subagent-delegation."Child approvals fail closed (upgrade)"]
+"Default deny" = ["crates/prometheus/tests/delegation_chat.rs::a_childs_approval_is_denied_and_logged_with_its_id"]
+"Escalation times out to deny" = ["crates/prometheus/src/chat/session/delegation/mod.rs::an_unanswered_escalation_is_denied_after_its_timeout"]
+
+[subagent-delegation."Background and synchronous dispatch"]
+"Background dispatch returns a handle" = ["crates/pmt-delegation/tests/host.rs::a_background_spawn_answers_with_a_handle_and_delivers_once", "crates/prometheus/tests/delegation_daemon.rs::a_background_childs_result_survives_a_daemon_restart_and_arrives_once"]
+"One-shot run is synchronous" = { tests = ["crates/prometheus/tests/delegation_chat.rs::a_childs_written_files_are_reported_with_their_digests"], note = "a `chat -z` parent receives the child's result inline in its delegate_task tool result" }
+
+[subagent-delegation."Concurrency limit and fair queueing"]
+"Excess children queue rather than oversubscribe" = ["crates/pmt-delegation/src/limiter.rs::a_third_child_queues_and_starts_when_one_finishes", "crates/pmt-delegation/tests/host.rs::a_third_child_reports_queued_and_runs_when_a_slot_frees"]
+
+[subagent-delegation."Durable background completions"]
+"Restart delivers an owned completion once" = ["crates/prometheus/tests/delegation_daemon.rs::a_background_childs_result_survives_a_daemon_restart_and_arrives_once", "crates/pmt-delegation/tests/host.rs::a_completion_owed_across_a_restart_is_delivered_once"]
+
+[subagent-delegation."Stall detection instead of wall-clock timeouts"]
+"Progressing child never stalls" = ["crates/pmt-delegation/src/stall.rs::a_child_progressing_every_minute_for_two_hours_never_stalls"]
+
+[subagent-delegation."Control actions scoped to the caller's spawn tree"]
+"Foreign child cannot be steered" = ["crates/pmt-delegation/src/tree.rs::another_conversations_child_is_not_in_the_tree", "crates/pmt-delegation/tests/host.rs::control_reaches_only_this_conversations_tree_and_stop_spares_siblings"]
+
+[subagent-delegation."Stop semantics"]
+"Turn interrupt leaves background work running" = ["crates/pmt-delegation/tests/host.rs::a_turn_interrupt_stops_synchronous_children_only"]
+
+[subagent-delegation."Live child progress streaming (upgrade)"]
+"Progress coalesced under load" = ["crates/pmt-delegation/src/progress.rs::forty_calls_in_one_second_make_at_most_four_events_ending_on_the_last", "crates/pmt-core/src/subagent_tree.rs::tree_lines_show_changes_without_flooding"]
+"Parent context untouched" = ["crates/prometheus/tests/delegation_chat.rs::a_leaf_child_runs_without_delegation_memory_or_clarify"]
+
+[subagent-delegation."Structured result contract (upgrade)"]
+"Budget exhaustion is truncation, not failure" = ["crates/pmt-delegation/tests/host.rs::results_report_truncation_and_written_files"]
+"Artifacts reported" = ["crates/prometheus/tests/delegation_chat.rs::a_childs_written_files_are_reported_with_their_digests"]
+
+[subagent-delegation."output_schema validation never discards results"]
+"Invalid twice" = ["crates/pmt-delegation/tests/host.rs::an_answer_invalid_twice_keeps_the_raw_text"]
+
+[subagent-delegation."Summary budget protects the parent context"]
+"Oversized summary is kept losslessly" = ["crates/pmt-delegation/src/summary.rs::an_oversized_summary_is_capped_and_kept_in_full", "crates/pmt-delegation/tests/host.rs::an_oversized_summary_is_capped_in_the_parent_context"]
+
+[subagent-delegation."Fan-out budget split and roll-up (upgrade)"]
+"Even split enforced" = ["crates/pmt-delegation/src/budget.rs::an_even_split_gives_each_child_a_quarter", "crates/pmt-delegation/tests/host.rs::a_call_budget_is_split_evenly_across_children", "crates/prometheus/tests/delegation_chat.rs::a_child_that_spends_its_share_stops_while_its_sibling_finishes"]
+"Child cost appears in the root session total" = ["crates/prometheus/tests/delegation_chat.rs::a_childs_usage_rolls_up_into_the_root_session"]
+
+[subagent-delegation."One-shot spawn budget"]
+"Third child in a one-shot run" = ["crates/pmt-delegation/src/budget.rs::a_one_shot_run_refuses_the_third_child", "crates/pmt-delegation/tests/host.rs::a_one_shot_run_refuses_its_third_child"]
+
+[subagent-delegation."Delegation routers fail closed"]
+"Missing router" = ["crates/pmt-delegation/src/router.rs::a_router_no_plugin_provides_is_unavailable_and_never_falls_back", "crates/pmt-delegation/tests/host.rs::routers_fail_closed_and_refuse_single_tasks", "crates/prometheus/tests/delegation_plugins.rs::a_router_no_plugin_provides_fails_every_spawn"]
+"One unroutable task" = ["crates/pmt-delegation/tests/host.rs::routers_fail_closed_and_refuse_single_tasks", "crates/prometheus/tests/delegation_plugins.rs::a_plugin_router_refuses_one_task_while_its_siblings_run"]
+
+[subagent-delegation."Delegation settings changes respect prompt caching"]
+"Plain switch leaves the running session unchanged" = ["crates/pmt-delegation/tests/host.rs::a_router_switch_reaches_a_session_only_when_applied_now"]
+
+[subagent-delegation."Profile routes run the child inside the target ProfileScope"]
+"No launching-profile secret leak" = ["crates/prometheus/tests/delegation_plugins.rs::a_child_routed_to_another_profile_never_sees_the_launching_profiles_secret"]
+
+[subagent-delegation."Subagent lifecycle interface for plugins"]
+"Plugin without the capability" = ["crates/pmt-plugins/tests/runtime.rs::subagents_need_the_grant_and_reach_the_calling_session", "crates/prometheus/tests/delegation_plugins.rs::a_plugin_without_the_subagents_capability_spawns_no_child"]
+"Forged handle" = ["crates/pmt-delegation/src/handles.rs::an_altered_handle_does_not_verify", "crates/pmt-delegation/tests/host.rs::forged_and_foreign_handles_are_unknown", "crates/prometheus/tests/delegation_plugins.rs::a_forged_handle_is_unknown_to_the_plugin_interface"]
+
+[subagent-delegation."Child processes are reaped or handed off"]
+"Handed-off process survives the child" = ["crates/prometheus/tests/delegation_plugins.rs::a_handed_off_process_outlives_the_child_and_belongs_to_the_parent"]
+
+[subagent-delegation."Programmatic tool calling under the caller's grant (upgrade)"]
+"Empty intersection never widens" = ["crates/prometheus/tests/execute_code.rs::an_empty_tool_intersection_is_refused_before_any_code_runs"]
+"Stub limited to the grant" = ["crates/pmt-tools/src/code_exec/channel.rs::a_tool_outside_the_stubs_is_refused_without_using_the_budget", "crates/prometheus/tests/execute_code.rs::stubs_follow_the_grant_and_the_environment_holds_no_secret"]
+"Script sandboxed like the session" = ["crates/prometheus/tests/execute_code.rs::a_session_without_network_blocks_the_scripts_connections"]
+
+[subagent-delegation."execute_code RPC channel and limits"]
+"Secrets absent from the script environment" = ["crates/prometheus/tests/execute_code.rs::stubs_follow_the_grant_and_the_environment_holds_no_secret"]
+"Call budget enforced" = ["crates/pmt-tools/src/code_exec/channel.rs::the_fifty_first_call_is_refused_and_later_ones_too"]
+
+[subagent-delegation."execute_code pre-execution guards"]
+"Empty code" = ["crates/prometheus/tests/execute_code.rs::whitespace_code_runs_nothing"]

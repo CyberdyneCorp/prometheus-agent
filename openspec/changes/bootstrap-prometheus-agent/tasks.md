@@ -381,12 +381,12 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 38. M2 Subagent delegation
 
-- [ ] 38.1 Implement `delegate_task` (contract, spawn preconditions, task validation, config defaults, role from depth) with children in isolated sessions and a capability grant that can only narrow; verify that a child cannot gain a tool the parent lacks (spec: subagent-delegation)
-- [ ] 38.2 Implement named subagent definitions, child model routing and fail-closed child approvals; verify with mock-provider tests (spec: subagent-delegation)
-- [ ] 38.3 Implement background and synchronous dispatch, the concurrency limit with fair queueing, durable background completions and stall detection; verify that a background child's result survives a daemon restart (spec: subagent-delegation)
-- [ ] 38.4 Implement control actions scoped to the caller's spawn tree, stop semantics, live progress streaming, the structured result contract, `output_schema` validation, the summary budget, fan-out budget split/roll-up and the one-shot spawn budget; verify with tree-scoped tests (spec: subagent-delegation)
-- [ ] 38.5 Implement fail-closed delegation routers, delegation settings changes that respect caching, profile routes into the target `ProfileScope`, the plugin lifecycle interface and child reaping; verify with tests (spec: subagent-delegation)
-- [ ] 38.6 Implement programmatic tool calling (`execute_code`) under the caller's grant with its RPC channel, limits and pre-execution guards; verify that an empty grant intersection is refused (spec: subagent-delegation)
+- [x] 38.1 Implement `delegate_task` (contract, spawn preconditions, task validation, config defaults, role from depth) with children in isolated sessions and a capability grant that can only narrow; verify that a child cannot gain a tool the parent lacks (spec: subagent-delegation)
+- [x] 38.2 Implement named subagent definitions, child model routing and fail-closed child approvals; verify with mock-provider tests (spec: subagent-delegation)
+- [x] 38.3 Implement background and synchronous dispatch, the concurrency limit with fair queueing, durable background completions and stall detection; verify that a background child's result survives a daemon restart (spec: subagent-delegation)
+- [x] 38.4 Implement control actions scoped to the caller's spawn tree, stop semantics, live progress streaming, the structured result contract, `output_schema` validation, the summary budget, fan-out budget split/roll-up and the one-shot spawn budget; verify with tree-scoped tests (spec: subagent-delegation)
+- [x] 38.5 Implement fail-closed delegation routers, delegation settings changes that respect caching, profile routes into the target `ProfileScope`, the plugin lifecycle interface and child reaping; verify with tests (spec: subagent-delegation)
+- [x] 38.6 Implement programmatic tool calling (`execute_code`) under the caller's grant with its RPC channel, limits and pre-execution guards; verify that an empty grant intersection is refused (spec: subagent-delegation)
 
 ## 39. M2 Git worktrees
 

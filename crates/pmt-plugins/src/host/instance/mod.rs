@@ -26,12 +26,15 @@ use wasmtime::{Store, StoreLimitsBuilder, Trap};
 
 mod backend;
 mod meter;
+mod router;
 mod surfaces;
 
 pub(crate) use meter::Meter;
 
 use super::bindings::PluginHost;
-use super::bindings::exports::prometheus::{hook, provider, terminal_backend, tool};
+use super::bindings::exports::prometheus::{
+    delegation_router, hook, provider, terminal_backend, tool,
+};
 use super::imports::{CallInfo, Context, HostState};
 use super::{Limits, Runtime};
 use crate::worlds::WorldRef;
@@ -57,6 +60,11 @@ pub struct Instance {
     surfaces: Option<hook::surfaces::GuestIndices>,
     models: Option<provider::models::GuestIndices>,
     backend: Option<terminal_backend::plugin::GuestIndices>,
+    router: Option<delegation_router::plugin::GuestIndices>,
+    /// `tool.tools()`, read once: a session starting while the instance
+    /// is busy (a plugin call waiting on a subagent it launched) must not
+    /// wait for it.
+    tool_specs: Mutex<Option<Vec<tool::plugin::ToolSpec>>>,
     live: Mutex<Option<Live>>,
     /// Idle stores for terminal-backend calls.
     pool: Mutex<Vec<Live>>,
@@ -114,6 +122,8 @@ impl Instance {
             surfaces: hook::surfaces::GuestIndices::new(&pre).ok(),
             models: provider::models::GuestIndices::new(&pre).ok(),
             backend: terminal_backend::plugin::GuestIndices::new(&pre).ok(),
+            router: delegation_router::plugin::GuestIndices::new(&pre).ok(),
+            tool_specs: Mutex::new(None),
             id,
             pre,
             ctx,
@@ -162,9 +172,24 @@ impl Instance {
     /// `plugins.call` when the call traps or times out.
     pub fn tools(&self, call: &CallInfo) -> Result<Vec<tool::plugin::ToolSpec>, Error> {
         let indices = self.tool.as_ref().ok_or_else(|| self.missing("tool"))?;
-        self.with_live(call, None, |store, instance| {
+        if let Some(specs) = self.cached_tools() {
+            return Ok(specs);
+        }
+        let specs = self.with_live(call, None, |store, instance| {
             indices.load(&mut *store, instance)?.call_tools(&mut *store)
-        })
+        })?;
+        *self
+            .tool_specs
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(specs.clone());
+        Ok(specs)
+    }
+
+    fn cached_tools(&self) -> Option<Vec<tool::plugin::ToolSpec>> {
+        self.tool_specs
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 
     /// `tool.call(name, arguments)`: the plugin's own `Err` is returned as

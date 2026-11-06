@@ -169,6 +169,20 @@ impl ProfileScope {
         &self.inner.secrets
     }
 
+    /// This scope with `patch` applied to its configuration snapshot, for
+    /// one consumer inside the process (a delegated child runs with its
+    /// share of a call budget as its session budget). Secrets stay shared.
+    #[must_use]
+    pub fn patched(&self, patch: impl FnOnce(&mut Config)) -> Self {
+        Self {
+            inner: Arc::new(Inner {
+                profile: self.inner.profile.clone(),
+                config: self.inner.config.patched(patch),
+                secrets: self.inner.secrets.clone(),
+            }),
+        }
+    }
+
     /// This scope with the `live` keys of `current` (the same profile's
     /// newer snapshot) and every other key unchanged: what a running
     /// session reads after a reload. Secrets stay shared.

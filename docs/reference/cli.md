@@ -51,6 +51,7 @@ Commands:
   mcp          MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
   plugins      Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
   tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
+  schema       Print the JSON Schema of a published contract (`subagent-result`)
   rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
   completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
   runtimes     List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
@@ -15461,6 +15462,116 @@ Options:
           Print help
 ```
 
+## `prometheus schema`
+
+```text
+Print the JSON Schema of a published contract (`subagent-result`)
+
+Usage: prometheus schema [OPTIONS] <COMMAND>
+
+Commands:
+  subagent-result  The `SubagentResult` a delegated child returns (contract version 1)
+  help             Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus schema subagent-result`
+
+```text
+The `SubagentResult` a delegated child returns (contract version 1)
+
+Usage: prometheus schema subagent-result [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus schema help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus schema help [COMMAND]
+
+Commands:
+  subagent-result  The `SubagentResult` a delegated child returns (contract version 1)
+  help             Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus schema help subagent-result`
+
+```text
+The `SubagentResult` a delegated child returns (contract version 1)
+
+Usage: prometheus schema help subagent-result
+```
+
+## `prometheus schema help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus schema help help
+```
+
 ## `prometheus rpc`
 
 ```text
@@ -16541,6 +16652,7 @@ Commands:
   mcp          MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
   plugins      Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
   tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
+  schema       Print the JSON Schema of a published contract (`subagent-result`)
   rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
   completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
   runtimes     List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
@@ -18951,6 +19063,25 @@ Usage: prometheus help plugins test-adapter
 The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
 
 Usage: prometheus help tui
+```
+
+## `prometheus help schema`
+
+```text
+Print the JSON Schema of a published contract (`subagent-result`)
+
+Usage: prometheus help schema [COMMAND]
+
+Commands:
+  subagent-result  The `SubagentResult` a delegated child returns (contract version 1)
+```
+
+## `prometheus help schema subagent-result`
+
+```text
+The `SubagentResult` a delegated child returns (contract version 1)
+
+Usage: prometheus help schema subagent-result
 ```
 
 ## `prometheus help rpc`

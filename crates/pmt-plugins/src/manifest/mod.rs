@@ -22,6 +22,7 @@
 //! the file [`COMPONENT_FILE`] next to the manifest.
 
 mod capabilities;
+mod router;
 
 use std::path::Path;
 
@@ -30,6 +31,7 @@ use semver::{Version, VersionReq};
 use toml::{Table, Value};
 
 pub use capabilities::{Declared, LlmDeclaration, describe, label};
+pub use router::RouterDeclaration;
 
 use crate::worlds::{self, Support, WorldRef};
 
@@ -57,6 +59,7 @@ const FIELDS: &[&str] = &[
     "capabilities",
     "requires_plugins",
     "kanban_lanes",
+    "delegation_router",
     "build",
     "mcp",
     "python",
@@ -110,6 +113,9 @@ pub struct Manifest {
     pub requires_plugins: Vec<String>,
     /// `[[kanban_lanes]]`, kept for the kanban worker lanes.
     pub kanban_lanes: Vec<Table>,
+    /// `[delegation_router]`: the router a `delegation-router` plugin
+    /// provides.
+    pub delegation_router: Option<RouterDeclaration>,
     /// The dev loop's build command.
     pub build: Option<String>,
     /// `[mcp]` or `[python]`: how the server or bridge starts it.
@@ -198,6 +204,7 @@ impl Manifest {
             capabilities: Declared::parse(table.get("capabilities"))?,
             requires_plugins: strings(&table, "requires_plugins")?,
             kanban_lanes: tables(&table, "kanban_lanes")?,
+            delegation_router: router::parse(table.get("delegation_router"))?,
             build: optional_string(&table, "build")?,
             launch,
             id,

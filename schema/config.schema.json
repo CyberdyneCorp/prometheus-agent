@@ -487,6 +487,21 @@
       },
       "type": "object"
     },
+    "BackgroundMode": {
+      "description": "When top-level spawns run in the background.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Where the session can receive later completions.",
+          "type": "string"
+        },
+        {
+          "const": "never",
+          "description": "Never: every call waits for its children.",
+          "type": "string"
+        }
+      ]
+    },
     "BackgroundNotifications": {
       "description": "Background notification levels.",
       "oneOf": [
@@ -926,6 +941,21 @@
         }
       ]
     },
+    "ChildApproval": {
+      "description": "How an approval needed inside a child is resolved; no value approves\ndangerous actions on its own.",
+      "oneOf": [
+        {
+          "const": "deny",
+          "description": "Deny and return the denial to the child.",
+          "type": "string"
+        },
+        {
+          "const": "escalate",
+          "description": "Ask the root session's surface, tagged with the child's id; denied\nwhen nobody answers in time.",
+          "type": "string"
+        }
+      ]
+    },
     "CliConfig": {
       "additionalProperties": false,
       "description": "The `[cli]` section.",
@@ -938,6 +968,46 @@
       },
       "type": "object",
       "x-apply": "live"
+    },
+    "CodeExecutionConfig": {
+      "additionalProperties": false,
+      "description": "The `[code_execution]` section.",
+      "properties": {
+        "allowed_tools": {
+          "default": [
+            "read_file",
+            "write_file",
+            "search_files",
+            "patch",
+            "terminal",
+            "web_search",
+            "web_extract"
+          ],
+          "description": "Tools a script may call through its stubs; a session sees the\nintersection with its own granted tools.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "max_tool_calls": {
+          "default": 50,
+          "description": "Stub calls one execution may make.",
+          "format": "uint32",
+          "maximum": 10000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "timeout_secs": {
+          "default": 300,
+          "description": "Seconds one execution may run.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
     },
     "ComposerConfig": {
       "additionalProperties": false,
@@ -1341,6 +1411,110 @@
           "type": "string"
         }
       ]
+    },
+    "DelegationConfig": {
+      "additionalProperties": false,
+      "description": "The `[delegation]` section.",
+      "properties": {
+        "background": {
+          "$ref": "#/$defs/BackgroundMode",
+          "default": "auto",
+          "description": "`auto` runs top-level spawns in the background where the session\ncan receive later completions; `never` always waits."
+        },
+        "child_approval": {
+          "$ref": "#/$defs/ChildApproval",
+          "default": "deny",
+          "description": "What an approval a child needs does: `deny` it, or `escalate` it to\nthe root session's surface."
+        },
+        "escalation_timeout_secs": {
+          "default": 300,
+          "description": "Seconds an escalated approval waits for an answer before it is\ndenied.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "inactivity_timeout_secs": {
+          "default": 0,
+          "description": "Seconds without progress after which a child counts as stalled\n(`0` uses the built-in 450 s between iterations and 1200 s inside\none tool call; otherwise at least 30).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_concurrent_children": {
+          "default": 8,
+          "description": "Children running at once across the profile, synchronous and\nbackground alike; further spawns queue.",
+          "format": "uint32",
+          "maximum": 64,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_iterations": {
+          "default": 150,
+          "description": "Model calls one child may make.",
+          "format": "uint32",
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_queued": {
+          "default": 32,
+          "description": "Spawns waiting for a free slot before new ones are refused with\n`delegation.at_capacity`.",
+          "format": "uint32",
+          "maximum": 1024,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_spawn_depth": {
+          "default": 1,
+          "description": "How deep children may spawn their own children; a child below this\ndepth keeps the `delegation` toolset (an orchestrator), the others\nare leaves.",
+          "format": "uint32",
+          "maximum": 4,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_summary_chars": {
+          "default": 24000,
+          "description": "Most characters of one child's summary inserted into the parent's\ncontext (`0` disables the cap); the full text stays readable.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_tasks_per_call": {
+          "default": 8,
+          "description": "Tasks one `delegate_task` call may carry.",
+          "format": "uint32",
+          "maximum": 64,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "model": {
+          "description": "The model children run on unless the task or its agent names one\n(`provider/model`); unset: the parent's current route.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "oneshot_max_children": {
+          "default": 2,
+          "description": "Children a finite one-shot run (`chat -z`, cron, eval) may spawn\n(`0` is unlimited); interactive and gateway sessions are never\ncharged.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "progress_events": {
+          "default": true,
+          "description": "Publish `subagent.*` progress events on the root session's stream.",
+          "type": "boolean"
+        },
+        "router": {
+          "default": "default",
+          "description": "The delegation router: `default`, or a router a plugin provides.\nAn unavailable router refuses every spawn.",
+          "type": "string"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
     },
     "DeliveryConfig": {
       "additionalProperties": false,
@@ -7839,6 +8013,23 @@
       },
       "description": "Line-mode CLI behaviour."
     },
+    "code_execution": {
+      "$ref": "#/$defs/CodeExecutionConfig",
+      "default": {
+        "allowed_tools": [
+          "read_file",
+          "write_file",
+          "search_files",
+          "patch",
+          "terminal",
+          "web_search",
+          "web_extract"
+        ],
+        "max_tool_calls": 50,
+        "timeout_secs": 300
+      },
+      "description": "Programmatic tool calling (`execute_code`)."
+    },
     "compression": {
       "$ref": "#/$defs/CompressionConfig",
       "default": {
@@ -7882,6 +8073,25 @@
       "$ref": "#/$defs/CronConfig",
       "default": {},
       "description": "Profile time zone (scheduler keys arrive with M2)."
+    },
+    "delegation": {
+      "$ref": "#/$defs/DelegationConfig",
+      "default": {
+        "background": "auto",
+        "child_approval": "deny",
+        "escalation_timeout_secs": 300,
+        "inactivity_timeout_secs": 0,
+        "max_concurrent_children": 8,
+        "max_iterations": 150,
+        "max_queued": 32,
+        "max_spawn_depth": 1,
+        "max_summary_chars": 24000,
+        "max_tasks_per_call": 8,
+        "oneshot_max_children": 2,
+        "progress_events": true,
+        "router": "default"
+      },
+      "description": "Subagent delegation."
     },
     "display": {
       "$ref": "#/$defs/DisplayConfig",

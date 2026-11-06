@@ -173,6 +173,16 @@ pub struct Layered {
 }
 
 impl Layered {
+    /// This snapshot with `patch` applied to its typed configuration (the
+    /// layer bookkeeping is unchanged): a process-internal narrowing such
+    /// as a delegated child's budget share, never a user-visible value.
+    #[must_use]
+    pub(crate) fn patched(&self, patch: impl FnOnce(&mut Config)) -> Self {
+        let mut out = self.clone();
+        patch(&mut out.config);
+        out
+    }
+
     /// Validates `text` (the contents of `path`) and applies `overrides`.
     ///
     /// # Errors
@@ -516,7 +526,7 @@ mod tests {
         assert_eq!(err.exit_code(), 2);
         assert_eq!(
             err.message(),
-            "agent.max_iterations: expected integer, found string"
+            "agent.max_iterations: expected integer, found string (accepted: 0 to 100000)"
         );
         let err = typed_value("agent.max_iterations", "-3").unwrap_err();
         assert_eq!(

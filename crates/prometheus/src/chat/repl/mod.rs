@@ -91,6 +91,8 @@ struct Repl {
     /// Messages background work posts to the chat (`/refine` summaries).
     posted: mpsc::UnboundedSender<String>,
     to_post: mpsc::UnboundedReceiver<String>,
+    /// Background delegation completions waiting for the idle prompt.
+    completions: mpsc::UnboundedReceiver<String>,
     last_interrupt: Option<Instant>,
     start: Start,
     confirm_destructive: bool,
@@ -124,6 +126,9 @@ pub struct Asks {
     pub secret_prompt: Option<Arc<CliSecretPrompt>>,
     /// Background process notices, printed as their own messages.
     pub notices: mpsc::UnboundedReceiver<pmt_tools::terminal::process::Notice>,
+    /// Background delegation completions: each runs as the agent's next
+    /// input once the chat is idle.
+    pub completions: mpsc::UnboundedReceiver<String>,
 }
 
 impl Asks {
@@ -136,6 +141,7 @@ impl Asks {
             secrets: mpsc::unbounded_channel().1,
             secret_prompt: None,
             notices: mpsc::unbounded_channel().1,
+            completions: mpsc::unbounded_channel().1,
         }
     }
 }
@@ -200,6 +206,7 @@ pub async fn run(
         memory: asks.memory,
         installs: asks.installs,
         secrets: asks.secrets,
+        completions: asks.completions,
         posted,
         to_post,
         last_interrupt: None,
@@ -256,6 +263,11 @@ impl Repl {
             event = self.input.next() => event,
             Some(text) = self.to_post.recv() => {
                 self.notice(&text);
+                return Flow::Continue;
+            }
+            Some(completion) = self.completions.recv() => {
+                self.notice("Background subagents finished; their results go to the agent.");
+                self.queue.push_back(completion);
                 return Flow::Continue;
             }
         };

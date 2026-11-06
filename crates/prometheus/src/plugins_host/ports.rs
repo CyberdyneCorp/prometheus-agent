@@ -23,6 +23,7 @@ pub(super) fn ports(scope: &ProfileScope) -> Ports {
     ports.secrets = Arc::new(Secrets(secrets));
     ports.http = Arc::new(Http::new(scope));
     ports.llm = Arc::new(super::llm::SessionsLlm);
+    ports.subagents = Arc::new(super::subagents::SessionsSubagents);
     ports.config = Arc::new(Settings {
         file: scope.profile().config_file(),
         entries: scope.config().plugins.entries.clone(),

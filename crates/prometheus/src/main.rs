@@ -158,6 +158,7 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         #[cfg(feature = "mcp")]
         Some(Command::Mcp { command }) => prometheus::mcp_cmd::run(command.as_ref(), &ctx),
         Some(Command::Rpc { command }) => prometheus::rpc_cmd::run(command, &ctx),
+        Some(Command::Schema { command }) => prometheus::schema_cmd::run(command),
         Some(Command::Connectors { command }) => prometheus::connectors_cmd::run(command, &ctx),
         Some(Command::Bridge { command }) => prometheus::bridge_cmd::run(command, &ctx),
         Some(Command::SelfTest) => Ok(self_test_cmd::run(&ctx)),
