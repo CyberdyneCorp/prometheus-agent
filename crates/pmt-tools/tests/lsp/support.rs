@@ -6,12 +6,13 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use pmt_config::schema::LspConfig;
 use pmt_core::capability::{BASELINE, CapabilitySet, Places};
 use pmt_tools::files::{ControlPaths, FileSession, FileSetup, Linter, LocalBackend};
 use pmt_tools::lsp::install::Installs;
-use pmt_tools::lsp::launch::{Launcher, Unconfined};
+use pmt_tools::lsp::launch::{LaunchSpec, Launcher, Unconfined};
 use pmt_tools::lsp::workspace::{TrustInputs, Workspaces};
 use pmt_tools::lsp::{LspSetup, SessionDiagnostics, Toolchain};
 use serde_json::Value;
@@ -155,6 +156,27 @@ impl Fixture {
             .lines()
             .filter(|l| l.starts_with("start "))
             .count()
+    }
+}
+
+/// An unconfined launcher that counts launches. The stand-in only logs its
+/// start once Python is up, which on a slow runner can come after a short
+/// warm-up timeout killed it; a launch is counted when it happens.
+#[derive(Default)]
+pub(crate) struct CountingLauncher {
+    launches: AtomicUsize,
+}
+
+impl CountingLauncher {
+    pub(crate) fn launches(&self) -> usize {
+        self.launches.load(Ordering::SeqCst)
+    }
+}
+
+impl Launcher for CountingLauncher {
+    fn command(&self, spec: &LaunchSpec<'_>) -> Result<tokio::process::Command, String> {
+        self.launches.fetch_add(1, Ordering::SeqCst);
+        Unconfined.command(spec)
     }
 }
 

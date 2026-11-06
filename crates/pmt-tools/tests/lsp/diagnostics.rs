@@ -12,7 +12,7 @@ use pmt_tools::lsp::status::Status;
 use pmt_tools::result::Status as ResultStatus;
 use serde_json::{Value, json};
 
-use crate::support::{Fixture, eventually, findings, patch, read, write};
+use crate::support::{CountingLauncher, Fixture, eventually, findings, patch, read, write};
 
 #[path = "../common/dispatcher.rs"]
 mod common;
@@ -157,15 +157,16 @@ async fn a_server_that_times_out_is_skipped_until_a_restart() {
         "",
         "warmup_timeout_ms = 300",
     );
-    let lsp = fx.diagnostics(config, &fx.app);
+    let launcher = Arc::new(CountingLauncher::default());
+    let lsp = fx.diagnostics_with(config, &fx.app, true, launcher.clone());
     let files = fx.files(&fx.app, Some(lsp.clone()));
     write(&files, &fx.app.join("a.py"), "BAD_x\n").await;
     assert_eq!(lsp.settle().await, None);
-    assert_eq!(fx.starts(), 1);
+    assert_eq!(launcher.launches(), 1);
     write(&files, &fx.app.join("b.py"), "BAD_y\n").await;
     assert_eq!(lsp.settle().await, None);
     assert_eq!(
-        fx.starts(),
+        launcher.launches(),
         1,
         "a broken server is not contacted:\n{}",
         fx.log()
@@ -175,7 +176,12 @@ async fn a_server_that_times_out_is_skipped_until_a_restart() {
         .unwrap();
     write(&files, &fx.app.join("c.py"), "BAD_z\n").await;
     assert_eq!(lsp.settle().await, None);
-    assert_eq!(fx.starts(), 2, "a restart clears the mark:\n{}", fx.log());
+    assert_eq!(
+        launcher.launches(),
+        2,
+        "a restart clears the mark:\n{}",
+        fx.log()
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
