@@ -187,6 +187,45 @@ pub struct Request {
     /// Reasoning effort to send (already clamped to the route; `None`
     /// sends no reasoning control). See [`crate::reasoning`].
     pub reasoning: Option<ReasoningLevel>,
+    /// Request parameters applied to the encoded body on every route
+    /// (spec: subagent-delegation, Child request overrides and direct
+    /// endpoints). See [`apply_overrides`].
+    pub body_overrides: Option<std::sync::Arc<serde_json::Map<String, Value>>>,
+}
+
+/// The key of [`Request::body_overrides`] merged one level deep.
+pub const EXTRA_BODY: &str = "extra_body";
+
+/// Applies `overrides` to an encoded request `body`: every top-level key
+/// replaces the encoded value (explicit keys win over route-derived
+/// ones), and each key of the `extra_body` table is merged one level
+/// into the body (an object merges into the object already there, key by
+/// key; anything else replaces it).
+pub fn apply_overrides(body: &mut Value, overrides: &serde_json::Map<String, Value>) {
+    let Some(target) = body.as_object_mut() else {
+        return;
+    };
+    for (key, value) in overrides {
+        if key == EXTRA_BODY {
+            continue;
+        }
+        target.insert(key.clone(), value.clone());
+    }
+    let Some(Value::Object(extra)) = overrides.get(EXTRA_BODY) else {
+        return;
+    };
+    for (key, value) in extra {
+        match (target.get_mut(key), value) {
+            (Some(Value::Object(existing)), Value::Object(more)) => {
+                for (inner, v) in more {
+                    existing.insert(inner.clone(), v.clone());
+                }
+            }
+            _ => {
+                target.insert(key.clone(), value.clone());
+            }
+        }
+    }
 }
 
 impl Request {
@@ -303,6 +342,25 @@ pub fn prompt_cache_key(session_id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn extra_body_merges_one_level_and_explicit_keys_win() {
+        let mut body = serde_json::json!({
+            "model": "m",
+            "temperature": 0.2,
+            "provider": {"order": ["a"], "sort": "price"}
+        });
+        let overrides = serde_json::json!({
+            "temperature": 0.9,
+            "extra_body": {"provider": {"sort": "throughput"}, "transforms": ["x"]}
+        });
+        apply_overrides(&mut body, overrides.as_object().unwrap());
+        assert_eq!(body["temperature"], 0.9);
+        assert_eq!(body["provider"]["sort"], "throughput");
+        assert_eq!(body["provider"]["order"], serde_json::json!(["a"]), "kept");
+        assert_eq!(body["transforms"], serde_json::json!(["x"]));
+        assert_eq!(body["model"], "m");
+    }
 
     #[test]
     fn hash_ignores_cache_markers_and_depends_on_content_and_route() {

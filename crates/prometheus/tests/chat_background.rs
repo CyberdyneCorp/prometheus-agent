@@ -22,6 +22,11 @@ latency_ms = 2000
 text = "the findings"
 
 [[rule]]
+user = "endless research"
+latency_ms = 60000
+text = "never seen"
+
+[[rule]]
 repeat = true
 text = "ok"
 "#;
@@ -49,8 +54,12 @@ fn a_background_task_reports_while_the_chat_keeps_answering() {
     let mut p = spawn(home.path(), &script);
     p.expect("› ").unwrap();
     p.send_line("/bg slow research").unwrap();
-    p.expect("Background task started: slow research (id bg_")
+    p.expect("Background task #1 started: slow research (id bg_")
         .unwrap();
+    p.expect("› ").unwrap();
+    p.send_line("/agents").unwrap();
+    p.expect("Background tasks").unwrap();
+    p.expect("#1 bg_").unwrap();
     p.expect("› ").unwrap();
     p.send_line("hello").unwrap();
     let answered = p.expect("ok").unwrap();
@@ -58,7 +67,7 @@ fn a_background_task_reports_while_the_chat_keeps_answering() {
         !String::from_utf8_lossy(answered.before()).contains("Background task complete"),
         "the chat answered while the task ran"
     );
-    p.expect("Background task complete").unwrap();
+    p.expect("Background task #1 complete").unwrap();
     p.expect("the findings").unwrap();
     p.send_line("/exit").unwrap();
     p.expect(Eof).unwrap();
@@ -69,4 +78,26 @@ fn a_background_task_reports_while_the_chat_keeps_answering() {
         2,
         "the task had a session of its own: {listed}"
     );
+}
+
+/// Scenario (subagent-delegation, User-launched background sessions):
+/// `/agents` stops a background task; the chat says so.
+#[test]
+fn agents_stops_a_background_task() {
+    let home = temp_home();
+    for (key, value) in [("model.provider", "mock"), ("model.default", "mock")] {
+        ok(&run(home.path(), &["config", "set", key, value]));
+    }
+    let script = home.path().join("script.toml");
+    std::fs::write(&script, SCRIPT).unwrap();
+    let mut p = spawn(home.path(), &script);
+    p.expect("› ").unwrap();
+    p.send_line("/bg endless research").unwrap();
+    p.expect("Background task #1 started").unwrap();
+    p.expect("› ").unwrap();
+    p.send_line("/tasks stop #1").unwrap();
+    p.expect("Stopping background task #1").unwrap();
+    p.expect("❌ Background task #1 failed: stopped").unwrap();
+    p.send_line("/exit").unwrap();
+    p.expect(Eof).unwrap();
 }

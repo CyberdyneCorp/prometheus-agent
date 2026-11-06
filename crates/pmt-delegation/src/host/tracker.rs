@@ -39,6 +39,7 @@ struct Inner {
     updates: watch::Sender<Snapshot>,
     written: Mutex<Vec<String>>,
     cwd: Mutex<Option<PathBuf>>,
+    transcript: Option<Arc<crate::transcript::Transcript>>,
 }
 
 impl Tracker {
@@ -49,6 +50,7 @@ impl Tracker {
         entry: Arc<Entry>,
         activity: Arc<Activity>,
         root_events: Option<Arc<dyn EventSink>>,
+        transcript: Option<Arc<crate::transcript::Transcript>>,
     ) -> Self {
         let (updates, rx) = watch::channel(Snapshot::default());
         if let Some(events) = root_events {
@@ -75,6 +77,7 @@ impl Tracker {
                 updates,
                 written: Mutex::default(),
                 cwd: Mutex::default(),
+                transcript,
             }),
         }
     }
@@ -109,6 +112,9 @@ impl Tracker {
                     };
                     s.activity = format!("model call {}", s.iteration);
                 });
+                if let Some(log) = &inner.transcript {
+                    log.line(&format!("model call {}", inner.entry.snapshot().iteration));
+                }
             }
             Event::ToolCall(call) => {
                 inner.activity.tool_started();
@@ -125,6 +131,13 @@ impl Tracker {
                     s.tool = Some(call.tool.clone());
                     s.activity = format!("{} {}", call.tool, argument_hint(&call.arguments));
                 });
+                if let Some(log) = &inner.transcript {
+                    log.line(&format!(
+                        "tool {} {}",
+                        call.tool,
+                        argument_hint(&call.arguments)
+                    ));
+                }
             }
             Event::ToolResult(_) => {
                 inner.activity.progressed();

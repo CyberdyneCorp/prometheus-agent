@@ -33,15 +33,15 @@ use pmt_tools::environments::Environments;
 
 use super::super::model::SwitchableModel;
 use super::super::{Clients, Factory, Live, Options};
-use super::{ChildSpec, OwnedFlags, isolation};
+use super::{ChildSpec, OwnedFlags, endpoint, isolation};
 
 /// How long a child's background processes get to stop at its end.
 const REAP_WITHIN: Duration = Duration::from_secs(10);
 
 /// Factories that open children, per (profile, launching store, working
-/// directory, route flags): built once, shared by every child of the
-/// process.
-type FactoryKey = (PathBuf, PathBuf, PathBuf, Option<PathBuf>);
+/// directory, route flags, direct endpoint): built once, shared by every
+/// child of the process.
+type FactoryKey = (PathBuf, PathBuf, PathBuf, Option<PathBuf>, Option<String>);
 static FACTORIES: LazyLock<Mutex<HashMap<FactoryKey, Arc<Factory>>>> =
     LazyLock::new(Mutex::default);
 
@@ -115,12 +115,14 @@ impl ChildLauncher {
         scope: &ProfileScope,
         cwd: &Path,
         cached: bool,
+        variant: Option<String>,
     ) -> Result<Arc<Factory>, Error> {
         let key = (
             scope.dir().to_path_buf(),
             self.scope.dir().to_path_buf(),
             cwd.to_path_buf(),
             self.flags.borrow().mock_script.map(PathBuf::from),
+            variant,
         );
         if let Some(factory) = FACTORIES
             .lock()
@@ -166,11 +168,21 @@ impl ChildLauncher {
                 .await
                 .map_err(|e| Error::new(&codes::TASK_PANICKED, e.to_string()))?
         };
-        let factory = self.factory(&scope, &place.cwd, place.tree.is_none())?;
-        let pinned = plan.model.model.is_some();
-        let target = match &plan.model.model {
-            Some(model) => factory.models.pinned_target(model).await?,
-            None => self.model.target(),
+        let delegation = &self.scope.config().delegation;
+        let direct = endpoint::direct(delegation, &plan.model, &self.model.target());
+        let (factory_scope, variant) = match direct {
+            Some(_) => (
+                endpoint::scope_for(&scope, delegation).unwrap_or_else(|| scope.clone()),
+                endpoint::signature(delegation),
+            ),
+            None => (scope.clone(), None),
+        };
+        // A child's own worktree gets a factory of its own, never cached.
+        let factory = self.factory(&factory_scope, &place.cwd, place.tree.is_none(), variant)?;
+        let (target, pinned) = match (direct, &plan.model.model) {
+            (Some(direct), _) => (direct, true),
+            (None, Some(model)) => (factory.models.pinned_target(model).await?, true),
+            (None, None) => (self.model.target(), false),
         };
         let capabilities = match &profile_caps {
             Some(profile) => plan.grant.capabilities.intersect(profile),
@@ -195,6 +207,7 @@ impl ChildLauncher {
             parent_gate: self.gate.get().cloned(),
             root_events: Arc::clone(&self.root_events),
             oneshot: self.oneshot.clone(),
+            body_overrides: endpoint::overrides(delegation),
         };
         let id = self.child_session(plan.parent, &target, &place.cwd)?;
         let clients = Clients {

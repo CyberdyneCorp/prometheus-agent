@@ -1401,6 +1401,7 @@ impl Live {
         if let Some(delegation) = &self.delegation {
             delegation.close();
         }
+        pmt_tools::code_exec::kernel::close_session(&self.id.to_string());
         self.emit(Event::SessionEnd(SessionEnd {
             reason: reason.as_str().to_owned(),
         }))

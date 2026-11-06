@@ -55,8 +55,9 @@ impl Delegator {
         let call = contract::parse(&arguments, 1, &self.router_params())?;
         let (planned, admissions) = self.admit(&call).await?;
         let delegation_id = crate::ids::delegation_id();
+        let units = [super::units::Unit::whole(&delegation_id, call.tasks.len())];
         let children = self.register(
-            &delegation_id,
+            &units,
             &call,
             planned,
             admissions,

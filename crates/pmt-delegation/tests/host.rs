@@ -102,6 +102,7 @@ impl Fixture {
                 .join(self.session.to_string()),
             paused: Arc::new(|| false),
             context_left: Arc::new(|| None),
+            shape: pmt_delegation::shape::Shape::default(),
         };
         edit(&mut ctx);
         let delegator = Delegator::new(ctx);
@@ -176,6 +177,26 @@ struct FakeLauncher {
     plans: Mutex<Vec<ChildPlan>>,
     running: Arc<AtomicUsize>,
     peak: Arc<AtomicUsize>,
+    /// Where live transcripts are written, and the logs found there each
+    /// time a child was opened (before its first model call).
+    live_root: Mutex<Option<PathBuf>>,
+    logs_at_open: Mutex<Vec<usize>>,
+}
+
+impl FakeLauncher {
+    fn count_logs(&self) -> usize {
+        let Some(root) = self.live_root.lock().unwrap().clone() else {
+            return 0;
+        };
+        std::fs::read_dir(root)
+            .into_iter()
+            .flatten()
+            .filter_map(Result::ok)
+            .flat_map(|dir| std::fs::read_dir(dir.path()).into_iter().flatten())
+            .filter_map(Result::ok)
+            .filter(|f| f.file_name().to_string_lossy().starts_with("task-"))
+            .count()
+    }
 }
 
 impl Launcher for FakeLauncher {
@@ -184,6 +205,8 @@ impl Launcher for FakeLauncher {
         plan: &'a ChildPlan,
     ) -> BoxFuture<'a, Result<Arc<dyn ChildSession>, Error>> {
         Box::pin(async move {
+            let logs = self.count_logs();
+            self.logs_at_open.lock().unwrap().push(logs);
             self.plans.lock().unwrap().push(plan.clone());
             if plan.model.model.as_deref() == Some("bad/route") {
                 return Err(Error::new(
@@ -951,4 +974,233 @@ async fn a_plugin_launch_is_refused_like_a_spawn() {
     };
     assert_eq!(refusal.code.code, "delegation.invalid_task");
     assert!(f.launcher.plans.lock().unwrap().is_empty());
+}
+
+/// Scenario: Stop one child (from the agents monitor).
+#[tokio::test]
+async fn stopping_one_child_from_the_monitor_spares_its_siblings() {
+    let f = fixture();
+    let d = f.delegator(DelegationConfig::default(), f.background());
+    let body = body(
+        &call(
+            &d,
+            json!({"tasks": [{"goal": "slow 1"}, {"goal": "slow 2"}, {"goal": "slow 3"}]}),
+        )
+        .await,
+    );
+    let ids: Vec<String> = body["subagent_ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap().to_owned())
+        .collect();
+    let conversation = d.conversation();
+    let listed = pmt_delegation::monitor::tree(&conversation);
+    assert_eq!(listed.len(), 3, "{listed:?}");
+    assert!(listed.iter().all(|l| l.contains("running")), "{listed:?}");
+    let said = pmt_delegation::monitor::stop(&conversation, &ids[1]).unwrap();
+    assert!(said.contains("siblings keep running"), "{said}");
+    let delivered = f.completions.wait_for(1).await;
+    let completion = &delivered[0].1;
+    let results: Value =
+        serde_json::from_str(&completion[completion.find('{').unwrap()..]).unwrap();
+    let statuses: Vec<&str> = results["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["status"].as_str().unwrap())
+        .collect();
+    assert_eq!(statuses, ["completed", "interrupted", "completed"]);
+    assert!(
+        pmt_delegation::monitor::stop(&conversation, &ids[0]).is_err(),
+        "an ended child cannot be stopped"
+    );
+}
+
+/// Scenario: Tail a live transcript.
+#[tokio::test]
+async fn a_childs_transcript_exists_before_its_first_model_call_and_logs_each_tool_call() {
+    let f = fixture();
+    let live = pmt_delegation::transcript::root(f.scope.dir());
+    *f.launcher.live_root.lock().unwrap() = Some(live.clone());
+    let d = f.delegator(DelegationConfig::default(), sync());
+    let result = body(&call(&d, json!({"tasks": [{"goal": "write the files"}]})).await);
+    let paths: Vec<String> = result["live_transcripts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p.as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(paths.len(), 1);
+    assert!(paths[0].ends_with("task-1.log"), "{paths:?}");
+    assert_eq!(
+        *f.launcher.logs_at_open.lock().unwrap(),
+        [1],
+        "written before the child ran"
+    );
+    let log = std::fs::read_to_string(&paths[0]).unwrap();
+    let tool_lines = log
+        .lines()
+        .filter(|l| l.contains(" tool write_file "))
+        .count();
+    assert_eq!(tool_lines, 2, "one line per tool call:\n{log}");
+    assert!(
+        log.lines().all(|l| l
+            .split(' ')
+            .next()
+            .is_some_and(|t| t.parse::<jiff::Timestamp>().is_ok())),
+        "{log}"
+    );
+    let id = result["delegation_id"].as_str().unwrap();
+    let manifest = std::fs::read_to_string(live.join(id).join("manifest.json")).unwrap();
+    assert!(manifest.contains("task-1.log"), "{manifest}");
+}
+
+fn completions_of(delivered: &[(String, String)]) -> Vec<(String, Vec<usize>)> {
+    let mut out: Vec<(String, Vec<usize>)> = delivered
+        .iter()
+        .map(|(id, text)| {
+            let results: Value = serde_json::from_str(&text[text.find('{').unwrap()..]).unwrap();
+            let mut tasks: Vec<usize> = results["results"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|r| usize::try_from(r["task_index"].as_u64().unwrap()).unwrap())
+                .collect();
+            tasks.sort_unstable();
+            (id.clone(), tasks)
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+/// Scenario: Ungrouped results arrive separately.
+#[tokio::test]
+async fn ungrouped_results_arrive_separately_and_a_group_together() {
+    let f = fixture();
+    let config = DelegationConfig {
+        independent_completions: true,
+        ..DelegationConfig::default()
+    };
+    let d = f.delegator_with(config, f.background(), |ctx| {
+        ctx.shape.groups = true;
+    });
+    let handle = body(
+        &call(
+            &d,
+            json!({"tasks": [
+                {"goal": "quick a"},
+                {"goal": "slow bench 1", "group": "bench"},
+                {"goal": "quick c"},
+                {"goal": "slow bench 2", "group": "bench"}
+            ]}),
+        )
+        .await,
+    );
+    let id = handle["delegation_id"].as_str().unwrap().to_owned();
+    let units = handle["units"].as_array().unwrap();
+    assert_eq!(units.len(), 3, "{handle}");
+    assert_eq!(units[1]["delegation_id"], format!("{id}-2"));
+    assert_eq!(units[1]["group"], "bench");
+    assert_eq!(units[1]["task_indexes"], json!([1, 3]));
+    let delivered = f.completions.wait_for(3).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let got = completions_of(&f.completions.delivered.lock().unwrap());
+    assert_eq!(
+        got,
+        [
+            (format!("{id}-1"), vec![0]),
+            (format!("{id}-2"), vec![1, 3]),
+            (format!("{id}-3"), vec![2]),
+        ]
+    );
+    // The quick ones did not wait for the group.
+    assert!(!delivered[0].0.ends_with("-2"), "{delivered:?}");
+}
+
+#[tokio::test]
+async fn without_independent_completions_a_group_is_accepted_and_ignored() {
+    let f = fixture();
+    let d = f.delegator(DelegationConfig::default(), f.background());
+    let handle = body(
+        &call(
+            &d,
+            json!({"tasks": [{"goal": "quick a"}, {"goal": "quick b", "group": "g"}]}),
+        )
+        .await,
+    );
+    assert!(handle.get("units").is_none(), "{handle}");
+    f.completions.wait_for(1).await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let got = completions_of(&f.completions.delivered.lock().unwrap());
+    assert_eq!(got.len(), 1, "one completion for the call: {got:?}");
+    assert_eq!(got[0].1, [0, 1]);
+}
+
+/// Scenario: One message per turn on Telegram (the joining dispatch).
+#[tokio::test]
+async fn a_joining_session_waits_for_its_children_and_has_no_live_control() {
+    let f = fixture();
+    let d = f.delegator_with(DelegationConfig::default(), f.background(), |ctx| {
+        ctx.shape.joining = true;
+    });
+    let result = body(
+        &call(
+            &d,
+            json!({"tasks": [{"goal": "quick a"}, {"goal": "quick b"}]}),
+        )
+        .await,
+    );
+    assert_eq!(
+        result["status"], "completed",
+        "joined in the call: {result}"
+    );
+    assert_eq!(result["results"].as_array().unwrap().len(), 2);
+    assert!(f.completions.delivered.lock().unwrap().is_empty());
+    let listed = call(&d, json!({"action": "list"})).await;
+    assert!(!listed.status.succeeded());
+    assert!(
+        listed.text_content().contains("waits for its children"),
+        "{}",
+        listed.text_content()
+    );
+}
+
+/// Scenario: Review returns to the session (the delegation rail).
+#[tokio::test]
+async fn a_labelled_dispatch_returns_as_a_labelled_completion() {
+    let f = fixture();
+    let d = f.delegator(DelegationConfig::default(), f.background());
+    let id = d
+        .dispatch_labelled(pmt_delegation::host::Labelled {
+            goal: "Review the recent work".to_owned(),
+            context: "User: open a PR".to_owned(),
+            model: None,
+            label: "Review: focus on security".to_owned(),
+        })
+        .await
+        .unwrap();
+    let delivered = f.completions.wait_for(1).await;
+    assert_eq!(delivered[0].0, id);
+    assert!(
+        delivered[0].1.starts_with(&format!(
+            "[delegation_completed {id}] Review: focus on security"
+        )),
+        "{}",
+        delivered[0].1
+    );
+    let none = f.delegator(DelegationConfig::default(), sync());
+    let refused = none
+        .dispatch_labelled(pmt_delegation::host::Labelled {
+            goal: "g".to_owned(),
+            context: String::new(),
+            model: None,
+            label: "Review recent work".to_owned(),
+        })
+        .await;
+    assert!(
+        refused.is_err(),
+        "a session without completions cannot run it"
+    );
 }

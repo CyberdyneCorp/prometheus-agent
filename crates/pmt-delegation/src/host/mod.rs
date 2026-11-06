@@ -14,8 +14,10 @@ mod child;
 mod control;
 pub mod deliver;
 pub mod plugin;
+mod review;
 mod spawn;
 mod tracker;
+mod units;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -41,6 +43,8 @@ use crate::grant::{Grant, ParentGrant};
 use crate::router::Router;
 use crate::routing::ModelChoice;
 
+pub(crate) use control::steer_entry;
+pub use review::Labelled;
 pub use tracker::Tracker;
 
 /// How a child's turn ended.
@@ -224,6 +228,8 @@ pub struct SessionContext {
     pub paused: Arc<dyn Fn() -> bool + Send + Sync>,
     /// Tokens left in the parent's context window, when known.
     pub context_left: Arc<dyn Fn() -> Option<u64> + Send + Sync>,
+    /// The session's form of `delegate_task` (joining, groups).
+    pub shape: crate::shape::Shape,
 }
 
 /// One session's delegation.
@@ -293,6 +299,13 @@ impl Delegator {
         };
         let outcome = match parsed.action {
             Action::Spawn => self.spawn(parsed, cancel).await,
+            other if self.ctx.shape.joining => Err(Refusal::new(
+                &codes::DELEGATION_INVALID_TASK,
+                format!(
+                    "action={} is not available: this session waits for its children inside the call.",
+                    other.as_str()
+                ),
+            )),
             _ => self.control(&parsed).await,
         };
         outcome.unwrap_or_else(|refusal| refusal.tool_result())

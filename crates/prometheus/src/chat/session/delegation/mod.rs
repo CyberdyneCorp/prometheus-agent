@@ -6,6 +6,7 @@
 //! context files, no clarify channel, the parent's frozen memory snapshot,
 //! an ephemeral system prompt and approvals that fail closed.
 
+mod endpoint;
 pub mod isolation;
 mod launcher;
 pub mod routers;
@@ -108,6 +109,8 @@ pub struct ChildSpec {
     pub root_events: Arc<dyn EventSink>,
     /// The run's one-shot spawn budget, shared with the parent.
     pub oneshot: Option<Arc<OneShotBudget>>,
+    /// `delegation.request_overrides`, set on every model call.
+    pub body_overrides: Option<Arc<serde_json::Map<String, serde_json::Value>>>,
 }
 
 impl ChildSpec {

@@ -48,7 +48,8 @@ pub use agent::{
 };
 pub use connectors::{ConnectorsConfig, DEFAULT_CONNECTOR_GATEWAY};
 pub use delegation::{
-    BackgroundMode, CODE_EXECUTION_TOOLS, ChildApproval, CodeExecutionConfig, DelegationConfig,
+    BackgroundMode, CODE_EXECUTION_TOOLS, ChildApproval, CodeExecutionConfig, CodeExecutionMode,
+    DelegationConfig, GatewayDelegationMode, ReviewConfig,
 };
 pub use gateway::{
     AgentCacheConfig, AllowBots, BackgroundNotifications, Batching, ChatPolicy, ChatToolProgress,

@@ -42,7 +42,7 @@ pub fn check(config: &Config) -> Result<(), Error> {
             ),
         ));
     }
-    Ok(())
+    crate::delegation_requests::check(delegation)
 }
 
 /// Whether `prefix` makes valid branch names `<prefix>/subagent-<id>`.

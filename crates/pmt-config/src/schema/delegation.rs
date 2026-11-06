@@ -5,8 +5,12 @@
 //! delegation settings it started with, so its tool schemas and prompt
 //! cache stay intact (`/delegation ... --now` rebuilds on purpose).
 
+use std::collections::BTreeMap;
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+
+use super::{SecretName, WireFormat};
 
 /// The `[delegation]` section.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -68,6 +72,57 @@ pub struct DelegationConfig {
     pub worktree_isolation: bool,
     /// Prefix of a child's worktree branch (`<prefix>/subagent-<id>`).
     pub worktree_branch_prefix: String,
+    /// A direct endpoint children call instead of a provider route
+    /// (`model`, or the parent's model id, names the model there).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
+    /// Name of the secret holding the direct endpoint's key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_key_secret: Option<SecretName>,
+    /// Wire format of the direct endpoint (default: inferred from its
+    /// URL, as for a custom provider).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wire_format: Option<WireFormat>,
+    /// Request parameters set on every child model call, winning over the
+    /// route's own; the `extra_body` table is merged one level deep into
+    /// the request body.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub request_overrides: BTreeMap<String, serde_json::Value>,
+    /// How messaging sessions run their children: `auto` waits for them
+    /// inside the call when the platform's interim assistant messages are
+    /// off, `inline` always waits, `background` never does.
+    pub gateway_mode: GatewayDelegationMode,
+    /// Deliver each ungrouped task's result (and each `group`'s results)
+    /// as its own completion as soon as it is ready.
+    pub independent_completions: bool,
+    /// The model `/review` runs on (unset: the session's route).
+    pub review: ReviewConfig,
+}
+
+/// `[delegation.review]`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct ReviewConfig {
+    /// Provider of the reviewer's model.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    /// The reviewer's model (with `provider`, a model id there; alone,
+    /// `provider/model`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+}
+
+/// How a messaging session runs its children.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum GatewayDelegationMode {
+    /// Wait inside the call where interim assistant messages are off.
+    #[default]
+    Auto,
+    /// Always wait inside the call.
+    Inline,
+    /// Never wait: children report as later completions.
+    Background,
 }
 
 impl Default for DelegationConfig {
@@ -89,6 +144,13 @@ impl Default for DelegationConfig {
             model: None,
             worktree_isolation: false,
             worktree_branch_prefix: "prometheus".to_owned(),
+            base_url: None,
+            api_key_secret: None,
+            wire_format: None,
+            request_overrides: BTreeMap::new(),
+            gateway_mode: GatewayDelegationMode::Auto,
+            independent_completions: false,
+            review: ReviewConfig::default(),
         }
     }
 }
@@ -131,6 +193,42 @@ pub struct CodeExecutionConfig {
     /// Seconds one execution may run.
     #[schemars(range(min = 1, max = 86_400))]
     pub timeout_secs: u64,
+    /// `project` runs scripts in the session's working directory on the
+    /// project's virtual environment (3.8 or newer) when there is one;
+    /// `strict` runs them in a fresh staging directory on the managed
+    /// Python runtime.
+    pub mode: CodeExecutionMode,
+    /// Seconds an unused Python kernel stays alive before it is stopped.
+    #[schemars(range(min = 1, max = 604_800))]
+    pub kernel_idle_timeout_secs: u64,
+    /// Top-level sessions keeping a Python kernel at once; the least
+    /// recently used one loses its kernel beyond this (children's kernels
+    /// are not counted).
+    #[schemars(range(min = 1, max = 64))]
+    pub max_session_kernels: u32,
+}
+
+/// Where `execute_code` runs a script and on which Python.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum CodeExecutionMode {
+    /// The session's working directory and the project's virtual
+    /// environment, else the managed runtime.
+    #[default]
+    Project,
+    /// A fresh staging directory and the managed runtime.
+    Strict,
+}
+
+impl CodeExecutionMode {
+    /// The config spelling.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Project => "project",
+            Self::Strict => "strict",
+        }
+    }
 }
 
 /// The tools `execute_code` stubs offer by default.
@@ -150,6 +248,9 @@ impl Default for CodeExecutionConfig {
             allowed_tools: CODE_EXECUTION_TOOLS.iter().map(|&t| t.to_owned()).collect(),
             max_tool_calls: 50,
             timeout_secs: 300,
+            mode: CodeExecutionMode::Project,
+            kernel_idle_timeout_secs: 1800,
+            max_session_kernels: 4,
         }
     }
 }

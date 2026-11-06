@@ -53,7 +53,7 @@ impl Delegator {
 
 /// Queues `message` for `entry` (the `steer` action and the plugin
 /// interface).
-pub(super) fn steer_entry(
+pub(crate) fn steer_entry(
     entry: &Arc<Entry>,
     message: Option<&str>,
 ) -> Result<ToolResult, Refusal> {

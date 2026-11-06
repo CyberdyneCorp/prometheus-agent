@@ -192,6 +192,9 @@ pub struct ProviderModel {
     /// The session's `/reasoning` level (`None`: the config decides).
     session_reasoning: std::sync::Mutex<Option<ReasoningLevel>>,
     watch: std::sync::Mutex<Option<CredentialWatch>>,
+    /// Parameters set on every request body (a delegated child's
+    /// `delegation.request_overrides`).
+    body_overrides: std::sync::Mutex<Option<Arc<serde_json::Map<String, serde_json::Value>>>>,
 }
 
 impl ProviderModel {
@@ -206,7 +209,21 @@ impl ProviderModel {
             fallback: Mutex::new(fallback),
             session_reasoning: std::sync::Mutex::default(),
             watch: std::sync::Mutex::default(),
+            body_overrides: std::sync::Mutex::default(),
         }
+    }
+
+    /// Sets `overrides` on every later request body, on every route of
+    /// the chain (spec: subagent-delegation, Child request overrides and
+    /// direct endpoints).
+    pub fn set_body_overrides(
+        &self,
+        overrides: Option<Arc<serde_json::Map<String, serde_json::Value>>>,
+    ) {
+        *self
+            .body_overrides
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = overrides;
     }
 
     /// Calls `watch` with the credential of each route a call is sent on.
@@ -253,6 +270,11 @@ impl ProviderModel {
         );
         Request {
             reasoning: effort.ok().and_then(|e| e.sent),
+            body_overrides: self
+                .body_overrides
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone(),
             ..request.clone()
         }
     }

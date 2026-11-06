@@ -989,6 +989,22 @@
           },
           "type": "array"
         },
+        "kernel_idle_timeout_secs": {
+          "default": 1800,
+          "description": "Seconds an unused Python kernel stays alive before it is stopped.",
+          "format": "uint64",
+          "maximum": 604800,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_session_kernels": {
+          "default": 4,
+          "description": "Top-level sessions keeping a Python kernel at once; the least\nrecently used one loses its kernel beyond this (children's kernels\nare not counted).",
+          "format": "uint32",
+          "maximum": 64,
+          "minimum": 1,
+          "type": "integer"
+        },
         "max_tool_calls": {
           "default": 50,
           "description": "Stub calls one execution may make.",
@@ -996,6 +1012,11 @@
           "maximum": 10000,
           "minimum": 1,
           "type": "integer"
+        },
+        "mode": {
+          "$ref": "#/$defs/CodeExecutionMode",
+          "default": "project",
+          "description": "`project` runs scripts in the session's working directory on the\nproject's virtual environment (3.8 or newer) when there is one;\n`strict` runs them in a fresh staging directory on the managed\nPython runtime."
         },
         "timeout_secs": {
           "default": 300,
@@ -1008,6 +1029,21 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "CodeExecutionMode": {
+      "description": "Where `execute_code` runs a script and on which Python.",
+      "oneOf": [
+        {
+          "const": "project",
+          "description": "The session's working directory and the project's virtual\nenvironment, else the managed runtime.",
+          "type": "string"
+        },
+        {
+          "const": "strict",
+          "description": "A fresh staging directory and the managed runtime.",
+          "type": "string"
+        }
+      ]
     },
     "ComposerConfig": {
       "additionalProperties": false,
@@ -1416,10 +1452,28 @@
       "additionalProperties": false,
       "description": "The `[delegation]` section.",
       "properties": {
+        "api_key_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Name of the secret holding the direct endpoint's key."
+        },
         "background": {
           "$ref": "#/$defs/BackgroundMode",
           "default": "auto",
           "description": "`auto` runs top-level spawns in the background where the session\ncan receive later completions; `never` always waits."
+        },
+        "base_url": {
+          "description": "A direct endpoint children call instead of a provider route\n(`model`, or the parent's model id, names the model there).",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "child_approval": {
           "$ref": "#/$defs/ChildApproval",
@@ -1434,12 +1488,22 @@
           "minimum": 1,
           "type": "integer"
         },
+        "gateway_mode": {
+          "$ref": "#/$defs/GatewayDelegationMode",
+          "default": "auto",
+          "description": "How messaging sessions run their children: `auto` waits for them\ninside the call when the platform's interim assistant messages are\noff, `inline` always waits, `background` never does."
+        },
         "inactivity_timeout_secs": {
           "default": 0,
           "description": "Seconds without progress after which a child counts as stalled\n(`0` uses the built-in 450 s between iterations and 1200 s inside\none tool call; otherwise at least 30).",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
+        },
+        "independent_completions": {
+          "default": false,
+          "description": "Deliver each ungrouped task's result (and each `group`'s results)\nas its own completion as soon as it is ready.",
+          "type": "boolean"
         },
         "max_concurrent_children": {
           "default": 8,
@@ -1507,10 +1571,31 @@
           "description": "Publish `subagent.*` progress events on the root session's stream.",
           "type": "boolean"
         },
+        "request_overrides": {
+          "additionalProperties": true,
+          "description": "Request parameters set on every child model call, winning over the\nroute's own; the `extra_body` table is merged one level deep into\nthe request body.",
+          "type": "object"
+        },
+        "review": {
+          "$ref": "#/$defs/ReviewConfig",
+          "default": {},
+          "description": "The model `/review` runs on (unset: the session's route)."
+        },
         "router": {
           "default": "default",
           "description": "The delegation router: `default`, or a router a plugin provides.\nAn unavailable router refuses every spawn.",
           "type": "string"
+        },
+        "wire_format": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WireFormat"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Wire format of the direct endpoint (default: inferred from its\nURL, as for a custom provider)."
         },
         "worktree_branch_prefix": {
           "default": "prometheus",
@@ -2325,6 +2410,26 @@
       },
       "type": "object",
       "x-apply": "restart"
+    },
+    "GatewayDelegationMode": {
+      "description": "How a messaging session runs its children.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Wait inside the call where interim assistant messages are off.",
+          "type": "string"
+        },
+        {
+          "const": "inline",
+          "description": "Always wait inside the call.",
+          "type": "string"
+        },
+        {
+          "const": "background",
+          "description": "Never wait: children report as later completions.",
+          "type": "string"
+        }
+      ]
     },
     "GatewayDisplay": {
       "additionalProperties": false,
@@ -5743,6 +5848,27 @@
         }
       ]
     },
+    "ReviewConfig": {
+      "additionalProperties": false,
+      "description": "`[delegation.review]`.",
+      "properties": {
+        "model": {
+          "description": "The reviewer's model (with `provider`, a model id there; alone,\n`provider/model`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provider": {
+          "description": "Provider of the reviewer's model.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "SandboxConfig": {
       "additionalProperties": false,
       "description": "The `[security.sandbox]` section.",
@@ -8074,7 +8200,10 @@
           "web_search",
           "web_extract"
         ],
+        "kernel_idle_timeout_secs": 1800,
+        "max_session_kernels": 4,
         "max_tool_calls": 50,
+        "mode": "project",
         "timeout_secs": 300
       },
       "description": "Programmatic tool calling (`execute_code`)."
@@ -8129,7 +8258,9 @@
         "background": "auto",
         "child_approval": "deny",
         "escalation_timeout_secs": 300,
+        "gateway_mode": "auto",
         "inactivity_timeout_secs": 0,
+        "independent_completions": false,
         "max_concurrent_children": 8,
         "max_iterations": 150,
         "max_queued": 32,
@@ -8138,6 +8269,7 @@
         "max_tasks_per_call": 8,
         "oneshot_max_children": 2,
         "progress_events": true,
+        "review": {},
         "router": "default",
         "worktree_branch_prefix": "prometheus",
         "worktree_isolation": false

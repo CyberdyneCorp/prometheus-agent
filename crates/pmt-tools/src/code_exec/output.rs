@@ -60,6 +60,13 @@ pub fn cap_stdout(text: &str, cap: usize) -> Option<String> {
 /// The tool result of `ran`.
 #[must_use]
 pub fn result(ran: &Ran<'_>) -> ToolResult {
+    finish(&body(ran), ran.exit_code == Some(0))
+}
+
+/// The JSON body of `ran`'s result (callers may add fields before
+/// [`finish`]).
+#[must_use]
+pub fn body(ran: &Ran<'_>) -> serde_json::Value {
     let stdout = String::from_utf8_lossy(ran.stdout);
     let stderr = String::from_utf8_lossy(ran.stderr);
     let mut full_output = None;
@@ -90,7 +97,13 @@ pub fn result(ran: &Ran<'_>) -> ToolResult {
     if ran.cancelled {
         body["error"] = "The script was stopped with the turn.".into();
     }
-    let ok = ran.exit_code == Some(0);
+    body
+}
+
+/// The tool result of a finished `body`: an error unless the script
+/// exited with 0.
+#[must_use]
+pub fn finish(body: &serde_json::Value, ok: bool) -> ToolResult {
     let text = body.to_string();
     if ok {
         ToolResult::ok(text)

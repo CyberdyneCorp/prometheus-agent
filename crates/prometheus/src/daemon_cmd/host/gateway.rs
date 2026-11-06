@@ -329,6 +329,28 @@ impl Agents for DaemonHost {
         })
     }
 
+    fn admit_background<'a>(
+        &'a self,
+        profile: &'a str,
+        session: &'a str,
+    ) -> HostFuture<'a, pmt_gateway::messaging::agents::BackgroundSlot> {
+        Box::pin(async move {
+            let scope = self.profile(profile)?.scope();
+            let delegation = &scope.config().delegation;
+            let admission = pmt_delegation::limiter::Limiter::for_profile(
+                scope.dir(),
+                delegation.max_concurrent_children,
+                delegation.max_queued,
+            )
+            .admit(session, 1)
+            .map_err(|refusal| refusal.error())?
+            .pop()
+            .expect("one admission per task");
+            let permit = admission.ready().await;
+            Ok(Box::new(permit) as pmt_gateway::messaging::agents::BackgroundSlot)
+        })
+    }
+
     fn model_choices(&self, profile: &str) -> Vec<ModelChoice> {
         let Ok(profile) = self.profile(profile) else {
             return Vec::new();

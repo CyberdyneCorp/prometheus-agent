@@ -45,11 +45,12 @@ impl Delegator {
         results: &[SubagentResult],
         tasks: usize,
         sink: &Arc<dyn Completions>,
+        label: Option<&str>,
     ) {
         if self.suspended() {
             return;
         }
-        let text = completion_text(delegation_id, &self.for_context(results, tasks));
+        let text = completion_text(delegation_id, &self.for_context(results, tasks), label);
         deliver_one(&self.ctx.store, delegation_id, text, sink.as_ref()).await;
     }
 }
@@ -69,16 +70,24 @@ pub fn capped(result: &SubagentResult, cap: Option<usize>, spill_dir: &Path) -> 
     serde_json::to_value(result).unwrap_or(Value::Null)
 }
 
-/// The `delegation_completed` input text of `results`.
+/// The `delegation_completed` input text of `results`, headed by
+/// `label` when the dispatch named one (`/review`).
 #[must_use]
-pub fn completion_text(delegation_id: &str, results: &[Value]) -> String {
-    let body = json!({
+pub fn completion_text(delegation_id: &str, results: &[Value], label: Option<&str>) -> String {
+    let mut body = json!({
         "type": COMPLETION_TYPE,
         "delegation_id": delegation_id,
         "results": results,
     });
+    let heading = match label {
+        Some(label) => {
+            body["label"] = label.into();
+            format!("{label}: background subagents finished")
+        }
+        None => "Background subagents finished".to_owned(),
+    };
     format!(
-        "[{COMPLETION_TYPE} {delegation_id}] Background subagents finished. Their results:\n{}",
+        "[{COMPLETION_TYPE} {delegation_id}] {heading}. Their results:\n{}",
         serde_json::to_string_pretty(&body).unwrap_or_default()
     )
 }
@@ -176,7 +185,7 @@ pub async fn deliver_pending(
             .filter_map(|json| serde_json::from_str::<SubagentResult>(json).ok())
             .map(|result| capped(&result, cap, spill_dir))
             .collect();
-        let text = completion_text(&delegation.id, &results);
+        let text = completion_text(&delegation.id, &results, None);
         deliver_one(store, &delegation.id, text, sink).await;
     }
 }

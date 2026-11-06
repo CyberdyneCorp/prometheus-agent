@@ -640,11 +640,15 @@ looks for a release.
 - **`/background <prompt>`** (alias `/bg`; also in `prometheus chat` and
   the TUI) runs the prompt in a separate session of the profile (the
   chat's model and toolsets, none of its history) and answers at once with
-  "Background task started: ... (id bg_...)"; the chat keeps working. The
-  result arrives as "✅ Background task complete" or `❌ Background task
-  failed: <reason>` in the chat and thread that asked (a notification in
-  the CLI and TUI). A chat runs at most `gateway.background.max_per_chat`
-  (default 3) tasks at once ("Too many background tasks running (3)").
+  "Background task #1 started: ... (id bg_...)"; the chat keeps working.
+  The result arrives as "✅ Background task #1 complete" or `❌ Background
+  task #1 failed: <reason>` in the chat and thread that asked (a
+  notification in the CLI and TUI), never in the chat's own session. A
+  chat runs at most `gateway.background.max_per_chat` (default 3) tasks at
+  once ("Too many background tasks running (3)"), and every task takes a
+  slot of `delegation.max_concurrent_children` like a subagent (it waits
+  for one when all are busy). `/agents` lists the chat's tasks and `/agents
+  stop #1` stops one.
   Approvals a task's tools ask for are not shown anywhere and time out
   (denied), so a task runs what needs no approval.
 - **`/branch [--here] [name]`** (alias `/fork`) forks the session. Where

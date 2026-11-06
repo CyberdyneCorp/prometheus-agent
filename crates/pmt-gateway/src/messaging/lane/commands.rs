@@ -155,9 +155,14 @@ impl Lane {
             "topic" => self.topic_command(&call.routing, &call.args).await,
             "background" => {
                 let policy = self.session_policy(&call.routing);
-                let text =
-                    crate::messaging::tasks::start(&self.shared, &call.routing, policy, &call.args)
-                        .await;
+                let text = crate::messaging::tasks::start(
+                    &self.shared,
+                    &call.routing,
+                    policy,
+                    &call.args,
+                    self.session.as_deref(),
+                )
+                .await;
                 self.say(&text);
             }
             "update" => self.update_command(&call.routing, &call.args).await,

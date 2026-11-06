@@ -397,8 +397,8 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 ## 40. M2 Delegation upgrades
 
 - [ ] 40.1 Implement user-launched background sessions, the agents monitor with live transcripts (stop one child, tail a transcript), the review command and independent completions (ungrouped results arrive separately); verify with mock-provider tests (spec: subagent-delegation)
-- [ ] 40.2 Implement child request overrides and direct endpoints, gateway delegation mode with one-shot joining (one message per turn on messaging platforms) and worktree isolation for children (clean children pruned, failed probes keep work); verify with mock-provider tests (spec: subagent-delegation)
-- [ ] 40.3 Implement the persistent `execute_code` session kernel (state kept between calls, reset discards it) and `execute_code` execution modes (broken venv falls back); verify with kernel tests (spec: subagent-delegation)
+- [x] 40.2 Implement child request overrides and direct endpoints, gateway delegation mode with one-shot joining (one message per turn on messaging platforms) and worktree isolation for children (clean children pruned, failed probes keep work); verify with mock-provider tests (spec: subagent-delegation)
+- [x] 40.3 Implement the persistent `execute_code` session kernel (state kept between calls, reset discards it) and `execute_code` execution modes (broken venv falls back); verify with kernel tests (spec: subagent-delegation)
 
 ## 41. M2 Scheduled jobs
 

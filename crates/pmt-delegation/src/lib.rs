@@ -23,14 +23,17 @@ pub mod handles;
 pub mod host;
 pub mod ids;
 pub mod limiter;
+pub mod monitor;
 pub mod output;
 pub mod progress;
 pub mod result;
 pub mod router;
 pub mod routing;
 pub mod schema_check;
+pub mod shape;
 pub mod stall;
 pub mod summary;
+pub mod transcript;
 pub mod tree;
 pub mod validate;
 

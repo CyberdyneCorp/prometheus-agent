@@ -2677,6 +2677,14 @@ capabilities = [
 [subagent-delegation."execute_code pre-execution guards"]
 "Empty code" = ["crates/prometheus/tests/execute_code.rs::whitespace_code_runs_nothing"]
 
+# Group 40.3 (persistent execute_code kernel, execution modes).
+[subagent-delegation."Persistent execute_code session kernel"]
+"State persists between calls" = ["crates/prometheus/tests/execute_code_kernel.rs::variables_persist_between_calls_until_a_reset"]
+"Reset discards state" = ["crates/prometheus/tests/execute_code_kernel.rs::variables_persist_between_calls_until_a_reset"]
+
+[subagent-delegation."execute_code execution modes"]
+"Broken venv falls back" = ["crates/prometheus/tests/execute_code_kernel.rs::a_project_venv_without_an_interpreter_falls_back_with_a_note"]
+
 # Group 39 (git worktrees).
 [git-worktrees."Worktree creation"]
 "Repository with a post-checkout hook" = ["crates/pmt-worktrees/tests/worktrees.rs::a_post_checkout_hook_does_not_run_when_a_tree_is_created"]
@@ -2708,6 +2716,27 @@ capabilities = [
 [git-worktrees."Subagent worktree isolation"]
 "Child commits work" = ["crates/prometheus/tests/worktree_delegation.rs::a_childs_commit_lands_on_its_branch_and_its_tree_is_removed"]
 "Container backend" = ["crates/prometheus/tests/worktree_delegation.rs::on_a_container_backend_the_child_shares_the_workspace_with_a_note"]
+
+# Group 40.1 / 40.2 (background sessions, agents monitor, review,
+# independent completions, request overrides, gateway delegation mode).
+[subagent-delegation."User-launched background sessions"]
+"Result delivered to the same chat" = ["crates/prometheus/tests/delegation_gateway.rs::a_background_result_is_posted_to_the_chat_and_not_into_its_session", "crates/pmt-gateway/tests/messaging/chats.rs::a_background_task_reports_back_while_the_chat_keeps_talking"]
+
+[subagent-delegation."Agents monitor and live transcripts"]
+"Stop one child" = ["crates/pmt-delegation/tests/host.rs::stopping_one_child_from_the_monitor_spares_its_siblings", "crates/prometheus/tests/delegation_review.rs::agents_lists_tails_and_stops_a_running_child"]
+"Tail a live transcript" = ["crates/pmt-delegation/tests/host.rs::a_childs_transcript_exists_before_its_first_model_call_and_logs_each_tool_call", "crates/prometheus/tests/delegation_review.rs::agents_lists_tails_and_stops_a_running_child"]
+
+[subagent-delegation."Review command"]
+"Review returns to the session" = ["crates/prometheus/tests/delegation_review.rs::a_review_runs_in_the_background_and_returns_to_the_session", "crates/pmt-delegation/tests/host.rs::a_labelled_dispatch_returns_as_a_labelled_completion"]
+
+[subagent-delegation."Independent completions"]
+"Ungrouped results arrive separately" = ["crates/pmt-delegation/tests/host.rs::ungrouped_results_arrive_separately_and_a_group_together"]
+
+[subagent-delegation."Child request overrides and direct endpoints"]
+"Routing hint on every child call" = ["crates/prometheus/tests/delegation_requests.rs::a_childs_requests_carry_the_overrides_on_the_inherited_route"]
+
+[subagent-delegation."Gateway delegation mode and one-shot joining"]
+"One message per turn on Telegram" = ["crates/prometheus/tests/delegation_gateway.rs::a_platform_without_interim_messages_waits_for_its_children_and_replies_once", "crates/pmt-delegation/tests/host.rs::a_joining_session_waits_for_its_children_and_has_no_live_control"]
 
 [subagent-delegation."Worktree isolation for children"]
 "Clean child pruned" = ["crates/prometheus/tests/worktree_delegation.rs::a_child_that_changed_nothing_has_its_tree_and_branch_pruned"]

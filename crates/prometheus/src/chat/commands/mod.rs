@@ -5,6 +5,7 @@
 //! client drives. What only changes a client's display or which session
 //! it drives stays with that client.
 
+mod agents;
 mod background;
 mod browser;
 mod delegation;
@@ -14,6 +15,7 @@ mod mcp;
 pub(crate) mod plugins;
 pub(crate) mod quick;
 mod refine;
+mod review;
 pub(crate) mod session;
 pub mod worktree;
 
@@ -95,6 +97,8 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "reload-skills" => Ok(pmt_skills::reload::reload(&ctx.live.skills).render()),
         "refine" => refine::refine(ctx, args).await,
         "background" => background::background(ctx, args).await,
+        "agents" => agents::agents(ctx, args).await,
+        "review" => review::review(ctx, args).await,
         "delegation" => delegation::delegation(ctx, args).await,
         "profile" => Ok(format!(
             "profile {} ({})",

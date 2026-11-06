@@ -63,6 +63,10 @@ pub struct Conversation {
     pub policy: Option<pmt_config::schema::ChatPolicy>,
 }
 
+/// A background task's concurrency slot, held while it runs (dropping it
+/// frees the slot).
+pub type BackgroundSlot = Box<dyn std::any::Any + Send>;
+
 /// A configured provider and the models a chat's picker offers of it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelChoice {
@@ -182,6 +186,17 @@ pub trait Agents: Host {
             store.append_message(session.parse()?, &row)?;
             Ok(())
         })
+    }
+    /// Waits for a slot of the profile's child concurrency limit for the
+    /// background task of `session` (spec: subagent-delegation,
+    /// User-launched background sessions count against
+    /// `delegation.max_concurrent_children`). The default admits at once.
+    fn admit_background<'a>(
+        &'a self,
+        _profile: &'a str,
+        _session: &'a str,
+    ) -> HostFuture<'a, BackgroundSlot> {
+        Box::pin(async { Ok(Box::new(()) as BackgroundSlot) })
     }
     /// The providers configured for `profile` and their models, for the
     /// chat model picker (`/model` without arguments).

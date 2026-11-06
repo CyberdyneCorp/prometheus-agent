@@ -458,6 +458,7 @@ impl<'a> Turn<'a> {
             max_output_tokens: None,
             cache,
             reasoning: None,
+            body_overrides: None,
         };
         if let Some(ephemeral) = &mut self.ephemeral {
             ephemeral.attach(&mut request.messages);

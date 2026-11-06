@@ -8,12 +8,14 @@ use std::sync::{Arc, OnceLock};
 use pmt_agent::tools::{AgentTools, DelegationPort};
 use pmt_agent::turn::model::BoxFuture;
 use pmt_agent::turn::{EventSink, ToolPort as _};
+use pmt_config::schema::GatewayDelegationMode;
 use pmt_core::cancel::CancelToken;
 use pmt_core::capability::CapabilitySet;
 use pmt_delegation::agents::Definitions;
 use pmt_delegation::budget::OneShotBudget;
 use pmt_delegation::grant::ParentGrant;
 use pmt_delegation::host::{Delegator, Dispatch, SessionContext};
+use pmt_delegation::shape::Shape;
 use pmt_obs::trajectory::writer::Emit;
 use pmt_store::{Source, Visibility};
 use pmt_tools::ToolResult;
@@ -34,6 +36,7 @@ pub struct Wiring {
     code: Option<Arc<super::super::code::SessionCode>>,
     events: Arc<LateEvents>,
     gate: Arc<OnceLock<Arc<CommandGate>>>,
+    shape: Shape,
 }
 
 impl Wiring {
@@ -62,6 +65,7 @@ impl Wiring {
             Arc::clone(&events) as _,
             oneshot.clone(),
         );
+        let shape = shape(factory, session, child, &config);
         let dispatch = dispatch(factory, session, child, clients);
         let paused_file = scope.dir().join(PAUSE_FILE);
         let store = Arc::clone(&factory.store);
@@ -95,6 +99,7 @@ impl Wiring {
             spill_dir: pmt_tools::spillover::session_dir(scope.dir(), &id.to_string()),
             paused: Arc::new(move || paused_file.exists()),
             context_left: Arc::new(move || Some(context_left(&store, id, window))),
+            shape,
             config,
             scope,
         };
@@ -103,6 +108,7 @@ impl Wiring {
             code: None,
             events,
             gate,
+            shape,
         }
     }
 
@@ -132,6 +138,7 @@ impl Wiring {
         if let Some(code) = &self.code {
             code.bind(tools);
         }
+        tools.shape_delegation(self.shape);
         let tools = tools.definitions().into_iter().map(|t| t.name).collect();
         self.delegator.set_parent(ParentGrant {
             tools,
@@ -163,6 +170,41 @@ fn context_left(store: &pmt_store::Store, id: pmt_core::id::SessionId, window: u
             .sum()
     });
     window.saturating_sub(used / pmt_delegation::summary::CHARS_PER_TOKEN)
+}
+
+/// The session's form of `delegate_task`: read back from its frozen
+/// tool schemas once it has them (fixed at creation), else from the
+/// configuration: a top-level messaging session joins its children under
+/// `delegation.gateway_mode` (`auto`: when the platform's interim
+/// assistant messages are off), and `delegation.independent_completions`
+/// offers groups.
+fn shape(
+    factory: &Factory,
+    session: &pmt_store::Session,
+    child: Option<&ChildSpec>,
+    config: &pmt_config::schema::DelegationConfig,
+) -> Shape {
+    let stored = factory.store.session_prompt(session.id).ok().flatten();
+    if let Some(shape) = stored.and_then(|p| Shape::of_stored(&p.tools)) {
+        return shape;
+    }
+    let joining = match (&session.origin, child) {
+        (pmt_store::Origin::Gateway { platform, .. }, None) => match config.gateway_mode {
+            GatewayDelegationMode::Inline => true,
+            GatewayDelegationMode::Background => false,
+            GatewayDelegationMode::Auto => {
+                let display = &factory.scope.config().gateway.display;
+                !display
+                    .for_platform(&platform.to_lowercase())
+                    .interim_messages
+            }
+        },
+        _ => false,
+    };
+    Shape {
+        joining,
+        groups: config.independent_completions,
+    }
 }
 
 /// How the session's spawns run: in the background where a sink takes

@@ -608,6 +608,28 @@ pub static BUILTINS: &[Command] = &[
         Effect::None,
     ),
     command(
+        "agents",
+        &["tasks"],
+        Session,
+        "What runs for this session: subagents, background tasks, processes; stop, steer, inspect or tail one",
+        &[text(
+            "stop <id> | steer <sa-id> <message> | inspect <id> | tail <sa-id>",
+        )],
+        TERMINALS_AND_CHATS,
+        Immediate,
+        Effect::None,
+    ),
+    command(
+        "review",
+        &[],
+        Session,
+        "Review the session's recent work with a background reviewer; findings return here",
+        &[text("instructions")],
+        TERMINALS_AND_CHATS,
+        Immediate,
+        Effect::None,
+    ),
+    command(
         "background",
         &["bg"],
         Session,

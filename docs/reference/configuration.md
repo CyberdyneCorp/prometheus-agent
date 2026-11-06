@@ -107,7 +107,10 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `busy.input_mode` | one of "queue", "steer", "interrupt" | `"queue"` | `"queue"`, `"steer"`, `"interrupt"` | `live` | What plain text typed while a turn runs does: `queue` runs it as the next turn, `steer` hands it to the running turn after its current tool step, `interrupt` stops the turn and then runs it. |
 | `cli.confirm_destructive` | boolean | `true` | any | `live` | Ask `once / always / cancel` before `/clear`, `/new`, `/undo` and `/rewind`. |
 | `code_execution.allowed_tools` | array of string | `["read_file","write_file","search_files","patch","terminal","web_search","web_extract"]` | any | `next_session` | Tools a script may call through its stubs; a session sees the intersection with its own granted tools. |
+| `code_execution.kernel_idle_timeout_secs` | integer | `1800` | 1 to 604800 | `next_session` | Seconds an unused Python kernel stays alive before it is stopped. |
+| `code_execution.max_session_kernels` | integer | `4` | 1 to 64 | `next_session` | Top-level sessions keeping a Python kernel at once; the least recently used one loses its kernel beyond this (children's kernels are not counted). |
 | `code_execution.max_tool_calls` | integer | `50` | 1 to 10000 | `next_session` | Stub calls one execution may make. |
+| `code_execution.mode` | one of "project", "strict" | `"project"` | `"project"`, `"strict"` | `next_session` | `project` runs scripts in the session's working directory on the project's virtual environment (3.8 or newer) when there is one; `strict` runs them in a fresh staging directory on the managed Python runtime. |
 | `code_execution.timeout_secs` | integer | `300` | 1 to 86400 | `next_session` | Seconds one execution may run. |
 | `compression.abort_on_summary_failure` | boolean | `false` | any | `next_session` | End the turn when the summary cannot be produced. |
 | `compression.enabled` | boolean | `true` | any | `next_session` | Compact the context automatically. |
@@ -131,10 +134,14 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `connectors.gateway_url` | string | `"https://connector-gateway.nousresearch.com"` | any | `next_session` | The connector gateway's origin (a self-hosted gateway, or a test server); `https` except on loopback. |
 | `context.engine` | string | `"builtin"` | any | `next_session` | Context engine: `builtin` or an installed `context-engine` plugin. |
 | `cron.timezone` | string | unset | any | `live` | IANA time zone of this profile (`Europe/Lisbon`); unset uses the host's zone. |
+| `delegation.api_key_secret` | string | unset | a secret name | `next_session` | Name of the secret holding the direct endpoint's key. |
 | `delegation.background` | one of "auto", "never" | `"auto"` | `"auto"`, `"never"` | `next_session` | `auto` runs top-level spawns in the background where the session can receive later completions; `never` always waits. |
+| `delegation.base_url` | string | unset | any | `next_session` | A direct endpoint children call instead of a provider route (`model`, or the parent's model id, names the model there). |
 | `delegation.child_approval` | one of "deny", "escalate" | `"deny"` | `"deny"`, `"escalate"` | `next_session` | What an approval a child needs does: `deny` it, or `escalate` it to the root session's surface. |
 | `delegation.escalation_timeout_secs` | integer | `300` | 1 to 86400 | `next_session` | Seconds an escalated approval waits for an answer before it is denied. |
+| `delegation.gateway_mode` | one of "auto", "inline", "background" | `"auto"` | `"auto"`, `"inline"`, `"background"` | `next_session` | How messaging sessions run their children: `auto` waits for them inside the call when the platform's interim assistant messages are off, `inline` always waits, `background` never does. |
 | `delegation.inactivity_timeout_secs` | integer | `0` | ≥ 0 | `next_session` | Seconds without progress after which a child counts as stalled (`0` uses the built-in 450 s between iterations and 1200 s inside one tool call; otherwise at least 30). |
+| `delegation.independent_completions` | boolean | `false` | any | `next_session` | Deliver each ungrouped task's result (and each `group`'s results) as its own completion as soon as it is ready. |
 | `delegation.max_concurrent_children` | integer | `8` | 1 to 64 | `next_session` | Children running at once across the profile, synchronous and background alike; further spawns queue. |
 | `delegation.max_iterations` | integer | `150` | 1 to 1000 | `next_session` | Model calls one child may make. |
 | `delegation.max_queued` | integer | `32` | 0 to 1024 | `next_session` | Spawns waiting for a free slot before new ones are refused with `delegation.at_capacity`. |
@@ -144,7 +151,11 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `delegation.model` | string | unset | any | `next_session` | The model children run on unless the task or its agent names one (`provider/model`); unset: the parent's current route. |
 | `delegation.oneshot_max_children` | integer | `2` | ≥ 0 | `next_session` | Children a finite one-shot run (`chat -z`, cron, eval) may spawn (`0` is unlimited); interactive and gateway sessions are never charged. |
 | `delegation.progress_events` | boolean | `true` | any | `next_session` | Publish `subagent.*` progress events on the root session's stream. |
+| `delegation.request_overrides` | table | unset | any | `next_session` | Request parameters set on every child model call, winning over the route's own; the `extra_body` table is merged one level deep into the request body. |
+| `delegation.review.model` | string | unset | any | `next_session` | The reviewer's model (with `provider`, a model id there; alone, `provider/model`). |
+| `delegation.review.provider` | string | unset | any | `next_session` | Provider of the reviewer's model. |
 | `delegation.router` | string | `"default"` | any | `next_session` | The delegation router: `default`, or a router a plugin provides. An unavailable router refuses every spawn. |
+| `delegation.wire_format` | one of "chat_completions", "responses", "anthropic_messages" | unset | `"chat_completions"`, `"responses"`, `"anthropic_messages"` | `next_session` | Wire format of the direct endpoint (default: inferred from its URL, as for a custom provider). |
 | `delegation.worktree_branch_prefix` | string | `"prometheus"` | any | `next_session` | Prefix of a child's worktree branch (`<prefix>/subagent-<id>`). |
 | `delegation.worktree_isolation` | boolean | `false` | any | `next_session` | Run each child in its own git worktree and branch when the parent uses the local terminal backend inside a git repository. |
 | `display.bell_on_complete` | boolean | `false` | any | `live` | Ring the terminal bell when a turn completes. |

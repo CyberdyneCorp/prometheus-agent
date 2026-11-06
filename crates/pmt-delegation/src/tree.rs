@@ -146,6 +146,8 @@ pub struct Entry {
     cancel_requested: std::sync::atomic::AtomicBool,
     /// A plugin cancelled it (`cancel_requested`, then `cancelled`).
     cancelled: std::sync::atomic::AtomicBool,
+    /// Its live transcript.
+    transcript: std::sync::OnceLock<std::path::PathBuf>,
 }
 
 /// What an entry is created from.
@@ -196,6 +198,31 @@ impl Entry {
     /// Updates the live snapshot.
     pub fn observe(&self, update: impl FnOnce(&mut Snapshot)) {
         update(&mut lock(&self.snapshot));
+    }
+
+    /// Notes its live transcript.
+    pub fn set_transcript(&self, path: std::path::PathBuf) {
+        let _ = self.transcript.set(path);
+    }
+
+    /// Its live transcript, if one was written.
+    #[must_use]
+    pub fn transcript(&self) -> Option<&std::path::Path> {
+        self.transcript.get().map(std::path::PathBuf::as_path)
+    }
+
+    /// The `provider/model` it runs on (empty before it starts).
+    #[must_use]
+    pub fn model(&self) -> String {
+        lock(&self.model).clone()
+    }
+
+    /// Time since it was spawned.
+    #[must_use]
+    pub fn elapsed(&self) -> Duration {
+        lock(&self.ended)
+            .unwrap_or_else(Instant::now)
+            .saturating_duration_since(self.started)
     }
 
     /// The live snapshot.
@@ -361,6 +388,7 @@ impl Registry {
             ended: Mutex::default(),
             cancel_requested: std::sync::atomic::AtomicBool::new(false),
             cancelled: std::sync::atomic::AtomicBool::new(false),
+            transcript: std::sync::OnceLock::new(),
         });
         let mut entries = lock(&self.entries);
         let now = Instant::now();

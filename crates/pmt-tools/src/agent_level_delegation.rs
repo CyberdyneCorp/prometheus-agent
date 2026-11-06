@@ -80,11 +80,13 @@ pub fn execute_code() -> ToolDescriptor {
         "Run a Python script in a sandbox to process data or chain tool calls without round \
          trips. Inside it, `from prometheus_tools import <tool>` gives a function per tool you \
          may call from code (see `available` in an error); each returns the tool's text. \
-         Print what you want back: stdout (capped) and stderr are returned.",
+         Print what you want back: stdout (capped) and stderr are returned. Imports and \
+         variables persist between calls of this session; pass `reset: true` to start clean.",
         json!({
             "type": "object",
             "properties": {
-                "code": {"type": "string", "description": "The Python source."}
+                "code": {"type": "string", "description": "The Python source."},
+                "reset": {"type": "boolean", "description": "Discard the imports and variables earlier calls left (they persist between calls by default)."}
             },
             "required": ["code"],
             "additionalProperties": false

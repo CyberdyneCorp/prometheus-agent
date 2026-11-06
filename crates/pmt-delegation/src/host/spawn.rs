@@ -13,6 +13,7 @@ use pmt_store::delegations::{Delivery, SubagentRow};
 use pmt_tools::ToolResult;
 use serde_json::{Value, json};
 
+use super::units::Unit;
 use super::{ApprovalPlan, ChildPlan, Delegator, Dispatch};
 use crate::Refusal;
 use crate::budget::{self, ChildBudget, Remaining};
@@ -49,6 +50,18 @@ pub(super) struct Child {
     pub planned: Planned,
     pub admission: Admission,
     pub output_schema: Option<Value>,
+    /// Its live transcript.
+    pub transcript: Option<Arc<crate::transcript::Transcript>>,
+}
+
+/// What a background dispatch starts.
+pub(super) struct Dispatched<'a> {
+    pub units: &'a [Unit],
+    pub children: Vec<Child>,
+    /// The live transcript paths.
+    pub live: Vec<String>,
+    /// The handle lists the units.
+    pub independent: bool,
 }
 
 impl Delegator {
@@ -65,11 +78,24 @@ impl Delegator {
             Mode::Turn
         };
         let delegation_id = crate::ids::delegation_id();
-        let children = self.register(&delegation_id, &call, planned, admissions, mode, cancel)?;
+        let independent = mode == Mode::Background && self.ctx.shape.groups;
+        let units = Unit::of(&call, &delegation_id, independent);
+        let mut children = self.register(&units, &call, planned, admissions, mode, cancel)?;
+        let live = self.transcripts(&delegation_id, &mut children);
         match background {
-            Ok(sink) => Ok(self.dispatch_background(&delegation_id, children, sink)),
+            Ok(sink) => Ok(self.dispatch_background(
+                &delegation_id,
+                Dispatched {
+                    units: &units,
+                    children,
+                    live,
+                    independent,
+                },
+                &sink,
+                None,
+            )),
             Err(note) => Ok(self
-                .run_synchronously(&delegation_id, children, call.tasks.len(), &note)
+                .run_synchronously(&delegation_id, children, call.tasks.len(), &note, &live)
                 .await),
         }
     }
@@ -256,6 +282,12 @@ impl Delegator {
         if self.ctx.depth > 0 {
             return Err("Nested spawns run synchronously.".to_owned());
         }
+        if self.ctx.shape.joining {
+            return Err(
+                "This messaging session waits for its children (delegation.gateway_mode)."
+                    .to_owned(),
+            );
+        }
         if self.ctx.config.background == BackgroundMode::Never {
             return Err(
                 "delegation.background = \"never\": the call waited for its children.".to_owned(),
@@ -277,7 +309,7 @@ impl Delegator {
     /// Records the call and its children and creates their live entries.
     pub(super) fn register(
         &self,
-        delegation_id: &str,
+        units: &[Unit],
         call: &Call,
         planned: Vec<Planned>,
         admissions: Vec<Admission>,
@@ -295,7 +327,10 @@ impl Delegator {
         };
         let mut children = Vec::with_capacity(planned.len());
         let mut rows = Vec::with_capacity(planned.len());
-        for ((task, planned), admission) in call.tasks.iter().zip(planned).zip(admissions) {
+        for (position, ((task, planned), admission)) in
+            call.tasks.iter().zip(planned).zip(admissions).enumerate()
+        {
+            let delegation_id = Unit::id_of(units, position);
             let subagent_id = match &planned {
                 Planned::Run(plan, _) => plan.subagent_id.clone(),
                 Planned::Refused(_) => crate::ids::subagent_id(),
@@ -303,7 +338,7 @@ impl Delegator {
             let entry = Registry::process().add(
                 NewEntry {
                     subagent_id: subagent_id.clone(),
-                    delegation_id: delegation_id.to_owned(),
+                    delegation_id: delegation_id.clone(),
                     task_index: task.index,
                     goal: task.goal.clone(),
                     depth: self.ctx.depth + 1,
@@ -317,7 +352,7 @@ impl Delegator {
             );
             rows.push(SubagentRow {
                 id: subagent_id,
-                delegation_id: delegation_id.to_owned(),
+                delegation_id,
                 task_index: i64::try_from(task.index).unwrap_or(i64::MAX),
                 session_id: None,
                 parent_session_id: self.ctx.session.to_string(),
@@ -337,6 +372,7 @@ impl Delegator {
                 planned,
                 admission,
                 output_schema: self.output_schema(task),
+                transcript: None,
             });
         }
         // Only a background call owes the session a completion; a plugin's
@@ -346,20 +382,36 @@ impl Delegator {
         } else {
             Delivery::Inline
         };
-        self.ctx
-            .store
-            .record_delegation(delegation_id, self.ctx.session, delivery, &rows)
-            .map_err(|e| Refusal::from(&e))?;
+        for unit in units {
+            let unit_rows: Vec<SubagentRow> = rows
+                .iter()
+                .filter(|r| r.delegation_id == unit.id)
+                .cloned()
+                .collect();
+            self.ctx
+                .store
+                .record_delegation(&unit.id, self.ctx.session, delivery, &unit_rows)
+                .map_err(|e| Refusal::from(&e))?;
+        }
         Ok(children)
     }
 
-    /// Starts the children and answers at once with the handle.
-    fn dispatch_background(
+    /// Starts the children and answers at once with the handle; each unit
+    /// is delivered as its own completion once its children end
+    /// (`label` heads every completion).
+    pub(super) fn dispatch_background(
         self: &Arc<Self>,
         delegation_id: &str,
-        children: Vec<Child>,
-        sink: Arc<dyn super::Completions>,
+        dispatched: Dispatched<'_>,
+        sink: &Arc<dyn super::Completions>,
+        label: Option<&str>,
     ) -> ToolResult {
+        let Dispatched {
+            units,
+            children,
+            live,
+            independent,
+        } = dispatched;
         let ids: Vec<String> = children
             .iter()
             .map(|c| c.entry.subagent_id.clone())
@@ -369,23 +421,30 @@ impl Delegator {
             .filter(|c| c.admission.is_queued())
             .map(|c| c.entry.subagent_id.clone())
             .collect();
-        let me = Arc::clone(self);
-        let id = delegation_id.to_owned();
-        tokio::spawn(async move {
-            let tasks = children.len();
-            let results = me.run_all(children).await;
-            me.complete(&id, &results, tasks, &sink).await;
+        let mut by_unit = Unit::split(units, children);
+        for unit in units {
+            let unit_children = by_unit.remove(&unit.id).unwrap_or_default();
+            let me = Arc::clone(self);
+            let (id, sink, label) = (unit.id.clone(), Arc::clone(sink), label.map(str::to_owned));
+            tokio::spawn(async move {
+                let tasks = unit_children.len();
+                let results = me.run_all(unit_children).await;
+                me.complete(&id, &results, tasks, &sink, label.as_deref())
+                    .await;
+            });
+        }
+        let mut handle = json!({
+            "status": "dispatched",
+            "delegation_id": delegation_id,
+            "subagent_ids": ids,
+            "queued": queued,
+            "live_transcripts": live,
+            "note": "The children run in the background; their results arrive later as a delegation_completed input. Use action=list/status/steer/stop/wait to follow them.",
         });
-        ToolResult::ok(
-            json!({
-                "status": "dispatched",
-                "delegation_id": delegation_id,
-                "subagent_ids": ids,
-                "queued": queued,
-                "note": "The children run in the background; their results arrive later as a delegation_completed input. Use action=list/status/steer/stop/wait to follow them.",
-            })
-            .to_string(),
-        )
+        if independent {
+            handle["units"] = units.iter().map(Unit::view).collect();
+        }
+        ToolResult::ok(handle.to_string())
     }
 
     async fn run_synchronously(
@@ -394,6 +453,7 @@ impl Delegator {
         children: Vec<Child>,
         tasks: usize,
         note: &str,
+        live: &[String],
     ) -> ToolResult {
         let results = self.run_all(children).await;
         let inserted = self.for_context(&results, tasks);
@@ -402,6 +462,7 @@ impl Delegator {
                 "status": "completed",
                 "delegation_id": delegation_id,
                 "results": inserted,
+                "live_transcripts": live,
                 "note": note,
             })
             .to_string(),

@@ -13,6 +13,8 @@
 //! granted tools is exposed, and an empty intersection runs nothing.
 
 pub mod channel;
+pub mod interpreter;
+pub mod kernel;
 pub mod output;
 pub mod stubs;
 
@@ -79,6 +81,9 @@ pub struct Execution<'a> {
     pub timeout: Duration,
     /// Where the full stdout is kept when it is capped.
     pub spill_dir: &'a Path,
+    /// Why the script runs differently than configured (a fallback),
+    /// added to the result.
+    pub note: Option<String>,
 }
 
 /// The refusal of an `execute_code` call.
@@ -150,7 +155,7 @@ async fn run_script(
     if !matches!(ended, Ended::Exited(_)) {
         let _ = child.kill().await;
     }
-    let result = output::result(&output::Ran {
+    let mut body = output::body(&output::Ran {
         stdout: &out,
         stderr: &err,
         exit_code: match ended {
@@ -163,14 +168,21 @@ async fn run_script(
         timeout: exec.timeout,
         spill_dir: exec.spill_dir,
     });
+    if let Some(note) = &exec.note {
+        body["note"] = note.clone().into();
+    }
     let _ = std::fs::remove_dir_all(&dir);
-    Ok(result)
+    Ok(output::finish(&body, ended_ok(&ended)))
 }
 
 enum Ended {
     Exited(Option<i32>),
     TimedOut,
     Cancelled,
+}
+
+fn ended_ok(ended: &Ended) -> bool {
+    matches!(ended, Ended::Exited(Some(0)))
 }
 
 /// The script under the sandbox with nothing but the allowed environment.

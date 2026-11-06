@@ -20,6 +20,13 @@ use crate::result::{ExitReason, ResultError, ResultUsage, Status, SubagentResult
 use crate::stall::{self, Activity, Policy};
 use crate::tree::Entry;
 
+/// What one child runs with.
+struct Run<'a> {
+    plan: &'a ChildPlan,
+    schema: Option<&'a Value>,
+    transcript: Option<Arc<crate::transcript::Transcript>>,
+}
+
 /// How a run ended before its result is assembled.
 struct Ran {
     outcome: TurnOutcome,
@@ -41,6 +48,7 @@ impl Delegator {
             planned,
             admission,
             output_schema,
+            transcript,
         } = child;
         let result = match planned {
             Planned::Refused(message) => SubagentResult::refused(
@@ -55,21 +63,28 @@ impl Delegator {
                     () = entry.interrupt.token().cancelled() => interrupted(&entry),
                     permit = admission.ready() => {
                         let _permit = permit;
-                        self.run_planned(&entry, &plan, goal, output_schema.as_ref()).await
+                        let run = Run { plan: &plan, schema: output_schema.as_ref(), transcript: transcript.clone() };
+                        self.run_planned(&entry, run, goal).await
                     }
                 }
             }
         };
+        if let Some(log) = &transcript {
+            log.line(&format!(
+                "finished: {} {}",
+                result.status.as_str(),
+                pmt_core::subagent_tree::one_line(&result.summary)
+            ));
+        }
         self.finish(&entry, result).await
     }
 
-    async fn run_planned(
-        &self,
-        entry: &Arc<Entry>,
-        plan: &ChildPlan,
-        goal: String,
-        schema: Option<&Value>,
-    ) -> SubagentResult {
+    async fn run_planned(&self, entry: &Arc<Entry>, run: Run<'_>, goal: String) -> SubagentResult {
+        let Run {
+            plan,
+            schema,
+            transcript,
+        } = run;
         let started = Instant::now();
         let activity = Arc::new(Activity::new());
         let tracker = Tracker::start(
@@ -79,6 +94,7 @@ impl Delegator {
                 .config
                 .progress_events
                 .then(|| Arc::clone(&self.ctx.events)),
+            transcript.clone(),
         );
         let mut plan = plan.clone();
         plan.events = Arc::new(tracker.clone()) as _;
@@ -87,6 +103,13 @@ impl Delegator {
             Err(err) => return not_opened(entry, &err),
         };
         entry.started(&session.id().to_string(), &session.model());
+        if let Some(log) = &transcript {
+            log.line(&format!(
+                "started in session {} on {}",
+                session.id(),
+                session.model()
+            ));
+        }
         if let Some(cwd) = session.cwd() {
             tracker.set_cwd(cwd);
         }

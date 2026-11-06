@@ -101,7 +101,7 @@ impl Factory {
             clients,
             memory.snapshot(),
         );
-        wiring.attach_code(self.session_code(session.id, environment));
+        wiring.attach_code(self.session_code(session.id, environment, child.is_none()));
         wiring
     }
 
@@ -132,6 +132,9 @@ impl Factory {
             Some(spec) if spec.pinned => self.models.port_pinned(target).await?,
             _ => self.models.port(target).await?,
         };
+        if let Some(spec) = child {
+            port.set_body_overrides(spec.body_overrides.clone());
+        }
         Ok(Arc::new(SwitchableModel::new(target.clone(), port)))
     }
 
@@ -168,16 +171,18 @@ impl Factory {
         &self,
         id: SessionId,
         environment: &env::Attached,
+        top_level: bool,
     ) -> Arc<code::SessionCode> {
-        code::SessionCode::new(
-            &self.scope,
-            &id.to_string(),
-            environment
-                .commands
-                .as_ref()
-                .map(|c| Arc::clone(&c.sandbox)),
-            self.options.cwd.clone(),
-        )
+        let commands = environment.commands.as_ref();
+        let place = code::Placement {
+            sandbox: commands.map(|c| Arc::clone(&c.sandbox)),
+            workdir: self.options.cwd.clone(),
+            venv: commands
+                .and_then(|c| c.env.get("VIRTUAL_ENV"))
+                .map(std::path::PathBuf::from),
+            top_level,
+        };
+        code::SessionCode::new(&self.scope, &id.to_string(), place)
     }
 
     /// The session's turn loop, its tool progress and its MCP registration.

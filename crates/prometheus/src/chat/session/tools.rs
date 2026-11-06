@@ -345,6 +345,8 @@ pub struct SwappableTools {
     /// A note for the model put before the next tool result (a moved
     /// working directory), so the prompt itself never changes.
     announcement: std::sync::Mutex<Option<String>>,
+    /// The session's form of `delegate_task` (fixed at creation).
+    delegation: std::sync::OnceLock<pmt_delegation::shape::Shape>,
 }
 
 impl SwappableTools {
@@ -354,7 +356,13 @@ impl SwappableTools {
         Self {
             current: RwLock::new(tools),
             announcement: std::sync::Mutex::default(),
+            delegation: std::sync::OnceLock::new(),
         }
+    }
+
+    /// Offers `delegate_task` in `shape`'s form.
+    pub fn shape_delegation(&self, shape: pmt_delegation::shape::Shape) {
+        let _ = self.delegation.set(shape);
     }
 
     /// Puts `note` before the next tool result the model gets.
@@ -377,7 +385,14 @@ impl SwappableTools {
 
 impl ToolPort for SwappableTools {
     fn definitions(&self) -> Vec<Tool> {
-        self.tools().definitions()
+        let mut tools = self.tools().definitions();
+        let shape = self.delegation.get().copied().unwrap_or_default();
+        for tool in &mut tools {
+            if pmt_delegation::shape::Shape::applies_to(&tool.name) {
+                shape.tailor(&mut tool.parameters);
+            }
+        }
+        tools
     }
 
     fn idempotent(&self, name: &str) -> bool {
