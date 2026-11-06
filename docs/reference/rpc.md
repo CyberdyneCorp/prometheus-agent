@@ -428,8 +428,10 @@ One completion.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `billing_source` | string or null | no | The current route's `billing_source` (`subscription:<provider>/<label>`, `api_key:<provider>[/<label>]`, `local`...), when the session is loaded. |
 | `context_window` | integer or null | no | The model's context window, when known. |
 | `cost_usd` | number or null | no | The session's cost so far in the usage ledger's currency (USD), priced calls only. |
+| `subscription` | [`SubscriptionStatus`](#subscriptionstatus) or null | no | The subscription the current route bills, when it is one. |
 | `tokens` | integer | yes | Estimated tokens of the active context. |
 
 ### `Decision`
@@ -728,6 +730,27 @@ An image attached to a prompt: a file the daemon reads (checked like `chat --ima
 | `` | An absolute path on the daemon's machine. |
 | `` | A blob reference (`blob:sha256:<hex>`) of one of the session's earlier user messages. |
 
+### `QuotaStatus`
+
+A subscription's plan and quota windows.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `plan` | string or null | no | The plan label. |
+| `reported` | boolean | yes | The provider reports quota data. |
+| `text` | string | yes | One line for a status display (`quota: not reported by provider`). |
+| `windows` | array of [`QuotaWindow`](#quotawindow) | no | The quota windows. |
+
+### `QuotaWindow`
+
+One quota window.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | `5h`, `weekly`... |
+| `resets_at` | string or null | no | When it resets (RFC 3339). |
+| `used_percent` | number | yes | Used share, 0-100. |
+
 ### `RequestCancel`
 
 `request.cancel` payload: a server request timed out or was cancelled.
@@ -915,6 +938,14 @@ One delegated child of a session.
 |---|---|---|---|
 | `admission` | [`Admission`](#admission) | no | How the input was admitted. |
 | `turn_id` | string | yes | The admission id: the turn that runs the input (for a steered input, the running turn it joined). |
+
+### `SubscriptionStatus`
+
+A subscription's status in `session.context_usage`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `quota` | [`QuotaStatus`](#quotastatus) | yes | Its plan and quota windows. |
 
 ### `SudoAnswer`
 

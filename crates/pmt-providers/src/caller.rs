@@ -11,7 +11,7 @@ use pmt_core::error::Error;
 use pmt_obs::usage::UsageRecorder;
 
 use crate::capability;
-use crate::classify::ProviderError;
+use crate::classify::{ErrorClass, ProviderError};
 use crate::cost::{CallContext, Pending};
 use crate::fallback::{Activated, Fallback, Walk};
 use crate::metadata::Catalog;
@@ -80,6 +80,25 @@ pub trait ErrorClassifier: Send + Sync {
     ) -> BoxFuture<'a, Option<(crate::classify::Reclassified, crate::classify::ErrorClass)>>;
 }
 
+/// One call's outcome, as health scoring sees it (spec: model-providers,
+/// Provider health scoring).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Observed {
+    /// `None` on success, else the failure's class.
+    pub class: Option<ErrorClass>,
+    /// From sending to the first streamed event.
+    pub ttft: Option<std::time::Duration>,
+    /// Output tokens per second after the first event.
+    pub output_tps: Option<f64>,
+}
+
+/// Sees the outcome of every model call sent (refusals are not sent and
+/// are not seen).
+pub trait CallObserver: Send + Sync {
+    /// `route`'s call ended with `outcome`.
+    fn observed(&self, route: &Route, outcome: &Observed);
+}
+
 /// What a failed request's credential work decided.
 #[derive(Debug)]
 pub enum Recovery {
@@ -130,6 +149,7 @@ pub struct ModelCaller {
     recorder: Option<Arc<UsageRecorder>>,
     hooks: Option<Arc<dyn CredentialHooks>>,
     classifier: Option<Arc<dyn ErrorClassifier>>,
+    observer: Option<Arc<dyn CallObserver>>,
 }
 
 impl std::fmt::Debug for ModelCaller {
@@ -208,7 +228,54 @@ impl ModelCaller {
             recorder: None,
             hooks: None,
             classifier: None,
+            observer: None,
         }
+    }
+
+    /// Tells `observer` the outcome of every call sent.
+    #[must_use]
+    pub fn with_observer(mut self, observer: Arc<dyn CallObserver>) -> Self {
+        self.observer = Some(observer);
+        self
+    }
+
+    /// Reports a failed attempt to the observer.
+    fn observe_failure(&self, route: &Route, error: &ProviderError) {
+        if let Some(observer) = &self.observer {
+            observer.observed(
+                route,
+                &Observed {
+                    class: Some(error.class),
+                    ttft: None,
+                    output_tps: None,
+                },
+            );
+        }
+    }
+
+    /// Reports `stream`'s outcome to the observer when it ends.
+    fn observe_stream(&self, stream: &mut ModelStream, route: &Route, sent: std::time::Instant) {
+        let Some(observer) = self.observer.clone() else {
+            return;
+        };
+        let ttft = sent.elapsed();
+        let first = std::time::Instant::now();
+        let route = route.clone();
+        stream.on_end(crate::transport::OnEnd::new(move |failure, usage| {
+            let secs = first.elapsed().as_secs_f64();
+            #[allow(clippy::cast_precision_loss)] // token counts are far below 2^52
+            let output_tps = usage
+                .filter(|u| u.output_tokens > 0 && secs > 0.0)
+                .map(|u| u.output_tokens as f64 / secs);
+            observer.observed(
+                &route,
+                &Observed {
+                    class: failure.map(|f| f.class),
+                    ttft: Some(ttft),
+                    output_tps,
+                },
+            );
+        }));
     }
 
     /// Consults `classifier` about every failed call before the retry and
@@ -331,15 +398,21 @@ impl ModelCaller {
         }
         let mut retry = 0;
         loop {
+            let sent = std::time::Instant::now();
             let error = match send_once(&self.sender, self.hooks.as_deref(), route, request).await {
                 Ok((mut stream, prepared)) => {
                     if let (Some(recorder), Some(ctx)) = (&self.recorder, ctx) {
                         stream.record_with(Pending::new(recorder.clone(), &prepared, request, ctx));
                     }
+                    self.observe_stream(&mut stream, &prepared, sent);
                     return Ok(stream);
                 }
                 Err(error) if error.refusal.is_some() => return Err(error),
-                Err(error) => self.reclassify(route, request, context_length, error).await,
+                Err(error) => {
+                    let error = self.reclassify(route, request, context_length, error).await;
+                    self.observe_failure(route, &error);
+                    error
+                }
             };
             let Some(delay) = retries.delay(retry, &error) else {
                 return Err(error);
@@ -399,7 +472,11 @@ impl ModelCaller {
                 }
                 Err(error) => {
                     let activated = state.activate(&error, walk, Timestamp::now()).await;
-                    let (error, route) = first.get_or_insert((error, route)).clone();
+                    let (activated, (error, route)) = match activated {
+                        // The move was refused: that refusal is the turn's error.
+                        Err(refused) => (None, (refused, route)),
+                        Ok(activated) => (activated, first.get_or_insert((error, route)).clone()),
+                    };
                     match activated {
                         Some(activated) => {
                             tracing::warn!(from = %route.label(), to = %format!("{}/{}", activated.to.provider, activated.to.model), reason = activated.reason.as_str(), "provider fallback");

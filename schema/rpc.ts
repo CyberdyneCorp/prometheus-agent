@@ -274,10 +274,14 @@ export interface ConfigValue {
 
 /** `session.context_usage` result. */
 export interface ContextUsage {
+  /** The current route's `billing_source` (`subscription:<provider>/<label>`, `api_key:<provider>[/<label>]`, `local`...), when the session is loaded. */
+  billing_source?: string | null;
   /** The model's context window, when known. */
   context_window?: number | null;
   /** The session's cost so far in the usage ledger's currency (USD), priced calls only. */
   cost_usd?: number | null;
+  /** The subscription the current route bills, when it is one. */
+  subscription?: SubscriptionStatus | null;
   /** Estimated tokens of the active context. */
   tokens: number;
 }
@@ -575,6 +579,28 @@ export type PromptImage = {
   blob: string;
 };
 
+/** A subscription's plan and quota windows. */
+export interface QuotaStatus {
+  /** The plan label. */
+  plan?: string | null;
+  /** The provider reports quota data. */
+  reported: boolean;
+  /** One line for a status display (`quota: not reported by provider`). */
+  text: string;
+  /** The quota windows. */
+  windows?: Array<QuotaWindow>;
+}
+
+/** One quota window. */
+export interface QuotaWindow {
+  /** `5h`, `weekly`... */
+  name: string;
+  /** When it resets (RFC 3339). */
+  resets_at?: string | null;
+  /** Used share, 0-100. */
+  used_percent: number;
+}
+
 /** `request.cancel` payload: a server request timed out or was cancelled. */
 export interface RequestCancel {
   /** `srq-<12 hex>`. */
@@ -764,6 +790,12 @@ export interface Submitted {
   admission?: Admission;
   /** The admission id: the turn that runs the input (for a steered input, the running turn it joined). */
   turn_id: string;
+}
+
+/** A subscription's status in `session.context_usage`. */
+export interface SubscriptionStatus {
+  /** Its plan and quota windows. */
+  quota: QuotaStatus;
 }
 
 /** `sudo.request` result. */

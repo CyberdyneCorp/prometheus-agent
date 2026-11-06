@@ -46,6 +46,7 @@ pub mod plugins_host;
 pub mod profile_cmd;
 pub mod prompt;
 pub mod prompt_cmd;
+pub mod providers_cmd;
 pub mod rpc_cmd;
 pub mod runtimes_cmd;
 pub mod schema_cmd;

@@ -1,7 +1,8 @@
 //! The status line (spec: tui, Status line and accessibility; Client-local
 //! display commands; Busy indicator styles; Live session switcher): the
 //! battery when it is shown, profile, model, context-window use as a
-//! percentage, the session's cost in the ledger currency, the pending
+//! percentage, the session's cost in the ledger currency, its billing
+//! source and subscription quota, the pending
 //! approvals and the live sessions, led by the busy indicator while a turn
 //! runs. Items that do not fit a narrow terminal are dropped from the end.
 
@@ -35,6 +36,10 @@ pub struct Status {
     pub context_window: Option<u64>,
     /// The session's cost in USD.
     pub cost_usd: Option<f64>,
+    /// What the current route bills (`subscription:openai-codex/personal`).
+    pub billing: Option<String>,
+    /// The billed subscription's quota line.
+    pub quota: Option<String>,
     /// Approvals waiting for an answer.
     pub approvals: usize,
     /// Sessions this TUI is attached to (shown from two on).
@@ -76,6 +81,12 @@ impl Status {
         }
         if let Some(cost) = self.cost_usd {
             items.push(format!("${cost:.4}"));
+        }
+        if let Some(billing) = &self.billing {
+            items.push(billing.clone());
+        }
+        if let Some(quota) = &self.quota {
+            items.push(quota.clone());
         }
         if self.approvals > 0 {
             let s = if self.approvals == 1 { "" } else { "s" };

@@ -30,6 +30,7 @@ Commands:
   demo         Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
   trajectory   Render the recorded trajectory of a session
   model        Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
+  providers    Provider routing state: per-route health scores
   fallback     List and edit the profile's fallback chain (`[[fallback.chain]]`)
   auth         Add, list and remove provider API keys and subscription sign-ins
   tools        List the profile's tools and explain one (exposure, capabilities, approvals)

@@ -50,6 +50,9 @@ pub struct RouteInfo {
     pub max_output_tokens: Option<u64>,
     /// The route's wire format.
     pub wire_format: WireFormat,
+    /// The route's `billing_source` (spec: model-providers, Billing source
+    /// transparency).
+    pub billing_source: String,
 }
 
 /// One tool call the model asked for.
@@ -168,6 +171,10 @@ pub struct ProviderSetup {
     pub health: Arc<dyn RouteHealth>,
     /// The launch-only endpoint, if any.
     pub ad_hoc: Option<AdHoc>,
+    /// Asks before a fallback from a subscription to a metered credential
+    /// (`providers.<id>.confirm_metered_fallback`); `None` refuses such a
+    /// move (non-interactive sessions).
+    pub metered_confirm: Option<Arc<dyn pmt_providers::fallback::MeteredConfirm>>,
 }
 
 impl ProviderSetup {
@@ -291,12 +298,30 @@ impl ProviderModel {
         caller: ModelCaller,
         primary: &Target,
     ) -> Result<Self, Error> {
+        let chain = fallback::chain(&setup.config, &setup.registry)?;
+        Self::start_with_chain(setup, caller, primary, chain).await
+    }
+
+    /// Resolves the session's `primary` route with its own fallback
+    /// `chain` (see `fallback::scoped_chain` for pinned owners).
+    ///
+    /// # Errors
+    ///
+    /// Resolution failures of the primary.
+    pub async fn start_with_chain(
+        setup: ProviderSetup,
+        caller: ModelCaller,
+        primary: &Target,
+        chain: Vec<Target>,
+    ) -> Result<Self, Error> {
         let route = setup
             .resolver()
             .resolve_target(primary, &mut Trace::default())
             .await?;
-        let chain = fallback::chain(&setup.config, &setup.registry)?;
-        let state = Fallback::new(route, chain, setup.config.fallback.min_health);
+        let mut state = Fallback::new(route, chain, setup.config.fallback.min_health);
+        if let Some(confirm) = &setup.metered_confirm {
+            state = state.with_metered_confirm(Arc::clone(confirm));
+        }
         Ok(Self::new(setup, caller, state))
     }
 
@@ -313,12 +338,7 @@ impl ProviderModel {
         caller: ModelCaller,
         primary: &Target,
     ) -> Result<Self, Error> {
-        let route = setup
-            .resolver()
-            .resolve_target(primary, &mut Trace::default())
-            .await?;
-        let state = Fallback::new(route, Vec::new(), setup.config.fallback.min_health);
-        Ok(Self::new(setup, caller, state))
+        Self::start_with_chain(setup, caller, primary, Vec::new()).await
     }
 
     fn info(&self, route: &Route) -> RouteInfo {
@@ -333,6 +353,7 @@ impl ProviderModel {
             context_window: Some(meta.context_window),
             max_output_tokens: meta.max_output_tokens,
             wire_format: route.wire_format,
+            billing_source: route.billing_source(),
         }
     }
 

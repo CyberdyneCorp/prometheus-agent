@@ -467,15 +467,21 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `prompt_cache.ttl` | one of "5m", "1h", "auto", "off" | `"5m"` | `"5m"`, `"1h"`, `"auto"`, `"off"` | `next_session` | Provider prompt-cache lifetime. |
 | `providers.<name>.aliases` | array of string | `[]` | any | `next_session` | Extra names a custom provider answers to. |
 | `providers.<name>.allow_insecure_http` | boolean | `false` | any | `next_session` | Allow a plain `http://` base URL on a public host (plain HTTP to loopback and private-network hosts is always allowed). |
+| `providers.<name>.args` | array of string | `[]` | any | `next_session` | Arguments of `command`. |
 | `providers.<name>.auth` | one of "api_key", "oauth", "token_mint", "external_process", "aws_chain", "none" | unset | `"api_key"`, `"oauth"`, `"token_mint"`, `"external_process"`, `"aws_chain"`, `"none"` | `next_session` | Credential kind of a custom provider; unset uses the built-in provider's, or `api_key` when `key_secret` is set and `none` otherwise. |
 | `providers.<name>.base_url` | string | unset | any | `next_session` | API base URL. |
 | `providers.<name>.catalog_ttl_secs` | integer | `86400` | ≥ 0 | `next_session` | Lifetime of the cached live model listing. |
+| `providers.<name>.command` | string | unset | any | `next_session` | The agent CLI an `auth = "external_process"` provider drives over the Agent Client Protocol (`claude`), found by the executable lookup. |
+| `providers.<name>.confirm_metered_fallback` | boolean | `false` | any | `next_session` | Ask (interactive sessions) or fail the turn (non-interactive ones) before a fallback moves the session from a subscription of this provider to a pay-per-token credential. |
+| `providers.<name>.daily_budget_usd` | number | unset | ≥ 0.0 | `next_session` | Spend cap per calendar day (UTC) in USD; once the profile's usage ledger reaches it the provider is unavailable until the next day. |
 | `providers.<name>.enabled` | boolean | `true` | any | `next_session` | `false` makes every request to this provider fail with `provider.disabled`. |
+| `providers.<name>.key_cmd` | string | unset | any | `next_session` | A helper command whose stdout is this provider's credential: one bare token, or JSON with `access_token` and optional `expires_in` (seconds). The token is cached until 60 s before it expires (3000 s when no expiry is given) and minted again after an HTTP 401. |
 | `providers.<name>.key_hosts` | array of string | `[]` | any | `next_session` | Hostnames the provider's secret may be sent to (exact, or a leading `*.` wildcard). |
 | `providers.<name>.key_secret` | string | unset | a secret name | `next_session` | Name of the secret holding this provider's key. |
 | `providers.<name>.login_flow` | one of "device", "browser" | unset | `"device"`, `"browser"` | `next_session` | Sign-in flow for OAuth providers; unset uses the provider default. |
 | `providers.<name>.max_retries` | integer | `2` | 0 to 6 | `next_session` | Same-route retries of a retryable failure. |
 | `providers.<name>.models_url` | string | unset | any | `next_session` | Model listing URL; unset is `<base_url>/models`. |
+| `providers.<name>.monthly_budget_usd` | number | unset | ≥ 0.0 | `next_session` | Spend cap per calendar month (UTC) in USD. |
 | `providers.<name>.oauth.allowed_hosts` | array | unset | any | `next_session` | Hosts the sign-in endpoints may be on (exact, or a leading `*.`). |
 | `providers.<name>.oauth.authorize_url` | string | unset | any | `next_session` | Authorization endpoint of the browser (PKCE) flow. |
 | `providers.<name>.oauth.client_id` | string | unset | any | `next_session` | The OAuth client id. |
@@ -490,6 +496,8 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `providers.<name>.plan_notes` | array | unset | any | `next_session` | Eligibility and billing notes shown before sign-in and by `auth status`; replaces the provider's built-in notes. |
 | `providers.<name>.pool_strategy` | one of "fill_first", "round_robin", "random", "least_used" | `"fill_first"` | `"fill_first"`, `"round_robin"`, `"random"`, `"least_used"` | `next_session` | Credential pool selection. |
 | `providers.<name>.prefer_credential` | one of "subscription", "api_key" | `"subscription"` | `"subscription"`, `"api_key"` | `next_session` | Which credential wins when both exist. |
+| `providers.<name>.project` | string | unset | any | `next_session` | Google Cloud project of a `vertex` provider. |
+| `providers.<name>.region` | string | unset | any | `next_session` | Google Cloud region of a `vertex` provider (`us-central1`). |
 | `providers.<name>.request_timeout_secs` | integer | `600` | ≥ 0 | `next_session` | Per-request timeout. |
 | `providers.<name>.script` | string | unset | any | `next_session` | Script file of the built-in `mock` provider. |
 | `providers.<name>.stream_idle_timeout_secs` | integer | `120` | ≥ 0 | `next_session` | Longest gap between stream events. |
@@ -506,6 +514,8 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `quick_commands.<name>.target` | string | unset | any | `live` | The slash command an `alias` runs (with or without the leading `/`); the user's arguments are appended. |
 | `quick_commands.<name>.timeout_secs` | integer | `30` | 1 to 3600 | `live` | An `exec` command is killed after this many seconds. |
 | `quick_commands.<name>.type` | one of "alias", "exec" | unset | `"alias"`, `"exec"` | `live` | `alias` re-dispatches `target`; `exec` runs `command` in the local sandbox. |
+| `routing.health_half_life_secs` | integer | `1800` | ≥ 1 | `next_session` | Half-life (seconds) of the decay of an idle route's health score toward 1.0. |
+| `routing.health_window` | integer | `50` | 1 to 500 | `next_session` | Calls per (provider, model, credential) a health score is computed over. |
 | `schema_version` | integer | `1` | ≥ 0 | `restart` | Version of this file's schema; older files are migrated forward and a newer one is refused. |
 | `secrets.backend` | one of "file", "keychain" | `"file"` | `"file"`, `"keychain"` | `restart` | Where this profile's secrets are stored. |
 | `secrets.command.argv` | array of string | `[]` | any | `restart` | The helper's program and arguments (no shell). |

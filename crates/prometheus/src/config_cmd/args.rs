@@ -47,6 +47,17 @@ pub enum ConfigCommand {
         #[arg(long, conflicts_with = "key")]
         changed: bool,
     },
+    /// List config keys naming a deprecated or retired model with their
+    /// replacements; nothing changes without --apply.
+    FixModels {
+        /// Rewrite the keys (config.toml is first copied to
+        /// config.toml.bak-<timestamp>).
+        #[arg(long)]
+        apply: bool,
+        /// With --apply, skip the config.toml.bak-<timestamp> copy.
+        #[arg(long, requires = "apply")]
+        no_backup: bool,
+    },
     /// Print the config.toml JSON Schema (draft 2020-12).
     Schema,
     /// Print the configuration reference (Markdown).

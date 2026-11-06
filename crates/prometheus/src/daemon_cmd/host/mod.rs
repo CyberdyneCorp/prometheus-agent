@@ -586,13 +586,17 @@ impl Host for DaemonHost {
                 .filter_map(|m| m.content.as_ref().map(String::len))
                 .sum();
             let loaded = profile.loaded.lock().await.get(&id).cloned();
-            let context_window = match loaded {
+            let route = match loaded {
                 Some(session) => {
                     use pmt_agent::turn::model::ModelPort as _;
-                    session.live.model.route().await.context_window
+                    Some(session.live.model.route().await)
                 }
                 None => None,
             };
+            let context_window = route.as_ref().and_then(|r| r.context_window);
+            let subscription = route
+                .as_ref()
+                .and_then(|r| crate::chat::session::model::subscription_status(&profile.store, r));
             let cost = profile
                 .store
                 .usage_totals(pmt_store::UsageScope::Session(id))?;
@@ -601,6 +605,8 @@ impl Host for DaemonHost {
                 tokens: u64::try_from(chars.div_ceil(4)).unwrap_or(u64::MAX),
                 context_window,
                 cost_usd: (cost.calls > cost.unpriced_calls).then_some(cost.cost_usd),
+                billing_source: route.map(|r| r.billing_source),
+                subscription,
             })
         })
     }

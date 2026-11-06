@@ -80,6 +80,14 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "usage",
     },
     JsonShape {
+        schema: "prometheus.provider_health.v1",
+        command: "providers health",
+    },
+    JsonShape {
+        schema: "prometheus.fix_models.v1",
+        command: "config fix-models",
+    },
+    JsonShape {
         schema: "prometheus.prompt_size.v1",
         command: "prompt size",
     },

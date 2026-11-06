@@ -172,6 +172,12 @@ pub enum CredentialSource {
         /// Its name.
         name: String,
     },
+    /// A short-lived token minted per use (`key_cmd`, `token_mint`); its
+    /// value is filled in before each request.
+    Minted {
+        /// Provider id.
+        provider: String,
+    },
     /// No credential (`auth = "none"`).
     None,
 }
@@ -266,6 +272,7 @@ impl Credential {
             CredentialSource::Secret { name } => Some(pool::secret_id(name)),
             CredentialSource::Subscription { label, .. } => Some(pool::subscription_id(label)),
             CredentialSource::Borrowed { cli, .. } => Some(pool::borrowed_id(cli)),
+            CredentialSource::Minted { .. } => Some("minted".to_owned()),
             CredentialSource::Flag | CredentialSource::None => None,
         }
     }
@@ -287,6 +294,7 @@ impl Credential {
                 format!("subscription:{provider}/borrowed:{cli}")
             }
             CredentialSource::Secret { name } => format!("secret:{name}"),
+            CredentialSource::Minted { provider } => format!("minted:{provider}"),
             CredentialSource::None => "none".to_owned(),
         }
     }
@@ -312,6 +320,7 @@ impl Credential {
             | CredentialSource::Secret { .. } => {
                 format!("api_key:{provider}")
             }
+            CredentialSource::Minted { .. } => format!("api_key:{provider}/minted"),
             CredentialSource::None if local => "local".to_owned(),
             CredentialSource::None => format!("keyless:{provider}"),
         }
@@ -357,10 +366,10 @@ pub(super) fn resolve(
     explicit: Option<&str>,
 ) -> Result<Credential, Error> {
     let id = provider.id();
-    if let Some(key) = resolver.ad_hoc.as_ref().and_then(|a| a.key_for(base_url)) {
-        return Ok(Credential::new(CredentialSource::Flag, Some(key.clone())));
-    }
     let host = host_of(base_url).unwrap_or_default();
+    if let Some(early) = launch_or_minted(resolver, provider, base_url, &host, explicit) {
+        return early;
+    }
     let now = Timestamp::now();
     let states = match resolver.extras.pool_state() {
         Some(state) => state.states(id)?,
@@ -408,6 +417,56 @@ pub(super) fn resolve(
         return Ok(Credential::none());
     }
     Err(unusable(resolver, id, &host, &names, &seen)?)
+}
+
+/// A key given for this launch, else a minted credential; `None` when
+/// the provider's stored credentials decide.
+fn launch_or_minted(
+    resolver: &Resolver<'_>,
+    provider: &Provider,
+    base_url: &str,
+    host: &str,
+    explicit: Option<&str>,
+) -> Option<Result<Credential, Error>> {
+    if let Some(key) = resolver.ad_hoc.as_ref().and_then(|a| a.key_for(base_url)) {
+        return Some(Ok(Credential::new(
+            CredentialSource::Flag,
+            Some(key.clone()),
+        )));
+    }
+    (explicit.is_none() && mints(provider)).then(|| minted(provider, host))
+}
+
+/// Whether `provider`'s credential is minted per use (spec:
+/// model-providers, Minted short-lived credentials).
+fn mints(provider: &Provider) -> bool {
+    provider.settings().key_cmd.is_some() || provider.auth() == ProviderAuth::TokenMint
+}
+
+/// The minted credential of `provider`, bound to its key hosts like a
+/// key (the token itself is minted before each request).
+fn minted(provider: &Provider, host: &str) -> Result<Credential, Error> {
+    let hosts = provider.key_hosts();
+    if hosts.iter().any(|pattern| host_matches(pattern, host)) {
+        return Ok(Credential::new(
+            CredentialSource::Minted {
+                provider: provider.id().to_owned(),
+            },
+            None,
+        ));
+    }
+    Err(Error::new(
+        &codes::PROVIDER_MISSING_CREDENTIAL,
+        format!(
+            "the minted credential of provider '{}' may not be sent to {host} (bound to {})",
+            provider.id(),
+            hosts.join(", ")
+        ),
+    )
+    .with_hint(format!(
+        "add the host to providers.{}.key_hosts if it is the provider's endpoint",
+        provider.id()
+    )))
 }
 
 /// The provider's keys that are set and bound to `host` (or only the

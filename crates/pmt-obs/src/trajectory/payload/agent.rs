@@ -376,6 +376,12 @@ pub struct ProviderFallback {
     pub reason: String,
     /// Whether the billing source changed (subscription vs API key).
     pub billing_change: bool,
+    /// The given-up route's `billing_source`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from_billing: Option<String>,
+    /// The new route's `billing_source`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to_billing: Option<String>,
 }
 
 /// `provider.route_selected`.

@@ -447,6 +447,11 @@ impl Factory {
     /// Asks `approver` before memory changes that need approval.
     #[must_use]
     pub fn with_memory_approver(mut self, approver: Arc<dyn Approver>) -> Self {
+        // The same yes/no line confirms a move from a subscription to a
+        // metered credential (`confirm_metered_fallback`).
+        self.models = self
+            .models
+            .with_metered_confirm(Arc::new(model::AskMetered(Arc::clone(&approver))));
         self.approver = Some(approver);
         self
     }

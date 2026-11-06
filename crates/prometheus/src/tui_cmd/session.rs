@@ -236,6 +236,8 @@ impl Tui<'_> {
                     self.app.status.context_window = usage.context_window;
                 }
                 self.app.status.cost_usd = usage.cost_usd;
+                self.app.status.billing.clone_from(&usage.billing_source);
+                self.app.status.quota = usage.subscription.as_ref().map(|s| s.quota.text.clone());
             }
             Done::Models(models) => {
                 if !models.models.is_empty() {

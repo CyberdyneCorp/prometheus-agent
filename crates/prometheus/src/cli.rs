@@ -225,6 +225,12 @@ pub enum Command {
         #[command(subcommand)]
         command: Option<ModelCommand>,
     },
+    /// Provider routing state: per-route health scores.
+    Providers {
+        /// The providers subcommand.
+        #[command(subcommand)]
+        command: crate::providers_cmd::ProvidersCommand,
+    },
     /// List and edit the profile's fallback chain (`[[fallback.chain]]`).
     Fallback {
         /// The fallback subcommand.
@@ -614,6 +620,9 @@ pub enum UsageBy {
     Day,
     /// Profile.
     Profile,
+    /// Billing source (`subscription:<provider>/<label>`,
+    /// `api_key:<provider>/<label>`, `local`...).
+    Billing,
 }
 
 fn component_values() -> clap::builder::PossibleValuesParser {

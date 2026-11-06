@@ -577,6 +577,51 @@ pub struct ContextUsage {
     /// priced calls only.
     #[serde(default)]
     pub cost_usd: Option<f64>,
+    /// The current route's `billing_source` (`subscription:<provider>/<label>`,
+    /// `api_key:<provider>[/<label>]`, `local`...), when the session is
+    /// loaded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub billing_source: Option<String>,
+    /// The subscription the current route bills, when it is one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subscription: Option<SubscriptionStatus>,
+}
+
+/// A subscription's status in `session.context_usage`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SubscriptionStatus {
+    /// Its plan and quota windows.
+    pub quota: QuotaStatus,
+}
+
+/// A subscription's plan and quota windows.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct QuotaStatus {
+    /// The provider reports quota data.
+    pub reported: bool,
+    /// The plan label.
+    #[serde(default)]
+    pub plan: Option<String>,
+    /// The quota windows.
+    #[serde(default)]
+    pub windows: Vec<QuotaWindow>,
+    /// One line for a status display (`quota: not reported by provider`).
+    pub text: String,
+}
+
+/// One quota window.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct QuotaWindow {
+    /// `5h`, `weekly`...
+    pub name: String,
+    /// Used share, 0-100.
+    pub used_percent: f64,
+    /// When it resets (RFC 3339).
+    #[serde(default)]
+    pub resets_at: Option<String>,
 }
 
 /// `prompt.submit` params.

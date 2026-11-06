@@ -223,6 +223,9 @@ pub(super) fn usage(ctx: &Ctx<'_>) -> Result<String, Error> {
     if budgets != "no budgets set" {
         let _ = write!(text, "\n{budgets}");
     }
+    if let Some(billing) = crate::slash_handlers::billing_lines(store, id)? {
+        let _ = write!(text, "\n{billing}");
+    }
     Ok(text)
 }
 

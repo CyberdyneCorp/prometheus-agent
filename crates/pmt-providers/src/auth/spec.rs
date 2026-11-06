@@ -142,7 +142,8 @@ fn custom(id: &str) -> OAuthSpec {
     }
 }
 
-/// The sign-ins this build ships: Claude subscriptions and ChatGPT plans.
+/// The sign-ins this build ships: Claude subscriptions, ChatGPT plans and
+/// the [`portal`] sign-ins.
 fn builtin(id: &str) -> Option<OAuthSpec> {
     match id {
         "anthropic" => Some(OAuthSpec {
@@ -182,6 +183,85 @@ fn builtin(id: &str) -> Option<OAuthSpec> {
                 ("codex_cli_simplified_flow".to_owned(), "true".to_owned()),
             ],
             allowed_hosts: owned(&["auth.openai.com"]),
+            ..custom(id)
+        }),
+        _ => portal(id),
+    }
+}
+
+/// The browser PKCE redirect of the portal sign-ins (an OS-assigned
+/// loopback port).
+fn localhost(path: &str) -> Redirect {
+    Redirect {
+        uri_host: "127.0.0.1".to_owned(),
+        port: 0,
+        path: path.to_owned(),
+    }
+}
+
+/// The M2 subscription portals (spec: model-providers, xAI SuperGrok
+/// sign-in; Nous Portal subscription sign-in; Qwen Portal and MiniMax
+/// portal sign-in; OpenRouter OAuth key minting).
+fn portal(id: &str) -> Option<OAuthSpec> {
+    match id {
+        "xai-oauth" => Some(OAuthSpec {
+            client_id: "b1a00492-073a-47ea-816f-4c329264a828".to_owned(),
+            authorize_url: Some("https://auth.x.ai/oauth2/authorize".to_owned()),
+            token_url: "https://auth.x.ai/oauth2/token".to_owned(),
+            scopes: owned(&[
+                "openid",
+                "profile",
+                "email",
+                "offline_access",
+                "grok-cli:access",
+                "api:access",
+            ]),
+            redirect: localhost("/callback"),
+            allowed_hosts: owned(&["auth.x.ai"]),
+            ..custom(id)
+        }),
+        // Scoped short-lived inference tokens, not long-lived session keys.
+        "nous" => Some(OAuthSpec {
+            client_id: "hermes-cli".to_owned(),
+            token_url: "https://portal.nousresearch.com/api/oauth/token".to_owned(),
+            device_authorization_url: Some(
+                "https://portal.nousresearch.com/api/oauth/device/code".to_owned(),
+            ),
+            verification_url: Some("https://portal.nousresearch.com/device".to_owned()),
+            scopes: owned(&["inference:invoke"]),
+            allowed_hosts: owned(&["portal.nousresearch.com"]),
+            ..custom(id)
+        }),
+        "qwen-oauth" => Some(OAuthSpec {
+            client_id: "f0304373b74a44d2b584a3fb70ca9e56".to_owned(),
+            authorize_url: Some("https://chat.qwen.ai/api/v1/oauth2/authorize".to_owned()),
+            token_url: "https://chat.qwen.ai/api/v1/oauth2/token".to_owned(),
+            scopes: owned(&["openid", "profile", "email", "model.completion"]),
+            redirect: localhost("/callback"),
+            allowed_hosts: owned(&["chat.qwen.ai"]),
+            ..custom(id)
+        }),
+        "minimax-oauth" => Some(OAuthSpec {
+            client_id: "78257093-7e40-4613-99e0-527b14b39113".to_owned(),
+            authorize_url: Some("https://api.minimax.io/oauth/authorize".to_owned()),
+            token_url: "https://api.minimax.io/oauth/token".to_owned(),
+            scopes: owned(&["group_id", "profile", "model.completion"]),
+            redirect: localhost("/callback"),
+            allowed_hosts: owned(&["api.minimax.io"]),
+            ..custom(id)
+        }),
+        // OpenRouter's PKCE has no client id and no refresh token; the
+        // "token" endpoint mints a user API key.
+        "openrouter" => Some(OAuthSpec {
+            client_id: "prometheus".to_owned(),
+            authorize_url: Some("https://openrouter.ai/auth".to_owned()),
+            token_url: "https://openrouter.ai/api/v1/auth/keys".to_owned(),
+            redirect: Redirect {
+                uri_host: "localhost".to_owned(),
+                port: 0,
+                path: "/cb".to_owned(),
+            },
+            allowed_hosts: owned(&["openrouter.ai"]),
             ..custom(id)
         }),
         _ => None,
@@ -344,7 +424,8 @@ mod tests {
 
     #[test]
     fn providers_without_shipped_endpoints_say_so() {
-        let err = spec_of("", "xai-oauth").unwrap_err();
+        let config = "[providers.acme]\nbase_url = \"https://api.acme.example/v1\"\nauth = \"oauth\"\nlogin_flow = \"browser\"\n";
+        let err = spec_of(config, "acme").unwrap_err();
         assert_eq!(err.code().code, "auth.signin_unavailable");
         assert_eq!(err.exit_code(), 69);
     }

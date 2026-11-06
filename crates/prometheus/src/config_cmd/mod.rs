@@ -7,6 +7,7 @@ pub mod args;
 
 pub(crate) mod edit;
 mod explain;
+mod fix_models;
 
 use std::fmt::Write as _;
 
@@ -45,6 +46,7 @@ pub fn run(command: &ConfigCommand, ctx: &Context<'_>) -> Result<u8, Error> {
             (Some(key), _) => explain::key(&ctx.scope()?, key, ctx.json),
             (None, _) => explain::changed(&ctx.scope()?, ctx.json),
         },
+        ConfigCommand::FixModels { apply, no_backup } => fix_models::run(ctx, *apply, *no_backup),
         ConfigCommand::Schema => print_raw(&catalog::pretty(catalog::schema())),
         ConfigCommand::Docs => print_raw(&reference::render(
             catalog::schema(),

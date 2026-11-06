@@ -60,11 +60,46 @@ pub trait PoolState: Send + Sync {
         until: Option<Timestamp>,
         reason: Option<&str>,
     ) -> Result<(), Error>;
+
+    /// Where API key `credential` of `provider` came from and whether it
+    /// is dead (`None`: typed by hand, never dead).
+    ///
+    /// # Errors
+    ///
+    /// Store errors.
+    fn key_origin(
+        &self,
+        _provider: &str,
+        _credential: &str,
+    ) -> Result<Option<(String, bool)>, Error> {
+        Ok(None)
+    }
+
+    /// Marks minted key `credential` of `provider` dead.
+    ///
+    /// # Errors
+    ///
+    /// Store errors.
+    fn mark_key_dead(&self, _provider: &str, _credential: &str) -> Result<(), Error> {
+        Ok(())
+    }
 }
 
 impl PoolState for pmt_store::Store {
     fn states(&self, provider: &str) -> Result<Vec<CredentialState>, Error> {
         self.credential_states(provider)
+    }
+
+    fn key_origin(
+        &self,
+        provider: &str,
+        credential: &str,
+    ) -> Result<Option<(String, bool)>, Error> {
+        pmt_store::Store::key_origin(self, provider, credential)
+    }
+
+    fn mark_key_dead(&self, provider: &str, credential: &str) -> Result<(), Error> {
+        pmt_store::Store::mark_key_dead(self, provider, credential)
     }
 
     fn record_use(&self, provider: &str, credential: &str, now: Timestamp) -> Result<(), Error> {

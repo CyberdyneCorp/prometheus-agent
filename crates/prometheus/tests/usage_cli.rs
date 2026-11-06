@@ -334,5 +334,8 @@ fn the_usage_command_shows_the_session_cache_hit_rate() {
         .unwrap();
     let text = usage(&store, id).unwrap();
     assert!(text.contains("cache read 90000"), "{text}");
-    assert!(text.ends_with("cache hit rate 90%"), "{text}");
+    assert!(text.contains("cache hit rate 90%\n"), "{text}");
+    // The billing source of the session's calls follows (spec:
+    // model-providers, Billing source transparency).
+    assert!(text.ends_with("billing local"), "{text}");
 }

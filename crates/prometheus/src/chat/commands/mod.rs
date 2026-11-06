@@ -13,6 +13,7 @@ pub mod files;
 pub mod info;
 mod mcp;
 pub(crate) mod plugins;
+mod provider;
 pub(crate) mod quick;
 mod refine;
 mod review;
@@ -115,6 +116,7 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "rewind" => session::rewind(ctx, args),
         "compress" => session::compress(ctx, args).await,
         "model" => session::model(ctx, args).await,
+        "provider" => provider::provider(ctx, args).await,
         "reasoning" => session::reasoning(ctx, args).await,
         "tools" => session::tools(ctx, args).await,
         "plugins" => plugins::plugins(ctx, args).await,

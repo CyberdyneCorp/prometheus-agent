@@ -71,7 +71,7 @@ pub struct AliasRoute {
 }
 
 /// One `[providers.<id>]` override of a built-in or custom provider.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct ProviderConfig {
     /// `false` makes every request to this provider fail with
@@ -137,6 +137,38 @@ pub struct ProviderConfig {
     /// Script file of the built-in `mock` provider.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub script: Option<String>,
+    /// A helper command whose stdout is this provider's credential: one
+    /// bare token, or JSON with `access_token` and optional `expires_in`
+    /// (seconds). The token is cached until 60 s before it expires (3000 s
+    /// when no expiry is given) and minted again after an HTTP 401.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key_cmd: Option<String>,
+    /// Google Cloud project of a `vertex` provider.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+    /// Google Cloud region of a `vertex` provider (`us-central1`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub region: Option<String>,
+    /// The agent CLI an `auth = "external_process"` provider drives over
+    /// the Agent Client Protocol (`claude`), found by the executable
+    /// lookup.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    /// Arguments of `command`.
+    pub args: Vec<String>,
+    /// Spend cap per calendar day (UTC) in USD; once the profile's usage
+    /// ledger reaches it the provider is unavailable until the next day.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.0))]
+    pub daily_budget_usd: Option<f64>,
+    /// Spend cap per calendar month (UTC) in USD.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.0))]
+    pub monthly_budget_usd: Option<f64>,
+    /// Ask (interactive sessions) or fail the turn (non-interactive ones)
+    /// before a fallback moves the session from a subscription of this
+    /// provider to a pay-per-token credential.
+    pub confirm_metered_fallback: bool,
 }
 
 impl Default for ProviderConfig {
@@ -163,6 +195,14 @@ impl Default for ProviderConfig {
             plan_notes: None,
             oauth: None,
             script: None,
+            key_cmd: None,
+            project: None,
+            region: None,
+            command: None,
+            args: Vec::new(),
+            daily_budget_usd: None,
+            monthly_budget_usd: None,
+            confirm_metered_fallback: false,
         }
     }
 }
@@ -355,6 +395,10 @@ pub struct ModelRoute {
     /// Prices per million tokens (USD).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub price: Option<ModelPrice>,
+    /// Replacement (`<provider>/<model>`) of this deprecated or retired
+    /// model, over the built-in retirement table's.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replacement: Option<String>,
 }
 
 /// Per-million-token prices in USD.
@@ -502,6 +546,31 @@ pub struct FallbackEntry {
     /// Name of the secret this entry uses instead of the provider's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub credential: Option<SecretName>,
+}
+
+/// The `[routing]` section (spec: model-providers, Provider health
+/// scoring).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+#[schemars(extend("x-apply" = "next_session"))]
+pub struct RoutingConfig {
+    /// Calls per (provider, model, credential) a health score is computed
+    /// over.
+    #[schemars(range(min = 1, max = 500))]
+    pub health_window: u32,
+    /// Half-life (seconds) of the decay of an idle route's health score
+    /// toward 1.0.
+    #[schemars(range(min = 1))]
+    pub health_half_life_secs: u64,
+}
+
+impl Default for RoutingConfig {
+    fn default() -> Self {
+        Self {
+            health_window: 50,
+            health_half_life_secs: 1800,
+        }
+    }
 }
 
 /// The `[auth]` section.

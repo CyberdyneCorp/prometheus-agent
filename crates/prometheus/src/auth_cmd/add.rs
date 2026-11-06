@@ -59,6 +59,9 @@ pub(super) fn run(ctx: &Context<'_>, args: &Args<'_>) -> Result<u8, Error> {
         Some(AuthTypeArg::ApiKey) => false,
         None => args.browser || args.device || provider.auth() == ProviderAuth::Oauth,
     };
+    if oauth && provider.id() == "openrouter" {
+        return mint_openrouter_key(ctx, &profile, provider, label);
+    }
     if oauth {
         let choice = match (args.browser, args.device) {
             (true, _) => FlowChoice::Browser,
@@ -139,6 +142,59 @@ fn sign_in(
     Ok(0)
 }
 
+/// `auth add openrouter --type oauth` (spec: model-providers, OpenRouter
+/// OAuth key minting): the browser sign-in mints a user API key, stored as
+/// the pool key `label` with source `oauth`.
+fn mint_openrouter_key(
+    ctx: &Context<'_>,
+    profile: &Profile,
+    provider: &Provider,
+    label: &str,
+) -> Result<u8, Error> {
+    let id = provider.id();
+    let name = api_key_secret(provider, label).ok_or_else(|| {
+        Error::new(
+            &codes::AUTH_UNSUPPORTED,
+            format!("provider '{id}' takes no API key"),
+        )
+    })?;
+    let ui = TerminalUi { launch: ctx.launch };
+    let http = client(profile.scope.config())?;
+    let key = block_on(auth::openrouter::mint_key(&http, provider, &ui, place(ctx)))??;
+    profile.scope.secrets().store().set(&name, &key)?;
+    let store = pmt_store::Store::open(&profile.scope)?;
+    store.set_key_origin(
+        id,
+        &pmt_providers::pool::secret_id(&name),
+        auth::openrouter::SOURCE,
+    )?;
+    let added = Added {
+        profile: profile.scope.name().as_str(),
+        provider: id,
+        label,
+        kind: "api_key",
+        source: auth::openrouter::SOURCE,
+        secret: Some(&name),
+        plan: None,
+    };
+    if ctx.json {
+        return json(&added);
+    }
+    eprintln!("stored the OpenRouter key minted for '{label}' as secret {name}");
+    Ok(0)
+}
+
+/// Where a browser sign-in runs: SSH sessions get the tunnel hint, a
+/// graphical terminal may open the browser.
+fn place(ctx: &Context<'_>) -> Place {
+    let remote = ctx.launch.is_ssh_session();
+    Place {
+        remote,
+        can_open_browser: !remote && ctx.launch.has_graphical_display() && prompt::stdin_is_tty(),
+        timeout: CALLBACK_TIMEOUT,
+    }
+}
+
 /// Signs in to provider `id` on the terminal with its default flow and
 /// stores the sign-in as label `default` (the model picker's subscription
 /// choice).
@@ -160,15 +216,9 @@ fn sign_in_and_save(
     label: &str,
     choice: FlowChoice,
 ) -> Result<auth::Subscription, Error> {
-    let remote = ctx.launch.is_ssh_session();
-    let place = Place {
-        remote,
-        can_open_browser: !remote && ctx.launch.has_graphical_display() && prompt::stdin_is_tty(),
-        timeout: CALLBACK_TIMEOUT,
-    };
     let ui = TerminalUi { launch: ctx.launch };
     let http = client(profile.scope.config())?;
-    let done = block_on(auth::sign_in(&http, provider, choice, &ui, place))??;
+    let done = block_on(auth::sign_in(&http, provider, choice, &ui, place(ctx)))??;
     profile
         .credentials
         .save(provider.id(), label, &done.tokens, &done.obtained)

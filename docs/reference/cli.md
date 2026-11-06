@@ -37,6 +37,7 @@ Commands:
   demo         Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
   trajectory   Render the recorded trajectory of a session
   model        Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
+  providers    Provider routing state: per-route health scores
   fallback     List and edit the profile's fallback chain (`[[fallback.chain]]`)
   auth         Add, list and remove provider API keys and subscription sign-ins
   tools        List the profile's tools and explain one (exposure, capabilities, approvals)
@@ -619,17 +620,18 @@ Read, change, validate and explain the profile's config.toml
 Usage: prometheus config [OPTIONS] <COMMAND>
 
 Commands:
-  path      Print the path of the profile's config.toml
-  show      Print config.toml, or with --effective every effective value
-  get       Print the effective value of a key
-  set       Set a key in config.toml (the value is typed by the key's schema)
-  unset     Remove a key from config.toml so its default applies
-  edit      Edit config.toml in $VISUAL / $EDITOR; the result is validated before it is saved
-  validate  Validate config.toml (exit 0 when valid, 78 when not)
-  explain   Explain a key: type, default, effective value, source, apply class
-  schema    Print the config.toml JSON Schema (draft 2020-12)
-  docs      Print the configuration reference (Markdown)
-  help      Print this message or the help of the given subcommand(s)
+  path        Print the path of the profile's config.toml
+  show        Print config.toml, or with --effective every effective value
+  get         Print the effective value of a key
+  set         Set a key in config.toml (the value is typed by the key's schema)
+  unset       Remove a key from config.toml so its default applies
+  edit        Edit config.toml in $VISUAL / $EDITOR; the result is validated before it is saved
+  validate    Validate config.toml (exit 0 when valid, 78 when not)
+  explain     Explain a key: type, default, effective value, source, apply class
+  fix-models  List config keys naming a deprecated or retired model with their replacements; nothing changes without --apply
+  schema      Print the config.toml JSON Schema (draft 2020-12)
+  docs        Print the configuration reference (Markdown)
+  help        Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -1000,6 +1002,51 @@ Options:
           Print help
 ```
 
+## `prometheus config fix-models`
+
+```text
+List config keys naming a deprecated or retired model with their replacements; nothing changes without --apply
+
+Usage: prometheus config fix-models [OPTIONS]
+
+Options:
+      --apply
+          Rewrite the keys (config.toml is first copied to config.toml.bak-<timestamp>)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --no-backup
+          With --apply, skip the config.toml.bak-<timestamp> copy
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus config schema`
 
 ```text
@@ -1086,17 +1133,18 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus config help [COMMAND]
 
 Commands:
-  path      Print the path of the profile's config.toml
-  show      Print config.toml, or with --effective every effective value
-  get       Print the effective value of a key
-  set       Set a key in config.toml (the value is typed by the key's schema)
-  unset     Remove a key from config.toml so its default applies
-  edit      Edit config.toml in $VISUAL / $EDITOR; the result is validated before it is saved
-  validate  Validate config.toml (exit 0 when valid, 78 when not)
-  explain   Explain a key: type, default, effective value, source, apply class
-  schema    Print the config.toml JSON Schema (draft 2020-12)
-  docs      Print the configuration reference (Markdown)
-  help      Print this message or the help of the given subcommand(s)
+  path        Print the path of the profile's config.toml
+  show        Print config.toml, or with --effective every effective value
+  get         Print the effective value of a key
+  set         Set a key in config.toml (the value is typed by the key's schema)
+  unset       Remove a key from config.toml so its default applies
+  edit        Edit config.toml in $VISUAL / $EDITOR; the result is validated before it is saved
+  validate    Validate config.toml (exit 0 when valid, 78 when not)
+  explain     Explain a key: type, default, effective value, source, apply class
+  fix-models  List config keys naming a deprecated or retired model with their replacements; nothing changes without --apply
+  schema      Print the config.toml JSON Schema (draft 2020-12)
+  docs        Print the configuration reference (Markdown)
+  help        Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus config help path`
@@ -1161,6 +1209,14 @@ Usage: prometheus config help validate
 Explain a key: type, default, effective value, source, apply class
 
 Usage: prometheus config help explain
+```
+
+## `prometheus config help fix-models`
+
+```text
+List config keys naming a deprecated or retired model with their replacements; nothing changes without --apply
+
+Usage: prometheus config help fix-models
 ```
 
 ## `prometheus config help schema`
@@ -8322,6 +8378,7 @@ Options:
           - purpose:  Purpose (`main`, `auxiliary.title`, `compression`...)
           - day:      Calendar day in the profile's time zone
           - profile:  Profile
+          - billing:  Billing source (`subscription:<provider>/<label>`, `api_key:<provider>/<label>`, `local`...)
 
           [default: day]
 
@@ -8949,6 +9006,116 @@ Usage: prometheus model help info
 Print this message or the help of the given subcommand(s)
 
 Usage: prometheus model help help
+```
+
+## `prometheus providers`
+
+```text
+Provider routing state: per-route health scores
+
+Usage: prometheus providers [OPTIONS] <COMMAND>
+
+Commands:
+  health  Health of every route called: success rate, errors by class, time to first token, output speed and the score fallback walks use
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus providers health`
+
+```text
+Health of every route called: success rate, errors by class, time to first token, output speed and the score fallback walks use
+
+Usage: prometheus providers health [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus providers help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus providers help [COMMAND]
+
+Commands:
+  health  Health of every route called: success rate, errors by class, time to first token, output speed and the score fallback walks use
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus providers help health`
+
+```text
+Health of every route called: success rate, errors by class, time to first token, output speed and the score fallback walks use
+
+Usage: prometheus providers help health
+```
+
+## `prometheus providers help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus providers help help
 ```
 
 ## `prometheus fallback`
@@ -16869,6 +17036,7 @@ Commands:
   demo         Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
   trajectory   Render the recorded trajectory of a session
   model        Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
+  providers    Provider routing state: per-route health scores
   fallback     List and edit the profile's fallback chain (`[[fallback.chain]]`)
   auth         Add, list and remove provider API keys and subscription sign-ins
   tools        List the profile's tools and explain one (exposure, capabilities, approvals)
@@ -16950,16 +17118,17 @@ Read, change, validate and explain the profile's config.toml
 Usage: prometheus help config [COMMAND]
 
 Commands:
-  path      Print the path of the profile's config.toml
-  show      Print config.toml, or with --effective every effective value
-  get       Print the effective value of a key
-  set       Set a key in config.toml (the value is typed by the key's schema)
-  unset     Remove a key from config.toml so its default applies
-  edit      Edit config.toml in $VISUAL / $EDITOR; the result is validated before it is saved
-  validate  Validate config.toml (exit 0 when valid, 78 when not)
-  explain   Explain a key: type, default, effective value, source, apply class
-  schema    Print the config.toml JSON Schema (draft 2020-12)
-  docs      Print the configuration reference (Markdown)
+  path        Print the path of the profile's config.toml
+  show        Print config.toml, or with --effective every effective value
+  get         Print the effective value of a key
+  set         Set a key in config.toml (the value is typed by the key's schema)
+  unset       Remove a key from config.toml so its default applies
+  edit        Edit config.toml in $VISUAL / $EDITOR; the result is validated before it is saved
+  validate    Validate config.toml (exit 0 when valid, 78 when not)
+  explain     Explain a key: type, default, effective value, source, apply class
+  fix-models  List config keys naming a deprecated or retired model with their replacements; nothing changes without --apply
+  schema      Print the config.toml JSON Schema (draft 2020-12)
+  docs        Print the configuration reference (Markdown)
 ```
 
 ## `prometheus help config path`
@@ -17024,6 +17193,14 @@ Usage: prometheus help config validate
 Explain a key: type, default, effective value, source, apply class
 
 Usage: prometheus help config explain
+```
+
+## `prometheus help config fix-models`
+
+```text
+List config keys naming a deprecated or retired model with their replacements; nothing changes without --apply
+
+Usage: prometheus help config fix-models
 ```
 
 ## `prometheus help config schema`
@@ -18251,6 +18428,25 @@ Usage: prometheus help model list
 Show the profile's current route, context window and reasoning effort
 
 Usage: prometheus help model info
+```
+
+## `prometheus help providers`
+
+```text
+Provider routing state: per-route health scores
+
+Usage: prometheus help providers [COMMAND]
+
+Commands:
+  health  Health of every route called: success rate, errors by class, time to first token, output speed and the score fallback walks use
+```
+
+## `prometheus help providers health`
+
+```text
+Health of every route called: success rate, errors by class, time to first token, output speed and the score fallback walks use
+
+Usage: prometheus help providers health
 ```
 
 ## `prometheus help fallback`
@@ -19551,6 +19747,8 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.plugins.v1` | `prometheus plugins list` |
 | `prometheus.bridge_status.v1` | `prometheus bridge status` |
 | `prometheus.usage.v1` | `prometheus usage` |
+| `prometheus.provider_health.v1` | `prometheus providers health` |
+| `prometheus.fix_models.v1` | `prometheus config fix-models` |
 | `prometheus.prompt_size.v1` | `prometheus prompt size` |
 | `prometheus.config.v1` | `prometheus config show` |
 | `prometheus.config_value.v1` | `prometheus config get` |

@@ -80,7 +80,7 @@ pub use mcp::{
 pub use models::{
     AliasRoute, AuthConfig, AuxiliaryConfig, AuxiliaryTask, FallbackConfig, FallbackEntry,
     LoginFlow, ModelAlias, ModelConfig, ModelEntry, ModelPrice, ModelRoute, OAuthEndpoints,
-    PoolStrategy, PreferCredential, ProviderAuth, ProviderConfig, WireFormat,
+    PoolStrategy, PreferCredential, ProviderAuth, ProviderConfig, RoutingConfig, WireFormat,
 };
 pub use operations::{
     BudgetsConfig, CronConfig, DegradedFeature, EgressConfig, EgressMode, GatewayHealthConfig,
@@ -195,6 +195,8 @@ pub struct Config {
     /// User slash commands (`/<name>`), keyed by name.
     #[schemars(extend("x-apply" = "live"))]
     pub quick_commands: std::collections::BTreeMap<String, QuickCommand>,
+    /// Provider health scoring.
+    pub routing: RoutingConfig,
     /// Secrets store backend.
     pub secrets: SecretsConfig,
     /// Capabilities, sandbox, egress and redaction.
@@ -270,6 +272,7 @@ impl Default for Config {
             privacy: PrivacyConfig::default(),
             providers: std::collections::BTreeMap::new(),
             quick_commands: std::collections::BTreeMap::new(),
+            routing: RoutingConfig::default(),
             secrets: SecretsConfig::default(),
             security: SecurityConfig::default(),
             sessions: SessionsConfig::default(),

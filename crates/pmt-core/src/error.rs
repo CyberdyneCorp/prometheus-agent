@@ -560,6 +560,18 @@ error_codes! {
     /// The model's context window is below `model.min_context_window`.
     MODEL_CONTEXT_TOO_SMALL = ("model.context_too_small", Config,
         "The resolved model's context window is below `model.min_context_window`; if the window is larger, set `[models.\"<provider>/<model>\"] context_window`.");
+    /// The model is retired.
+    MODEL_RETIRED = ("model.retired", Config,
+        "The model is marked `retired` in the model catalog's retirement table, so no new session may start on it; the message names its replacement. `prometheus config fix-models --apply` rewrites every config key that names it.");
+    /// A provider's spend cap is reached.
+    PROVIDER_BUDGET_EXHAUSTED = ("provider.budget_exhausted", BudgetExceeded,
+        "The provider's `providers.<id>.daily_budget_usd` or `monthly_budget_usd` is used up in the profile's usage ledger, so no request was sent to it; the fallback chain applies, and the cap frees at the start of the next day or month.");
+    /// The agent CLI an `external_process` provider drives is not installed.
+    PROVIDER_EXTERNAL_CLI_MISSING = ("provider.external_cli_missing", Unavailable,
+        "A provider with `auth = \"external_process\"` drives an installed agent CLI (`providers.<id>.command`), and the executable lookup did not find it; install it or set the command to its full path.");
+    /// A move from a subscription to a metered credential was not confirmed.
+    PROVIDER_METERED_FALLBACK_REFUSED = ("provider.metered_fallback_refused", Auth,
+        "`providers.<id>.confirm_metered_fallback = true` and the fallback would move the session from a subscription to a pay-per-token credential, which the user declined or which a non-interactive run cannot confirm; the turn failed instead.");
     /// The provider's wire format is implemented by a plugin that is not installed.
     PROVIDER_PLUGIN_UNAVAILABLE = ("provider.plugin_unavailable", Config,
         "The provider speaks a wire format that only a provider plugin implements (`gemini_native`, `bedrock_converse`, bridged plugins such as `github-copilot`) or is a virtual provider of a capability this build does not include (`moa`); the message names what is missing.");

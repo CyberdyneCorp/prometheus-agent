@@ -40,6 +40,7 @@ async fn model_on(profile: &Profile) -> ProviderModel {
         }),
         health: Arc::new(Healthy),
         ad_hoc: None,
+        metered_confirm: None,
     };
     let caller = ModelCaller::new(pmt_net::client(&pmt_net::OutboundPolicy::default()).unwrap());
     let target = Target {

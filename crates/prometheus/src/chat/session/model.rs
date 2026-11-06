@@ -21,7 +21,8 @@ use pmt_providers::ProviderRegistry;
 use pmt_providers::auth::Accounts;
 use pmt_providers::auxiliary::{self, AuxArgs, AuxCaller, AuxContext, AuxTask};
 use pmt_providers::cost::CallContext;
-use pmt_providers::fallback::Healthy;
+use pmt_providers::fallback::MeteredConfirm;
+use pmt_providers::health::StoreHealth;
 use pmt_providers::metadata::Catalog;
 use pmt_providers::mock::Mock;
 use pmt_providers::request::Request;
@@ -54,6 +55,8 @@ pub(super) struct ProviderSetupParts {
     accounts: Arc<Accounts>,
     pub(super) catalog: Arc<Catalog>,
     ad_hoc: Option<AdHoc>,
+    health: Arc<StoreHealth>,
+    metered_confirm: Option<Arc<dyn MeteredConfirm>>,
 }
 
 impl ProviderSetupParts {
@@ -67,8 +70,9 @@ impl ProviderSetupParts {
                 timeout: Duration::from_millis(500),
             }),
             catalog: Arc::clone(&self.catalog),
-            health: Arc::new(Healthy),
+            health: Arc::clone(&self.health) as _,
             ad_hoc: self.ad_hoc.clone(),
+            metered_confirm: self.metered_confirm.clone(),
         }
     }
 
@@ -149,6 +153,8 @@ impl Models {
         let prices: Arc<dyn Prices> = catalog.clone();
         let client = crate::model_cmd::client(config)?;
         let recorder = Arc::new(UsageRecorder::new(Arc::clone(store), prices));
+        let health =
+            Arc::new(StoreHealth::new(Arc::clone(store), config).with_pool(Arc::clone(store) as _));
         let aux = AuxCaller::new(client.clone())
             .with_mock(Arc::clone(&mock))
             .with_recorder(Arc::clone(&recorder))
@@ -156,7 +162,8 @@ impl Models {
         let caller = ModelCaller::new(client)
             .with_mock(mock)
             .with_recorder(recorder)
-            .with_credentials(Arc::clone(&accounts) as _);
+            .with_credentials(Arc::clone(&accounts) as _)
+            .with_observer(Arc::clone(&health) as _);
         // `privacy.redact_pii`: every model request of the profile, main and
         // auxiliary, leaves the process redacted.
         let pii = pmt_config::privacy::pii(scope.dir(), &config.privacy)?;
@@ -175,11 +182,33 @@ impl Models {
                 accounts,
                 catalog,
                 ad_hoc,
+                health,
+                metered_confirm: None,
             }),
             caller,
             aux: Arc::new(aux),
             pii,
         })
+    }
+
+    /// Asks `confirm` before a fallback moves a session from a
+    /// subscription to a metered credential when the provider sets
+    /// `confirm_metered_fallback` (an interactive session); without it
+    /// such a move fails the turn.
+    #[must_use]
+    pub fn with_metered_confirm(mut self, confirm: Arc<dyn MeteredConfirm>) -> Self {
+        let parts = &self.setup;
+        self.setup = Arc::new(ProviderSetupParts {
+            config: Arc::clone(&parts.config),
+            registry: Arc::clone(&parts.registry),
+            secrets: parts.secrets.clone(),
+            accounts: Arc::clone(&parts.accounts),
+            catalog: Arc::clone(&parts.catalog),
+            ad_hoc: parts.ad_hoc.clone(),
+            health: Arc::clone(&parts.health),
+            metered_confirm: Some(confirm),
+        });
+        self
     }
 
     /// Hashes messaging user `id` in every later request (a gateway
@@ -217,6 +246,8 @@ impl Models {
                 accounts: Arc::clone(&parts.accounts),
                 catalog: Arc::clone(&parts.catalog),
                 ad_hoc: parts.ad_hoc.clone(),
+                health: Arc::clone(&parts.health),
+                metered_confirm: parts.metered_confirm.clone(),
             });
             self.caller = self.caller.with_request_hooks(Arc::new(
                 pmt_plugins::surfaces::ModelRequestHooks::new(models),
@@ -229,6 +260,59 @@ impl Models {
         };
         self.caller = self.caller.with_classifier(plugins.error_classifier(call));
         Ok(self)
+    }
+
+    /// The model side of a session after `/provider reload --now` (spec:
+    /// model-providers, Provider registry changes apply at session
+    /// boundaries): the registry rebuilt from the profile's current config
+    /// and plugins, with the ids whose descriptor or settings changed.
+    ///
+    /// # Errors
+    ///
+    /// The registry refuses a provider block or plugin descriptor.
+    pub fn reloaded(
+        &self,
+        scope: &ProfileScope,
+        plugins: &crate::plugins_host::ProfilePlugins,
+    ) -> Result<(Self, Vec<String>), Error> {
+        let models = plugins.current().surfaces.models.clone();
+        let registered = crate::plugins_host::providers::registered(&models);
+        let registry = ProviderRegistry::for_profile(scope.config(), registered)?;
+        let old = &self.setup.registry;
+        let mut changed: Vec<String> = registry
+            .iter()
+            .filter(|p| old.lookup(p.id()).ok() != Some(*p))
+            .map(|p| p.id().to_owned())
+            .collect();
+        changed.extend(
+            old.iter()
+                .filter(|p| registry.lookup(p.id()).is_err())
+                .map(|p| p.id().to_owned()),
+        );
+        let parts = &self.setup;
+        let caller = if models.is_empty() {
+            self.caller.clone()
+        } else {
+            self.caller.clone().with_request_hooks(Arc::new(
+                pmt_plugins::surfaces::ModelRequestHooks::new(models),
+            ))
+        };
+        let reloaded = Self {
+            setup: Arc::new(ProviderSetupParts {
+                config: Arc::new(scope.config().clone()),
+                registry: Arc::new(registry),
+                secrets: parts.secrets.clone(),
+                accounts: Arc::clone(&parts.accounts),
+                catalog: Arc::clone(&parts.catalog),
+                ad_hoc: parts.ad_hoc.clone(),
+                health: Arc::clone(&parts.health),
+                metered_confirm: parts.metered_confirm.clone(),
+            }),
+            caller,
+            aux: Arc::clone(&self.aux),
+            pii: self.pii.clone(),
+        };
+        Ok((reloaded, changed))
     }
 
     /// The session's first route: flags over the profile config. A profile
@@ -258,6 +342,14 @@ impl Models {
             },
             session: Layer::default(),
         };
+        if let Some(default) = &parts.config.model.default {
+            pmt_providers::retirement::check_reference(
+                &parts.config,
+                &parts.registry,
+                default,
+                parts.config.model.provider.as_deref(),
+            )?;
+        }
         let requested = requested(&selection, &parts.config.model);
         if requested.provider == "auto" && requested.model.is_none() && parts.ad_hoc.is_none() {
             return Err(Error::new(&codes::MODEL_NOT_CONFIGURED, NO_MODEL));
@@ -385,7 +477,7 @@ impl Models {
         let ctx = AuxContext {
             resolver: &resolver,
             main: Some(main),
-            health: &Healthy,
+            health: &*self.setup.health,
         };
         let Some(route) = auxiliary::resolve(AuxTask::Vision, &AuxArgs::default(), &ctx).await?
         else {
@@ -397,6 +489,25 @@ impl Models {
             route,
             context,
         )))
+    }
+}
+
+/// Confirms a move from a subscription to a metered credential on the
+/// session's yes/no line.
+pub(crate) struct AskMetered(pub(crate) Arc<dyn pmt_memory::session::Approver>);
+
+impl MeteredConfirm for AskMetered {
+    fn confirm<'a>(
+        &'a self,
+        from: &'a str,
+        to: &'a str,
+    ) -> pmt_providers::resolve::BoxFuture<'a, bool> {
+        Box::pin(async move {
+            let question = format!(
+                "The subscription route failed; continue on {to} instead of {from} (pay per token)? [y/N]"
+            );
+            self.0.ask(&question).await.unwrap_or(false)
+        })
     }
 }
 
@@ -580,4 +691,39 @@ impl ModelPort for SwitchableModel {
             result
         })
     }
+}
+
+/// The `subscription` field of a session's status (spec: model-providers,
+/// Subscription plan and quota visibility): the stored plan and quota of
+/// the subscription `route` bills, `quota: not reported by provider` for a
+/// subscription without quota data, `None` for other billing sources.
+#[must_use]
+pub fn subscription_status(
+    store: &Store,
+    route: &pmt_agent::turn::model::RouteInfo,
+) -> Option<pmt_rpc::catalog::contracts::SubscriptionStatus> {
+    use pmt_rpc::catalog::contracts::{QuotaStatus, QuotaWindow, SubscriptionStatus};
+    let (reported, quota) =
+        pmt_providers::quota::for_session(store, &route.provider, &route.billing_source)?;
+    let text = match (&quota, reported) {
+        (Some(quota), _) => format!("quota: {}", quota.describe()),
+        (None, true) => "quota: not fetched yet".to_owned(),
+        (None, false) => pmt_providers::quota::NOT_REPORTED.to_owned(),
+    };
+    let (plan, windows) = quota.map_or_else(Default::default, |q| (q.plan, q.windows));
+    Some(SubscriptionStatus {
+        quota: QuotaStatus {
+            reported,
+            plan,
+            windows: windows
+                .into_iter()
+                .map(|w| QuotaWindow {
+                    name: w.name,
+                    used_percent: w.used_percent,
+                    resets_at: w.resets_at,
+                })
+                .collect(),
+            text,
+        },
+    })
 }

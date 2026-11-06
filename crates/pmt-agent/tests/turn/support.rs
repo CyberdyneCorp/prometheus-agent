@@ -224,6 +224,7 @@ pub(crate) async fn mock_model_priced(
         catalog,
         health: Arc::new(Healthy),
         ad_hoc: None,
+        metered_confirm: None,
     };
     let target = Target {
         provider: "mock".into(),

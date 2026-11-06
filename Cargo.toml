@@ -80,6 +80,9 @@ reqwest = { version = "0.13", default-features = false }
 # so OS-installed roots (corporate CAs) are trusted.
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-platform-verifier = "0.7"
+# RS256 signatures of Google service-account assertions (minted Vertex AI
+# tokens); the same ring rustls already uses.
+ring = "0.17"
 # The OS roots exported into the CA bundle handed to sandboxed children.
 rustls-native-certs = "0.8"
 # Decrypts an encrypted PKCS#8 client key of an mTLS MCP server

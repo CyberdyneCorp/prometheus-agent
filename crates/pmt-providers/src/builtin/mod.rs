@@ -175,6 +175,25 @@ const CODEX_NOTES: &[&str] = &[
     "Signing in here starts a separate session; importing a Codex CLI sign-in (prometheus auth import codex-cli) shares one rotating refresh token with that CLI.",
 ];
 
+/// SuperGrok / X Premium+ caveats.
+const XAI_NOTES: &[&str] = &[
+    "Needs a SuperGrok or X Premium+ subscription; a tier without API access is refused after sign-in. Use an API key instead: prometheus auth add xai",
+    "xAI-backed tools (speech, images, video, transcription, X search) whose provider is xai bill the same subscription.",
+];
+
+/// Nous Portal caveats.
+const NOUS_NOTES: &[&str] = &[
+    "One Nous Portal sign-in serves every portal model and the tools whose provider is nous (web search, image generation, speech, browser).",
+];
+
+/// Portal sign-ins that are not API keys.
+const QWEN_NOTES: &[&str] = &[
+    "Qwen Portal sign-in bills the portal account; DashScope API keys stay with the alibaba provider.",
+];
+const MINIMAX_NOTES: &[&str] = &[
+    "MiniMax portal sign-in bills the portal account; MiniMax API keys stay with the minimax and minimax-cn providers.",
+];
+
 const ROWS: &[Row] = &[
     cached(model(
         key(
@@ -222,18 +241,21 @@ const ROWS: &[Row] = &[
         ),
         CODEX_NOTES,
     ),
-    flows(
-        model(
-            key(
-                "nous",
-                &["nous-portal", "nousresearch"],
-                &["NOUS_API_KEY"],
-                "https://inference-api.nousresearch.com/v1",
-                ChatCompletions,
+    notes(
+        flows(
+            model(
+                key(
+                    "nous",
+                    &["nous-portal", "nousresearch"],
+                    &["NOUS_API_KEY"],
+                    "https://inference-api.nousresearch.com/v1",
+                    ChatCompletions,
+                ),
+                "Hermes-4-405B",
             ),
-            "Hermes-4-405B",
+            &[Device],
         ),
-        &[Device],
+        NOUS_NOTES,
     ),
     cached(model(
         key(
@@ -245,12 +267,15 @@ const ROWS: &[Row] = &[
         ),
         "grok-4",
     )),
-    signin(
-        "xai-oauth",
-        &["grok-oauth", "x-ai-oauth", "xai-grok-oauth"],
-        "https://api.x.ai/v1",
-        Responses,
-        &[Browser],
+    notes(
+        signin(
+            "xai-oauth",
+            &["grok-oauth", "x-ai-oauth", "xai-grok-oauth"],
+            "https://api.x.ai/v1",
+            Responses,
+            &[Browser],
+        ),
+        XAI_NOTES,
     ),
     key(
         "router",
@@ -355,12 +380,15 @@ const ROWS: &[Row] = &[
         "https://api.minimaxi.com/anthropic",
         AnthropicMessages,
     ),
-    signin(
-        "minimax-oauth",
-        &["minimax-portal", "minimax-global"],
-        "https://api.minimax.io/anthropic",
-        AnthropicMessages,
-        &[Browser],
+    notes(
+        signin(
+            "minimax-oauth",
+            &["minimax-portal", "minimax-global"],
+            "https://api.minimax.io/anthropic",
+            AnthropicMessages,
+            &[Browser],
+        ),
+        MINIMAX_NOTES,
     ),
     key(
         "alibaba",
@@ -411,12 +439,15 @@ const ROWS: &[Row] = &[
         "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
         ChatCompletions,
     ),
-    signin(
-        "qwen-oauth",
-        &["qwen", "qwen-portal", "qwen-cli"],
-        "https://portal.qwen.ai/v1",
-        ChatCompletions,
-        &[Browser],
+    notes(
+        signin(
+            "qwen-oauth",
+            &["qwen", "qwen-portal", "qwen-cli"],
+            "https://portal.qwen.ai/v1",
+            ChatCompletions,
+            &[Browser],
+        ),
+        QWEN_NOTES,
     ),
     key(
         "kilocode",
@@ -515,6 +546,7 @@ const ROWS: &[Row] = &[
         id: "vertex",
         aliases: &["google-vertex", "vertex-ai", "gcp-vertex"],
         endpoint_note: Some("computed from project and region"),
+        extra_hosts: &["*.googleapis.com"],
         auth: TokenMint,
         ..BASE
     },

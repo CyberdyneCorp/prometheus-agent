@@ -77,6 +77,7 @@ const fn group(by: UsageBy) -> GroupBy {
         UsageBy::Purpose => GroupBy::Purpose,
         UsageBy::Day => GroupBy::Day,
         UsageBy::Profile => GroupBy::Profile,
+        UsageBy::Billing => GroupBy::Billing,
     }
 }
 
@@ -99,6 +100,9 @@ struct ProfileReport {
     name: String,
     zone: TimeZone,
     report: Report,
+    report_by: GroupBy,
+    /// The same calls by `billing_source`.
+    billing: Report,
 }
 
 fn profile_report(
@@ -126,8 +130,15 @@ fn profile_report(
         ..UsageFilter::default()
     };
     let name = scope.name().as_str().to_owned();
+    let billing = report(&store, &name, &filter, GroupBy::Billing, &zone)?;
     let report = report(&store, &name, &filter, by, &zone)?;
-    Ok(ProfileReport { name, zone, report })
+    Ok(ProfileReport {
+        name,
+        zone,
+        report,
+        report_by: by,
+        billing,
+    })
 }
 
 #[derive(Serialize)]
@@ -144,23 +155,34 @@ struct ProfileJson<'a> {
     profile: &'a str,
     timezone: Option<&'a str>,
     rows: Vec<RowJson<'a>>,
+    /// The calls by `billing_source`, whatever `--by` groups.
+    billing_sources: Vec<RowJson<'a>>,
     total: TotalsJson,
 }
 
 impl<'a> From<&'a ProfileReport> for ProfileJson<'a> {
     fn from(profile: &'a ProfileReport) -> Self {
-        Self {
-            profile: &profile.name,
-            timezone: profile.zone.iana_name(),
-            rows: profile
-                .report
+        let rows = |report: &'a Report, billing: bool| {
+            report
                 .rows
                 .iter()
                 .map(|row| RowJson {
                     key: &row.key,
+                    // Subscription calls are never priced per token.
+                    cost_status: (billing && row.key.starts_with("subscription:"))
+                        .then_some("subscription"),
                     totals: TotalsJson::from(&row.totals),
                 })
-                .collect(),
+                .collect()
+        };
+        Self {
+            profile: &profile.name,
+            timezone: profile.zone.iana_name(),
+            rows: rows(
+                &profile.report,
+                matches!(profile.report_by, GroupBy::Billing),
+            ),
+            billing_sources: rows(&profile.billing, true),
             total: TotalsJson::from(&profile.report.total),
         }
     }
@@ -169,6 +191,8 @@ impl<'a> From<&'a ProfileReport> for ProfileJson<'a> {
 #[derive(Serialize)]
 struct RowJson<'a> {
     key: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cost_status: Option<&'static str>,
     #[serde(flatten)]
     totals: TotalsJson,
 }

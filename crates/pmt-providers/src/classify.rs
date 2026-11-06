@@ -318,7 +318,10 @@ impl ProviderError {
 /// `auth.plan_not_eligible` for sign-in `label` of `provider`.
 #[must_use]
 pub fn plan_not_eligible(provider: &str, label: &str, detail: &str) -> Error {
-    let command = format!("prometheus auth add {provider} --type api_key");
+    let command = match key_counterpart(provider) {
+        Some(keyed) => format!("prometheus auth add {keyed}"),
+        None => format!("prometheus auth add {provider} --type api_key"),
+    };
     Error::new(
         &codes::AUTH_PLAN_NOT_ELIGIBLE,
         format!(
@@ -326,6 +329,18 @@ pub fn plan_not_eligible(provider: &str, label: &str, detail: &str) -> Error {
         ),
     )
     .with_hint(command)
+}
+
+/// The API-key provider of a sign-in-only subscription provider (an xAI
+/// subscription without API access falls back to an `XAI_API_KEY`).
+fn key_counterpart(provider: &str) -> Option<&'static str> {
+    match provider {
+        "xai-oauth" => Some("xai"),
+        "qwen-oauth" => Some("alibaba"),
+        "minimax-oauth" => Some("minimax"),
+        "openai-codex" => Some("openai-api"),
+        _ => None,
+    }
 }
 
 const ENTITLEMENT: &[&str] = &[

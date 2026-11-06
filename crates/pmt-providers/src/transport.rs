@@ -385,6 +385,27 @@ pub struct ModelStream {
     usage: Option<Usage>,
     ledger: Option<Pending>,
     recorded: Option<Result<pmt_store::UsageEvent, pmt_core::Error>>,
+    on_end: Option<OnEnd>,
+}
+
+/// What [`OnEnd`] calls.
+type EndFn = dyn FnOnce(Option<&ProviderError>, Option<Usage>) + Send + Sync;
+
+/// Called once when a stream ends: its failure, if any, and its usage.
+pub(crate) struct OnEnd(Box<EndFn>);
+
+impl OnEnd {
+    pub(crate) fn new(
+        f: impl FnOnce(Option<&ProviderError>, Option<Usage>) + Send + Sync + 'static,
+    ) -> Self {
+        Self(Box::new(f))
+    }
+}
+
+impl std::fmt::Debug for OnEnd {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("OnEnd")
+    }
 }
 
 impl std::fmt::Debug for dyn Decode {
@@ -405,6 +426,7 @@ impl ModelStream {
             usage: None,
             ledger: None,
             recorded: None,
+            on_end: None,
         };
         stream.fill().await?;
         Ok(stream)
@@ -419,6 +441,11 @@ impl ModelStream {
             self.fail(error);
         }
         let event = self.pending.pop_front()?;
+        if matches!(event, StreamEvent::Stop { .. })
+            && let Some(OnEnd(on_end)) = self.on_end.take()
+        {
+            on_end(self.failure.as_ref(), self.usage);
+        }
         if let StreamEvent::Usage { usage } = &event {
             self.usage = Some(*usage);
             if let Some(pending) = self.ledger.take() {
@@ -434,6 +461,11 @@ impl ModelStream {
             }
         }
         Some(event)
+    }
+
+    /// Calls `on_end` once, when the stream's `stop` event is read.
+    pub(crate) fn on_end(&mut self, on_end: OnEnd) {
+        self.on_end = Some(on_end);
     }
 
     /// Records the call's ledger row when its usage arrives.

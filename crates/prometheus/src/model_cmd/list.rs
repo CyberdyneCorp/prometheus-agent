@@ -164,6 +164,9 @@ struct ModelRow {
     supports_vision: bool,
     supports_reasoning: bool,
     current: bool,
+    /// `deprecated` or `retired` per the retirement table.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    retirement: Option<&'static str>,
     /// The window as shown (`200000 (pinned)`).
     #[serde(skip)]
     shown: String,
@@ -182,7 +185,10 @@ fn list_models(ctx: &Context<'_>, models: &Models, chosen: &[&Provider]) -> Resu
             let (meta, _) = models
                 .catalog
                 .metadata_at(provider.id(), &model, provider.base_url());
+            let retirement = pmt_providers::retirement::lookup(config, provider.id(), &model)
+                .map(|entry| entry.status.as_str());
             rows.push(ModelRow {
+                retirement,
                 shown: window::label(meta.context_window, meta.context_source),
                 current: current_provider == Some(provider.id())
                     && config.model.default.as_deref() == Some(model.as_str()),
@@ -213,12 +219,14 @@ fn list_models(ctx: &Context<'_>, models: &Models, chosen: &[&Provider]) -> Resu
         }
         let _ = writeln!(
             text,
-            "{} {}/{}  ctx {}  {}",
+            "{} {}/{}  ctx {}  {}{}",
             if row.current { "*" } else { " " },
             row.provider,
             row.model,
             row.shown,
-            flags.join(",")
+            flags.join(","),
+            row.retirement
+                .map_or_else(String::new, |s| format!("  [{s}]"))
         );
     }
     if rows.is_empty() {

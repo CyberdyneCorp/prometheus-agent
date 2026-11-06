@@ -116,20 +116,74 @@ pub struct Activated {
     pub to: RouteRef,
     /// The failure class that caused it.
     pub reason: ErrorClass,
+    /// The typed code of a request refused before it was sent
+    /// (`provider.budget_exhausted`, `auth.credentials_benched`).
+    pub cause: Option<&'static str>,
     /// Whether the billing source changed (subscription vs key).
     pub billing_change: bool,
+    /// The given-up route's `billing_source`.
+    pub from_billing: String,
+    /// The new route's `billing_source`.
+    pub to_billing: String,
 }
 
 impl Activated {
-    /// The trajectory payload.
+    /// The trajectory payload: the reason is the refusal's code, else the
+    /// failure class.
     #[must_use]
     pub fn payload(&self) -> pmt_obs::trajectory::payload::ProviderFallback {
         pmt_obs::trajectory::payload::ProviderFallback {
             from: format!("{}/{}", self.from.provider, self.from.model),
             to: format!("{}/{}", self.to.provider, self.to.model),
-            reason: self.reason.as_str().to_owned(),
+            reason: self.cause.unwrap_or(self.reason.as_str()).to_owned(),
             billing_change: self.billing_change,
+            from_billing: Some(self.from_billing.clone()),
+            to_billing: Some(self.to_billing.clone()),
         }
+    }
+}
+
+/// `subscription openai-codex/personal` or `API key openrouter/default`.
+#[must_use]
+pub fn billing_label(source: &str) -> String {
+    match source.split_once(':') {
+        Some(("subscription", rest)) => format!("subscription {rest}"),
+        Some(("api_key", rest)) => format!("API key {rest}"),
+        Some(("keyless", rest)) => format!("keyless {rest}"),
+        _ => source.to_owned(),
+    }
+}
+
+/// Asks the user before a fallback moves a session from a subscription
+/// to a pay-per-token credential (`providers.<id>.confirm_metered_fallback`).
+pub trait MeteredConfirm: Send + Sync {
+    /// Whether to move from billing source `from` to `to`.
+    fn confirm<'a>(&'a self, from: &'a str, to: &'a str) -> resolve::BoxFuture<'a, bool>;
+}
+
+/// The fallback chain of a session owner (spec: model-providers, Scoped
+/// fallback chains for pinned owners): a delegated child, cron job or
+/// harness-evolution session that pins its own provider or model gets no
+/// inherited chain unless it declares one; an unpinned owner inherits the
+/// parent's; a declared empty chain disables fallback.
+///
+/// # Errors
+///
+/// `provider.unknown` for a declared entry naming no provider.
+pub fn scoped_chain(
+    pinned: bool,
+    declared: Option<&[pmt_config::schema::FallbackEntry]>,
+    inherited: Vec<Target>,
+    registry: &ProviderRegistry,
+) -> Result<Vec<Target>, Error> {
+    match declared {
+        Some(entries) => {
+            let mut config = Config::default();
+            config.fallback.chain = entries.to_vec();
+            chain(&config, registry)
+        }
+        None if pinned => Ok(Vec::new()),
+        None => Ok(inherited),
     }
 }
 
@@ -163,6 +217,13 @@ pub struct Fallback {
     primary_cooldown_until: Option<Timestamp>,
     consecutive_failovers: u32,
     min_health: f64,
+    metered: Option<std::sync::Arc<dyn MeteredConfirm>>,
+}
+
+impl std::fmt::Debug for dyn MeteredConfirm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("MeteredConfirm")
+    }
 }
 
 impl Fallback {
@@ -176,7 +237,17 @@ impl Fallback {
             primary_cooldown_until: None,
             consecutive_failovers: 0,
             min_health,
+            metered: None,
         }
+    }
+
+    /// Asks `confirm` before a confirm-gated move from a subscription to
+    /// a metered credential; without it such a move fails the turn (a
+    /// non-interactive session).
+    #[must_use]
+    pub fn with_metered_confirm(mut self, confirm: std::sync::Arc<dyn MeteredConfirm>) -> Self {
+        self.metered = Some(confirm);
+        self
     }
 
     /// The route calls use now.
@@ -221,14 +292,19 @@ impl Fallback {
     /// Handles a failure of the current route (after its same-route
     /// retries): activates the next usable chain entry, or returns `None`
     /// when the class is not fallback-eligible or the chain is spent.
+    ///
+    /// # Errors
+    ///
+    /// `provider.metered_fallback_refused` when the move needed the user's
+    /// confirmation and did not get it.
     pub async fn activate(
         &mut self,
         failure: &ProviderError,
         walk: &Walk<'_>,
         now: Timestamp,
-    ) -> Option<Activated> {
+    ) -> Result<Option<Activated>, ProviderError> {
         if !failure.fallback_eligible() {
-            return None;
+            return Ok(None);
         }
         let failed = self.current().clone();
         let leaving_primary = self.active.is_none();
@@ -244,22 +320,67 @@ impl Fallback {
             let Some(route) = self.usable(index, &failed, walk, now).await else {
                 continue;
             };
-            if leaving_primary {
-                self.consecutive_failovers += 1;
-            }
             let activated = Activated {
                 from: RouteRef::of(&failed),
                 to: RouteRef::of(&route),
                 reason: failure.class,
+                cause: failure.refusal.as_ref().map(|r| r.code.code),
                 billing_change: billing_kind(&failed) != billing_kind(&route),
+                from_billing: failed.billing_source(),
+                to_billing: route.billing_source(),
             };
+            self.confirm_metered(&activated, walk).await?;
+            if leaving_primary {
+                self.consecutive_failovers += 1;
+            }
             self.active = Some((index, route));
-            return Some(activated);
+            return Ok(Some(activated));
         }
         if leaving_primary {
             self.arm_cooldown(add(now, EXHAUSTED_COOLDOWN));
         }
-        None
+        Ok(None)
+    }
+
+    /// Refuses a move from a subscription to a metered credential that
+    /// the given-up provider's `confirm_metered_fallback` gates, unless the
+    /// user confirms it.
+    async fn confirm_metered(
+        &self,
+        activated: &Activated,
+        walk: &Walk<'_>,
+    ) -> Result<(), ProviderError> {
+        let metered_move = activated.from_billing.starts_with("subscription:")
+            && !activated.to_billing.starts_with("subscription:");
+        let gated = walk
+            .resolver
+            .registry
+            .lookup(&activated.from.provider)
+            .is_ok_and(|p| p.settings().confirm_metered_fallback);
+        if !(metered_move && gated) {
+            return Ok(());
+        }
+        let (from, to) = (
+            billing_label(&activated.from_billing),
+            billing_label(&activated.to_billing),
+        );
+        if let Some(confirm) = &self.metered
+            && confirm.confirm(&from, &to).await
+        {
+            return Ok(());
+        }
+        let error = Error::new(
+            &pmt_core::error::codes::PROVIDER_METERED_FALLBACK_REFUSED,
+            format!(
+                "falling back from {}/{} would bill {to} instead of {from}, which providers.{}.confirm_metered_fallback requires confirming",
+                activated.from.provider, activated.from.model, activated.from.provider
+            ),
+        )
+        .with_hint(format!(
+            "run interactively to confirm, or set providers.{}.confirm_metered_fallback = false",
+            activated.from.provider
+        ));
+        Err(ProviderError::refused(ErrorClass::Auth, &error))
     }
 
     /// The route of chain entry `index` if it may be used now.

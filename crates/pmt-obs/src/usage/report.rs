@@ -25,11 +25,14 @@ pub enum GroupBy {
     Day,
     /// Profile name.
     Profile,
+    /// `billing_source` (spec: model-providers, Billing source
+    /// transparency).
+    Billing,
 }
 
 impl GroupBy {
     /// Every grouping, in `--by` order.
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::Root,
         Self::Session,
         Self::Model,
@@ -37,6 +40,7 @@ impl GroupBy {
         Self::Purpose,
         Self::Day,
         Self::Profile,
+        Self::Billing,
     ];
 
     /// The `--by` name.
@@ -50,6 +54,7 @@ impl GroupBy {
             Self::Purpose => "purpose",
             Self::Day => "day",
             Self::Profile => "profile",
+            Self::Billing => "billing",
         }
     }
 
@@ -62,6 +67,7 @@ impl GroupBy {
             Self::Purpose => event.purpose.clone(),
             Self::Day => event.ts.to_zoned(zone.clone()).date().to_string(),
             Self::Profile => profile.to_owned(),
+            Self::Billing => event.billing_source.clone(),
         }
     }
 }

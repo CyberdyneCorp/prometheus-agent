@@ -428,16 +428,22 @@ impl Resolver<'_> {
             "wire_format",
             wire::available(provider, wire_source).map_or(Ok(()), Err),
         )?;
+        let model = target
+            .model
+            .clone()
+            .or_else(|| provider.descriptor().default_model.clone());
+        if let Some(model) = &model {
+            // A retired model refuses the route whatever its credential.
+            trace.check(
+                "model",
+                crate::retirement::check(self.config, provider.id(), model),
+            )?;
+        }
         let credential =
             credential::resolve(self, provider, &base_url, target.credential.as_deref());
         let credential = trace.check("credential", credential)?;
         trace.ok("credential", credential.describe());
-        let model = target
-            .model
-            .clone()
-            .or_else(|| provider.descriptor().default_model.clone())
-            .ok_or_else(|| no_model(provider.id()));
-        let model = trace.check("model", model)?;
+        let model = trace.check("model", model.ok_or_else(|| no_model(provider.id())))?;
         trace.ok("model", model.clone());
         let settings = provider.settings();
         Ok(Route {
@@ -469,6 +475,9 @@ impl Resolver<'_> {
             return Ok(url.to_owned());
         }
         let id = provider.id();
+        if let Some(url) = vertex_endpoint(provider) {
+            return Ok(url);
+        }
         let hint = format!("prometheus config set providers.{id}.base_url http://<host>:<port>/v1");
         let Some(default) = provider.descriptor().base_url.as_deref() else {
             return Err(Error::new(
@@ -488,6 +497,25 @@ impl Resolver<'_> {
         }
         Ok(default.to_owned())
     }
+}
+
+/// Vertex AI's OpenAI-compatible endpoint of `providers.vertex.project`
+/// in `region` (`global` when unset).
+fn vertex_endpoint(provider: &Provider) -> Option<String> {
+    if provider.id() != "vertex" {
+        return None;
+    }
+    let settings = provider.settings();
+    let project = settings.project.as_deref()?;
+    let region = settings.region.as_deref().unwrap_or("global");
+    let host = if region == "global" {
+        "aiplatform.googleapis.com".to_owned()
+    } else {
+        format!("{region}-aiplatform.googleapis.com")
+    };
+    Some(format!(
+        "https://{host}/v1/projects/{project}/locations/{region}/endpoints/openapi"
+    ))
 }
 
 fn no_model(provider: &str) -> Error {

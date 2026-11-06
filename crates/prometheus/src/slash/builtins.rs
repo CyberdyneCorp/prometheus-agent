@@ -299,6 +299,16 @@ pub static BUILTINS: &[Command] = &[
         Effect::Immediate,
     ),
     command(
+        "provider",
+        &[],
+        Model,
+        "Apply provider plugin and [providers.*] changes to this session (--now); otherwise they reach new sessions",
+        &[arg("action", ArgKind::Choice(&["reload"]), true), NOW],
+        CHATS,
+        BusyPolicy::Reject,
+        Effect::Immediate,
+    ),
+    command(
         "reasoning",
         &[],
         Model,

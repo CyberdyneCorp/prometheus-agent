@@ -123,6 +123,8 @@ impl Host for AskingHost {
             tokens: 0,
             context_window: None,
             cost_usd: None,
+            billing_source: None,
+            subscription: None,
         })
     }
 

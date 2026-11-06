@@ -1,6 +1,7 @@
 //! `prometheus auth list` and `prometheus auth status <provider>`: peeks
-//! that never refresh, rotate or contact a provider, and never print key
-//! or token material.
+//! that never refresh, rotate or bench a credential, and never print key
+//! or token material; `auth status` asks a subscription's usage endpoint
+//! for its plan and quota windows (at most once a minute per credential).
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -75,6 +76,7 @@ pub(super) fn rows_of(profile: &Profile, provider: &Provider) -> Result<Vec<Row>
     };
     let now = Timestamp::now();
     let mut rows = key_rows(provider, &sources, &states, now);
+    mark_minted(profile, provider, &mut rows)?;
     for sub in profile.credentials.subscriptions()? {
         if sub.provider == provider.id() {
             let id = pool::subscription_id(&sub.label);
@@ -86,6 +88,24 @@ pub(super) fn rows_of(profile: &Profile, provider: &Provider) -> Result<Vec<Row>
         rows.push(row.with_state(&id, &states, now));
     }
     Ok(rows)
+}
+
+/// Keys minted by a sign-in (OpenRouter OAuth) show that source, and
+/// `dead` once the provider refused them.
+fn mark_minted(profile: &Profile, provider: &Provider, rows: &mut [Row]) -> Result<(), Error> {
+    let Some(state) = profile.accounts.state() else {
+        return Ok(());
+    };
+    for row in rows {
+        let Some(secret) = &row.secret else { continue };
+        if let Some((source, dead)) = state.key_origin(provider.id(), &pool::secret_id(secret))? {
+            row.source = source;
+            if dead {
+                row.status = "dead";
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Secret name -> where its winning value comes from.
@@ -243,9 +263,19 @@ pub(super) fn status(ctx: &Context<'_>, name: &str) -> Result<u8, Error> {
         prefer_credential: &'static str,
         plan_notes: &'a [String],
         credentials: Vec<Row>,
+        /// Per sign-in label: its plan and quota windows (spec:
+        /// model-providers, Subscription plan and quota visibility).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        quota: Option<BTreeMap<String, Option<pmt_providers::quota::Quota>>>,
+        /// Tools that bill this subscription when their provider setting
+        /// names its vendor.
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        tools: Vec<pmt_providers::auth::tools::ToolRoute>,
     }
     let profile = Profile::open(ctx)?;
     let provider = profile.registry.lookup(name)?;
+    let credentials = rows_of(&profile, provider)?;
+    let quota = quota_of(&profile, provider, &credentials);
     let view = StatusView {
         profile: profile.scope.name().as_str(),
         provider: provider.id(),
@@ -263,7 +293,9 @@ pub(super) fn status(ctx: &Context<'_>, name: &str) -> Result<u8, Error> {
             pmt_config::schema::PreferCredential::ApiKey => "api_key",
         },
         plan_notes: provider.plan_notes(),
-        credentials: rows_of(&profile, provider)?,
+        credentials,
+        quota,
+        tools: tools_of(&profile, provider),
     };
     if ctx.json {
         return document("auth status", &view);
@@ -283,8 +315,97 @@ pub(super) fn status(ctx: &Context<'_>, name: &str) -> Result<u8, Error> {
             view.provider
         );
     }
-    for (i, row) in view.credentials.iter().enumerate() {
-        let _ = writeln!(text, "{}. {}", i + 1, describe(row));
+    for route in &view.tools {
+        let _ = writeln!(
+            text,
+            "tool {}: {} ({})",
+            route.tool,
+            if route.routed {
+                "billed here"
+            } else {
+                "not routed here"
+            },
+            route.setting
+        );
     }
+    credential_lines(&mut text, &view.credentials, view.quota.as_ref());
     print_raw(&text)
+}
+
+type Quotas = BTreeMap<String, Option<pmt_providers::quota::Quota>>;
+
+/// One numbered line per credential; a sign-in's quota under it.
+fn credential_lines(text: &mut String, credentials: &[Row], quota: Option<&Quotas>) {
+    for (i, row) in credentials.iter().enumerate() {
+        let _ = writeln!(text, "{}. {}", i + 1, describe(row));
+        if row.kind != "subscription" {
+            continue;
+        }
+        let line = match quota.and_then(|q| q.get(&row.label)) {
+            Some(Some(quota)) => format!("quota: {}", quota.describe()),
+            Some(None) => "quota: not fetched yet".to_owned(),
+            None => pmt_providers::quota::NOT_REPORTED.to_owned(),
+        };
+        let _ = writeln!(text, "   {line}");
+    }
+}
+
+/// The tools whose provider setting may name `provider`'s vendor.
+fn tools_of(profile: &Profile, provider: &Provider) -> Vec<pmt_providers::auth::tools::ToolRoute> {
+    let vendor = match provider.id() {
+        "nous" => "nous",
+        "xai" | "xai-oauth" => "xai",
+        _ => return Vec::new(),
+    };
+    pmt_providers::auth::tools::tool_routing(profile.scope.config(), vendor)
+}
+
+/// The plan and quota windows of each owned sign-in of `provider`, when
+/// it reports them: the stored probe, refreshed (at most once a minute,
+/// with the current access token; never refreshing, rotating or
+/// benching the credential) when older. `None` when the provider reports
+/// no quota.
+fn quota_of(
+    profile: &Profile,
+    provider: &Provider,
+    rows: &[Row],
+) -> Option<BTreeMap<String, Option<pmt_providers::quota::Quota>>> {
+    let tracker = profile.accounts.quota()?;
+    let base_url = provider.base_url()?;
+    pmt_providers::quota::endpoint(provider.id(), base_url)?;
+    // A sign-in token goes only to the provider's own hosts.
+    let host = pmt_config::provider_urls::host_of(base_url).unwrap_or_default();
+    let bound = provider
+        .key_hosts()
+        .iter()
+        .any(|pattern| pmt_providers::descriptor::host_matches(pattern, &host));
+    let mut quotas = BTreeMap::new();
+    for row in rows {
+        let Some(sub) = &row.subscription else {
+            continue;
+        };
+        let id = pool::subscription_id(&row.label);
+        let token = profile
+            .credentials
+            .access_token(sub)
+            .ok()
+            .flatten()
+            .filter(|_| bound);
+        let quota = match &token {
+            Some(token) => {
+                crate::model_cmd::block_on(tracker.current(pmt_providers::quota::Probe {
+                    provider: provider.id(),
+                    credential: &id,
+                    base_url,
+                    token,
+                    account_id: sub.account_id.as_deref(),
+                }))
+                .ok()
+                .flatten()
+            }
+            None => tracker.stored(provider.id(), &id),
+        };
+        quotas.insert(row.label.clone(), quota);
+    }
+    Some(quotas)
 }

@@ -1304,6 +1304,13 @@
                 "description": "Route given up (`provider/model`).",
                 "type": "string"
               },
+              "from_billing": {
+                "description": "The given-up route's `billing_source`.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
               "reason": {
                 "description": "Why.",
                 "type": "string"
@@ -1311,6 +1318,13 @@
               "to": {
                 "description": "Route now used.",
                 "type": "string"
+              },
+              "to_billing": {
+                "description": "The new route's `billing_source`.",
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             },
             "required": [

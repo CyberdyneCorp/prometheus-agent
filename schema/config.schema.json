@@ -4116,6 +4116,13 @@
             "null"
           ]
         },
+        "replacement": {
+          "description": "Replacement (`<provider>/<model>`) of this deprecated or retired\nmodel, over the built-in retirement table's.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "supports_reasoning": {
           "description": "Whether the model reasons (thinking tokens).",
           "type": [
@@ -5351,6 +5358,14 @@
           "description": "Allow a plain `http://` base URL on a public host (plain HTTP to\nloopback and private-network hosts is always allowed).",
           "type": "boolean"
         },
+        "args": {
+          "default": [],
+          "description": "Arguments of `command`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "auth": {
           "anyOf": [
             {
@@ -5376,10 +5391,38 @@
           "minimum": 0,
           "type": "integer"
         },
+        "command": {
+          "description": "The agent CLI an `auth = \"external_process\"` provider drives over\nthe Agent Client Protocol (`claude`), found by the executable\nlookup.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "confirm_metered_fallback": {
+          "default": false,
+          "description": "Ask (interactive sessions) or fail the turn (non-interactive ones)\nbefore a fallback moves the session from a subscription of this\nprovider to a pay-per-token credential.",
+          "type": "boolean"
+        },
+        "daily_budget_usd": {
+          "description": "Spend cap per calendar day (UTC) in USD; once the profile's usage\nledger reaches it the provider is unavailable until the next day.",
+          "format": "double",
+          "minimum": 0.0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "enabled": {
           "default": true,
           "description": "`false` makes every request to this provider fail with\n`provider.disabled`.",
           "type": "boolean"
+        },
+        "key_cmd": {
+          "description": "A helper command whose stdout is this provider's credential: one\nbare token, or JSON with `access_token` and optional `expires_in`\n(seconds). The token is cached until 60 s before it expires (3000 s\nwhen no expiry is given) and minted again after an HTTP 401.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "key_hosts": {
           "default": [],
@@ -5426,6 +5469,15 @@
             "null"
           ]
         },
+        "monthly_budget_usd": {
+          "description": "Spend cap per calendar month (UTC) in USD.",
+          "format": "double",
+          "minimum": 0.0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "oauth": {
           "anyOf": [
             {
@@ -5456,6 +5508,20 @@
           "$ref": "#/$defs/PreferCredential",
           "default": "subscription",
           "description": "Which credential wins when both exist."
+        },
+        "project": {
+          "description": "Google Cloud project of a `vertex` provider.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "region": {
+          "description": "Google Cloud region of a `vertex` provider (`us-central1`).",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "request_timeout_secs": {
           "default": 600,
@@ -5868,6 +5934,29 @@
         }
       },
       "type": "object"
+    },
+    "RoutingConfig": {
+      "additionalProperties": false,
+      "description": "The `[routing]` section (spec: model-providers, Provider health\nscoring).",
+      "properties": {
+        "health_half_life_secs": {
+          "default": 1800,
+          "description": "Half-life (seconds) of the decay of an idle route's health score\ntoward 1.0.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "health_window": {
+          "default": 50,
+          "description": "Calls per (provider, model, credential) a health score is computed\nover.",
+          "format": "uint32",
+          "maximum": 500,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
     },
     "SandboxConfig": {
       "additionalProperties": false,
@@ -8616,6 +8705,14 @@
       "description": "User slash commands (`/<name>`), keyed by name.",
       "type": "object",
       "x-apply": "live"
+    },
+    "routing": {
+      "$ref": "#/$defs/RoutingConfig",
+      "default": {
+        "health_half_life_secs": 1800,
+        "health_window": 50
+      },
+      "description": "Provider health scoring."
     },
     "schema_version": {
       "default": 1,

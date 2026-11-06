@@ -746,6 +746,13 @@
       "additionalProperties": false,
       "description": "`session.context_usage` result.",
       "properties": {
+        "billing_source": {
+          "description": "The current route's `billing_source` (`subscription:<provider>/<label>`,\n`api_key:<provider>[/<label>]`, `local`...), when the session is\nloaded.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "context_window": {
           "description": "The model's context window, when known.",
           "format": "uint64",
@@ -763,6 +770,17 @@
             "number",
             "null"
           ]
+        },
+        "subscription": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SubscriptionStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The subscription the current route bills, when it is one."
         },
         "tokens": {
           "description": "Estimated tokens of the active context.",
@@ -1650,6 +1668,69 @@
         }
       ]
     },
+    "QuotaStatus": {
+      "additionalProperties": false,
+      "description": "A subscription's plan and quota windows.",
+      "properties": {
+        "plan": {
+          "default": null,
+          "description": "The plan label.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reported": {
+          "description": "The provider reports quota data.",
+          "type": "boolean"
+        },
+        "text": {
+          "description": "One line for a status display (`quota: not reported by provider`).",
+          "type": "string"
+        },
+        "windows": {
+          "default": [],
+          "description": "The quota windows.",
+          "items": {
+            "$ref": "#/$defs/QuotaWindow"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "reported",
+        "text"
+      ],
+      "type": "object"
+    },
+    "QuotaWindow": {
+      "additionalProperties": false,
+      "description": "One quota window.",
+      "properties": {
+        "name": {
+          "description": "`5h`, `weekly`...",
+          "type": "string"
+        },
+        "resets_at": {
+          "default": null,
+          "description": "When it resets (RFC 3339).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "used_percent": {
+          "description": "Used share, 0-100.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "used_percent"
+      ],
+      "type": "object"
+    },
     "RequestCancel": {
       "additionalProperties": false,
       "description": "`request.cancel` payload: a server request timed out or was cancelled.",
@@ -2223,6 +2304,20 @@
       },
       "required": [
         "turn_id"
+      ],
+      "type": "object"
+    },
+    "SubscriptionStatus": {
+      "additionalProperties": false,
+      "description": "A subscription's status in `session.context_usage`.",
+      "properties": {
+        "quota": {
+          "$ref": "#/$defs/QuotaStatus",
+          "description": "Its plan and quota windows."
+        }
+      },
+      "required": [
+        "quota"
       ],
       "type": "object"
     },
