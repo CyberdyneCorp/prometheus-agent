@@ -1379,7 +1379,7 @@ capabilities = [
 "Fallback on rate limit" = ["crates/prometheus/tests/chat_startup.rs::a_rate_limited_primary_falls_back_with_a_notice_and_a_trajectory_event", "crates/pmt-providers/tests/providers/mock.rs::a_rate_limited_primary_falls_back_to_the_secondary"]
 
 [replay-and-evaluation."Offline smoke demo"]
-"First run on a fresh machine" = ["crates/prometheus/tests/demo_cli.rs::first_run_on_a_fresh_machine"]
+"First run on a fresh machine" = ["crates/prometheus/tests/demo_cli.rs::first_run_on_a_fresh_machine", "crates/prometheus/tests/demo_cli.rs::inside_a_git_tree_the_demo_starts_and_installs_no_language_server"]
 
 # ---------------------------------------------------------------------------
 # M2 (partial): indexed as each task group lands.

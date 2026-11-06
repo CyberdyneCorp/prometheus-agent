@@ -98,10 +98,19 @@ struct Session {
     turn: Result<TurnResult, Error>,
 }
 
+/// The demo must stay offline and the same everywhere, but its ledger
+/// repository may sit inside a git tree (a checkout holding the temporary
+/// directory), where a session would start a language server for the
+/// patched script and, with `lsp.install_strategy = "auto"`, install it
+/// over the network first. The demo's profile starts no language server
+/// and installs no runtime.
+const OFFLINE: [&str; 2] = ["lsp.enabled=false", "runtimes.allow_lazy_install=false"];
+
 /// Runs the scenario's one turn in the demo's home.
 fn run_session(place: &Place, launch: &LaunchEnv) -> Result<Session, Error> {
     let home = place.home();
-    let set = unconfined_override();
+    let mut set = unconfined_override();
+    set.extend(OFFLINE.map(String::from));
     let ctx = Context {
         home_flag: Some(&home),
         launch,

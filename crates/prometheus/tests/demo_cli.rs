@@ -21,6 +21,10 @@ const LIMIT: Duration = Duration::from_secs(30);
 /// directory at `<base>/tmp`, and every proxy variable pointing at
 /// `proxy`, so a connection attempt would be counted.
 fn demo(base: &Path, proxy: &str, args: &[&str]) -> Output {
+    demo_command(base, proxy, args).output().unwrap()
+}
+
+fn demo_command(base: &Path, proxy: &str, args: &[&str]) -> Command {
     let tmp = base.join("tmp");
     std::fs::create_dir_all(&tmp).unwrap();
     let mut cmd: Command = common::command(&base.join("user-home"));
@@ -37,7 +41,7 @@ fn demo(base: &Path, proxy: &str, args: &[&str]) -> Output {
     for var in ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"] {
         cmd.env(var, proxy).env(var.to_lowercase(), proxy);
     }
-    cmd.output().unwrap()
+    cmd
 }
 
 /// A stand-in for the network: counts and drops every connection.
@@ -174,4 +178,54 @@ fn the_demo_cleans_up_only_what_it_created() {
         common::stderr(&out)
     );
     assert_eq!(entries(&busy), ["notes.txt"]);
+}
+
+/// A `bash-language-server` on `PATH` that would run if a session started
+/// it (Unix: the demo's script is `total.sh`).
+#[cfg(unix)]
+fn fake_language_server(bin: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::create_dir_all(bin).unwrap();
+    let server = bin.join("bash-language-server");
+    std::fs::write(&server, "#!/bin/sh\nexec sleep 30\n").unwrap();
+    std::fs::set_permissions(&server, std::fs::Permissions::from_mode(0o755)).unwrap();
+}
+
+#[cfg(not(unix))]
+fn fake_language_server(_bin: &Path) {}
+
+/// Even when its repository sits inside a git working tree (a checkout
+/// holding the temporary directory), the demo starts no language server
+/// for the script it patches, installs none and makes no connection.
+#[test]
+fn inside_a_git_tree_the_demo_starts_and_installs_no_language_server() {
+    let base = temp_home();
+    let (proxy, connections) = counting_proxy();
+    let checkout = base.path().join("checkout");
+    std::fs::create_dir(&checkout).unwrap();
+    let init = Command::new("git")
+        .args(["init", "-q"])
+        .arg(&checkout)
+        .status()
+        .unwrap();
+    assert!(init.success());
+    let bin = base.path().join("bin");
+    fake_language_server(&bin);
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    let path =
+        std::env::join_paths(std::iter::once(bin).chain(std::env::split_paths(&path))).unwrap();
+
+    let out = demo_command(base.path(), &proxy, &["--output", "checkout/run", "--keep"])
+        .env("PATH", path)
+        .output()
+        .unwrap();
+
+    assert_passed(&out);
+    assert_eq!(connections.load(Ordering::SeqCst), 0, "the demo connected");
+    let home = checkout.join("run").join("home");
+    assert!(home.join("profiles").join("default").exists());
+    // A started server records its status under the profile's LSP cache;
+    // an installed one lands under runtimes/lsp.
+    assert!(!home.join("profiles/default/cache/lsp").exists());
+    assert!(!home.join("runtimes/lsp").exists());
 }

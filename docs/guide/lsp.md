@@ -181,6 +181,22 @@ prometheus lsp restart [<id>]      stop servers and clear broken marks (every pr
 prometheus lsp which <id>          the binary it would run; exit 66 when none is found
 ```
 
+In a fresh profile nothing runs yet, and a server that is neither
+installed nor on `PATH` is named with how to get it:
+
+```console
+$ prometheus lsp status
+no running language servers
+$ prometheus lsp list
+rust-analyzer <...> trusted workspaces only
+pyright npm <...> Python
+$ prometheus lsp which zls # exits 66
+error: no zls binary found (not installed under runtimes/lsp and not on PATH)
+hint: install it manually: install zls (https://github.com/zigtools/zls)
+$ prometheus lsp which nope # exits 2
+error: unknown language server 'nope'
+```
+
 `status` marks servers that start only in trusted workspaces. `--json`
 prints `prometheus.lsp_status.v1` and `prometheus.lsp_list.v1` documents.
 The desktop app and dashboard read the same data through RPC
