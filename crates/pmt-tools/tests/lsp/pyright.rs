@@ -17,6 +17,16 @@ async fn pyright_reports_an_undefined_name_after_a_patch() {
         eprintln!("skipped: set PMT_TEST_LSP=require to install and run the real pyright");
         return;
     }
+    // pyright's stderr and the session's routing are logged at DEBUG: a
+    // failure shows why the server said nothing (nextest runs each test in
+    // its own process, so the global subscriber is this test's alone).
+    let _ = tracing::subscriber::set_global_default(
+        tracing_subscriber::fmt()
+            .with_test_writer()
+            .with_ansi(false)
+            .with_max_level(tracing::Level::DEBUG)
+            .finish(),
+    );
     let fx = Fixture::new();
     let config: pmt_config::schema::LspConfig =
         toml::from_str("wait_timeout_ms = 60000\nwarmup_timeout_ms = 120000\n").unwrap();
