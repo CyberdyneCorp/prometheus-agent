@@ -70,6 +70,7 @@ pub mod usage_cmd;
 pub mod vault_cmd;
 pub mod verify_cmd;
 pub mod version;
+pub mod worktrees_cmd;
 
 pub use cli::{
     ApprovalsCommand, AuthCommand, BackupCommand, Cli, Command, ConfigCommand, DemoArgs,

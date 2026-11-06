@@ -342,6 +342,9 @@ pub async fn dispatcher(
 /// The session's tool port; a `--now` change swaps it at a turn boundary.
 pub struct SwappableTools {
     current: RwLock<Arc<SessionTools>>,
+    /// A note for the model put before the next tool result (a moved
+    /// working directory), so the prompt itself never changes.
+    announcement: std::sync::Mutex<Option<String>>,
 }
 
 impl SwappableTools {
@@ -350,7 +353,16 @@ impl SwappableTools {
     pub fn new(tools: Arc<SessionTools>) -> Self {
         Self {
             current: RwLock::new(tools),
+            announcement: std::sync::Mutex::default(),
         }
+    }
+
+    /// Puts `note` before the next tool result the model gets.
+    pub fn announce(&self, note: String) {
+        *self
+            .announcement
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(note);
     }
 
     /// Serves `tools` from the next turn.
@@ -379,7 +391,22 @@ impl ToolPort for SwappableTools {
         cancel: &'a CancelToken,
     ) -> BoxFuture<'a, ToolBatch> {
         let tools = self.tools();
-        Box::pin(async move { tools.run(calls, turn_id, cancel).await })
+        Box::pin(async move {
+            let mut batch = tools.run(calls, turn_id, cancel).await;
+            if let Some(first) = batch.outcomes.first_mut()
+                && let Some(note) = self
+                    .announcement
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .take()
+            {
+                first
+                    .result
+                    .content
+                    .insert(0, pmt_tools::result::Content::Text { text: note });
+            }
+            batch
+        })
     }
 
     fn settle(&self) -> BoxFuture<'_, Option<String>> {

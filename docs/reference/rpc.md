@@ -127,10 +127,10 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `vault.sources` | `security-boundaries` | 1.0 | [`VaultSourcesParams`](#vaultsourcesparams) | [`VaultSourceList`](#vaultsourcelist) |
 | `voice.client_config` | `voice-mode` | 1.0 | not served yet | |
 | `wake.feed` | `voice-mode` | 1.0 | not served yet | |
-| `worktree.list` | `git-worktrees` | 1.0 | not served yet | |
-| `worktree.new` | `git-worktrees` | 1.0 | not served yet | |
-| `worktree.prune` | `git-worktrees` | 1.0 | not served yet | |
-| `worktree.status` | `git-worktrees` | 1.0 | not served yet | |
+| `worktree.list` | `git-worktrees` | 1.0 | [`WorktreeSessionParams`](#worktreesessionparams) | [`WorktreeListing`](#worktreelisting) |
+| `worktree.new` | `git-worktrees` | 1.0 | [`WorktreeNewParams`](#worktreenewparams) | [`WorktreeCreated`](#worktreecreated) |
+| `worktree.prune` | `git-worktrees` | 1.0 | [`WorktreePruneParams`](#worktreepruneparams) | [`WorktreePruned`](#worktreepruned) |
+| `worktree.status` | `git-worktrees` | 1.0 | [`WorktreeSessionParams`](#worktreesessionparams) | [`WorktreeStatus`](#worktreestatus) |
 
 ## Server requests
 
@@ -1098,3 +1098,105 @@ A `<major>.<minor>` protocol version on the wire.
 |---|---|---|---|
 | `major` | integer | yes | Incompatible revisions. |
 | `minor` | integer | yes | Backward-compatible additions. |
+
+### `WorktreeArchiveInfo`
+
+One archive.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `age_secs` | integer | yes | Seconds since it was archived. |
+| `branch` | string or null | no | The branch it was on. |
+| `name` | string | yes | The archived tree's name (`worktrees restore <name>`). |
+| `reason` | string | yes | Why it was archived (`sweep`, `exit`, `subagent`). |
+| `reference` | string | yes | `refs/prometheus/archive/<name>`. |
+
+### `WorktreeCreated`
+
+`worktree.new` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `base` | string | yes | The ref it was branched from. |
+| `notices` | array of string | yes | What the user should know (a failed fetch). |
+| `tree` | [`WorktreeInfo`](#worktreeinfo) | yes | The new tree, now the session's working directory. |
+
+### `WorktreeDecision`
+
+One sweep decision.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `action` | string | yes | `remove`, `archive` or `keep`. |
+| `name` | string | yes | The tree. |
+| `outcome` | string | yes | What happened (the plan on a dry run). |
+| `path` | string | yes | Its directory. |
+| `reason` | string or null | no | The reason a tree is kept (`live-process`, `keep-large-untracked`...). |
+
+### `WorktreeInfo`
+
+One Prometheus tree.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `age_secs` | integer | yes | Seconds since it was created. |
+| `branch` | string or null | no | The branch it is on (`null`: detached). |
+| `kind` | string | yes | `generated`, `named`, `subagent` or `kanban`. |
+| `last_decision` | string or null | no | The last sweep decision and its reason. |
+| `name` | string | yes | Its name (directory under `.worktrees/`). |
+| `path` | string | yes | Its directory. |
+
+### `WorktreeListing`
+
+`worktree.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `archives` | array of [`WorktreeArchiveInfo`](#worktreearchiveinfo) | yes | Its archives. |
+| `repo` | string | yes | The repository's main checkout. |
+| `trees` | array of [`WorktreeInfo`](#worktreeinfo) | yes | Its Prometheus trees. |
+
+### `WorktreeNewParams`
+
+`worktree.new` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string or null | no | The tree's name (`[A-Za-z0-9._-]{1,64}`); omitted: `prom-<8 hex>`. |
+| `session_id` | string | yes | The session to move into the new tree. |
+
+### `WorktreePruneParams`
+
+`worktree.prune` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `dry_run` | boolean | no | Report the decisions; change nothing. |
+| `session_id` | string | yes | The session (its working directory's repository). |
+
+### `WorktreePruned`
+
+`worktree.prune` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `decisions` | array of [`WorktreeDecision`](#worktreedecision) | yes | One decision per tree. |
+| `dry_run` | boolean | yes | Nothing was changed. |
+| `repo` | string | yes | The repository's main checkout. |
+
+### `WorktreeSessionParams`
+
+Params naming the session (`worktree.status`, `worktree.list`).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `session_id` | string | yes | The session (its working directory's repository). |
+
+### `WorktreeStatus`
+
+`worktree.status` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `cwd` | string | yes | The session's working directory. |
+| `tree` | [`WorktreeInfo`](#worktreeinfo) or null | no | The Prometheus tree it is in (`null`: none). |

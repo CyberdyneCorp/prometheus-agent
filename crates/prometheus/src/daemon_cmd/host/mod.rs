@@ -39,10 +39,12 @@ mod reload;
 mod send_tool;
 mod setup;
 mod turns;
+mod worktrees;
 
 use crate::chat::resume;
 use crate::chat::session::{Clients, Factory, Live};
 pub(super) use reload::watch;
+pub(super) use worktrees::sweep_worktrees;
 
 /// A loaded session.
 struct Loaded {
@@ -618,6 +620,15 @@ impl Host for DaemonHost {
             let (mode, allow, deny) = crate::egress::snapshot(hosts);
             Ok(pmt_rpc::contracts::EgressState { mode, allow, deny })
         })
+    }
+
+    fn worktree<'a>(
+        &'a self,
+        profile: &'a str,
+        request: pmt_gateway::worktree::WorktreeCall,
+        link: Link,
+    ) -> HostFuture<'a, pmt_gateway::worktree::WorktreeReply> {
+        Box::pin(self.worktree_call(profile, request, link))
     }
 
     fn files_undo<'a>(

@@ -6,6 +6,7 @@
 //! context files, no clarify channel, the parent's frozen memory snapshot,
 //! an ephemeral system prompt and approvals that fail closed.
 
+pub mod isolation;
 mod launcher;
 pub mod routers;
 mod wiring;

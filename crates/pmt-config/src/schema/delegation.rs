@@ -63,6 +63,11 @@ pub struct DelegationConfig {
     /// (`provider/model`); unset: the parent's current route.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// Run each child in its own git worktree and branch when the parent
+    /// uses the local terminal backend inside a git repository.
+    pub worktree_isolation: bool,
+    /// Prefix of a child's worktree branch (`<prefix>/subagent-<id>`).
+    pub worktree_branch_prefix: String,
 }
 
 impl Default for DelegationConfig {
@@ -82,6 +87,8 @@ impl Default for DelegationConfig {
             progress_events: true,
             router: "default".to_owned(),
             model: None,
+            worktree_isolation: false,
+            worktree_branch_prefix: "prometheus".to_owned(),
         }
     }
 }

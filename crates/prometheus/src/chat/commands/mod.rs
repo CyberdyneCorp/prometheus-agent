@@ -15,6 +15,7 @@ pub(crate) mod plugins;
 pub(crate) mod quick;
 mod refine;
 pub(crate) mod session;
+pub mod worktree;
 
 use std::sync::Arc;
 
@@ -115,6 +116,7 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "plugins" => plugins::plugins(ctx, args).await,
         "mcp" => mcp::mcp(ctx, args).await,
         "browser" => browser::browser(ctx, args).await,
+        "worktree" => worktree::worktree(ctx, args).await,
         other => return state_command(ctx, other, args).map(|r| r.map(Reply::Text)),
     };
     Some(text.map(Reply::Text))

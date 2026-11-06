@@ -15,6 +15,7 @@ Commands:
   grants       List and revoke the profile's permanent capability grants and approvals
   browser      Browser sessions: status, and closing the real browser whose profile real-profile browsing copies
   lsp          Language servers behind the diagnostics of file edits: status, registry, installs, restart
+  worktrees    Git worktrees of sessions and subagents: list, sweep and restore archived trees
   vault        The credential vault: logins, cards and addresses the browser fills by handle
   security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one
@@ -138,6 +139,9 @@ Options:
 
       --no-checkpoints
           Record no file snapshots or checkpoints this run
+
+  -w, --worktree [<NAME>]
+          Run the session in a new git worktree of the current repository (`.worktrees/NAME` on branch `prometheus/NAME`; a generated name when omitted); with `-r`/`-c` of a session that owns one, reopen it
 
       --cwd <DIR>
           Working directory of the session (also scopes `-c` and `latest`)

@@ -17,6 +17,7 @@ pmt-agent = { path = "crates/pmt-agent" }
 pmt-config = { path = "crates/pmt-config" }
 pmt-core = { path = "crates/pmt-core" }
 pmt-delegation = { path = "crates/pmt-delegation" }
+pmt-worktrees = { path = "crates/pmt-worktrees" }
 pmt-memory = { path = "crates/pmt-memory" }
 pmt-mcp = { path = "crates/pmt-mcp" }
 pmt-net = { path = "crates/pmt-net" }

@@ -952,6 +952,110 @@ export interface Version {
   minor: number;
 }
 
+/** One archive. */
+export interface WorktreeArchiveInfo {
+  /** Seconds since it was archived. */
+  age_secs: number;
+  /** The branch it was on. */
+  branch?: string | null;
+  /** The archived tree's name (`worktrees restore <name>`). */
+  name: string;
+  /** Why it was archived (`sweep`, `exit`, `subagent`). */
+  reason: string;
+  /** `refs/prometheus/archive/<name>`. */
+  reference: string;
+}
+
+/** `worktree.new` result. */
+export interface WorktreeCreated {
+  /** The ref it was branched from. */
+  base: string;
+  /** What the user should know (a failed fetch). */
+  notices: Array<string>;
+  /** The new tree, now the session's working directory. */
+  tree: WorktreeInfo;
+}
+
+/** One sweep decision. */
+export interface WorktreeDecision {
+  /** `remove`, `archive` or `keep`. */
+  action: string;
+  /** The tree. */
+  name: string;
+  /** What happened (the plan on a dry run). */
+  outcome: string;
+  /** Its directory. */
+  path: string;
+  /** The reason a tree is kept (`live-process`, `keep-large-untracked`...). */
+  reason?: string | null;
+}
+
+/** One Prometheus tree. */
+export interface WorktreeInfo {
+  /** Seconds since it was created. */
+  age_secs: number;
+  /** The branch it is on (`null`: detached). */
+  branch?: string | null;
+  /** `generated`, `named`, `subagent` or `kanban`. */
+  kind: string;
+  /** The last sweep decision and its reason. */
+  last_decision?: string | null;
+  /** Its name (directory under `.worktrees/`). */
+  name: string;
+  /** Its directory. */
+  path: string;
+}
+
+/** `worktree.list` result. */
+export interface WorktreeListing {
+  /** Its archives. */
+  archives: Array<WorktreeArchiveInfo>;
+  /** The repository's main checkout. */
+  repo: string;
+  /** Its Prometheus trees. */
+  trees: Array<WorktreeInfo>;
+}
+
+/** `worktree.new` params. */
+export interface WorktreeNewParams {
+  /** The tree's name (`[A-Za-z0-9._-]{1,64}`); omitted: `prom-<8 hex>`. */
+  name?: string | null;
+  /** The session to move into the new tree. */
+  session_id: string;
+}
+
+/** `worktree.prune` params. */
+export interface WorktreePruneParams {
+  /** Report the decisions; change nothing. */
+  dry_run?: boolean;
+  /** The session (its working directory's repository). */
+  session_id: string;
+}
+
+/** `worktree.prune` result. */
+export interface WorktreePruned {
+  /** One decision per tree. */
+  decisions: Array<WorktreeDecision>;
+  /** Nothing was changed. */
+  dry_run: boolean;
+  /** The repository's main checkout. */
+  repo: string;
+}
+
+/** Params naming the session (`worktree.status`, `worktree.list`). */
+export interface WorktreeSessionParams {
+  /** The session (its working directory's repository). */
+  session_id: string;
+}
+
+/** `worktree.status` result. */
+export interface WorktreeStatus {
+  /** The session's working directory. */
+  cwd: string;
+  /** The Prometheus tree it is in (`null`: none). */
+  tree?: WorktreeInfo | null;
+}
+
 export interface Methods {
   "approval.respond": { params: ApprovalRespondParams; result: Ack };
   "command.dispatch": { params: DispatchParams; result: Dispatched };
@@ -986,6 +1090,10 @@ export interface Methods {
   "vault.list": { params: VaultListParams; result: VaultItems };
   "vault.remove": { params: VaultRemoveParams; result: VaultItem };
   "vault.sources": { params: VaultSourcesParams; result: VaultSourceList };
+  "worktree.list": { params: WorktreeSessionParams; result: WorktreeListing };
+  "worktree.new": { params: WorktreeNewParams; result: WorktreeCreated };
+  "worktree.prune": { params: WorktreePruneParams; result: WorktreePruned };
+  "worktree.status": { params: WorktreeSessionParams; result: WorktreeStatus };
 }
 
 export interface ServerRequests {
@@ -1052,10 +1160,6 @@ export const UNDECLARED = [
   "ui.prefs.patch",
   "voice.client_config",
   "wake.feed",
-  "worktree.list",
-  "worktree.new",
-  "worktree.prune",
-  "worktree.status",
   "achievement.unlocked",
   "automation.state",
   "health.changed",

@@ -24,6 +24,7 @@ pub mod status_bar;
 pub mod terminal;
 pub mod theme;
 pub mod usage_file;
+pub mod worktree;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -169,65 +170,116 @@ fn run_recorded(
     if mode != Mode::OneShot && terminal::interactive() {
         crate::hooks_host::consent::ask_pending(&scope)?;
     }
-    // The prompt is read before anything starts, so a missing file or an
-    // empty pipe fails fast.
-    let first = match (mode, &source) {
-        (Mode::OneShot, _) => Some(oneshot::prompt(&source)?),
-        (Mode::Line | Mode::Tui, PromptSource::Text(text)) => Some(text.clone()),
-        (Mode::Line | Mode::Tui, PromptSource::File(path)) => {
-            Some(oneshot::read_prompt_file(path)?)
-        }
-        (Mode::Line | Mode::Tui, PromptSource::None) => None,
+    let entered = worktree::enter(args, &scope, ui.quiet)?;
+    let run = Run {
+        args: entered.as_ref().map_or(args, |e| &e.args),
+        ctx: &ctx,
+        set: &set,
+        scope: &scope,
+        mode,
+        ui,
+        record,
     };
-    if mode == Mode::Tui {
-        let tui = Tui {
-            args,
-            set: &set,
-            first,
-            images: image_paths,
-        };
-        return tui.run(&ctx, &scope, ui);
+    let outcome = run.start(&source, images, image_paths);
+    if let Some(entered) = &entered {
+        worktree::finish(entered, mode, &scope, ui.quiet);
     }
-    if !args.runs_in_process()
-        && let Some(daemon) = crate::daemon_client::running(scope.home())?
-    {
-        let config = scope.config();
-        let cwd = current_dir()?;
-        let start = remote::Start {
+    outcome
+}
+
+/// One chat run once its profile, mode and directory are settled.
+struct Run<'a> {
+    args: &'a ChatArgs,
+    ctx: &'a Context<'a>,
+    set: &'a [String],
+    scope: &'a pmt_config::ProfileScope,
+    mode: Mode,
+    ui: Ui,
+    record: &'a Arc<usage_file::RunRecord>,
+}
+
+impl Run<'_> {
+    /// Reads the first prompt, then runs the session in the TUI, on the
+    /// home's daemon or in this process.
+    fn start(
+        &self,
+        source: &PromptSource,
+        images: Vec<attach::Image>,
+        image_paths: Vec<PathBuf>,
+    ) -> Result<u8, Error> {
+        let Self {
             args,
+            ctx,
+            set,
+            scope,
             mode,
-            first,
-            cwd: &cwd,
-            terminal: terminal::identity().filter(|_| config.sessions.terminal_continue),
             ui,
-            approve_unattended: config.approvals.single_query_mode
-                == pmt_config::schema::UnattendedApproval::Approve,
-            setup: remote::setup_of(args, &set, &cwd)?,
-            images: image_paths,
-            run_budget: args.run_budget,
-            record: Arc::clone(record),
-            scope: &scope,
-            launch: ctx.launch,
+            record,
+        } = *self;
+        let ctx = *ctx;
+        let source = source.clone();
+        let scope = scope.clone();
+        let set = set.to_vec();
+        // The prompt is read before anything starts, so a missing file or an
+        // empty pipe fails fast.
+        let first = match (mode, &source) {
+            (Mode::OneShot, _) => Some(oneshot::prompt(&source)?),
+            (Mode::Line | Mode::Tui, PromptSource::Text(text)) => Some(text.clone()),
+            (Mode::Line | Mode::Tui, PromptSource::File(path)) => {
+                Some(oneshot::read_prompt_file(path)?)
+            }
+            (Mode::Line | Mode::Tui, PromptSource::None) => None,
         };
-        return remote::run(&daemon, &scope, &start);
+        if mode == Mode::Tui {
+            let tui = Tui {
+                args,
+                set: &set,
+                first,
+                images: image_paths,
+            };
+            return tui.run(&ctx, &scope, ui);
+        }
+        if !args.runs_in_process()
+            && let Some(daemon) = crate::daemon_client::running(scope.home())?
+        {
+            let config = scope.config();
+            let cwd = current_dir()?;
+            let start = remote::Start {
+                args,
+                mode,
+                first,
+                cwd: &cwd,
+                terminal: terminal::identity().filter(|_| config.sessions.terminal_continue),
+                ui,
+                approve_unattended: config.approvals.single_query_mode
+                    == pmt_config::schema::UnattendedApproval::Approve,
+                setup: remote::setup_of(args, &set, &cwd)?,
+                images: image_paths,
+                run_budget: args.run_budget,
+                record: Arc::clone(record),
+                scope: &scope,
+                launch: ctx.launch,
+            };
+            return remote::run(&daemon, &scope, &start);
+        }
+        let _lock = WriterLock::acquire(scope.home(), Role::Chat, vec![scope.name().to_string()])?;
+        let ad_hoc = crate::model_cmd::explain::ad_hoc(&args.endpoint)?;
+        let options = session_options(args, mode)?;
+        let flags = RouteFlags {
+            provider: args.provider.as_deref(),
+            model: args.model.as_deref(),
+            mock_script: args.mock_script.as_deref(),
+        };
+        let mut factory = Factory::new(scope, ctx.launch, &flags, ad_hoc, options)?
+            .with_config_reread(set.clone());
+        record.store(&factory.store);
+        factory.record = Arc::clone(record);
+        let first = First {
+            text: first,
+            images,
+        };
+        crate::model_cmd::block_on(start(factory, args, &flags, mode, first, ui))?
     }
-    let _lock = WriterLock::acquire(scope.home(), Role::Chat, vec![scope.name().to_string()])?;
-    let ad_hoc = crate::model_cmd::explain::ad_hoc(&args.endpoint)?;
-    let options = session_options(args, mode)?;
-    let flags = RouteFlags {
-        provider: args.provider.as_deref(),
-        model: args.model.as_deref(),
-        mock_script: args.mock_script.as_deref(),
-    };
-    let mut factory =
-        Factory::new(scope, ctx.launch, &flags, ad_hoc, options)?.with_config_reread(set.clone());
-    record.store(&factory.store);
-    factory.record = Arc::clone(record);
-    let first = First {
-        text: first,
-        images,
-    };
-    crate::model_cmd::block_on(start(factory, args, &flags, mode, first, ui))?
 }
 
 /// The session flags of a chat in this process.

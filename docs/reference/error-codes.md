@@ -294,6 +294,10 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `delegation.unknown_handle` | `not_found` | 66 | The subagent handle failed its signature check, belongs to another conversation or its result expired (results are kept 3600 s). |
 | `execute_code.no_tools` | `permission_denied` | 77 | The intersection of `code_execution.allowed_tools` with the session's granted tools is empty, so no script ran. |
 | `execute_code.refused` | `permission_denied` | 77 | No code, no resolvable sandbox policy, a command that stops the serving gateway, or an approval that was not given; nothing ran. |
+| `worktree.not_a_repository` | `usage` | 2 | `chat -w`, `/worktree` and `worktrees prune --repo` need a directory inside a non-bare git repository with `git` on `PATH`. |
+| `worktree.invalid_name` | `invalid_input` | 65 | A worktree name matches `[A-Za-z0-9._-]{1,64}` and must not exist yet under `<repo>/.worktrees/` or as branch `prometheus/<name>`. |
+| `worktree.archive_not_found` | `not_found` | 66 | No `refs/prometheus/archive/<name>` exists in the repository (or in any recorded repository); `prometheus worktrees list` shows the archives. |
+| `worktree.git` | `io` | 74 | git failed while creating, archiving, removing or restoring a worktree; the message carries git's error and nothing was removed. |
 | `rpc.parse` | `invalid_input` | 65 | A client protocol frame is not valid JSON (JSON-RPC `-32700`); the connection keeps serving. |
 | `rpc.invalid_request` | `invalid_input` | 65 | A client protocol frame is JSON but not a JSON-RPC 2.0 request object (JSON-RPC `-32600`). |
 | `rpc.unknown_method` | `usage` | 2 | The called method is not declared in the RPC catalog (`schema/rpc.json`); JSON-RPC `-32601`. |

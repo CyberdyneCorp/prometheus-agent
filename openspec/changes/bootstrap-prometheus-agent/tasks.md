@@ -390,9 +390,9 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 39. M2 Git worktrees
 
-- [ ] 39.1 Implement worktree creation (post-checkout hooks run under the sandbox, generated names for unnamed trees), `chat -w` worktree mode, exit disposition (uncommitted work kept on Ctrl-D, gateway sessions handled) and the in-session worktree command that preserves the prompt cache; verify with git fixture repositories (spec: git-worktrees)
-- [ ] 39.2 Implement the repository registry and sweep schedule, the sweep decision table (live processes and large untracked files protect a tree), the archive format (consistent under concurrent index changes) and the worktree CLI with restore; verify that an archived lane restores (spec: git-worktrees)
-- [ ] 39.3 Implement subagent worktree isolation (child commits land on the child's branch; container backends handled); verify with a mock-provider delegation that commits in a child worktree (spec: git-worktrees)
+- [x] 39.1 Implement worktree creation (post-checkout hooks run under the sandbox, generated names for unnamed trees), `chat -w` worktree mode, exit disposition (uncommitted work kept on Ctrl-D, gateway sessions handled) and the in-session worktree command that preserves the prompt cache; verify with git fixture repositories (spec: git-worktrees)
+- [x] 39.2 Implement the repository registry and sweep schedule, the sweep decision table (live processes and large untracked files protect a tree), the archive format (consistent under concurrent index changes) and the worktree CLI with restore; verify that an archived lane restores (spec: git-worktrees)
+- [x] 39.3 Implement subagent worktree isolation (child commits land on the child's branch; container backends handled); verify with a mock-provider delegation that commits in a child worktree (spec: git-worktrees)
 
 ## 40. M2 Delegation upgrades
 

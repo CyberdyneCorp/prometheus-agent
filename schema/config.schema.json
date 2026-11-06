@@ -1511,6 +1511,16 @@
           "default": "default",
           "description": "The delegation router: `default`, or a router a plugin provides.\nAn unavailable router refuses every spawn.",
           "type": "string"
+        },
+        "worktree_branch_prefix": {
+          "default": "prometheus",
+          "description": "Prefix of a child's worktree branch (`<prefix>/subagent-<id>`).",
+          "type": "string"
+        },
+        "worktree_isolation": {
+          "default": false,
+          "description": "Run each child in its own git worktree and branch when the parent\nuses the local terminal backend inside a git repository.",
+          "type": "boolean"
         }
       },
       "type": "object",
@@ -7911,6 +7921,45 @@
           "type": "string"
         }
       ]
+    },
+    "WorktreesConfig": {
+      "additionalProperties": false,
+      "description": "The `[worktrees]` section (spec: git-worktrees).",
+      "properties": {
+        "archive_dirty": {
+          "default": true,
+          "description": "Archive dirty or unpushed trees past their idle tier before\nremoving them; `false` keeps such trees.",
+          "type": "boolean"
+        },
+        "archive_max_file_bytes": {
+          "default": 52428800,
+          "description": "Untracked files larger than this keep a tree from the sweep\n(`keep-large-untracked`) and are left out of archives.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "archive_retention_secs": {
+          "default": 2592000,
+          "description": "Seconds an archive is kept before the sweep deletes it (`0` =\nforever).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_total_bytes": {
+          "default": 0,
+          "description": "Total bytes of trees above which the oldest idle ones past their\ntier are archived and removed first (`0` = off).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sync_remote": {
+          "default": true,
+          "description": "Fetch the default remote before creating a tree (a failed fetch\nfalls back to the local tip).",
+          "type": "boolean"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -8089,7 +8138,9 @@
         "max_tasks_per_call": 8,
         "oneshot_max_children": 2,
         "progress_events": true,
-        "router": "default"
+        "router": "default",
+        "worktree_branch_prefix": "prometheus",
+        "worktree_isolation": false
       },
       "description": "Subagent delegation."
     },
@@ -8711,6 +8762,17 @@
         "searxng": {}
       },
       "description": "Web tools."
+    },
+    "worktrees": {
+      "$ref": "#/$defs/WorktreesConfig",
+      "default": {
+        "archive_dirty": true,
+        "archive_max_file_bytes": 52428800,
+        "archive_retention_secs": 2592000,
+        "max_total_bytes": 0,
+        "sync_remote": true
+      },
+      "description": "Git worktrees: creation, the stale-tree sweep and archives."
     }
   },
   "title": "Prometheus config.toml",

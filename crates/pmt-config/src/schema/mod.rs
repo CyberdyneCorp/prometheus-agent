@@ -86,6 +86,7 @@ pub use operations::{
     LogLevel, LoggingConfig, NetworkConfig, ObservabilityConfig, PrivacyConfig, SandboxConfig,
     SandboxMode, SecretCommandConfig, SecretsBackend, SecretsConfig, SecurityConfig,
     TelemetryConfig, TrajectoriesConfig, VaultConfig, VaultKeyStorage, VaultSourceConfig,
+    WorktreesConfig,
 };
 pub use plugins::{
     DEFAULT_CATALOG_URL, GuidanceMode, PluginsConfig, PluginsWasmConfig, SecurityGuidanceConfig,
@@ -225,6 +226,8 @@ pub struct Config {
     pub vision: VisionConfig,
     /// Web tools.
     pub web: WebConfig,
+    /// Git worktrees: creation, the stale-tree sweep and archives.
+    pub worktrees: WorktreesConfig,
 }
 
 impl Default for Config {
@@ -282,6 +285,7 @@ impl Default for Config {
             vault: VaultConfig::default(),
             vision: VisionConfig::default(),
             web: WebConfig::default(),
+            worktrees: WorktreesConfig::default(),
         }
     }
 }

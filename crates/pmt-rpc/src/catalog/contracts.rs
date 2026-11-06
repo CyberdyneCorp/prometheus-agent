@@ -81,11 +81,13 @@ mod lsp;
 mod messaging;
 mod security;
 mod tui;
+mod worktree;
 pub use files::*;
 pub use lsp::*;
 pub use messaging::*;
 pub use security::*;
 pub use tui::*;
+pub use worktree::*;
 
 /// A `<major>.<minor>` protocol version on the wire.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

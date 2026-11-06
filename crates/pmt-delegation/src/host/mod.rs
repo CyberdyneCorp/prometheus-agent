@@ -78,6 +78,10 @@ pub struct TurnOutcome {
 pub struct Closed {
     /// Processes that did not stop within 10 seconds.
     pub orphaned_processes: Vec<String>,
+    /// The child's own git worktree and what became of it.
+    pub worktree: Option<crate::result::WorktreeReport>,
+    /// Why the child ran without the isolation it was configured for.
+    pub note: Option<String>,
 }
 
 /// A running child session.

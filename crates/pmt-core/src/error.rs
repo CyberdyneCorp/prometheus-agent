@@ -887,8 +887,20 @@ error_codes! {
     /// `execute_code` refused before running anything.
     EXECUTE_CODE_REFUSED = ("execute_code.refused", PermissionDenied,
         "No code, no resolvable sandbox policy, a command that stops the serving gateway, or an approval that was not given; nothing ran.");
+    /// A worktree operation needs a git repository.
+    WORKTREE_NOT_A_REPOSITORY = ("worktree.not_a_repository", Usage,
+        "`chat -w`, `/worktree` and `worktrees prune --repo` need a directory inside a non-bare git repository with `git` on `PATH`.");
+    /// A worktree name is malformed or already used.
+    WORKTREE_INVALID_NAME = ("worktree.invalid_name", InvalidInput,
+        "A worktree name matches `[A-Za-z0-9._-]{1,64}` and must not exist yet under `<repo>/.worktrees/` or as branch `prometheus/<name>`.");
+    /// No archive of that tree exists.
+    WORKTREE_ARCHIVE_NOT_FOUND = ("worktree.archive_not_found", NotFound,
+        "No `refs/prometheus/archive/<name>` exists in the repository (or in any recorded repository); `prometheus worktrees list` shows the archives.");
+    /// A git command of a worktree operation failed.
+    WORKTREE_GIT = ("worktree.git", Io,
+        "git failed while creating, archiving, removing or restoring a worktree; the message carries git's error and nothing was removed.");
     /// A client frame is not JSON (JSON-RPC -32700).
-    RPC_PARSE = ("rpc.parse", InvalidInput,
+    RPC_PARSE =("rpc.parse", InvalidInput,
         "A client protocol frame is not valid JSON (JSON-RPC `-32700`); the connection keeps serving.");
     /// A frame is JSON but not a JSON-RPC 2.0 request (-32600).
     RPC_INVALID_REQUEST = ("rpc.invalid_request", InvalidInput,

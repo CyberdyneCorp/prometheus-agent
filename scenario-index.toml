@@ -2676,3 +2676,39 @@ capabilities = [
 
 [subagent-delegation."execute_code pre-execution guards"]
 "Empty code" = ["crates/prometheus/tests/execute_code.rs::whitespace_code_runs_nothing"]
+
+# Group 39 (git worktrees).
+[git-worktrees."Worktree creation"]
+"Repository with a post-checkout hook" = ["crates/pmt-worktrees/tests/worktrees.rs::a_post_checkout_hook_does_not_run_when_a_tree_is_created"]
+"Unnamed tree" = ["crates/pmt-worktrees/tests/worktrees.rs::an_unnamed_tree_gets_a_generated_name_and_branch", "crates/prometheus/tests/worktree_chat.rs::a_one_shot_run_works_in_a_new_tree_and_leaves_the_checkout_unchanged"]
+
+[git-worktrees."chat -w worktree mode"]
+"One-shot in a worktree" = ["crates/prometheus/tests/worktree_chat.rs::a_one_shot_run_works_in_a_new_tree_and_leaves_the_checkout_unchanged"]
+
+[git-worktrees."Exit disposition"]
+"Ctrl-D with uncommitted work" = ["crates/prometheus/tests/worktree_chat.rs::enter_at_the_exit_prompt_keeps_a_tree_with_uncommitted_work"]
+"Gateway session" = ["crates/prometheus/tests/worktree_daemon.rs::a_messaging_sessions_dirty_tree_is_kept_without_a_prompt_when_it_ends"]
+
+[git-worktrees."In-session worktree command"]
+"Prompt cache preserved" = ["crates/prometheus/tests/worktree_daemon.rs::moving_into_a_new_worktree_keeps_the_prompt_and_tools_and_moves_the_terminal"]
+
+[git-worktrees."Repository registry and sweep schedule"]
+"Scheduled sweep" = ["crates/pmt-worktrees/tests/worktrees.rs::the_scheduled_sweep_removes_an_idle_clean_merged_tree"]
+
+[git-worktrees."Sweep decision table"]
+"Live process inside" = ["crates/pmt-worktrees/tests/worktrees.rs::a_tree_a_process_works_in_is_never_touched", "crates/pmt-worktrees/src/sweep.rs::protections_come_before_any_change"]
+"Large untracked file" = ["crates/pmt-worktrees/tests/worktrees.rs::a_large_untracked_file_keeps_a_dirty_tree"]
+
+[git-worktrees."Archive format"]
+"Index changes during archiving" = ["crates/pmt-worktrees/tests/worktrees.rs::an_index_change_during_archiving_saves_the_archive_and_keeps_the_tree"]
+
+[git-worktrees."Worktree CLI and restore"]
+"Restore an archived lane" = ["crates/pmt-worktrees/tests/worktrees.rs::an_archived_lane_restores_with_its_staged_and_untracked_files", "crates/prometheus/tests/worktree_chat.rs::an_archived_lane_restores_with_its_staged_and_untracked_files"]
+
+[git-worktrees."Subagent worktree isolation"]
+"Child commits work" = ["crates/prometheus/tests/worktree_delegation.rs::a_childs_commit_lands_on_its_branch_and_its_tree_is_removed"]
+"Container backend" = ["crates/prometheus/tests/worktree_delegation.rs::on_a_container_backend_the_child_shares_the_workspace_with_a_note"]
+
+[subagent-delegation."Worktree isolation for children"]
+"Clean child pruned" = ["crates/prometheus/tests/worktree_delegation.rs::a_child_that_changed_nothing_has_its_tree_and_branch_pruned"]
+"Failed probe keeps work" = ["crates/prometheus/tests/worktree_delegation.rs::a_tree_that_cannot_be_inspected_is_kept_in_place"]

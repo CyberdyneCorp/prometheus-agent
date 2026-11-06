@@ -2748,6 +2748,289 @@
         "minor"
       ],
       "type": "object"
+    },
+    "WorktreeArchiveInfo": {
+      "additionalProperties": false,
+      "description": "One archive.",
+      "properties": {
+        "age_secs": {
+          "description": "Seconds since it was archived.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "branch": {
+          "description": "The branch it was on.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "The archived tree's name (`worktrees restore <name>`).",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Why it was archived (`sweep`, `exit`, `subagent`).",
+          "type": "string"
+        },
+        "reference": {
+          "description": "`refs/prometheus/archive/<name>`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "reference",
+        "age_secs",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "WorktreeCreated": {
+      "additionalProperties": false,
+      "description": "`worktree.new` result.",
+      "properties": {
+        "base": {
+          "description": "The ref it was branched from.",
+          "type": "string"
+        },
+        "notices": {
+          "description": "What the user should know (a failed fetch).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "tree": {
+          "$ref": "#/$defs/WorktreeInfo",
+          "description": "The new tree, now the session's working directory."
+        }
+      },
+      "required": [
+        "tree",
+        "base",
+        "notices"
+      ],
+      "type": "object"
+    },
+    "WorktreeDecision": {
+      "additionalProperties": false,
+      "description": "One sweep decision.",
+      "properties": {
+        "action": {
+          "description": "`remove`, `archive` or `keep`.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The tree.",
+          "type": "string"
+        },
+        "outcome": {
+          "description": "What happened (the plan on a dry run).",
+          "type": "string"
+        },
+        "path": {
+          "description": "Its directory.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "The reason a tree is kept (`live-process`, `keep-large-untracked`...).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "action",
+        "outcome"
+      ],
+      "type": "object"
+    },
+    "WorktreeInfo": {
+      "additionalProperties": false,
+      "description": "One Prometheus tree.",
+      "properties": {
+        "age_secs": {
+          "description": "Seconds since it was created.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "branch": {
+          "description": "The branch it is on (`null`: detached).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "`generated`, `named`, `subagent` or `kanban`.",
+          "type": "string"
+        },
+        "last_decision": {
+          "description": "The last sweep decision and its reason.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "Its name (directory under `.worktrees/`).",
+          "type": "string"
+        },
+        "path": {
+          "description": "Its directory.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "kind",
+        "age_secs"
+      ],
+      "type": "object"
+    },
+    "WorktreeListing": {
+      "additionalProperties": false,
+      "description": "`worktree.list` result.",
+      "properties": {
+        "archives": {
+          "description": "Its archives.",
+          "items": {
+            "$ref": "#/$defs/WorktreeArchiveInfo"
+          },
+          "type": "array"
+        },
+        "repo": {
+          "description": "The repository's main checkout.",
+          "type": "string"
+        },
+        "trees": {
+          "description": "Its Prometheus trees.",
+          "items": {
+            "$ref": "#/$defs/WorktreeInfo"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "repo",
+        "trees",
+        "archives"
+      ],
+      "type": "object"
+    },
+    "WorktreeNewParams": {
+      "additionalProperties": false,
+      "description": "`worktree.new` params.",
+      "properties": {
+        "name": {
+          "default": null,
+          "description": "The tree's name (`[A-Za-z0-9._-]{1,64}`); omitted: `prom-<8 hex>`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_id": {
+          "description": "The session to move into the new tree.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "WorktreePruneParams": {
+      "additionalProperties": false,
+      "description": "`worktree.prune` params.",
+      "properties": {
+        "dry_run": {
+          "default": false,
+          "description": "Report the decisions; change nothing.",
+          "type": "boolean"
+        },
+        "session_id": {
+          "description": "The session (its working directory's repository).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "WorktreePruned": {
+      "additionalProperties": false,
+      "description": "`worktree.prune` result.",
+      "properties": {
+        "decisions": {
+          "description": "One decision per tree.",
+          "items": {
+            "$ref": "#/$defs/WorktreeDecision"
+          },
+          "type": "array"
+        },
+        "dry_run": {
+          "description": "Nothing was changed.",
+          "type": "boolean"
+        },
+        "repo": {
+          "description": "The repository's main checkout.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repo",
+        "dry_run",
+        "decisions"
+      ],
+      "type": "object"
+    },
+    "WorktreeSessionParams": {
+      "additionalProperties": false,
+      "description": "Params naming the session (`worktree.status`, `worktree.list`).",
+      "properties": {
+        "session_id": {
+          "description": "The session (its working directory's repository).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "WorktreeStatus": {
+      "additionalProperties": false,
+      "description": "`worktree.status` result.",
+      "properties": {
+        "cwd": {
+          "description": "The session's working directory.",
+          "type": "string"
+        },
+        "tree": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorktreeInfo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The Prometheus tree it is in (`null`: none)."
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "type": "object"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -3447,23 +3730,43 @@
       "since": "1.0"
     },
     "worktree.list": {
-      "declared": false,
       "owner": "git-worktrees",
+      "params": {
+        "$ref": "#/$defs/WorktreeSessionParams"
+      },
+      "result": {
+        "$ref": "#/$defs/WorktreeListing"
+      },
       "since": "1.0"
     },
     "worktree.new": {
-      "declared": false,
       "owner": "git-worktrees",
+      "params": {
+        "$ref": "#/$defs/WorktreeNewParams"
+      },
+      "result": {
+        "$ref": "#/$defs/WorktreeCreated"
+      },
       "since": "1.0"
     },
     "worktree.prune": {
-      "declared": false,
       "owner": "git-worktrees",
+      "params": {
+        "$ref": "#/$defs/WorktreePruneParams"
+      },
+      "result": {
+        "$ref": "#/$defs/WorktreePruned"
+      },
       "since": "1.0"
     },
     "worktree.status": {
-      "declared": false,
       "owner": "git-worktrees",
+      "params": {
+        "$ref": "#/$defs/WorktreeSessionParams"
+      },
+      "result": {
+        "$ref": "#/$defs/WorktreeStatus"
+      },
       "since": "1.0"
     }
   },

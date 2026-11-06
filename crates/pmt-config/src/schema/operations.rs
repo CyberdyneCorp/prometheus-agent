@@ -176,6 +176,40 @@ pub struct TelemetryConfig {
     pub endpoint: Option<String>,
 }
 
+/// The `[worktrees]` section (spec: git-worktrees).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+#[schemars(extend("x-apply" = "live"))]
+pub struct WorktreesConfig {
+    /// Fetch the default remote before creating a tree (a failed fetch
+    /// falls back to the local tip).
+    pub sync_remote: bool,
+    /// Archive dirty or unpushed trees past their idle tier before
+    /// removing them; `false` keeps such trees.
+    pub archive_dirty: bool,
+    /// Untracked files larger than this keep a tree from the sweep
+    /// (`keep-large-untracked`) and are left out of archives.
+    pub archive_max_file_bytes: u64,
+    /// Total bytes of trees above which the oldest idle ones past their
+    /// tier are archived and removed first (`0` = off).
+    pub max_total_bytes: u64,
+    /// Seconds an archive is kept before the sweep deletes it (`0` =
+    /// forever).
+    pub archive_retention_secs: u64,
+}
+
+impl Default for WorktreesConfig {
+    fn default() -> Self {
+        Self {
+            sync_remote: true,
+            archive_dirty: true,
+            archive_max_file_bytes: 52_428_800,
+            max_total_bytes: 0,
+            archive_retention_secs: 2_592_000,
+        }
+    }
+}
+
 /// The `[vault]` section: the credential vault.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]

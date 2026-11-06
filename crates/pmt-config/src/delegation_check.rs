@@ -32,7 +32,29 @@ pub fn check(config: &Config) -> Result<(), Error> {
             "delegation.router: the router name is empty (use \"default\")",
         ));
     }
+    if !valid_branch_prefix(&delegation.worktree_branch_prefix) {
+        return Err(Error::new(
+            &codes::CONFIG_INVALID,
+            format!(
+                "delegation.worktree_branch_prefix: '{}' is not a branch prefix (1-64 characters \
+                 of [A-Za-z0-9._/-], no '..', no leading or trailing '/')",
+                delegation.worktree_branch_prefix
+            ),
+        ));
+    }
     Ok(())
+}
+
+/// Whether `prefix` makes valid branch names `<prefix>/subagent-<id>`.
+fn valid_branch_prefix(prefix: &str) -> bool {
+    (1..=64).contains(&prefix.len())
+        && prefix
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-' | b'/'))
+        && !prefix.contains("..")
+        && !prefix.contains("//")
+        && !prefix.starts_with(['/', '.', '-'])
+        && !prefix.ends_with('/')
 }
 
 #[cfg(test)]
@@ -51,6 +73,24 @@ mod tests {
         );
         config.delegation.inactivity_timeout_secs = 30;
         check(&config).unwrap();
+    }
+
+    #[test]
+    fn a_branch_prefix_must_make_valid_branch_names() {
+        let mut config = Config::default();
+        for good in ["prometheus", "agents/work", "x.y_z-1"] {
+            config.delegation.worktree_branch_prefix = good.to_owned();
+            check(&config).unwrap();
+        }
+        for bad in ["", "a b", "../x", "x/", "/x", "a//b"] {
+            config.delegation.worktree_branch_prefix = bad.to_owned();
+            let err = check(&config).unwrap_err();
+            assert!(
+                err.message()
+                    .starts_with("delegation.worktree_branch_prefix"),
+                "{bad}"
+            );
+        }
     }
 
     /// The defaults the specification names.
@@ -78,5 +118,17 @@ mod tests {
         assert_eq!(d.background, crate::schema::BackgroundMode::Auto);
         assert!(d.progress_events);
         assert_eq!((d.max_queued, d.escalation_timeout_secs), (32, 300));
+        assert!(!d.worktree_isolation);
+        assert_eq!(d.worktree_branch_prefix, "prometheus");
+        let w = Config::default().worktrees;
+        assert!(w.sync_remote && w.archive_dirty);
+        assert_eq!(
+            (
+                w.archive_max_file_bytes,
+                w.max_total_bytes,
+                w.archive_retention_secs
+            ),
+            (52_428_800, 0, 2_592_000)
+        );
     }
 }

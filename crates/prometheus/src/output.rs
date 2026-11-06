@@ -244,6 +244,18 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "lsp list",
     },
     JsonShape {
+        schema: "prometheus.worktrees_list.v1",
+        command: "worktrees list",
+    },
+    JsonShape {
+        schema: "prometheus.worktrees_prune.v1",
+        command: "worktrees prune",
+    },
+    JsonShape {
+        schema: "prometheus.worktrees_restore.v1",
+        command: "worktrees restore",
+    },
+    JsonShape {
         schema: "prometheus.daemon_status.v1",
         command: "daemon status",
     },

@@ -88,6 +88,28 @@ pub struct ResultError {
     pub message: String,
 }
 
+/// A child's isolation worktree on finish (spec: git-worktrees, Subagent
+/// worktree isolation).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct WorktreeReport {
+    /// Where it ran (`<repo>/.worktrees/subagent-<id>`).
+    pub path: String,
+    /// Its branch (`<prefix>/subagent-<id>`), kept for the parent to merge
+    /// when it holds work.
+    pub branch: String,
+    /// The commits it made (`<short sha> <subject>`), oldest first.
+    pub commits: Vec<String>,
+    /// It left uncommitted edits.
+    pub dirty: bool,
+    /// The tree and its branch were removed (nothing to keep).
+    pub pruned: bool,
+    /// The archive holding its work, when it was archived.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub archive_ref: Option<String>,
+    /// The tree could not be inspected, so it was kept in place.
+    pub inspection_failed: bool,
+}
+
 /// One child's result.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[schemars(title = "SubagentResult")]
@@ -142,6 +164,12 @@ pub struct SubagentResult {
     /// Seconds without progress before a stall stopped it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub quiet_secs: Option<u64>,
+    /// Its isolation worktree (`delegation.worktree_isolation`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worktree: Option<WorktreeReport>,
+    /// Why it ran differently than configured (isolation skipped).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
 
 impl SubagentResult {
@@ -192,6 +220,8 @@ impl SubagentResult {
             missed_steer: Vec::new(),
             orphaned_processes: Vec::new(),
             quiet_secs: None,
+            worktree: None,
+            note: None,
         }
     }
 }

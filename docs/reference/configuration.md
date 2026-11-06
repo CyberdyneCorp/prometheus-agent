@@ -145,6 +145,8 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `delegation.oneshot_max_children` | integer | `2` | ≥ 0 | `next_session` | Children a finite one-shot run (`chat -z`, cron, eval) may spawn (`0` is unlimited); interactive and gateway sessions are never charged. |
 | `delegation.progress_events` | boolean | `true` | any | `next_session` | Publish `subagent.*` progress events on the root session's stream. |
 | `delegation.router` | string | `"default"` | any | `next_session` | The delegation router: `default`, or a router a plugin provides. An unavailable router refuses every spawn. |
+| `delegation.worktree_branch_prefix` | string | `"prometheus"` | any | `next_session` | Prefix of a child's worktree branch (`<prefix>/subagent-<id>`). |
+| `delegation.worktree_isolation` | boolean | `false` | any | `next_session` | Run each child in its own git worktree and branch when the parent uses the local terminal backend inside a git repository. |
 | `display.bell_on_complete` | boolean | `false` | any | `live` | Ring the terminal bell when a turn completes. |
 | `display.bell_on_prompt` | boolean | `false` | any | `live` | Ring the terminal bell when an approval or clarify prompt opens. |
 | `display.compact` | boolean | `false` | any | `live` | Compact layout. |
@@ -647,3 +649,8 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `web.keyless.enabled` | boolean | `false` | any | `next_session` | Allow keyless web search as the last `auto` choice. |
 | `web.search_backend` | string | unset | any | `next_session` | Search backend; unset uses `backend`. |
 | `web.searxng.url` | string | unset | any | `next_session` | Base URL of the SearXNG instance (its JSON output must be enabled); `searxng` is unavailable until it is set. |
+| `worktrees.archive_dirty` | boolean | `true` | any | `live` | Archive dirty or unpushed trees past their idle tier before removing them; `false` keeps such trees. |
+| `worktrees.archive_max_file_bytes` | integer | `52428800` | ≥ 0 | `live` | Untracked files larger than this keep a tree from the sweep (`keep-large-untracked`) and are left out of archives. |
+| `worktrees.archive_retention_secs` | integer | `2592000` | ≥ 0 | `live` | Seconds an archive is kept before the sweep deletes it (`0` = forever). |
+| `worktrees.max_total_bytes` | integer | `0` | ≥ 0 | `live` | Total bytes of trees above which the oldest idle ones past their tier are archived and removed first (`0` = off). |
+| `worktrees.sync_remote` | boolean | `true` | any | `live` | Fetch the default remote before creating a tree (a failed fetch falls back to the local tip). |

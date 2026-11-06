@@ -146,6 +146,13 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::lsp_cmd::LspCommand,
     },
+    /// Git worktrees of sessions and subagents: list, sweep and restore
+    /// archived trees.
+    Worktrees {
+        /// The worktrees subcommand.
+        #[command(subcommand)]
+        command: crate::worktrees_cmd::WorktreesCommand,
+    },
     /// The credential vault: logins, cards and addresses the browser fills
     /// by handle.
     Vault {

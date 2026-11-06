@@ -126,6 +126,23 @@ pub trait Host: Send + Sync + 'static {
         })
     }
 
+    /// Runs a `worktree.*` request on a session, loading it first. Hosts
+    /// without sessions in git checkouts refuse.
+    fn worktree<'a>(
+        &'a self,
+        profile: &'a str,
+        request: crate::worktree::WorktreeCall,
+        link: Link,
+    ) -> HostFuture<'a, crate::worktree::WorktreeReply> {
+        let _ = (profile, request, link);
+        Box::pin(async {
+            Err(Error::new(
+                &pmt_core::error::codes::RPC_NOT_SERVED,
+                "this host has no worktrees",
+            ))
+        })
+    }
+
     /// Lists, previews or restores a session workspace's checkpoints
     /// (`files.rollback`). Hosts without file snapshots refuse.
     fn files_rollback<'a>(

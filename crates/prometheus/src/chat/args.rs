@@ -121,6 +121,12 @@ pub struct ChatArgs {
     /// Record no file snapshots or checkpoints this run.
     #[arg(long)]
     pub no_checkpoints: bool,
+    /// Run the session in a new git worktree of the current repository
+    /// (`.worktrees/NAME` on branch `prometheus/NAME`; a generated name
+    /// when omitted); with `-r`/`-c` of a session that owns one, reopen
+    /// it.
+    #[arg(short = 'w', long = "worktree", value_name = "NAME", num_args = 0..=1, default_missing_value = "")]
+    pub worktree: Option<String>,
     /// Working directory of the session (also scopes `-c` and `latest`).
     #[arg(long, value_name = "DIR")]
     pub cwd: Option<PathBuf>,

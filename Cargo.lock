@@ -3441,6 +3441,21 @@ name = "pmt-web"
 version = "0.1.0"
 
 [[package]]
+name = "pmt-worktrees"
+version = "0.1.0"
+dependencies = [
+ "getrandom 0.4.3",
+ "jiff",
+ "pmt-core",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "sysinfo",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
 name = "png"
 version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3565,6 +3580,7 @@ dependencies = [
  "pmt-tui",
  "pmt-update",
  "pmt-vault",
+ "pmt-worktrees",
  "pulldown-cmark",
  "qrcode",
  "ratatui",

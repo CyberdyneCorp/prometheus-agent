@@ -61,7 +61,7 @@ pub fn undo_files(
     force: bool,
     dry_run: bool,
 ) -> Result<UndoReport, Error> {
-    let Some(snapshots) = &live.snapshots else {
+    let Some(snapshots) = &live.place.snapshots() else {
         return Ok(UndoReport::default());
     };
     let turn = store.user_turns(live.id)?;
@@ -166,7 +166,7 @@ pub fn rollback_live(
     diff: bool,
     all: bool,
 ) -> Result<String, Error> {
-    let Some(snapshots) = &live.snapshots else {
+    let Some(snapshots) = &live.place.snapshots() else {
         return Ok("file snapshots are off for this session".to_owned());
     };
     let reply = rollback_reply(
@@ -250,14 +250,15 @@ fn remove(words: &mut Vec<&str>, flag: &str) -> bool {
 pub fn diff(ctx: &Ctx<'_>, args: &str) -> String {
     let request = worktree::Request::parse(args);
     let host = SnapshotStore::of_profile(ctx.scope.dir());
-    let (store, tree): (&SnapshotStore, &dyn Tree) = match &ctx.live.snapshots {
+    let snapshots = ctx.live.place.snapshots();
+    let (store, tree): (&SnapshotStore, &dyn Tree) = match &snapshots {
         Some(s) => (s.store(), s.tree()),
         None => (&host, &HostTree),
     };
     let text = worktree::diff(
         store,
         tree,
-        &ctx.live.worktree,
+        &ctx.live.place.worktree(),
         &ctx.live.id.to_string(),
         &request,
     );

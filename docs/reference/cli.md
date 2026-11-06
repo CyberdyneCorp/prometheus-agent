@@ -22,6 +22,7 @@ Commands:
   grants       List and revoke the profile's permanent capability grants and approvals
   browser      Browser sessions: status, and closing the real browser whose profile real-profile browsing copies
   lsp          Language servers behind the diagnostics of file edits: status, registry, installs, restart
+  worktrees    Git worktrees of sessions and subagents: list, sweep and restore archived trees
   vault        The credential vault: logins, cards and addresses the browser fills by handle
   security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one
@@ -145,6 +146,9 @@ Options:
 
       --no-checkpoints
           Record no file snapshots or checkpoints this run
+
+  -w, --worktree [<NAME>]
+          Run the session in a new git worktree of the current repository (`.worktrees/NAME` on branch `prometheus/NAME`; a generated name when omitted); with `-r`/`-c` of a session that owns one, reopen it
 
       --cwd <DIR>
           Working directory of the session (also scopes `-c` and `latest`)
@@ -287,6 +291,9 @@ Options:
 
       --no-checkpoints
           Record no file snapshots or checkpoints this run
+
+  -w, --worktree [<NAME>]
+          Run the session in a new git worktree of the current repository (`.worktrees/NAME` on branch `prometheus/NAME`; a generated name when omitted); with `-r`/`-c` of a session that owns one, reopen it
 
       --cwd <DIR>
           Working directory of the session (also scopes `-c` and `latest`)
@@ -4719,6 +4726,230 @@ Usage: prometheus lsp help which
 Print this message or the help of the given subcommand(s)
 
 Usage: prometheus lsp help help
+```
+
+## `prometheus worktrees`
+
+```text
+Git worktrees of sessions and subagents: list, sweep and restore archived trees
+
+Usage: prometheus worktrees [OPTIONS] <COMMAND>
+
+Commands:
+  list     Live trees and archives: name, age, branch and last decision
+  prune    Run the sweep: remove idle clean trees, archive then remove idle unfinished ones, keep the rest with a reason
+  restore  Recreate an archived tree with its branch, staged and untracked files; exits 66 when no archive has that name
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus worktrees list`
+
+```text
+Live trees and archives: name, age, branch and last decision
+
+Usage: prometheus worktrees list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --repo <PATH>
+          Only this repository (default: every recorded one and the current directory's)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus worktrees prune`
+
+```text
+Run the sweep: remove idle clean trees, archive then remove idle unfinished ones, keep the rest with a reason
+
+Usage: prometheus worktrees prune [OPTIONS]
+
+Options:
+      --dry-run
+          Print every decision with its reason; change nothing
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --repo <PATH>
+          Only this repository (default: every recorded one)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus worktrees restore`
+
+```text
+Recreate an archived tree with its branch, staged and untracked files; exits 66 when no archive has that name
+
+Usage: prometheus worktrees restore [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The archived tree's name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --path <DIR>
+          Where to recreate it (default `<repo>/.worktrees/<name>`)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus worktrees help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus worktrees help [COMMAND]
+
+Commands:
+  list     Live trees and archives: name, age, branch and last decision
+  prune    Run the sweep: remove idle clean trees, archive then remove idle unfinished ones, keep the rest with a reason
+  restore  Recreate an archived tree with its branch, staged and untracked files; exits 66 when no archive has that name
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus worktrees help list`
+
+```text
+Live trees and archives: name, age, branch and last decision
+
+Usage: prometheus worktrees help list
+```
+
+## `prometheus worktrees help prune`
+
+```text
+Run the sweep: remove idle clean trees, archive then remove idle unfinished ones, keep the rest with a reason
+
+Usage: prometheus worktrees help prune
+```
+
+## `prometheus worktrees help restore`
+
+```text
+Recreate an archived tree with its branch, staged and untracked files; exits 66 when no archive has that name
+
+Usage: prometheus worktrees help restore
+```
+
+## `prometheus worktrees help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus worktrees help help
 ```
 
 ## `prometheus vault`
@@ -16623,6 +16854,7 @@ Commands:
   grants       List and revoke the profile's permanent capability grants and approvals
   browser      Browser sessions: status, and closing the real browser whose profile real-profile browsing copies
   lsp          Language servers behind the diagnostics of file edits: status, registry, installs, restart
+  worktrees    Git worktrees of sessions and subagents: list, sweep and restore archived trees
   vault        The credential vault: logins, cards and addresses the browser fills by handle
   security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one
@@ -17376,6 +17608,43 @@ Usage: prometheus help lsp restart
 Print the binary a server runs; exits 66 when there is none
 
 Usage: prometheus help lsp which
+```
+
+## `prometheus help worktrees`
+
+```text
+Git worktrees of sessions and subagents: list, sweep and restore archived trees
+
+Usage: prometheus help worktrees [COMMAND]
+
+Commands:
+  list     Live trees and archives: name, age, branch and last decision
+  prune    Run the sweep: remove idle clean trees, archive then remove idle unfinished ones, keep the rest with a reason
+  restore  Recreate an archived tree with its branch, staged and untracked files; exits 66 when no archive has that name
+```
+
+## `prometheus help worktrees list`
+
+```text
+Live trees and archives: name, age, branch and last decision
+
+Usage: prometheus help worktrees list
+```
+
+## `prometheus help worktrees prune`
+
+```text
+Run the sweep: remove idle clean trees, archive then remove idle unfinished ones, keep the rest with a reason
+
+Usage: prometheus help worktrees prune
+```
+
+## `prometheus help worktrees restore`
+
+```text
+Recreate an archived tree with its branch, staged and untracked files; exits 66 when no archive has that name
+
+Usage: prometheus help worktrees restore
 ```
 
 ## `prometheus help vault`
@@ -19323,6 +19592,9 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.browser_status.v1` | `prometheus browser status` |
 | `prometheus.lsp_status.v1` | `prometheus lsp status` |
 | `prometheus.lsp_list.v1` | `prometheus lsp list` |
+| `prometheus.worktrees_list.v1` | `prometheus worktrees list` |
+| `prometheus.worktrees_prune.v1` | `prometheus worktrees prune` |
+| `prometheus.worktrees_restore.v1` | `prometheus worktrees restore` |
 | `prometheus.daemon_status.v1` | `prometheus daemon status` |
 | `prometheus.gateway_status.v1` | `prometheus gateway status` |
 | `prometheus.gateway_platforms.v1` | `prometheus gateway platforms` |

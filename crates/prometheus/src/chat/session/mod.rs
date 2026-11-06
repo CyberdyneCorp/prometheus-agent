@@ -20,6 +20,7 @@ mod mcp;
 pub mod modal;
 pub mod model;
 mod opening;
+pub mod place;
 mod plugins;
 pub mod processes;
 pub mod progress;
@@ -98,6 +99,7 @@ pub struct Options {
 
 /// The clients of one daemon session: they see its events and answer its
 /// secret prompts (a factory serves several sessions, each with its own).
+#[derive(Clone)]
 pub struct Clients {
     /// Where the session's trajectory events also go.
     pub events: Arc<dyn EventSink>,
@@ -200,8 +202,12 @@ pub struct Live {
     session_surface: pmt_tools::SessionSurface,
     /// The profile's live plugin set (slash commands, reload).
     pub plugins: crate::plugins_host::ProfilePlugins,
-    /// The session's working directory (plugin `session.info`).
-    pub cwd: PathBuf,
+    /// Where the session works: its cwd and cwd-bound environment
+    /// (`/worktree new` moves it).
+    pub place: place::Place,
+    /// The daemon clients it was opened with (a moved environment's
+    /// prompts and notices go to them too).
+    clients: Option<Clients>,
     /// The surface that created the session (`cli`, `tui`, `gateway`...).
     surface: &'static str,
     /// The plugin system-prompt sections the session's prompt carries.
@@ -221,20 +227,12 @@ pub struct Live {
     pub config: SharedScope,
     capabilities: CapabilitySet,
     trajectory: Option<Arc<TrajectoryWriter>>,
-    browser: Option<Arc<pmt_tools::browser::BrowserExec>>,
     /// The session's egress policy (`/egress`, `egress.set`).
     pub egress: crate::egress::Running,
-    /// Sync-back of a remote workspace (session end, `/sync`).
-    pub sync: Option<Arc<pmt_tools::terminal::sync::SyncBack>>,
-    /// File snapshots, when on (`/undo`, `/rollback`, `/diff session`).
-    pub snapshots: Option<Arc<pmt_tools::snapshots::SessionSnapshots>>,
-    /// Where `/diff` runs git (the session's backend).
-    pub worktree: pmt_tools::snapshots::worktree::Worktree,
     /// Its allowed hardening downgrades (banner marker, `security.downgrade`).
     pub downgrades: downgrades::Downgrades,
     /// The session's subagent delegation (`/stop all`, close, `/agents`).
     pub delegation: Option<Arc<pmt_delegation::host::Delegator>>,
-    _environment: pmt_tools::environments::Attachment,
     _skills: pmt_skills::session::Attachment,
 }
 
@@ -544,7 +542,7 @@ impl Factory {
             &capabilities,
             &current,
             &skills,
-            clients.as_ref(),
+            &place::At::open(&self.options.cwd, clients.as_ref()),
         )?;
         let memory = Arc::new(MemorySession::new(self.memory_setup(id)?));
         let summarizer = self.models.summarizer(&model, id);
@@ -574,7 +572,7 @@ impl Factory {
             target,
             session: &session,
             child,
-            clients: clients.map(|c| c.events),
+            clients: clients.as_ref().map(|c| Arc::clone(&c.events)),
             model: &model,
             tools: &tool_port,
             tool_state: &tool_state,
@@ -588,7 +586,10 @@ impl Factory {
             memory: &memory,
             plugin_sections: &plugin_sections,
         })?;
+        let (environment, egress, downgrades) = place::Environment::of(environment);
         let live = Live {
+            place: place::Place::new(self.options.cwd.clone(), environment, &id.to_string()),
+            clients,
             scope: self.scope_for(child),
             id,
             agent,
@@ -605,7 +606,6 @@ impl Factory {
             tool_state,
             session_surface,
             plugins: self.plugins.clone(),
-            cwd: self.options.cwd.clone(),
             surface: session.source.as_str(),
             plugin_sections,
             notices,
@@ -614,14 +614,9 @@ impl Factory {
             record: Arc::clone(&self.record),
             capabilities,
             trajectory,
-            browser: environment.browser,
-            egress: environment.egress,
-            sync: environment.sync,
-            snapshots: environment.snapshots,
-            worktree: environment.worktree,
-            downgrades: environment.downgrades,
+            egress,
+            downgrades,
             delegation: delegation.delegator(),
-            _environment: environment.attachment,
             _skills: attached,
         };
         live.emit_start(&session, target).await;
@@ -742,11 +737,18 @@ impl Factory {
     /// The egress policy of session `id`: the profile's, with the chat
     /// flags; refusals go to the audit log and, once the session's event
     /// sink is set in `events`, to its trajectory and clients.
-    fn egress(&self, id: SessionId, events: &Denials) -> crate::egress::SessionEgress {
-        let hosts = Arc::new(crate::egress::host_policy(
-            &self.scope.config().security.egress,
-            &self.options.egress,
-        ));
+    fn egress(
+        &self,
+        id: SessionId,
+        events: &Denials,
+        hosts: Option<Arc<pmt_net::egress::HostPolicy>>,
+    ) -> crate::egress::SessionEgress {
+        let hosts = hosts.unwrap_or_else(|| {
+            Arc::new(crate::egress::host_policy(
+                &self.scope.config().security.egress,
+                &self.options.egress,
+            ))
+        });
         let events = Arc::clone(events);
         let runtime = tokio::runtime::Handle::current();
         let emit: Arc<dyn Fn(&pmt_net::egress::Denial) + Send + Sync> = Arc::new(move |denial| {
@@ -796,10 +798,12 @@ impl Factory {
         capabilities: &CapabilitySet,
         config: &SharedScope,
         skills: &Arc<SkillsSession>,
-        clients: Option<&Clients>,
+        at: &place::At<'_>,
     ) -> Result<env::Attached, Error> {
         let id = session.id;
-        let denials = env::Denials::default();
+        let clients = at.clients;
+        let denials = at.denials.clone().unwrap_or_default();
+        let capabilities = &place::with_worktree_git(capabilities, at.cwd);
         let processes =
             processes::Wiring::of(self.scope.config(), &self.store, id, &session.origin);
         let environment = env::attach(&env::EnvInputs {
@@ -807,7 +811,7 @@ impl Factory {
             config,
             session_id: &id.to_string(),
             launch: &self.launch,
-            cwd: &self.options.cwd,
+            cwd: at.cwd,
             capabilities,
             redactor: self.redactor.clone(),
             browser: self.browser(),
@@ -818,7 +822,7 @@ impl Factory {
             providers: self.plugins.current().providers.clone(),
             plugin_call: self.plugin_call(id),
             plugins: &self.plugins,
-            egress: &self.egress(id, &denials),
+            egress: &self.egress(id, &denials, at.hosts.clone()),
             denials: &denials,
             vault_prompt: self.vault_prompt(clients),
             processes: &processes,
@@ -1282,7 +1286,7 @@ impl Live {
     /// user typed it: `cli`, `tui`, `gateway`...) reports as its session.
     #[must_use]
     pub fn plugin_call(&self, surface: &str) -> pmt_plugins::host::CallInfo {
-        session_call(self.id, surface, &self.cwd)
+        session_call(self.id, surface, &self.place.cwd())
     }
 
     /// The surface that created the session (`cli`, `tui`, `gateway`...).
@@ -1375,7 +1379,7 @@ impl Live {
     /// is written to the session's own profile store at every call, so
     /// nothing is left to flush.
     pub async fn unload(self) {
-        if let Some(browser) = &self.browser {
+        if let Some(browser) = &self.place.browser() {
             browser.close_session(&self.id.to_string()).await;
         }
         // Everything else the session holds (its agent, tools, delegation)
@@ -1417,18 +1421,19 @@ impl Live {
                     .await;
             }
         }
-        if let Some(browser) = &self.browser {
+        if let Some(browser) = &self.place.browser() {
             browser.close_session(&self.id.to_string()).await;
         }
         if let Some(text) = self.sync_back().await {
             tracing::info!(session = %self.id, "{text}");
         }
+        self.place.release();
     }
 
     /// Copies the remote workspace's changes back to the host (session end
     /// and `/sync`); `None` without sync-back.
     pub async fn sync_back(&self) -> Option<String> {
-        let sync = Arc::clone(self.sync.as_ref()?);
+        let sync = self.place.sync()?;
         let budget = self.config.get().config().terminal.sync_back_max_bytes;
         let done = tokio::task::spawn_blocking(move || sync.sync()).await;
         Some(match done {

@@ -10,7 +10,7 @@
 //! both profiles' grants.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex, OnceLock, PoisonError};
 use std::time::Duration;
 
@@ -33,7 +33,7 @@ use pmt_tools::environments::Environments;
 
 use super::super::model::SwitchableModel;
 use super::super::{Clients, Factory, Live, Options};
-use super::{ChildSpec, OwnedFlags};
+use super::{ChildSpec, OwnedFlags, isolation};
 
 /// How long a child's background processes get to stop at its end.
 const REAP_WITHIN: Duration = Duration::from_secs(10);
@@ -108,12 +108,18 @@ impl ChildLauncher {
         Ok((scope, Some(capabilities)))
     }
 
-    /// The factory that opens children of `scope`.
-    fn factory(&self, scope: &ProfileScope) -> Result<Arc<Factory>, Error> {
+    /// The factory that opens children of `scope` in `cwd`; a child's own
+    /// worktree gets a factory of its own, never cached.
+    fn factory(
+        &self,
+        scope: &ProfileScope,
+        cwd: &Path,
+        cached: bool,
+    ) -> Result<Arc<Factory>, Error> {
         let key = (
             scope.dir().to_path_buf(),
             self.scope.dir().to_path_buf(),
-            self.cwd.clone(),
+            cwd.to_path_buf(),
             self.flags.borrow().mock_script.map(PathBuf::from),
         );
         if let Some(factory) = FACTORIES
@@ -125,7 +131,7 @@ impl ChildLauncher {
         }
         let options = Options {
             interactive: false,
-            cwd: self.cwd.clone(),
+            cwd: cwd.to_path_buf(),
             ..Options::default()
         };
         let factory = Factory::with_store(
@@ -141,6 +147,9 @@ impl ChildLauncher {
             None => factory,
         };
         let factory = Arc::new(factory);
+        if !cached {
+            return Ok(factory);
+        }
         FACTORIES
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -150,7 +159,14 @@ impl ChildLauncher {
 
     async fn open_child(&self, plan: &ChildPlan) -> Result<Arc<dyn ChildSession>, Error> {
         let (scope, profile_caps) = self.profile(plan.profile.as_deref())?;
-        let factory = self.factory(&scope)?;
+        let parent_cwd = self.parent_cwd(plan.parent);
+        let place = {
+            let (scope, cwd, id) = (scope.clone(), parent_cwd.clone(), plan.subagent_id.clone());
+            tokio::task::spawn_blocking(move || isolation::prepare(&scope, &cwd, &id))
+                .await
+                .map_err(|e| Error::new(&codes::TASK_PANICKED, e.to_string()))?
+        };
+        let factory = self.factory(&scope, &place.cwd, place.tree.is_none())?;
         let pinned = plan.model.model.is_some();
         let target = match &plan.model.model {
             Some(model) => factory.models.pinned_target(model).await?,
@@ -166,7 +182,11 @@ impl ChildLauncher {
             pinned,
             tools: plan.grant.tools.clone(),
             capabilities,
-            system: plan.system.clone(),
+            system: format!(
+                "{}{}",
+                plan.system,
+                place.instructions().unwrap_or_default()
+            ),
             memory: plan.memory.clone(),
             max_iterations: plan.budget.max_iterations,
             scope: budget_scope(&scope, &plan.budget),
@@ -176,7 +196,7 @@ impl ChildLauncher {
             root_events: Arc::clone(&self.root_events),
             oneshot: self.oneshot.clone(),
         };
-        let id = self.child_session(plan.parent, &target)?;
+        let id = self.child_session(plan.parent, &target, &place.cwd)?;
         let clients = Clients {
             events: Arc::clone(&plan.events),
             secrets: Arc::new(NoPrompt),
@@ -194,6 +214,7 @@ impl ChildLauncher {
             live: Arc::new(live),
             store: Arc::clone(&self.store),
             model,
+            place: Mutex::new(Some(place)),
         }))
     }
 
@@ -202,13 +223,26 @@ impl ChildLauncher {
         &self,
         parent: SessionId,
         target: &pmt_providers::resolve::Target,
+        cwd: &Path,
     ) -> Result<SessionId, Error> {
         let mut new = NewSession::child(Source::Subagent, parent, LineageKind::Delegate);
         new.origin = Origin::Subagent { parent };
         new.provider = Some(target.provider.clone());
         new.model.clone_from(&target.model);
-        new.cwd = Some(self.cwd.to_string_lossy().into_owned());
+        new.cwd = Some(cwd.to_string_lossy().into_owned());
         Ok(self.store.create_session(&new)?.id)
+    }
+
+    /// Where the parent works now: the directory recorded on its session
+    /// (`/worktree new` moves it), else the one it was opened in.
+    fn parent_cwd(&self, parent: SessionId) -> PathBuf {
+        self.store
+            .session(parent)
+            .ok()
+            .and_then(|s| s.cwd)
+            .map(PathBuf::from)
+            .filter(|dir| dir.is_dir())
+            .unwrap_or_else(|| self.cwd.clone())
     }
 }
 
@@ -252,6 +286,8 @@ struct LiveChild {
     live: Arc<Live>,
     store: Arc<Store>,
     model: String,
+    /// Its own worktree (or why it has none), disposed of at close.
+    place: Mutex<Option<isolation::Isolation>>,
 }
 
 impl ChildSession for LiveChild {
@@ -264,7 +300,7 @@ impl ChildSession for LiveChild {
     }
 
     fn cwd(&self) -> Option<PathBuf> {
-        Some(self.live.cwd.clone())
+        Some(self.live.cwd())
     }
 
     fn turn(&self, input: String, interrupt: Interrupt) -> BoxFuture<'_, TurnOutcome> {
@@ -311,8 +347,28 @@ impl ChildSession for LiveChild {
         Box::pin(async move {
             let orphaned = reap(&self.live.id.to_string()).await;
             self.live.end(&self.store, EndReason::JobComplete).await;
+            let place = self
+                .place
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .take();
+            let (worktree, note) = match place {
+                Some(place) => {
+                    let note = place.note;
+                    let report = match place.tree {
+                        Some(tree) => tokio::task::spawn_blocking(move || tree.finish())
+                            .await
+                            .ok(),
+                        None => None,
+                    };
+                    (report, note)
+                }
+                None => (None, None),
+            };
             Closed {
                 orphaned_processes: orphaned,
+                worktree,
+                note,
             }
         })
     }

@@ -106,6 +106,8 @@ impl Delegator {
         let mut result = assemble(entry, &session.model(), ran, started);
         result.missed_steer = missed;
         result.orphaned_processes = closed.orphaned_processes;
+        result.worktree = closed.worktree;
+        result.note = closed.note;
         result.artifacts = tracker.artifacts(&self.ctx.store);
         result.usage.tool_calls = entry.snapshot().tool_calls;
         result.trajectory_ref = Some(session.id().to_string());

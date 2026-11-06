@@ -229,6 +229,16 @@ pub static BUILTINS: &[Command] = &[
         Effect::None,
     ),
     command(
+        "worktree",
+        &[],
+        Session,
+        "Git worktrees: show the active one, new [NAME], list, prune [--dry-run]",
+        &[text("args")],
+        CHATS,
+        BusyPolicy::Reject,
+        Effect::Immediate,
+    ),
+    command(
         "sync",
         &[],
         Session,
