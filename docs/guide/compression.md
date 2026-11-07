@@ -156,8 +156,8 @@ The result is one of `preview`, `nothing_to_do`, `lock_skipped` or
 message's text in the `## Pinned` section of every later summary, however
 many compactions run; an id prefix is enough when it is unique. Pinned text
 together stays within `compression.pinned_max_tokens` (default 8,000): a pin
-over it is refused with "pinned content would exceed <N> tokens; unpin
-something first".
+over it is refused with `pinned content would exceed <N> tokens; unpin
+something first`.
 
 ## Opt-in upkeep
 
