@@ -926,6 +926,21 @@ error_codes! {
     /// A lifecycle operation does not apply to the job.
     CRON_INVALID_STATE = ("cron.invalid_state", InvalidInput,
         "The operation does not apply in the job's state (for example resuming a one-shot job whose time has passed); the message says how to change it.");
+    /// No incident has that id.
+    CRON_INCIDENT_NOT_FOUND = ("cron.incident_not_found", NotFound,
+        "No failure incident of the profile has that id; `prometheus cron incidents` lists them.");
+    /// A job's working directory is not an existing absolute directory.
+    CRON_INVALID_WORKDIR = ("cron.invalid_workdir", Usage,
+        "A job's `workdir` must be an absolute path to an existing directory; relative paths are refused and nothing was saved.");
+    /// A notepad write would exceed its limits.
+    CRON_NOTEPAD_LIMIT = ("cron.notepad_limit", InvalidInput,
+        "A job notepad key is at most 128 characters, a value at most 16 KiB and a notepad at most 64 KiB counting keys and values; the notepad is unchanged.");
+    /// A run of the job is already queued or running.
+    CRON_ALREADY_RUNNING = ("cron.already_running", Conflict,
+        "A run of the job is queued or running; wait for it (`prometheus cron runs <job>`) before starting another.");
+    /// An automation blueprint or slot value is not valid.
+    CRON_BLUEPRINT = ("cron.blueprint", InvalidInput,
+        "The blueprint name matches none of the catalog, or a slot value is invalid (the message names the slot and the accepted values); nothing was created.");
     /// A client frame is not JSON (JSON-RPC -32700).
     RPC_PARSE =("rpc.parse", InvalidInput,
         "A client protocol frame is not valid JSON (JSON-RPC `-32700`); the connection keeps serving.");

@@ -13,7 +13,7 @@ use pmt_store::Store;
 use pmt_store::cron::{JobRow, RunRow};
 use sha2::{Digest as _, Sha256};
 
-use crate::job::{Job, JobSpec, JobState, Status, new_id, spec_json};
+use crate::job::{Job, JobSpec, JobState, SELF, Status, new_id, spec_json};
 use crate::scan;
 use crate::schedule::{Echo, Schedule};
 use crate::scheduler::run_row;
@@ -42,6 +42,14 @@ pub struct Profile<'a> {
 /// `cron.invalid_job`, `cron.prompt_rejected`.
 pub fn check(profile: &Profile<'_>, spec: &JobSpec, now: Timestamp) -> Result<Echo, Error> {
     validate::validate(spec, profile.scripts_dir, profile.catalog)?;
+    for source in spec.context_from.iter().filter(|s| *s != SELF) {
+        find(profile.store, source).map_err(|e| {
+            Error::new(
+                &codes::CRON_INVALID_JOB,
+                format!("context_from: {}", e.message()),
+            )
+        })?;
+    }
     if let Some(rule) = scan::violation(&spec.prompt) {
         return Err(Error::new(
             &codes::CRON_PROMPT_REJECTED,
@@ -73,7 +81,33 @@ fn next_from(spec: &JobSpec, now: Timestamp, zone: &TimeZone) -> Result<Option<i
         .map_err(|e| Error::new(&codes::CRON_INVALID_SCHEDULE, e))
 }
 
-/// Saves a checked job.
+/// The reason of a job created paused without one.
+pub const DEFAULT_PAUSED_REASON: &str = "Created paused; awaiting operator approval.";
+
+/// How a job is created.
+#[derive(Debug, Clone, Default)]
+pub struct NewJob<'a> {
+    /// Its display name (default: from the prompt).
+    pub name: Option<String>,
+    /// The creating chat.
+    pub origin: Option<&'a JobOrigin>,
+    /// Created paused, with this reason (empty: the default reason).
+    pub paused: Option<String>,
+}
+
+/// `context_from` entries naming the job itself become `self`.
+fn own_entries(spec: &mut JobSpec, own: &[&str]) {
+    for entry in &mut spec.context_from {
+        if own.contains(&entry.as_str()) {
+            SELF.clone_into(entry);
+        }
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    spec.context_from.retain(|e| seen.insert(e.clone()));
+}
+
+/// Saves a checked job; a paused job is stored disabled in its first
+/// write, arming nothing.
 ///
 /// # Errors
 ///
@@ -81,35 +115,49 @@ fn next_from(spec: &JobSpec, now: Timestamp, zone: &TimeZone) -> Result<Option<i
 pub fn create(
     profile: &Profile<'_>,
     mut spec: JobSpec,
-    name: Option<String>,
-    origin: Option<&JobOrigin>,
+    new: NewJob<'_>,
     now: Timestamp,
 ) -> Result<Job, Error> {
     if spec.deliver.is_empty() {
-        spec.deliver = default_deliver(origin);
+        spec.deliver = default_deliver(new.origin);
     }
+    let name = new
+        .name
+        .filter(|n| !n.trim().is_empty())
+        .unwrap_or_else(|| spec.default_name());
+    own_entries(&mut spec, &[name.as_str()]);
     check(profile, &spec, now)?;
     let now_ms = now.as_millisecond();
+    let paused = new.paused.map(|reason| {
+        if reason.trim().is_empty() {
+            DEFAULT_PAUSED_REASON.to_owned()
+        } else {
+            reason
+        }
+    });
+    let next_run_at = match paused {
+        Some(_) => None,
+        None => next_from(&spec, now, &profile.zone)?,
+    };
     let row = JobRow {
         id: new_id(),
-        name: name
-            .filter(|n| !n.trim().is_empty())
-            .unwrap_or_else(|| spec.default_name()),
+        name,
         spec: spec_json(&spec),
-        origin: origin.and_then(|o| serde_json::to_string(o).ok()),
-        state: JobState::Scheduled.as_str().to_owned(),
-        enabled: true,
-        next_run_at: next_from(&spec, now, &profile.zone)?,
-        last_run_at: None,
-        last_status: None,
-        last_error: None,
-        completed: 0,
-        paused_at: None,
-        paused_reason: None,
-        alerted: false,
-        completed_at: None,
+        origin: new.origin.and_then(|o| serde_json::to_string(o).ok()),
+        state: if paused.is_some() {
+            JobState::Paused
+        } else {
+            JobState::Scheduled
+        }
+        .as_str()
+        .to_owned(),
+        enabled: paused.is_none(),
+        next_run_at,
+        paused_at: paused.as_ref().map(|_| now_ms),
+        paused_reason: paused,
         created_at: now_ms,
         updated_at: now_ms,
+        ..JobRow::default()
     };
     profile.store.cron_insert_job(&row)?;
     Job::from_row(row)
@@ -220,6 +268,7 @@ pub fn update(
     let job = find(profile.store, key)?;
     let mut spec = job.spec.clone();
     edit(&mut spec)?;
+    own_entries(&mut spec, &[job.id(), name.unwrap_or(&job.row.name)]);
     let echo = check(profile, &spec, now)?;
     let rescheduled = spec.schedule != job.spec.schedule || spec.timezone != job.spec.timezone;
     let next = if rescheduled {
@@ -266,9 +315,68 @@ pub fn remove(store: &Store, key: &str) -> Result<Job, Error> {
 ///
 /// As [`find`], store errors.
 pub fn manual_run(store: &Store, key: &str, now: Timestamp) -> Result<(Job, RunRow), Error> {
+    queue_run(store, key, now, &QueueRun::default())
+}
+
+/// How [`queue_run`] queues a run.
+#[derive(Debug, Clone, Default)]
+pub struct QueueRun {
+    /// `manual` (default) or `webhook`.
+    pub trigger: Option<&'static str>,
+    /// Appended under `## Run Context` to this run's prompt only.
+    pub context: Option<String>,
+    /// Refuse while a run of the job is queued or running.
+    pub exclusive: bool,
+    /// Refuse a paused job.
+    pub enabled_only: bool,
+}
+
+/// Whether a run of `job_id` is queued or running.
+///
+/// # Errors
+///
+/// Store errors.
+pub fn active(store: &Store, job_id: &str) -> Result<bool, Error> {
+    Ok(store
+        .cron_runs_in(&["queued", "running"])?
+        .iter()
+        .any(|r| r.job_id == job_id))
+}
+
+/// Queues a run of `key` (`queued`) with `how`'s trigger and context; the
+/// job's schedule and state are untouched. An exclusive run is refused
+/// while another is queued or running (`cron.already_running`). The
+/// context passes the prompt safety scan.
+///
+/// # Errors
+///
+/// As [`find`], `cron.already_running`, `cron.invalid_state` (a paused
+/// job with `enabled_only`), `cron.prompt_rejected`, store errors.
+pub fn queue_run(
+    store: &Store,
+    key: &str,
+    now: Timestamp,
+    how: &QueueRun,
+) -> Result<(Job, RunRow), Error> {
     let job = find(store, key)?;
-    let mut run = run_row(&job, now, "manual", Status::Ok);
+    if how.enabled_only && !job.row.enabled {
+        return Err(invalid_state(format!("job {} is paused", job.id())));
+    }
+    if let Some(rule) = how.context.as_deref().and_then(scan::violation) {
+        return Err(Error::new(
+            &codes::CRON_PROMPT_REJECTED,
+            format!("prompt rejected: {rule}"),
+        ));
+    }
+    if how.exclusive && (job.state() == JobState::Running || active(store, job.id())?) {
+        return Err(Error::new(
+            &codes::CRON_ALREADY_RUNNING,
+            format!("job {} ({}) is already running", job.id(), job.row.name),
+        ));
+    }
+    let mut run = run_row(&job, now, how.trigger.unwrap_or("manual"), Status::Ok);
     "queued".clone_into(&mut run.status);
+    run.run_context.clone_from(&how.context);
     // Two manual runs in one millisecond still get distinct keys.
     for _ in 0..1000 {
         match store.cron_insert_run(&run) {

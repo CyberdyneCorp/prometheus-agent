@@ -939,6 +939,7 @@ impl Factory {
             &self.scope,
             &self.launch,
             &self.store,
+            self.options.interactive,
         ));
         let tools = match &self.messaging {
             Some(ports) => tools.with_messaging(ports.port(id, self.read_check(capabilities))),

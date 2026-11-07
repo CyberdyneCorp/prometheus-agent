@@ -8,6 +8,7 @@
 mod agents;
 mod background;
 mod browser;
+mod cron;
 mod delegation;
 pub mod files;
 pub mod info;
@@ -121,6 +122,7 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "mcp" => mcp::mcp(ctx, args).await,
         "browser" => browser::browser(ctx, args).await,
         "worktree" => worktree::worktree(ctx, args).await,
+        "cron" => cron::cron(ctx, args),
         other => return state_command(ctx, other, args).map(|r| r.map(Reply::Text)),
     };
     Some(text.map(Reply::Text))

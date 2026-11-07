@@ -48,7 +48,7 @@ pub use agent::{
     VisionConfig,
 };
 pub use connectors::{ConnectorsConfig, DEFAULT_CONNECTOR_GATEWAY};
-pub use cron::{CronConfig, CronProvider};
+pub use cron::{ContinuableSurface, CronConfig, CronDeliveryConfig, CronProvider};
 pub use delegation::{
     BackgroundMode, CODE_EXECUTION_TOOLS, ChildApproval, CodeExecutionConfig, CodeExecutionMode,
     DelegationConfig, GatewayDelegationMode, ReviewConfig,

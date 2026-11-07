@@ -1,9 +1,12 @@
 //! The `cronjob` tool of interactive sessions (spec: scheduled-jobs,
-//! Model tool surface; Canonical schedule echo and confirmation): create
-//! and schedule edits answer `needs_confirmation` with the echo and a
-//! token valid for 10 minutes, and save only when the call is repeated
-//! with it; a job created from a messaging chat records the chat as its
-//! origin, so `deliver = origin` goes back there.
+//! Model tool surface; Canonical schedule echo and confirmation; Complete
+//! cronjob tool field set; Asynchronous tool-initiated runs with per-run
+//! context): create and schedule edits answer `needs_confirmation` with
+//! the echo and a token valid for 10 minutes, and save only when the call
+//! is repeated with it; a job created from a messaging chat records the
+//! chat as its origin, so `deliver = origin` goes back there. The tool
+//! never takes a model: `pinned` only freezes or releases the profile's
+//! current main model.
 
 use std::sync::Arc;
 
@@ -14,37 +17,57 @@ use pmt_config::ProfileScope;
 use pmt_core::env::LaunchEnv;
 use pmt_core::error::{Error, codes};
 use pmt_core::id::SessionId;
-use pmt_cron::fields::Fields;
+use pmt_cron::fields::{Fields, Pin};
 use pmt_cron::job::Job;
 use pmt_cron::ops;
 use pmt_cron::schedule::Echo;
 use pmt_cron::target::JobOrigin;
+use pmt_store::cron::RunRow;
 use pmt_store::{Origin, Store};
 use pmt_tools::ToolResult;
 use serde_json::{Value, json};
 
-use super::{HostCatalog, profile_zone, scripts_dir};
+use super::{HostCatalog, HostRunner, profile_zone, scripts_dir};
 
-/// The port of a session of `scope`.
+/// The outcome excerpt a finished tool run reports at most.
+const EXCERPT_CHARS: usize = 2000;
+
+/// The port of a session of `scope`; `detached` sessions (someone reads
+/// the transcript later) get tool runs in the background, the others
+/// (`chat -q`, cron runs, workers) run them synchronously.
 #[must_use]
-pub fn port(scope: &ProfileScope, launch: &LaunchEnv, store: &Arc<Store>) -> Arc<dyn CronPort> {
+pub fn port(
+    scope: &ProfileScope,
+    launch: &LaunchEnv,
+    store: &Arc<Store>,
+    detached: bool,
+) -> Arc<dyn CronPort> {
     Arc::new(ToolPort {
         scope: scope.clone(),
+        launch: launch.clone(),
         catalog: HostCatalog::new(scope, launch),
         store: Arc::clone(store),
+        detached,
     })
 }
 
 struct ToolPort {
     scope: ProfileScope,
+    launch: LaunchEnv,
     catalog: HostCatalog,
     store: Arc<Store>,
+    detached: bool,
 }
 
 impl CronPort for ToolPort {
     fn call(&self, session: SessionId, arguments: Value) -> BoxFuture<'_, ToolResult> {
         Box::pin(async move {
-            match self.run(session, &arguments) {
+            let reply = if arguments["action"] == "run" {
+                self.run_now(session, &arguments).await
+            } else {
+                self.run(session, &arguments)
+            };
+            match reply {
                 Ok(reply) => ToolResult::ok(reply.to_string()),
                 Err(err) => ToolResult::error(err.message()),
             }
@@ -57,17 +80,26 @@ fn text(arguments: &Value, key: &str) -> Option<String> {
 }
 
 fn list(arguments: &Value, key: &str) -> Option<Vec<String>> {
-    arguments[key].as_array().map(|items| {
-        items
-            .iter()
-            .filter_map(|v| v.as_str().map(str::to_owned))
-            .collect()
-    })
+    match &arguments[key] {
+        Value::String(one) => Some(vec![one.clone()]),
+        Value::Array(items) => Some(
+            items
+                .iter()
+                .filter_map(|v| v.as_str().map(str::to_owned))
+                .collect(),
+        ),
+        _ => None,
+    }
 }
 
 /// The tool arguments as job fields.
-fn fields(arguments: &Value) -> Fields {
-    Fields {
+fn fields(arguments: &Value, scope: &ProfileScope) -> Result<Fields, Error> {
+    let pin = match arguments["pinned"].as_bool() {
+        Some(true) => Some(crate::cron_cmd::main_model(scope)?),
+        Some(false) => Some(Pin::Release),
+        None => None,
+    };
+    Ok(Fields {
         schedule: text(arguments, "schedule"),
         schedule_text: text(arguments, "schedule_text"),
         prompt: text(arguments, "prompt"),
@@ -75,6 +107,8 @@ fn fields(arguments: &Value) -> Fields {
         script: text(arguments, "script"),
         no_agent: arguments["no_agent"].as_bool(),
         deliver: list(arguments, "deliver"),
+        failure_deliver: list(arguments, "failure_deliver"),
+        attach_to_session: arguments["attach_to_session"].as_bool(),
         toolsets: list(arguments, "toolsets"),
         memory: text(arguments, "memory"),
         grace: text(arguments, "grace"),
@@ -83,28 +117,54 @@ fn fields(arguments: &Value) -> Fields {
         repeat: arguments["repeat"]
             .as_u64()
             .and_then(|n| u32::try_from(n).ok()),
-        model: text(arguments, "model"),
-        provider: text(arguments, "provider"),
-        timezone: None,
-    }
+        pin,
+        reasoning_effort: None,
+        timezone: text(arguments, "timezone"),
+        workdir: text(arguments, "workdir"),
+        script_secrets: list(arguments, "script_secrets"),
+        interpreter: text(arguments, "interpreter"),
+        monitor_script: text(arguments, "monitor_script"),
+        monitor_url: text(arguments, "monitor_url"),
+        context_from: list(arguments, "context_from"),
+        continuity: arguments["continuity"].as_bool(),
+    })
 }
 
 fn usage(message: impl Into<String>) -> Error {
     Error::new(&codes::CLI_USAGE, message)
 }
 
-/// The job's summary in tool replies.
+/// The job's summary in tool replies and `cron list --json`: its fields
+/// plus state, next run, last status, failure streak and pin.
 #[must_use]
 pub fn summary(job: &Job) -> Value {
-    json!({
-        "id": job.id(),
-        "name": job.row.name,
-        "schedule": format!("{} {}", job.spec.schedule.kind(), job.spec.schedule.canonical()),
-        "state": job.row.state,
-        "next_run_at": job.next_run().map(|t| t.to_string()),
-        "last_status": job.row.last_status,
-        "deliver": job.spec.deliver,
-    })
+    let mut fields = serde_json::to_value(&job.spec).unwrap_or_else(|_| json!({}));
+    if let Some(map) = fields.as_object_mut() {
+        map.insert("id".into(), json!(job.id()));
+        map.insert("name".into(), json!(job.row.name));
+        map.insert(
+            "schedule".into(),
+            json!(format!(
+                "{} {}",
+                job.spec.schedule.kind(),
+                job.spec.schedule.canonical()
+            )),
+        );
+        map.insert("state".into(), json!(job.row.state));
+        map.insert(
+            "next_run_at".into(),
+            json!(job.next_run().map(|t| t.to_string())),
+        );
+        map.insert("last_status".into(), json!(job.row.last_status));
+        map.insert("failure_streak".into(), json!(job.row.failure_streak));
+        map.insert("pinned".into(), json!(job.spec.pinned()));
+        map.insert("paused_reason".into(), json!(job.row.paused_reason));
+        map.insert(
+            "delivery_unverified".into(),
+            json!(job.row.delivery_unverified),
+        );
+    }
+    fields
 }
 
 fn needs_confirmation(echo: &Echo, token: &str) -> Value {
@@ -118,12 +178,41 @@ fn needs_confirmation(echo: &Echo, token: &str) -> Value {
     })
 }
 
+/// What a finished tool run reports to its session.
+fn outcome(job: &Job, run: &RunRow) -> String {
+    let excerpt: String = run
+        .output
+        .as_deref()
+        .unwrap_or_default()
+        .chars()
+        .take(EXCERPT_CHARS)
+        .collect();
+    let next = job
+        .next_run()
+        .map_or_else(|| "none".to_owned(), |t| t.to_string());
+    format!(
+        "[cron run finished] job {} ({}) run {}: status {}{}; delivered to {}; next scheduled \
+         run {next}\n\n{excerpt}",
+        job.row.name,
+        job.id(),
+        run.id,
+        run.status,
+        run.error
+            .as_deref()
+            .map(|e| format!(" ({e})"))
+            .unwrap_or_default(),
+        run.delivered.as_deref().unwrap_or("[]"),
+    )
+}
+
 impl ToolPort {
     fn run(&self, session: SessionId, arguments: &Value) -> Result<Value, Error> {
         let now = Timestamp::now();
         let action = arguments["action"].as_str().unwrap_or_default();
-        let job =
-            || text(arguments, "job").ok_or_else(|| usage(format!("cronjob {action} needs 'job'")));
+        let job = || {
+            text(arguments, "job_id")
+                .ok_or_else(|| usage(format!("cronjob {action} needs 'job_id'")))
+        };
         match action {
             "create" => self.create(session, arguments, now),
             "list" => Ok(
@@ -133,7 +222,7 @@ impl ToolPort {
             "pause" => Ok(summary(&ops::pause(
                 &self.store,
                 &job()?,
-                text(arguments, "reason").as_deref(),
+                text(arguments, "paused_reason").as_deref(),
                 now,
             )?)),
             "resume" => Ok(summary(&ops::resume(
@@ -143,13 +232,6 @@ impl ToolPort {
                 &profile_zone(&self.scope)?,
             )?)),
             "remove" => Ok(json!({"removed": summary(&ops::remove(&self.store, &job()?)?)})),
-            "run" => {
-                let (job, run) = ops::manual_run(&self.store, &job()?, now)?;
-                Ok(
-                    json!({"status": "queued", "job": job.id(), "run_id": run.id,
-                    "note": "the gateway daemon runs it at its next tick (or `prometheus cron tick`)"}),
-                )
-            }
             "runs" => self.runs(&job()?, arguments),
             other => Err(usage(format!(
                 "unknown cronjob action '{other}' (create, list, update, pause, resume, remove, run, runs)"
@@ -190,7 +272,7 @@ impl ToolPort {
     ) -> Result<Value, Error> {
         let scripts = scripts_dir(&self.scope);
         let profile = self.profile(&scripts)?;
-        let mut spec = fields(arguments).new_spec(now, &profile.zone)?;
+        let mut spec = fields(arguments, &self.scope)?.new_spec(now, &profile.zone)?;
         let origin = self.origin(session);
         if spec.deliver.is_empty() {
             spec.deliver = ops::default_deliver(origin.as_ref());
@@ -199,7 +281,16 @@ impl ToolPort {
         let echo = ops::check(&profile, &spec, now)?;
         match text(arguments, "confirm_token") {
             Some(token) if ops::redeem(&token, &spec, name.as_deref(), now) => {
-                let job = ops::create(&profile, spec, name, origin.as_ref(), now)?;
+                let paused = arguments["paused"]
+                    .as_bool()
+                    .unwrap_or(false)
+                    .then(|| text(arguments, "paused_reason").unwrap_or_default());
+                let new = ops::NewJob {
+                    name,
+                    origin: origin.as_ref(),
+                    paused,
+                };
+                let job = ops::create(&profile, spec, new, now)?;
                 Ok(json!({"status": "created", "job": summary(&job), "summary": echo.render()}))
             }
             Some(_) => Err(Error::new(
@@ -216,7 +307,7 @@ impl ToolPort {
     fn update(&self, key: &str, arguments: &Value, now: Timestamp) -> Result<Value, Error> {
         let scripts = scripts_dir(&self.scope);
         let profile = self.profile(&scripts)?;
-        let fields = fields(arguments);
+        let fields = fields(arguments, &self.scope)?;
         let name = text(arguments, "name");
         if fields.reschedules() {
             let current = ops::find(&self.store, key)?;
@@ -232,14 +323,57 @@ impl ToolPort {
                 ));
             }
         }
-        let (job, _) = ops::update(
+        let (mut job, _) = ops::update(
             &profile,
             key,
             name.as_deref(),
             |spec| fields.apply(spec, now, &profile.zone),
             now,
         )?;
+        match arguments["paused"].as_bool() {
+            Some(true) => {
+                let reason = text(arguments, "paused_reason");
+                job = ops::pause(&self.store, job.id(), reason.as_deref(), now)?;
+            }
+            Some(false) => job = ops::resume(&self.store, job.id(), now, &profile.zone)?,
+            None => {}
+        }
         Ok(json!({"status": "updated", "job": summary(&job)}))
+    }
+
+    /// `run`: queued with the call's `prompt` as this run's context only;
+    /// started in the background (the outcome re-enters the session as a
+    /// notice) or, for sessions that cannot receive it, run to its end.
+    async fn run_now(&self, session: SessionId, arguments: &Value) -> Result<Value, Error> {
+        let key = text(arguments, "job_id").ok_or_else(|| usage("cronjob run needs 'job_id'"))?;
+        let how = ops::QueueRun {
+            context: text(arguments, "prompt").filter(|p| !p.trim().is_empty()),
+            exclusive: true,
+            ..ops::QueueRun::default()
+        };
+        let (job, run) = ops::queue_run(&self.store, &key, Timestamp::now(), &how)?;
+        let runner = HostRunner::new(&self.scope, &self.launch, Arc::clone(&self.store));
+        if !self.detached {
+            let finished = runner.execute(&job, &run).await?;
+            return Ok(json!({"status": "finished", "run_id": finished.id,
+                "outcome": outcome(&job, &finished)}));
+        }
+        let store = Arc::clone(&self.store);
+        let run_id = run.id.clone();
+        tokio::spawn(async move {
+            let text = match runner.execute(&job, &run).await {
+                Ok(finished) => {
+                    let job = ops::find(&store, job.id()).unwrap_or(job);
+                    outcome(&job, &finished)
+                }
+                Err(err) => format!("[cron run failed to record] run {}: {err}", run.id),
+            };
+            let row = pmt_agent::turn::transcript::notice_row(&text, "cron");
+            if let Err(err) = store.append_message(session, &row) {
+                tracing::warn!(error = %err, "cron run outcome not reported to its session");
+            }
+        });
+        Ok(json!({"status": "started", "run_id": run_id}))
     }
 
     fn runs(&self, key: &str, arguments: &Value) -> Result<Value, Error> {

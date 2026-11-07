@@ -76,8 +76,11 @@ pub(super) fn replay(env: &Env<'_>, id: &str, live: bool, deliver: bool) -> Resu
     let runner = env.runner();
     let scripts = scripts_dir(&env.scope);
     let config = env.scope.config().cron.clone();
+    let zone = crate::cron_host::profile_zone(&env.scope)?;
     let ctx = pmt_cron::exec::Exec {
         store: &env.store,
+        profile: env.scope.name().as_str(),
+        zone: &zone,
         scripts_dir: &scripts,
         config: &config,
         runner: &runner,
@@ -90,7 +93,7 @@ pub(super) fn replay(env: &Env<'_>, id: &str, live: bool, deliver: bool) -> Resu
         "replayed run {} as {} ({})\n",
         original.id, new.id, new.status
     );
-    text.push_str(&super::diff::unified(
+    text.push_str(&pmt_cron::diff::unified(
         old_text,
         new_text,
         &original.id,

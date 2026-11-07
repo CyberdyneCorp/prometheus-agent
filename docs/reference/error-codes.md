@@ -307,6 +307,11 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `cron.confirmation` | `permission_denied` | 77 | Saving a job (or a changed schedule) needs a confirmation: answer `y` on a terminal or pass `--yes`; the command exits 4 and nothing was saved. |
 | `cron.replay_unavailable` | `unavailable` | 69 | Replaying a run against its recorded model responses needs the model-call cache and the replay provider, which this build does not have yet; `prometheus cron replay <run> --live` re-runs the recorded inputs against the current provider instead. |
 | `cron.invalid_state` | `invalid_input` | 65 | The operation does not apply in the job's state (for example resuming a one-shot job whose time has passed); the message says how to change it. |
+| `cron.incident_not_found` | `not_found` | 66 | No failure incident of the profile has that id; `prometheus cron incidents` lists them. |
+| `cron.invalid_workdir` | `usage` | 2 | A job's `workdir` must be an absolute path to an existing directory; relative paths are refused and nothing was saved. |
+| `cron.notepad_limit` | `invalid_input` | 65 | A job notepad key is at most 128 characters, a value at most 16 KiB and a notepad at most 64 KiB counting keys and values; the notepad is unchanged. |
+| `cron.already_running` | `conflict` | 75 | A run of the job is queued or running; wait for it (`prometheus cron runs <job>`) before starting another. |
+| `cron.blueprint` | `invalid_input` | 65 | The blueprint name matches none of the catalog, or a slot value is invalid (the message names the slot and the accepted values); nothing was created. |
 | `rpc.parse` | `invalid_input` | 65 | A client protocol frame is not valid JSON (JSON-RPC `-32700`); the connection keeps serving. |
 | `rpc.invalid_request` | `invalid_input` | 65 | A client protocol frame is JSON but not a JSON-RPC 2.0 request object (JSON-RPC `-32600`). |
 | `rpc.unknown_method` | `usage` | 2 | The called method is not declared in the RPC catalog (`schema/rpc.json`); JSON-RPC `-32601`. |

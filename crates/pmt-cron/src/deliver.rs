@@ -50,16 +50,32 @@ pub struct SendError {
     pub message: String,
 }
 
-/// Where deliveries go (the daemon's messaging gateway).
+/// The prefix of a Bot Chat delivery target (`bot_chat:<profile>`).
+pub const BOT_CHAT: &str = "bot_chat:";
+
+/// The outbox target of profile `profile`'s Bot Chat.
+#[must_use]
+pub fn bot_chat_target(profile: &str) -> String {
+    format!("{BOT_CHAT}{profile}")
+}
+
+/// A successful send.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Sent {
+    /// The platform's id of the message (the admitted session of a Bot
+    /// Chat delivery); `None` leaves the delivery unverified.
+    pub message_id: Option<String>,
+}
+
+/// Where deliveries go (the daemon's messaging gateway, other profiles'
+/// Bot Chats).
 pub trait Sender: Send + Sync {
-    /// Sends `body` to `target` for the profile; `warning` marks a failure
-    /// notice.
+    /// Sends `row` (its target, body, notice flag, receipt id = row id,
+    /// whether it opens a conversation).
     fn send<'a>(
         &'a self,
-        target: &'a str,
-        body: &'a str,
-        warning: bool,
-    ) -> pmt_agent::turn::model::BoxFuture<'a, Result<(), SendError>>;
+        row: &'a DeliveryRow,
+    ) -> pmt_agent::turn::model::BoxFuture<'a, Result<Sent, SendError>>;
 }
 
 /// A queued row for `run` to `target`.
@@ -78,6 +94,8 @@ pub fn row(run: &RunRow, target: &str, body: &str, warning: bool, now_ms: i64) -
         error: None,
         created_at: now_ms,
         updated_at: now_ms,
+        message_id: None,
+        continuable: false,
     }
 }
 
@@ -90,7 +108,7 @@ pub async fn pump(store: &Store, sender: &dyn Sender, now_ms: i64) -> Result<usi
     let mut taken = 0;
     while let Some(row) = store.cron_take_delivery(now_ms)? {
         taken += 1;
-        let outcome = sender.send(&row.target, &row.body, row.warning).await;
+        let outcome = sender.send(&row).await;
         settle(store, &row, outcome, now_ms)?;
     }
     Ok(taken)
@@ -99,11 +117,11 @@ pub async fn pump(store: &Store, sender: &dyn Sender, now_ms: i64) -> Result<usi
 fn settle(
     store: &Store,
     row: &DeliveryRow,
-    outcome: Result<(), SendError>,
+    outcome: Result<Sent, SendError>,
     now_ms: i64,
 ) -> Result<(), Error> {
     match outcome {
-        Ok(()) => store.cron_settle_delivery(&row.id, "sent", None, now_ms)?,
+        Ok(sent) => store.cron_settle_sent(&row.id, sent.message_id.as_deref())?,
         Err(err) if err.transient && row.attempts < MAX_ATTEMPTS => {
             let backoff = FIRST_BACKOFF_MS << (row.attempts.saturating_sub(1)).min(16);
             tracing::info!(target = %row.target, error = %err.message, "cron delivery retried");
@@ -168,6 +186,16 @@ pub fn write_back(store: &Store, run_id: &str) -> Result<(), Error> {
         .map(|r| r.target.as_str())
         .collect();
     let delivered = serde_json::to_string(&delivered).unwrap_or_default();
+    // Sent without a message id: acknowledged but not verified.
+    let unverified = rows
+        .iter()
+        .find(|r| r.state == "sent" && r.message_id.is_none())
+        .map(|r| r.target.clone());
+    let any_sent = rows.iter().any(|r| r.state == "sent");
+    let receipt = rows
+        .iter()
+        .find(|r| r.target.starts_with(BOT_CHAT))
+        .map(|r| r.id.clone());
     store.cron_update_run(
         run_id,
         |run| {
@@ -177,9 +205,17 @@ pub fn write_back(store: &Store, run_id: &str) -> Result<(), Error> {
                 run.error.clone_from(&error);
             }
             run.delivered = Some(delivered.clone());
+            run.unverified.clone_from(&unverified);
+            if receipt.is_some() {
+                run.receipt.clone_from(&receipt);
+            }
             Ok(())
         },
         |run, job| {
+            if any_sent {
+                // The next verified delivery clears the mark.
+                job.delivery_unverified.clone_from(&unverified);
+            }
             // A later run's outcome is not overwritten by an older one's.
             if job
                 .last_run_at

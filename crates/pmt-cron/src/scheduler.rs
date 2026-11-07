@@ -257,6 +257,45 @@ pub fn claim(
     }
 }
 
+/// Whether `row` is held by a closed usage window at `now` (ms).
+fn held(row: &JobRow, now: i64) -> bool {
+    row.quota_hold_until.is_some_and(|until| until > now)
+}
+
+/// Claims the automatic re-run of `job` due at `now` (spec: Automatic
+/// re-runs when the model was unreachable; Hold through a closed provider
+/// usage window): a `retry` run at the job's `retry_at`, at most once,
+/// never while a run of the job is active.
+///
+/// # Errors
+///
+/// Store errors.
+pub fn claim_retry(store: &Store, job: &Job, now: Timestamp) -> Result<Option<RunRow>, Error> {
+    let Some(at) = job.row.retry_at.filter(|at| *at <= now.as_millisecond()) else {
+        return Ok(None);
+    };
+    let mut run = run_row(job, at_ms(at), "retry", Status::Ok);
+    "running".clone_into(&mut run.status);
+    run.owner = Some(Holder::current());
+    run.retry_of.clone_from(&job.row.retry_of);
+    let claimed = store.cron_claim_run(
+        &run,
+        |row| {
+            row.enabled
+                && row.retry_at == Some(at)
+                && row.state != JobState::Running.as_str()
+                && !held(row, now.as_millisecond())
+        },
+        |row| {
+            row.retry_at = None;
+            JobState::Running.as_str().clone_into(&mut row.state);
+            row.last_run_at = Some(now.as_millisecond());
+            Ok(())
+        },
+    )?;
+    Ok(matches!(claimed, Claim::Claimed(_)).then_some(run))
+}
+
 /// Jobs the scheduler looks at: enabled, not in error, with a next run
 /// at or before `now`.
 ///
@@ -272,9 +311,46 @@ pub fn due_jobs(store: &Store, now: Timestamp) -> Result<Vec<Job>, Error> {
             row.enabled
                 && row.state != JobState::Error.as_str()
                 && row.next_run_at.is_some_and(|at| at <= now)
+                && !held(row, now)
         })
         .map(Job::from_row)
         .collect()
+}
+
+/// Claims the due occurrence of `job`; a skip may leave a fresh one due,
+/// so it looks once more.
+fn claim_due(
+    store: &Store,
+    mut job: Job,
+    now: Timestamp,
+    profile_zone: &TimeZone,
+    config: &CronConfig,
+) -> Result<Option<(Job, RunRow)>, Error> {
+    for _ in 0..2 {
+        match claim(store, &job, now, profile_zone, config)? {
+            Claimed::Run(claimed) => return Ok(Some(*claimed)),
+            Claimed::Nothing => return Ok(None),
+            Claimed::Skipped => match store.cron_job(job.id())? {
+                Some(row) => job = Job::from_row(row)?,
+                None => return Ok(None),
+            },
+        }
+    }
+    Ok(None)
+}
+
+/// The automatic re-runs due at `now`.
+fn retries(store: &Store, now: Timestamp) -> Result<Vec<(Job, RunRow)>, Error> {
+    let mut runs = Vec::new();
+    for row in store.cron_jobs()? {
+        if row.enabled && row.retry_at.is_some() {
+            let job = Job::from_row(row)?;
+            if let Some(run) = claim_retry(store, &job, now)? {
+                runs.push((job, run));
+            }
+        }
+    }
+    Ok(runs)
 }
 
 /// One evaluation of every due job of a profile: nothing while the
@@ -298,22 +374,9 @@ pub fn tick(
     }
     let mut runs = Vec::new();
     for job in due_jobs(store, now)? {
-        let mut job = job;
-        // A skip may leave a fresh occurrence due: look once more.
-        for _ in 0..2 {
-            match claim(store, &job, now, profile_zone, config)? {
-                Claimed::Run(claimed) => {
-                    runs.push(*claimed);
-                    break;
-                }
-                Claimed::Nothing => break,
-                Claimed::Skipped => match store.cron_job(job.id())? {
-                    Some(row) => job = Job::from_row(row)?,
-                    None => break,
-                },
-            }
-        }
+        runs.extend(claim_due(store, job, now, profile_zone, config)?);
     }
+    runs.extend(retries(store, now)?);
     for run in store.cron_runs_in(&["queued"])? {
         if let Some(row) = store.cron_job(&run.job_id)? {
             runs.push((Job::from_row(row)?, run));
@@ -351,7 +414,9 @@ pub fn recover(store: &Store) -> Result<Vec<String>, Error> {
             |r, job| {
                 job.last_status = Some(Status::Failed.as_str().to_owned());
                 job.last_error = Some("interrupted".to_owned());
-                if job.state == JobState::Running.as_str() && r.trigger == "schedule" {
+                if job.state == JobState::Running.as_str()
+                    && matches!(r.trigger.as_str(), "schedule" | "retry")
+                {
                     JobState::Scheduled.as_str().clone_into(&mut job.state);
                 }
                 Ok(())

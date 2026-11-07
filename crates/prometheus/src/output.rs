@@ -276,6 +276,18 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "cron tick",
     },
     JsonShape {
+        schema: "prometheus.cron_incidents.v1",
+        command: "cron incidents",
+    },
+    JsonShape {
+        schema: "prometheus.cron_incident.v1",
+        command: "cron incidents ack",
+    },
+    JsonShape {
+        schema: "prometheus.cron_notepad.v1",
+        command: "cron notepad",
+    },
+    JsonShape {
         schema: "prometheus.worktrees_prune.v1",
         command: "worktrees prune",
     },

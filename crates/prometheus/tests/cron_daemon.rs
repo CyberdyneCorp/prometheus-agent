@@ -201,7 +201,7 @@ fn a_job_the_agent_creates_from_a_chat_needs_confirmation_and_delivers_back_ther
     };
     let session = store.create_session(&chat).unwrap().id;
     let launch = pmt_core::env::LaunchEnv::default();
-    let port = prometheus::cron_host::tool::port(&scope, &launch, &store);
+    let port = prometheus::cron_host::tool::port(&scope, &launch, &store, true);
     let args =
         json!({"action": "create", "schedule": "every 1h", "prompt": "status", "name": "status"});
     let runtime = tokio::runtime::Runtime::new().unwrap();
@@ -238,6 +238,45 @@ fn a_job_the_agent_creates_from_a_chat_needs_confirmation_and_delivers_back_ther
     assert_eq!(
         (&delivered[0]["chat"], &delivered[0]["thread"]),
         (&json!("chat-9"), &json!("thread-3"))
+    );
+    daemon.stop(home.path());
+}
+
+/// Scenario: Add from a Discord thread (the gateway path every adapter
+/// shares, on the debug-build file adapter).
+#[test]
+fn a_job_added_with_slash_cron_in_a_thread_delivers_there() {
+    let home = gateway_home_with(RULES, CRON);
+    let daemon = Daemon::start(home.path());
+    self::common::gateway::send_in(
+        home.path(),
+        "default",
+        "u1",
+        "chat-7",
+        "thread-4",
+        "/cron add \"every day at 18:00\" \"summarize today's commits\" --yes",
+    );
+    let mut jobs = Value::Null;
+    wait("the job is created", Duration::from_mins(1), || {
+        jobs = json(home.path(), &["cron", "list"])["jobs"].clone();
+        jobs.as_array().is_some_and(|j| !j.is_empty())
+    });
+    let job = &jobs[0];
+    assert_eq!(job["prompt"], "summarize today's commits");
+    assert_eq!(job["schedule"], "cron 0 18 * * *");
+    assert_eq!(job["deliver"], json!(["origin"]));
+    let id = job["id"].as_str().unwrap().to_owned();
+    self::common::gateway::wait_said(home.path(), "default", &format!("created job {id}"));
+    due_now(home.path(), "default", &id);
+    wait_status(home.path(), "default", &id, &["ok", "delivery_failed"]);
+    let delivered: Vec<Value> = sent(home.path(), "default")
+        .into_iter()
+        .filter(|m| m["kind"] == "send" && m["text"].as_str().is_some_and(|t| t.starts_with("⏰")))
+        .collect();
+    assert_eq!(delivered.len(), 1, "{delivered:?}");
+    assert_eq!(
+        (&delivered[0]["chat"], &delivered[0]["thread"]),
+        (&json!("chat-7"), &json!("thread-4"))
     );
     daemon.stop(home.path());
 }

@@ -10,15 +10,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use jiff::Timestamp;
-use pmt_agent::turn::model::BoxFuture;
-use pmt_core::error::codes;
-use pmt_cron::deliver::{SendError, Sender};
-use pmt_gateway::messaging::SendRequest;
 use pmt_store::cron::{CronLease, TickLease};
 use pmt_store::leases::Holder;
 use tracing::Instrument as _;
 
-use super::send_tool::GatewayCell;
+use super::cron_send::GatewaySender;
 use super::{DaemonHost, Profile};
 use crate::cron_host::{self, HostRunner};
 
@@ -40,55 +36,6 @@ pub(in crate::daemon_cmd) async fn schedule(host: Arc<DaemonHost>) {
             }
         }
         tokio::time::sleep(PROFILES_EVERY).await;
-    }
-}
-
-/// Sends a profile's deliveries through the daemon's gateway; a platform
-/// the profile does not enable fails rather than borrowing another
-/// profile's adapter.
-struct GatewaySender {
-    gateway: GatewayCell,
-    profile: String,
-}
-
-impl Sender for GatewaySender {
-    fn send<'a>(
-        &'a self,
-        target: &'a str,
-        body: &'a str,
-        warning: bool,
-    ) -> BoxFuture<'a, Result<(), SendError>> {
-        Box::pin(async move {
-            let Some(gateway) = self.gateway.get() else {
-                return Err(SendError {
-                    transient: true,
-                    message: "the messaging gateway is not running yet".to_owned(),
-                });
-            };
-            let request = SendRequest {
-                target: target.to_owned(),
-                text: body.to_owned(),
-                attachments: Vec::new(),
-                warning,
-            };
-            gateway
-                .send(&self.profile, &request)
-                .await
-                .map(drop)
-                .map_err(|err| {
-                    let platform = target.split(':').next().unwrap_or(target);
-                    let message = if err.code().code == codes::GATEWAY_PLATFORM_NOT_CONFIGURED.code
-                    {
-                        format!("{platform} not configured for profile {}", self.profile)
-                    } else {
-                        err.message().to_owned()
-                    };
-                    SendError {
-                        transient: err.code().code == codes::STORE_BUSY.code,
-                        message,
-                    }
-                })
-        })
     }
 }
 
@@ -137,6 +84,7 @@ async fn profile_loop(host: Arc<DaemonHost>, name: String, profile: Arc<Profile>
     let sender = GatewaySender {
         gateway: Arc::clone(&host.gateway),
         profile: name.clone(),
+        store: Arc::clone(&profile.store),
     };
     let mut lease = Lease {
         held: None,

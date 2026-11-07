@@ -1,6 +1,10 @@
-//! A unified line diff of two run outputs (`cron replay --live`).
+//! A unified line diff of two texts (`cron replay --live`, monitor
+//! changes).
 
 use std::fmt::Write as _;
+
+/// The largest alignment table computed (lines old x lines new).
+const MAX_CELLS: usize = 4_000_000;
 
 /// The longest-common-subsequence lengths of every suffix pair.
 fn lcs(old: &[&str], new: &[&str]) -> Vec<Vec<usize>> {
@@ -20,12 +24,27 @@ fn lcs(old: &[&str], new: &[&str]) -> Vec<Vec<usize>> {
 /// The lines of `old` and `new` as a unified diff with labels `a` and
 /// `b` (one hunk over the whole text; outputs are short).
 #[must_use]
-pub(super) fn unified(old: &str, new: &str, a: &str, b: &str) -> String {
+pub fn unified(old: &str, new: &str, a: &str, b: &str) -> String {
     if old == new {
         return "outputs are identical\n".to_owned();
     }
     let old: Vec<&str> = old.lines().collect();
     let new: Vec<&str> = new.lines().collect();
+    if old.len().saturating_mul(new.len()) > MAX_CELLS {
+        // Too large to align: every old line goes, every new one comes.
+        let mut text = format!(
+            "--- {a}\n+++ {b}\n@@ -1,{} +1,{} @@\n",
+            old.len(),
+            new.len()
+        );
+        for line in &old {
+            let _ = writeln!(text, "-{line}");
+        }
+        for line in &new {
+            let _ = writeln!(text, "+{line}");
+        }
+        return text;
+    }
     let table = lcs(&old, &new);
     let mut text = format!(
         "--- {a}\n+++ {b}\n@@ -1,{} +1,{} @@\n",

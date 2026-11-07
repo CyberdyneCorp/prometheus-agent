@@ -47,12 +47,15 @@ pub(super) fn add(
     env: &Env<'_>,
     schedule: Option<&str>,
     flags: &JobFlags,
+    paused: Option<String>,
     now: Timestamp,
 ) -> Result<u8, Error> {
     let runner = env.runner();
     let scripts = scripts_dir(&env.scope);
     let profile = runner.profile(&scripts);
-    let spec = flags.fields(schedule).new_spec(now, &profile.zone)?;
+    let spec = flags
+        .fields(schedule, &env.scope)?
+        .new_spec(now, &profile.zone)?;
     let mut checked = spec.clone();
     if checked.deliver.is_empty() {
         checked.deliver = ops::default_deliver(None);
@@ -61,7 +64,12 @@ pub(super) fn add(
     if !confirmed(env, &echo, flags.yes)? {
         return Ok(pmt_core::exit::APPROVAL_REQUIRED);
     }
-    let job = ops::create(&profile, spec, flags.name.clone(), None, now)?;
+    let new = ops::NewJob {
+        name: flags.name.clone(),
+        origin: None,
+        paused,
+    };
+    let job = ops::create(&profile, spec, new, now)?;
     saved(env, "created", &job, Some(&echo))
 }
 
@@ -75,7 +83,7 @@ pub(super) fn edit(
     let runner = env.runner();
     let scripts = scripts_dir(&env.scope);
     let profile = runner.profile(&scripts);
-    let fields = flags.fields(schedule);
+    let fields = flags.fields(schedule, &env.scope)?;
     if fields.reschedules() {
         let mut spec = ops::find(&env.store, key)?.spec;
         fields.apply(&mut spec, now, &profile.zone)?;

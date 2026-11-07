@@ -38,19 +38,37 @@ const STOP_GRACE: Duration = Duration::from_secs(10);
 /// and with `memory = off` no memory at all.
 fn run_scope(scope: &ProfileScope, job: &Job) -> ProfileScope {
     let memory = job.spec.memory;
+    let reasoning = job
+        .spec
+        .reasoning_effort
+        .as_deref()
+        .and_then(|level| serde_json::from_value(serde_json::json!(level)).ok());
     scope.patched(move |config| {
         config.memory.nudge_interval = 0;
         if memory == MemoryMode::Off {
             config.memory.memory_enabled = false;
             config.memory.user_profile_enabled = false;
         }
+        if reasoning.is_some() {
+            config.agent.reasoning_effort = reasoning;
+        }
     })
 }
 
-fn flags(job: &Job) -> RouteFlags<'_> {
+/// The run's model (spec: Model pinning and cron fleet default): the
+/// job's pin, else `cron.model` / `cron.model_provider`, else the
+/// profile's main model at fire time.
+fn flags<'a>(job: &'a Job, config: &'a pmt_config::schema::CronConfig) -> RouteFlags<'a> {
+    if job.spec.pinned() {
+        return RouteFlags {
+            provider: job.spec.provider.as_deref(),
+            model: job.spec.model.as_deref(),
+            mock_script: None,
+        };
+    }
     RouteFlags {
-        provider: job.spec.provider.as_deref(),
-        model: job.spec.model.as_deref(),
+        provider: config.model_provider.as_deref(),
+        model: config.model.as_deref(),
         mock_script: None,
     }
 }
@@ -63,7 +81,7 @@ fn factory(
     replay: bool,
 ) -> Result<Factory, Error> {
     let config = &scope.config().cron;
-    let workspace = super::workspace(scope);
+    let workspace = super::script::cwd(scope, job);
     std::fs::create_dir_all(&workspace).map_err(|e| {
         Error::new(
             &pmt_core::error::codes::OUTPUT_IO,
@@ -74,7 +92,9 @@ fn factory(
         interactive: false,
         cwd: workspace,
         skills: job.spec.skills.clone(),
-        no_context_files: true,
+        // A job with a workdir loads its project context files; a
+        // detached one loads none.
+        no_context_files: job.spec.workdir.is_none(),
         source_tag: replay.then(|| REPLAY_TAG.to_owned()),
         cron: Some(CronRun {
             job_id: job.id().to_owned(),
@@ -92,7 +112,7 @@ fn factory(
         run_scope(scope, job),
         store,
         launch,
-        &flags(job),
+        &flags(job, config),
         None,
         options,
     )
@@ -109,7 +129,7 @@ pub(super) async fn credential(
     let factory = factory(scope, launch, store, job, false).map_err(|e| e.message().to_owned())?;
     factory
         .models
-        .primary(&flags(job))
+        .primary(&flags(job, &scope.config().cron))
         .await
         .map(drop)
         .map_err(|e| e.message().to_owned())
@@ -170,6 +190,7 @@ pub(super) async fn run(
         input_tokens: 0,
         output_tokens: 0,
         cost_usd: 0.0,
+        reached_model: false,
     };
     match Box::pin(session(scope, launch, &store, &request, &mut outcome)).await {
         Ok(end) => outcome.end = end,
@@ -183,7 +204,40 @@ pub(super) async fn run(
         outcome.output_tokens = totals.tokens.output;
         outcome.cost_usd = totals.cost_usd;
     }
+    outcome.reached_model = matches!(outcome.end, AgentEnd::Completed(_))
+        || outcome.input_tokens + outcome.output_tokens > 0;
+    if !outcome.reached_model {
+        outcome.end = unreached(outcome.end);
+    }
     outcome
+}
+
+/// A failure before any model response: a network or DNS error is
+/// `Unreachable` (re-run automatically), a closed subscription usage
+/// window `UsageClosed` (the job is held); anything else stays a failure.
+fn unreached(end: AgentEnd) -> AgentEnd {
+    let AgentEnd::Failed(message) = end else {
+        return end;
+    };
+    if let Some(until) = usage_window(&message) {
+        return AgentEnd::UsageClosed(until);
+    }
+    if message.contains(": network error") {
+        return AgentEnd::Unreachable(message);
+    }
+    AgentEnd::Failed(message)
+}
+
+/// The reopening instant of a `provider.usage_window_closed` error
+/// (`... usage window closed until <RFC 3339>`).
+fn usage_window(message: &str) -> Option<i64> {
+    let (_, rest) = message.split_once("usage window closed until ")?;
+    let instant = rest.split_whitespace().next()?;
+    instant
+        .trim_end_matches(['.', ',', ';', ')'])
+        .parse::<jiff::Timestamp>()
+        .ok()
+        .map(jiff::Timestamp::as_millisecond)
 }
 
 async fn session(
@@ -195,7 +249,10 @@ async fn session(
 ) -> Result<AgentEnd, Error> {
     let job = &request.job;
     let factory = factory(scope, launch, Arc::clone(store), job, request.replay)?;
-    let target = factory.models.primary(&flags(job)).await?;
+    let target = factory
+        .models
+        .primary(&flags(job, &scope.config().cron))
+        .await?;
     let id = factory.create_session(None, &target)?;
     outcome.session_id = Some(id.to_string());
     let activity = Arc::new(Activity {
@@ -273,5 +330,30 @@ async fn watch(
         };
         interrupt.stop(Issuer::System(format!("cron_{reason}_timeout")));
         return reason;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AgentEnd, unreached};
+
+    #[test]
+    fn failures_before_the_model_are_classified() {
+        assert_eq!(
+            unreached(AgentEnd::Failed(
+                "provider_error: openai: network error: dns error".into()
+            )),
+            AgentEnd::Unreachable("provider_error: openai: network error: dns error".into())
+        );
+        assert_eq!(
+            unreached(AgentEnd::Failed(
+                "anthropic: usage window closed until 2026-11-04T13:00:00Z".into()
+            )),
+            AgentEnd::UsageClosed(1_793_797_200_000)
+        );
+        assert_eq!(
+            unreached(AgentEnd::Failed("anthropic: rate_limit error".into())),
+            AgentEnd::Failed("anthropic: rate_limit error".into())
+        );
     }
 }

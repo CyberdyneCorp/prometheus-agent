@@ -15,13 +15,18 @@
 
 pub mod clock;
 pub mod deliver;
+pub mod diff;
 pub mod doctor;
 pub mod duration;
 pub mod exec;
+pub mod failure;
 pub mod fields;
 pub mod grace;
+pub mod incident;
 pub mod job;
+pub mod notepad;
 pub mod ops;
+pub mod prompt;
 pub mod scan;
 pub mod schedule;
 pub mod scheduler;

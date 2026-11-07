@@ -8,8 +8,12 @@
 //! one job and a daemon advancing another never lose either change.
 
 pub mod deliveries;
+pub mod incidents;
 pub mod lease;
+pub mod notepad;
+pub mod receipts;
 pub mod runs;
+pub mod suggestions;
 
 use pmt_core::error::{Error, codes};
 use rusqlite::{Connection, OptionalExtension, Row, params};
@@ -19,11 +23,13 @@ use crate::sessions::now_ms;
 use crate::store::Store;
 
 pub use deliveries::DeliveryRow;
+pub use incidents::{IncidentRow, incident_not_found};
 pub use lease::{CronLease, LeaseHolder, TickLease};
 pub use runs::{Claim, RunRow};
+pub use suggestions::SuggestionRow;
 
 /// One `cron_jobs` row.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct JobRow {
     /// 12 hex characters.
     pub id: String,
@@ -59,11 +65,32 @@ pub struct JobRow {
     pub created_at: i64,
     /// Last change.
     pub updated_at: i64,
+    /// Consecutive failed, timed-out or blocked runs.
+    pub failure_streak: u32,
+    /// When the next automatic re-run fires (model unreachable, or a
+    /// closed usage window reopening).
+    pub retry_at: Option<i64>,
+    /// The run a re-run stands in for.
+    pub retry_of: Option<String>,
+    /// Re-runs of the current ladder so far.
+    pub retry_step: u32,
+    /// Nothing fires before this (a closed provider usage window).
+    pub quota_hold_until: Option<i64>,
+    /// The target of the last delivery without a platform message id.
+    pub delivery_unverified: Option<String>,
+    /// SHA-256 of the monitor's previous output.
+    pub monitor_hash: Option<String>,
+    /// The monitor's previous output (for the diff).
+    pub monitor_output: Option<String>,
 }
 
 const COLUMNS: &str = "id, name, spec, origin, state, enabled, next_run_at, last_run_at, \
      last_status, last_error, completed, paused_at, paused_reason, alerted, completed_at, \
-     created_at, updated_at";
+     created_at, updated_at, failure_streak, retry_at, retry_of, retry_step, quota_hold_until, \
+     delivery_unverified, monitor_hash, monitor_output";
+
+const PLACEHOLDERS: &str = "?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, \
+     ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25";
 
 fn job_from_row(row: &Row<'_>) -> rusqlite::Result<JobRow> {
     Ok(JobRow {
@@ -84,6 +111,14 @@ fn job_from_row(row: &Row<'_>) -> rusqlite::Result<JobRow> {
         completed_at: row.get(14)?,
         created_at: row.get(15)?,
         updated_at: row.get(16)?,
+        failure_streak: row.get(17)?,
+        retry_at: row.get(18)?,
+        retry_of: row.get(19)?,
+        retry_step: row.get(20)?,
+        quota_hold_until: row.get(21)?,
+        delivery_unverified: row.get(22)?,
+        monitor_hash: row.get(23)?,
+        monitor_output: row.get(24)?,
     })
 }
 
@@ -98,11 +133,12 @@ pub(crate) fn load_job(conn: &Connection, id: &str) -> Result<Option<JobRow>, Er
 }
 
 pub(crate) fn save_job(conn: &Connection, job: &JobRow) -> Result<(), Error> {
+    write_job(conn, "INSERT OR REPLACE", job)
+}
+
+fn write_job(conn: &Connection, verb: &str, job: &JobRow) -> Result<(), Error> {
     conn.execute(
-        &format!(
-            "INSERT OR REPLACE INTO cron_jobs ({COLUMNS}) VALUES \
-             (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)"
-        ),
+        &format!("{verb} INTO cron_jobs ({COLUMNS}) VALUES ({PLACEHOLDERS})"),
         params![
             job.id,
             job.name,
@@ -120,7 +156,15 @@ pub(crate) fn save_job(conn: &Connection, job: &JobRow) -> Result<(), Error> {
             job.alerted,
             job.completed_at,
             job.created_at,
-            job.updated_at
+            job.updated_at,
+            job.failure_streak,
+            job.retry_at,
+            job.retry_of,
+            job.retry_step,
+            job.quota_hold_until,
+            job.delivery_unverified,
+            job.monitor_hash,
+            job.monitor_output
         ],
     )
     .map_err(sql)?;
@@ -141,35 +185,7 @@ impl Store {
     ///
     /// `store.constraint` for a duplicate id, `store.sqlite`.
     pub fn cron_insert_job(&self, job: &JobRow) -> Result<(), Error> {
-        self.write(|tx| {
-            tx.execute(
-                &format!(
-                    "INSERT INTO cron_jobs ({COLUMNS}) VALUES \
-                     (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)"
-                ),
-                params![
-                    job.id,
-                    job.name,
-                    job.spec,
-                    job.origin,
-                    job.state,
-                    job.enabled,
-                    job.next_run_at,
-                    job.last_run_at,
-                    job.last_status,
-                    job.last_error,
-                    job.completed,
-                    job.paused_at,
-                    job.paused_reason,
-                    job.alerted,
-                    job.completed_at,
-                    job.created_at,
-                    job.updated_at
-                ],
-            )
-            .map_err(sql)?;
-            Ok(())
-        })
+        self.write(|tx| write_job(tx, "INSERT", job))
     }
 
     /// One job.
@@ -230,6 +246,8 @@ impl Store {
         self.write(|tx| {
             let n = tx
                 .execute("DELETE FROM cron_jobs WHERE id = ?1", params![id])
+                .map_err(sql)?;
+            tx.execute("DELETE FROM cron_notepad WHERE job_id = ?1", params![id])
                 .map_err(sql)?;
             Ok(n > 0)
         })

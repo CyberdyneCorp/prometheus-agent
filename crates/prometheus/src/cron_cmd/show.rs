@@ -53,6 +53,22 @@ pub(super) fn list(env: &Env<'_>, all: bool, _now: Timestamp) -> Result<u8, Erro
         if let Some(reason) = &job.row.paused_reason {
             let _ = writeln!(text, "    paused: {reason}");
         }
+        if job.spec.pinned() {
+            let model = job.spec.model.as_deref().unwrap_or("-");
+            let _ = writeln!(text, "    pinned: {model}");
+        }
+        match job.row.failure_streak {
+            0 => {}
+            1 => {
+                let _ = writeln!(text, "    failing 1 run in a row");
+            }
+            n => {
+                let _ = writeln!(text, "    failing {n} runs in a row");
+            }
+        }
+        if let Some(target) = &job.row.delivery_unverified {
+            let _ = writeln!(text, "    delivery UNVERIFIED: {target}");
+        }
         if let Some(error) = job
             .row
             .last_error

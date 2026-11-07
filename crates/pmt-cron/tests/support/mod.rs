@@ -11,13 +11,14 @@ use jiff::Timestamp;
 use jiff::tz::TimeZone;
 use pmt_agent::turn::model::BoxFuture;
 use pmt_config::{Home, Launch, Overrides, ProfileName, ProfileScope};
-use pmt_cron::deliver::{SendError, Sender};
+use pmt_cron::deliver::{SendError, Sender, Sent};
 use pmt_cron::exec::{AgentEnd, AgentOutcome, AgentRequest, Runner, ScriptOutcome};
 use pmt_cron::job::{Job, JobSpec};
 use pmt_cron::ops::{self, Profile};
 use pmt_cron::schedule::Schedule;
 use pmt_cron::validate::Catalog;
 use pmt_store::Store;
+use pmt_store::cron::DeliveryRow;
 
 pub struct TestProfile {
     _root: tempfile::TempDir,
@@ -69,6 +70,12 @@ impl Catalog for Known {
     fn check_model(&self, _: Option<&str>, _: Option<&str>) -> Result<(), String> {
         Ok(())
     }
+    fn profile_exists(&self, name: &str) -> bool {
+        ["default", "assistant"].contains(&name)
+    }
+    fn secret_reserved(&self, name: &str) -> bool {
+        name.ends_with("_API_KEY")
+    }
 }
 
 pub fn at(text: &str) -> Timestamp {
@@ -83,7 +90,11 @@ pub fn create(store: &Store, scripts: &Path, spec: JobSpec, name: &str, now: Tim
         zone: TimeZone::UTC,
         catalog: &Known,
     };
-    ops::create(&profile, spec, Some(name.to_owned()), None, now).unwrap()
+    let new = ops::NewJob {
+        name: Some(name.to_owned()),
+        ..ops::NewJob::default()
+    };
+    ops::create(&profile, spec, new, now).unwrap()
 }
 
 pub fn every(secs: u64, prompt: &str) -> JobSpec {
@@ -99,6 +110,10 @@ pub struct Scripted {
     pub calls: Mutex<Vec<String>>,
     pub prompts: Mutex<Vec<String>>,
     pub skill_text: String,
+    /// Bodies `fetch` answers, in order (the last repeats).
+    pub pages: Mutex<Vec<String>>,
+    /// Outcomes `run_agent` answers, in order, before `answer`.
+    pub queue: Mutex<Vec<AgentEnd>>,
 }
 
 impl Scripted {
@@ -137,15 +152,28 @@ impl Runner for Scripted {
         Box::pin(async move { outcome })
     }
 
+    fn fetch<'a>(&'a self, url: &'a str) -> BoxFuture<'a, Result<String, String>> {
+        self.calls.lock().unwrap().push(format!("fetch {url}"));
+        let mut pages = self.pages.lock().unwrap();
+        let page = if pages.len() > 1 {
+            Some(pages.remove(0))
+        } else {
+            pages.first().cloned()
+        };
+        Box::pin(async move { page.ok_or_else(|| "no page".to_owned()) })
+    }
+
     fn run_agent(&self, request: AgentRequest) -> BoxFuture<'_, AgentOutcome> {
         self.calls.lock().unwrap().push("agent".to_owned());
         self.prompts.lock().unwrap().push(request.prompt);
-        let end = self
-            .answer
-            .lock()
-            .unwrap()
-            .clone()
+        let queued = {
+            let mut queue = self.queue.lock().unwrap();
+            (!queue.is_empty()).then(|| queue.remove(0))
+        };
+        let end = queued
+            .or_else(|| self.answer.lock().unwrap().clone())
             .unwrap_or(AgentEnd::Completed("done".into()));
+        let reached_model = !matches!(end, AgentEnd::Unreachable(_) | AgentEnd::UsageClosed(_));
         Box::pin(async move {
             AgentOutcome {
                 session_id: Some("ses_test".into()),
@@ -153,6 +181,7 @@ impl Runner for Scripted {
                 input_tokens: 10,
                 output_tokens: 5,
                 cost_usd: 0.0,
+                reached_model,
             }
         })
     }
@@ -163,26 +192,105 @@ impl Runner for Scripted {
 }
 
 /// A sender recording what it sent, failing per target.
-#[derive(Default)]
 pub struct Outbox {
     pub sent: Mutex<Vec<(String, String)>>,
     pub fail: Mutex<Option<SendError>>,
+    /// Answer with a message id (`false`: acknowledged without one).
+    pub with_ids: bool,
+}
+
+impl Default for Outbox {
+    fn default() -> Self {
+        Self {
+            sent: Mutex::default(),
+            fail: Mutex::default(),
+            with_ids: true,
+        }
+    }
 }
 
 impl Sender for Outbox {
-    fn send<'a>(
-        &'a self,
-        target: &'a str,
-        body: &'a str,
-        _: bool,
-    ) -> BoxFuture<'a, Result<(), SendError>> {
+    fn send<'a>(&'a self, row: &'a DeliveryRow) -> BoxFuture<'a, Result<Sent, SendError>> {
         let fail = self.fail.lock().unwrap().clone();
         if fail.is_none() {
             self.sent
                 .lock()
                 .unwrap()
-                .push((target.to_owned(), body.to_owned()));
+                .push((row.target.clone(), row.body.clone()));
         }
-        Box::pin(async move { fail.map_or(Ok(()), Err) })
+        let id = self.with_ids.then(|| format!("msg-{}", row.id));
+        Box::pin(async move { fail.map_or(Ok(Sent { message_id: id }), Err) })
+    }
+}
+
+/// The bodies sent so far.
+impl Outbox {
+    pub fn bodies(&self) -> Vec<String> {
+        self.sent
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(_, b)| b.clone())
+            .collect()
+    }
+}
+
+/// The execution context of `profile` at `now` (UTC).
+pub fn context<'a>(
+    profile: &'a TestProfile,
+    store: &'a Store,
+    config: &'a pmt_config::schema::CronConfig,
+    runner: &'a Scripted,
+    now: Timestamp,
+) -> pmt_cron::exec::Exec<'a> {
+    let clock: &'static pmt_cron::clock::FakeClock =
+        Box::leak(Box::new(pmt_cron::clock::FakeClock::new(now)));
+    pmt_cron::exec::Exec {
+        store,
+        profile: "default",
+        zone: Box::leak(Box::new(TimeZone::UTC)),
+        scripts_dir: Box::leak(Box::new(profile.scripts())),
+        config,
+        runner,
+        clock,
+    }
+}
+
+/// Ticks at `now`, executes every claimed run and sends the outbox;
+/// returns the finished runs.
+pub fn tick_all(
+    profile: &TestProfile,
+    store: &Store,
+    runner: &Scripted,
+    outbox: &Outbox,
+    config: &pmt_config::schema::CronConfig,
+    now: Timestamp,
+) -> Vec<pmt_store::cron::RunRow> {
+    let claimed =
+        pmt_cron::scheduler::tick(store, &profile.home, now, &TimeZone::UTC, config).unwrap();
+    let ctx = context(profile, store, config, runner, now);
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let mut runs = Vec::new();
+    for (job, run) in &claimed {
+        runs.push(
+            rt.block_on(pmt_cron::exec::execute(&ctx, job, run))
+                .unwrap(),
+        );
+    }
+    rt.block_on(pmt_cron::deliver::pump(store, outbox, now.as_millisecond()))
+        .unwrap();
+    runs
+}
+
+/// The profile operations' view of a test store.
+pub fn ops_profile<'a>(store: &'a Store, scripts: &'a Path) -> Profile<'a> {
+    Profile {
+        store,
+        scripts_dir: scripts,
+        zone: TimeZone::UTC,
+        catalog: &Known,
     }
 }

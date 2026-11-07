@@ -29,6 +29,15 @@ pub const SETTINGS: &[&str] = &[
     "cron.wrap_response",
     "cron.run_retention_secs",
     "cron.completed_retention_secs",
+    "cron.model",
+    "cron.model_provider",
+    "cron.failure_nudge_threshold",
+    "cron.retry_unreachable",
+    "cron.failure_repeat_alert_secs",
+    "cron.continuable",
+    "cron.delivery.notify",
+    "cron.delivery.threads",
+    "cron.continuable_surface",
 ];
 
 /// The trigger in effect for `config` and why it differs from the
@@ -56,7 +65,8 @@ pub struct Problem {
     pub id: String,
     /// Its name.
     pub name: String,
-    /// `error` or `blocked_config`.
+    /// `error`, `blocked_config`, `delivery_unverified` or
+    /// `workdir_missing`.
     pub kind: String,
     /// Why.
     pub detail: Option<String>,
@@ -132,6 +142,36 @@ impl Report {
     }
 }
 
+/// What needs attention in one job.
+fn problems_of(row: &pmt_store::cron::JobRow) -> Vec<Problem> {
+    let problem = |kind: &str, detail: Option<String>| Problem {
+        id: row.id.clone(),
+        name: row.name.clone(),
+        kind: kind.to_owned(),
+        detail,
+    };
+    let mut found = Vec::new();
+    if row.state == JobState::Error.as_str() {
+        found.push(problem(JobState::Error.as_str(), row.last_error.clone()));
+    } else if row.last_status.as_deref() == Some(Status::BlockedConfig.as_str()) {
+        found.push(problem(
+            Status::BlockedConfig.as_str(),
+            row.last_error.clone(),
+        ));
+    }
+    if let Some(target) = &row.delivery_unverified {
+        found.push(problem("delivery_unverified", Some(target.clone())));
+    }
+    let workdir = crate::job::Job::from_row(row.clone())
+        .ok()
+        .and_then(|job| job.spec.workdir)
+        .filter(|dir| !std::path::Path::new(dir).is_dir());
+    if let Some(dir) = workdir {
+        found.push(problem("workdir_missing", Some(dir)));
+    }
+    found
+}
+
 /// The report of `scope` over `store` at `now`.
 ///
 /// # Errors
@@ -150,24 +190,7 @@ pub fn report(scope: &ProfileScope, store: &Store, now: Timestamp) -> Result<Rep
                 && j.next_run_at.is_some_and(|at| at <= now_ms)
         })
         .count();
-    let problems = jobs
-        .iter()
-        .filter_map(|j| {
-            let kind = if j.state == JobState::Error.as_str() {
-                JobState::Error.as_str()
-            } else if j.last_status.as_deref() == Some(Status::BlockedConfig.as_str()) {
-                Status::BlockedConfig.as_str()
-            } else {
-                return None;
-            };
-            Some(Problem {
-                id: j.id.clone(),
-                name: j.name.clone(),
-                kind: kind.to_owned(),
-                detail: j.last_error.clone(),
-            })
-        })
-        .collect();
+    let problems = jobs.iter().flat_map(problems_of).collect();
     let undelivered = store
         .cron_undelivered()?
         .into_iter()

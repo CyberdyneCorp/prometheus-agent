@@ -4,8 +4,8 @@
 //! unique name; an ambiguous name exits 2 listing the ids.
 
 mod args;
-mod diff;
 mod edit;
+mod incidents;
 mod show;
 mod tick;
 
@@ -16,7 +16,7 @@ use pmt_config::ProfileScope;
 use pmt_core::error::Error;
 use pmt_store::Store;
 
-pub use self::args::{CronCommand, JobFlags};
+pub use self::args::{CronCommand, IncidentAction, JobFlags, NotepadAction, main_model};
 
 use crate::context::Context;
 use crate::cron_host::HostRunner;
@@ -47,7 +47,20 @@ pub fn run(command: &CronCommand, ctx: &Context<'_>) -> Result<u8, Error> {
     let now = Timestamp::now();
     match command {
         CronCommand::List { all } => show::list(&env, *all, now),
-        CronCommand::Add { schedule, flags } => edit::add(&env, schedule.as_deref(), flags, now),
+        CronCommand::Add {
+            schedule,
+            prompt_text,
+            flags,
+            paused,
+            paused_reason,
+        } => {
+            let paused = paused.then(|| paused_reason.clone().unwrap_or_default());
+            let mut flags = flags.clone();
+            if prompt_text.is_some() {
+                flags.prompt.clone_from(prompt_text);
+            }
+            edit::add(&env, schedule.as_deref(), &flags, paused, now)
+        }
         CronCommand::Edit {
             job,
             schedule,
@@ -62,6 +75,11 @@ pub fn run(command: &CronCommand, ctx: &Context<'_>) -> Result<u8, Error> {
         }
         CronCommand::ShowRun { run } => show::show_run(&env, run),
         CronCommand::Replay { run, live, deliver } => tick::replay(&env, run, *live, *deliver),
+        CronCommand::Incidents { action, state, job } => match action {
+            Some(IncidentAction::Ack { id }) => incidents::ack(&env, id, now),
+            None => incidents::list(&env, state.as_deref(), job.as_deref()),
+        },
+        CronCommand::Notepad { job, action } => incidents::notepad(&env, job, action.as_ref()),
         CronCommand::Status => show::status(&env, now),
         CronCommand::Doctor => show::doctor(&env, now),
         CronCommand::Tick => tick::tick(&env),

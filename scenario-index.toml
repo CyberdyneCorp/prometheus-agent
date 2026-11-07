@@ -2833,3 +2833,66 @@ capabilities = [
 
 [scheduled-jobs."Cron doctor"]
 "Healthy profile" = ["crates/prometheus/tests/cron_cli.rs::the_doctor_exits_0_on_a_healthy_profile"]
+
+# --- 42 (M2 scheduled job upgrades) ---
+
+[scheduled-jobs."Per-job working directory"]
+"Project job loads its context files" = ["crates/prometheus/tests/cron_upgrades.rs::a_project_job_loads_its_context_files_and_works_there"]
+"Relative workdir refused" = ["crates/prometheus/tests/cron_upgrades.rs::a_relative_workdir_is_refused"]
+
+[scheduled-jobs."Model pinning and cron fleet default"]
+"Unpinned jobs follow the cron default" = ["crates/prometheus/tests/cron_upgrades.rs::unpinned_jobs_follow_the_cron_default_and_pins_freeze"]
+"Pin freezes the current main model" = ["crates/prometheus/tests/cron_upgrades.rs::unpinned_jobs_follow_the_cron_default_and_pins_freeze"]
+"Agent cannot choose a model" = ["crates/pmt-tools/src/agent_level_cron.rs::a_model_argument_fails_schema_validation"]
+
+[scheduled-jobs."Create paused with an auditable reason"]
+"Canary job never fires before review" = ["crates/prometheus/tests/cron_upgrades.rs::a_job_added_paused_waits_for_review", "crates/pmt-cron/tests/gates.rs::a_job_created_paused_never_fires"]
+
+[scheduled-jobs."Failure streak and review nudge"]
+"Third consecutive failure nudges" = ["crates/pmt-cron/tests/failures.rs::the_third_consecutive_failure_nudges"]
+
+[scheduled-jobs."Automatic re-runs when the model was unreachable"]
+"Laptop wakes before Wi-Fi" = ["crates/pmt-cron/tests/failures.rs::an_unreachable_model_is_re_run_without_a_failure_notice", "crates/prometheus/src/cron_host/agent.rs::failures_before_the_model_are_classified"]
+
+[scheduled-jobs."Hold through a closed provider usage window"]
+"Sub-hourly job does not alert every tick" = { tests = ["crates/pmt-cron/tests/failures.rs::a_closed_usage_window_holds_the_job_with_one_notice", "crates/prometheus/src/cron_host/agent.rs::failures_before_the_model_are_classified"], note = "the hold is driven by a provider error `... usage window closed until <RFC 3339>`; subscription providers raise it (model-providers, group 45)" }
+
+[scheduled-jobs."Failure incidents with alert-once and acknowledge"]
+"Same error alerts once" = ["crates/pmt-cron/tests/failures.rs::the_same_error_alerts_once"]
+"Acknowledged signature stays silent after success" = ["crates/pmt-cron/tests/failures.rs::an_acknowledged_signature_stays_silent_after_success", "crates/prometheus/tests/cron_upgrades.rs::incidents_are_listed_and_acknowledged"]
+
+[scheduled-jobs."Failure notice routing"]
+"Failures go to an ops channel" = ["crates/pmt-cron/tests/failures.rs::failures_go_to_the_failure_targets"]
+
+[scheduled-jobs."Bot Chat delivery target"]
+"Unknown profile rejected at create" = ["crates/pmt-cron/src/validate.rs::an_unknown_bot_chat_profile_is_refused"]
+
+[scheduled-jobs."Push notification flag, cron threads and delivery confirmation"]
+"Adapter ack without message id" = ["crates/pmt-cron/tests/gates.rs::an_acknowledgement_without_a_message_id_is_unverified"]
+
+[scheduled-jobs."Agent-declared run failure"]
+"Agent reports a failed subtask" = ["crates/pmt-cron/tests/failures.rs::an_agent_declared_failure_fails_the_run", "crates/pmt-cron/src/failure.rs::the_marker_counts_only_alone_on_the_first_line"]
+
+[scheduled-jobs."Script wake gate and script credentials"]
+"Unchanged poll skips the model" = ["crates/pmt-cron/tests/gates.rs::a_sleeping_wake_gate_skips_the_model"]
+"Provider key cannot reach a script" = ["crates/pmt-cron/src/validate.rs::a_provider_key_cannot_reach_a_script"]
+
+[scheduled-jobs."Monitor mode"]
+"Unchanged page is free" = ["crates/pmt-cron/tests/gates.rs::an_unchanged_monitored_page_skips_the_model"]
+
+[scheduled-jobs."Job chaining and continuity"]
+"Pipeline stage receives upstream output" = ["crates/pmt-cron/tests/gates.rs::a_pipeline_stage_receives_upstream_output"]
+"Continuity skips quiet ticks" = ["crates/pmt-cron/tests/gates.rs::continuity_carries_the_last_report_over_quiet_ticks"]
+
+[scheduled-jobs."Per-job notepad"]
+"Cursor carried across runs" = ["crates/prometheus/tests/cron_upgrades.rs::a_notepad_value_reaches_the_next_run", "crates/pmt-cron/tests/gates.rs::the_notepad_rides_the_next_prompt"]
+
+[scheduled-jobs."Asynchronous tool-initiated runs with per-run context"]
+"Agent keeps working while the job runs" = ["crates/prometheus/tests/cron_upgrades.rs::a_tool_run_starts_in_the_background_and_reports_back"]
+"Per-run context is not persisted" = ["crates/prometheus/tests/cron_upgrades.rs::a_tool_run_starts_in_the_background_and_reports_back", "crates/pmt-cron/tests/gates.rs::run_context_rides_one_run_only"]
+
+[scheduled-jobs."Complete cronjob tool field set"]
+"Timezone pin through the tool" = ["crates/prometheus/tests/cron_upgrades.rs::the_tool_pins_a_timezone"]
+
+[scheduled-jobs."/cron slash command"]
+"Add from a Discord thread" = { tests = ["crates/prometheus/tests/cron_daemon.rs::a_job_added_with_slash_cron_in_a_thread_delivers_there"], note = "proven on the debug-build file adapter's platform (`test`), the gateway slash path every adapter shares" }

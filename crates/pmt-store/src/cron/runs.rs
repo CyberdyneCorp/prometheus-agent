@@ -65,12 +65,21 @@ pub struct RunRow {
     pub owner: Option<Holder>,
     /// Row creation.
     pub created_at: i64,
+    /// The run a `retry` run re-runs.
+    pub retry_of: Option<String>,
+    /// Transient context appended to this run's prompt only (`## Run
+    /// Context`: a tool `run` prompt, a webhook event).
+    pub run_context: Option<String>,
+    /// The Bot Chat receipt of its delivery.
+    pub receipt: Option<String>,
+    /// A delivery target that acknowledged without a message id.
+    pub unverified: Option<String>,
 }
 
 const COLUMNS: &str = "id, job_id, job_name, scheduled_at, trigger, lateness, collapsed, \
      skipped, status, reason, error, started_at, ended_at, session_id, output, output_blob, \
      inputs, delivered, input_tokens, output_tokens, cost_usd, pid, process_start, host_id, \
-     created_at";
+     created_at, retry_of, run_context, receipt, unverified";
 
 fn run_from_row(row: &Row<'_>) -> rusqlite::Result<RunRow> {
     let pid: Option<u32> = row.get(21)?;
@@ -108,6 +117,10 @@ fn run_from_row(row: &Row<'_>) -> rusqlite::Result<RunRow> {
         cost_usd: row.get(20)?,
         owner,
         created_at: row.get(24)?,
+        retry_of: row.get(25)?,
+        run_context: row.get(26)?,
+        receipt: row.get(27)?,
+        unverified: row.get(28)?,
     })
 }
 
@@ -123,7 +136,7 @@ fn insert_run(conn: &Connection, run: &RunRow) -> Result<bool, Error> {
             &format!(
                 "INSERT OR IGNORE INTO cron_runs ({COLUMNS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, \
                  ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, \
-                 ?23, ?24, ?25)"
+                 ?23, ?24, ?25, ?26, ?27, ?28, ?29)"
             ),
             params![
                 run.id,
@@ -150,7 +163,11 @@ fn insert_run(conn: &Connection, run: &RunRow) -> Result<bool, Error> {
                 owner.map(|h| h.pid),
                 owner.map(|h| signed(h.process_start)),
                 owner.map(|h| h.host_id.clone()),
-                run.created_at
+                run.created_at,
+                run.retry_of,
+                run.run_context,
+                run.receipt,
+                run.unverified
             ],
         )
         .map_err(sql)?;
@@ -218,6 +235,32 @@ impl Store {
                 return Ok(Claim::Lost);
             }
             advance(&mut job)?;
+            job.updated_at = now_ms();
+            save_job(tx, &job)?;
+            Ok(Claim::Claimed(Box::new(job)))
+        })
+    }
+
+    /// Inserts `run` (unique per job and instant) and lets `change` update
+    /// its job in one transaction, when `allowed` accepts the job as it is
+    /// now; otherwise writes nothing and answers [`Claim::Lost`] (re-runs,
+    /// webhook and tool runs).
+    ///
+    /// # Errors
+    ///
+    /// `cron.job_not_found`, the error of `change`, `store.sqlite`.
+    pub fn cron_claim_run(
+        &self,
+        run: &RunRow,
+        allowed: impl Fn(&JobRow) -> bool,
+        mut change: impl FnMut(&mut JobRow) -> Result<(), Error>,
+    ) -> Result<Claim, Error> {
+        self.write(|tx| {
+            let mut job = load_job(tx, &run.job_id)?.ok_or_else(|| job_not_found(&run.job_id))?;
+            if !allowed(&job) || !insert_run(tx, run)? {
+                return Ok(Claim::Lost);
+            }
+            change(&mut job)?;
             job.updated_at = now_ms();
             save_job(tx, &job)?;
             Ok(Claim::Claimed(Box::new(job)))

@@ -191,12 +191,98 @@ token after you agreed. A job created from a messaging chat remembers it,
 so `deliver = origin` posts back to that chat and thread. Scheduled runs,
 one-shot runs and the API do not get the tool.
 
+Its fields are those of `cron add` except the model: the agent may only
+set `pinned` (freeze or release the current main model, when you ask).
+`run` starts the job in the background and answers `{status: "started",
+run_id}`; the outcome (status, targets, next run, an excerpt) arrives
+later as a `[cron run finished]` message. Its optional `prompt` is added
+to that run only, under `## Run Context`.
+
+## /cron in a chat
+
+`/cron list|add|edit|pause|resume|run|remove|runs|incidents ...` takes the
+arguments of `prometheus cron` on every chat surface. A job added from a
+chat records it as its origin, so `deliver = origin` posts back to that
+chat and thread. Saving shows the echo and needs `--yes`
+(`/cron add "every day at 18:00" "summarize today's commits" --yes`);
+`/cron run` posts the outcome in the chat when the run ends.
+
+## Where and with which model a run works
+
+- `--workdir /abs/dir` (an existing absolute directory, else exit 2): the
+  run's terminal, file and code tools work there, the sandbox may write
+  there, and its `AGENTS.md` / `CLAUDE.md` / `.cursorrules` are loaded.
+  Without it a run is detached and loads no project context.
+  `cron doctor` reports a workdir that disappeared.
+- The model is the job's pin (`--model m [--provider p]`, or `--pin` to
+  freeze the profile's current main model; `--unpin` releases it), else
+  `cron.model` / `cron.model_provider`, else the main model at fire time.
+  `--reasoning-effort` pins a reasoning level. `cron list` shows pins.
+- `--paused [--paused-reason TEXT]` creates the job disabled with nothing
+  armed (default reason `Created paused; awaiting operator approval.`);
+  `cron resume` arms it.
+
+## Failures
+
+- Failure notices go to `--failure-deliver` targets, else to `deliver`
+  (`local` records them only). A final answer whose first line is exactly
+  `[CRON_FAILURE]` fails the run with the rest as its error.
+- Each failure is an incident keyed by the job and a normalized error
+  (lower case, numbers with duration units dropped). Only the first
+  failure of an incident is announced, plus one reminder after
+  `cron.failure_repeat_alert_secs` (6 h; 0 alerts every time). A success
+  resolves the job's incidents. `cron incidents [--state S] [--job J]`
+  lists them; `cron incidents ack <id>` silences that error for good.
+- After `cron.failure_nudge_threshold` (3) failures in a row a recurring
+  job's notice adds `This job has failed <n> runs in a row ...`;
+  `cron list` shows `failing <n> runs in a row`.
+- A run that never reached the model because of a network or DNS error is
+  re-run after 5, 15 and 30 minutes (`cron.retry_unreachable`), without a
+  notice, as long as the re-run comes before the next occurrence.
+- A provider reporting its subscription usage window closed until `t`
+  holds the job: one notice, nothing fires before `t`, then the next
+  occurrence after it (a cron-kind job whose window reopens at least half
+  a period early re-runs once at `t`).
+
+## Gates, monitors, chains and the notepad
+
+- A script whose last stdout line is `{"wakeAgent": false}` skips the
+  agent (`silent`, reason `wake_agent_false`); `{"wakeAgent": true,
+  "context": {...}}` adds the context as a JSON block. Scripts run with
+  only the secrets named by `--script-secret` (never provider or gateway
+  credentials); `.sh` files run with bash, `.py` files with the managed
+  Python or `--interpreter`.
+- `--monitor-script` or `--monitor-url` (30 s, 1 MiB) runs first each
+  tick: unchanged output skips the model (`silent`, reason `no_change`), a
+  change adds a `MONITOR CHANGE DETECTED` diff to the prompt.
+- `--context-from JOB` prepends the latest output of another job;
+  `--continuity` prepends the job's own previous report (quiet runs are
+  skipped over).
+- `prometheus cron notepad <job> set <key> <value>` keeps notes a run sees
+  at the top of its prompt (`## Job notepad`); a run can call it from its
+  terminal. Limits: keys 128 characters, values 16 KiB, 64 KiB per job
+  (exit 65 `notepad limit exceeded`).
+
+## Delivery details
+
+- `cron.delivery.notify` (default true) sends output and notices as
+  notifying messages, never muted as warnings.
+  `cron.delivery.threads.<platform> = "<thread>"` sends home-chat
+  deliveries to that thread or topic.
+- A delivery is verified when the platform returns a message id; otherwise
+  `cron list` shows `delivery UNVERIFIED: <target>` and `cron doctor`
+  lists it until a verified delivery. An empty answer is never sent
+  (`delivery_failed`, `empty payload`).
+
 ## Not in this build yet
 
 - `cron replay <run>` without `--live` (replaying recorded model responses)
   needs the model-call cache and exits 69.
 - Natural-language schedules (`--nl`, `schedule_text`) are refused.
-- `bot_chat` deliveries fail with `bot_chat delivery is not available in
-  this build`.
-- `cron incidents`, `cron notepad` and `cron suggestions` arrive with the
-  job upgrades.
+- `bot_chat[:<profile>]` is validated (an unknown profile is refused) and
+  queued with a receipt, but the delivery fails: Bot Chat turns are not
+  available in this build.
+- Continuable deliveries (`attach_to_session`, `cron.continuable`) are
+  stored but not yet linked to a conversation.
+- `cron suggestions`, `/suggestions`, `/blueprint` and webhook-triggered
+  job runs are not available yet.

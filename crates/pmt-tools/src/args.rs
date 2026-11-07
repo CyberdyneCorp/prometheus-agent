@@ -182,7 +182,7 @@ fn check_object(schema: &Value, map: &Map<String, Value>, pointer: &str, out: &m
             None => match additional {
                 Some(Value::Bool(false)) => out.push(Violation {
                     pointer: child_pointer,
-                    message: "unknown property".into(),
+                    message: format!("unknown field '{key}'"),
                 }),
                 Some(extra @ Value::Object(_)) => check(extra, child, &child_pointer, out),
                 _ => {}
@@ -316,7 +316,7 @@ mod tests {
             found,
             [
                 "/path: required property is missing",
-                "/extra: unknown property",
+                "/extra: unknown field 'extra'",
                 "/lines: expected integer or null",
                 "/mode: expected one of \"replace\", \"append\"",
                 "/offset: value must be at least 1",

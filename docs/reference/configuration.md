@@ -137,11 +137,20 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `cron.allow_agent_scheduling` | boolean | `false` | any | `live` | Offer the `cronjob` tool inside scheduled runs. |
 | `cron.catch_up_missed` | boolean | `true` | any | `live` | Collapse missed occurrences of a job without an explicit `grace` into one catch-up run (otherwise they are recorded `skipped_late`). |
 | `cron.completed_retention_secs` | integer | `604800` | ≥ 0 | `live` | Seconds completed jobs are kept before deletion (`0` = never deleted). |
+| `cron.continuable` | boolean | `false` | any | `live` | Deliveries of jobs that do not set `attach_to_session` open a conversation a reply continues. |
+| `cron.continuable_surface` | table | `{}` | any | `live` | Per platform: `thread` (a new thread per continuable delivery) or `in_channel` (posted top-level, seeding the channel's session) on adapters that support it. |
 | `cron.default_toolsets` | array | unset | any | `live` | Toolsets of runs whose job names none; unset uses the cron surface's default (`toolsets.surfaces.cron`, else the enabled toolsets). |
+| `cron.delivery.notify` | boolean | `true` | any | `live` | Send scheduled output and failure notices as notifying messages, never muted as warnings. |
+| `cron.delivery.threads` | table | `{}` | any | `live` | Per platform: the thread or topic id home-chat deliveries go to (explicit `<adapter>:<chat>:<thread>` targets win). |
+| `cron.failure_nudge_threshold` | integer | `3` | ≥ 0 | `live` | Consecutive failures of a recurring job after which its failure notice suggests fixing, pausing or removing it (`0` = never). |
+| `cron.failure_repeat_alert_secs` | integer | `21600` | ≥ 0 | `live` | Seconds after which a failure incident still alerted sends one reminder (`0` = alert on every failing run). |
 | `cron.max_parallel_jobs` | integer | `4` | 1 to 64 | `live` | Runs executing at once per profile (1 = serial). |
 | `cron.max_run_secs` | integer | `3600` | ≥ 0 | `live` | Seconds a run may take in all (`0` = unlimited); a job's `timeout.wall` wins. |
+| `cron.model` | string | unset | any | `live` | The model of unpinned jobs (unset: the profile's main model at fire time). |
+| `cron.model_provider` | string | unset | any | `live` | The provider of `cron.model`. |
 | `cron.preflight` | boolean | `true` | any | `live` | Check a job's credential, skills and delivery adapters before each run; a failure is recorded `blocked_config` without a model call. |
 | `cron.provider` | one of "builtin", "managed" | `"builtin"` | `"builtin"`, `"managed"` | `live` | The trigger: `builtin` or `managed`. |
+| `cron.retry_unreachable` | boolean | `true` | any | `live` | Re-run a recurring job 5, 15 and 30 minutes after it failed to reach the model (network or DNS), without a failure notice. |
 | `cron.run_retention_secs` | integer | `7776000` | ≥ 0 | `live` | Seconds run records are kept (`0` = forever). |
 | `cron.script_timeout_secs` | integer | `120` | 1 to 86400 | `live` | Seconds a job script may run before it is killed. |
 | `cron.tick_interval_secs` | integer | `30` | 10 to 300 | `live` | Seconds between the built-in trigger's evaluations of due jobs (it also wakes at the earliest next run). |

@@ -25,7 +25,15 @@ pub trait Catalog {
     ///
     /// The unknown provider or model.
     fn check_model(&self, provider: Option<&str>, model: Option<&str>) -> Result<(), String>;
+    /// Whether profile `name` exists under the same Prometheus home.
+    fn profile_exists(&self, name: &str) -> bool;
+    /// Whether secret `name` is a provider credential or gateway-owned
+    /// (never passed to scripts).
+    fn secret_reserved(&self, name: &str) -> bool;
 }
+
+/// The reasoning levels a job may pin.
+pub const REASONING_LEVELS: &[&str] = &["none", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 fn invalid(message: impl Into<String>) -> Error {
     Error::new(&codes::CRON_INVALID_JOB, message)
@@ -93,15 +101,88 @@ pub fn validate(spec: &JobSpec, scripts_dir: &Path, catalog: &dyn Catalog) -> Re
     {
         return Err(invalid(format!("unknown toolset '{toolset}'")));
     }
-    for target in &spec.deliver {
-        Target::parse(target)?;
+    for target in spec.deliver.iter().chain(&spec.failure_deliver) {
+        if let Target::BotChat(Some(profile)) = Target::parse(target)?
+            && !catalog.profile_exists(&profile)
+        {
+            return Err(invalid(format!("unknown profile '{profile}'")));
+        }
     }
+    check_workdir(spec)?;
+    check_script_fields(spec, scripts_dir, catalog)?;
     if spec.model.is_some() || spec.provider.is_some() {
         catalog
             .check_model(spec.provider.as_deref(), spec.model.as_deref())
             .map_err(invalid)?;
     }
     check_limits(spec)
+}
+
+/// `workdir` is an absolute path to an existing directory.
+///
+/// # Errors
+///
+/// `cron.invalid_workdir` (exit 2) naming the path.
+pub fn check_workdir(spec: &JobSpec) -> Result<(), Error> {
+    match spec.workdir.as_deref() {
+        Some(dir) if !(Path::new(dir).is_absolute() && Path::new(dir).is_dir()) => Err(Error::new(
+            &codes::CRON_INVALID_WORKDIR,
+            format!("workdir must be an existing absolute directory: {dir}"),
+        )),
+        _ => Ok(()),
+    }
+}
+
+fn check_script_fields(
+    spec: &JobSpec,
+    scripts_dir: &Path,
+    catalog: &dyn Catalog,
+) -> Result<(), Error> {
+    if let Some(name) = spec
+        .script_secrets
+        .iter()
+        .find(|s| catalog.secret_reserved(s))
+    {
+        return Err(invalid(format!(
+            "secret '{name}' cannot be passed to cron scripts"
+        )));
+    }
+    if spec
+        .interpreter
+        .as_deref()
+        .is_some_and(|i| !Path::new(i).is_absolute())
+    {
+        return Err(invalid("interpreter must be an absolute path"));
+    }
+    if spec.monitor_script.is_some() && spec.monitor_url.is_some() {
+        return Err(invalid("set monitor_script or monitor_url, not both"));
+    }
+    if spec.no_agent && (spec.monitor_script.is_some() || spec.monitor_url.is_some()) {
+        return Err(invalid(
+            "monitor mode needs the agent: it cannot be no_agent",
+        ));
+    }
+    if let Some(script) = &spec.monitor_script {
+        script_path(scripts_dir, script)?;
+    }
+    if let Some(url) = &spec.monitor_url
+        && !(url.starts_with("http://") || url.starts_with("https://"))
+    {
+        return Err(invalid(format!(
+            "monitor_url must be an http or https URL: {url}"
+        )));
+    }
+    if spec
+        .reasoning_effort
+        .as_deref()
+        .is_some_and(|r| !REASONING_LEVELS.contains(&r))
+    {
+        return Err(invalid(format!(
+            "unknown reasoning effort (expected {})",
+            REASONING_LEVELS.join(", ")
+        )));
+    }
+    Ok(())
 }
 
 fn check_limits(spec: &JobSpec) -> Result<(), Error> {
@@ -139,6 +220,12 @@ mod tests {
                 Some("nope") => Err("unknown model 'nope'".into()),
                 _ => Ok(()),
             }
+        }
+        fn profile_exists(&self, name: &str) -> bool {
+            name == "assistant"
+        }
+        fn secret_reserved(&self, name: &str) -> bool {
+            name == "OPENAI_API_KEY"
         }
     }
 
@@ -204,5 +291,44 @@ mod tests {
         assert!(check(&job).is_err());
         job.grace_secs = Some(0);
         assert!(check(&job).is_ok());
+    }
+
+    /// Scenario: Unknown profile rejected at create.
+    #[test]
+    fn an_unknown_bot_chat_profile_is_refused() {
+        let mut job = spec();
+        job.deliver = vec!["bot_chat:nobody".into()];
+        assert_eq!(check(&job).unwrap_err(), "unknown profile 'nobody'");
+        job.deliver = vec!["bot_chat:assistant".into(), "bot_chat".into()];
+        assert!(check(&job).is_ok());
+    }
+
+    /// Scenario: Provider key cannot reach a script.
+    #[test]
+    fn a_provider_key_cannot_reach_a_script() {
+        let mut job = spec();
+        job.script_secrets = vec!["OPENAI_API_KEY".into()];
+        assert_eq!(
+            check(&job).unwrap_err(),
+            "secret 'OPENAI_API_KEY' cannot be passed to cron scripts"
+        );
+    }
+
+    #[test]
+    fn workdir_and_monitor_rules() {
+        let mut job = spec();
+        job.workdir = Some("../acme".into());
+        assert_eq!(
+            check(&job).unwrap_err(),
+            "workdir must be an existing absolute directory: ../acme"
+        );
+        job.workdir = Some(std::env::temp_dir().display().to_string());
+        assert!(check(&job).is_ok());
+        let mut job = spec();
+        job.monitor_url = Some("ftp://x".into());
+        assert!(check(&job).unwrap_err().starts_with("monitor_url must be"));
+        job.monitor_url = Some("https://example.com".into());
+        job.monitor_script = Some("ok.sh".into());
+        assert!(check(&job).unwrap_err().contains("not both"));
     }
 }

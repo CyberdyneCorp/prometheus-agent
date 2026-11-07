@@ -5,6 +5,7 @@
 //! `prometheus cron tick`), and the `cronjob` model tool ([`tool`]).
 
 mod agent;
+mod fetch;
 mod script;
 pub mod tool;
 
@@ -108,6 +109,52 @@ impl Catalog for HostCatalog {
             _ => Ok(()),
         }
     }
+
+    fn profile_exists(&self, name: &str) -> bool {
+        pmt_config::ProfileName::parse(name).is_ok_and(|name| {
+            pmt_config::Home::open(self.scope.home())
+                .ok()
+                .and_then(|home| home.existing_profile(&name).ok())
+                .is_some()
+        })
+    }
+
+    fn secret_reserved(&self, name: &str) -> bool {
+        reserved_secret(&self.scope, name)
+    }
+}
+
+/// Whether secret `name` is a provider credential (an API key of a
+/// registered provider, any label, or a subscription token) or owned by
+/// the messaging gateway (a platform token or proxy URL).
+fn reserved_secret(scope: &ProfileScope, name: &str) -> bool {
+    if name.starts_with("OAUTH_") {
+        return true;
+    }
+    let config = scope.config();
+    if let Ok(registry) = pmt_providers::registry::ProviderRegistry::for_profile(config, Vec::new())
+    {
+        let provider_key = registry
+            .iter()
+            .flat_map(pmt_providers::Provider::secret_names)
+            .any(|key| {
+                name == key
+                    || name
+                        .strip_prefix(key.as_str())
+                        .is_some_and(|r| r.starts_with('_'))
+            });
+        if provider_key {
+            return true;
+        }
+    }
+    let gateway = &config.gateway;
+    let named =
+        |secret: Option<&pmt_config::schema::SecretName>| secret.is_some_and(|s| s.0 == name);
+    named(gateway.proxy_url_secret.as_ref())
+        || gateway
+            .platforms
+            .values()
+            .any(|p| named(p.token_secret.as_ref()) || named(p.proxy_url_secret.as_ref()))
 }
 
 /// Runs jobs of one profile: agent sessions through the session factory,
@@ -170,8 +217,11 @@ impl HostRunner {
     pub async fn execute(&self, job: &Job, run: &RunRow) -> Result<RunRow, Error> {
         let scripts = scripts_dir(&self.scope);
         let config = self.scope.config().cron.clone();
+        let zone = profile_zone(&self.scope).unwrap_or(TimeZone::UTC);
         let ctx = Exec {
             store: &self.store,
+            profile: self.scope.name().as_str(),
+            zone: &zone,
             scripts_dir: &scripts,
             config: &config,
             runner: self,
@@ -208,11 +258,15 @@ impl Runner for HostRunner {
 
     fn run_script<'a>(
         &'a self,
-        _job: &'a Job,
+        job: &'a Job,
         script: &'a Path,
         timeout: std::time::Duration,
     ) -> BoxFuture<'a, ScriptOutcome> {
-        Box::pin(script::run(&self.scope, script, timeout))
+        Box::pin(script::run(&self.scope, job, script, timeout))
+    }
+
+    fn fetch<'a>(&'a self, url: &'a str) -> BoxFuture<'a, Result<String, String>> {
+        Box::pin(fetch::get(&self.scope, url))
     }
 
     fn run_agent(&self, request: AgentRequest) -> BoxFuture<'_, AgentOutcome> {

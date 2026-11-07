@@ -37,10 +37,15 @@ pub struct DeliveryRow {
     pub created_at: i64,
     /// Last change.
     pub updated_at: i64,
+    /// The platform's id of the sent message (a `sent` row without one is
+    /// unverified).
+    pub message_id: Option<String>,
+    /// The delivery opens a conversation a reply continues.
+    pub continuable: bool,
 }
 
 const COLUMNS: &str = "id, run_id, job_id, target, body, warning, state, attempts, \
-     next_attempt_at, error, created_at, updated_at";
+     next_attempt_at, error, created_at, updated_at, message_id, continuable";
 
 fn from_row(row: &Row<'_>) -> rusqlite::Result<DeliveryRow> {
     Ok(DeliveryRow {
@@ -56,6 +61,8 @@ fn from_row(row: &Row<'_>) -> rusqlite::Result<DeliveryRow> {
         error: row.get(9)?,
         created_at: row.get(10)?,
         updated_at: row.get(11)?,
+        message_id: row.get(12)?,
+        continuable: row.get(13)?,
     })
 }
 
@@ -83,7 +90,7 @@ impl Store {
                 tx.execute(
                     &format!(
                         "INSERT OR IGNORE INTO cron_deliveries ({COLUMNS}) VALUES \
-                         (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)"
+                         (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)"
                     ),
                     params![
                         row.id,
@@ -97,7 +104,9 @@ impl Store {
                         row.next_attempt_at,
                         row.error,
                         row.created_at,
-                        row.updated_at
+                        row.updated_at,
+                        row.message_id,
+                        row.continuable
                     ],
                 )
                 .map_err(sql)?;
@@ -159,6 +168,24 @@ impl Store {
                 "UPDATE cron_deliveries SET state = ?2, error = ?3, next_attempt_at = ?4, \
                  updated_at = ?5 WHERE id = ?1",
                 params![id, state, error, next_attempt_at, now_ms()],
+            )
+            .map_err(sql)?;
+            Ok(())
+        })
+    }
+
+    /// Settles row `id` as `sent`, recording the platform's message id
+    /// when the adapter returned one.
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`.
+    pub fn cron_settle_sent(&self, id: &str, message_id: Option<&str>) -> Result<(), Error> {
+        self.write(|tx| {
+            tx.execute(
+                "UPDATE cron_deliveries SET state = 'sent', error = NULL, message_id = ?2, \
+                 updated_at = ?3 WHERE id = ?1",
+                params![id, message_id, now_ms()],
             )
             .map_err(sql)?;
             Ok(())

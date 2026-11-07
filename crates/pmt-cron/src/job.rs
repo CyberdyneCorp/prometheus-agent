@@ -108,6 +108,36 @@ pub struct JobSpec {
     /// A pinned provider.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,
+    /// A pinned reasoning level (`none` to `max`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
+    /// The absolute working directory of the run (unset: detached, no
+    /// project context files).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workdir: Option<String>,
+    /// Where failure and interruption notices go instead of `deliver`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub failure_deliver: Vec<String>,
+    /// Link deliveries to a conversation a reply continues (`None`:
+    /// `cron.continuable`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attach_to_session: Option<bool>,
+    /// Secrets of the profile passed to the script's environment.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub script_secrets: Vec<String>,
+    /// The absolute interpreter of a `.py` script.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interpreter: Option<String>,
+    /// A monitor script under `<profile>/scripts/`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub monitor_script: Option<String>,
+    /// A monitored `http`/`https` URL.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub monitor_url: Option<String>,
+    /// Jobs whose latest output is prepended to the prompt (`self` for
+    /// continuity).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub context_from: Vec<String>,
 }
 
 impl JobSpec {
@@ -129,7 +159,29 @@ impl JobSpec {
             repeat_times: None,
             model: None,
             provider: None,
+            reasoning_effort: None,
+            workdir: None,
+            failure_deliver: Vec::new(),
+            attach_to_session: None,
+            script_secrets: Vec::new(),
+            interpreter: None,
+            monitor_script: None,
+            monitor_url: None,
+            context_from: Vec::new(),
         }
+    }
+
+    /// Whether a model is pinned (`pinned` in listings).
+    #[must_use]
+    pub fn pinned(&self) -> bool {
+        self.model.is_some() || self.provider.is_some()
+    }
+
+    /// Whether the job carries its own previous output (`self` in
+    /// `context_from`).
+    #[must_use]
+    pub fn continuity(&self) -> bool {
+        self.context_from.iter().any(|c| c == SELF)
     }
 
     /// The executions limit: the spec's, else 1 for a one-shot.
@@ -169,6 +221,9 @@ impl JobSpec {
         }
     }
 }
+
+/// The `context_from` entry of the job itself.
+pub const SELF: &str = "self";
 
 macro_rules! literals {
     ($(#[$doc:meta])* $name:ident { $($(#[$vdoc:meta])* $variant:ident = $text:literal),+ $(,)? }) => {

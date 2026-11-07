@@ -1325,6 +1325,21 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "ContinuableSurface": {
+      "description": "How a continuable delivery opens its conversation.",
+      "oneOf": [
+        {
+          "const": "thread",
+          "description": "A new thread (or topic) per delivery.",
+          "type": "string"
+        },
+        {
+          "const": "in_channel",
+          "description": "Top-level in the channel, seeding the channel's session.",
+          "type": "string"
+        }
+      ]
+    },
     "ContinuationMode": {
       "description": "The named intent-continuation mode.",
       "oneOf": [
@@ -1363,6 +1378,19 @@
           "minimum": 0,
           "type": "integer"
         },
+        "continuable": {
+          "default": false,
+          "description": "Deliveries of jobs that do not set `attach_to_session` open a\nconversation a reply continues.",
+          "type": "boolean"
+        },
+        "continuable_surface": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ContinuableSurface"
+          },
+          "default": {},
+          "description": "Per platform: `thread` (a new thread per continuable delivery) or\n`in_channel` (posted top-level, seeding the channel's session) on\nadapters that support it.",
+          "type": "object"
+        },
         "default_toolsets": {
           "description": "Toolsets of runs whose job names none; unset uses the cron\nsurface's default (`toolsets.surfaces.cron`, else the enabled\ntoolsets).",
           "items": {
@@ -1372,6 +1400,28 @@
             "array",
             "null"
           ]
+        },
+        "delivery": {
+          "$ref": "#/$defs/CronDeliveryConfig",
+          "default": {
+            "notify": true,
+            "threads": {}
+          },
+          "description": "How scheduled deliveries are sent."
+        },
+        "failure_nudge_threshold": {
+          "default": 3,
+          "description": "Consecutive failures of a recurring job after which its failure\nnotice suggests fixing, pausing or removing it (`0` = never).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failure_repeat_alert_secs": {
+          "default": 21600,
+          "description": "Seconds after which a failure incident still alerted sends one\nreminder (`0` = alert on every failing run).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
         },
         "max_parallel_jobs": {
           "default": 4,
@@ -1388,6 +1438,20 @@
           "minimum": 0,
           "type": "integer"
         },
+        "model": {
+          "description": "The model of unpinned jobs (unset: the profile's main model at fire\ntime).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model_provider": {
+          "description": "The provider of `cron.model`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "preflight": {
           "default": true,
           "description": "Check a job's credential, skills and delivery adapters before each\nrun; a failure is recorded `blocked_config` without a model call.",
@@ -1397,6 +1461,11 @@
           "$ref": "#/$defs/CronProvider",
           "default": "builtin",
           "description": "The trigger: `builtin` or `managed`."
+        },
+        "retry_unreachable": {
+          "default": true,
+          "description": "Re-run a recurring job 5, 15 and 30 minutes after it failed to\nreach the model (network or DNS), without a failure notice.",
+          "type": "boolean"
         },
         "run_retention_secs": {
           "default": 7776000,
@@ -1436,6 +1505,26 @@
       },
       "type": "object",
       "x-apply": "live"
+    },
+    "CronDeliveryConfig": {
+      "additionalProperties": false,
+      "description": "The `[cron.delivery]` table.",
+      "properties": {
+        "notify": {
+          "default": true,
+          "description": "Send scheduled output and failure notices as notifying messages,\nnever muted as warnings.",
+          "type": "boolean"
+        },
+        "threads": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Per platform: the thread or topic id home-chat deliveries go to\n(explicit `<adapter>:<chat>:<thread>` targets win).",
+          "type": "object"
+        }
+      },
+      "type": "object"
     },
     "CronProvider": {
       "description": "Which trigger signals due occurrences (spec: scheduled-jobs, Pluggable\ntrigger provider).",
@@ -8356,10 +8445,19 @@
         "allow_agent_scheduling": false,
         "catch_up_missed": true,
         "completed_retention_secs": 604800,
+        "continuable": false,
+        "continuable_surface": {},
+        "delivery": {
+          "notify": true,
+          "threads": {}
+        },
+        "failure_nudge_threshold": 3,
+        "failure_repeat_alert_secs": 21600,
         "max_parallel_jobs": 4,
         "max_run_secs": 3600,
         "preflight": true,
         "provider": "builtin",
+        "retry_unreachable": true,
         "run_retention_secs": 7776000,
         "script_timeout_secs": 120,
         "tick_interval_secs": 30,

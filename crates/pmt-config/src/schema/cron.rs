@@ -1,6 +1,8 @@
 //! The `[cron]` section (spec: scheduled-jobs). Every scheduler knob is a
 //! typed key here; none is read from the environment.
 
+use std::collections::BTreeMap;
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -77,6 +79,63 @@ pub struct CronConfig {
     /// Seconds completed jobs are kept before deletion (`0` = never
     /// deleted).
     pub completed_retention_secs: u64,
+    /// The model of unpinned jobs (unset: the profile's main model at fire
+    /// time).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// The provider of `cron.model`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_provider: Option<String>,
+    /// Consecutive failures of a recurring job after which its failure
+    /// notice suggests fixing, pausing or removing it (`0` = never).
+    pub failure_nudge_threshold: u32,
+    /// Re-run a recurring job 5, 15 and 30 minutes after it failed to
+    /// reach the model (network or DNS), without a failure notice.
+    pub retry_unreachable: bool,
+    /// Seconds after which a failure incident still alerted sends one
+    /// reminder (`0` = alert on every failing run).
+    pub failure_repeat_alert_secs: u64,
+    /// Deliveries of jobs that do not set `attach_to_session` open a
+    /// conversation a reply continues.
+    pub continuable: bool,
+    /// How scheduled deliveries are sent.
+    pub delivery: CronDeliveryConfig,
+    /// Per platform: `thread` (a new thread per continuable delivery) or
+    /// `in_channel` (posted top-level, seeding the channel's session) on
+    /// adapters that support it.
+    pub continuable_surface: BTreeMap<String, ContinuableSurface>,
+}
+
+/// How a continuable delivery opens its conversation.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ContinuableSurface {
+    /// A new thread (or topic) per delivery.
+    #[default]
+    Thread,
+    /// Top-level in the channel, seeding the channel's session.
+    InChannel,
+}
+
+/// The `[cron.delivery]` table.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct CronDeliveryConfig {
+    /// Send scheduled output and failure notices as notifying messages,
+    /// never muted as warnings.
+    pub notify: bool,
+    /// Per platform: the thread or topic id home-chat deliveries go to
+    /// (explicit `<adapter>:<chat>:<thread>` targets win).
+    pub threads: BTreeMap<String, String>,
+}
+
+impl Default for CronDeliveryConfig {
+    fn default() -> Self {
+        Self {
+            notify: true,
+            threads: BTreeMap::new(),
+        }
+    }
 }
 
 impl Default for CronConfig {
@@ -96,6 +155,14 @@ impl Default for CronConfig {
             wrap_response: true,
             run_retention_secs: 7_776_000,
             completed_retention_secs: 604_800,
+            model: None,
+            model_provider: None,
+            failure_nudge_threshold: 3,
+            retry_unreachable: true,
+            failure_repeat_alert_secs: 21_600,
+            continuable: false,
+            delivery: CronDeliveryConfig::default(),
+            continuable_surface: BTreeMap::new(),
         }
     }
 }

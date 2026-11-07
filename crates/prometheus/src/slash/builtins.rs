@@ -229,6 +229,16 @@ pub static BUILTINS: &[Command] = &[
         Effect::None,
     ),
     command(
+        "cron",
+        &[],
+        Tools,
+        "Scheduled jobs: list, add, edit, pause, resume, run, remove, runs, incidents (as `prometheus cron`)",
+        &[text("args")],
+        CHATS,
+        BusyPolicy::Reject,
+        Effect::None,
+    ),
+    command(
         "worktree",
         &[],
         Session,

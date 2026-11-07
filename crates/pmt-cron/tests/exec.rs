@@ -29,6 +29,8 @@ fn exec_ctx<'a>(
     let clock: &'static FakeClock = Box::leak(Box::new(FakeClock::new(at(now))));
     Exec {
         store,
+        profile: "default",
+        zone: Box::leak(Box::new(TimeZone::UTC)),
         scripts_dir: Box::leak(Box::new(profile.scripts())),
         config,
         runner,
@@ -251,7 +253,9 @@ fn a_failed_preflight_records_blocked_config_and_alerts_once() {
     let alerts = store.cron_deliveries_of(&first.id).unwrap().len()
         + store.cron_deliveries_of(&second.id).unwrap().len();
     assert_eq!(alerts, 1);
-    assert!(store.cron_deliveries_of(&first.id).unwrap()[0].warning);
+    // `cron.delivery.notify` (default) sends notices as notifying
+    // messages, never muted as warnings.
+    assert!(!store.cron_deliveries_of(&first.id).unwrap()[0].warning);
     // A passing preflight re-arms the alert.
     *runner.preflight.lock().unwrap() = None;
     fire(
