@@ -11,6 +11,7 @@
 //! - `requests`: approval and clarify prompts and their cards.
 
 mod admin;
+mod automated;
 mod branch;
 mod clarify;
 mod commands;
@@ -97,6 +98,11 @@ pub(crate) enum Msg {
         reference: String,
         routing: Box<Routing>,
     },
+    /// An automated turn (goal, loop, heartbeat) for the idle
+    /// conversation.
+    Automated(crate::messaging::automation::Automated),
+    /// A status line to say in the chat.
+    Say(String),
 }
 
 /// What a lane shows outside its task.
@@ -124,6 +130,11 @@ impl Handle {
     /// Whether the conversation runs a turn.
     pub(crate) fn running(&self) -> bool {
         self.status.running.load(Ordering::Acquire)
+    }
+
+    /// Whether a person's input waits for the running turn.
+    pub(crate) fn human_pending(&self) -> bool {
+        self.status.human_pending.load(Ordering::Acquire)
     }
 }
 
@@ -193,6 +204,7 @@ struct Pending {
 
 /// The turn the gateway started in the session.
 #[derive(Debug)]
+#[allow(clippy::struct_excessive_bools)] // independent facts of one running turn
 struct Running {
     turn_id: String,
     /// Who asked (may answer its approvals).
@@ -215,6 +227,9 @@ struct Running {
     addressed: bool,
     /// The platform's native stream of the answer, if one is used.
     stream: native::Stream,
+    /// A heartbeat turn: no typing indicator, tool progress or streamed
+    /// draft (approval prompts and failures still show).
+    quiet: bool,
 }
 
 /// A transition run once the stopped turn has ended.
@@ -270,6 +285,9 @@ struct Lane {
     observed_since_turn: bool,
     /// Model picker cards whose buttons still answer.
     pickers: Vec<models::Picker>,
+    /// The automation origin of the turn being started (`goal`, `loop`,
+    /// `heartbeat`).
+    automating: Option<String>,
 }
 
 /// Hands an authorized event to its conversation's lane, starting it.
@@ -280,7 +298,7 @@ pub(crate) fn input(
     inbound: Inbound,
     voice: bool,
 ) -> Admission {
-    let handle = lane(shared, key, &routing);
+    let handle = open(shared, key, &routing);
     let seq = handle.status.seq.fetch_add(1, Ordering::AcqRel) + 1;
     let queued = handle.status.running.load(Ordering::Acquire);
     handle.send(Msg::Input {
@@ -296,7 +314,8 @@ pub(crate) fn input(
     }
 }
 
-fn lane(shared: &Arc<Shared>, key: &SessionKey, routing: &Routing) -> Handle {
+/// The lane of `key`, started with `routing` when it has none.
+pub(crate) fn open(shared: &Arc<Shared>, key: &SessionKey, routing: &Routing) -> Handle {
     let mut lanes = shared.lanes.lock().expect("lanes poisoned");
     if let Some(handle) = lanes.get(key.as_str()) {
         return handle.clone();
@@ -333,6 +352,7 @@ fn lane(shared: &Arc<Shared>, key: &SessionKey, routing: &Routing) -> Handle {
         progress_mode: None,
         observed_since_turn: false,
         pickers: Vec::new(),
+        automating: None,
     };
     let span = tracing::info_span!(
         "conversation",
@@ -492,6 +512,8 @@ impl Lane {
             Msg::ModelPicked { reference, routing } => {
                 self.switch_model(&routing, &reference).await;
             }
+            Msg::Automated(automated) => self.automated(automated).await,
+            Msg::Say(text) => self.say(&text),
             Msg::Mirror(row) => {
                 self.mirrors.push(row);
                 if self.running.is_none() {

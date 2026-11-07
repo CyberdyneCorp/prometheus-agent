@@ -147,7 +147,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 |---|---|---|---|
 | `achievement.unlocked` | `pets` | 1.0 | not served yet |
 | `adapter.state` | `messaging-gateway` | 1.0 | [`AdapterStatePayload`](#adapterstatepayload) |
-| `automation.state` | `session-automation` | 1.0 | not served yet |
+| `automation.state` | `session-automation` | 1.0 | [`AutomationStatePayload`](#automationstatepayload) |
 | `health.changed` | `observability` | 1.0 | not served yet |
 | `local_model.context_grown` | `local-models` | 1.0 | not served yet |
 | `message.delivery` | `messaging-gateway` | 1.0 | not served yet |
@@ -271,6 +271,20 @@ What an attached connection may do in the session.
 | `open_requests` | array of [`OpenRequest`](#openrequest) | no | Requests of the session still waiting for an answer (re-sent to this connection when it is a capable driver). |
 | `session_id` | string | yes | The session. |
 | `truncated` | boolean | no | Events after the client's `last_seen_seq` were evicted, or the client's epoch is not this daemon's: reload the transcript (`session.transcript`) instead of applying the replayed events. |
+
+### `AutomationStatePayload`
+
+One kind of a session's automation.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `count` | integer | no | Turns (goal), wakeups (loop) or fires (heartbeat) so far. |
+| `kind` | string | yes | `goal`, `loop` or `heartbeat`. |
+| `limit` | integer or null | no | A goal's turn budget (`goals.max_turns`). |
+| `next_fire_at` | string or null | no | When it fires next (RFC 3339), for an active loop or heartbeat or a parked goal's deadline. |
+| `row` | string or null | no | The live row as the CLI shows it (absent once removed). |
+| `session_id` | string | yes | The session. |
+| `status` | string | yes | `active`, `paused`, `done`, `parked`, or `none` once removed. |
 
 ### `BannerInfo`
 

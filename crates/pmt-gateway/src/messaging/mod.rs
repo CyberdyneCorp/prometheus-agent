@@ -31,7 +31,7 @@ mod artifacts;
 pub mod attachments;
 mod attention;
 pub mod auth;
-mod automation;
+pub mod automation;
 mod cache;
 mod cards;
 pub mod conformance;

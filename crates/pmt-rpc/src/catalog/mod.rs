@@ -139,6 +139,7 @@ pub fn declare_builtin(d: &mut Declarations) {
         .server_request::<c::SecretAsk>()
         .server_request::<c::SudoAsk>()
         .event::<c::AdapterStateChanged>()
+        .event::<c::AutomationStateChanged>()
         .event::<c::RequestCancelled>()
         .event::<c::RequestDone>()
         .event::<c::SessionEvent>()

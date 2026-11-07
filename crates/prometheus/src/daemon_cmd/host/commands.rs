@@ -39,6 +39,9 @@ pub(super) const CLIENT_COMMANDS: &[&str] = &[
     "battery",
 ];
 
+/// The session automation commands.
+const AUTOMATION: &[&str] = &["goal", "subgoal", "loop", "heartbeat"];
+
 fn refused(reason: impl Into<String>) -> Dispatched {
     Dispatched::Refused {
         reason: reason.into(),
@@ -260,7 +263,20 @@ impl Run<'_> {
 
     async fn shared(&self, name: &str, args: &str) -> Dispatched {
         let scope = self.profile.scope();
-        match commands::run(&self.ctx(&scope), name, args).await {
+        let reply = commands::run(&self.ctx(&scope), name, args).await;
+        if AUTOMATION.contains(&name) {
+            // What a command set starts at the next idle boundary, and every
+            // surface shows it.
+            self.profile.automation_wake.notify_one();
+            let limits = crate::automation::limits(scope.config());
+            super::automation::publish(
+                &self.session.factory.store,
+                self.session.live.id,
+                self.link,
+                &limits,
+            );
+        }
+        match reply {
             Some(Ok(Reply::Text(notice))) => Dispatched::Done { notice },
             Some(Ok(Reply::Send(input))) => Dispatched::Send {
                 message: input.text,

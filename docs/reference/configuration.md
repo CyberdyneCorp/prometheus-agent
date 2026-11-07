@@ -362,9 +362,18 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.voice.echo_transcripts` | boolean | `true` | any | `live` | Echo a transcript back to the chat once. |
 | `gateway.voice.reply_mode` | one of "off", "mirror", "always" | `"mirror"` | `"off"`, `"mirror"`, `"always"` | `live` | When replies are spoken. |
 | `gateway.voice.stt_enabled` | boolean | `true` | any | `live` | Transcribe inbound voice and audio clips with the profile's speech-to-text provider. |
+| `goals.gate_max_retries` | integer | `3` | 1 to 100 | `live` | Consecutive failures of a quality gate after which the goal pauses. |
+| `goals.gate_timeout_secs` | integer | `300` | 1 to 86400 | `live` | Seconds one quality gate command may run. |
+| `goals.max_turns` | integer | `20` | 1 to 1000 | `live` | Continuation turns a goal may use before it pauses. |
+| `goals.max_wait_secs` | integer | `1800` | 1 to 86400 | `live` | Longest wait of a goal parked on a process (seconds). |
+| `heartbeat.min_interval_secs` | integer | `60` | 1 to 86400 | `live` | Shortest `/heartbeat every` interval (seconds). |
 | `hooks.auto_accept` | boolean | `false` | any | `next_session` | Run shell hooks nobody approved yet without asking (as `--accept-hooks` does for one run); every hook still runs in the session's sandbox. |
 | `hooks.outbound` | array of table | `[]` | any | `next_session` | Outbound webhooks: hook events sent as HTTPS `POST` requests. |
 | `logging.level` | one of "error", "warn", "info", "debug", "trace" | `"info"` | `"error"`, `"warn"`, `"info"`, `"debug"`, `"trace"` | `restart` | Log level; `PMT_LOG` or `RUST_LOG` override it. |
+| `loops.max_ticks` | integer | `100` | 0 to 100000 | `live` | Wakeups after which a loop pauses (`0` = unlimited). |
+| `loops.min_interval_secs` | integer | `30` | 1 to 86400 | `live` | Shortest fixed interval a loop may use (seconds). |
+| `loops.self_paced_ceiling_secs` | integer | `900` | 1 to 86400 | `live` | Longest wait of a self-paced loop (seconds). |
+| `loops.self_paced_floor_secs` | integer | `60` | 1 to 86400 | `live` | First wait of a self-paced loop (seconds). |
 | `lsp.broken_retry_secs` | integer | `0` | ≥ 0 | `next_session` | After a server fails to start or times out, skip it for its workspace this long (`0` = until `prometheus lsp restart` or the process exits). |
 | `lsp.enabled` | boolean | `true` | any | `next_session` | Run language servers after `write_file` and `patch`; `false` starts no server, watcher or background task. |
 | `lsp.exclude_roots` | array of string | `[]` | any | `next_session` | Git roots where no server runs (globs, `~` expanded; a bare path also matches everything below it). |

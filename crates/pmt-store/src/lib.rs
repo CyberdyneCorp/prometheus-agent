@@ -23,6 +23,7 @@
 //!   [`verification`] `prometheus verify` evidence, and [`cron`] scheduled
 //!   jobs, their runs, delivery outbox and tick lease.
 
+pub mod automation;
 pub mod blobs;
 pub mod compaction;
 pub mod compression_state;
@@ -65,6 +66,7 @@ pub mod usage;
 pub mod usage_query;
 pub mod verification;
 
+pub use automation::AutomationRow;
 pub use blobs::{BlobRef, GcReport};
 pub use compaction::{Compacted, Compaction};
 pub use compression_state::CompressionState;
@@ -99,7 +101,7 @@ pub use usage_query::UsageFilter;
 /// The newest `state.db` schema version this build reads and writes
 /// (`store_meta.schema_version`); every embedded migration bumps it, and a
 /// newer store opens read-only. Reported by `prometheus version --json`.
-pub const SCHEMA_VERSION: u32 = 26;
+pub const SCHEMA_VERSION: u32 = 27;
 
 #[cfg(test)]
 mod tests {

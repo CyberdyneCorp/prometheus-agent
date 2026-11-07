@@ -2914,3 +2914,72 @@ capabilities = [
 
 [skills."Blueprint skills never auto-schedule"]
 "Install does not create a job" = { tests = ["crates/prometheus/tests/cron_automations.rs::the_inbox_offers_starters_and_skill_blueprints_without_creating_jobs"], note = "the skill is placed in the profile's skills directory (what an install writes); the inbox offers its blueprint and no job exists" }
+
+[session-automation."Persisted per-session automation state"]
+"Goal survives resume" = ["crates/prometheus/tests/automation_line.rs::a_goal_survives_resume_with_its_turn_count", "crates/pmt-store/tests/store/automation.rs::rows_are_kept_per_kind_across_reopening_and_go_with_the_session"]
+"Reset clears automation" = { tests = ["crates/prometheus/tests/automation_daemon.rs::a_silent_heartbeat_sends_nothing_and_a_reset_drops_it", "crates/pmt-store/tests/store/automation.rs::a_conversation_switching_session_drops_the_old_automation"], note = "proven on the debug-build file adapter's platform (`test`), the gateway path every adapter (Telegram included) shares" }
+
+[session-automation."Automated turns are plain user turns"]
+"Cache prefix preserved" = ["crates/pmt-agent/tests/turn/cache.rs::automated_goal_continuations_keep_the_cache_prefix", "crates/prometheus/tests/automation_line.rs::a_goal_continues_on_the_judges_word_until_it_is_achieved"]
+
+[session-automation."Idle-boundary arbitration"]
+"User input preempts continuation" = ["crates/prometheus/tests/automation_line.rs::a_line_typed_during_the_turn_runs_before_the_continuation"]
+"Parked goal lets the loop run" = ["crates/pmt-automation/src/arbiter.rs::a_parked_goal_lets_the_loop_run", "crates/pmt-automation/src/arbiter.rs::an_active_goal_defers_loops_and_heartbeats"]
+
+[session-automation."Goal command surface"]
+"Control word escape" = ["crates/pmt-automation/src/command.rs::the_control_word_escape_sets_literal_text"]
+"Draft is a whole word" = ["crates/pmt-automation/src/command.rs::draft_is_matched_as_a_whole_word_only"]
+
+[session-automation."Goal changes while a turn runs"]
+"New goal rejected mid-run" = ["crates/prometheus/tests/automation_daemon.rs::a_new_goal_is_refused_while_the_chat_runs_a_turn", "crates/pmt-automation/src/goal/tests.rs::a_new_goal_is_refused_while_a_turn_runs_but_control_commands_run"]
+
+[session-automation."Goal judge loop"]
+"Continue injects the next turn" = ["crates/prometheus/tests/automation_line.rs::a_goal_continues_on_the_judges_word_until_it_is_achieved", "crates/pmt-automation/src/goal/tests.rs::continue_injects_the_next_turn_and_counts_it"]
+"Broken judge fails open" = ["crates/prometheus/tests/automation_line.rs::a_failing_judge_keeps_going_until_the_budget_pauses_the_goal", "crates/pmt-automation/src/goal/tests.rs::a_broken_judge_fails_open_and_advances_the_counter"]
+
+[session-automation."Goal turn budget and blocked verdict"]
+"Budget exhaustion pauses" = ["crates/prometheus/tests/automation_line.rs::a_failing_judge_keeps_going_until_the_budget_pauses_the_goal", "crates/pmt-automation/src/goal/tests.rs::budget_exhaustion_pauses_without_a_fourth_continuation"]
+"Unachievable goal pauses" = ["crates/prometheus/tests/automation_line.rs::a_blocked_goal_pauses_and_a_failed_draft_sets_the_objective", "crates/pmt-automation/src/goal/tests.rs::a_blocked_verdict_pauses_and_is_never_achieved"]
+
+[session-automation."Completion contracts"]
+"Inline contract parsing" = ["crates/pmt-automation/src/contract.rs::inline_lines_fill_the_contract_and_the_rest_stays_headline"]
+"Draft falls back" = ["crates/prometheus/tests/automation_line.rs::a_blocked_goal_pauses_and_a_failed_draft_sets_the_objective"]
+
+[session-automation."Subgoals"]
+"Subgoal tightens the judge" = ["crates/pmt-automation/src/judge.rs::the_judge_prompt_states_subgoals_and_the_response_tail", "crates/pmt-automation/src/goal/tests.rs::subgoals_need_a_goal_and_keep_the_counter"]
+
+[session-automation."Quality gates"]
+"Red gate blocks completion" = ["crates/prometheus/tests/automation_line.rs::a_red_quality_gate_skips_the_judge", "crates/pmt-automation/src/goal/tests.rs::a_red_gate_skips_the_judge_and_carries_the_exit_and_output_tail"]
+"Exhausted gate pauses" = ["crates/pmt-automation/src/goal/tests.rs::an_exhausted_gate_pauses_naming_the_gate"]
+
+[session-automation."Goal wait barriers"]
+"Park on a CI watcher" = { tests = ["crates/pmt-automation/src/goal/tests.rs::a_wait_on_a_live_pid_parks_and_a_dead_one_continues", "crates/pmt-automation/src/goal/tests.rs::a_pid_or_session_wait_is_capped", "crates/pmt-tools/tests/terminal/notifications.rs::a_subagent_hands_off_at_most_three_processes"], note = "the judge's process list is the session's own running processes (handed-off subagent processes excluded); parking, the cap and the release run against a scripted process table" }
+"Dead pid rejected" = ["crates/prometheus/tests/automation_line.rs::a_goal_survives_resume_with_its_turn_count", "crates/pmt-automation/src/goal/tests.rs::a_dead_pid_is_refused_for_goal_wait"]
+
+[session-automation."Goal messages on messaging platforms"]
+"Telegram continuation not quoted" = { tests = ["crates/prometheus/tests/automation_daemon.rs::goal_turns_in_a_chat_quote_nothing_and_say_their_status"], note = "proven on the debug-build file adapter's platform (`test`): the lane posts automated replies with no reply_to, which every adapter (Telegram's reply_to_message_id included) maps from the same outgoing field" }
+
+[session-automation."Loop command and cadence"]
+"Interval below the floor" = ["crates/prometheus/tests/automation_line.rs::loops_refuse_short_intervals_stop_at_their_cap_and_pause_on_ctrl_c", "crates/pmt-automation/src/command.rs::an_interval_below_the_floor_is_refused"]
+"Self-paced backoff" = ["crates/pmt-automation/src/cadence.rs::self_pacing_backs_off_on_identical_replies_and_snaps_back"]
+
+[session-automation."Loop stop conditions"]
+"Run cap" = { tests = ["crates/prometheus/tests/automation_line.rs::loops_refuse_short_intervals_stop_at_their_cap_and_pause_on_ctrl_c", "crates/pmt-automation/src/cadence.rs::the_run_cap_and_loop_complete_remove_the_loop"], note = "the line test runs `--times 3` at a 1 s interval (`loops.min_interval_secs = 1`) instead of 2 m" }
+"Interrupt pauses" = ["crates/prometheus/tests/automation_line.rs::loops_refuse_short_intervals_stop_at_their_cap_and_pause_on_ctrl_c"]
+
+[session-automation."Session heartbeat"]
+"Missed ticks coalesce" = ["crates/pmt-automation/src/cadence.rs::missed_heartbeats_coalesce_into_one_fire_and_re_anchor", "crates/pmt-automation/src/arbiter.rs::a_stored_heartbeat_fires_once_after_a_restart_and_re_anchors"]
+"Minimum interval" = ["crates/pmt-automation/src/command.rs::a_heartbeat_below_the_minimum_is_refused"]
+
+[session-automation."Heartbeat ownership, recovery and silence on the gateway"]
+"Silent heartbeat" = { tests = ["crates/prometheus/tests/automation_daemon.rs::a_silent_heartbeat_sends_nothing_and_a_reset_drops_it"], note = "proven on the debug-build file adapter's platform (`test`), the gateway path every adapter (Slack included) shares" }
+"Restored after restart in its profile" = ["crates/prometheus/tests/automation_daemon.rs::a_chat_heartbeat_is_restored_after_a_restart_in_its_profile"]
+
+[session-automation."Automation status on every surface"]
+"Desktop closed, loop keeps firing" = { tests = ["crates/prometheus/tests/automation_daemon.rs::a_client_sessions_loop_keeps_firing_with_no_client_attached", "crates/pmt-tui/src/status.rs::automation_rows_show_after_the_other_items"], note = "the desktop app is M3 (desktop-app); the daemon side is proven with a client session whose client leaves: its `/loop` (1 s instead of 5 m) keeps firing and the replies are stored; `automation.state` reaches clients and the TUI shows the row" }
+
+[session-automation."Automation configuration"]
+"Inverted self-paced bounds" = ["crates/prometheus/tests/automation_config.rs::an_inverted_self_paced_range_fails_validation_naming_both_keys", "crates/pmt-config/src/automation_check.rs::an_inverted_self_paced_range_names_both_keys"]
+
+[session-automation."Automation is distinct from kanban and cron"]
+"Goal does not touch the board" = { tests = ["crates/prometheus/tests/automation_line.rs::a_goal_continues_on_the_judges_word_until_it_is_achieved"], note = "kanban boards are M3 (kanban); the test sets and completes a goal and checks the home's kanban directory and the scheduled jobs are unchanged" }

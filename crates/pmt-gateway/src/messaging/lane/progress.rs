@@ -141,7 +141,7 @@ impl Lane {
 
     /// A tool call, a tool result or model text of the running turn.
     pub(super) async fn show_progress(&mut self, kind: &str, payload: &Value) {
-        if self.running.is_none() {
+        if self.running.as_ref().is_none_or(|r| r.quiet) {
             return;
         }
         let display = self.display();

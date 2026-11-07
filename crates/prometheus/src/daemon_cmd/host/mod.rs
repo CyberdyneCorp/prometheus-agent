@@ -30,6 +30,7 @@ use tracing::Instrument as _;
 
 use super::turn::{SecretsToClients, SudoToClients, ToClients, approvals, clarify};
 
+mod automation;
 mod commands;
 mod cron;
 mod cron_admit;
@@ -48,6 +49,7 @@ mod worktrees;
 
 use crate::chat::resume;
 use crate::chat::session::{Clients, Factory, Live};
+pub(super) use automation::schedule as schedule_automation;
 pub(super) use cron::schedule as schedule_cron;
 pub(super) use reload::watch;
 pub(super) use worktrees::sweep_worktrees;
@@ -72,6 +74,12 @@ struct Loaded {
     /// A one-shot run's session: it ends once its turn is done, as an
     /// in-process one-shot run's does.
     oneshot: bool,
+    /// A messaging conversation's session (its lane runs its automated
+    /// turns).
+    gateway: bool,
+    /// What the last turn's automation boundary left for the lane: status
+    /// lines and a goal continuation.
+    after: Mutex<pmt_gateway::messaging::automation::AfterTurn>,
 }
 
 impl Loaded {
@@ -109,6 +117,8 @@ struct Profile {
     loaded: tokio::sync::Mutex<HashMap<SessionId, Arc<Loaded>>>,
     /// Wakes the profile's scheduler loop (a webhook queued a run).
     cron_wake: tokio::sync::Notify,
+    /// Wakes the profile's automation loop (a command set something).
+    automation_wake: tokio::sync::Notify,
 }
 
 /// The daemon's host over every served profile.
@@ -164,6 +174,7 @@ impl Profile {
             setups: Mutex::default(),
             loaded: tokio::sync::Mutex::default(),
             cron_wake: tokio::sync::Notify::new(),
+            automation_wake: tokio::sync::Notify::new(),
         }))
     }
 
@@ -282,6 +293,7 @@ impl DaemonHost {
         // sessions (one-shot runs, cron, subagents) cannot receive a later
         // notice, so quiet-wait never promises one there.
         let oneshot = row.source_tag.as_deref() == Some(pmt_store::sessions::ONESHOT_TAG);
+        let gateway = matches!(row.origin, pmt_store::Origin::Gateway { .. });
         let completions = match row.origin {
             pmt_store::Origin::Gateway { .. } => Some(notify::completions(
                 Arc::clone(&self.gateway),
@@ -333,6 +345,8 @@ impl DaemonHost {
             queue: Mutex::default(),
             current: Mutex::default(),
             oneshot,
+            gateway,
+            after: Mutex::default(),
         });
         loaded.insert(id, Arc::clone(&session));
         if let Some(inbox) = &inbox {

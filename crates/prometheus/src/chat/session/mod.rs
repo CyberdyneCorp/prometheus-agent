@@ -15,6 +15,7 @@ pub mod documents;
 pub mod downgrades;
 pub mod env;
 mod guardian;
+pub mod judge;
 mod lifecycle;
 mod lsp;
 mod mcp;

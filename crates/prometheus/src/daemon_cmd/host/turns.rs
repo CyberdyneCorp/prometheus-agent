@@ -66,6 +66,13 @@ impl DaemonHost {
         }
         let mut input = setup::input(&session.factory, &session.live, &params).await?;
         input.prefix.clone_from(&author.prefix);
+        input.origin.clone_from(&author.origin);
+        if author.origin.is_none() {
+            // Someone's input goes first: a continuation the last boundary
+            // left for the lane is dropped (the judge looks again after
+            // this turn).
+            session.after.lock().expect("after poisoned").turn = None;
+        }
         input.author = serde_json::to_value(&author).ok();
         let job = Queued {
             input,
@@ -171,11 +178,14 @@ impl DaemonHost {
                 loop {
                     let link = job.link.clone();
                     let permit = slots.acquire(|ahead| waiting(&link, ahead)).await;
-                    run_one(id, &session, job, &record).await;
+                    let wakeup = run_one(id, &session, job, &record).await;
                     drop(permit);
                     let next = {
                         let mut queue = session.queue.lock().expect("queue poisoned");
-                        let next = queue.pop_front();
+                        // Queued input goes before a goal continuation.
+                        let next = queue
+                            .pop_front()
+                            .or_else(|| wakeup.map(|w| automated(w, link)));
                         if next.is_none() {
                             session.busy.store(false, Ordering::Release);
                         }
@@ -205,6 +215,11 @@ impl DaemonHost {
     /// queued input or is in use by a request right now; `true` when it is
     /// closed (or was not loaded).
     pub(super) async fn close_unused(profile: &Profile, id: SessionId) -> bool {
+        // An active loop or heartbeat keeps its session (spec:
+        // session-automation, Automation status on every surface).
+        if Self::automation_keeps(profile, id) {
+            return false;
+        }
         {
             let loaded = profile.loaded.lock().await;
             let Some(session) = loaded.get(&id) else {
@@ -337,13 +352,27 @@ fn waiting(link: &Link, ahead: usize) {
 /// How long a stopping daemon waits for an interrupted turn to end.
 const STOP_WAIT: Duration = Duration::from_secs(5);
 
-/// Runs one turn and emits its `turn.finished`.
+/// A goal continuation as the session's next job.
+fn automated(wakeup: pmt_automation::arbiter::Wakeup, link: Link) -> Queued {
+    Queued {
+        input: TurnInput {
+            origin: Some(wakeup.kind.as_str().to_owned()),
+            ..TurnInput::text(wakeup.prompt)
+        },
+        turn_id: pmt_agent::turn::TurnId::new().to_string(),
+        run_budget: None,
+        link,
+    }
+}
+
+/// Runs one turn, then its automation boundary, and emits its
+/// `turn.finished`; the goal continuation the boundary asks for.
 async fn run_one(
     id: SessionId,
     session: &Loaded,
     job: Queued,
     record: &crate::chat::usage_file::RunRecord,
-) {
+) -> Option<pmt_automation::arbiter::Wakeup> {
     *session.current.lock().expect("current poisoned") = Some(job.turn_id.clone());
     // The session's configuration: its start snapshot with the live keys
     // of every reload since.
@@ -354,14 +383,32 @@ async fn run_one(
         options.deltas = Arc::new(crate::daemon_cmd::turn::DeltasToLink(job.link.clone()));
     }
     *session.interrupt.lock().expect("interrupt poisoned") = Some(options.interrupt.clone());
+    let origin = job
+        .input
+        .origin
+        .as_deref()
+        .and_then(pmt_automation::Kind::parse);
     let outcome = session
         .live
         .agent
         .run_turn(Some(&scope), id, job.input, options)
         .await;
+    session.interrupt.lock().expect("interrupt poisoned").take();
+    let end = super::automation::TurnEnd {
+        origin,
+        reply: outcome
+            .as_ref()
+            .ok()
+            .and_then(|r| r.final_response.clone())
+            .unwrap_or_default(),
+        interrupted: outcome
+            .as_ref()
+            .is_ok_and(|r| r.exit_reason == pmt_agent::turn::ExitReason::InterruptedByUser),
+    };
+    let wakeup = DaemonHost::automation_after(session, end, &job.link).await;
     let mut ended = finished(job.turn_id, outcome);
     ended.report = serde_json::to_value(record.report(&Ok(0))).ok();
     job.link.emit::<TurnEnded>(&ended);
-    session.interrupt.lock().expect("interrupt poisoned").take();
     session.current.lock().expect("current poisoned").take();
+    wakeup
 }

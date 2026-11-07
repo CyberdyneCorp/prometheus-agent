@@ -331,6 +331,10 @@ pub struct Author {
     /// created with message timestamps; never stored in the text.
     #[serde(skip)]
     pub prefix: Option<String>,
+    /// What started an automated turn (`goal`, `loop`, `heartbeat`): the
+    /// host stores it as the user message's `origin`.
+    #[serde(skip)]
+    pub origin: Option<String>,
 }
 
 /// Receives a turn's answer text as it streams.

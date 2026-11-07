@@ -337,6 +337,63 @@
       ],
       "type": "object"
     },
+    "AutomationStatePayload": {
+      "additionalProperties": false,
+      "description": "One kind of a session's automation.",
+      "properties": {
+        "count": {
+          "default": 0,
+          "description": "Turns (goal), wakeups (loop) or fires (heartbeat) so far.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "description": "`goal`, `loop` or `heartbeat`.",
+          "type": "string"
+        },
+        "limit": {
+          "default": null,
+          "description": "A goal's turn budget (`goals.max_turns`).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "next_fire_at": {
+          "default": null,
+          "description": "When it fires next (RFC 3339), for an active loop or heartbeat or a\nparked goal's deadline.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "row": {
+          "default": null,
+          "description": "The live row as the CLI shows it (absent once removed).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        },
+        "status": {
+          "description": "`active`, `paused`, `done`, `parked`, or `none` once removed.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "kind",
+        "status"
+      ],
+      "type": "object"
+    },
     "BannerInfo": {
       "additionalProperties": false,
       "description": "`session.banner` result: what the TUI's startup banner lists.",
@@ -3311,8 +3368,10 @@
       "since": "1.0"
     },
     "automation.state": {
-      "declared": false,
       "owner": "session-automation",
+      "payload": {
+        "$ref": "#/$defs/AutomationStatePayload"
+      },
       "since": "1.0"
     },
     "health.changed": {

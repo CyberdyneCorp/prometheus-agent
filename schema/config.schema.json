@@ -2891,6 +2891,46 @@
       },
       "type": "object"
     },
+    "GoalsConfig": {
+      "additionalProperties": false,
+      "description": "The `[goals]` section: the `/goal` judge loop's bounds.",
+      "properties": {
+        "gate_max_retries": {
+          "default": 3,
+          "description": "Consecutive failures of a quality gate after which the goal pauses.",
+          "format": "uint32",
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "gate_timeout_secs": {
+          "default": 300,
+          "description": "Seconds one quality gate command may run.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_turns": {
+          "default": 20,
+          "description": "Continuation turns a goal may use before it pauses.",
+          "format": "uint32",
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_wait_secs": {
+          "default": 1800,
+          "description": "Longest wait of a goal parked on a process (seconds).",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
     "GuardrailThresholds": {
       "additionalProperties": false,
       "description": "Repetition thresholds of the tool loop guardrails.",
@@ -2940,6 +2980,22 @@
           "type": "string"
         }
       ]
+    },
+    "HeartbeatConfig": {
+      "additionalProperties": false,
+      "description": "The `[heartbeat]` section.",
+      "properties": {
+        "min_interval_secs": {
+          "default": 60,
+          "description": "Shortest `/heartbeat every` interval (seconds).",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
     },
     "HomeChannel": {
       "additionalProperties": false,
@@ -3158,6 +3214,46 @@
         }
       },
       "type": "object"
+    },
+    "LoopsConfig": {
+      "additionalProperties": false,
+      "description": "The `[loops]` section: `/loop` cadence bounds.",
+      "properties": {
+        "max_ticks": {
+          "default": 100,
+          "description": "Wakeups after which a loop pauses (`0` = unlimited).",
+          "format": "uint32",
+          "maximum": 100000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "min_interval_secs": {
+          "default": 30,
+          "description": "Shortest fixed interval a loop may use (seconds).",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "self_paced_ceiling_secs": {
+          "default": 900,
+          "description": "Longest wait of a self-paced loop (seconds).",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "self_paced_floor_secs": {
+          "default": 60,
+          "description": "First wait of a self-paced loop (seconds).",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
     },
     "LspConfig": {
       "additionalProperties": false,
@@ -8635,6 +8731,23 @@
       },
       "description": "The profile's part in the home's gateway daemon."
     },
+    "goals": {
+      "$ref": "#/$defs/GoalsConfig",
+      "default": {
+        "gate_max_retries": 3,
+        "gate_timeout_secs": 300,
+        "max_turns": 20,
+        "max_wait_secs": 1800
+      },
+      "description": "`/goal`: the judge loop's turn budget, quality gates and waits."
+    },
+    "heartbeat": {
+      "$ref": "#/$defs/HeartbeatConfig",
+      "default": {
+        "min_interval_secs": 60
+      },
+      "description": "`/heartbeat` bounds."
+    },
     "hooks": {
       "$ref": "#/$defs/HooksConfig",
       "default": {
@@ -8649,6 +8762,16 @@
         "level": "info"
       },
       "description": "Structured log files."
+    },
+    "loops": {
+      "$ref": "#/$defs/LoopsConfig",
+      "default": {
+        "max_ticks": 100,
+        "min_interval_secs": 30,
+        "self_paced_ceiling_secs": 900,
+        "self_paced_floor_secs": 60
+      },
+      "description": "`/loop` cadence bounds."
     },
     "lsp": {
       "$ref": "#/$defs/LspConfig",

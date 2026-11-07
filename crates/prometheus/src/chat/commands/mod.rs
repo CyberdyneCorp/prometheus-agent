@@ -127,6 +127,10 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "cron" => cron::cron(ctx, args),
         "suggestions" => suggestions::suggestions(ctx, args),
         "blueprint" => blueprint::blueprint(ctx, args),
+        "goal" => crate::automation::commands::goal(ctx, args).await,
+        "subgoal" => crate::automation::commands::subgoal(ctx, args),
+        "loop" => crate::automation::commands::looping(ctx, args),
+        "heartbeat" => crate::automation::commands::heartbeat(ctx, args),
         other => return state_command(ctx, other, args).map(|r| r.map(Reply::Text)),
     };
     Some(text.map(Reply::Text))

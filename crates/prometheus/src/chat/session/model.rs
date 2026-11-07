@@ -328,6 +328,21 @@ impl Models {
         })
     }
 
+    /// The session's goal judge on its `goal_judge` auxiliary route.
+    #[must_use]
+    pub fn judge(
+        &self,
+        model: &Arc<SwitchableModel>,
+        session: pmt_core::id::SessionId,
+    ) -> super::judge::RouteJudge {
+        super::judge::RouteJudge {
+            parts: Arc::clone(&self.setup),
+            aux: Arc::clone(&self.aux),
+            model: Arc::clone(model),
+            session,
+        }
+    }
+
     /// The session's approval guardian on its `approval` auxiliary route.
     pub(crate) fn guardian(
         &self,

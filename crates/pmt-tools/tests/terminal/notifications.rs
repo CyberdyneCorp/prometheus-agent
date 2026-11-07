@@ -211,7 +211,7 @@ async fn heartbeats_are_clamped_to_a_minute_and_carry_new_output_only() {
     session.close().await;
 }
 
-/// Scenario: Fourth handoff.
+/// Scenario: Fourth handoff (and the judge's own-process listing).
 #[tokio::test]
 async fn a_subagent_hands_off_at_most_three_processes() {
     let fixture = Fixture::new();
@@ -242,6 +242,17 @@ async fn a_subagent_hands_off_at_most_three_processes() {
         "handoff cap reached (3 per subagent); wait on or kill the rest yourself."
     );
     assert_eq!(act(&child, "poll", &lone, None).await["state"], "running");
+    // The goal judge sees only the processes the parent started itself
+    // (spec: session-automation, Goal wait barriers).
+    let own = start(&parent, TerminalArgs::new("sleep 30")).await;
+    let listed: Vec<String> = parent
+        .processes()
+        .own_running()
+        .into_iter()
+        .map(|p| p.id)
+        .collect();
+    assert_eq!(listed, std::slice::from_ref(&own));
+    act(&parent, "kill", &own, None).await;
     // The parent owns the handed-off processes now, and hears of their end.
     for id in &ids {
         assert_eq!(act(&parent, "poll", id, None).await["state"], "running");

@@ -397,6 +397,14 @@ impl Agents for DaemonHost {
         })
     }
 
+    fn take_automated<'a>(
+        &'a self,
+        profile: &'a str,
+        session_id: &'a str,
+    ) -> HostFuture<'a, pmt_gateway::messaging::automation::AfterTurn> {
+        Box::pin(async move { Ok(self.take_after(profile, session_id).await) })
+    }
+
     fn find_cron_job<'a>(&'a self, profile: &'a str, job: &'a str) -> HostFuture<'a, String> {
         Box::pin(async move { self.cron_job_id(profile, job) })
     }

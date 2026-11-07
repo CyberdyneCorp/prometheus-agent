@@ -161,6 +161,18 @@ pub trait Agents: Host {
     /// suspension).
     fn end_conversation<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()>;
 
+    /// What the host decided when `session_id`'s turn ended (status lines
+    /// and a goal continuation), taken once (spec: session-automation,
+    /// Goal messages on messaging platforms); hosts without automation
+    /// have nothing.
+    fn take_automated<'a>(
+        &'a self,
+        _profile: &'a str,
+        _session_id: &'a str,
+    ) -> HostFuture<'a, crate::messaging::automation::AfterTurn> {
+        Box::pin(async { Ok(crate::messaging::automation::AfterTurn::default()) })
+    }
+
     /// The mounts of `session`'s container, when its terminal runs in
     /// one (its reply's container paths are then translated to host
     /// paths).

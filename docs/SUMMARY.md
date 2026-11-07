@@ -27,6 +27,7 @@
 - [Subagents and programmatic tool calls](guide/delegation.md)
 - [Git worktrees](guide/worktrees.md)
 - [Scheduled jobs](guide/cron.md)
+- [Session automation](guide/session-automation.md)
 - [Skills](guide/skills.md)
 - [Memory](guide/memory.md)
 - [Capabilities, grants and redaction](guide/security.md)

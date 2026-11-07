@@ -217,12 +217,15 @@ impl Lane {
         self.add_observed(&session, &pending.routing);
         self.record_start(&session, &pending.routing);
         self.shared.cache.touch(&self.profile, &session);
+        let origin = self.automating.take();
+        let quiet = origin.as_deref() == Some("heartbeat");
         let author = Author {
             client_kind: "gateway".to_owned(),
             client_id: format!("{}:{}", pending.routing.platform, pending.routing.sender_id),
             principal: self.profile.clone(),
             sent_at: Some(pending.sent_at.to_string()),
             prefix: self.model_prefix(&session, pending.sent_at),
+            origin,
         };
         let params = SubmitParams {
             session_id: session.clone(),
@@ -254,13 +257,17 @@ impl Lane {
         {
             Ok(submitted) => {
                 let routing = &pending.routing;
-                let typing = crate::messaging::typing::start(
-                    &self.shared,
-                    &self.profile,
-                    &routing.platform,
-                    &routing.chat_id,
-                    routing.thread_id.as_deref(),
-                );
+                let typing = (!quiet)
+                    .then(|| {
+                        crate::messaging::typing::start(
+                            &self.shared,
+                            &self.profile,
+                            &routing.platform,
+                            &routing.chat_id,
+                            routing.thread_id.as_deref(),
+                        )
+                    })
+                    .flatten();
                 let speech = self
                     .streams_audio(pending.voice)
                     .then(|| super::reply::Spoken::new(&submitted.turn_id));
@@ -279,8 +286,11 @@ impl Lane {
                     progress: super::progress::Progress::new(Instant::now()),
                     addressed: pending.addressed,
                     stream: super::native::Stream::default(),
+                    quiet,
                 });
-                self.working_status(true).await;
+                if !quiet {
+                    self.working_status(true).await;
+                }
             }
             Err(err) => {
                 self.turn_over(&session);
@@ -419,6 +429,9 @@ impl Lane {
             self.renew(&routing, reset).await;
         }
         self.next().await;
+        if self.running.is_none() {
+            self.after_automation().await;
+        }
     }
 
     /// Runs what waits for the turn, in order, until one starts a turn.
@@ -441,6 +454,9 @@ impl Lane {
     /// streams as audio, and shown as an edited draft on streaming
     /// platforms.
     pub(super) async fn delta(&mut self, text: &str) {
+        if self.running.as_ref().is_some_and(|r| r.quiet) {
+            return;
+        }
         if let Some(mut speech) = self.running.as_mut().and_then(|r| r.speech.take()) {
             self.speak_streamed(&mut speech, text, false).await;
             if let Some(running) = self.running.as_mut() {

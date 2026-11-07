@@ -142,6 +142,24 @@ export interface Attached {
   truncated?: boolean;
 }
 
+/** One kind of a session's automation. */
+export interface AutomationStatePayload {
+  /** Turns (goal), wakeups (loop) or fires (heartbeat) so far. */
+  count?: number;
+  /** `goal`, `loop` or `heartbeat`. */
+  kind: string;
+  /** A goal's turn budget (`goals.max_turns`). */
+  limit?: number | null;
+  /** When it fires next (RFC 3339), for an active loop or heartbeat or a parked goal's deadline. */
+  next_fire_at?: string | null;
+  /** The live row as the CLI shows it (absent once removed). */
+  row?: string | null;
+  /** The session. */
+  session_id: string;
+  /** `active`, `paused`, `done`, `parked`, or `none` once removed. */
+  status: string;
+}
+
 /** `session.banner` result: what the TUI's startup banner lists. */
 export interface BannerInfo {
   /** The degraded marker while the session runs below full hardening, for example `sandbox: partial:landlock_net` (spec: security-boundaries, Hardening downgrades are never silent). */
@@ -1187,6 +1205,7 @@ export interface ServerRequests {
 
 export interface Events {
   "adapter.state": AdapterStatePayload;
+  "automation.state": AutomationStatePayload;
   "request.cancel": RequestCancel;
   "request.resolved": RequestResolved;
   "session.event": unknown;
@@ -1241,7 +1260,6 @@ export const UNDECLARED = [
   "voice.client_config",
   "wake.feed",
   "achievement.unlocked",
-  "automation.state",
   "health.changed",
   "local_model.context_grown",
   "message.delivery",

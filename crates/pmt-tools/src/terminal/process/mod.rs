@@ -222,6 +222,11 @@ struct Entry {
     group: Group,
     /// Notify on exit.
     notify: AtomicBool,
+    /// Watch-pattern lines delivered so far (a goal parked on the process
+    /// releases on a new one).
+    matches: AtomicU32,
+    /// A subagent handed it to this session.
+    adopted: AtomicBool,
     sink: Mutex<Sink>,
     clock: Clock,
     output: Mutex<Output>,
@@ -281,8 +286,12 @@ impl Entry {
         let verdicts = lock(&self.watch).feed(&text, (self.clock)());
         for verdict in verdicts {
             let line = match verdict {
-                Verdict::Deliver(line) => line,
+                Verdict::Deliver(line) => {
+                    self.matches.fetch_add(1, Ordering::SeqCst);
+                    line
+                }
                 Verdict::DeliverLast(line) => {
+                    self.matches.fetch_add(1, Ordering::SeqCst);
                     self.notify.store(true, Ordering::SeqCst);
                     line
                 }
@@ -299,6 +308,20 @@ impl Entry {
     fn reset_quiet(&self) {
         *lock(&self.quiet) = None;
     }
+}
+
+/// A running background process as [`ProcessRegistry::own_running`]
+/// lists it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Running {
+    /// Its process id (`proc_…`).
+    pub id: String,
+    /// Its OS pid, when local.
+    pub pid: Option<u32>,
+    /// Its command line.
+    pub command: String,
+    /// Watch-pattern lines delivered so far.
+    pub matches: u32,
 }
 
 /// A process the registry found for a call.
@@ -416,6 +439,8 @@ impl ProcessRegistry {
             pid,
             group,
             notify: AtomicBool::new(tracking.notify),
+            matches: AtomicU32::new(0),
+            adopted: AtomicBool::new(false),
             sink: Mutex::new(self.sink.clone()),
             clock: Arc::clone(&self.options.clock),
             output: Mutex::default(),
@@ -492,6 +517,7 @@ impl ProcessRegistry {
         let entry = process.0;
         *lock(&entry.sink) = self.sink.clone();
         entry.notify.store(true, Ordering::SeqCst);
+        entry.adopted.store(true, Ordering::SeqCst);
         entry.reset_quiet();
         self.lock().push(entry);
         Ok(())
@@ -730,6 +756,23 @@ impl ProcessRegistry {
             .iter()
             .filter(|e| e.state() == State::Running)
             .filter_map(|e| e.pid)
+            .collect()
+    }
+
+    /// Running processes the session started itself (not ones its
+    /// subagents handed over), for the goal judge (spec: session-
+    /// automation, Goal wait barriers).
+    #[must_use]
+    pub fn own_running(&self) -> Vec<Running> {
+        self.lock()
+            .iter()
+            .filter(|e| e.state() == State::Running && !e.adopted.load(Ordering::SeqCst))
+            .map(|e| Running {
+                id: e.id.clone(),
+                pid: e.pid,
+                command: e.command.clone(),
+                matches: e.matches.load(Ordering::SeqCst),
+            })
             .collect()
     }
 

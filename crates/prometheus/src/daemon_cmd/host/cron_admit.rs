@@ -79,6 +79,7 @@ impl DaemonHost {
             principal: delivery.target.to_owned(),
             sent_at: Some(jiff::Timestamp::now().to_string()),
             prefix: None,
+            origin: None,
         };
         let link = gateway.link(&session);
         self.submit_turn(&profile, params, (author, link), Some(BusyInputMode::Queue))

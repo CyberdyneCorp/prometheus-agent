@@ -269,10 +269,15 @@ impl<'a> Turn<'a> {
             &input.additions,
             &input.images,
         );
-        if let Some(author) = input.author {
-            let mut metadata = row.metadata.take().unwrap_or_else(|| serde_json::json!({}));
-            metadata["author"] = author;
-            row.metadata = Some(metadata);
+        for (key, value) in [
+            ("author", input.author),
+            ("origin", input.origin.map(serde_json::Value::String)),
+        ] {
+            if let Some(value) = value {
+                let mut metadata = row.metadata.take().unwrap_or_else(|| serde_json::json!({}));
+                metadata[key] = value;
+                row.metadata = Some(metadata);
+            }
         }
         let message_id = row.id;
         let wire = row.content.clone().unwrap_or_default();

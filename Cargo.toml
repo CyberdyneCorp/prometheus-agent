@@ -14,6 +14,7 @@ repository = "https://github.com/CyberdyneCorp/prometheus-agent"
 
 [workspace.dependencies]
 pmt-agent = { path = "crates/pmt-agent" }
+pmt-automation = { path = "crates/pmt-automation" }
 pmt-config = { path = "crates/pmt-config" }
 pmt-core = { path = "crates/pmt-core" }
 pmt-cron = { path = "crates/pmt-cron" }

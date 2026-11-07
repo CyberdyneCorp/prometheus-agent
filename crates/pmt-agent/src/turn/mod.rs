@@ -368,6 +368,10 @@ pub struct TurnInput {
     /// Put in front of the text the model sees (a messaging session's send
     /// time); the clean text stays in the row's `user_text`.
     pub prefix: Option<String>,
+    /// What started an automated turn (`goal`, `loop`, `heartbeat`): kept
+    /// in the stored user message's metadata under `origin` (spec:
+    /// session-automation, Automated turns are plain user turns).
+    pub origin: Option<String>,
 }
 
 impl TurnInput {
@@ -380,6 +384,7 @@ impl TurnInput {
             images: Vec::new(),
             author: None,
             prefix: None,
+            origin: None,
         }
     }
 }

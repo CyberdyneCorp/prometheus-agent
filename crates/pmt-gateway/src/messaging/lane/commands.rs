@@ -103,12 +103,16 @@ impl Lane {
             .config()
             .map(|s| s.config().gateway.platform(&call.routing.platform))
             .unwrap_or_default();
-        if !auth::may_run(
-            &table,
-            call.routing.chat_type,
-            &call.routing.sender_id,
-            &call.name,
-        ) {
+        let allowed = match goal_gate(&table, &call) {
+            Some(allowed) => allowed,
+            None => auth::may_run(
+                &table,
+                call.routing.chat_type,
+                &call.routing.sender_id,
+                &call.name,
+            ),
+        };
+        if !allowed {
             self.say(ADMIN_ONLY);
             return None;
         }
@@ -368,4 +372,20 @@ impl Lane {
             Err(err) => self.say(err.message()),
         }
     }
+}
+
+/// `/goal gate …` (spec: session-automation, Quality gates): adding a gate
+/// (a shell command run at every boundary) needs a configured admin of the
+/// chat's scope; listing, removing and clearing stay open to the session's
+/// users. `None` for any other command.
+fn goal_gate(table: &pmt_config::schema::PlatformConfig, call: &Call<'_>) -> Option<bool> {
+    let mut words = call.args.split_whitespace();
+    if call.name != "goal" || words.next() != Some("gate") {
+        return None;
+    }
+    if words.next() != Some("add") {
+        return Some(true);
+    }
+    let admin = auth::is_admin(table, call.routing.chat_type, &call.routing.sender_id);
+    Some(admin == Some(true))
 }

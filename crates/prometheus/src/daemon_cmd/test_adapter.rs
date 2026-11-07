@@ -137,6 +137,7 @@ impl Adapter for FileAdapter {
                 "sent.jsonl",
                 &json!({"kind": "send", "chat": message.chat_id, "thread": message.thread_id,
                     "text": message.text, "buttons": buttons, "message_id": id,
+                    "reply_to": message.reply_to,
                     "attachments": message.attachments, "notify": message.notify}),
             );
             Ok(Sent {

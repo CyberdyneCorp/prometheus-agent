@@ -247,6 +247,7 @@ async fn submit(
         principal: routing.profile.clone(),
         sent_at: Some(jiff::Timestamp::now().to_string()),
         prefix: None,
+        origin: None,
     };
     let link = shared.server.link(session);
     shared
