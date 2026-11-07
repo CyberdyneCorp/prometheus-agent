@@ -12,11 +12,13 @@
 //! turns replay the stored bytes.
 
 pub mod blocks;
+pub mod coding;
 pub mod context;
 pub mod frozen;
 pub mod install_tree;
 pub mod personality;
 pub mod platform;
+pub mod prefill;
 pub mod scan;
 pub mod size;
 
@@ -358,7 +360,14 @@ pub fn build(inputs: &PromptInputs) -> Result<Built, Error> {
 /// tagging; per session, so in the session tier), then the start time and
 /// the shown id.
 fn session_info(inputs: &PromptInputs, shown_id: Option<SessionId>) -> String {
-    let info = blocks::session_info(inputs.started_at, shown_id);
+    let mut info = blocks::session_info(inputs.started_at, shown_id);
+    let agent = &inputs.config.agent;
+    if coding::applies(agent, &inputs.platform, inputs.cwd.as_deref()) {
+        info = format!(
+            "{}{SEPARATOR}{info}",
+            coding::block(agent, inputs.cwd.as_deref())
+        );
+    }
     if inputs.tool_names.is_empty() {
         return info;
     }

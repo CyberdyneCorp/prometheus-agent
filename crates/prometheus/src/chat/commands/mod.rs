@@ -20,6 +20,7 @@ pub(crate) mod quick;
 mod refine;
 mod review;
 pub(crate) mod session;
+mod side;
 mod suggestions;
 pub mod worktree;
 
@@ -75,8 +76,10 @@ pub enum Reply {
 pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, Error>> {
     let text = match name {
         "learn" => return Some(learn(ctx, args)),
+        "init" => return Some(Ok(Reply::Send(pmt_agent::init::input(args)))),
         "retry" => return Some(retry(ctx)),
         "help" => Ok(ctx.registry.help(ctx.surface).trim_end().to_owned()),
+        "btw" => side::btw(ctx, args),
         "usage" => session::usage(ctx),
         "budget" => budget(ctx, args),
         "title" => title(ctx, args),

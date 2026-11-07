@@ -212,8 +212,10 @@ pub(super) struct Turn<'a> {
     pub(super) held: bool,
     /// Files edited this turn (`pre_verify`).
     pub(super) edited: std::collections::BTreeSet<String>,
-    /// `pre_verify` continuations made this turn.
+    /// `pre_verify` and verify-on-stop continuations made this turn.
     pub(super) verify_nudges: u32,
+    /// Edits not verified since (verify-on-stop).
+    pub(super) evidence: super::verify::Evidence,
 }
 
 impl<'a> Turn<'a> {
@@ -258,12 +260,17 @@ impl<'a> Turn<'a> {
             held: false,
             edited: std::collections::BTreeSet::new(),
             verify_nudges: 0,
+            evidence: super::verify::Evidence::default(),
         }
     }
 
     async fn run(mut self, input: TurnInput) -> Result<TurnResult, Error> {
         let setup = &self.agent.setup;
+        let init = crate::init::is_init(&input)
+            .then(|| self.init_snapshot())
+            .flatten();
         self.close_unfinished().await?;
+        self.load_prefill()?;
         self.journal_kind(JournalKind::TurnStarted)?;
         setup.model.start_turn().await;
         self.start_stream();
@@ -304,7 +311,35 @@ impl<'a> Turn<'a> {
         self.recall(&text, &wire).await;
         self.hook_context(&text, &wire).await;
         let ending = self.iterate(&mut frozen).await?;
+        if let Some((path, before)) = init {
+            self.keep_user_sections(&path, &before);
+        }
         self.finish(ending, Some(&frozen)).await
+    }
+
+    /// `AGENTS.md` before an `/init` turn: its path and text.
+    fn init_snapshot(&self) -> Option<(std::path::PathBuf, String)> {
+        let cwd = self.agent.setup.prompt.cwd.as_deref()?;
+        let path = crate::init::agents_file(cwd);
+        let before = std::fs::read_to_string(&path).ok()?;
+        Some((path, before))
+    }
+
+    /// Appends back the user sections an `/init` turn dropped.
+    fn keep_user_sections(&mut self, path: &std::path::Path, before: &str) {
+        let after = std::fs::read_to_string(path).unwrap_or_default();
+        let Some(merged) = crate::init::restore(before, &after) else {
+            return;
+        };
+        match std::fs::write(path, merged) {
+            Ok(()) => self.notices.push(format!(
+                "kept your sections of {} that the update dropped",
+                path.display()
+            )),
+            Err(err) => {
+                tracing::warn!(error = %err, path = %path.display(), "AGENTS.md sections not restored");
+            }
+        }
     }
 
     pub(super) async fn iterate(&mut self, frozen: &mut Frozen) -> Result<Ending, Error> {
@@ -439,8 +474,10 @@ impl<'a> Turn<'a> {
         if let Some(findings) = self.agent.setup.tools.settle().await {
             return Some((findings, "lsp_diagnostics"));
         }
-        let message = self.verify_nudge(reply, route).await?;
-        Some((message, "pre_verify"))
+        if let Some(message) = self.verify_nudge(reply, route).await {
+            return Some((message, "pre_verify"));
+        }
+        self.verify_on_stop().map(|m| (m, "verify_on_stop"))
     }
 
     /// The interrupt and run-budget check at the top of an iteration.
@@ -483,6 +520,9 @@ impl<'a> Turn<'a> {
         };
         if let Some(ephemeral) = &mut self.ephemeral {
             ephemeral.attach(&mut request.messages);
+        }
+        if let Some(prefill) = self.agent.prefill_messages() {
+            request.messages.splice(0..0, prefill.iter().cloned());
         }
         breakpoints::plan(&mut request, route.wire_format);
         Ok(request)
@@ -561,6 +601,36 @@ impl<'a> Turn<'a> {
             }))
             .await;
         }
+        Ok(())
+    }
+
+    /// Freezes the prefill messages at the session's start (its first
+    /// turn), or restores the frozen ones (spec: agent-turn-loop, Prefill
+    /// messages).
+    pub(super) fn load_prefill(&self) -> Result<(), Error> {
+        let setup = &self.agent.setup;
+        let frozen = match setup.store.prefill(setup.session)? {
+            Some(frozen) => Some(frozen),
+            None => match &self.config.prompt.prefill_messages_file {
+                Some(file)
+                    if setup
+                        .store
+                        .messages(setup.session, Visibility::All)?
+                        .is_empty() =>
+                {
+                    let read = crate::prompt::prefill::read(setup.scope.dir(), file)?;
+                    setup.store.save_prefill(setup.session, &read)?;
+                    Some(read)
+                }
+                _ => None,
+            },
+        };
+        *self
+            .agent
+            .prefill
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) =
+            frozen.map(|p| std::sync::Arc::new(crate::prompt::prefill::messages(&p)));
         Ok(())
     }
 

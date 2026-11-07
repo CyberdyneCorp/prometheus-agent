@@ -205,6 +205,7 @@ impl Turn<'_> {
     /// Continues the turn from its journal.
     async fn resume(mut self, unfinished: &Unfinished) -> Result<TurnResult, Error> {
         let setup = &self.agent.setup;
+        self.load_prefill()?;
         setup.model.start_turn().await;
         self.start_stream();
         let route = setup.model.route().await;

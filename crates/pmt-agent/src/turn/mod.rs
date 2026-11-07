@@ -37,6 +37,7 @@ mod steer;
 mod system;
 pub mod tools;
 pub mod transcript;
+mod verify;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
@@ -407,6 +408,7 @@ pub struct Agent {
     personality: Mutex<Option<String>>,
     steers: steer::Steers,
     hints: hints::Hints,
+    prefill: Mutex<Option<Arc<Vec<pmt_providers::request::Message>>>>,
     /// The previous request's prefix (cache break detection).
     prefix: Mutex<Option<cache::Prefix>>,
     /// Reported usage, for the compression preflight.
@@ -432,6 +434,7 @@ impl Agent {
             personality: Mutex::new(None),
             steers: steer::Steers::default(),
             hints: hints::Hints::default(),
+            prefill: Mutex::new(None),
             prefix: Mutex::new(None),
             usage: Mutex::new(compression::UsageMemory::new()),
             cache_ttl: OnceLock::new(),
@@ -524,6 +527,13 @@ impl Agent {
             );
         }
         kept
+    }
+
+    fn prefill_messages(&self) -> Option<Arc<Vec<pmt_providers::request::Message>>> {
+        self.prefill
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 
     fn usage_memory(&self) -> MutexGuard<'_, compression::UsageMemory> {

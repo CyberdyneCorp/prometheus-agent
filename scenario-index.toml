@@ -3057,3 +3057,19 @@ capabilities = [
 [agent-turn-loop."Crash resume mid-tool-batch (upgrade)"]
 "Crash during a terminal command" = ["crates/prometheus/tests/crash_resume.rs::a_crash_during_a_terminal_command_resumes_with_the_read_reused_and_the_command_unknown", "crates/prometheus/tests/crash_resume.rs::the_daemon_resumes_a_crashed_turn_when_the_session_loads", "crates/pmt-agent/tests/turn/journal.rs::declining_closes_the_turn_as_crashed_with_a_boundary_row", "crates/pmt-agent/tests/turn/journal.rs::a_new_message_closes_a_crashed_turn_first"]
 "Idempotent call re-run" = ["crates/pmt-agent/tests/turn/journal.rs::resuming_reuses_finished_results_reruns_safe_calls_and_marks_the_rest_unknown"]
+
+[agent-turn-loop."Side questions with /btw"]
+"Busy session" = ["crates/prometheus/tests/side_questions.rs::a_side_question_is_answered_while_the_turn_runs_and_never_stored"]
+
+[agent-turn-loop."Project instructions bootstrap with /init"]
+"Existing file preserved" = ["crates/pmt-agent/tests/turn/init.rs::an_existing_agents_file_keeps_the_users_sections"]
+
+[agent-turn-loop."Prefill messages"]
+"Frozen at start" = ["crates/pmt-agent/tests/turn/prefill.rs::prefill_is_frozen_at_session_start_and_never_stored", "crates/pmt-agent/tests/turn/prefill.rs::a_prefill_with_another_role_fails_the_session_start"]
+
+[agent-turn-loop."Verify-on-stop"]
+"Unverified edit nudged" = ["crates/pmt-agent/tests/turn/verify.rs::an_unverified_edit_is_nudged_and_the_turn_goes_on", "crates/pmt-agent/tests/turn/verify.rs::a_check_after_the_last_edit_is_evidence", "crates/pmt-agent/tests/turn/verify.rs::off_by_default_and_no_ledger_then"]
+"Docs-only edits pass" = ["crates/pmt-agent/tests/turn/verify.rs::docs_only_edits_pass_without_a_nudge"]
+
+[agent-turn-loop."Coding posture and standing coding instructions"]
+"Messaging unaffected" = ["crates/pmt-agent/tests/turn/verify.rs::messaging_sessions_get_no_coding_brief"]

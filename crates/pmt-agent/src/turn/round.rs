@@ -133,6 +133,7 @@ impl Turn<'_> {
             if matches!(outcome.result.status, Status::Ok | Status::Degraded) {
                 self.edited
                     .extend(super::observe::edited_paths(&call.name, &call.arguments));
+                self.observe_evidence(call);
             }
             let nonce = pmt_core::provenance::nonce(&self.agent.setup.session.to_string());
             self.append(&transcript::tool_row(call, &outcome.result, &nonce))?;

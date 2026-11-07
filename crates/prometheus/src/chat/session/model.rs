@@ -435,6 +435,22 @@ impl Models {
         }
     }
 
+    /// The session's side questions on its `side_question` auxiliary
+    /// route.
+    #[must_use]
+    pub fn side(
+        &self,
+        model: &Arc<SwitchableModel>,
+        session: pmt_core::id::SessionId,
+    ) -> super::side::SideAsker {
+        super::side::SideAsker {
+            parts: Arc::clone(&self.setup),
+            aux: Arc::clone(&self.aux),
+            model: Arc::clone(model),
+            session,
+        }
+    }
+
     /// The session's approval guardian on its `approval` auxiliary route.
     pub(crate) fn guardian(
         &self,

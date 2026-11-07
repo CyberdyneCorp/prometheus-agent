@@ -85,3 +85,54 @@ impl Store {
         })
     }
 }
+
+impl Store {
+    /// Records one verify-on-stop evidence row (`edit` or `check`) of
+    /// `turn` in `session` (spec: agent-turn-loop, Verify-on-stop).
+    ///
+    /// # Errors
+    ///
+    /// `store.schema_too_new`, `store.sqlite`.
+    pub fn record_verify_evidence(
+        &self,
+        session: SessionId,
+        turn: &str,
+        kind: &str,
+        detail: &str,
+    ) -> Result<(), Error> {
+        let session = session.to_string();
+        self.write(|tx| {
+            tx.execute(
+                "INSERT INTO verify_ledger (session_id, turn_id, kind, detail, at) \
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![session, turn, kind, detail, now_ms()],
+            )
+            .map(drop)
+            .map_err(sql)
+        })
+    }
+
+    /// The verify-on-stop ledger of `session` as `(turn, kind, detail)`,
+    /// oldest first.
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`.
+    pub fn verify_ledger(
+        &self,
+        session: SessionId,
+    ) -> Result<Vec<(String, String, String)>, Error> {
+        let session = session.to_string();
+        self.read(|conn| {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT turn_id, kind, detail FROM verify_ledger WHERE session_id = ?1 ORDER BY id",
+                )
+                .map_err(sql)?;
+            let rows = stmt
+                .query_map([&session], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+                .map_err(sql)?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(sql)
+        })
+    }
+}

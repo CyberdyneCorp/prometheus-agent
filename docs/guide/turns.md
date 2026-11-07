@@ -106,6 +106,43 @@ then the turn goes on with the next model request. Closing (or sending a
 new message instead) answers the open calls the same way without running
 anything and ends the turn as `crashed` with a boundary message.
 
+## Side questions, /init and verification
+
+`/btw <question>` asks a side question about the conversation without
+adding anything to it: one call on the `side_question` auxiliary route
+(default: the session's model) over a snapshot of the transcript taken
+when you send it. It works while a turn runs, without interrupting it;
+the answer appears as `side answer: ...` (a separate message on
+messaging platforms). Neither the question nor the answer is stored, so
+the prompt cache is untouched.
+
+`/init [notes]` runs a normal turn that inspects the workspace with
+read-only tools (manifests, layout, toolchain, CI) and writes `AGENTS.md`
+at the workspace root, or merges its findings into the existing file;
+your notes are passed as emphasis. The write goes through the usual file
+approvals. Sections you wrote (`## ...`) are kept verbatim: one the
+update dropped is appended back. The new file is project context from
+your next session.
+
+**Verify-on-stop.** With `agent.verify_on_stop = true` (or `"auto"`: on
+for the CLI, TUI, desktop, ACP and API callers, off for messaging;
+default `false`), a turn that edited files other than documentation
+cannot end until a test, build, lint or type-check command ran after the
+last edit: the final answer gets a nudge, as a new message, to verify or
+explain why it cannot (the answer to that nudge stands unless the model
+edits again). `agent.max_verify_nudges` (default 3) bounds the nudges
+together with `pre_verify` hooks; `agent.verify_guidance` (default true)
+adds clean-diff advice. The evidence (edits and checks) is recorded in
+`state.db` only while the feature is on.
+
+**Coding posture.** Per `agent.coding_context` (`"auto"` by default: on
+for interactive CLI, TUI, desktop and ACP sessions in a code workspace, a
+git repository or a directory with a build manifest; `"on"`; `"off"`),
+the session block of the prompt gets a coding brief, a workspace snapshot
+(branch and number of dirty files) and your standing
+`agent.coding_instructions`. Messaging sessions never get it. Changes
+apply from the next session.
+
 ## Failures and retries
 
 Each model call is tried up to `agent.api_max_retries` times (default 3)
@@ -303,6 +340,16 @@ pirate
 session, `/personality none` clears it, and `--now` applies it to the
 running session (one prompt-cache break). Custom texts are checked like
 context files.
+
+### Prefill messages
+
+`prompt.prefill_messages_file` (relative to the profile directory) names
+a JSON array of `{"role": "user" | "assistant", "content": "..."}`
+few-shot messages sent right after the system prompt. A session reads the
+file once, at its start, and keeps those messages (with the file's path
+and hash) for its whole life: editing the file changes new sessions only.
+They are never stored as transcript messages. A missing or malformed
+file, or another role, fails the session start (exit 78).
 
 ### Session id
 

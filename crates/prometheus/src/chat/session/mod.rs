@@ -28,6 +28,7 @@ pub mod processes;
 pub mod progress;
 pub mod python;
 pub mod serve;
+pub mod side;
 pub mod skills;
 pub mod snapshots;
 pub mod sudo;
