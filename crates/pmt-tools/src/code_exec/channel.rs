@@ -16,6 +16,7 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 
+use super::confined_fs;
 use crate::ToolResult;
 
 /// The variable naming the channel directory.
@@ -131,8 +132,11 @@ impl Server {
         let Ok(entries) = std::fs::read_dir(&self.dir) else {
             return Vec::new();
         };
+        // The script owns this directory: only regular files are
+        // requests (a link or FIFO is never opened).
         let mut found: Vec<PathBuf> = entries
             .filter_map(Result::ok)
+            .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
             .map(|e| e.path())
             .filter(|p| p.extension().is_some_and(|e| e == "req"))
             .collect();
@@ -141,12 +145,15 @@ impl Server {
     }
 
     async fn answer(&self, request: &std::path::Path, calls: &dyn StubCalls) {
-        let text = std::fs::read_to_string(request).unwrap_or_default();
+        // Read and written without following links the script planted
+        // (the host is unsandboxed); the rename replaces a link at the
+        // answer path rather than writing through it.
+        let text = confined_fs::read_regular(request).unwrap_or_default();
         let _ = std::fs::remove_file(request);
-        let reply = self.reply(&text, calls).await;
+        let reply = self.reply(&String::from_utf8_lossy(&text), calls).await;
         let answer = request.with_extension("resp");
         let temp = request.with_extension("resp.tmp");
-        if std::fs::write(&temp, reply.to_string()).is_ok() {
+        if confined_fs::write_new(&temp, reply.to_string().as_bytes()).is_ok() {
             let _ = std::fs::rename(&temp, &answer);
         }
     }
@@ -277,5 +284,37 @@ mod tests {
             "args": {"command": "ls", "background": true, "pty": true, "notify_on_complete": true}});
         server.reply(&request.to_string(), &calls).await;
         assert_eq!(calls.0.lock().unwrap()[0].1, json!({"command": "ls"}));
+    }
+
+    /// The script owns the channel directory: a link it plants at the
+    /// answer's temp path is replaced, not written through, and a FIFO
+    /// posing as a request never blocks the host.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn planted_links_and_fifos_do_not_redirect_or_block_the_host() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("zshrc");
+        std::fs::write(&target, "original").unwrap();
+        let rpc = dir.path().join("rpc");
+        std::fs::create_dir(&rpc).unwrap();
+        nix::unistd::mkfifo(&rpc.join("0.req"), nix::sys::stat::Mode::S_IRWXU).unwrap();
+        std::os::unix::fs::symlink(&target, rpc.join("1.resp.tmp")).unwrap();
+        let token = Token::new();
+        let request = json!({"token": token.as_str(), "tool": "read_file", "args": {}});
+        std::fs::write(rpc.join("1.req"), request.to_string()).unwrap();
+        let server = Server::new(rpc.clone(), token, vec!["read_file".to_owned()], 50);
+        let calls = Recording::default();
+        let answer = rpc.join("1.resp");
+        let _ = tokio::time::timeout(Duration::from_secs(5), async {
+            tokio::select! {
+                () = server.serve(&calls) => {}
+                () = async { while !answer.exists() { tokio::time::sleep(POLL).await; } } => {}
+            }
+        })
+        .await;
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "original");
+        let reply: Value =
+            serde_json::from_str(&std::fs::read_to_string(&answer).unwrap()).unwrap();
+        assert_eq!(reply["ok"], true, "{reply}");
     }
 }

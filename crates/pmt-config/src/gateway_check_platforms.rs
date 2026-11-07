@@ -244,7 +244,26 @@ fn check_route_name(key: &str, name: &str) -> Result<(), Error> {
     }
 }
 
+/// A `cron_job` route: a job named, never with `deliver_only`.
+fn check_route_job(key: &str, job: &str, route: &WebhookRoute) -> Result<(), Error> {
+    if job.trim().is_empty() {
+        return Err(invalid(format!(
+            "{key}.cron_job: name a scheduled job (id or name)"
+        )));
+    }
+    if route.deliver_only {
+        return Err(invalid(format!(
+            "{key}.cron_job: a route fires a scheduled job or forwards with deliver_only, not both"
+        )));
+    }
+    Ok(())
+}
+
 fn check_route_delivery(key: &str, route: &WebhookRoute) -> Result<(), Error> {
+    if let Some(job) = &route.cron_job {
+        // The job delivers: the route's own delivery is not used.
+        return check_route_job(key, job, route);
+    }
     let target = route.deliver_target();
     if route.deliver_only && target == "log" {
         return Err(invalid(format!(
@@ -452,6 +471,16 @@ mod tests {
                 .contains("path traversal")
         );
         check_toml("[gateway.platforms.webhook.routes.ci]\nsecret_secret = \"S\"\nscript = \"ci/transform.py\"\n").unwrap();
+    }
+
+    #[test]
+    fn a_cron_job_route_cannot_also_forward() {
+        let err = check_toml(
+            "[gateway.platforms.webhook.routes.pr]\nsecret_secret = \"S\"\ncron_job = \"sweeper\"\ndeliver_only = true\ndeliver = \"telegram\"\n",
+        )
+        .unwrap_err();
+        assert!(err.message().contains("not both"), "{}", err.message());
+        check_toml("[gateway.platforms.webhook.routes.pr]\nsecret_secret = \"S\"\ncron_job = \"sweeper\"\n").unwrap();
     }
 
     #[test]

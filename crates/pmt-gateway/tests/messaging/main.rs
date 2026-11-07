@@ -2,6 +2,7 @@
 //! against a fake adapter and a fake agent side, over real profile stores.
 
 mod access;
+mod automation;
 mod busy;
 mod cards;
 mod chats;

@@ -305,7 +305,7 @@ impl Checker<'_> {
             return;
         }
         if !allowed.contains(value) {
-            let message = format!("{key}: unknown value {value} (allowed: {})", list(allowed));
+            let message = unknown_value_message(key, value, allowed);
             self.invalid(key, node, message);
         }
     }
@@ -437,6 +437,22 @@ fn list(values: &[Value]) -> String {
         .map(Value::to_string)
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+/// The message for a value outside `allowed`; `cron.provider` words it
+/// as its spec does (scheduled-jobs, Pluggable trigger provider).
+fn unknown_value_message(key: &str, value: &Value, allowed: &[Value]) -> String {
+    if key == "cron.provider" {
+        let names: Vec<&str> = allowed.iter().filter_map(Value::as_str).collect();
+        let shown = value
+            .as_str()
+            .map_or_else(|| value.to_string(), str::to_owned);
+        return format!(
+            "unknown cron.provider '{shown}' (expected {})",
+            names.join("|")
+        );
+    }
+    format!("{key}: unknown value {value} (allowed: {})", list(allowed))
 }
 
 fn type_matches(schema: &Value, node: &Node) -> bool {
@@ -635,6 +651,19 @@ mod tests {
                 )]
             );
         }
+    }
+
+    /// Scenario: Unknown provider name (spec: scheduled-jobs, Pluggable
+    /// trigger provider).
+    #[test]
+    fn an_unknown_cron_provider_names_the_accepted_ones() {
+        let found = issues("[cron]\nprovider = \"cronos\"\n");
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(
+            found[0].message,
+            "unknown cron.provider 'cronos' (expected builtin|managed)"
+        );
+        assert_eq!(found[0].code.kind.exit_code(), 78);
     }
 
     /// Scenario: Invalid value fails validation (subagent-delegation).

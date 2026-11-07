@@ -169,8 +169,38 @@ pub(crate) const MIGRATIONS: &[Migration] = &[
     },
     Migration {
         version: 23,
-        min_read_version: 2,
+        min_read_version: 23,
         sql: include_str!("schema/v23.sql"),
+        rebuilds_tables: true,
+    },
+    Migration {
+        version: 24,
+        min_read_version: 23,
+        sql: include_str!("schema/v24.sql"),
+        rebuilds_tables: false,
+    },
+    Migration {
+        version: 25,
+        min_read_version: 23,
+        sql: include_str!("schema/v25.sql"),
+        rebuilds_tables: true,
+    },
+    Migration {
+        version: 26,
+        min_read_version: 23,
+        sql: include_str!("schema/v26.sql"),
+        rebuilds_tables: false,
+    },
+    Migration {
+        version: 27,
+        min_read_version: 23,
+        sql: include_str!("schema/v27.sql"),
+        rebuilds_tables: false,
+    },
+    Migration {
+        version: 28,
+        min_read_version: 23,
+        sql: include_str!("schema/v28.sql"),
         rebuilds_tables: false,
     },
 ];

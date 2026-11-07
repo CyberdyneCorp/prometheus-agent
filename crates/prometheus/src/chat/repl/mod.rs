@@ -9,6 +9,7 @@
 //! their busy policy and prompts (approvals, clarify questions, memory
 //! approvals, confirmations) are answered from the next line.
 
+mod automation;
 mod bottom_line;
 mod commands;
 pub(crate) mod compose;
@@ -104,6 +105,9 @@ struct Repl {
     running: bool,
     /// The bottom status line's toggles (`/statusbar`, `/battery`).
     status_bar: crate::chat::status_bar::StatusBar,
+    /// The automated turn the next idle boundary runs (a goal
+    /// continuation or a reserved timer wakeup).
+    wakeup: Option<crate::automation::boundary::Reserved>,
 }
 
 /// The memory approver of an interactive session and the REPL's end of
@@ -143,6 +147,14 @@ impl Asks {
             notices: mpsc::unbounded_channel().1,
             completions: mpsc::unbounded_channel().1,
         }
+    }
+}
+
+/// Sleeps until `at`; never wakes without one.
+async fn sleep_until(at: Option<tokio::time::Instant>) {
+    match at {
+        Some(at) => tokio::time::sleep_until(at).await,
+        None => std::future::pending().await,
     }
 }
 
@@ -216,6 +228,7 @@ pub async fn run(
         shell_context: Vec::new(),
         running: false,
         status_bar,
+        wakeup: None,
     };
     repl.attach(live);
     let notices = print_notices(asks.notices, repl.input.printer());
@@ -242,9 +255,19 @@ impl Repl {
             self.user_turn(seed).await;
         }
         loop {
+            // A queued line goes before any automated turn.
             let flow = match self.queue.pop_front() {
-                Some(line) => self.idle_line(line).await,
-                None => self.idle_event().await,
+                Some(line) => {
+                    self.drop_wakeup();
+                    self.idle_line(line).await
+                }
+                None => match self.wakeup.take() {
+                    Some(reserved) => {
+                        self.automated(reserved).await;
+                        Flow::Continue
+                    }
+                    None => self.idle_event().await,
+                },
             };
             if flow == Flow::Exit {
                 break;
@@ -259,8 +282,13 @@ impl Repl {
         let prompt = self.prompt();
         self.show_status();
         self.input.request(&prompt);
+        let automation = self.automation_deadline();
         let event = tokio::select! {
             event = self.input.next() => event,
+            () = sleep_until(automation) => {
+                self.automation_due();
+                return Flow::Continue;
+            }
             Some(text) = self.to_post.recv() => {
                 self.notice(&text);
                 return Flow::Continue;
@@ -316,6 +344,16 @@ impl Repl {
         if trimmed.is_empty() {
             return Flow::Continue;
         }
+        // A `yes` saves the job a `/cron` echo just showed; any other input
+        // drops it.
+        if let Some(confirmation) = crate::chat::commands::cron::take(self.live().id, trimmed) {
+            let session = self.live();
+            self.show(crate::chat::commands::cron::confirm(
+                &self.ctx(session),
+                confirmation,
+            ));
+            return Flow::Continue;
+        }
         if trimmed.starts_with('/') {
             return self.slash(trimmed.to_owned()).await;
         }
@@ -337,11 +375,19 @@ impl Repl {
                 target.provider,
                 target.model.as_deref().unwrap_or("default")
             );
-            crate::chat::status_bar::line_text(
+            let line = crate::chat::status_bar::line_text(
                 &self.status_bar,
                 self.factory.scope.name().as_str(),
                 Some(&model),
-            )
+            )?;
+            // The live automation rows (`loop · every 5m · 2 runs · next
+            // in 4m`).
+            let rows = self.automation_rows();
+            Some(if rows.is_empty() {
+                line
+            } else {
+                format!("{line} │ {}", rows.join(" │ "))
+            })
         });
         self.input.set_status(text.flatten());
     }

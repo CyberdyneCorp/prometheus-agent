@@ -76,6 +76,11 @@
           "const": "steered",
           "description": "Handed to the running turn after its current tool step\n(`busy.input_mode = \"steer\"`).",
           "type": "string"
+        },
+        {
+          "const": "handled",
+          "description": "Answered without a turn: the `yes` that saves the job a `/cron`\necho just showed (spec: scheduled-jobs, /cron slash command); the\nresult's `notice` says what happened.",
+          "type": "string"
         }
       ]
     },
@@ -332,6 +337,63 @@
       ],
       "type": "object"
     },
+    "AutomationStatePayload": {
+      "additionalProperties": false,
+      "description": "One kind of a session's automation.",
+      "properties": {
+        "count": {
+          "default": 0,
+          "description": "Turns (goal), wakeups (loop) or fires (heartbeat) so far.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "description": "`goal`, `loop` or `heartbeat`.",
+          "type": "string"
+        },
+        "limit": {
+          "default": null,
+          "description": "A goal's turn budget (`goals.max_turns`).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "next_fire_at": {
+          "default": null,
+          "description": "When it fires next (RFC 3339), for an active loop or heartbeat or a\nparked goal's deadline.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "row": {
+          "default": null,
+          "description": "The live row as the CLI shows it (absent once removed).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        },
+        "status": {
+          "description": "`active`, `paused`, `done`, `parked`, or `none` once removed.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "kind",
+        "status"
+      ],
+      "type": "object"
+    },
     "BannerInfo": {
       "additionalProperties": false,
       "description": "`session.banner` result: what the TUI's startup banner lists.",
@@ -382,6 +444,225 @@
         "skills",
         "mcp_servers"
       ],
+      "type": "object"
+    },
+    "BlueprintFillParams": {
+      "additionalProperties": false,
+      "description": "`cron.blueprints.fill` params.",
+      "properties": {
+        "create": {
+          "default": false,
+          "description": "Save the job (after the caller showed the echo); otherwise only\ncheck and echo.",
+          "type": "boolean"
+        },
+        "key": {
+          "description": "The blueprint (key, prefix or near spelling).",
+          "type": "string"
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "values": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Slot values by name.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "type": "object"
+    },
+    "BlueprintFilled": {
+      "additionalProperties": false,
+      "description": "`cron.blueprints.fill` result.",
+      "properties": {
+        "echo": {
+          "description": "The schedule echo: the canonical form and the next instants.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "job_id": {
+          "description": "The created job's id.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "key": {
+          "description": "The blueprint's key.",
+          "type": "string"
+        },
+        "missing": {
+          "description": "The slot that needs a value.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "prompt": {
+          "description": "The job's prompt.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "question": {
+          "description": "Its question.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "schedule": {
+          "description": "The canonical schedule (`cron 0 8 * * 1-5`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "description": "`missing` (a slot needs a value), `ready` (echoed, not saved) or\n`created`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "key"
+      ],
+      "type": "object"
+    },
+    "BlueprintInfo": {
+      "additionalProperties": false,
+      "description": "One blueprint.",
+      "properties": {
+        "category": {
+          "description": "Its category.",
+          "type": "string"
+        },
+        "description": {
+          "description": "What it does.",
+          "type": "string"
+        },
+        "key": {
+          "description": "Its key (`<plugin>:<key>`, `skill:<key>` outside the built-ins).",
+          "type": "string"
+        },
+        "slots": {
+          "description": "Its slots, in the order they are asked.",
+          "items": {
+            "$ref": "#/$defs/BlueprintSlot"
+          },
+          "type": "array"
+        },
+        "source": {
+          "description": "`builtin`, `plugin` or `skill`.",
+          "type": "string"
+        },
+        "title": {
+          "description": "Its title.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "title",
+        "description",
+        "category",
+        "source",
+        "slots"
+      ],
+      "type": "object"
+    },
+    "BlueprintList": {
+      "additionalProperties": false,
+      "description": "`cron.blueprints.list` result.",
+      "properties": {
+        "blueprints": {
+          "description": "The profile's catalog.",
+          "items": {
+            "$ref": "#/$defs/BlueprintInfo"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "blueprints"
+      ],
+      "type": "object"
+    },
+    "BlueprintSlot": {
+      "additionalProperties": false,
+      "description": "One slot, as a form field.",
+      "properties": {
+        "default": {
+          "description": "The value used when none is given.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "`time`, `enum`, `text` or `weekdays`.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The field name (`time`, `days`...).",
+          "type": "string"
+        },
+        "options": {
+          "description": "The options of an `enum`; the presets of `weekdays`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "question": {
+          "description": "The question asked for it.",
+          "type": "string"
+        },
+        "required": {
+          "description": "Needs a value (given or default).",
+          "type": "boolean"
+        },
+        "strict": {
+          "description": "An `enum` accepts only its options.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "kind",
+        "question",
+        "options",
+        "strict",
+        "required"
+      ],
+      "type": "object"
+    },
+    "BlueprintsListParams": {
+      "additionalProperties": false,
+      "description": "`cron.blueprints.list` params.",
+      "properties": {
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "ClarifyAnswers": {
@@ -2297,6 +2578,13 @@
           "default": "started",
           "description": "How the input was admitted."
         },
+        "notice": {
+          "description": "What a `handled` input did, to show in place of a turn.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "turn_id": {
           "description": "The admission id: the turn that runs the input (for a steered\ninput, the running turn it joined).",
           "type": "string"
@@ -3175,8 +3463,10 @@
       "since": "1.0"
     },
     "automation.state": {
-      "declared": false,
       "owner": "session-automation",
+      "payload": {
+        "$ref": "#/$defs/AutomationStatePayload"
+      },
       "since": "1.0"
     },
     "health.changed": {
@@ -3340,13 +3630,23 @@
       "since": "1.0"
     },
     "cron.blueprints.fill": {
-      "declared": false,
       "owner": "scheduled-jobs",
+      "params": {
+        "$ref": "#/$defs/BlueprintFillParams"
+      },
+      "result": {
+        "$ref": "#/$defs/BlueprintFilled"
+      },
       "since": "1.0"
     },
     "cron.blueprints.list": {
-      "declared": false,
       "owner": "scheduled-jobs",
+      "params": {
+        "$ref": "#/$defs/BlueprintsListParams"
+      },
+      "result": {
+        "$ref": "#/$defs/BlueprintList"
+      },
       "since": "1.0"
     },
     "daemon.update": {

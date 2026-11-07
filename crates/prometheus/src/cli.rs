@@ -146,6 +146,13 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::lsp_cmd::LspCommand,
     },
+    /// Scheduled jobs: create, list, pause, run now, inspect runs, replay,
+    /// doctor and the headless tick.
+    Cron {
+        /// The cron subcommand.
+        #[command(subcommand)]
+        command: crate::cron_cmd::CronCommand,
+    },
     /// Git worktrees of sessions and subagents: list, sweep and restore
     /// archived trees.
     Worktrees {

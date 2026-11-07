@@ -1204,3 +1204,47 @@ async fn a_labelled_dispatch_returns_as_a_labelled_completion() {
         "a session without completions cannot run it"
     );
 }
+
+/// A review completion owed across a restart keeps its `Review: …` label.
+#[tokio::test]
+async fn a_labelled_completion_delivered_after_a_restart_keeps_its_label() {
+    let f = fixture();
+    f.completions.refuse.store(true, Ordering::SeqCst);
+    let d = f.delegator(DelegationConfig::default(), f.background());
+    let id = d
+        .dispatch_labelled(pmt_delegation::host::Labelled {
+            goal: "Review the recent work".to_owned(),
+            context: "User: open a PR".to_owned(),
+            model: None,
+            label: "Review: focus on security".to_owned(),
+        })
+        .await
+        .unwrap();
+    for _ in 0..200 {
+        if f.store
+            .delegation(&id)
+            .unwrap()
+            .unwrap()
+            .completed_at
+            .is_some()
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    let reopened = Store::open(&f.scope).unwrap();
+    deliver::recover(&reopened);
+    f.completions.refuse.store(false, Ordering::SeqCst);
+    let spill = f.scope.dir().join("spill");
+    deliver::deliver_pending(&reopened, f.session, None, &spill, f.completions.as_ref()).await;
+    let delivered = f.completions.delivered.lock().unwrap().clone();
+    assert_eq!(delivered.len(), 1);
+    assert!(
+        delivered[0].1.starts_with(&format!(
+            "[delegation_completed {id}] Review: focus on security"
+        )),
+        "{}",
+        delivered[0].1
+    );
+}

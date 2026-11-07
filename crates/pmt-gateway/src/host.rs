@@ -188,6 +188,37 @@ pub trait Host: Send + Sync + 'static {
         ))
     }
 
+    /// The automation blueprints of `profile` (`cron.blueprints.list`).
+    ///
+    /// # Errors
+    ///
+    /// `rpc.not_served`; profile errors.
+    fn cron_blueprints(&self, profile: &str) -> Result<pmt_rpc::contracts::BlueprintList, Error> {
+        let _ = profile;
+        Err(Error::new(
+            &pmt_core::error::codes::RPC_NOT_SERVED,
+            "this host has no scheduled jobs",
+        ))
+    }
+
+    /// Fills a blueprint of `profile` (`cron.blueprints.fill`).
+    ///
+    /// # Errors
+    ///
+    /// `rpc.not_served`; `cron.blueprint` for a bad value; the errors of
+    /// creating a job.
+    fn cron_blueprint_fill(
+        &self,
+        profile: &str,
+        params: &pmt_rpc::contracts::BlueprintFillParams,
+    ) -> Result<pmt_rpc::contracts::BlueprintFilled, Error> {
+        let _ = (profile, params);
+        Err(Error::new(
+            &pmt_core::error::codes::RPC_NOT_SERVED,
+            "this host has no scheduled jobs",
+        ))
+    }
+
     /// Stops the session's running turn at its next safe point; a no-op
     /// when none runs.
     fn interrupt<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()>;
@@ -300,6 +331,10 @@ pub struct Author {
     /// created with message timestamps; never stored in the text.
     #[serde(skip)]
     pub prefix: Option<String>,
+    /// What started an automated turn (`goal`, `loop`, `heartbeat`): the
+    /// host stores it as the user message's `origin`.
+    #[serde(skip)]
+    pub origin: Option<String>,
 }
 
 /// Receives a turn's answer text as it streams.

@@ -17,7 +17,9 @@
 //! the whole file validates in one place.
 
 mod agent;
+mod automation;
 mod connectors;
+mod cron;
 mod delegation;
 mod gateway;
 mod gateway_display;
@@ -46,7 +48,9 @@ pub use agent::{
     PromptCacheConfig, PromptCacheTtl, PromptConfig, ReasoningLevel, TailMode, ToolLoopGuardrails,
     VisionConfig,
 };
+pub use automation::{GoalsConfig, HeartbeatConfig, LoopsConfig};
 pub use connectors::{ConnectorsConfig, DEFAULT_CONNECTOR_GATEWAY};
+pub use cron::{ContinuableSurface, CronConfig, CronDeliveryConfig, CronProvider};
 pub use delegation::{
     BackgroundMode, CODE_EXECUTION_TOOLS, ChildApproval, CodeExecutionConfig, CodeExecutionMode,
     DelegationConfig, GatewayDelegationMode, ReviewConfig,
@@ -83,11 +87,10 @@ pub use models::{
     PoolStrategy, PreferCredential, ProviderAuth, ProviderConfig, RoutingConfig, WireFormat,
 };
 pub use operations::{
-    BudgetsConfig, CronConfig, DegradedFeature, EgressConfig, EgressMode, GatewayHealthConfig,
-    LogLevel, LoggingConfig, NetworkConfig, ObservabilityConfig, PrivacyConfig, SandboxConfig,
-    SandboxMode, SecretCommandConfig, SecretsBackend, SecretsConfig, SecurityConfig,
-    TelemetryConfig, TrajectoriesConfig, VaultConfig, VaultKeyStorage, VaultSourceConfig,
-    WorktreesConfig,
+    BudgetsConfig, DegradedFeature, EgressConfig, EgressMode, GatewayHealthConfig, LogLevel,
+    LoggingConfig, NetworkConfig, ObservabilityConfig, PrivacyConfig, SandboxConfig, SandboxMode,
+    SecretCommandConfig, SecretsBackend, SecretsConfig, SecurityConfig, TelemetryConfig,
+    TrajectoriesConfig, VaultConfig, VaultKeyStorage, VaultSourceConfig, WorktreesConfig,
 };
 pub use plugins::{
     DEFAULT_CATALOG_URL, GuidanceMode, PluginsConfig, PluginsWasmConfig, SecurityGuidanceConfig,
@@ -157,10 +160,16 @@ pub struct Config {
     pub files: FilesConfig,
     /// The profile's part in the home's gateway daemon.
     pub gateway: GatewayConfig,
+    /// `/goal`: the judge loop's turn budget, quality gates and waits.
+    pub goals: GoalsConfig,
+    /// `/heartbeat` bounds.
+    pub heartbeat: HeartbeatConfig,
     /// Shell hooks and outbound webhooks.
     pub hooks: HooksConfig,
     /// Structured log files.
     pub logging: LoggingConfig,
+    /// `/loop` cadence bounds.
+    pub loops: LoopsConfig,
     /// Language server diagnostics after file edits.
     pub lsp: LspConfig,
     /// External MCP servers.
@@ -255,8 +264,11 @@ impl Default for Config {
             fallback: FallbackConfig::default(),
             files: FilesConfig::default(),
             gateway: GatewayConfig::default(),
+            goals: GoalsConfig::default(),
+            heartbeat: HeartbeatConfig::default(),
             hooks: HooksConfig::default(),
             logging: LoggingConfig::default(),
+            loops: LoopsConfig::default(),
             lsp: LspConfig::default(),
             mcp: McpConfig::default(),
             mcp_server: McpServerModeConfig::default(),

@@ -31,6 +31,11 @@ fn a_tool_handler_runs_in_the_sidecar_and_its_return_is_the_result() {
         registrations.sections[0].r#static.as_deref(),
         Some("Echo plugin rules.")
     );
+    // register_automation_blueprint: data scheduled-jobs reads (spec:
+    // scheduled-jobs, Automation blueprint catalog).
+    assert_eq!(registrations.blueprints.len(), 1);
+    assert_eq!(registrations.blueprints[0]["key"], "standup");
+    assert_eq!(registrations.blueprints[0]["slots"][0]["default"], "09:15");
 }
 
 #[test]

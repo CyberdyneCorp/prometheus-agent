@@ -39,6 +39,9 @@ pub(super) const CLIENT_COMMANDS: &[&str] = &[
     "battery",
 ];
 
+/// The session automation commands.
+const AUTOMATION: &[&str] = &["goal", "subgoal", "loop", "heartbeat"];
+
 fn refused(reason: impl Into<String>) -> Dispatched {
     Dispatched::Refused {
         reason: reason.into(),
@@ -121,6 +124,31 @@ impl DaemonHost {
 }
 
 impl DaemonHost {
+    /// Saves the job the `/cron` echo of `session` showed (a client's `yes`
+    /// sent as a prompt); the notice says what happened.
+    pub(super) fn confirm_cron(
+        profile: &Profile,
+        session: &Loaded,
+        link: &Link,
+        confirmation: commands::cron::Confirmation,
+    ) -> String {
+        let registry = commands::registry(&profile.scope(), &session.live);
+        let run = Run {
+            session,
+            profile,
+            registry: &registry,
+            link,
+            surface: Surface::Cli,
+            message_limit: None,
+            caller: session.live.surface(),
+        };
+        let scope = profile.scope();
+        match commands::cron::confirm(&run.ctx(&scope), confirmation) {
+            Ok(notice) => notice,
+            Err(err) => reason(&err),
+        }
+    }
+
     /// The message limit of the platform a gateway session talks on.
     fn message_limit(&self, profile: &Profile, id: pmt_core::id::SessionId) -> Option<usize> {
         let session = profile.store.session(id).ok()?;
@@ -135,6 +163,12 @@ impl DaemonHost {
 
 impl Run<'_> {
     async fn line(&self, line: String, depth: u8) -> Dispatched {
+        // A messaging `yes` the gateway's lookup routed here, answering a
+        // `/cron` echo; any other line drops the shown job.
+        if let Some(confirmation) = commands::cron::take(self.session.live.id, &line) {
+            let scope = self.profile.scope();
+            return done(commands::cron::confirm(&self.ctx(&scope), confirmation));
+        }
         match self.registry.resolve(&line, self.surface) {
             Resolution::Builtin { command, args } => self.builtin(command, &args).await,
             Resolution::External { command, args } => match command.source {
@@ -229,7 +263,20 @@ impl Run<'_> {
 
     async fn shared(&self, name: &str, args: &str) -> Dispatched {
         let scope = self.profile.scope();
-        match commands::run(&self.ctx(&scope), name, args).await {
+        let reply = commands::run(&self.ctx(&scope), name, args).await;
+        if AUTOMATION.contains(&name) {
+            // What a command set starts at the next idle boundary, and every
+            // surface shows it.
+            self.profile.automation_wake.notify_one();
+            let limits = crate::automation::limits(scope.config());
+            super::automation::publish(
+                &self.session.factory.store,
+                self.session.live.id,
+                self.link,
+                &limits,
+            );
+        }
+        match reply {
             Some(Ok(Reply::Text(notice))) => Dispatched::Done { notice },
             Some(Ok(Reply::Send(input))) => Dispatched::Send {
                 message: input.text,

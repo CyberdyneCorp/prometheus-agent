@@ -224,6 +224,7 @@ fn outbound(key: &str, chat: &str) -> NewOutbound {
         kind: OutboundKind::Reply,
         body: format!("body of {key}"),
         attachments: Vec::new(),
+        notify: None,
     }
 }
 

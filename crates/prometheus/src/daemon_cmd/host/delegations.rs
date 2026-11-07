@@ -73,6 +73,7 @@ impl ClientInbox {
             turn_id: pmt_agent::turn::TurnId::new().to_string(),
             run_budget: None,
             link: self.link.clone(),
+            from_lane: false,
         };
         {
             let mut queue = session.queue.lock().expect("queue poisoned");

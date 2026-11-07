@@ -5,6 +5,7 @@
 
 pub mod clarify;
 pub mod connections;
+pub mod cron;
 pub mod delegation;
 pub mod memory;
 pub mod messaging;
@@ -20,6 +21,7 @@ use pmt_tools::ToolResult;
 use serde_json::Value;
 
 pub use clarify::Clarifier;
+pub use cron::CronPort;
 pub use delegation::{CodePort, DelegationPort};
 pub use memory::{MemoryPort, Recalled};
 pub use messaging::{MessagingPort, MessagingPorts, ReadCheck};
@@ -38,6 +40,7 @@ pub struct AgentTools {
     connections: Option<Arc<pmt_tools::connectors::manage::Manager>>,
     delegation: Option<Arc<dyn DelegationPort>>,
     code: Option<Arc<dyn CodePort>>,
+    cron: Option<Arc<dyn CronPort>>,
 }
 
 impl AgentTools {
@@ -65,6 +68,7 @@ impl AgentTools {
             connections: None,
             delegation: None,
             code: None,
+            cron: None,
         })
     }
 
@@ -107,6 +111,13 @@ impl AgentTools {
         self
     }
 
+    /// Runs `cronjob` through `port`.
+    #[must_use]
+    pub fn with_cron(mut self, port: Arc<dyn CronPort>) -> Self {
+        self.cron = Some(port);
+        self
+    }
+
     /// Runs `execute_code` through `port`.
     #[must_use]
     pub fn with_code(mut self, port: Arc<dyn CodePort>) -> Self {
@@ -131,6 +142,10 @@ impl AgentTools {
             "execute_code" => match &self.code {
                 Some(port) => port.call(arguments, cancel).await,
                 None => ToolResult::error(delegation::NO_CODE),
+            },
+            "cronjob" => match &self.cron {
+                Some(port) => port.call(self.session, arguments).await,
+                None => ToolResult::error(cron::NO_CRON),
             },
             "todo" => self.todo(arguments),
             "clarify" => self.clarify.call(arguments).await,

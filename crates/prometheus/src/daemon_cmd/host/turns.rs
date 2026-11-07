@@ -28,6 +28,7 @@ use pmt_store::EndReason;
 
 use tracing::Instrument as _;
 
+use super::automation::Follow;
 use super::{DaemonHost, Loaded, Profile, finished, session_id, setup};
 
 /// An input waiting for its turn.
@@ -36,15 +37,21 @@ pub(super) struct Queued {
     pub(super) turn_id: String,
     pub(super) run_budget: Option<u64>,
     pub(super) link: Link,
+    /// A messaging conversation's lane submitted it: the lane takes the
+    /// turn's automation boundary once it delivered the answer.
+    pub(super) from_lane: bool,
 }
 
 impl DaemonHost {
+    /// Admits `params` as an input of its session; `busy` overrides
+    /// `busy.input_mode` (a turn the daemon starts on its own always
+    /// queues: it neither steers nor interrupts someone's turn).
     pub(super) async fn submit_turn(
         &self,
         profile: &Arc<Profile>,
         params: SubmitParams,
-        author: Author,
-        link: Link,
+        (author, link): (Author, Link),
+        busy: Option<BusyInputMode>,
     ) -> Result<Submitted, Error> {
         let id = session_id(&params.session_id)?;
         // No new turn starts while the home is paused (spec: messaging-
@@ -52,26 +59,50 @@ impl DaemonHost {
         pmt_core::pause::check(profile.scope().home())?;
         Self::check_budget(profile, id)?;
         let session = self.load(profile, id, &link).await?;
+        // A `yes` saves the job a `/cron` echo just showed; any other input
+        // drops it.
+        if let Some(confirmation) = crate::chat::commands::cron::take(id, &params.text) {
+            return Ok(Submitted {
+                turn_id: pmt_agent::turn::TurnId::new().to_string(),
+                admission: Admission::Handled,
+                notice: Some(Self::confirm_cron(profile, &session, &link, confirmation)),
+            });
+        }
         let mut input = setup::input(&session.factory, &session.live, &params).await?;
         input.prefix.clone_from(&author.prefix);
+        input.origin.clone_from(&author.origin);
+        if author.origin.is_none() {
+            // Someone's input goes first: a continuation the last boundary
+            // left for the lane is dropped (the judge looks again after
+            // this turn).
+            session.after.lock().expect("after poisoned").turn = None;
+        }
         input.author = serde_json::to_value(&author).ok();
+        // An automated turn neither steers nor interrupts a running one
+        // (a client's turn on a conversation's session): it queues.
+        let busy = busy.or_else(|| author.origin.is_some().then_some(BusyInputMode::Queue));
         let job = Queued {
             input,
             turn_id: pmt_agent::turn::TurnId::new().to_string(),
             run_budget: params.run_budget_secs,
             link,
+            // The lane is the gateway's only submitter.
+            from_lane: author.client_kind == "gateway",
         };
         let turn_id = job.turn_id.clone();
         let admission = {
             let mut queue = session.queue.lock().expect("queue poisoned");
             if session.busy.swap(true, Ordering::AcqRel) {
-                Self::while_busy(&session, &mut queue, job, &params.text)?
+                let mode =
+                    busy.unwrap_or_else(|| session.live.config.get().config().busy.input_mode);
+                Self::while_busy(&session, &mut queue, job, &params.text, mode)?
             } else {
                 drop(queue);
                 self.start(Arc::clone(profile), id, Arc::clone(&session), job)?;
                 return Ok(Submitted {
                     turn_id,
                     admission: Admission::Started,
+                    notice: None,
                 });
             }
         };
@@ -84,8 +115,8 @@ impl DaemonHost {
         queue: &mut std::collections::VecDeque<Queued>,
         job: Queued,
         text: &str,
+        mode: BusyInputMode,
     ) -> Result<Submitted, Error> {
-        let mode = session.live.config.get().config().busy.input_mode;
         let turn_id = job.turn_id.clone();
         match mode {
             BusyInputMode::Queue => queue.push_back(job),
@@ -99,12 +130,14 @@ impl DaemonHost {
                 return Ok(Submitted {
                     turn_id: running.unwrap_or(turn_id),
                     admission: Admission::Steered,
+                    notice: None,
                 });
             }
         }
         Ok(Submitted {
             turn_id,
             admission: Admission::Queued,
+            notice: None,
         })
     }
 
@@ -154,17 +187,15 @@ impl DaemonHost {
                 loop {
                     let link = job.link.clone();
                     let permit = slots.acquire(|ahead| waiting(&link, ahead)).await;
-                    run_one(id, &session, job, &record).await;
+                    let follow = run_one(id, &session, job, &record).await;
                     drop(permit);
-                    let next = {
-                        let mut queue = session.queue.lock().expect("queue poisoned");
-                        let next = queue.pop_front();
-                        if next.is_none() {
-                            session.busy.store(false, Ordering::Release);
+                    let (next, in_chat) = next_job(&session, follow, link);
+                    let Some(queued) = next else {
+                        if let Some(wakeup) = in_chat {
+                            DaemonHost::continue_in_chat(&session, &wakeup);
                         }
-                        next
+                        break;
                     };
-                    let Some(queued) = next else { break };
                     job = queued;
                     record = setup::record(&session.factory, &session.live).unwrap_or_else(|err| {
                         tracing::warn!("no usage record for a queued turn: {err}");
@@ -188,6 +219,11 @@ impl DaemonHost {
     /// queued input or is in use by a request right now; `true` when it is
     /// closed (or was not loaded).
     pub(super) async fn close_unused(profile: &Profile, id: SessionId) -> bool {
+        // An active loop or heartbeat keeps its session (spec:
+        // session-automation, Automation status on every surface).
+        if Self::automation_keeps(profile, id) {
+            return false;
+        }
         {
             let loaded = profile.loaded.lock().await;
             let Some(session) = loaded.get(&id) else {
@@ -320,13 +356,53 @@ fn waiting(link: &Link, ahead: usize) {
 /// How long a stopping daemon waits for an interrupted turn to end.
 const STOP_WAIT: Duration = Duration::from_secs(5);
 
-/// Runs one turn and emits its `turn.finished`.
+/// A goal continuation as the session's next job.
+fn automated(wakeup: pmt_automation::arbiter::Wakeup, link: Link) -> Queued {
+    Queued {
+        input: TurnInput {
+            origin: Some(wakeup.kind.as_str().to_owned()),
+            ..TurnInput::text(wakeup.prompt)
+        },
+        turn_id: pmt_agent::turn::TurnId::new().to_string(),
+        run_budget: None,
+        link,
+        from_lane: false,
+    }
+}
+
+/// The session's next job after a turn: queued input first, then the
+/// goal continuation `follow` asks for (the session goes idle when there
+/// is neither). A continuation for the conversation's chat comes back
+/// second, to hand to its lane once the session is idle; queued input
+/// drops it (the judge looks again after that input's turn).
+fn next_job(
+    session: &Loaded,
+    follow: Option<Follow>,
+    link: Link,
+) -> (Option<Queued>, Option<pmt_automation::arbiter::Wakeup>) {
+    let mut queue = session.queue.lock().expect("queue poisoned");
+    if let Some(queued) = queue.pop_front() {
+        return (Some(queued), None);
+    }
+    let (next, in_chat) = match follow {
+        Some(Follow::Here(wakeup)) => (Some(automated(wakeup, link)), None),
+        Some(Follow::InChat(wakeup)) => (None, Some(wakeup)),
+        None => (None, None),
+    };
+    if next.is_none() {
+        session.busy.store(false, Ordering::Release);
+    }
+    (next, in_chat)
+}
+
+/// Runs one turn, then its automation boundary, and emits its
+/// `turn.finished`; the goal continuation the boundary asks for.
 async fn run_one(
     id: SessionId,
     session: &Loaded,
     job: Queued,
     record: &crate::chat::usage_file::RunRecord,
-) {
+) -> Option<Follow> {
     *session.current.lock().expect("current poisoned") = Some(job.turn_id.clone());
     // The session's configuration: its start snapshot with the live keys
     // of every reload since.
@@ -337,14 +413,33 @@ async fn run_one(
         options.deltas = Arc::new(crate::daemon_cmd::turn::DeltasToLink(job.link.clone()));
     }
     *session.interrupt.lock().expect("interrupt poisoned") = Some(options.interrupt.clone());
+    let origin = job
+        .input
+        .origin
+        .as_deref()
+        .and_then(pmt_automation::Kind::parse);
     let outcome = session
         .live
         .agent
         .run_turn(Some(&scope), id, job.input, options)
         .await;
+    session.interrupt.lock().expect("interrupt poisoned").take();
+    let end = super::automation::TurnEnd {
+        origin,
+        reply: outcome
+            .as_ref()
+            .ok()
+            .and_then(|r| r.final_response.clone())
+            .unwrap_or_default(),
+        interrupted: outcome
+            .as_ref()
+            .is_ok_and(|r| r.exit_reason == pmt_agent::turn::ExitReason::InterruptedByUser),
+        from_lane: job.from_lane,
+    };
+    let wakeup = DaemonHost::automation_after(session, end, &job.link).await;
     let mut ended = finished(job.turn_id, outcome);
     ended.report = serde_json::to_value(record.report(&Ok(0))).ok();
     job.link.emit::<TurnEnded>(&ended);
-    session.interrupt.lock().expect("interrupt poisoned").take();
     session.current.lock().expect("current poisoned").take();
+    wakeup
 }

@@ -1462,6 +1462,9 @@ capabilities = [
 [cli."Shell completions (upgrade)"]
 "Config key completion" = ["crates/prometheus/tests/completions_cli.rs::zsh_completes_a_config_key_on_tab"]
 
+[cli."Background sessions"]
+"Result delivered back" = { tests = ["crates/prometheus/tests/delegation_gateway.rs::a_background_result_is_posted_to_the_chat_and_not_into_its_session", "crates/pmt-gateway/tests/messaging/chats.rs::a_background_task_reports_back_while_the_chat_keeps_talking"], note = "the requirement defers to subagent-delegation > User-launched background sessions; `/bg` and `/background` are one registry entry (slash/builtins.rs)" }
+
 [configuration-and-profiles."Live reload with apply classes"]
 "Prompt-affecting key deferred" = ["crates/prometheus/tests/daemon_config.rs::a_next_session_key_leaves_the_live_session_and_reaches_new_ones", "crates/pmt-config/src/reload.rs::changed_keys_carry_their_apply_class"]
 "Live key applies to a running session" = ["crates/prometheus/tests/daemon_config.rs::a_live_key_changed_mid_session_applies_on_the_next_turn", "crates/pmt-config/src/layers.rs::a_session_takes_the_reloaded_live_keys_and_keeps_the_rest"]
@@ -2720,14 +2723,14 @@ capabilities = [
 # Group 40.1 / 40.2 (background sessions, agents monitor, review,
 # independent completions, request overrides, gateway delegation mode).
 [subagent-delegation."User-launched background sessions"]
-"Result delivered to the same chat" = ["crates/prometheus/tests/delegation_gateway.rs::a_background_result_is_posted_to_the_chat_and_not_into_its_session", "crates/pmt-gateway/tests/messaging/chats.rs::a_background_task_reports_back_while_the_chat_keeps_talking"]
+"Result delivered to the same chat" = ["crates/prometheus/tests/delegation_gateway.rs::a_background_result_is_posted_to_the_chat_and_not_into_its_session", "crates/pmt-gateway/tests/messaging/chats.rs::a_background_task_reports_back_while_the_chat_keeps_talking", "crates/prometheus/tests/chat_background.rs::a_background_task_reports_while_the_chat_keeps_answering", "crates/pmt-store/tests/store/sessions.rs::a_background_task_session_links_its_launcher_for_lineage_only"]
 
 [subagent-delegation."Agents monitor and live transcripts"]
 "Stop one child" = ["crates/pmt-delegation/tests/host.rs::stopping_one_child_from_the_monitor_spares_its_siblings", "crates/prometheus/tests/delegation_review.rs::agents_lists_tails_and_stops_a_running_child"]
 "Tail a live transcript" = ["crates/pmt-delegation/tests/host.rs::a_childs_transcript_exists_before_its_first_model_call_and_logs_each_tool_call", "crates/prometheus/tests/delegation_review.rs::agents_lists_tails_and_stops_a_running_child"]
 
 [subagent-delegation."Review command"]
-"Review returns to the session" = ["crates/prometheus/tests/delegation_review.rs::a_review_runs_in_the_background_and_returns_to_the_session", "crates/pmt-delegation/tests/host.rs::a_labelled_dispatch_returns_as_a_labelled_completion"]
+"Review returns to the session" = ["crates/prometheus/tests/delegation_review.rs::a_review_runs_in_the_background_and_returns_to_the_session", "crates/pmt-delegation/tests/host.rs::a_labelled_dispatch_returns_as_a_labelled_completion", "crates/pmt-delegation/tests/host.rs::a_labelled_completion_delivered_after_a_restart_keeps_its_label"]
 
 [subagent-delegation."Independent completions"]
 "Ungrouped results arrive separately" = ["crates/pmt-delegation/tests/host.rs::ungrouped_results_arrive_separately_and_a_group_together"]
@@ -2741,6 +2744,253 @@ capabilities = [
 [subagent-delegation."Worktree isolation for children"]
 "Clean child pruned" = ["crates/prometheus/tests/worktree_delegation.rs::a_child_that_changed_nothing_has_its_tree_and_branch_pruned"]
 "Failed probe keeps work" = ["crates/prometheus/tests/worktree_delegation.rs::a_tree_that_cannot_be_inspected_is_kept_in_place"]
+
+# Group 41 (scheduled jobs: grammar, next runs, at-most-once firing, the
+# daemon trigger and headless tick, runs, delivery, CLI and cronjob tool).
+[scheduled-jobs."Unambiguous schedule grammar"]
+"Bare duration is rejected, not guessed" = ["crates/pmt-cron/src/schedule/tests.rs::a_bare_duration_is_rejected_naming_both_readings", "crates/prometheus/tests/cron_cli.rs::saving_without_a_terminal_needs_yes"]
+"Explicit forms parse to their kinds" = ["crates/pmt-cron/src/schedule/tests.rs::explicit_forms_parse_to_their_kinds", "crates/pmt-cron/src/schedule/tests.rs::grammar_table"]
+"Sub-minute interval rejected" = ["crates/pmt-cron/src/schedule/tests.rs::a_sub_minute_interval_is_rejected"]
+
+[scheduled-jobs."Canonical schedule echo and confirmation (upgrade)"]
+"CLI echo before save" = ["crates/prometheus/tests/cron_cli.rs::a_terminal_sees_the_echo_and_saves_only_on_yes", "crates/pmt-cron/src/schedule/tests.rs::the_echo_shows_the_zone_and_the_next_three_instants"]
+"Non-TTY without --yes refused" = ["crates/prometheus/tests/cron_cli.rs::saving_without_a_terminal_needs_yes"]
+"Tool create needs a confirmation round-trip" = ["crates/prometheus/tests/cron_daemon.rs::a_job_the_agent_creates_from_a_chat_needs_confirmation_and_delivers_back_there"]
+
+[scheduled-jobs."Job payload validation"]
+"Unknown toolset is an error" = ["crates/pmt-cron/src/validate.rs::an_unknown_toolset_is_refused", "crates/prometheus/tests/cron_cli.rs::an_unknown_toolset_is_refused_at_create"]
+
+[scheduled-jobs."Job record and storage"]
+"Concurrent edits do not clobber each other" = ["crates/pmt-cron/tests/scheduler.rs::a_pause_and_an_advance_by_two_writers_both_land"]
+
+[scheduled-jobs."Job states and status literals"]
+"Uncomputable next run is an error, not completion" = ["crates/pmt-cron/tests/scheduler.rs::a_job_whose_zone_disappeared_enters_error_and_stays_listed"]
+
+[scheduled-jobs."Next-run computation"]
+"DST fall-back fires once" = ["crates/pmt-cron/src/schedule/tests.rs::a_fall_back_time_fires_once_at_its_first_occurrence"]
+"Interval does not drift with run length" = ["crates/pmt-cron/src/schedule/tests.rs::an_interval_counts_from_the_previous_scheduled_instant"]
+
+[scheduled-jobs."Grace and missed occurrences"]
+"Explicit zero grace means never catch up" = ["crates/pmt-cron/tests/scheduler.rs::an_explicit_zero_grace_skips_the_backlog_and_moves_to_the_next_hour", "crates/pmt-cron/src/grace.rs::an_explicit_zero_grace_records_the_backlog_skipped"]
+"Default policy collapses the backlog" = ["crates/pmt-cron/tests/scheduler.rs::the_default_policy_runs_one_catch_up_for_five_missed_hours", "crates/pmt-cron/src/grace.rs::the_default_policy_collapses_a_backlog_into_one_run"]
+
+[scheduled-jobs."At-most-once occurrence firing"]
+"Two triggers for one occurrence" = ["crates/pmt-cron/tests/scheduler.rs::two_triggers_racing_on_one_occurrence_fire_it_once"]
+"Crash mid-run is not retried" = ["crates/pmt-cron/tests/scheduler.rs::a_run_interrupted_by_a_crash_is_failed_on_restart_and_not_fired_again"]
+
+[scheduled-jobs."Built-in trigger inside the gateway daemon"]
+"Each profile ticked under its own scope" = ["crates/prometheus/tests/cron_daemon.rs::each_profile_runs_its_own_jobs_and_delivers_only_through_its_own_adapters"]
+"Emergency stop halts dispatch" = ["crates/pmt-cron/tests/scheduler.rs::nothing_is_dispatched_while_the_emergency_stop_is_on"]
+
+[scheduled-jobs."Headless tick without a daemon"]
+"Daemon present" = ["crates/prometheus/tests/cron_daemon.rs::a_tick_steps_aside_while_the_daemon_owns_scheduling"]
+
+[scheduled-jobs."Execution concurrency and timeouts"]
+"Idle run interrupted" = ["crates/prometheus/tests/cron_cli.rs::an_idle_run_is_interrupted_and_listed_by_its_status"]
+"Env var is not a knob" = ["crates/prometheus/tests/cron_cli.rs::an_environment_variable_does_not_set_the_idle_timeout"]
+
+[scheduled-jobs."Fresh isolated agent session per run"]
+"Cron cannot schedule more cron by default" = ["crates/prometheus/tests/cron_cli.rs::a_run_starts_a_fresh_cron_session_without_cronjob_clarify_or_memory_writes"]
+
+[scheduled-jobs."Memory policy for unattended runs"]
+"Default run cannot write memory" = ["crates/prometheus/tests/cron_cli.rs::a_run_starts_a_fresh_cron_session_without_cronjob_clarify_or_memory_writes"]
+
+[scheduled-jobs."Unattended approvals fail closed"]
+"Dangerous command denied without prompt" = ["crates/prometheus/tests/cron_cli.rs::an_approval_in_a_run_is_denied_at_once_and_the_run_goes_on"]
+
+[scheduled-jobs."Script-backed and no-agent jobs"]
+"Watchdog script with no agent" = ["crates/prometheus/tests/cron_cli.rs::a_no_agent_script_job_stores_its_output_verbatim_without_a_session", "crates/pmt-cron/tests/exec.rs::a_no_agent_script_is_delivered_verbatim_without_a_model_call"]
+
+[scheduled-jobs."Prompt and payload safety scan"]
+"Concealment directive refused" = ["crates/prometheus/tests/cron_cli.rs::a_concealment_directive_is_refused_at_create", "crates/pmt-cron/src/scan.rs::hostile_prompts_name_their_rule"]
+
+[scheduled-jobs."Pre-dispatch preflight"]
+"Revoked key blocks without spending" = ["crates/prometheus/tests/cron_cli.rs::a_missing_provider_secret_blocks_the_run_without_a_request", "crates/pmt-cron/tests/exec.rs::a_failed_preflight_records_blocked_config_and_alerts_once"]
+
+[scheduled-jobs."Delivery targets"]
+"Profile isolation of delivery" = ["crates/prometheus/tests/cron_daemon.rs::each_profile_runs_its_own_jobs_and_delivers_only_through_its_own_adapters"]
+
+[scheduled-jobs."Durable delivery outbox"]
+"Daemon restarts during send" = ["crates/pmt-cron/tests/exec.rs::a_row_left_sending_by_a_crash_becomes_unknown_and_is_not_resent"]
+
+[scheduled-jobs."Response framing and silence"]
+"Nothing to report" = ["crates/pmt-cron/tests/exec.rs::a_silent_answer_is_stored_and_not_delivered"]
+
+[scheduled-jobs."Run history (upgrade)"]
+"Inspect a failed night" = ["crates/prometheus/tests/cron_cli.rs::an_idle_run_is_interrupted_and_listed_by_its_status"]
+
+[scheduled-jobs."Run replay (upgrade)"]
+"Compare against current harness" = ["crates/prometheus/tests/cron_cli.rs::a_live_replay_reruns_the_inputs_and_diffs_the_outputs"]
+"Deterministic replay" = { deferred = "needs the model-call cache and replay provider of group 51 (task 51.2 owns it)" }
+
+[scheduled-jobs."Lifecycle operations"]
+"Run-now is synchronous by default" = ["crates/prometheus/tests/cron_cli.rs::run_now_executes_a_paused_job_in_the_foreground_and_keeps_it_paused", "crates/pmt-cron/tests/exec.rs::a_manual_run_of_a_paused_job_keeps_it_paused"]
+
+[scheduled-jobs."Repeat limits and retention"]
+"Limit reached" = ["crates/pmt-cron/tests/exec.rs::a_job_reaching_its_repeat_limit_completes_and_stays_listed"]
+
+[scheduled-jobs."Pluggable trigger provider"]
+"Unknown provider name" = ["crates/pmt-config/src/validate.rs::an_unknown_cron_provider_names_the_accepted_ones"]
+
+[scheduled-jobs."CLI surface"]
+"Ambiguous name" = ["crates/prometheus/tests/cron_cli.rs::an_ambiguous_name_exits_2_listing_the_ids"]
+
+[scheduled-jobs."Model tool surface"]
+"Created from Telegram delivers back to Telegram" = { tests = ["crates/prometheus/tests/cron_daemon.rs::a_job_the_agent_creates_from_a_chat_needs_confirmation_and_delivers_back_there"], note = "proven on the debug-build file adapter's platform (`test`), the gateway path every adapter shares" }
+
+[scheduled-jobs."Cron doctor"]
+"Healthy profile" = ["crates/prometheus/tests/cron_cli.rs::the_doctor_exits_0_on_a_healthy_profile"]
+
+# --- 42 (M2 scheduled job upgrades) ---
+
+[scheduled-jobs."Per-job working directory"]
+"Project job loads its context files" = ["crates/prometheus/tests/cron_upgrades.rs::a_project_job_loads_its_context_files_and_works_there"]
+"Relative workdir refused" = ["crates/prometheus/tests/cron_upgrades.rs::a_relative_workdir_is_refused"]
+"Tool workdir outside the session's workspace refused" = ["crates/prometheus/tests/cron_upgrades.rs::a_tool_workdir_outside_the_sessions_workspace_is_refused"]
+
+[scheduled-jobs."Model pinning and cron fleet default"]
+"Unpinned jobs follow the cron default" = ["crates/prometheus/tests/cron_upgrades.rs::unpinned_jobs_follow_the_cron_default_and_pins_freeze"]
+"Pin freezes the current main model" = ["crates/prometheus/tests/cron_upgrades.rs::unpinned_jobs_follow_the_cron_default_and_pins_freeze"]
+"Agent cannot choose a model" = ["crates/pmt-tools/src/agent_level_cron.rs::a_model_argument_fails_schema_validation"]
+
+[scheduled-jobs."Create paused with an auditable reason"]
+"Canary job never fires before review" = ["crates/prometheus/tests/cron_upgrades.rs::a_job_added_paused_waits_for_review", "crates/pmt-cron/tests/gates.rs::a_job_created_paused_never_fires"]
+
+[scheduled-jobs."Failure streak and review nudge"]
+"Third consecutive failure nudges" = ["crates/pmt-cron/tests/failures.rs::the_third_consecutive_failure_nudges"]
+
+[scheduled-jobs."Automatic re-runs when the model was unreachable"]
+"Laptop wakes before Wi-Fi" = ["crates/pmt-cron/tests/failures.rs::an_unreachable_model_is_re_run_without_a_failure_notice", "crates/prometheus/tests/cron_upgrades.rs::an_unreachable_provider_schedules_a_re_run", "crates/prometheus/src/cron_host/agent.rs::failures_before_the_model_are_classified"]
+
+[scheduled-jobs."Hold through a closed provider usage window"]
+"Sub-hourly job does not alert every tick" = { tests = ["crates/pmt-cron/tests/failures.rs::a_closed_usage_window_holds_the_job_with_one_notice", "crates/prometheus/tests/cron_upgrades.rs::a_benched_provider_holds_a_sub_hourly_job"], note = "the provider's signal is `auth.credentials_benched` (every credential benched until a reset instant, carried as the error's typed `BenchEnd` source) raised before any request with no fallback chain; the scripted test drives the 5-hour schedule" }
+
+[scheduled-jobs."Failure incidents with alert-once and acknowledge"]
+"Same error alerts once" = ["crates/pmt-cron/tests/failures.rs::the_same_error_alerts_once"]
+"Acknowledged signature stays silent after success" = ["crates/pmt-cron/tests/failures.rs::an_acknowledged_signature_stays_silent_after_success", "crates/prometheus/tests/cron_upgrades.rs::incidents_are_listed_and_acknowledged"]
+
+[scheduled-jobs."Failure notice routing"]
+"Failures go to an ops channel" = ["crates/pmt-cron/tests/failures.rs::failures_go_to_the_failure_targets"]
+
+[scheduled-jobs."Bot Chat delivery target"]
+"Output processed by another profile's bot" = ["crates/prometheus/tests/cron_delivery.rs::another_profiles_bot_chat_takes_one_turn_per_receipt"]
+"Unknown profile rejected at create" = ["crates/pmt-cron/src/validate.rs::an_unknown_bot_chat_profile_is_refused", "crates/prometheus/tests/cron_delivery.rs::another_profiles_bot_chat_takes_one_turn_per_receipt"]
+
+[scheduled-jobs."Push notification flag, cron threads and delivery confirmation"]
+"Adapter ack without message id" = ["crates/pmt-cron/tests/gates.rs::an_acknowledgement_without_a_message_id_is_unverified"]
+
+[scheduled-jobs."Continuable deliveries"]
+"Reply to a daily brief continues it" = { tests = ["crates/prometheus/tests/cron_delivery.rs::a_reply_in_the_delivery_thread_continues_with_the_brief"], note = "the debug-build file adapter opens threads as Telegram opens topics (the gateway thread path every threaded adapter shares)" }
+
+[scheduled-jobs."Agent-declared run failure"]
+"Agent reports a failed subtask" = ["crates/pmt-cron/tests/failures.rs::an_agent_declared_failure_fails_the_run", "crates/pmt-cron/src/failure.rs::the_marker_counts_only_alone_on_the_first_line"]
+
+[scheduled-jobs."Script wake gate and script credentials"]
+"Unchanged poll skips the model" = ["crates/pmt-cron/tests/gates.rs::a_sleeping_wake_gate_skips_the_model"]
+"Provider key cannot reach a script" = ["crates/pmt-cron/src/validate.rs::a_provider_key_cannot_reach_a_script", "crates/prometheus/tests/cron_upgrades.rs::provider_and_gateway_secrets_cannot_reach_a_script"]
+
+[scheduled-jobs."Monitor mode"]
+"Unchanged page is free" = ["crates/pmt-cron/tests/gates.rs::an_unchanged_monitored_page_skips_the_model", "crates/prometheus/tests/cron_upgrades.rs::a_monitored_url_obeys_the_egress_destination_policy"]
+
+[scheduled-jobs."Job chaining and continuity"]
+"Pipeline stage receives upstream output" = ["crates/pmt-cron/tests/gates.rs::a_pipeline_stage_receives_upstream_output"]
+"Continuity skips quiet ticks" = ["crates/pmt-cron/tests/gates.rs::continuity_carries_the_last_report_over_quiet_ticks"]
+
+[scheduled-jobs."Per-job notepad"]
+"Cursor carried across runs" = ["crates/prometheus/tests/cron_upgrades.rs::a_run_writes_its_notepad_from_its_terminal", "crates/prometheus/tests/cron_upgrades.rs::a_run_cannot_write_another_jobs_notepad", "crates/prometheus/tests/cron_upgrades.rs::a_notepad_value_reaches_the_next_run", "crates/pmt-cron/tests/gates.rs::the_notepad_rides_the_next_prompt"]
+
+[scheduled-jobs."Asynchronous tool-initiated runs with per-run context"]
+"Agent keeps working while the job runs" = ["crates/prometheus/tests/cron_upgrades.rs::a_tool_run_starts_in_the_background_and_reports_back"]
+"Per-run context is not persisted" = ["crates/prometheus/tests/cron_upgrades.rs::a_tool_run_starts_in_the_background_and_reports_back", "crates/pmt-cron/tests/gates.rs::run_context_rides_one_run_only"]
+
+[scheduled-jobs."Complete cronjob tool field set"]
+"Timezone pin through the tool" = ["crates/prometheus/tests/cron_upgrades.rs::the_tool_pins_a_timezone"]
+
+[scheduled-jobs."/cron slash command"]
+"Add from a Discord thread" = { tests = ["crates/prometheus/tests/cron_daemon.rs::a_job_added_with_slash_cron_in_a_thread_delivers_there", "crates/prometheus/tests/cron_daemon.rs::a_slash_cron_job_waits_for_the_yes_reply", "crates/prometheus/tests/tui_daemon.rs::a_yes_after_a_cron_echo_saves_the_job_without_a_turn", "crates/prometheus/tests/cron_cli.rs::the_line_interface_saves_a_slash_cron_job_on_yes"], note = "proven on the debug-build file adapter's platform (`test`), the gateway slash path every adapter shares; the `yes` reply (instead of `--yes`) on the gateway, a daemon client and the line interface" }
+
+[scheduled-jobs."Suggested automations inbox"]
+"Dismissed suggestion is not re-offered" = ["crates/pmt-cron/tests/suggestions.rs::a_dismissed_suggestion_is_not_offered_again", "crates/prometheus/tests/cron_automations.rs::the_review_cannot_offer_a_dismissed_suggestion_again"]
+
+[scheduled-jobs."Automation blueprint catalog"]
+"Inline values skip the questions" = ["crates/pmt-cron/src/blueprint/tests.rs::inline_values_render_the_schedule_and_prompt", "crates/prometheus/tests/cron_automations.rs::a_blueprint_echoes_its_schedule_and_saves_only_on_yes"]
+"Invalid slot value" = ["crates/pmt-cron/src/blueprint/tests.rs::an_invalid_slot_value_is_refused_by_name", "crates/prometheus/tests/cron_automations.rs::a_blueprint_echoes_its_schedule_and_saves_only_on_yes"]
+
+[scheduled-jobs."Webhook-triggered job runs"]
+"PR review feedback fires a sweeper job" = ["crates/prometheus/tests/cron_webhooks.rs::a_signed_review_event_fires_the_sweeper_job_once"]
+"Burst does not double-fire" = ["crates/prometheus/tests/cron_webhooks.rs::a_signed_review_event_fires_the_sweeper_job_once"]
+
+[skills."Blueprint skills never auto-schedule"]
+"Install does not create a job" = { tests = ["crates/prometheus/tests/cron_automations.rs::the_inbox_offers_starters_and_skill_blueprints_without_creating_jobs"], note = "the skill is placed in the profile's skills directory (what an install writes); the inbox offers its blueprint and no job exists" }
+
+[session-automation."Persisted per-session automation state"]
+"Goal survives resume" = ["crates/prometheus/tests/automation_line.rs::a_goal_survives_resume_with_its_turn_count", "crates/pmt-store/tests/store/automation.rs::rows_are_kept_per_kind_across_reopening_and_go_with_the_session"]
+"Reset clears automation" = { tests = ["crates/prometheus/tests/automation_daemon.rs::a_silent_heartbeat_sends_nothing_and_a_reset_drops_it", "crates/pmt-store/tests/store/automation.rs::a_conversation_switching_session_drops_the_old_automation"], note = "proven on the debug-build file adapter's platform (`test`), the gateway path every adapter (Telegram included) shares" }
+
+[session-automation."Automated turns are plain user turns"]
+"Cache prefix preserved" = ["crates/pmt-agent/tests/turn/cache.rs::automated_goal_continuations_keep_the_cache_prefix", "crates/prometheus/tests/automation_line.rs::a_goal_continues_on_the_judges_word_until_it_is_achieved"]
+
+[session-automation."Idle-boundary arbitration"]
+"User input preempts continuation" = ["crates/prometheus/tests/automation_line.rs::a_line_typed_during_the_turn_runs_before_the_continuation"]
+"Parked goal lets the loop run" = ["crates/pmt-automation/src/arbiter.rs::a_parked_goal_lets_the_loop_run", "crates/pmt-automation/src/arbiter.rs::an_active_goal_defers_loops_and_heartbeats"]
+
+[session-automation."Goal command surface"]
+"Control word escape" = ["crates/pmt-automation/src/command.rs::the_control_word_escape_sets_literal_text"]
+"Draft is a whole word" = ["crates/pmt-automation/src/command.rs::draft_is_matched_as_a_whole_word_only"]
+
+[session-automation."Goal changes while a turn runs"]
+"New goal rejected mid-run" = ["crates/prometheus/tests/automation_daemon.rs::a_new_goal_is_refused_while_the_chat_runs_a_turn", "crates/pmt-automation/src/goal/tests.rs::a_new_goal_is_refused_while_a_turn_runs_but_control_commands_run"]
+
+[session-automation."Goal judge loop"]
+"Continue injects the next turn" = ["crates/prometheus/tests/automation_line.rs::a_goal_continues_on_the_judges_word_until_it_is_achieved", "crates/pmt-automation/src/goal/tests.rs::continue_injects_the_next_turn_and_counts_it"]
+"Broken judge fails open" = ["crates/prometheus/tests/automation_line.rs::a_failing_judge_keeps_going_until_the_budget_pauses_the_goal", "crates/pmt-automation/src/goal/tests.rs::a_broken_judge_fails_open_and_advances_the_counter"]
+
+[session-automation."Goal turn budget and blocked verdict"]
+"Budget exhaustion pauses" = ["crates/prometheus/tests/automation_line.rs::a_failing_judge_keeps_going_until_the_budget_pauses_the_goal", "crates/pmt-automation/src/goal/tests.rs::budget_exhaustion_pauses_without_a_fourth_continuation"]
+"Unachievable goal pauses" = ["crates/prometheus/tests/automation_line.rs::a_blocked_goal_pauses_and_a_failed_draft_sets_the_objective", "crates/pmt-automation/src/goal/tests.rs::a_blocked_verdict_pauses_and_is_never_achieved"]
+
+[session-automation."Completion contracts"]
+"Inline contract parsing" = ["crates/pmt-automation/src/contract.rs::inline_lines_fill_the_contract_and_the_rest_stays_headline"]
+"Draft falls back" = ["crates/prometheus/tests/automation_line.rs::a_blocked_goal_pauses_and_a_failed_draft_sets_the_objective"]
+
+[session-automation."Subgoals"]
+"Subgoal tightens the judge" = ["crates/pmt-automation/src/judge.rs::the_judge_prompt_states_subgoals_and_the_response_tail", "crates/pmt-automation/src/goal/tests.rs::subgoals_need_a_goal_and_keep_the_counter"]
+
+[session-automation."Quality gates"]
+"Red gate blocks completion" = ["crates/prometheus/tests/automation_line.rs::a_red_quality_gate_skips_the_judge", "crates/pmt-automation/src/goal/tests.rs::a_red_gate_skips_the_judge_and_carries_the_exit_and_output_tail"]
+"Exhausted gate pauses" = ["crates/pmt-automation/src/goal/tests.rs::an_exhausted_gate_pauses_naming_the_gate"]
+
+[session-automation."Goal wait barriers"]
+"Park on a CI watcher" = { tests = ["crates/pmt-automation/src/goal/tests.rs::a_wait_on_a_live_pid_parks_and_a_dead_one_continues", "crates/pmt-automation/src/goal/tests.rs::a_pid_or_session_wait_is_capped", "crates/pmt-tools/tests/terminal/notifications.rs::a_subagent_hands_off_at_most_three_processes"], note = "the judge's process list is the session's own running processes (handed-off subagent processes excluded); parking, the cap and the release run against a scripted process table" }
+"Dead pid rejected" = ["crates/prometheus/tests/automation_line.rs::a_goal_survives_resume_with_its_turn_count", "crates/pmt-automation/src/goal/tests.rs::a_dead_pid_is_refused_for_goal_wait"]
+
+[session-automation."Goal messages on messaging platforms"]
+"Telegram continuation not quoted" = { tests = ["crates/prometheus/tests/automation_daemon.rs::goal_turns_in_a_chat_quote_nothing_and_say_their_status"], note = "proven on the debug-build file adapter's platform (`test`): the lane posts automated replies with no reply_to, which every adapter (Telegram's reply_to_message_id included) maps from the same outgoing field" }
+
+[session-automation."Loop command and cadence"]
+"Interval below the floor" = ["crates/prometheus/tests/automation_line.rs::loops_refuse_short_intervals_stop_at_their_cap_and_pause_on_ctrl_c", "crates/pmt-automation/src/command.rs::an_interval_below_the_floor_is_refused"]
+"Self-paced backoff" = ["crates/pmt-automation/src/cadence.rs::self_pacing_backs_off_on_identical_replies_and_snaps_back"]
+
+[session-automation."Loop stop conditions"]
+"Run cap" = { tests = ["crates/prometheus/tests/automation_line.rs::loops_refuse_short_intervals_stop_at_their_cap_and_pause_on_ctrl_c", "crates/pmt-automation/src/cadence.rs::the_run_cap_and_loop_complete_remove_the_loop"], note = "the line test runs `--times 3` at a 1 s interval (`loops.min_interval_secs = 1`) instead of 2 m" }
+"Interrupt pauses" = ["crates/prometheus/tests/automation_line.rs::loops_refuse_short_intervals_stop_at_their_cap_and_pause_on_ctrl_c", "crates/prometheus/tests/automation_daemon.rs::the_attached_line_interface_shows_the_loop_and_ctrl_c_pauses_it"]
+
+[session-automation."Session heartbeat"]
+"Missed ticks coalesce" = ["crates/pmt-automation/src/cadence.rs::missed_heartbeats_coalesce_into_one_fire_and_re_anchor", "crates/pmt-automation/src/arbiter.rs::a_stored_heartbeat_fires_once_after_a_restart_and_re_anchors"]
+"Minimum interval" = ["crates/pmt-automation/src/command.rs::a_heartbeat_below_the_minimum_is_refused"]
+
+[session-automation."Heartbeat ownership, recovery and silence on the gateway"]
+"Silent heartbeat" = { tests = ["crates/prometheus/tests/automation_daemon.rs::a_silent_heartbeat_sends_nothing_and_a_reset_drops_it"], note = "proven on the debug-build file adapter's platform (`test`), the gateway path every adapter (Slack included) shares" }
+"Restored after restart in its profile" = ["crates/prometheus/tests/automation_daemon.rs::a_chat_heartbeat_is_restored_after_a_restart_in_its_profile"]
+
+[session-automation."Automation status on every surface"]
+"Desktop closed, loop keeps firing" = { tests = ["crates/prometheus/tests/automation_daemon.rs::a_client_sessions_loop_keeps_firing_with_no_client_attached", "crates/prometheus/tests/automation_daemon.rs::the_attached_line_interface_shows_the_loop_and_ctrl_c_pauses_it", "crates/pmt-tui/src/status.rs::automation_rows_show_after_the_other_items"], note = "the desktop app is M3 (desktop-app); the daemon side is proven with a client session whose client leaves: its `/loop` (1 s instead of 5 m) keeps firing and the replies are stored; `automation.state` reaches clients and the TUI shows the row" }
+
+[session-automation."Automation configuration"]
+"Inverted self-paced bounds" = ["crates/prometheus/tests/automation_config.rs::an_inverted_self_paced_range_fails_validation_naming_both_keys", "crates/pmt-config/src/automation_check.rs::an_inverted_self_paced_range_names_both_keys"]
+
+[session-automation."Automation is distinct from kanban and cron"]
+"Goal does not touch the board" = { tests = ["crates/prometheus/tests/automation_line.rs::a_goal_continues_on_the_judges_word_until_it_is_achieved"], note = "kanban boards are M3 (kanban); the test sets and completes a goal and checks the home's kanban directory and the scheduled jobs are unchanged" }
 
 # Group 45 (subscription providers and routing).
 [configuration-and-profiles."Retired model rewrite"]

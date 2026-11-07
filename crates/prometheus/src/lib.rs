@@ -9,6 +9,7 @@ pub mod accounts;
 pub mod advisories;
 pub mod approvals_cmd;
 pub mod auth_cmd;
+pub mod automation;
 pub mod backup_cmd;
 pub mod bridge_cmd;
 pub mod browser_cmd;
@@ -20,6 +21,8 @@ pub mod config_cmd;
 pub mod connectors_cmd;
 pub mod connectors_host;
 pub mod context;
+pub mod cron_cmd;
+pub mod cron_host;
 pub mod daemon_client;
 #[cfg(feature = "gateway")]
 pub mod daemon_cmd;

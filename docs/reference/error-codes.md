@@ -302,6 +302,20 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `worktree.invalid_name` | `invalid_input` | 65 | A worktree name matches `[A-Za-z0-9._-]{1,64}` and must not exist yet under `<repo>/.worktrees/` or as branch `prometheus/<name>`. |
 | `worktree.archive_not_found` | `not_found` | 66 | No `refs/prometheus/archive/<name>` exists in the repository (or in any recorded repository); `prometheus worktrees list` shows the archives. |
 | `worktree.git` | `io` | 74 | git failed while creating, archiving, removing or restoring a worktree; the message carries git's error and nothing was removed. |
+| `cron.job_not_found` | `not_found` | 66 | No job of the profile has that id or name; `prometheus cron list --all` shows every job, completed ones included. |
+| `cron.run_not_found` | `not_found` | 66 | No run record has that id (records are kept for `cron.run_retention_secs`); `prometheus cron runs <job>` lists a job's runs. |
+| `cron.ambiguous_name` | `usage` | 2 | Several jobs share that name; the message lists their ids, and any of them selects one job. |
+| `cron.invalid_schedule` | `invalid_input` | 65 | The schedule is ambiguous (a bare duration), shorter than 60 s, in the past, or not one of `every <duration>`, a 5-field cron expression or day/time phrase, an RFC 3339 time, `at <time>`, `tomorrow at <time>` or `in <duration>`; nothing was saved. |
+| `cron.invalid_job` | `invalid_input` | 65 | The job has nothing to run, `no_agent` without a script, a script outside `<profile>/scripts`, an unknown skill, toolset, delivery target, model or provider, or a field out of range; nothing was saved. |
+| `cron.prompt_rejected` | `permission_denied` | 77 | The job's prompt holds an injection or concealment directive, a secret-exfiltration pattern or invisible Unicode; the message names the rule and nothing was saved. |
+| `cron.confirmation` | `permission_denied` | 77 | Saving a job (or a changed schedule) needs a confirmation: answer `y` on a terminal or pass `--yes`; the command exits 4 and nothing was saved. |
+| `cron.replay_unavailable` | `unavailable` | 69 | Replaying a run against its recorded model responses needs the model-call cache and the replay provider, which this build does not have yet; `prometheus cron replay <run> --live` re-runs the recorded inputs against the current provider instead. |
+| `cron.invalid_state` | `invalid_input` | 65 | The operation does not apply in the job's state (for example resuming a one-shot job whose time has passed); the message says how to change it. |
+| `cron.incident_not_found` | `not_found` | 66 | No failure incident of the profile has that id; `prometheus cron incidents` lists them. |
+| `cron.invalid_workdir` | `usage` | 2 | A job's `workdir` must be an absolute path to an existing directory, and one set through the `cronjob` tool must lie inside the calling session's workspace; nothing was saved. |
+| `cron.notepad_limit` | `invalid_input` | 65 | A job notepad key is at most 128 characters, a value at most 16 KiB and a notepad at most 64 KiB counting keys and values; the notepad is unchanged. |
+| `cron.already_running` | `conflict` | 75 | A run of the job is queued or running; wait for it (`prometheus cron runs <job>`) before starting another. |
+| `cron.blueprint` | `invalid_input` | 65 | The blueprint name matches none of the catalog, or a slot value is invalid (the message names the slot and the accepted values); nothing was created. |
 | `rpc.parse` | `invalid_input` | 65 | A client protocol frame is not valid JSON (JSON-RPC `-32700`); the connection keeps serving. |
 | `rpc.invalid_request` | `invalid_input` | 65 | A client protocol frame is JSON but not a JSON-RPC 2.0 request object (JSON-RPC `-32600`). |
 | `rpc.unknown_method` | `usage` | 2 | The called method is not declared in the RPC catalog (`schema/rpc.json`); JSON-RPC `-32601`. |

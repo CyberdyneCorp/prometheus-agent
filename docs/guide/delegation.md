@@ -106,12 +106,16 @@ model there. Such children get no fallback chain.
 ## Background tasks and the agents monitor
 
 `/background <prompt>` (alias `/bg`) starts an independent session of the
-profile on this session's route, reasoning level and fallback chain, with
-none of its history, and answers at once with `Background task #1 started:
-… (id bg_…)`. The task takes a slot of `delegation.max_concurrent_children`
-(it waits for one when all are busy); its answer arrives as a labelled
-notification (a chat message in a messaging chat) and never enters this
-session. Its session is tagged `background`.
+profile on this session's route, reasoning level, fallback chain and tool
+selection, with none of its history, and answers at once with `Background
+task #1 started: … (id bg_…)`. The task takes a slot of
+`delegation.max_concurrent_children` (it waits for one when all are busy);
+its answer arrives as a labelled notification (a chat message in a
+messaging chat) and never enters this session. Its session is recorded with
+source `background` and this session as its parent for lineage only: it is
+the root of its own lineage (its usage and subagents are its own), `chat -c`
+and `--resume latest` never pick it, and `prometheus chat --resume <id>`
+continues it on this session's surface.
 
 `/agents` (alias `/tasks`) lists what runs for this session with status,
 elapsed time, model, tokens and cost: its subagents as a tree grouped by
@@ -132,7 +136,8 @@ loaded, and the instructions as its focus. It runs on `[delegation.review]`
 `provider` and `model` (default: this session's route). `/review` answers
 `Review started. Results will return here.`, and the findings re-enter the
 session as a `delegation_completed` input labelled `Review: <focus>` (or
-`Review recent work`).
+`Review recent work`), also when the review finishes while the daemon is
+down and its completion is delivered after a restart.
 
 ## Control
 

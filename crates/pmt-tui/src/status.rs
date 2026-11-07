@@ -54,6 +54,9 @@ pub struct Status {
     pub reduced_motion: bool,
     /// A connection note (`reconnecting`, `gateway restarting`).
     pub note: Option<String>,
+    /// The session's live automation rows by kind (`loop · every 5m · 2
+    /// runs · next in 4m`), from `automation.state`.
+    pub automation: std::collections::BTreeMap<String, String>,
 }
 
 /// The status item that opens the session switcher when clicked.
@@ -98,6 +101,7 @@ impl Status {
         if let Some(note) = &self.note {
             items.push(note.clone());
         }
+        items.extend(self.automation.values().cloned());
         items
     }
 
@@ -223,6 +227,20 @@ mod tests {
             indicator: BusyIndicator::Ascii,
             ..Status::default()
         }
+    }
+
+    #[test]
+    fn automation_rows_show_after_the_other_items() {
+        let mut status = full();
+        status.automation.insert(
+            "loop".into(),
+            "loop · every 5m · 2 runs · next in 4m".into(),
+        );
+        let shown = text(&status, 120);
+        assert!(
+            shown.contains("2 approvals │ loop · every 5m · 2 runs · next in 4m"),
+            "{shown}"
+        );
     }
 
     #[test]

@@ -52,6 +52,8 @@ pub struct GateInputs<'a> {
     pub user_home: Option<&'a Path>,
     /// Someone can answer prompts.
     pub interactive: bool,
+    /// A scheduled run: approvals follow `approvals.cron_mode`.
+    pub cron: bool,
     /// `--yolo`.
     pub yolo: bool,
     /// Plugin approval observers and transport.
@@ -82,6 +84,8 @@ pub fn gate(inputs: &GateInputs<'_>) -> Result<Gate, Error> {
         let (channel, surface) =
             Channel::attached(Duration::from_secs(config.approvals.timeout_secs.max(1)));
         (channel, Some(surface), Context::Interactive)
+    } else if inputs.cron {
+        (Channel::unattended(), None, Context::Cron)
     } else {
         (Channel::unattended(), None, Context::SingleQuery)
     };

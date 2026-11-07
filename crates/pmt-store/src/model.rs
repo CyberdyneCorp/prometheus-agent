@@ -90,6 +90,8 @@ store_enum!(
         Harness = "harness",
         /// Imported from an export or another agent.
         Import = "import",
+        /// A `/bg` task's own session (subagent-delegation).
+        Background = "background",
     }
 );
 
@@ -152,6 +154,9 @@ store_enum!(
         Reset = "reset",
         /// Imported session.
         Import = "import",
+        /// A `/bg` task's session and the session that launched it: a
+        /// lineage-only link, so the child is the root of its own lineage.
+        Background = "background",
     }
 );
 

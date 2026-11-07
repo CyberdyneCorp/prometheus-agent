@@ -41,6 +41,7 @@ impl Repl {
         let Some(live) = self.live.take() else {
             return;
         };
+        let origin = input.origin.clone();
         if let Err(err) = pmt_core::pause::check(live.scope.home()) {
             self.error(&err);
             self.live = Some(live);
@@ -69,8 +70,10 @@ impl Repl {
         self.input.set_busy(false);
         self.running = false;
         let calls = self.end_progress();
+        let outcome = super::automation::Outcome::of(origin.as_deref(), &result);
         self.after_turn(&live, result, started.elapsed(), calls)
             .await;
+        self.automation_after(&live, outcome).await;
         if let Some(back) = live.model.end_turn() {
             self.notice(&format!(
                 "model: back to {}/{}",
@@ -335,6 +338,10 @@ impl Repl {
             child,
             model: Arc::clone(&live.model) as _,
             focus: None,
+            suggestions: Some(crate::cron_host::inbox(
+                &self.factory.scope,
+                Arc::clone(&self.factory.store),
+            )),
         };
         tokio::spawn(async move {
             if let Err(err) = pmt_memory::review::run(review).await {

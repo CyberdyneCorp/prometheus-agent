@@ -3,8 +3,10 @@
 //! Launch environment is read once; configuration-and-profiles, Environment
 //! is secrets-only).
 //!
-//! Only the home override, the log filter, secrets and the OS directories
-//! needed to find the default home are read. Every other `PMT_*` or
+//! Only the home override, the log filter, secrets, the OS directories
+//! needed to find the default home and the notepad channel of a scheduled
+//! run (`PMT_CRON_NOTEPAD`, set by the host on the run's terminal, never
+//! by a person) are read. Every other `PMT_*` or
 //! `PROMETHEUS_*` variable is recorded as ignored so startup can WARN and
 //! `prometheus doctor` can report it; it never changes behaviour, because
 //! behaviour lives in typed configuration.
@@ -52,6 +54,11 @@ const TEST_ADAPTER_DIR: &str = "PMT_TEST_ADAPTER_DIR";
 /// builds ignore it).
 const TEST_SERVICE_DIR: &str = "PMT_TEST_SERVICE_DIR";
 const RUST_LOG: &str = "RUST_LOG";
+/// The notepad channel file of the scheduled run whose terminal started
+/// this process (spec: scheduled-jobs, Per-job notepad): the run's sandbox
+/// denies the home, so `prometheus cron notepad` edits this file and the
+/// host applies it to the job's notepad when the run ends.
+pub const CRON_NOTEPAD: &str = "PMT_CRON_NOTEPAD";
 const OWNED_PREFIXES: [&str; 2] = ["PMT_", "PROMETHEUS_"];
 
 static READ: AtomicBool = AtomicBool::new(false);
@@ -139,6 +146,7 @@ pub struct LaunchEnv {
     test_battery: Option<String>,
     test_adapter_dir: Option<PathBuf>,
     test_service_dir: Option<PathBuf>,
+    cron_notepad: Option<PathBuf>,
 }
 
 impl LaunchEnv {
@@ -188,6 +196,7 @@ impl LaunchEnv {
                 Var::TestBattery => env.test_battery = env.unicode(name, value),
                 Var::TestAdapterDir => env.test_adapter_dir = non_blank(value).map(PathBuf::from),
                 Var::TestServiceDir => env.test_service_dir = non_blank(value).map(PathBuf::from),
+                Var::CronNotepad => env.cron_notepad = non_blank(value).map(PathBuf::from),
                 Var::PmtLog => pmt_log = env.unicode(name, value),
                 Var::RustLog => rust_log = env.unicode(name, value),
                 Var::Visual => visual = env.unicode(name, value).filter(|v| !v.trim().is_empty()),
@@ -258,6 +267,13 @@ impl LaunchEnv {
     #[must_use]
     pub fn test_battery(&self) -> Option<&str> {
         self.test_battery.as_deref()
+    }
+
+    /// `PMT_CRON_NOTEPAD`: the notepad channel of the scheduled run whose
+    /// terminal started this process.
+    #[must_use]
+    pub fn cron_notepad(&self) -> Option<&PathBuf> {
+        self.cron_notepad.as_ref()
     }
 
     /// `PROMETHEUS_HOME` when set and not blank (`~` is expanded by home
@@ -373,6 +389,7 @@ enum Var {
     TestBattery,
     TestAdapterDir,
     TestServiceDir,
+    CronNotepad,
     Secret,
     Ignored(Option<String>),
     Other,
@@ -402,6 +419,7 @@ fn classify(name: &str, policy: &EnvPolicy<'_>) -> Var {
         TEST_BATTERY if cfg!(debug_assertions) => return Var::TestBattery,
         TEST_ADAPTER_DIR if cfg!(debug_assertions) => return Var::TestAdapterDir,
         TEST_SERVICE_DIR if cfg!(debug_assertions) => return Var::TestServiceDir,
+        CRON_NOTEPAD => return Var::CronNotepad,
         _ => {}
     }
     if is_user_home_var(name) {

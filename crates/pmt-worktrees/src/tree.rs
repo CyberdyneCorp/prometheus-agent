@@ -109,30 +109,31 @@ pub struct SharedGitDirs {
     pub writes: Vec<PathBuf>,
 }
 
-/// The git directories of the linked worktree at `dir`; `None` for a main
-/// checkout (its git directory is inside it) or outside git.
+/// The git directories of the Prometheus tree containing `dir`; `None`
+/// anywhere else (a main checkout, a tree made by hand, outside git).
+///
+/// The `.git` file of a checkout is writable by whatever runs in it, so
+/// its `gitdir:` line alone never widens a sandbox: the tree must be one
+/// [`containing`] verifies (the marker in its admin directory, its
+/// checkout under the repository's `.worktrees`), the admin directory
+/// must really be `<common>/worktrees/<id>`, and the checkout's `.git`
+/// must name that same admin directory.
 #[must_use]
 pub fn shared_git_dirs(dir: &Path) -> Option<SharedGitDirs> {
-    let mut top = dir.canonicalize().ok()?;
-    while !top.join(".git").exists() {
-        top = top.parent()?.to_path_buf();
-    }
-    if top.join(".git").is_dir() {
-        return None;
-    }
-    let admin = admin_of(&top)?;
-    let common = admin.parent()?.parent()?;
-    if admin.parent()?.file_name()? != "worktrees" {
+    let (repo, tree) = containing(dir)?;
+    let common = repo.common.canonicalize().ok()?;
+    let admin = tree.admin.canonicalize().ok()?;
+    if admin.parent()? != common.join("worktrees") || admin_of(&tree.path)? != admin {
         return None;
     }
     Some(SharedGitDirs {
-        common: common.to_path_buf(),
         writes: vec![
             common.join("objects"),
             common.join("refs"),
             common.join("logs"),
-            admin.clone(),
+            admin,
         ],
+        common,
     })
 }
 

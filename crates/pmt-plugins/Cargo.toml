@@ -42,6 +42,8 @@ testkit = ["dep:wit-component"]
 
 [dev-dependencies]
 pmt-plugins = { path = ".", features = ["testkit"] }
+flate2.workspace = true
+tar.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
 
 [lints]

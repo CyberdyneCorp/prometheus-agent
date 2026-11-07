@@ -90,7 +90,27 @@ impl Tui<'_> {
                 self.withdraw(&event.data, "timed out or nobody could answer it; denied");
             }
             "request.resolved" => self.withdraw(&event.data, "answered in another window"),
+            "automation.state" if shown => self.on_automation(&event.data),
             _ => {}
+        }
+    }
+
+    /// A goal, loop or heartbeat of the shown session changed: its live
+    /// row in the status line follows.
+    fn on_automation(&mut self, data: &Value) {
+        let Ok(state) =
+            serde_json::from_value::<pmt_rpc::contracts::AutomationStatePayload>(data.clone())
+        else {
+            return;
+        };
+        let rows = &mut self.app.status.automation;
+        match state.row {
+            Some(row) => {
+                rows.insert(state.kind, row);
+            }
+            None => {
+                rows.remove(&state.kind);
+            }
         }
     }
 
@@ -222,6 +242,9 @@ impl Tui<'_> {
     pub(super) async fn on_done(&mut self, done: Done) {
         match done {
             Done::Submitted(Ok((session, submitted))) => {
+                if let Some(notice) = submitted.notice {
+                    self.notice(notice);
+                }
                 self.admitted(&session, &submitted.turn_id, submitted.admission);
             }
             Done::Submitted(Err(err))
@@ -280,6 +303,8 @@ impl Tui<'_> {
                 self.notice("steering the running turn");
                 return;
             }
+            // No turn runs (its notice was shown).
+            Admission::Handled => return,
         }
         self.pending
             .entry(session.to_owned())

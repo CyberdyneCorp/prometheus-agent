@@ -275,6 +275,7 @@ impl Host for FakeHost {
             Ok(Submitted {
                 turn_id: turn,
                 admission: Admission::Started,
+                notice: None,
             })
         })
     }

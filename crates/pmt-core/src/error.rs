@@ -911,6 +911,48 @@ error_codes! {
     /// A git command of a worktree operation failed.
     WORKTREE_GIT = ("worktree.git", Io,
         "git failed while creating, archiving, removing or restoring a worktree; the message carries git's error and nothing was removed.");
+    /// No scheduled job has that id or name.
+    CRON_JOB_NOT_FOUND = ("cron.job_not_found", NotFound,
+        "No job of the profile has that id or name; `prometheus cron list --all` shows every job, completed ones included.");
+    /// No run has that id.
+    CRON_RUN_NOT_FOUND = ("cron.run_not_found", NotFound,
+        "No run record has that id (records are kept for `cron.run_retention_secs`); `prometheus cron runs <job>` lists a job's runs.");
+    /// A job name matches several jobs.
+    CRON_AMBIGUOUS_NAME = ("cron.ambiguous_name", Usage,
+        "Several jobs share that name; the message lists their ids, and any of them selects one job.");
+    /// A schedule string is not in the grammar.
+    CRON_INVALID_SCHEDULE = ("cron.invalid_schedule", InvalidInput,
+        "The schedule is ambiguous (a bare duration), shorter than 60 s, in the past, or not one of `every <duration>`, a 5-field cron expression or day/time phrase, an RFC 3339 time, `at <time>`, `tomorrow at <time>` or `in <duration>`; nothing was saved.");
+    /// A job definition fails validation.
+    CRON_INVALID_JOB = ("cron.invalid_job", InvalidInput,
+        "The job has nothing to run, `no_agent` without a script, a script outside `<profile>/scripts`, an unknown skill, toolset, delivery target, model or provider, or a field out of range; nothing was saved.");
+    /// The prompt safety scan refused a job.
+    CRON_PROMPT_REJECTED = ("cron.prompt_rejected", PermissionDenied,
+        "The job's prompt holds an injection or concealment directive, a secret-exfiltration pattern or invisible Unicode; the message names the rule and nothing was saved.");
+    /// A job create or edit was not confirmed.
+    CRON_CONFIRMATION = ("cron.confirmation", PermissionDenied,
+        "Saving a job (or a changed schedule) needs a confirmation: answer `y` on a terminal or pass `--yes`; the command exits 4 and nothing was saved.");
+    /// Deterministic replay of a run is not available.
+    CRON_REPLAY_UNAVAILABLE = ("cron.replay_unavailable", Unavailable,
+        "Replaying a run against its recorded model responses needs the model-call cache and the replay provider, which this build does not have yet; `prometheus cron replay <run> --live` re-runs the recorded inputs against the current provider instead.");
+    /// A lifecycle operation does not apply to the job.
+    CRON_INVALID_STATE = ("cron.invalid_state", InvalidInput,
+        "The operation does not apply in the job's state (for example resuming a one-shot job whose time has passed); the message says how to change it.");
+    /// No incident has that id.
+    CRON_INCIDENT_NOT_FOUND = ("cron.incident_not_found", NotFound,
+        "No failure incident of the profile has that id; `prometheus cron incidents` lists them.");
+    /// A job's working directory is not an existing absolute directory.
+    CRON_INVALID_WORKDIR = ("cron.invalid_workdir", Usage,
+        "A job's `workdir` must be an absolute path to an existing directory, and one set through the `cronjob` tool must lie inside the calling session's workspace; nothing was saved.");
+    /// A notepad write would exceed its limits.
+    CRON_NOTEPAD_LIMIT = ("cron.notepad_limit", InvalidInput,
+        "A job notepad key is at most 128 characters, a value at most 16 KiB and a notepad at most 64 KiB counting keys and values; the notepad is unchanged.");
+    /// A run of the job is already queued or running.
+    CRON_ALREADY_RUNNING = ("cron.already_running", Conflict,
+        "A run of the job is queued or running; wait for it (`prometheus cron runs <job>`) before starting another.");
+    /// An automation blueprint or slot value is not valid.
+    CRON_BLUEPRINT = ("cron.blueprint", InvalidInput,
+        "The blueprint name matches none of the catalog, or a slot value is invalid (the message names the slot and the accepted values); nothing was created.");
     /// A client frame is not JSON (JSON-RPC -32700).
     RPC_PARSE =("rpc.parse", InvalidInput,
         "A client protocol frame is not valid JSON (JSON-RPC `-32700`); the connection keeps serving.");

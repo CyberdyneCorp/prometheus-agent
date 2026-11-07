@@ -13,6 +13,7 @@
 //! granted tools is exposed, and an empty intersection runs nothing.
 
 pub mod channel;
+mod confined_fs;
 pub mod interpreter;
 pub mod kernel;
 pub mod output;

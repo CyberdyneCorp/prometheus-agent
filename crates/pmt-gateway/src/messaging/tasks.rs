@@ -133,7 +133,8 @@ pub(crate) async fn start(
         chat_id: routing.chat_id.clone(),
         thread_id: routing.thread_id.clone(),
         user_id: routing.sender_id.clone(),
-        parent: None,
+        parent: launcher.map(str::to_owned),
+        background: true,
         policy,
     };
     let session = match shared
@@ -246,6 +247,7 @@ async fn submit(
         principal: routing.profile.clone(),
         sent_at: Some(jiff::Timestamp::now().to_string()),
         prefix: None,
+        origin: None,
     };
     let link = shared.server.link(session);
     shared
@@ -296,6 +298,7 @@ fn end(shared: &Shared, session: &str, finished: &TurnFinished) {
         kind: OutboundKind::Notification,
         body,
         attachments: Vec::new(),
+        notify: None,
     };
     shared.deliver(&task.profile, &new);
 }

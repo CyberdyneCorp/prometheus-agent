@@ -175,12 +175,22 @@ fn owner_of(cwd: &Path, session: &str) -> Option<OwnerLock> {
 }
 
 /// `capabilities` plus writes to the shared git directories a commit in
-/// a linked worktree needs (spec: git-worktrees, Subagent worktree
+/// a Prometheus tree needs (spec: git-worktrees, Subagent worktree
 /// isolation: a child commits on its branch from its own tree). The main
-/// checkout's hooks and configuration stay out of reach.
+/// checkout's hooks and configuration stay out of reach. No grant may
+/// name or contain one of the `protected` places (`PROMETHEUS_HOME`,
+/// credential stores): the sandbox keeps a store denied only while it
+/// lies strictly below a grant's root. (A grant inside a store exposes
+/// only that verified repository, like a workspace kept there.)
 #[must_use]
-pub fn with_worktree_git(capabilities: &CapabilitySet, cwd: &Path) -> CapabilitySet {
-    let Some(dirs) = pmt_worktrees::tree::shared_git_dirs(cwd) else {
+pub fn with_worktree_git(
+    capabilities: &CapabilitySet,
+    cwd: &Path,
+    protected: &[PathBuf],
+) -> CapabilitySet {
+    let Some(dirs) = pmt_worktrees::tree::shared_git_dirs(cwd)
+        .filter(|dirs| !protected.iter().any(|p| p.starts_with(&dirs.common)))
+    else {
         return capabilities.clone();
     };
     let grants = dirs
@@ -262,5 +272,58 @@ impl Live {
             cwd.display()
         ));
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn git(dir: &Path, args: &[&str]) {
+        let out = std::process::Command::new("git")
+            .current_dir(dir)
+            .args(["-c", "user.name=t", "-c", "user.email=t@example.invalid"])
+            .args(args)
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env(
+                "GIT_CONFIG_GLOBAL",
+                if cfg!(windows) { "NUL" } else { "/dev/null" },
+            )
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "git {args:?}: {out:?}");
+    }
+
+    /// A tree's git grants never name or contain a protected place, and a
+    /// forged `.git` file widens nothing.
+    #[test]
+    fn worktree_git_grants_need_a_verified_tree_outside_protected_places() {
+        let root = tempfile::tempdir().unwrap();
+        let work = root.path().canonicalize().unwrap().join("work");
+        std::fs::create_dir_all(&work).unwrap();
+        git(&work, &["init", "-q", "-b", "main"]);
+        git(&work, &["commit", "-q", "--allow-empty", "-m", "init"]);
+        let request = pmt_worktrees::create::Request {
+            name: Some("t"),
+            ..Default::default()
+        };
+        let tree = pmt_worktrees::create::create(&work, &request).unwrap().tree;
+        let base = CapabilitySet::parse(["fs.read:<workspace>/**"]).unwrap();
+
+        assert_ne!(with_worktree_git(&base, &tree.path, &[]), base);
+        let common = work.join(".git");
+        assert_eq!(with_worktree_git(&base, &tree.path, &[common]), base);
+
+        let forged = work.join(".worktrees/forged");
+        std::fs::create_dir_all(&forged).unwrap();
+        std::fs::write(
+            forged.join(".git"),
+            format!(
+                "gitdir: {}\n",
+                root.path().join("home/worktrees/x").display()
+            ),
+        )
+        .unwrap();
+        assert_eq!(with_worktree_git(&base, &forged, &[]), base);
     }
 }

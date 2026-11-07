@@ -178,6 +178,7 @@ async fn the_background_review_runs_in_a_child_session_and_never_deletes() {
         child,
         model,
         focus: None,
+        suggestions: None,
     })
     .await
     .unwrap();
@@ -226,6 +227,7 @@ async fn a_focused_review_reports_its_memory_changes() {
         child,
         model,
         focus: Some("time zones".to_owned()),
+        suggestions: None,
     })
     .await
     .unwrap();

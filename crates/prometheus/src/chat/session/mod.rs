@@ -9,11 +9,13 @@ pub mod api_hooks;
 pub mod backend;
 pub mod browser;
 pub mod code;
+pub mod cron;
 pub mod delegation;
 pub mod documents;
 pub mod downgrades;
 pub mod env;
 mod guardian;
+pub mod judge;
 mod lifecycle;
 mod lsp;
 mod mcp;
@@ -95,6 +97,8 @@ pub struct Options {
     pub ignore_rules: bool,
     /// `--egress` and `--allow-host`.
     pub egress: crate::egress::Overrides,
+    /// A scheduled run's session (spec: scheduled-jobs).
+    pub cron: Option<cron::CronRun>,
 }
 
 /// The clients of one daemon session: they see its events and answer its
@@ -478,9 +482,12 @@ impl Factory {
         parent: Option<SessionId>,
         target: &pmt_providers::resolve::Target,
     ) -> Result<SessionId, Error> {
-        let mut new = match parent {
-            Some(parent) => NewSession::child(Source::Cli, parent, pmt_store::LineageKind::Fork),
-            None => NewSession::new(Source::Cli),
+        let mut new = match (parent, &self.options.cron) {
+            (Some(parent), _) => {
+                NewSession::child(Source::Cli, parent, pmt_store::LineageKind::Fork)
+            }
+            (None, Some(run)) => run.new_session(),
+            (None, None) => NewSession::new(Source::Cli),
         };
         new.provider = Some(target.provider.clone());
         new.model.clone_from(&target.model);
@@ -680,7 +687,14 @@ impl Factory {
             &plugin_toolsets,
             &surface,
         )?;
-        let selection = self.with_browser_opt_ins(session.id, selection);
+        let selection = match &self.options.cron {
+            Some(run) => run.selection(
+                &registry,
+                &self.scope.config().tools.disabled_toolsets,
+                selection,
+            )?,
+            None => self.with_browser_opt_ins(session.id, selection),
+        };
         Ok((registry, selection, surface))
     }
 
@@ -727,6 +741,7 @@ impl Factory {
             cwd: &self.options.cwd,
             user_home: self.launch.user_home().map(PathBuf::as_path),
             interactive: self.options.interactive,
+            cron: self.options.cron.is_some(),
             yolo: self.options.yolo,
             hooks: Some(Arc::new(hooks)),
             session_id: id.to_string(),
@@ -808,7 +823,15 @@ impl Factory {
         let id = session.id;
         let clients = at.clients;
         let denials = at.denials.clone().unwrap_or_default();
-        let capabilities = &place::with_worktree_git(capabilities, at.cwd);
+        let cron = self.options.cron.as_ref();
+        let protected = pmt_sandbox::credential_stores(&pmt_sandbox::Paths {
+            user_home: self.launch.user_home().cloned().unwrap_or_default(),
+            prometheus_home: self.scope.home().to_path_buf(),
+            workspace: at.cwd.to_path_buf(),
+            scratch: Vec::new(),
+        });
+        let capabilities = &place::with_worktree_git(capabilities, at.cwd, &protected)
+            .union(&cron.map(cron::CronRun::sandbox_grants).unwrap_or_default());
         let processes =
             processes::Wiring::of(self.scope.config(), &self.store, id, &session.origin);
         let environment = env::attach(&env::EnvInputs {
@@ -834,6 +857,7 @@ impl Factory {
             snapshots: snapshots::opener(&self.scope, &self.store, id),
             input_roots: input_roots(&self.scope, skills),
             automatic_trust: automatic_trust(session),
+            cron_notepad: cron.and_then(|c| c.notepad.as_deref()),
         })?;
         // Skills pass their declared secrets to the terminal.
         if let Some(terminal) = &environment.terminal {
@@ -847,40 +871,6 @@ impl Factory {
             )));
         }
         Ok(environment)
-    }
-
-    /// Where `browser_vault` asks for a password or code: the session's
-    /// clients (a daemon session) or the local terminal (an interactive
-    /// chat); nobody in cron, webhook, API and single-query runs.
-    fn vault_prompt(
-        &self,
-        clients: Option<&Clients>,
-    ) -> Option<Arc<dyn pmt_tools::browser::vault::MaskedPrompt>> {
-        if !self.options.interactive {
-            return None;
-        }
-        let secrets = clients
-            .map(|c| Arc::clone(&c.secrets))
-            .or_else(|| self.secret_prompt.clone())?;
-        Some(Arc::new(env::VaultPrompt(secrets)))
-    }
-
-    /// Where a sudo password is asked: the session's clients
-    /// (`sudo.request`) or the local terminal's hidden line, on an
-    /// interactive session only.
-    fn sudo_prompt(
-        &self,
-        clients: Option<&Clients>,
-    ) -> Option<Arc<dyn pmt_tools::terminal::sudo::SudoPrompt>> {
-        if !self.options.interactive {
-            return None;
-        }
-        match clients {
-            Some(clients) => clients.sudo.clone(),
-            None => self.secret_prompt.clone().map(|p| {
-                Arc::new(sudo::HiddenLine(p)) as Arc<dyn pmt_tools::terminal::sudo::SudoPrompt>
-            }),
-        }
     }
 
     /// The baseline and granted capabilities, plus reads of the session's
@@ -925,7 +915,13 @@ impl Factory {
                 .with_summarizer(Arc::clone(summarizer) as _),
         )?
         .with_memory(Arc::clone(memory) as _)
-        .with_connections(crate::connectors_host::manager(&self.scope, cards));
+        .with_connections(crate::connectors_host::manager(&self.scope, cards))
+        .with_cron(crate::cron_host::tool::port(
+            &self.scope,
+            &self.launch,
+            &self.store,
+            self.options.interactive,
+        ));
         let tools = match &self.messaging {
             Some(ports) => tools.with_messaging(ports.port(id, self.read_check(capabilities))),
             None => tools,
@@ -952,13 +948,16 @@ impl Factory {
     /// The stored row of session `id`, recorded for `--usage-file` with
     /// the launch flags; a gateway session's platform user id is hashed in
     /// every model request when PII is redacted (spec:
-    /// security-boundaries, Optional PII redaction).
+    /// security-boundaries, Optional PII redaction). A `/bg` task's session
+    /// is opened as the surface that launched it (its toolsets, hooks and
+    /// plugin calls); the stored row keeps `source = background`.
     fn session_row(
         &self,
         id: SessionId,
         target: &pmt_providers::resolve::Target,
     ) -> Result<pmt_store::Session, Error> {
-        let session = self.store.session(id)?;
+        let mut session = self.store.session(id)?;
+        session.source = self.store.running_source(&session);
         if let pmt_store::Origin::Gateway {
             user: Some(user), ..
         } = &session.origin

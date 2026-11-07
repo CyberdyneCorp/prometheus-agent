@@ -27,6 +27,7 @@ use tokio::io::{AsyncBufReadExt as _, AsyncWriteExt as _, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout};
 
 use super::channel::{Server, StubCalls, Token};
+use super::confined_fs;
 use super::output::{self, Ran};
 use crate::ToolResult;
 
@@ -264,8 +265,10 @@ impl Kernel {
         } else {
             Ended::Died
         };
-        let stdout = std::fs::read(base.with_extension("out")).unwrap_or_default();
-        let stderr = std::fs::read(base.with_extension("err")).unwrap_or_default();
+        // The cell may have replaced its output files with links to
+        // files the sandbox denies it; the host reads only regular files.
+        let stdout = confined_fs::read_regular(&base.with_extension("out")).unwrap_or_default();
+        let stderr = confined_fs::read_regular(&base.with_extension("err")).unwrap_or_default();
         for ext in ["py", "out", "err"] {
             let _ = std::fs::remove_file(base.with_extension(ext));
         }
@@ -279,7 +282,9 @@ impl Kernel {
 
     /// Hands cell `number` to the kernel; `false` when it is gone.
     async fn send(&mut self, base: &Path, number: &str, code: &str) -> bool {
-        if std::fs::write(base.with_extension("py"), code).is_err() {
+        // Cell numbers are predictable, so an earlier cell can plant a
+        // link at this path: create the file anew, never write through.
+        if confined_fs::write_new(&base.with_extension("py"), code.as_bytes()).is_err() {
             return false;
         }
         let line = format!("{number}\n");

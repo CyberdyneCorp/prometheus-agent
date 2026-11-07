@@ -30,7 +30,13 @@ use tracing::Instrument as _;
 
 use super::turn::{SecretsToClients, SudoToClients, ToClients, approvals, clarify};
 
+mod automation;
 mod commands;
+mod cron;
+mod cron_admit;
+mod cron_continue;
+mod cron_fire;
+mod cron_send;
 mod delegations;
 mod discovery;
 mod gateway;
@@ -43,6 +49,8 @@ mod worktrees;
 
 use crate::chat::resume;
 use crate::chat::session::{Clients, Factory, Live};
+pub(super) use automation::schedule as schedule_automation;
+pub(super) use cron::schedule as schedule_cron;
 pub(super) use reload::watch;
 pub(super) use worktrees::sweep_worktrees;
 
@@ -66,6 +74,12 @@ struct Loaded {
     /// A one-shot run's session: it ends once its turn is done, as an
     /// in-process one-shot run's does.
     oneshot: bool,
+    /// The daemon's gateway, for a messaging conversation's session (its
+    /// lane runs its automated turns).
+    chat: Option<send_tool::GatewayCell>,
+    /// What the last turn's automation boundary left for the lane: status
+    /// lines and a goal continuation.
+    after: Mutex<pmt_gateway::messaging::automation::AfterTurn>,
 }
 
 impl Loaded {
@@ -97,10 +111,17 @@ struct Profile {
     store: Arc<Store>,
     /// What the reloads did, for `daemon status`.
     config: Mutex<reload::State>,
+    /// Held across a whole config re-read, so a plugin reload that finds
+    /// the file unchanged waits for the poll that is still applying it.
+    rereading: tokio::sync::Mutex<()>,
     /// Session machinery per working directory and setup.
     factories: Mutex<HashMap<(PathBuf, SessionSetup), Arc<Factory>>>,
     setups: Mutex<HashMap<SessionId, SessionSetup>>,
     loaded: tokio::sync::Mutex<HashMap<SessionId, Arc<Loaded>>>,
+    /// Wakes the profile's scheduler loop (a webhook queued a run).
+    cron_wake: tokio::sync::Notify,
+    /// Wakes the profile's automation loop (a command set something).
+    automation_wake: tokio::sync::Notify,
 }
 
 /// The daemon's host over every served profile.
@@ -151,10 +172,13 @@ impl Profile {
         Ok(Arc::new(Self {
             current: SharedScope::new(scope),
             config: Mutex::new(state),
+            rereading: tokio::sync::Mutex::default(),
             store,
             factories: Mutex::default(),
             setups: Mutex::default(),
             loaded: tokio::sync::Mutex::default(),
+            cron_wake: tokio::sync::Notify::new(),
+            automation_wake: tokio::sync::Notify::new(),
         }))
     }
 
@@ -273,6 +297,8 @@ impl DaemonHost {
         // sessions (one-shot runs, cron, subagents) cannot receive a later
         // notice, so quiet-wait never promises one there.
         let oneshot = row.source_tag.as_deref() == Some(pmt_store::sessions::ONESHOT_TAG);
+        let chat = matches!(row.origin, pmt_store::Origin::Gateway { .. })
+            .then(|| Arc::clone(&self.gateway));
         let completions = match row.origin {
             pmt_store::Origin::Gateway { .. } => Some(notify::completions(
                 Arc::clone(&self.gateway),
@@ -324,6 +350,8 @@ impl DaemonHost {
             queue: Mutex::default(),
             current: Mutex::default(),
             oneshot,
+            chat,
+            after: Mutex::default(),
         });
         loaded.insert(id, Arc::clone(&session));
         if let Some(inbox) = &inbox {
@@ -693,6 +721,21 @@ impl Host for DaemonHost {
         Ok(crate::lsp_cmd::status(&scope))
     }
 
+    fn cron_blueprints(&self, profile: &str) -> Result<pmt_rpc::contracts::BlueprintList, Error> {
+        let scope = self.profile(profile)?.scope();
+        Ok(crate::cron_host::blueprint_rpc::list(&scope, &self.launch))
+    }
+
+    fn cron_blueprint_fill(
+        &self,
+        profile: &str,
+        params: &pmt_rpc::contracts::BlueprintFillParams,
+    ) -> Result<pmt_rpc::contracts::BlueprintFilled, Error> {
+        let served = self.profile(profile)?;
+        let store = Arc::clone(&served.store);
+        crate::cron_host::blueprint_rpc::fill(&served.scope(), &self.launch, store, params)
+    }
+
     fn vault(&self, profile: &str) -> Result<pmt_gateway::vault::VaultAccess, Error> {
         let scope = self.profile(profile)?.scope();
         Ok(pmt_gateway::vault::VaultAccess {
@@ -743,7 +786,8 @@ impl Host for DaemonHost {
         Box::pin(
             async move {
                 let profile = &self.profile(profile)?;
-                self.submit_turn(profile, params, author, link).await
+                self.submit_turn(profile, params, (author, link), None)
+                    .await
             }
             .instrument(span),
         )

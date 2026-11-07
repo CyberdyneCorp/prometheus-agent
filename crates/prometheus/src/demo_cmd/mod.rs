@@ -138,6 +138,7 @@ fn run_session(place: &Place, launch: &LaunchEnv) -> Result<Session, Error> {
         ignore_user_config: false,
         ignore_rules: false,
         egress: crate::egress::Overrides::default(),
+        cron: None,
     };
     let factory = Factory::new(scope, launch, &flags, None, options)?;
     crate::model_cmd::block_on(session(factory, &flags))?

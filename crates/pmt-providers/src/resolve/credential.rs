@@ -685,6 +685,33 @@ pub fn benched(provider: &str, until: Timestamp) -> Error {
         ),
     )
     .with_hint(format!("prometheus auth status {provider}"))
+    .with_source(BenchEnd(until))
+}
+
+/// When an `auth.credentials_benched` refusal ends, carried as the
+/// error's source so callers (the cron usage-window hold) read the
+/// instant without parsing the message.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BenchEnd(pub Timestamp);
+
+impl std::fmt::Display for BenchEnd {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "benched until {}", self.0)
+    }
+}
+
+impl std::error::Error for BenchEnd {}
+
+/// The instant every credential is benched until, when `error` is an
+/// `auth.credentials_benched` refusal.
+#[must_use]
+pub fn bench_end(error: &Error) -> Option<Timestamp> {
+    if error.code() != &codes::AUTH_CREDENTIALS_BENCHED {
+        return None;
+    }
+    std::error::Error::source(error)?
+        .downcast_ref::<BenchEnd>()
+        .map(|end| end.0)
 }
 
 fn missing(provider: &str, host: &str, names: &[String], unbound: &[String]) -> Error {

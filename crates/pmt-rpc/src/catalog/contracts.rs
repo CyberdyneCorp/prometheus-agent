@@ -76,12 +76,16 @@ macro_rules! event {
     };
 }
 
+mod automation;
+mod cron;
 mod files;
 mod lsp;
 mod messaging;
 mod security;
 mod tui;
 mod worktree;
+pub use automation::*;
+pub use cron::*;
 pub use files::*;
 pub use lsp::*;
 pub use messaging::*;
@@ -723,6 +727,9 @@ pub struct Submitted {
     /// How the input was admitted.
     #[serde(default)]
     pub admission: Admission,
+    /// What a `handled` input did, to show in place of a turn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notice: Option<String>,
 }
 
 /// How `prompt.submit` admitted an input (spec: tui, Prompt submission
@@ -740,6 +747,10 @@ pub enum Admission {
     /// Handed to the running turn after its current tool step
     /// (`busy.input_mode = "steer"`).
     Steered,
+    /// Answered without a turn: the `yes` that saves the job a `/cron`
+    /// echo just showed (spec: scheduled-jobs, /cron slash command); the
+    /// result's `notice` says what happened.
+    Handled,
 }
 
 /// An approval answer.

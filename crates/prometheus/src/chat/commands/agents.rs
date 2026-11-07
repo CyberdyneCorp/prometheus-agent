@@ -2,7 +2,7 @@
 //! and live transcripts): what runs for this session, with status,
 //! elapsed time, model, tokens and cost: its subagents as a tree grouped
 //! by parent (running and recently finished), its `/background` tasks and
-//! its background processes. Per item:
+//! its background processes, and its goal, loop and heartbeat. Per item:
 //!
 //! - `/agents stop <id>`: a subagent (`sa-…`; its siblings keep running),
 //!   a background task (`bg_…` or `#<n>`) or a process (`proc_…`);
@@ -76,6 +76,17 @@ async fn listing(ctx: &Ctx<'_>, conversation: &str) -> String {
     if !processes.is_empty() {
         out.push_str("Processes\n");
         out.push_str(&processes);
+    }
+    // The session's goal, loop and heartbeat (spec: session-automation,
+    // Automation status on every surface).
+    let scope = ctx.live.config.get();
+    let limits = crate::automation::limits(scope.config());
+    let rows = crate::automation::rows(&ctx.factory.store, ctx.live.id, &limits);
+    if !rows.is_empty() {
+        out.push_str("Automation\n");
+        for row in rows {
+            let _ = writeln!(out, "  {row}");
+        }
     }
     if out.is_empty() {
         return "Nothing runs for this session: no subagents, background tasks or processes."

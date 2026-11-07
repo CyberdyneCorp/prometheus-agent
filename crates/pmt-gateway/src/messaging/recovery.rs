@@ -102,6 +102,7 @@ pub(crate) fn recover(shared: &Shared, profile: &str) {
             kind: OutboundKind::System,
             body: RESTARTED.to_owned(),
             attachments: Vec::new(),
+            notify: None,
         };
         shared.deliver(profile, &notice);
     }

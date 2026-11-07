@@ -279,6 +279,13 @@ search, text-to-speech...) that config selects by name, such as
 A plugin that needs another declares `requires_plugins = ["other"]`; it
 loads after it, and not at all when `other` is missing, disabled or failed.
 
+A plugin can add [scheduled-job blueprints](cron.md#blueprints) as data:
+each `[[automation_blueprints]]` table (`key`, `title`, `description`,
+`category`, `schedule`, `prompt`, `slots`) joins the catalog as
+`<plugin>:<key>` while the plugin is enabled. A Python plugin calls
+`ctx.register_automation_blueprint(key, title=..., schedule=..., prompt=...,
+slots=[...])` instead.
+
 ## Limits worth designing for
 
 - Each call has `plugins.wasm.call_timeout_ms` (default 30 s) of CPU time;

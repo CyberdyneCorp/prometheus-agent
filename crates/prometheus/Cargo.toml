@@ -65,6 +65,8 @@ pmt-agent.workspace = true
 pmt-backup.workspace = true
 pmt-config.workspace = true
 pmt-core.workspace = true
+pmt-automation.workspace = true
+pmt-cron.workspace = true
 pmt-delegation.workspace = true
 pmt-worktrees.workspace = true
 pmt-gateway = { workspace = true, optional = true }

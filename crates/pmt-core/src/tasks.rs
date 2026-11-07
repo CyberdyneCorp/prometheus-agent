@@ -15,9 +15,6 @@ const EXCERPT: usize = 60;
 /// How long a finished task stays listed.
 pub const RETAIN: Duration = Duration::from_hours(1);
 
-/// The source tag of a background task's session.
-pub const SOURCE_TAG: &str = "background";
-
 /// What starting task `number` answers (every surface says the same).
 #[must_use]
 pub fn started(number: u32, prompt: &str, id: &str) -> String {

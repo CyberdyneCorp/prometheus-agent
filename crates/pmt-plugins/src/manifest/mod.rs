@@ -59,6 +59,7 @@ const FIELDS: &[&str] = &[
     "capabilities",
     "requires_plugins",
     "kanban_lanes",
+    "automation_blueprints",
     "delegation_router",
     "build",
     "mcp",
@@ -113,6 +114,9 @@ pub struct Manifest {
     pub requires_plugins: Vec<String>,
     /// `[[kanban_lanes]]`, kept for the kanban worker lanes.
     pub kanban_lanes: Vec<Table>,
+    /// `[[automation_blueprints]]`: scheduled-job blueprints the plugin
+    /// adds to the catalog (keys become `<plugin>:<key>`), kept as data.
+    pub automation_blueprints: Vec<Table>,
     /// `[delegation_router]`: the router a `delegation-router` plugin
     /// provides.
     pub delegation_router: Option<RouterDeclaration>,
@@ -204,6 +208,7 @@ impl Manifest {
             capabilities: Declared::parse(table.get("capabilities"))?,
             requires_plugins: strings(&table, "requires_plugins")?,
             kanban_lanes: tables(&table, "kanban_lanes")?,
+            automation_blueprints: tables(&table, "automation_blueprints")?,
             delegation_router: router::parse(table.get("delegation_router"))?,
             build: optional_string(&table, "build")?,
             launch,

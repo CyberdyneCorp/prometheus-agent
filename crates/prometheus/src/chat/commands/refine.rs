@@ -31,6 +31,10 @@ pub(super) async fn refine(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
         child: child_session(&ctx.factory.store, live.id)?,
         model: Arc::clone(&live.model) as _,
         focus,
+        suggestions: Some(crate::cron_host::inbox(
+            ctx.scope,
+            Arc::clone(&ctx.factory.store),
+        )),
     };
     let post = Arc::clone(&ctx.post);
     tokio::spawn(async move {

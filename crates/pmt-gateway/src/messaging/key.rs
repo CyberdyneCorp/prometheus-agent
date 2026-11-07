@@ -93,6 +93,12 @@ impl Default for Isolation {
 pub struct SessionKey(String);
 
 impl SessionKey {
+    /// A key as the store recorded it (a route's `key`).
+    #[must_use]
+    pub(crate) fn from_stored(key: String) -> Self {
+        Self(key)
+    }
+
     /// The key text.
     #[must_use]
     pub fn as_str(&self) -> &str {

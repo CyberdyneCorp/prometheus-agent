@@ -3,7 +3,11 @@
 //! same line editor as the in-process interface ([`Input`]), prompts that
 //! become turns of the daemon's session, lines typed while a turn runs
 //! that wait their turn, and Ctrl-C that interrupts a running turn (twice
-//! at the prompt leaves).
+//! at the prompt leaves). Turns the daemon starts on its own between this
+//! client's turns (a goal continuation, a loop wakeup, a heartbeat) are
+//! shown as they run and Ctrl-C interrupts them too; the session's live
+//! automation rows join the status line (spec: session-automation,
+//! Automation status on every surface; Loop stop conditions).
 //!
 //! Slash commands that change what this terminal shows or which session
 //! it drives run here ([`super::local`]); every other command goes to the
@@ -16,7 +20,7 @@ use std::time::Instant;
 use pmt_config::schema::MarkdownMode;
 use pmt_core::error::Error;
 use pmt_rpc::client::error_of;
-use pmt_rpc::contracts::{CommandDispatch, DispatchParams, Dispatched, SessionRef};
+use pmt_rpc::contracts::{CommandDispatch, DispatchParams, Dispatched, Envelope, SessionRef};
 
 use super::render::{self, Out};
 use super::turn::{self, Asker, Prompt};
@@ -170,6 +174,9 @@ pub(super) struct Chat<'a, 'b> {
     pub(super) status_bar: crate::chat::status_bar::StatusBar,
     /// The session's model, for the status line.
     pub(super) model: Option<String>,
+    /// A turn the daemon started on its own runs (seen from its events
+    /// until its `turn.finished`).
+    pub(super) daemon_turn: bool,
 }
 
 /// What the loop does after a line.
@@ -206,6 +213,7 @@ pub(super) async fn run(attached: &mut Attached, start: &Start<'_>) -> Result<u8
         images: start.images.clone(),
         status_bar: crate::chat::status_bar::StatusBar::new(start.scope, start.launch),
         model: None,
+        daemon_turn: false,
     };
     chat.refresh_model().await;
     chat.screen.say(
@@ -233,10 +241,7 @@ impl Chat<'_, '_> {
                     typed = self.lines.next() => typed,
                     _ = self.signals.next() => Typed::Interrupt,
                     Some(event) = self.attached.inbox.events.recv() => {
-                        // Notices posted between turns (`/refine`).
-                        if event.event == "session.event" {
-                            render::event(&self.screen, &event.data);
-                        }
+                        self.on_idle_event(&event);
                         continue;
                     }
                 }
@@ -245,6 +250,12 @@ impl Chat<'_, '_> {
                 Typed::Line(line) => line,
                 Typed::Compose(buffer) => format!("/prompt {buffer}"),
                 Typed::Eof => return Ok(0),
+                Typed::Interrupt if self.daemon_turn => {
+                    // A wakeup or continuation runs: stop it (a loop
+                    // pauses), never arm the exit.
+                    turn::interrupt(self.attached).await;
+                    continue;
+                }
                 Typed::Interrupt => {
                     if last_interrupt.is_some_and(|t| t.elapsed() < DOUBLE_CTRL_C) {
                         return Ok(0);
@@ -331,8 +342,37 @@ impl Chat<'_, '_> {
         self.model = options.ok().and_then(|o| o.current);
     }
 
+    /// An event between this client's own turns: notices posted between
+    /// turns (`/refine`), the turns the daemon runs on its own and the
+    /// automation rows.
+    fn on_idle_event(&mut self, event: &Envelope) {
+        if event
+            .session_id
+            .as_deref()
+            .is_some_and(|id| id != self.attached.session)
+        {
+            return;
+        }
+        match event.event.as_str() {
+            "automation.state" => {
+                let session = self.attached.session.clone();
+                render::automation(&mut self.attached.automation, &session, &event.data);
+            }
+            "turn.finished" => {
+                self.daemon_turn = false;
+                if event.data["exit_reason"] == "interrupted_by_user" {
+                    self.screen.notice("(interrupted)");
+                }
+            }
+            "session.event" if !render::is_notice(&event.data) => self.daemon_turn = true,
+            _ => {}
+        }
+        show_followed(event, &self.screen);
+    }
+
     /// Hands the bottom status line to the editor (none when quiet or
-    /// turned off).
+    /// turned off), with the session's live automation rows (`loop ·
+    /// every 5m · 2 runs · next in 4m`).
     fn show_status(&self) {
         let text = (!self.start.ui.quiet)
             .then(|| {
@@ -342,7 +382,20 @@ impl Chat<'_, '_> {
                     self.model.as_deref(),
                 )
             })
-            .flatten();
+            .flatten()
+            .map(|line| {
+                let rows: Vec<&str> = self
+                    .attached
+                    .automation
+                    .values()
+                    .map(String::as_str)
+                    .collect();
+                if rows.is_empty() {
+                    line
+                } else {
+                    format!("{line} │ {}", rows.join(" │ "))
+                }
+            });
         self.lines.set_status(text);
     }
 
@@ -387,6 +440,8 @@ impl Chat<'_, '_> {
                 let old = SessionRef {
                     session_id: std::mem::replace(&mut self.attached.session, next),
                 };
+                self.attached.automation.clear();
+                self.daemon_turn = false;
                 let _ = self
                     .attached
                     .client
@@ -429,6 +484,11 @@ pub(super) async fn follow(attached: &mut Attached, start: &Start<'_>) -> Result
         tokio::select! {
             event = attached.inbox.events.recv() => {
                 let Some(event) = event else { return Ok(0) };
+                if event.event == "automation.state"
+                    && let Some(row) = event.data["row"].as_str()
+                {
+                    out.notice(row);
+                }
                 show_followed(&event, &out);
             }
             _ = signals.next() => return Ok(0),

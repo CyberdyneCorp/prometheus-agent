@@ -133,7 +133,29 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `connectors.enabled` | boolean | `true` | any | `next_session` | Offer hosted connectors when the profile has a Nous sign-in. |
 | `connectors.gateway_url` | string | `"https://connector-gateway.nousresearch.com"` | any | `next_session` | The connector gateway's origin (a self-hosted gateway, or a test server); `https` except on loopback. |
 | `context.engine` | string | `"builtin"` | any | `next_session` | Context engine: `builtin` or an installed `context-engine` plugin. |
+| `cron.agent_idle_timeout_secs` | integer | `600` | ≥ 0 | `live` | Seconds an agent run may go without tokens or tool activity before it is interrupted (`0` = unlimited); a job's `timeout.idle` wins. |
+| `cron.allow_agent_scheduling` | boolean | `false` | any | `live` | Offer the `cronjob` tool inside scheduled runs. |
+| `cron.catch_up_missed` | boolean | `true` | any | `live` | Collapse missed occurrences of a job without an explicit `grace` into one catch-up run (otherwise they are recorded `skipped_late`). |
+| `cron.completed_retention_secs` | integer | `604800` | ≥ 0 | `live` | Seconds completed jobs are kept before deletion (`0` = never deleted). |
+| `cron.continuable` | boolean | `false` | any | `live` | Deliveries of jobs that do not set `attach_to_session` open a conversation a reply continues. |
+| `cron.continuable_surface` | table | `{}` | any | `live` | Per platform: `thread` (a new thread per continuable delivery) or `in_channel` (posted top-level, seeding the channel's session) on adapters that support it. |
+| `cron.default_toolsets` | array | unset | any | `live` | Toolsets of runs whose job names none; unset uses the cron surface's default (`toolsets.surfaces.cron`, else the enabled toolsets). |
+| `cron.delivery.notify` | boolean | `true` | any | `live` | Send scheduled output and failure notices as notifying messages, never muted as warnings. |
+| `cron.delivery.threads` | table | `{}` | any | `live` | Per platform: the thread or topic id home-chat deliveries go to (explicit `<adapter>:<chat>:<thread>` targets win). |
+| `cron.failure_nudge_threshold` | integer | `3` | ≥ 0 | `live` | Consecutive failures of a recurring job after which its failure notice suggests fixing, pausing or removing it (`0` = never). |
+| `cron.failure_repeat_alert_secs` | integer | `21600` | ≥ 0 | `live` | Seconds after which a failure incident still alerted sends one reminder (`0` = alert on every failing run). |
+| `cron.max_parallel_jobs` | integer | `4` | 1 to 64 | `live` | Runs executing at once per profile (1 = serial). |
+| `cron.max_run_secs` | integer | `3600` | ≥ 0 | `live` | Seconds a run may take in all (`0` = unlimited); a job's `timeout.wall` wins. |
+| `cron.model` | string | unset | any | `live` | The model of unpinned jobs (unset: the profile's main model at fire time). |
+| `cron.model_provider` | string | unset | any | `live` | The provider of `cron.model`. |
+| `cron.preflight` | boolean | `true` | any | `live` | Check a job's credential, skills and delivery adapters before each run; a failure is recorded `blocked_config` without a model call. |
+| `cron.provider` | one of "builtin", "managed" | `"builtin"` | `"builtin"`, `"managed"` | `live` | The trigger: `builtin` or `managed`. |
+| `cron.retry_unreachable` | boolean | `true` | any | `live` | Re-run a recurring job 5, 15 and 30 minutes after it failed to reach the model (network or DNS), without a failure notice. |
+| `cron.run_retention_secs` | integer | `7776000` | ≥ 0 | `live` | Seconds run records are kept (`0` = forever). |
+| `cron.script_timeout_secs` | integer | `120` | 1 to 86400 | `live` | Seconds a job script may run before it is killed. |
+| `cron.tick_interval_secs` | integer | `30` | 10 to 300 | `live` | Seconds between the built-in trigger's evaluations of due jobs (it also wakes at the earliest next run). |
 | `cron.timezone` | string | unset | any | `live` | IANA time zone of this profile (`Europe/Lisbon`); unset uses the host's zone. |
+| `cron.wrap_response` | boolean | `true` | any | `live` | Frame delivered output with the job name and a pause hint. |
 | `delegation.api_key_secret` | string | unset | a secret name | `next_session` | Name of the secret holding the direct endpoint's key. |
 | `delegation.background` | one of "auto", "never" | `"auto"` | `"auto"`, `"never"` | `next_session` | `auto` runs top-level spawns in the background where the session can receive later completions; `never` always waits. |
 | `delegation.base_url` | string | unset | any | `next_session` | A direct endpoint children call instead of a provider route (`model`, or the parent's model id, names the model there). |
@@ -290,6 +312,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.platforms.<name>.reactions` | boolean | unset | any | `next_session` | Mark the triggering message with processing reactions (eyes, then a check mark or a cross). Unset: on for Discord and Slack, off elsewhere. |
 | `gateway.platforms.<name>.reply_to_mode` | one of "off", "first", "all" | unset | `"off"`, `"first"`, `"all"` | `next_session` | Which parts of a reply quote the message they answer: none, the first part, or every part. Unset: `first`. |
 | `gateway.platforms.<name>.restart_notification` | boolean | unset | any | `next_session` | Post one notice to this platform's home channel after a graceful restart or update that interrupted running turns (default true). |
+| `gateway.platforms.<name>.routes.<name>.cron_job` | string | unset | any | `next_session` | Fire this scheduled job (its id or name) instead of a turn: the rendered prompt becomes the run's `## Run Context`, and the job's own delivery, skills and toolsets apply (`deliver` and `skills` are ignored). A paused or running job drops the event. |
 | `gateway.platforms.<name>.routes.<name>.deliver` | string | unset | any | `next_session` | Where the answer goes: `origin` (the HTTP caller's response), `log` (recorded under `<profile>/logs/webhook/<route>.jsonl`), `github_comment` (a comment on the payload's pull request or issue) or a send target `platform[:chat_id[:thread_id]]`. Unset: `origin`. |
 | `gateway.platforms.<name>.routes.<name>.deliver_extra` | array of string | unset | any | `next_session` | More send targets that receive a copy. |
 | `gateway.platforms.<name>.routes.<name>.deliver_only` | boolean | `false` | any | `next_session` | Run no model: the rendered prompt is sent verbatim to `deliver`. |
@@ -339,9 +362,18 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.voice.echo_transcripts` | boolean | `true` | any | `live` | Echo a transcript back to the chat once. |
 | `gateway.voice.reply_mode` | one of "off", "mirror", "always" | `"mirror"` | `"off"`, `"mirror"`, `"always"` | `live` | When replies are spoken. |
 | `gateway.voice.stt_enabled` | boolean | `true` | any | `live` | Transcribe inbound voice and audio clips with the profile's speech-to-text provider. |
+| `goals.gate_max_retries` | integer | `3` | 1 to 100 | `live` | Consecutive failures of a quality gate after which the goal pauses. |
+| `goals.gate_timeout_secs` | integer | `300` | 1 to 86400 | `live` | Seconds one quality gate command may run. |
+| `goals.max_turns` | integer | `20` | 1 to 1000 | `live` | Continuation turns a goal may use before it pauses. |
+| `goals.max_wait_secs` | integer | `1800` | 1 to 86400 | `live` | Longest wait of a goal parked on a process (seconds). |
+| `heartbeat.min_interval_secs` | integer | `60` | 1 to 86400 | `live` | Shortest `/heartbeat every` interval (seconds). |
 | `hooks.auto_accept` | boolean | `false` | any | `next_session` | Run shell hooks nobody approved yet without asking (as `--accept-hooks` does for one run); every hook still runs in the session's sandbox. |
 | `hooks.outbound` | array of table | `[]` | any | `next_session` | Outbound webhooks: hook events sent as HTTPS `POST` requests. |
 | `logging.level` | one of "error", "warn", "info", "debug", "trace" | `"info"` | `"error"`, `"warn"`, `"info"`, `"debug"`, `"trace"` | `restart` | Log level; `PMT_LOG` or `RUST_LOG` override it. |
+| `loops.max_ticks` | integer | `100` | 0 to 100000 | `live` | Wakeups after which a loop pauses (`0` = unlimited). |
+| `loops.min_interval_secs` | integer | `30` | 1 to 86400 | `live` | Shortest fixed interval a loop may use (seconds). |
+| `loops.self_paced_ceiling_secs` | integer | `900` | 1 to 86400 | `live` | Longest wait of a self-paced loop (seconds). |
+| `loops.self_paced_floor_secs` | integer | `60` | 1 to 86400 | `live` | First wait of a self-paced loop (seconds). |
 | `lsp.broken_retry_secs` | integer | `0` | ≥ 0 | `next_session` | After a server fails to start or times out, skip it for its workspace this long (`0` = until `prometheus lsp restart` or the process exits). |
 | `lsp.enabled` | boolean | `true` | any | `next_session` | Run language servers after `write_file` and `patch`; `false` starts no server, watcher or background task. |
 | `lsp.exclude_roots` | array of string | `[]` | any | `next_session` | Git roots where no server runs (globs, `~` expanded; a bare path also matches everything below it). |

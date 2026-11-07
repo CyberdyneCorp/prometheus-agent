@@ -22,7 +22,8 @@ use serde::Serialize;
 pub use auto::NOT_CONNECTED;
 pub(crate) use credential::request_key;
 pub use credential::{
-    Credential, CredentialExtras, CredentialSource, NoExtras, SecretSource, SignedIn, benched,
+    BenchEnd, Credential, CredentialExtras, CredentialSource, NoExtras, SecretSource, SignedIn,
+    bench_end, benched,
 };
 pub use probe::{BoxFuture, EndpointProbe, TcpProbe};
 

@@ -20,13 +20,16 @@
 //!   [`gateway`] the messaging gateway's routes, pairing and outbox, and
 //!   [`mcp_spend`] what conversations spent on costed MCP tools, and
 //!   [`process_receipts`] what ended background processes left behind, and
-//!   [`verification`] `prometheus verify` evidence.
+//!   [`verification`] `prometheus verify` evidence, and [`cron`] scheduled
+//!   jobs, their runs, delivery outbox and tick lease.
 
+pub mod automation;
 pub mod blobs;
 pub mod compaction;
 pub mod compression_state;
 mod contention;
 pub mod credential_state;
+pub mod cron;
 pub mod delegations;
 pub mod delete;
 mod error;
@@ -64,6 +67,7 @@ pub mod usage;
 pub mod usage_query;
 pub mod verification;
 
+pub use automation::AutomationRow;
 pub use blobs::{BlobRef, GcReport};
 pub use compaction::{Compacted, Compaction};
 pub use compression_state::CompressionState;
@@ -98,7 +102,7 @@ pub use usage_query::UsageFilter;
 /// The newest `state.db` schema version this build reads and writes
 /// (`store_meta.schema_version`); every embedded migration bumps it, and a
 /// newer store opens read-only. Reported by `prometheus version --json`.
-pub const SCHEMA_VERSION: u32 = 23;
+pub const SCHEMA_VERSION: u32 = 28;
 
 #[cfg(test)]
 mod tests {

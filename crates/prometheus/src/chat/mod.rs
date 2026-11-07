@@ -297,6 +297,7 @@ fn session_options(args: &ChatArgs, mode: Mode) -> Result<Options, Error> {
             (mode == Mode::OneShot).then(|| pmt_store::sessions::ONESHOT_TAG.to_owned())
         }),
         egress: args.egress_overrides(),
+        cron: None,
     })
 }
 

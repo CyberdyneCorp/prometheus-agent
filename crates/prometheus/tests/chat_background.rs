@@ -73,11 +73,35 @@ fn a_background_task_reports_while_the_chat_keeps_answering() {
     p.expect(Eof).unwrap();
     let listed = ok(&run(home.path(), &["--json", "sessions", "list", "--all"]));
     let listed: serde_json::Value = serde_json::from_str(&listed).unwrap();
+    let sessions = listed["sessions"].as_array().unwrap();
     assert_eq!(
-        listed["sessions"].as_array().unwrap().len(),
+        sessions.len(),
         2,
         "the task had a session of its own: {listed}"
     );
+    // Scenario (subagent-delegation, User-launched background sessions):
+    // `source = background`, the launching session as parent for lineage
+    // only (its own root), the answer never in the launching session, and
+    // `chat -c` resumes the launching session, not the task's.
+    let task = sessions.iter().find(|s| s["source"] == "background");
+    let task = task.unwrap_or_else(|| panic!("no background session: {listed}"));
+    let chat = sessions.iter().find(|s| s["source"] == "cli").unwrap();
+    assert_eq!(task["parent_session_id"], chat["id"]);
+    assert_eq!(task["lineage_kind"], "background");
+    assert_eq!(task["root_session_id"], task["id"]);
+    let id = chat["id"].as_str().unwrap();
+    let export = ok(&run(home.path(), &["sessions", "export", id]));
+    assert!(export.contains("hello"), "{export}");
+    assert!(!export.contains("the findings"), "{export}");
+    let resumed = common::command(home.path())
+        .current_dir(home.path())
+        .args(["--json", "--mock-script", script.to_str().unwrap()])
+        .args(["-z", "again", "-c"])
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    let resumed: serde_json::Value = serde_json::from_str(&ok(&resumed)).unwrap();
+    assert_eq!(resumed["session_id"], chat["id"], "{resumed}");
 }
 
 /// Scenario (subagent-delegation, User-launched background sessions):

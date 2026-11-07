@@ -60,6 +60,11 @@ impl Delegator {
             Mode::Background,
             &CancelToken::new(),
         )?;
+        // Persisted so a completion delivered after a restart keeps it.
+        self.ctx
+            .store
+            .set_delegation_label(&id, &request.label)
+            .map_err(|e| Refusal::from(&e))?;
         let live = self.transcripts(&id, &mut children);
         let dispatched = Dispatched {
             units: &units,

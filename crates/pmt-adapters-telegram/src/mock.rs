@@ -50,6 +50,8 @@ struct State {
     drop_next_poll: bool,
     files: Vec<(String, Vec<u8>)>,
     uploads: Vec<String>,
+    /// Ids of messages sent with `disable_notification`.
+    silent: Vec<String>,
     received: Vec<MockFile>,
     deleted: Vec<String>,
     /// Every call of a method without its own handling, in order.
@@ -179,6 +181,12 @@ impl BotApi {
     /// `description` (`404` as a Bot API without the method).
     pub fn refuse_rich(&self, code: u16, description: &str) {
         self.lock().refuse_rich = Some((code, description.to_owned()));
+    }
+
+    /// Ids of the messages (text or uploads) sent silently
+    /// (`disable_notification`).
+    pub fn silent(&self) -> Vec<String> {
+        self.lock().silent.clone()
     }
 
     /// The arguments of every call of `method`, in order.
@@ -311,6 +319,9 @@ impl BotApi {
             let field = |name: &str| form.iter().find(|p| p.name == name).map(FormPart::text);
             let chat = field("chat_id").unwrap_or_default();
             let thread_id = field("message_thread_id");
+            if field("disable_notification").as_deref() == Some("true") {
+                state.silent.push(id.to_string());
+            }
             if let Some(file) = form.iter().find(|p| p.file_name.is_some()) {
                 state.received.push(MockFile {
                     chat_id: chat.clone(),
@@ -334,6 +345,9 @@ impl BotApi {
             return refused(400, "Bad Request: message is too long");
         }
         let buttons = buttons(&args["reply_markup"]);
+        if args["disable_notification"] == true {
+            state.silent.push(id.to_string());
+        }
         state.sent.push(MockSent {
             chat_id: args["chat_id"].to_string().trim_matches('"').to_owned(),
             message_id: id.to_string(),

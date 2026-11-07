@@ -199,6 +199,11 @@ pub struct Outgoing {
     pub attachments: Vec<OutboundAttachment>,
     /// Send without markup (the resend after a `formatting` refusal).
     pub plain: bool,
+    /// How it notifies the recipient, for text and media alike: `None`
+    /// leaves it to the adapter (its quiet notification mode, where it has
+    /// one), `Some(true)` is a final, notifying message whatever that mode
+    /// says, `Some(false)` is sent silently where the platform can.
+    pub notify: Option<bool>,
 }
 
 impl Outgoing {
@@ -214,6 +219,7 @@ impl Outgoing {
             select: None,
             attachments: Vec::new(),
             plain: false,
+            notify: None,
         }
     }
 }
@@ -381,6 +387,23 @@ impl SenderVerdict {
     }
 }
 
+/// What firing a scheduled job from an adapter did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CronFire {
+    /// A run was queued.
+    Queued {
+        /// The job's id.
+        job_id: String,
+        /// The run's id.
+        run_id: String,
+    },
+    /// Dropped: the job is paused or already running.
+    Dropped {
+        /// Why.
+        reason: String,
+    },
+}
+
 /// The gateway, as an adapter reaches it.
 pub trait AdapterLink: Send + Sync {
     /// Submits an inbound event.
@@ -403,6 +426,23 @@ pub trait AdapterLink: Send + Sync {
     /// `mirror_to_session`); nothing when that chat has no session.
     fn mirror<'a>(&'a self, _target: &'a str, _text: &'a str) -> AdapterFuture<'a, ()> {
         Box::pin(async {})
+    }
+    /// Whether the adapter's profile has the scheduled job `job` (an id or
+    /// name): its id, or why not (a webhook route's `cron_job`, checked
+    /// when the route loads).
+    fn find_cron_job<'a>(&'a self, _job: &'a str) -> AdapterFuture<'a, Result<String, String>> {
+        Box::pin(async { Err("scheduled jobs are not available".to_owned()) })
+    }
+    /// Fires scheduled job `job` of the adapter's profile once, with
+    /// `context` as the run's transient `## Run Context`, through the same
+    /// at-most-once claim as a manual run; a paused job or one already
+    /// running is dropped.
+    fn fire_cron_job<'a>(
+        &'a self,
+        _job: &'a str,
+        _context: &'a str,
+    ) -> AdapterFuture<'a, Result<CronFire, String>> {
+        Box::pin(async { Err("scheduled jobs are not available".to_owned()) })
     }
     /// Whether `sender_id` may use the bot in a direct message (inline
     /// pickers answer nothing to anyone else).

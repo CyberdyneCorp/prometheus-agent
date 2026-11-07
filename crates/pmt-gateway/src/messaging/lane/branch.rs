@@ -183,6 +183,7 @@ impl Lane {
             kind: OutboundKind::System,
             body: text.to_owned(),
             attachments: Vec::new(),
+            notify: None,
         };
         self.shared.deliver(&self.profile, &new);
     }

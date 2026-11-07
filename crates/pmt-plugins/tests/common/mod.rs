@@ -289,6 +289,33 @@ impl Profile {
         identity
     }
 
+    /// Installs crate `component` with the `plugin.toml` it ships with
+    /// (`plugins/<group>/<id>/plugin.toml`), enables it and approves
+    /// everything it asks for.
+    pub(crate) fn install_shipped(&mut self, group: &str, id: &str, component: &str) {
+        let dir = self.plugin_dir(id);
+        testkit::install(component, &dir);
+        let shipped = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../plugins")
+            .join(group)
+            .join(id)
+            .join("plugin.toml");
+        std::fs::copy(shipped, dir.join("plugin.toml")).unwrap();
+        let digest = pmt_plugins::digest::of_dir(&dir).unwrap();
+        adopted(&dir, &digest);
+        self.config.enabled.push(id.to_owned());
+        let manifest = Manifest::read(&dir, &version()).unwrap();
+        let requested: CapabilitySet = manifest
+            .capabilities
+            .requested(&self.path().join("plugin-data").join(id))
+            .unwrap();
+        let identity = Identity {
+            id: id.to_owned(),
+            digest,
+        };
+        approve(&self.grants(), &identity, &requested, "test").unwrap();
+    }
+
     /// Writes the plugin without enabling or approving it.
     pub(crate) fn place(
         &self,

@@ -2,8 +2,9 @@
 //! daemon client sessions (spec: messaging-gateway, Background sessions
 //! from chat; subagent-delegation, User-launched background sessions):
 //! the prompt runs as the one turn of a new, independent session of the
-//! same profile (tagged `background`, no history of the asking session),
-//! on the asking session's route, reasoning level and fallback chain,
+//! same profile (`source = background`, its parent the asking session for
+//! lineage only, no history of it), on the asking session's route,
+//! reasoning level, fallback chain and tool selection,
 //! while the asking session stays free. It takes a slot of
 //! `delegation.max_concurrent_children` like a child (waiting for one when
 //! all are busy). The answer is posted as a labelled notification when the
@@ -21,7 +22,7 @@ use pmt_core::error::{Error, codes};
 use pmt_core::id::{BackgroundId, SessionId};
 use pmt_core::tasks::{self, NewTask, Registry, State, Task};
 use pmt_delegation::limiter::{Admission, Limiter};
-use pmt_store::NewSession;
+use pmt_store::{LineageKind, NewSession, Source};
 
 use super::Ctx;
 use crate::chat::session::Live;
@@ -109,15 +110,15 @@ pub(super) async fn background(ctx: &Ctx<'_>, args: &str) -> Result<String, Erro
 }
 
 /// The task's own session: independent of the asking one (no history,
-/// its own lineage), tagged `background`, on the same route, reasoning
-/// level and working directory.
+/// its own lineage root), recorded with `source = background` and the
+/// asking session as its parent for lineage only, on the same route,
+/// reasoning level, working directory and tool selection (including
+/// `/tools ... --now` changes of the asking session).
 async fn open_session(
     ctx: &Ctx<'_>,
     target: &pmt_providers::resolve::Target,
 ) -> Result<Live, Error> {
-    let source = ctx.factory.store.session(ctx.live.id)?.source;
-    let mut new = NewSession::new(source);
-    new.source_tag = Some(tasks::SOURCE_TAG.to_owned());
+    let mut new = NewSession::child(Source::Background, ctx.live.id, LineageKind::Background);
     new.provider = Some(target.provider.clone());
     new.model.clone_from(&target.model);
     new.cwd = Some(ctx.live.cwd().to_string_lossy().into_owned());
@@ -125,6 +126,9 @@ async fn open_session(
     let live = ctx.factory.open(id, target).await?;
     live.model
         .set_reasoning(ctx.live.model.session().reasoning());
+    ctx.factory
+        .rebuild_tools(&live, &ctx.live.selection())
+        .await?;
     Ok(live)
 }
 

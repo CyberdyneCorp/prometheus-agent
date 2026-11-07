@@ -149,6 +149,7 @@ impl Host for AskingHost {
         ready(Submitted {
             turn_id: turn,
             admission: Admission::Started,
+            notice: None,
         })
     }
 

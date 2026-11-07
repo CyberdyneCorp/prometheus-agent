@@ -409,13 +409,13 @@ The system SHALL provide `prometheus webhooks subscribe <name> [--events <list>]
 - **THEN** the system SHALL store a new secret, print it once with the route URL, and `prometheus webhooks list` SHALL show the route without the secret
 
 ### Requirement: Background sessions
-The system SHALL provide `/background <prompt>` (alias `/bg`) on CLI, TUI and messaging surfaces, which starts a separate root session (no lineage parent; same source surface, profile, model and cwd as the current session) running `<prompt>` without blocking the current session, prints `background session <id> started`, and on completion delivers a notification with the session title and final answer (truncated to 2000 characters with a `prometheus sessions show <id>` pointer) to the originating chat or terminal, limited to `sessions.max_background` concurrent background sessions (default 3; exceeding replies `too many background sessions`).
+The system SHALL provide `/background <prompt>` (alias `/bg`) on CLI, TUI and messaging surfaces exactly as defined by `subagent-delegation` › User-launched background sessions, which owns the behaviour: a new independent session (`source = background`, `parent_session_id` set to the launching session for lineage only) inheriting the launching session's profile, model route and settings, the immediate reply `Background task #<n> started` with a task id `bg_<ULID>`, the final answer (or failure) delivered to the launching surface without entering the launching session's history, and the concurrency limit `delegation.max_concurrent_children`. No other background-session command, reply or limit SHALL exist.
 **Milestone:** M2
 
 #### Scenario: Result delivered back
 - **GIVEN** a Telegram chat
 - **WHEN** the user sends `/background summarise the repo` and keeps chatting
-- **THEN** the foreground session SHALL keep answering and the chat SHALL later receive the background session's final answer
+- **THEN** the chat SHALL reply `Background task #<n> started`, the foreground session SHALL keep answering, and the chat SHALL later receive the background session's final answer labelled with its task number
 
 ### Requirement: External editor composition
 The REPL SHALL open `$VISUAL`, then `$EDITOR`, then a platform default (`notepad` on Windows, `vi` elsewhere) on Ctrl-X Ctrl-E with the current input buffer, and through `/prompt [initial text]` (aliases `/compose`, `/edit`) on a temporary Markdown file, submitting the saved content as the next user message, cancelling with `empty prompt; nothing sent` when the saved file is empty or unchanged from an empty start, and deleting the temporary file afterwards.

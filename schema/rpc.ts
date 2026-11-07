@@ -59,7 +59,7 @@ export interface AdapterStatePayload {
 }
 
 /** How `prompt.submit` admitted an input (spec: tui, Prompt submission while busy). */
-export type Admission = "started" | "queued" | "steered";
+export type Admission = "started" | "queued" | "steered" | "handled";
 
 /** The answer to `approval.request` (also `approval.respond` params, with its `id`). */
 export interface ApprovalAnswer {
@@ -142,6 +142,24 @@ export interface Attached {
   truncated?: boolean;
 }
 
+/** One kind of a session's automation. */
+export interface AutomationStatePayload {
+  /** Turns (goal), wakeups (loop) or fires (heartbeat) so far. */
+  count?: number;
+  /** `goal`, `loop` or `heartbeat`. */
+  kind: string;
+  /** A goal's turn budget (`goals.max_turns`). */
+  limit?: number | null;
+  /** When it fires next (RFC 3339), for an active loop or heartbeat or a parked goal's deadline. */
+  next_fire_at?: string | null;
+  /** The live row as the CLI shows it (absent once removed). */
+  row?: string | null;
+  /** The session. */
+  session_id: string;
+  /** `active`, `paused`, `done`, `parked`, or `none` once removed. */
+  status: string;
+}
+
 /** `session.banner` result: what the TUI's startup banner lists. */
 export interface BannerInfo {
   /** The degraded marker while the session runs below full hardening, for example `sandbox: partial:landlock_net` (spec: security-boundaries, Hardening downgrades are never silent). */
@@ -154,6 +172,84 @@ export interface BannerInfo {
   system_prompt?: FrozenPrompt | null;
   /** The session's tool names, in request order. */
   tools: Array<string>;
+}
+
+/** `cron.blueprints.fill` params. */
+export interface BlueprintFillParams {
+  /** Save the job (after the caller showed the echo); otherwise only check and echo. */
+  create?: boolean;
+  /** The blueprint (key, prefix or near spelling). */
+  key: string;
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+  /** Slot values by name. */
+  values?: Record<string, string>;
+}
+
+/** `cron.blueprints.fill` result. */
+export interface BlueprintFilled {
+  /** The schedule echo: the canonical form and the next instants. */
+  echo?: string | null;
+  /** The created job's id. */
+  job_id?: string | null;
+  /** The blueprint's key. */
+  key: string;
+  /** The slot that needs a value. */
+  missing?: string | null;
+  /** The job's prompt. */
+  prompt?: string | null;
+  /** Its question. */
+  question?: string | null;
+  /** The canonical schedule (`cron 0 8 * * 1-5`). */
+  schedule?: string | null;
+  /** `missing` (a slot needs a value), `ready` (echoed, not saved) or `created`. */
+  status: string;
+}
+
+/** One blueprint. */
+export interface BlueprintInfo {
+  /** Its category. */
+  category: string;
+  /** What it does. */
+  description: string;
+  /** Its key (`<plugin>:<key>`, `skill:<key>` outside the built-ins). */
+  key: string;
+  /** Its slots, in the order they are asked. */
+  slots: Array<BlueprintSlot>;
+  /** `builtin`, `plugin` or `skill`. */
+  source: string;
+  /** Its title. */
+  title: string;
+}
+
+/** `cron.blueprints.list` result. */
+export interface BlueprintList {
+  /** The profile's catalog. */
+  blueprints: Array<BlueprintInfo>;
+}
+
+/** One slot, as a form field. */
+export interface BlueprintSlot {
+  /** The value used when none is given. */
+  default?: string | null;
+  /** `time`, `enum`, `text` or `weekdays`. */
+  kind: string;
+  /** The field name (`time`, `days`...). */
+  name: string;
+  /** The options of an `enum`; the presets of `weekdays`. */
+  options: Array<string>;
+  /** The question asked for it. */
+  question: string;
+  /** Needs a value (given or default). */
+  required: boolean;
+  /** An `enum` accepts only its options. */
+  strict: boolean;
+}
+
+/** `cron.blueprints.list` params. */
+export interface BlueprintsListParams {
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
 }
 
 /** `clarify.request` result. */
@@ -788,6 +884,8 @@ export interface SubmitParams {
 export interface Submitted {
   /** How the input was admitted. */
   admission?: Admission;
+  /** What a `handled` input did, to show in place of a turn. */
+  notice?: string | null;
   /** The admission id: the turn that runs the input (for a steered input, the running turn it joined). */
   turn_id: string;
 }
@@ -1095,6 +1193,8 @@ export interface Methods {
   "complete.path": { params: CompleteParams; result: Completions };
   "complete.slash": { params: CompleteParams; result: Completions };
   "config.get": { params: ConfigGetParams; result: ConfigValue };
+  "cron.blueprints.fill": { params: BlueprintFillParams; result: BlueprintFilled };
+  "cron.blueprints.list": { params: BlueprintsListParams; result: BlueprintList };
   "egress.set": { params: EgressSetParams; result: EgressState };
   "files.rollback": { params: FilesRollbackParams; result: FilesRolledBack };
   "files.undo": { params: FilesUndoParams; result: FilesUndone };
@@ -1137,6 +1237,7 @@ export interface ServerRequests {
 
 export interface Events {
   "adapter.state": AdapterStatePayload;
+  "automation.state": AutomationStatePayload;
   "request.cancel": RequestCancel;
   "request.resolved": RequestResolved;
   "session.event": unknown;
@@ -1151,8 +1252,6 @@ export const UNDECLARED = [
   "bot.relay.deliver",
   "bot.relay.drain",
   "bot.roster.list",
-  "cron.blueprints.fill",
-  "cron.blueprints.list",
   "daemon.update",
   "evolve.cancel",
   "evolve.choose",
@@ -1193,7 +1292,6 @@ export const UNDECLARED = [
   "voice.client_config",
   "wake.feed",
   "achievement.unlocked",
-  "automation.state",
   "health.changed",
   "local_model.context_grown",
   "message.delivery",

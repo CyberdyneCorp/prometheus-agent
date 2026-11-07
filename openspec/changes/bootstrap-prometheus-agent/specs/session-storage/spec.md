@@ -51,7 +51,7 @@ The system SHALL identify every session, regardless of surface or origin, as `se
 - **THEN** the session id SHALL match `^ses_[0-9A-HJKMNP-TV-Z]{26}$`, `source` SHALL be `cron` and `origin.job_id` SHALL be `daily-digest`
 
 ### Requirement: Session record and source enum
-The system SHALL store for each session at least `id`, `profile_id`, `source` (one of `cli`, `tui`, `gateway`, `cron`, `subagent`, `acp`, `api`, `desktop`, `dashboard`, `eval`, `harness`, `import`), `origin` (typed JSON: platform/chat/thread/user for gateway, job id for cron, parent for subagent), `model`, `provider`, `cwd`, `git_repo_root`, `git_branch`, `title`, `title_source`, `started_at`, `last_activity_at`, `ended_at`, `end_reason` (one of `user_exit`, `new_session`, `compression`, `budget_exhausted`, `error`, `interrupted`, `idle_timeout`, `job_complete`), `pinned`, `archived` (`none`, `user`, `auto`), `hidden`, `bot_chat` (boolean, default false; the canonical Bot Chat marker owned by `bot-mode`), and `system_prompt_hash`, and SHALL reject an unknown `source` or `end_reason` value.
+The system SHALL store for each session at least `id`, `profile_id`, `source` (one of `cli`, `tui`, `gateway`, `cron`, `subagent`, `acp`, `api`, `desktop`, `dashboard`, `eval`, `harness`, `import`, `background`), `origin` (typed JSON: platform/chat/thread/user for gateway, job id for cron, parent for subagent), `model`, `provider`, `cwd`, `git_repo_root`, `git_branch`, `title`, `title_source`, `started_at`, `last_activity_at`, `ended_at`, `end_reason` (one of `user_exit`, `new_session`, `compression`, `budget_exhausted`, `error`, `interrupted`, `idle_timeout`, `job_complete`), `pinned`, `archived` (`none`, `user`, `auto`), `hidden`, `bot_chat` (boolean, default false; the canonical Bot Chat marker owned by `bot-mode`), and `system_prompt_hash`, and SHALL reject an unknown `source` or `end_reason` value.
 **Milestone:** M1
 
 #### Scenario: Unknown source rejected
@@ -90,7 +90,7 @@ The system SHALL store media, attachments, oversized payloads and trajectories i
 - **THEN** the blob SHALL NOT be deleted
 
 ### Requirement: Typed session lineage
-The system SHALL record lineage as `parent_session_id`, `lineage_kind` (one of `compression`, `fork`, `delegate`, `reset`, `import`) and `root_session_id` on every child session, SHALL compute `root_session_id` as the parent's root at insert time, and SHALL expose `lineage(session_id)` returning the ordered chain from root to tip and `tree(root_id)` returning every descendant with its kind.
+The system SHALL record lineage as `parent_session_id`, `lineage_kind` (one of `compression`, `fork`, `delegate`, `reset`, `import`, `background`) and `root_session_id` on every child session, SHALL compute `root_session_id` as the parent's root at insert time (except a `background` child, a `/bg` task's session whose link to the launching session is lineage only, which is the root of its own lineage), and SHALL expose `lineage(session_id)` returning the ordered chain from root to tip and `tree(root_id)` returning every descendant with its kind.
 **Milestone:** M1
 
 #### Scenario: Compression chain tip

@@ -443,7 +443,9 @@ jobs:
   perf:
     name: perf (startup, memory, size)
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    # A pull request builds two release trees (base + head); on a cold cache
+    # the base build alone takes ~17 min, so 45 min cancelled the job.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 

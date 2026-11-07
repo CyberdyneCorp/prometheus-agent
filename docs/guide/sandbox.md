@@ -211,9 +211,23 @@ command uploads at most 512 MiB (a notice lists what was left out).
 `managed` (the Nous subscription sign-in, billed as
 `subscription:nous`) or `auto` (default: direct when both secrets are
 stored, else managed when signed in). `prometheus doctor terminal` shows
-the chosen mode, or fails naming both missing options. The first-party
-`singularity`, `modal`, `daytona` and `vercel` plugins themselves are not
-published yet.
+the chosen mode, or fails naming both missing options.
+
+The first-party `daytona` and `vercel` plugins live in
+`plugins/first-party/` (their `plugin.toml` lists the hosts and secrets
+they are granted). Each session gets its own sandbox, created on its first
+command and released at session end; a backend without its credentials is
+unavailable, and `prometheus doctor terminal` names the missing secret or
+setting.
+
+| Plugin | Secret | Settings (`plugins.entries.<id>.*`) | Session end |
+| --- | --- | --- | --- |
+| `daytona` | `DAYTONA_API_KEY` | `snapshot`, `organization_id`, `persistent` (false), `api_url` | deletes the sandbox, or stops it when `persistent` (the next session starts it again) |
+| `vercel` | `VERCEL_TOKEN` | `team_id` and `project_id` (required), `runtime` (`node22`), `vcpus` (2), `timeout_ms` (45 minutes), `api_url` | stops the sandbox; one Vercel ended at its timeout is replaced on the next command |
+
+Daytona merges a command's stderr into its stdout; Vercel keeps them
+apart. The `singularity` and `modal` plugins are not built yet, and none of
+the four is published as a signed package yet.
 
 A `terminal-backend` plugin (world 1.1) provides `name`, `descriptor`,
 `check`, `execute`, `upload`, `download`, `cancel` and `teardown`. Its name
