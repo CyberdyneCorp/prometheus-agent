@@ -50,6 +50,7 @@ mod migrate;
 pub mod model;
 pub mod model_context;
 pub mod onboarding;
+pub mod pins;
 pub mod prefill;
 pub mod process_receipts;
 pub mod prompts;
@@ -87,6 +88,7 @@ pub use model::{
     Archived, CostStatus, EndReason, LineageKind, MemoryKind, MemoryOrigin, MemoryStatus,
     MemoryTarget, MemoryTier, Origin, Role, Source, TitleSource,
 };
+pub use pins::Pin;
 pub use prefill::SessionPrefill;
 pub use process_receipts::ProcessReceipt;
 pub use prompts::{PromptTier, SessionPrompt};
@@ -106,7 +108,7 @@ pub use usage_query::UsageFilter;
 /// The newest `state.db` schema version this build reads and writes
 /// (`store_meta.schema_version`); every embedded migration bumps it, and a
 /// newer store opens read-only. Reported by `prometheus version --json`.
-pub const SCHEMA_VERSION: u32 = 30;
+pub const SCHEMA_VERSION: u32 = 31;
 
 #[cfg(test)]
 mod tests {

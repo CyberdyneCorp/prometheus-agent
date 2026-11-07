@@ -446,7 +446,8 @@ async fn start(
                 run_budget,
                 terminal,
             };
-            repl::run(factory, live, asks, start, ui).await
+            // Boxed: the REPL future holds every command's and turn's.
+            Box::pin(repl::run(factory, live, asks, start, ui)).await
         }
     }
 }

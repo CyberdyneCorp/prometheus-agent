@@ -31,7 +31,8 @@ pub const HEADER: &str = "[CONTEXT COMPACTION - REFERENCE ONLY]";
 /// The last line of every summary row.
 pub const FOOTER: &str =
     "--- END OF CONTEXT SUMMARY - respond to the message below, not the summary above ---";
-/// The required sections, in order (`Pinned` is added when pins exist, M2).
+/// The required sections, in order ([`PINNED`] is added after `Open
+/// Todos` when pins exist).
 pub const SECTIONS: [&str; 6] = [
     "Goal",
     "Progress",
@@ -40,6 +41,8 @@ pub const SECTIONS: [&str; 6] = [
     "Open Todos",
     "Next Steps",
 ];
+/// The section of the pinned messages.
+pub const PINNED: &str = "Pinned";
 /// What an empty section says.
 const EMPTY: &str = "(none recorded)";
 
@@ -63,6 +66,9 @@ pub enum FailureKind {
     Auth,
     /// Payment or quota exhausted (aborts: no fallback).
     Quota,
+    /// The host refused the compacted transcript (an engine broke an
+    /// invariant): it is discarded, nothing changes.
+    InvalidEngineOutput,
 }
 
 impl FailureKind {
@@ -82,6 +88,7 @@ impl FailureKind {
             Self::Truncated => "summary_truncated",
             Self::Auth => "summary_auth",
             Self::Quota => "summary_quota",
+            Self::InvalidEngineOutput => "invalid_engine_output",
         }
     }
 }
@@ -132,6 +139,8 @@ pub struct Input {
     pub focus: Option<String>,
     /// The summary budget in tokens.
     pub budget: u64,
+    /// A retry: the items the previous attempt left out.
+    pub missing: Vec<String>,
 }
 
 /// The summary request of `input`; its output cap is the budget.
@@ -151,6 +160,14 @@ pub fn request(input: &Input) -> Request {
     if let Some(focus) = &input.focus {
         text.push_str("\n\nPRIORITY FROM THE USER - preserve everything about this first: ");
         text.push_str(focus);
+    }
+    if !input.missing.is_empty() {
+        text.push_str(
+            "\n\nYOUR PREVIOUS SUMMARY LEFT THESE OUT - mention each of them, exactly as written:",
+        );
+        for item in &input.missing {
+            let _ = write!(text, "\n- {item}");
+        }
     }
     let _ = write!(
         text,
@@ -272,10 +289,11 @@ impl Sections {
     }
 
     /// The summary row text: header, the required sections in order (Open
-    /// Todos from `open_todos` when the list has open items), any other
+    /// Todos from `open_todos` when the list has open items), `## Pinned`
+    /// with the pinned messages verbatim when there are any, any other
     /// section before `Next Steps`, and the end marker.
     #[must_use]
-    pub fn document(&self, open_todos: Option<&str>) -> String {
+    pub fn document(&self, open_todos: Option<&str>, pinned: Option<&str>) -> String {
         let mut out = format!("{HEADER}\n");
         let mut section = |title: &str, body: &str| {
             let _ = write!(out, "\n## {title}\n{}\n", body.trim());
@@ -287,8 +305,12 @@ impl Sections {
             };
             section(title, body);
         }
+        // The pins are the store's, never what a summarizer echoed.
+        if let Some(pinned) = pinned {
+            section(PINNED, pinned);
+        }
         for (title, body) in &self.entries {
-            if !SECTIONS.contains(&title.as_str()) {
+            if !SECTIONS.contains(&title.as_str()) && title != PINNED {
                 section(title, body);
             }
         }
@@ -406,7 +428,7 @@ mod tests {
         let model = format!(
             "{HEADER}\nSome preamble.\n## goal\nShip it.\n## Files\n- src/a.rs\n## Risks\nNone.\n## Next steps\nTest."
         );
-        let doc = Sections::parse(&model).document(Some("- [pending] write docs (t1)"));
+        let doc = Sections::parse(&model).document(Some("- [pending] write docs (t1)"), None);
         let headings: Vec<&str> = doc.lines().filter(|l| l.starts_with("## ")).collect();
         assert_eq!(
             headings,
@@ -436,6 +458,7 @@ mod tests {
             previous: Some("## Goal\nS1".into()),
             focus: Some("the auth bug".into()),
             budget: 4_000,
+            missing: vec!["src/auth.rs".into()],
         });
         let text = match &req.messages[0].parts[0] {
             pmt_providers::request::Part::Text { text } => text.clone(),
@@ -444,6 +467,11 @@ mod tests {
         assert!(text.contains("PREVIOUS SUMMARY"));
         assert!(text.contains("## Goal\nS1"));
         assert!(text.contains("the auth bug"));
+        assert!(
+            text.contains(
+                "LEFT THESE OUT - mention each of them, exactly as written:\n- src/auth.rs"
+            )
+        );
         assert_eq!(req.max_output_tokens, Some(4_000));
         assert!(req.tools.is_empty());
     }

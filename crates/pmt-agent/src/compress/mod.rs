@@ -8,9 +8,14 @@
 //! store), [`summary`] asks the auxiliary `compression` route for the
 //! handoff summary of the middle (or builds the deterministic fallback),
 //! [`assemble`] places it with strict role alternation and stubs orphaned
-//! calls, and [`compactor`] commits the result under the session's
+//! calls, [`quality`] checks the summary against the region's items,
+//! [`validate`] refuses a result that breaks the transcript (from any
+//! engine), and [`compactor`] commits the result under the session's
 //! compaction lock. [`engine`] selects the context engine and [`manual`]
-//! parses `/compress`.
+//! parses `/compress`. The M2 upgrades: [`pins`] (`/pin`), [`micro`]
+//! (micro-compaction), [`prepared`] (prepared-ahead summaries),
+//! [`proactive`] (proactive prune) and [`hygiene`] (the gateway's pre-turn
+//! check).
 //!
 //! Compaction is the only sanctioned rewrite of already-sent context: the
 //! turn loop rebuilds the system prompt after every commit and the cache
@@ -22,12 +27,19 @@ pub mod decision;
 pub mod engine;
 #[cfg(test)]
 pub(crate) mod fixtures;
+pub mod hygiene;
 pub mod items;
 pub mod manual;
+pub mod micro;
+pub mod pins;
+pub mod prepared;
+pub mod proactive;
 pub mod prune;
+pub mod quality;
 pub mod split;
 pub mod summary;
 pub mod threshold;
+pub mod validate;
 
 use pmt_store::{Message as Row, Role};
 use serde_json::Value;
@@ -93,7 +105,7 @@ pub fn rows_tokens(rows: &[Row]) -> u64 {
     rows.iter().map(row_tokens).sum()
 }
 
-fn flag(row: &Row, key: &str) -> bool {
+pub(crate) fn flag(row: &Row, key: &str) -> bool {
     row.metadata
         .as_ref()
         .and_then(|m| m.get(key))

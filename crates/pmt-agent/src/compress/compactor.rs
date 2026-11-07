@@ -20,15 +20,22 @@ use pmt_core::id::{MessageId, SessionId};
 use pmt_obs::trajectory::events::Event;
 use pmt_obs::trajectory::payload::{CompressionCommitted, CompressionFailed};
 use pmt_obs::trajectory::writer::Emit;
-use pmt_store::{Acquire, Compaction, Holder, Lease, LeaseKind, Message as Row, Store, Visibility};
+use pmt_store::{
+    Acquire, Compacted, Compaction, Holder, Lease, LeaseKind, Message as Row, Store, Visibility,
+};
 use pmt_tools::environments::Environments;
 
-use super::assemble::assemble;
+use super::assemble::{Assembled, Item, assemble};
+use super::engine::ContextEngine;
 use super::items::{Items, previous_summary};
-use super::prune::prune;
+use super::pins;
+use super::prepared::{Prepared, PreparedSummary};
+use super::prune::{Pruned, prune};
+use super::quality::{self, Checklist};
 use super::split::{Options, Split, split};
 use super::summary::{self, FailureKind, Input, Sections, Summarizer, SummaryFailure};
 use super::threshold::{ModelWindow, summary_budget, tail_budget};
+use super::validate::validate;
 use super::{Trigger, decision, is_summary, rows_tokens, tokens};
 use crate::tools::todo::TodoList;
 use crate::turn::events::EventSink;
@@ -142,6 +149,9 @@ pub struct Compactor<'a> {
     pub config: &'a CompressionConfig,
     /// The summary writer; `None` commits the fallback summary.
     pub summarizer: Option<&'a dyn Summarizer>,
+    /// A plugin's context engine (`context.engine`); `None` is the
+    /// built-in one.
+    pub engine: Option<&'a dyn ContextEngine>,
     /// Trajectory events.
     pub events: &'a dyn EventSink,
     /// The running turn, when inside one.
@@ -149,10 +159,17 @@ pub struct Compactor<'a> {
 }
 
 /// What the read phase found.
-struct Plan {
-    rows: Vec<Row>,
-    split: Split,
-    before: u64,
+pub(crate) struct Plan {
+    pub(crate) rows: Vec<Row>,
+    pub(crate) split: Split,
+    pub(crate) before: u64,
+}
+
+/// The summary a compaction commits.
+struct Written {
+    document: String,
+    coverage: Option<f64>,
+    failure: Option<SummaryFailure>,
 }
 
 impl Compactor<'_> {
@@ -162,25 +179,53 @@ impl Compactor<'_> {
     ///
     /// Store failures; every compaction outcome is an [`Outcome`].
     pub async fn compact(&self, run: &Run) -> Result<Outcome, Error> {
+        self.compact_with(run, None).await
+    }
+
+    /// [`Self::compact`] adopting `prepared` when the transcript only grew
+    /// since it was prepared (spec: Prepared-ahead summaries); otherwise
+    /// it is discarded.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::compact`].
+    pub async fn compact_with(
+        &self,
+        run: &Run,
+        prepared: Option<Prepared>,
+    ) -> Result<Outcome, Error> {
         if run.preview {
             return self.preview(run);
         }
-        let lock = match self.store.acquire_lease(
-            self.session,
-            LeaseKind::Compaction,
-            &Holder::current(),
-        )? {
-            Acquire::Granted(lock) => lock,
-            Acquire::Busy { .. } => return Ok(Outcome::of(Status::LockSkipped, 0)),
+        let Some(lock) = self.lock()? else {
+            return Ok(Outcome::of(Status::LockSkipped, 0));
         };
-        let result = self.locked(run, &lock).await;
-        if let Err(err) = self.store.release_lease(&lock) {
-            tracing::warn!(error = %err, "compaction lock could not be released; it lapses at its expiry");
-        }
+        let result = self.locked(run, &lock, prepared).await;
+        self.unlock(&lock);
         result
     }
 
-    fn plan(&self, run: &Run) -> Result<Plan, Error> {
+    /// The session's compaction lock, `None` while another holds it.
+    pub(crate) fn lock(&self) -> Result<Option<Lease>, Error> {
+        Ok(
+            match self.store.acquire_lease(
+                self.session,
+                LeaseKind::Compaction,
+                &Holder::current(),
+            )? {
+                Acquire::Granted(lock) => Some(lock),
+                Acquire::Busy { .. } => None,
+            },
+        )
+    }
+
+    pub(crate) fn unlock(&self, lock: &Lease) {
+        if let Err(err) = self.store.release_lease(lock) {
+            tracing::warn!(error = %err, "compaction lock could not be released; it lapses at its expiry");
+        }
+    }
+
+    pub(crate) fn plan(&self, run: &Run) -> Result<Plan, Error> {
         let rows = self.store.messages(self.session, Visibility::Active)?;
         let options = Options {
             first_compaction: !rows.iter().any(is_summary),
@@ -213,62 +258,185 @@ impl Compactor<'_> {
         })
     }
 
-    async fn locked(&self, run: &Run, lock: &Lease) -> Result<Outcome, Error> {
+    async fn locked(
+        &self,
+        run: &Run,
+        lock: &Lease,
+        prepared: Option<Prepared>,
+    ) -> Result<Outcome, Error> {
         let started = Instant::now();
-        let plan = self.plan(run)?;
+        let mut plan = self.plan(run)?;
+        if let Some(engine) = self.engine {
+            if let Some(prepared) = prepared {
+                prepared.discard();
+            }
+            return self.engine_run(engine, run, lock, &plan, started).await;
+        }
+        let prepared = prepared.and_then(|p| p.adopt(&mut plan));
         if !plan.split.has_work(&plan.rows) {
             self.back_off(run.trigger)?;
             return Ok(Outcome::of(Status::NothingToDo, plan.before));
         }
-        let middle = &plan.rows[plan.split.middle.clone()];
         let pruned = prune(&plan.rows, plan.split.middle.clone());
+        let written = match self.written(run, &plan, &pruned, prepared).await? {
+            Ok(written) => written,
+            Err(outcome) => return Ok(outcome),
+        };
+        let assembled = assemble(&plan.rows, &plan.split, &written.document);
+        self.commit(
+            run,
+            lock,
+            &plan,
+            (assembled, &pruned.originals),
+            written,
+            started,
+        )
+        .await
+    }
+
+    /// The summarizer's request for `plan` (its middle pruned).
+    pub(crate) fn input(&self, run: &Run, plan: &Plan, pruned: &Pruned) -> Input {
+        let middle = &plan.rows[plan.split.middle.clone()];
         let fresh: Vec<Row> = pruned
             .rows
             .iter()
             .filter(|r| !is_summary(r))
             .cloned()
             .collect();
-        let previous = previous_summary(middle);
-        let input = Input {
+        Input {
             transcript: summary::render(&fresh),
-            previous: previous.clone(),
+            previous: previous_summary(middle),
             focus: run.focus.clone(),
             budget: summary_budget(self.config, run.window.context_window, rows_tokens(middle)),
+            missing: Vec::new(),
+        }
+    }
+
+    /// The checked summary of `plan`'s middle (`prepared`: a summary
+    /// already written for it), or the outcome that ends the attempt.
+    async fn written(
+        &self,
+        run: &Run,
+        plan: &Plan,
+        pruned: &Pruned,
+        prepared: Option<PreparedSummary>,
+    ) -> Result<Result<Written, Outcome>, Error> {
+        let middle = &plan.rows[plan.split.middle.clone()];
+        let mut input = self.input(run, plan, pruned);
+        let todos = TodoList::load(self.store, self.session)?;
+        let pinned = pins::section(self.store, self.session)?;
+        let reinjected = todos.reinjection();
+        let document =
+            |sections: &Sections| sections.document(reinjected.as_deref(), pinned.as_deref());
+        let items = Items::of(middle);
+        let checklist = Checklist::new(&items, &todos.open_items());
+        // A prepared summary that failed is written again, as if there
+        // were none.
+        let first = match prepared {
+            Some(prepared) => match prepared.await_summary().await {
+                Ok(text) if !text.trim().is_empty() => Ok(text),
+                _ => self.summarize(&input).await,
+            },
+            None => self.summarize(&input).await,
         };
-        let (sections, failure) = match self.summarize(&input).await {
-            Ok(text) => (Sections::parse(&text), None),
+        let (mut sections, failure) = match first {
+            Ok(text) => {
+                let mut sections = Sections::parse(&text);
+                let missing = checklist.missing(&document(&sections));
+                if checklist.coverage(&document(&sections)) < self.config.quality_min_coverage {
+                    input.missing = missing;
+                    match self.summarize(&input).await {
+                        Ok(retry) => sections = Sections::parse(&retry),
+                        Err(err) => tracing::warn!(
+                            reason = err.kind.as_str(),
+                            "the summary retry failed; keeping the first summary: {}",
+                            err.message
+                        ),
+                    }
+                }
+                (sections, None)
+            }
             Err(failure) => {
                 self.summary_failed(&failure).await?;
                 if failure.kind.aborts() || self.config.abort_on_summary_failure {
-                    return Ok(Outcome {
+                    return Ok(Err(Outcome {
                         failure: Some(failure),
                         ..Outcome::of(Status::Failed, plan.before)
-                    });
+                    }));
                 }
-                let items = Items::of(middle);
+                let previous = input.previous.as_deref();
                 (
-                    summary::fallback(previous.as_deref(), &pruned.lines, &items),
+                    summary::fallback(previous, &pruned.lines, &items),
                     Some(failure),
                 )
             }
         };
-        let todos = TodoList::load(self.store, self.session)?.reinjection();
-        let document = sections.document(todos.as_deref());
-        let assembled = assemble(&plan.rows, &plan.split, &document);
-        let (replaced, replacements) = assembled.commit();
-        let mut compaction = Compaction::new(&plan.rows, replaced.clone(), replacements);
-        for original in &pruned.originals {
-            let blob = self.store.put_blob(original)?;
-            compaction.references.push((blob, assembled.summary_id));
+        let checked = document(&sections);
+        let coverage = checklist.coverage(&checked);
+        quality::preserve(&mut sections, &checklist.missing(&checked));
+        Ok(Ok(Written {
+            document: document(&sections),
+            coverage: Some(coverage),
+            failure,
+        }))
+    }
+
+    /// A plugin engine's compaction of the whole active transcript.
+    async fn engine_run(
+        &self,
+        engine: &dyn ContextEngine,
+        run: &Run,
+        lock: &Lease,
+        plan: &Plan,
+        started: Instant,
+    ) -> Result<Outcome, Error> {
+        let assembled = match engine.compact(&plan.rows).await {
+            Ok(output) => super::engine::assembled(&plan.rows, output),
+            Err(why) => Err(why),
+        };
+        let assembled = match assembled {
+            Ok(assembled) => assembled,
+            Err(why) => return self.invalid(plan, &why).await,
+        };
+        let document = assembled
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                Item::New(row) => row.content.clone(),
+                Item::Kept(_) => None,
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let written = Written {
+            document,
+            coverage: None,
+            failure: None,
+        };
+        self.commit(run, lock, plan, (assembled, &[]), written, started)
+            .await
+    }
+
+    /// Validates and commits `assembled`; an invalid result is discarded.
+    async fn commit(
+        &self,
+        run: &Run,
+        lock: &Lease,
+        plan: &Plan,
+        (assembled, originals): (Assembled<'_>, &[Vec<u8>]),
+        written: Written,
+        started: Instant,
+    ) -> Result<Outcome, Error> {
+        if let Err(why) = validate(&assembled) {
+            return self.invalid(plan, &why).await;
         }
-        let committed = match self.store.compact(lock, &compaction) {
+        let replaced = assembled.commit().0;
+        let committed = match self.apply(lock, &assembled, originals)? {
             Ok(committed) => committed,
-            Err(err) if err.code().code == "store.compaction_conflict" => {
+            Err(conflict) => {
                 self.back_off(run.trigger)?;
-                self.failed("conflict", err.message()).await;
+                self.failed("conflict", &conflict).await;
                 return Ok(Outcome::of(Status::Failed, plan.before));
             }
-            Err(err) => return Err(err),
         };
         let after_rows = self.store.messages(self.session, Visibility::Active)?;
         let tokens_after = plan
@@ -276,43 +444,88 @@ impl Compactor<'_> {
             .saturating_sub(rows_tokens(&plan.rows).saturating_sub(rows_tokens(&after_rows)));
         let mut state = self.store.compression_state(self.session)?;
         // An overflow attempt ignores an armed cooldown without clearing it.
-        let summarized = failure.is_none() && run.trigger != Trigger::Overflow;
+        let summarized = written.failure.is_none() && run.trigger != Trigger::Overflow;
         decision::committed(&mut state, plan.before, summarized);
         self.store.save_compression_state(self.session, &state)?;
-        note_compaction(self.session);
         let outcome = Outcome {
             status: Status::Compressed,
             epoch: Some(committed.epoch),
             tokens_before: plan.before,
             tokens_after,
             summarized: replaced,
-            fallback: failure.is_some(),
-            failure,
+            fallback: written.failure.is_some(),
+            failure: written.failure,
         };
         self.emit(Event::CompressionCommitted(CompressionCommitted {
             trigger: run.trigger.as_str().to_owned(),
             epoch: committed.epoch,
             tokens_before: outcome.tokens_before,
             tokens_after: outcome.tokens_after,
-            summary_tokens: tokens(&document),
-            coverage: None,
+            summary_tokens: tokens(&written.document),
+            coverage: written.coverage,
             duration_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
         }))
         .await;
         Ok(outcome)
     }
 
-    /// The summary, under `compression.summary_timeout_secs`.
-    async fn summarize(&self, input: &Input) -> Result<String, SummaryFailure> {
+    /// Commits an already validated `assembled` in place, keeping each of
+    /// `originals` in the blob store for the row that names it; `Err`
+    /// carries a concurrent rewrite (nothing changed).
+    pub(crate) fn apply(
+        &self,
+        lock: &Lease,
+        assembled: &Assembled<'_>,
+        originals: &[Vec<u8>],
+    ) -> Result<Result<Compacted, String>, Error> {
+        let (replaced, replacements) = assembled.commit();
+        let mut compaction = Compaction::new(assembled.source(), replaced, replacements);
+        for original in originals {
+            let blob = self.store.put_blob(original)?;
+            compaction.references.push((blob, assembled.summary_id));
+        }
+        match self.store.compact(lock, &compaction) {
+            Ok(committed) => {
+                note_compaction(self.session);
+                Ok(Ok(committed))
+            }
+            Err(err) if err.code().code == "store.compaction_conflict" => {
+                Ok(Err(err.message().to_owned()))
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    /// An engine result the host refused: nothing changes and it counts
+    /// as a failed summary.
+    async fn invalid(&self, plan: &Plan, why: &str) -> Result<Outcome, Error> {
+        let failure = SummaryFailure::new(FailureKind::InvalidEngineOutput, why);
+        self.summary_failed(&failure).await?;
+        Ok(Outcome {
+            failure: Some(failure),
+            ..Outcome::of(Status::Failed, plan.before)
+        })
+    }
+
+    /// The summary of `input`, under `compression.summary_timeout_secs`.
+    pub(crate) async fn summarize(&self, input: &Input) -> Result<String, SummaryFailure> {
+        self.summarize_request(&summary::request(input)).await
+    }
+
+    /// The summarizer's answer to `request`, under
+    /// `compression.summary_timeout_secs`.
+    pub(crate) async fn summarize_request(
+        &self,
+        request: &pmt_providers::request::Request,
+    ) -> Result<String, SummaryFailure> {
         let Some(summarizer) = self.summarizer else {
             return Err(SummaryFailure::new(
                 FailureKind::Failed,
                 "no auxiliary compression route resolved",
             ));
         };
-        let request = summary::request(input);
         let limit = Duration::from_secs(self.config.summary_timeout_secs);
-        let text = tokio::time::timeout(limit, summarizer.summarize(&request))
+        let text = tokio::time::timeout(limit, summarizer.summarize(request))
             .await
             .map_err(|_| {
                 SummaryFailure::new(
@@ -330,7 +543,7 @@ impl Compactor<'_> {
     }
 
     /// Arms the cooldown and reports the failure.
-    async fn summary_failed(&self, failure: &SummaryFailure) -> Result<(), Error> {
+    pub(crate) async fn summary_failed(&self, failure: &SummaryFailure) -> Result<(), Error> {
         let mut state = self.store.compression_state(self.session)?;
         let wait = decision::summary_failed(&mut state, Timestamp::now());
         self.store.save_compression_state(self.session, &state)?;
@@ -354,7 +567,7 @@ impl Compactor<'_> {
         self.store.save_compression_state(self.session, &state)
     }
 
-    async fn failed(&self, reason: &str, message: &str) {
+    pub(crate) async fn failed(&self, reason: &str, message: &str) {
         self.emit(Event::CompressionFailed(CompressionFailed {
             reason: reason.to_owned(),
             message: Some(message.to_owned()),

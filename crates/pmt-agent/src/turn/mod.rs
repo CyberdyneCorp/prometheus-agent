@@ -38,6 +38,7 @@ mod steer;
 mod system;
 pub mod tools;
 pub mod transcript;
+mod upkeep;
 mod verify;
 
 use std::path::PathBuf;
@@ -187,6 +188,9 @@ pub struct AgentSetup {
     /// surface frozen per session; MCP tool list changes respect the
     /// frozen surface).
     pub compaction_boundary: Option<Arc<dyn CompactionBoundary>>,
+    /// The plugin context engine `context.engine` names; `None` compacts
+    /// with the built-in engine.
+    pub context_engine: Option<Arc<dyn crate::compress::engine::ContextEngine>>,
 }
 
 /// What a session refreshes when a compaction commits. The prompt cache
@@ -329,6 +333,7 @@ impl AgentSetup {
             memory: None,
             turn_hooks: None,
             compaction_boundary: None,
+            context_engine: None,
         }
     }
 }
@@ -414,6 +419,10 @@ pub struct Agent {
     prefix: Mutex<Option<cache::Prefix>>,
     /// Reported usage, for the compression preflight.
     usage: Mutex<compression::UsageMemory>,
+    /// A summary written ahead of the compaction trigger.
+    prepared: Mutex<Option<crate::compress::prepared::Prepared>>,
+    /// Micro-compaction progress.
+    micro: Mutex<upkeep::MicroState>,
     /// The prompt-cache lifetime, resolved once per session.
     cache_ttl: OnceLock<CacheTtl>,
     /// The TTL lowering was logged.
@@ -438,6 +447,8 @@ impl Agent {
             prefill: Mutex::new(None),
             prefix: Mutex::new(None),
             usage: Mutex::new(compression::UsageMemory::new()),
+            prepared: Mutex::new(None),
+            micro: Mutex::new(upkeep::MicroState::default()),
             cache_ttl: OnceLock::new(),
             ttl_lowered: std::sync::atomic::AtomicBool::new(false),
         })

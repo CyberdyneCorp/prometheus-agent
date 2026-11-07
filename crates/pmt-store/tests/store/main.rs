@@ -16,6 +16,7 @@ mod journal;
 mod lifecycle;
 mod mcp_spend;
 mod open;
+mod pins;
 mod prompts;
 mod search;
 mod sessions;

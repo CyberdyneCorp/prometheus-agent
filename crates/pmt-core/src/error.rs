@@ -437,6 +437,12 @@ error_codes! {
     /// A turn the process stopped during was closed instead of resumed.
     TURN_CRASHED = ("turn.crashed", Internal,
         "The process stopped while this turn ran; set `agent.resume_on_crash` to `auto` or `ask` to continue such turns from their journal.");
+    /// A `/pin` would make pinned content exceed its budget.
+    COMPRESSION_PIN_LIMIT = ("compression.pin_limit", Usage,
+        "Pinned messages are copied into every compaction summary; unpin one with `/unpin <message-id>` or raise `compression.pinned_max_tokens`.");
+    /// `/pin` or `/unpin` named no message of the session.
+    COMPRESSION_PIN_UNKNOWN = ("compression.pin_unknown", NotFound,
+        "`/pin` takes `last` or the id (or a unique id prefix) of a user or assistant message of this session; `/unpin` takes a pinned one.");
     /// An unknown personality name.
     PERSONALITY_UNKNOWN = ("personality.unknown", Usage,
         "`agent.personality` and `/personality` take `none`, a built-in personality or a key of `[agent.personalities]`.");

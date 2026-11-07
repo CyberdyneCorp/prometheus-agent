@@ -84,6 +84,26 @@ pub(super) async fn compress(ctx: &Ctx<'_>, args: &str) -> Result<String, Error>
     .to_lowercase())
 }
 
+/// `/pin [<message-id>|last]`: keeps a message's text in every later
+/// compaction summary (spec: context-compression, Pinned messages survive
+/// compaction).
+pub(super) fn pin(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
+    let max = ctx.live.config.get().config().compression.pinned_max_tokens;
+    let pinned = pmt_agent::compress::pins::pin(&ctx.factory.store, ctx.live.id, args, max)?;
+    let first = pinned.text.lines().next().unwrap_or_default();
+    let preview: String = first.chars().take(60).collect();
+    Ok(format!("pinned {}: {preview}", pinned.id))
+}
+
+/// `/unpin <message-id>`.
+pub(super) fn unpin(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
+    if args.trim().is_empty() {
+        return Err(Error::new(&codes::CLI_USAGE, "usage: /unpin <message-id>"));
+    }
+    let id = pmt_agent::compress::pins::unpin(&ctx.factory.store, ctx.live.id, args)?;
+    Ok(format!("unpinned {id}"))
+}
+
 /// `/model [<ref>] [...]`: shows the route or switches it from the next
 /// turn (`--global` also saves it).
 pub(super) async fn model(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {

@@ -485,6 +485,14 @@ async fn run_one(
         .as_deref()
         .and_then(pmt_automation::Kind::parse);
     let agent = &session.live.agent;
+    // Gateway session hygiene: an inbound message of a session grown near
+    // its window is answered after a compaction, not into an overflow.
+    if job.from_lane
+        && job.resume.is_none()
+        && let Err(err) = agent.gateway_hygiene(&scope).await
+    {
+        tracing::warn!(session = %id, error = %err, "gateway session hygiene failed");
+    }
     let outcome = match job.resume {
         Some((unfinished, resume)) => {
             agent

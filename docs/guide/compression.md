@@ -84,9 +84,20 @@ It always has this shape:
 ## Decisions
 ## Files
 ## Open Todos      (the open items of the todo list, verbatim)
+## Pinned          (pinned messages, verbatim; only when there are any)
+## Preserved References   (what the summary left out; only when needed)
 ## Next Steps
 --- END OF CONTEXT SUMMARY - respond to the message below, not the summary above ---
 ```
+
+Before it commits, the summary is checked against what it must not lose,
+taken from the summarized messages: the files written or patched, the
+open todo items, the latest user request and tool errors that were never
+followed by a success of the same tool. When it mentions less than
+`compression.quality_min_coverage` of them (default `0.8`) the summarizer is
+asked once more with the missing items listed; anything still missing is
+appended verbatim under `## Preserved References`. The share is recorded as
+`coverage` in `compression.committed`.
 
 If the summary fails, times out (`compression.summary_timeout_secs`) or is
 cut off, a deterministic summary is committed instead (previous summary,
@@ -94,12 +105,21 @@ prune lines, files written, the latest request, unresolved tool errors),
 unless `compression.abort_on_summary_failure = true` or the failure was an
 authentication or quota error; then nothing changes.
 
+Whatever engine produced it, the compacted transcript is validated before
+it is committed: user and assistant messages still alternate where new
+rows were written, every tool result follows its call, no call is left
+without a result (except a call still running), it is smaller than before
+and the current user message is unchanged. A result that fails is
+discarded, the transcript stays as it was and `compression.failed` carries
+reason `invalid_engine_output` (it arms the cooldown like a failed
+summary).
+
 The replaced messages are not deleted: they stay in the session marked as
 archived with the compaction's epoch, so `prometheus sessions show`,
 exports and [`session_search`](../reference/tools.md#session_search) still
 find them. Each commit records
 `compression.committed` (trigger, epoch, tokens before and after, summary
-tokens, duration); failures record `compression.failed`. Only one
+tokens, the quality coverage, duration); failures record `compression.failed`. Only one
 compaction runs per session at a time; a second attempt reports
 `lock_skipped`.
 
@@ -125,6 +145,55 @@ next request starts a fresh cache prefix.
 The result is one of `preview`, `nothing_to_do`, `lock_skipped` or
 `compressed`.
 
+## Pinned messages
+
+```text
+/pin [<message-id>|last]
+/unpin <message-id>
+```
+
+`/pin` (default `last`: the newest user or assistant message) keeps a
+message's text in the `## Pinned` section of every later summary, however
+many compactions run; an id prefix is enough when it is unique. Pinned text
+together stays within `compression.pinned_max_tokens` (default 8,000): a pin
+over it is refused with "pinned content would exceed <N> tokens; unpin
+something first".
+
+## Opt-in upkeep
+
+These run only when configured; each commit is a compaction like any
+other (validated, in place, the prompt rebuilt).
+
+- **Micro-compaction** (`compression.micro_compact = true`): every
+  `compression.micro_compact_every_n_turns` completed turns (default 1;
+  interrupted or failed turns do not count) one assistant exchange of the
+  compressible middle is folded into a single rolling summary row. User
+  messages, the protected head and the tail are never folded, only the
+  newest rolling summary stays in the context (an older one becomes a
+  one-line marker), and an exchange that fails to fold three times in a row
+  is skipped. A failure is logged and never fails the turn.
+- **Prepared-ahead summaries** (`compression.prepare_ahead = true`): once
+  the context passes 90% of the trigger the summary is written in the
+  background. When the trigger is crossed it is used without another
+  summarizer call if the conversation only grew since; otherwise it is
+  discarded and the summary is written as usual.
+- **Proactive prune** (`compression.proactive_prune_tokens`, default `0` =
+  off): below the trigger, once the context passes this size, only the
+  deterministic prune runs, on tool results over 8,000 characters outside
+  the head and tail. It commits only when it reclaims at least 4,096 tokens
+  and runs again only after the context has grown back by what it
+  reclaimed, so cache breaks stay rare.
+
+## Gateway session hygiene
+
+Before the gateway hands an incoming message to the agent, it compacts the
+session (trigger `gateway_hygiene`) when the last known context reaches 85%
+of the main model's window or the session has 5,000 messages. The size is
+the provider's last reported count, else the usage stored for the session's
+last model call (since its last compaction), else an estimate. Sessions
+with fewer than 4 messages, and profiles with `compression.enabled =
+false`, are left alone.
+
 ## Prompt-cache breakpoints
 
 For providers with explicit cache breakpoints (Anthropic Messages) each
@@ -142,7 +211,8 @@ keep the chosen lifetime gets the longest it supports.
 `context.engine` selects the engine: `builtin` (the default) or an engine
 registered by an installed, enabled plugin. An unknown name fails
 `prometheus config validate` with `unknown context engine '<name>'` (exit
-78); a plugin's engine is used only when the key names it.
+78); a plugin's engine is used only when the key names it. The host
+validates a plugin engine's output like the built-in one's.
 
 ```console
 $ prometheus config set context.engine lcm

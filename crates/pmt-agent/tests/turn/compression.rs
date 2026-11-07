@@ -32,19 +32,19 @@ use crate::support::{FakeTools, Profile, Recording, Run, agent, mock_model, syst
 
 /// A 16K-token mock model: a 3,200-token tail budget, a 13,600-token
 /// trigger.
-const SMALL: &str = "[models.\"mock/mock\"]\ncontext_window = 16000\n";
+pub(crate) const SMALL: &str = "[models.\"mock/mock\"]\ncontext_window = 16000\n";
 
 /// Answers every summary request with the next scripted result (then a
 /// fixed summary) and keeps the requests.
 #[derive(Default)]
-struct FakeSummarizer {
-    script: Mutex<VecDeque<Result<String, SummaryFailure>>>,
+pub(crate) struct FakeSummarizer {
+    pub(crate) script: Mutex<VecDeque<Result<String, SummaryFailure>>>,
     requests: Mutex<Vec<Request>>,
     delay: Duration,
 }
 
 impl FakeSummarizer {
-    fn new() -> Arc<Self> {
+    pub(crate) fn new() -> Arc<Self> {
         Arc::new(Self::default())
     }
 
@@ -57,7 +57,7 @@ impl FakeSummarizer {
         Arc::new(fake)
     }
 
-    fn texts(&self) -> Vec<String> {
+    pub(crate) fn texts(&self) -> Vec<String> {
         self.requests
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -87,19 +87,38 @@ impl Summarizer for FakeSummarizer {
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
                 .pop_front();
-            next.unwrap_or_else(|| Ok(format!("## Goal\nGoal S{n}\n## Progress\nDid S{n}.")))
+            next.unwrap_or_else(|| {
+                Ok(format!(
+                    "## Goal\nGoal S{n}\n## Progress\nDid S{n}; last asked: {}",
+                    latest_user_line(request)
+                ))
+            })
         })
     }
 }
 
-fn with_summarizer(
+/// The newest `[USER]` line of a summary request: a compliant summary
+/// mentions the latest request, so the quality check needs no retry.
+fn latest_user_line(request: &Request) -> String {
+    let text = match &request.messages[0].parts[0] {
+        pmt_providers::request::Part::Text { text } => text.as_str(),
+        _ => "",
+    };
+    text.lines()
+        .rev()
+        .find_map(|l| l.strip_prefix("[USER] "))
+        .unwrap_or_default()
+        .to_owned()
+}
+
+pub(crate) fn with_summarizer(
     summarizer: &Arc<FakeSummarizer>,
 ) -> impl FnOnce(&mut pmt_agent::turn::AgentSetup) {
     let summarizer = summarizer.clone();
     move |setup| setup.summarizer = Some(summarizer)
 }
 
-fn committed(run: &Run) -> Vec<CompressionCommitted> {
+pub(crate) fn committed(run: &Run) -> Vec<CompressionCommitted> {
     run.events
         .events()
         .into_iter()
@@ -110,7 +129,7 @@ fn committed(run: &Run) -> Vec<CompressionCommitted> {
         .collect()
 }
 
-fn failures(run: &Run) -> Vec<CompressionFailed> {
+pub(crate) fn failures(run: &Run) -> Vec<CompressionFailed> {
     run.events
         .events()
         .into_iter()
@@ -121,7 +140,7 @@ fn failures(run: &Run) -> Vec<CompressionFailed> {
         .collect()
 }
 
-fn rebuilds(run: &Run) -> Vec<String> {
+pub(crate) fn rebuilds(run: &Run) -> Vec<String> {
     run.events
         .events()
         .into_iter()
@@ -132,7 +151,7 @@ fn rebuilds(run: &Run) -> Vec<String> {
         .collect()
 }
 
-fn active(profile: &Profile, s: SessionId) -> Vec<Message> {
+pub(crate) fn active(profile: &Profile, s: SessionId) -> Vec<Message> {
     profile.store.messages(s, Visibility::Active).unwrap()
 }
 
@@ -148,13 +167,16 @@ fn no_adjacent_roles(rows: &[Message]) -> bool {
         .all(|w| side(w[0].role) != side(w[1].role) || w[1].role == Role::Tool)
 }
 
-/// `n` stored user/assistant exchanges of `size` characters each.
-fn exchanges(profile: &Profile, s: SessionId, n: usize, size: usize) {
+/// `n` stored user/assistant exchanges, each answer padded with `size`
+/// characters. The summarized region must outweigh its summary (the host
+/// refuses a compaction that does not shrink the context), so the bulk is
+/// in the answers, which the quality check does not copy verbatim.
+pub(crate) fn exchanges(profile: &Profile, s: SessionId, n: usize, size: usize) {
     let rows: Vec<NewMessage> = (0..n)
         .flat_map(|i| {
             [
-                NewMessage::new(Role::User, format!("question {i} {}", "q".repeat(size))),
-                NewMessage::new(Role::Assistant, format!("answer {i}")),
+                NewMessage::new(Role::User, format!("question {i}")),
+                NewMessage::new(Role::Assistant, format!("answer {i} {}", "a".repeat(size))),
             ]
         })
         .collect();
@@ -204,6 +226,9 @@ async fn tool_output_over_the_threshold_compacts_post_tool_in_place() {
     run.turn(&profile, &format!("one {long}")).await;
     run.turn(&profile, &format!("two {long}")).await;
     run.turn(&profile, &format!("three pelican {long}")).await;
+    // The summarized middle must outweigh its summary, which carries the
+    // latest request it covers.
+    run.turn(&profile, &format!("more {long}")).await;
     let small = model.requests().last().unwrap().estimated_tokens();
     profile.reconfigure(&format!(
         "{SMALL}[compression]\nthreshold_tokens = {}\n",
@@ -214,7 +239,7 @@ async fn tool_output_over_the_threshold_compacts_post_tool_in_place() {
 
     assert_eq!(result.exit_reason, ExitReason::Completed);
     let done = committed(&run);
-    assert_eq!(done.len(), 1, "{done:?}");
+    assert_eq!(done.len(), 1, "{:?}", failures(&run));
     assert_eq!(done[0].trigger, "post_tool");
     assert_eq!(done[0].epoch, 1);
     assert!(done[0].tokens_after < done[0].tokens_before);
@@ -276,8 +301,9 @@ repeat = true
         tools,
         with_summarizer(&summarizer),
     );
-    for text in ["one", "two", "three"] {
-        run.turn(&profile, text).await;
+    for text in ["one", "two", "three", "more"] {
+        run.turn(&profile, &format!("{text} {}", "w".repeat(2_000)))
+            .await;
     }
     let small = model.requests().last().unwrap().estimated_tokens();
     profile.reconfigure(&format!(
@@ -344,7 +370,8 @@ async fn an_overflow_compacts_and_retries_despite_an_armed_cooldown() {
         FakeTools::new(),
         with_summarizer(&summarizer),
     );
-    for text in ["one", "two", "three"] {
+    // Four long turns: the middle (two of them) outweighs its summary.
+    for text in ["zero", "one", "two", "three"] {
         run.turn(&profile, &format!("{text} {}", "z".repeat(6_000)))
             .await;
     }
@@ -355,8 +382,8 @@ async fn an_overflow_compacts_and_retries_despite_an_armed_cooldown() {
     assert_eq!(result.exit_reason, ExitReason::Completed);
     assert_eq!(result.final_response.as_deref(), Some("ok"));
     let requests = model.requests();
-    assert_eq!(requests.len(), 5, "three turns, the overflow, the retry");
-    assert!(requests[4].estimated_tokens() < requests[3].estimated_tokens());
+    assert_eq!(requests.len(), 6, "four turns, the overflow, the retry");
+    assert!(requests[5].estimated_tokens() < requests[4].estimated_tokens());
     let done = committed(&run);
     assert_eq!(done.len(), 1);
     assert_eq!(done[0].trigger, "overflow");
@@ -383,14 +410,15 @@ async fn an_overflow_after_the_attempts_ends_with_context_exhausted() {
         FakeTools::new(),
         with_summarizer(&summarizer),
     );
-    for text in ["one", "two", "three"] {
+    // Four long turns: the middle (two of them) outweighs its summary.
+    for text in ["zero", "one", "two", "three"] {
         run.turn(&profile, &format!("{text} {}", "z".repeat(6_000)))
             .await;
     }
     let result = run.turn(&profile, "four").await;
     assert_eq!(result.exit_reason, ExitReason::ContextExhausted);
     assert_eq!(result.error.unwrap().message(), CONTEXT_FULL);
-    assert_eq!(model.requests().len(), 5, "the overflow and one retry");
+    assert_eq!(model.requests().len(), 6, "the overflow and one retry");
     assert_eq!(committed(&run).len(), 1);
 }
 
@@ -398,7 +426,7 @@ async fn an_overflow_after_the_attempts_ends_with_context_exhausted() {
 async fn a_second_compaction_updates_the_previous_summary() {
     let profile = Profile::new(SMALL);
     let s = profile.session(Source::Cli);
-    exchanges(&profile, s, 6, 10);
+    exchanges(&profile, s, 6, 400);
     let model = mock_model(&profile, "[[rule]]\ntext = \"ok\"\nrepeat = true\n", "mock").await;
     let summarizer = FakeSummarizer::new();
     let run = agent(
@@ -411,7 +439,7 @@ async fn a_second_compaction_updates_the_previous_summary() {
     let here = manual::parse("here 1").unwrap();
     let first = run.agent.compress(&profile.scope, &here).await.unwrap();
     assert_eq!(first.status, Status::Compressed);
-    exchanges(&profile, s, 2, 10);
+    exchanges(&profile, s, 2, 400);
     let second = run.agent.compress(&profile.scope, &here).await.unwrap();
     assert_eq!(second.status, Status::Compressed);
     assert_eq!(second.epoch, Some(2));
@@ -433,7 +461,7 @@ async fn a_second_compaction_updates_the_previous_summary() {
 async fn compress_here_keeps_the_last_two_exchanges_verbatim() {
     let profile = Profile::new(SMALL);
     let s = profile.session(Source::Cli);
-    exchanges(&profile, s, 30, 10);
+    exchanges(&profile, s, 30, 400);
     let before = active(&profile, s);
     let model = mock_model(&profile, "[[rule]]\ntext = \"ok\"\n", "mock").await;
     let summarizer = FakeSummarizer::new();
@@ -466,7 +494,7 @@ async fn compress_here_keeps_the_last_two_exchanges_verbatim() {
 async fn preview_and_lock_skipped_leave_the_transcript_unchanged() {
     let profile = Profile::new(SMALL);
     let s = profile.session(Source::Cli);
-    exchanges(&profile, s, 10, 10);
+    exchanges(&profile, s, 10, 400);
     let before = texts(&active(&profile, s));
     let model = mock_model(&profile, "[[rule]]\ntext = \"ok\"\n", "mock").await;
     let summarizer = FakeSummarizer::new();
@@ -511,7 +539,7 @@ async fn preview_and_lock_skipped_leave_the_transcript_unchanged() {
 async fn manual_compress_clears_the_cooldown_and_asks_for_a_summary() {
     let profile = Profile::new(SMALL);
     let s = profile.session(Source::Cli);
-    exchanges(&profile, s, 5, 10);
+    exchanges(&profile, s, 5, 400);
     cooldown(&profile, s, 300);
     let model = mock_model(&profile, "[[rule]]\ntext = \"ok\"\n", "mock").await;
     let summarizer = FakeSummarizer::new();
@@ -540,7 +568,7 @@ async fn manual_compress_clears_the_cooldown_and_asks_for_a_summary() {
 async fn a_failed_summary_arms_the_cooldown_and_commits_the_fallback() {
     let profile = Profile::new(SMALL);
     let s = profile.session(Source::Cli);
-    exchanges(&profile, s, 5, 10);
+    exchanges(&profile, s, 5, 400);
     let model = mock_model(&profile, "[[rule]]\ntext = \"ok\"\n", "mock").await;
     let summarizer = FakeSummarizer::failing(FailureKind::Timeout);
     let run = agent(
@@ -574,7 +602,7 @@ async fn a_failed_summary_arms_the_cooldown_and_commits_the_fallback() {
 async fn a_summary_over_its_time_limit_is_a_timeout() {
     let profile = Profile::new(&format!("{SMALL}[compression]\nsummary_timeout_secs = 1\n"));
     let s = profile.session(Source::Cli);
-    exchanges(&profile, s, 5, 10);
+    exchanges(&profile, s, 5, 400);
     let model = mock_model(&profile, "[[rule]]\ntext = \"ok\"\n", "mock").await;
     let summarizer = Arc::new(FakeSummarizer {
         delay: Duration::from_secs(5),
@@ -599,7 +627,7 @@ async fn a_summary_over_its_time_limit_is_a_timeout() {
 async fn an_auth_failure_aborts_with_the_transcript_unchanged() {
     let profile = Profile::new(SMALL);
     let s = profile.session(Source::Cli);
-    exchanges(&profile, s, 5, 10);
+    exchanges(&profile, s, 5, 400);
     let before = texts(&active(&profile, s));
     let model = mock_model(&profile, "[[rule]]\ntext = \"ok\"\n", "mock").await;
     let summarizer = FakeSummarizer::failing(FailureKind::Auth);
@@ -644,6 +672,8 @@ async fn a_commit_rebuilds_the_prompt_from_the_current_memory() {
         }));
     });
     run.turn(&profile, "one").await;
+    // More exchanges give the compaction something to shrink.
+    exchanges(&profile, s, 2, 2_000);
     std::fs::write(&memory, "remember MEM-BETA").unwrap();
     run.turn(&profile, "two").await;
     assert!(system_text(&model.requests()[1]).contains("MEM-ALPHA"));
@@ -696,8 +726,10 @@ async fn requests_carry_the_planned_breakpoints_and_only_compaction_breaks_the_c
         FakeTools::new(),
         with_summarizer(&summarizer),
     );
+    // Long turns: the summarized middle outweighs its summary.
     for text in ["one", "two", "three"] {
-        run.turn(&profile, text).await;
+        run.turn(&profile, &format!("{text} {}", "w".repeat(2_000)))
+            .await;
     }
     run.agent
         .compress(&profile.scope, &manual::parse("here 1").unwrap())
@@ -785,7 +817,7 @@ async fn the_summary_comes_from_the_auxiliary_compression_route() {
 
     let profile = Profile::new(SMALL);
     let s = profile.session(Source::Cli);
-    exchanges(&profile, s, 4, 10);
+    exchanges(&profile, s, 4, 400);
     let config = profile.scope.config();
     let registry = pmt_providers::ProviderRegistry::for_profile(config, Vec::new()).unwrap();
     let secrets: BTreeMap<String, SecretString> = BTreeMap::new();
@@ -916,6 +948,8 @@ async fn a_compaction_boundary_refreshes_the_tool_array() {
         setup.compaction_boundary = Some(boundary);
     });
     run.turn(&profile, "one").await;
+    // More exchanges give the compaction something to shrink.
+    exchanges(&profile, s, 2, 2_000);
     run.turn(&profile, "two").await;
     assert_eq!(tools.refreshed.load(std::sync::atomic::Ordering::SeqCst), 0);
     assert_eq!(tool_names(&model.requests()[1]), ["lookup"]);
@@ -951,7 +985,7 @@ async fn a_pruned_tool_result_is_read_back_by_its_ref() {
         .store
         .append_messages(s, &[NewMessage::new(Role::User, "build it"), call, result])
         .unwrap();
-    exchanges(&profile, s, 30, 10);
+    exchanges(&profile, s, 30, 400);
     let model = mock_model(&profile, "[[rule]]\ntext = \"ok\"\n", "mock").await;
     let summarizer = FakeSummarizer::new();
     let run = agent(

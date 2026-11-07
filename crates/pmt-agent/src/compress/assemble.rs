@@ -109,7 +109,25 @@ pub fn assemble<'a>(rows: &'a [Row], split: &Split, summary: &str) -> Assembled<
     assembled
 }
 
-impl Assembled<'_> {
+impl<'a> Assembled<'a> {
+    /// `items` over the stored `rows` (an engine's output, a micro-fold, a
+    /// prune); `summary_id` names the new row the pruned originals belong
+    /// to.
+    #[must_use]
+    pub fn from_items(rows: &'a [Row], items: Vec<Item>, summary_id: MessageId) -> Self {
+        Self {
+            rows,
+            items,
+            summary_id,
+        }
+    }
+
+    /// The stored rows the items index.
+    #[must_use]
+    pub fn source(&self) -> &'a [Row] {
+        self.rows
+    }
+
     /// Inserts the summary at `at` with a role that keeps alternation, or
     /// merges it into the row at `at` when neither role fits.
     fn place(&mut self, at: usize, summary: &str) {
@@ -139,14 +157,14 @@ impl Assembled<'_> {
         self.items.insert(at, Item::New(Box::new(row)));
     }
 
-    fn role(&self, item: &Item) -> Role {
+    pub(super) fn role(&self, item: &Item) -> Role {
         match item {
             Item::Kept(i) => self.rows[*i].role,
             Item::New(row) => row.role,
         }
     }
 
-    fn call_ids(&self, item: &Item) -> Vec<String> {
+    pub(super) fn call_ids(&self, item: &Item) -> Vec<String> {
         let calls = match item {
             Item::Kept(i) => self.rows[*i].tool_calls.as_ref(),
             Item::New(row) => row.tool_calls.as_ref(),
@@ -159,7 +177,7 @@ impl Assembled<'_> {
             .collect()
     }
 
-    fn answers(&self, item: &Item) -> Option<String> {
+    pub(super) fn answers(&self, item: &Item) -> Option<String> {
         match item {
             Item::Kept(i) => self.rows[*i].tool_call_id.clone(),
             Item::New(row) => row.tool_call_id.clone(),
@@ -228,6 +246,18 @@ impl Assembled<'_> {
             })
             .collect();
         (replaced, replacements)
+    }
+
+    /// The estimated tokens of an item.
+    pub(super) fn tokens(&self, item: &Item) -> u64 {
+        match item {
+            Item::Kept(i) => super::row_tokens(&self.rows[*i]),
+            Item::New(row) => {
+                let calls = row.tool_calls.as_ref().map_or(0, |c| c.to_string().len());
+                let text = row.content.as_deref().map_or(0, str::len);
+                ((text + calls) as u64).div_ceil(4)
+            }
+        }
     }
 
     /// The assembled rows' roles and texts (previews and tests).

@@ -7,10 +7,65 @@
 //! `unknown context engine '<name>'` (exit 78) instead of falling back,
 //! and a plugin engine is never activated without the key naming it.
 //! Session start and `config validate` both select through [`select`].
+//!
+//! A plugin engine runs behind [`ContextEngine`]: it returns the compacted
+//! transcript, which the host validates before committing (spec: Engine
+//! output is validated by the host).
 
 use pmt_config::schema::ContextConfig;
 use pmt_core::error::Error;
+use pmt_core::id::MessageId;
 use pmt_core::registry::Registry;
+use pmt_store::{Message as Row, NewMessage};
+
+use super::assemble::{Assembled, Item};
+use crate::turn::model::BoxFuture;
+
+/// One row of an engine's compacted transcript.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Output {
+    /// The stored active row with this id, unchanged.
+    Kept(MessageId),
+    /// A row the engine wrote.
+    New(Box<NewMessage>),
+}
+
+/// A context engine other than the built-in one (a plugin's): given the
+/// active transcript, the compacted transcript, or why it has none.
+pub trait ContextEngine: Send + Sync {
+    /// Compacts `rows` (the active transcript, in order).
+    fn compact<'a>(&'a self, rows: &'a [Row]) -> BoxFuture<'a, Result<Vec<Output>, String>>;
+}
+
+/// `output` over `rows`; a kept id that is not an active row is refused.
+///
+/// # Errors
+///
+/// The id the engine invented.
+pub fn assembled(rows: &[Row], output: Vec<Output>) -> Result<Assembled<'_>, String> {
+    let mut summary_id = None;
+    let items = output
+        .into_iter()
+        .map(|out| match out {
+            Output::Kept(id) => rows
+                .iter()
+                .position(|r| r.id == id)
+                .map(Item::Kept)
+                .ok_or_else(|| {
+                    format!("the engine kept message {id}, which is not in the transcript")
+                }),
+            Output::New(row) => {
+                summary_id.get_or_insert(row.id);
+                Ok(Item::New(row))
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Assembled::from_items(
+        rows,
+        items,
+        summary_id.unwrap_or_default(),
+    ))
+}
 
 /// The built-in engine's name.
 pub const BUILTIN: &str = "builtin";

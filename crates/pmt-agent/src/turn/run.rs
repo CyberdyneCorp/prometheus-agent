@@ -150,6 +150,12 @@ pub(super) async fn run(
     let mut turn = Turn::new(agent, scope.config(), id, options);
     turn.notices = notices;
     let result = turn.run(input).await;
+    if result
+        .as_ref()
+        .is_ok_and(|r| r.exit_reason == ExitReason::Completed)
+    {
+        agent.after_completed_turn(scope.config()).await;
+    }
     drop(refresher);
     if let Err(err) = setup.store.release_lease(&lease) {
         tracing::warn!(error = %err, "turn lease could not be released; it lapses at its expiry");

@@ -55,12 +55,33 @@ pub fn short_ref(bytes: &[u8]) -> String {
 /// transcript; later rows are read for duplicates).
 #[must_use]
 pub fn prune(rows: &[Row], region: Range<usize>) -> Pruned {
+    prune_where(rows, region, |_| true)
+}
+
+/// Tool results larger than this many characters are what a proactive
+/// prune shrinks (spec: Opt-in proactive prune).
+pub const PROACTIVE_MIN_CHARS: usize = 8_000;
+
+/// [`prune`] touching only tool results over `min_chars` characters (the
+/// proactive prune); every other row stays as it is.
+#[must_use]
+pub fn prune_large(rows: &[Row], region: Range<usize>, min_chars: usize) -> Pruned {
+    prune_where(rows, region, |row| {
+        row.role == Role::Tool
+            && row
+                .content
+                .as_deref()
+                .is_some_and(|t| t.chars().count() > min_chars)
+    })
+}
+
+fn prune_where(rows: &[Row], region: Range<usize>, eligible: impl Fn(&Row) -> bool) -> Pruned {
     let current_turn = rows.iter().rposition(is_real_user).unwrap_or(rows.len());
     let calls = calls_by_id(rows);
     let mut out = Pruned::default();
     for i in region {
         let mut row = rows[i].clone();
-        if i < current_turn {
+        if i < current_turn && eligible(&row) {
             prune_row(&mut row, &rows[i + 1..], &calls, &mut out);
         }
         out.rows.push(row);

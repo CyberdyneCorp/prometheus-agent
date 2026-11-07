@@ -144,6 +144,8 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `turn.guardrail_stop` | `cancelled` | 130 | The model kept repeating a failing or unproductive tool call; see `tool_loop_guardrails` to tune the thresholds. |
 | `turn.empty_steer` | `usage` | 2 | A steer message needs text; empty or whitespace-only steers are rejected. |
 | `turn.crashed` | `internal` | 70 | The process stopped while this turn ran; set `agent.resume_on_crash` to `auto` or `ask` to continue such turns from their journal. |
+| `compression.pin_limit` | `usage` | 2 | Pinned messages are copied into every compaction summary; unpin one with `/unpin <message-id>` or raise `compression.pinned_max_tokens`. |
+| `compression.pin_unknown` | `not_found` | 66 | `/pin` takes `last` or the id (or a unique id prefix) of a user or assistant message of this session; `/unpin` takes a pinned one. |
 | `personality.unknown` | `usage` | 2 | `agent.personality` and `/personality` take `none`, a built-in personality or a key of `[agent.personalities]`. |
 | `prompt.unknown_platform` | `usage` | 2 | `--platform` takes a surface with a built-in platform hint (cli, tui, desktop, telegram, discord, ...). |
 | `config.timezone` | `config` | 78 | `cron.timezone` must be an IANA time zone name such as `Europe/Lisbon`. |

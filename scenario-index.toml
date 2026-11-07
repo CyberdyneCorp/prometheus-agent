@@ -3086,3 +3086,26 @@ capabilities = [
 
 [context-compression."Pruned content is retrievable by the agent (upgrade)"]
 "Agent needs an old log" = ["crates/pmt-agent/tests/turn/compression.rs::a_pruned_tool_result_is_read_back_by_its_ref"]
+
+[context-compression."Engine output is validated by the host"]
+"Plugin engine breaks alternation" = ["crates/pmt-agent/tests/turn/compaction_upgrades.rs::a_plugin_engine_breaking_alternation_leaves_the_transcript_unchanged", "crates/pmt-agent/src/compress/validate.rs::two_adjacent_assistant_rows_are_refused"]
+
+[context-compression."Gateway session hygiene"]
+"Overnight growth" = ["crates/pmt-agent/tests/turn/compaction_upgrades.rs::gateway_hygiene_compacts_a_session_near_its_window_before_the_turn", "crates/pmt-agent/src/compress/hygiene.rs::hygiene_table"]
+
+[context-compression."Summary quality check (upgrade)"]
+"Summary forgot a file" = ["crates/pmt-agent/tests/turn/compaction_upgrades.rs::a_file_the_summary_forgot_is_preserved_and_the_coverage_recorded"]
+"Open todos survive verbatim" = ["crates/pmt-agent/tests/turn/compaction_upgrades.rs::open_todos_are_kept_verbatim_in_the_summary"]
+
+[context-compression."Pinned messages survive compaction (upgrade)"]
+"Pinned requirement kept" = ["crates/pmt-agent/tests/turn/compaction_upgrades.rs::a_pinned_message_is_in_the_summary_after_three_compactions"]
+
+[context-compression."Opt-in micro-compaction"]
+"Off by default" = ["crates/pmt-agent/tests/turn/compaction_upgrades.rs::micro_compaction_is_off_by_default"]
+"User messages preserved" = ["crates/pmt-agent/tests/turn/compaction_upgrades.rs::micro_compaction_folds_one_exchange_per_turn_and_keeps_every_user_message"]
+
+[context-compression."Prepared-ahead summaries"]
+"Prepared summary adopted" = ["crates/pmt-agent/tests/turn/compaction_upgrades.rs::a_summary_prepared_near_the_trigger_is_adopted_without_another_call"]
+
+[context-compression."Opt-in proactive prune"]
+"Disabled by default" = ["crates/pmt-agent/tests/turn/compaction_upgrades.rs::no_proactive_prune_runs_by_default"]
