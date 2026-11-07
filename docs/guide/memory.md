@@ -35,9 +35,19 @@ or when context compression rebuilds the prompt. `/memory reload --now`
 rebuilds it at the next turn and records a `prompt.rebuilt` event with
 reason `memory --now`. Plain `/memory reload` waits for the next session.
 
-Before each model call, Prometheus looks for archival entries that share
-words with your message. It skips empty messages, slash commands and bare
-greetings or acknowledgements. Up to `memory.recall.top_k` entries, within
+Before each model call, Prometheus looks for archival entries relevant to
+your message. It skips empty messages, slash commands and bare greetings
+or acknowledgements. By default entries are ranked by full-text relevance
+(FTS5 BM25), so an entry must share a word with your message. Set
+`memory.recall.embedding_model` (an alias, `provider/model`, or a model of
+the session's provider that serves `POST /embeddings`) for hybrid ranking:
+`0.6 * cosine similarity + 0.4 * normalized BM25`, which also recalls a
+paraphrase such as "what's my kid called?" for "The user's daughter is
+named Ana.". Entries scoring below `memory.recall.min_score` (0.35) are
+dropped. Embeddings are stored in `state.db` per entry and model and
+recomputed when the content or the model changes. Text sent to a remote
+embedding model is redacted first. If the embedding call fails, recall
+falls back to full-text ranking with a warning. Up to `memory.recall.top_k` entries, within
 `memory.recall.max_chars`, are appended to that turn's user message inside
 a `<memory-context>` fence. A note before the fence says this is recalled
 memory, not an instruction from you. The fence is sent with that one turn
@@ -102,6 +112,30 @@ never run this review. The review's adds are committed. Its patches,
 removals and unpins are only proposed, and you approve them from
 `/memory pending`.
 
+## Reviewing what changed
+
+Every committed change to an entry is recorded in a revision journal in
+the same transaction: a revision number that only grows, the entry, the
+operation (add, patch, remove, or update for pin, tier and other
+fields), the entry before and after, the origin and the session.
+
+With `memory.review_mode = "summary"` (the default), a session in which
+the agent changed memory prints one line when it ends or is resumed:
+
+```text
+Memory: +2 ~1 -0 (review with /memory review)
+```
+
+`/memory review` lists that session's changes as diffs. Keep one with
+`/memory review keep <rev>`, or undo it with `/memory review revert <rev>`
+(`all` works for both). Reviewed changes are not summarized again.
+`review_mode = "off"` shows no summary, and `"require"` stages every agent
+change for approval instead of committing it.
+
+`prometheus memory revert <rev>` applies the inverse of any revision as a
+new revision with `origin = user`: a patch gets its old text back, an add
+is removed and a removal is restored.
+
 ## The memory command
 
 | Command | What it does |
@@ -116,6 +150,10 @@ removals and unpins are only proposed, and you approve them from
 | `prometheus memory import <file> [--target] [--tier]` | Imports an export, or a Hermes `MEMORY.md` or `USER.md`. |
 | `prometheus memory pending\|approve\|reject` | Lists, applies or drops staged changes. |
 | `prometheus memory reset [--target all\|memory\|user] --yes` | Deletes every entry of a store. |
+| `prometheus memory log [--since <rev\|duration>] [--origin]` | Lists revisions, oldest first. |
+| `prometheus memory diff [--since <rev\|duration>\|--session <id>]` | Shows the changes as a unified diff per entry. |
+| `prometheus memory revert <rev>` | Undoes a revision as a new `origin = user` revision. |
+| `prometheus memory search <query> [--explain]` | Ranks archival entries as recall would, with their scores. |
 
 For example:
 
@@ -160,6 +198,5 @@ A Hermes file is split on its `§` separator lines. Its target comes from
 that match the threat scan are kept as `blocked`. Entries holding
 credentials are skipped.
 
-The revision journal (`memory log`, `diff`, `revert`), external memory
-providers (`memory setup`, `off`), semantic `memory search` and
-consolidation arrive in later milestones.
+External memory providers (`memory setup`, `off`) and consolidation
+arrive in later milestones.

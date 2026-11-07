@@ -17,6 +17,7 @@ pub mod capability;
 pub mod classify;
 pub mod cost;
 pub mod descriptor;
+pub mod embeddings;
 pub mod event;
 pub mod fallback;
 pub mod health;

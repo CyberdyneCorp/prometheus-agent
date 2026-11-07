@@ -3,7 +3,9 @@
 //! cli, deferred effects with `--now`).
 //!
 //! `/memory [status]`, `/memory pending`, `/memory approve <id>|all`,
-//! `/memory reject <id>|all` and `/memory reload [--now]`. The slash
+//! `/memory reject <id>|all`, `/memory review [keep|revert <rev>|all]`
+//! (spec: Reviewable memory changes per session) and `/memory reload
+//! [--now]`. The slash
 //! registry renders [`Reply::text`] and, on [`Reply::rebuild_now`], calls
 //! `Agent::rebuild_prompt(Rebuild::Now("memory"))` (`prompt.rebuilt` with
 //! reason `memory --now`).
@@ -17,8 +19,7 @@ use pmt_store::Store;
 use crate::{budget, status, write};
 
 /// The usage line.
-pub const USAGE: &str =
-    "usage: /memory [status | pending | approve <id>|all | reject <id>|all | reload [--now]]";
+pub const USAGE: &str = "usage: /memory [status | pending | approve <id>|all | reject <id>|all | review [keep|revert <rev>|all] | reload [--now]]";
 
 /// The reply to `/memory reload` without `--now`.
 pub const DEFERRED: &str = "Memory reload in your next session. Use /new to start one now, or add --now to apply immediately (invalidates prompt cache).";
@@ -43,15 +44,26 @@ fn plain(text: impl Into<String>) -> Reply {
     }
 }
 
-/// Runs `/memory <args>`.
+/// Runs `/memory <args>` in `session` (`review` needs one).
 ///
 /// # Errors
 ///
 /// Store errors; a refused approval (`memory.stale`,
 /// `memory.pending_not_found`...).
-pub fn run(store: &Store, config: &MemoryConfig, args: &str) -> Result<Reply, Error> {
+pub fn run(
+    store: &Store,
+    config: &MemoryConfig,
+    session: Option<&str>,
+    args: &str,
+) -> Result<Reply, Error> {
     let words: Vec<&str> = args.split_whitespace().collect();
     match words.as_slice() {
+        ["review", rest @ ..] => match session {
+            Some(session) => Ok(plain(crate::journal::review(store, session, rest)?)),
+            None => Ok(plain(
+                "/memory review needs a session; use prometheus memory diff --session <id>",
+            )),
+        },
         [] | ["status"] => Ok(plain(status::render(&status::status(store, config)?))),
         ["pending"] => pending(store),
         ["approve", id] => resolve(store, config, id, true),

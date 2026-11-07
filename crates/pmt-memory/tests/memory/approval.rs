@@ -70,9 +70,15 @@ async fn approval_stages_without_a_person_and_a_stale_patch_is_refused() {
         profile.store.memory_entry(&id).unwrap().unwrap().content,
         "B"
     );
-    let reply = slash::run(&profile.store, config, "pending").unwrap();
+    let reply = slash::run(&profile.store, config, None, "pending").unwrap();
     assert!(reply.text.contains(&pending_id), "{}", reply.text);
-    slash::run(&profile.store, config, &format!("reject {pending_id}")).unwrap();
+    slash::run(
+        &profile.store,
+        config,
+        None,
+        &format!("reject {pending_id}"),
+    )
+    .unwrap();
     assert!(profile.store.memory_pending().unwrap().is_empty());
 }
 
@@ -91,6 +97,7 @@ async fn approve_applies_a_staged_add_and_inline_answers_decide() {
     let reply = slash::run(
         &profile.store,
         &profile.scope.config().memory,
+        None,
         &format!("approve {pending_id}"),
     )
     .unwrap();

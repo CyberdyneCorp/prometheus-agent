@@ -4186,7 +4186,9 @@
         "recall": {
           "$ref": "#/$defs/RecallConfig",
           "default": {
+            "embedding_model": null,
             "max_chars": 1500,
+            "min_score": 0.35,
             "top_k": 5
           },
           "description": "Per-turn recall."
@@ -6195,12 +6197,28 @@
       "additionalProperties": false,
       "description": "The `[memory.recall]` section.",
       "properties": {
+        "embedding_model": {
+          "default": null,
+          "description": "Embedding model (`provider/model` or a model on the main route's\nprovider) for hybrid semantic recall; unset ranks lexically (BM25).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "max_chars": {
           "default": 1500,
           "description": "Character cap of recalled content per turn.",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
+        },
+        "min_score": {
+          "default": 0.35,
+          "description": "Hybrid recall drops entries scoring below this.",
+          "format": "double",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
         },
         "top_k": {
           "default": 5,
@@ -9054,7 +9072,9 @@
         "memory_enabled": true,
         "nudge_interval": 10,
         "recall": {
+          "embedding_model": null,
           "max_chars": 1500,
+          "min_score": 0.35,
           "top_k": 5
         },
         "review_mode": "summary",

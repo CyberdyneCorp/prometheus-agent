@@ -3215,6 +3215,10 @@ Commands:
   pending  List memory changes staged for approval
   approve  Apply a staged change (`all` for every one)
   reject   Drop a staged change (`all` for every one)
+  log      List memory revisions, oldest first
+  diff     Show memory changes as a unified diff per entry
+  revert   Undo a revision (recorded as a new revision with origin user)
+  search   Rank archival entries for a query as recall would
   reset    Delete every entry of a store
   help     Print this message or the help of the given subcommand(s)
 
@@ -3890,6 +3894,193 @@ Options:
           Print help
 ```
 
+## `prometheus memory log`
+
+```text
+List memory revisions, oldest first
+
+Usage: prometheus memory log [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --since <SINCE>
+          After this revision, or within this duration (2h, 3d, 1w)
+
+      --origin <ORIGIN>
+          Only this origin
+
+          Possible values:
+          - user:              The user (CLI, edit, revert)
+          - agent:             The agent's `memory` tool
+          - background-review: A background memory review
+          - provider:          An external memory provider
+          - consolidation:     A consolidation pass
+          - import:            An import
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus memory diff`
+
+```text
+Show memory changes as a unified diff per entry
+
+Usage: prometheus memory diff [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --since <SINCE>
+          After this revision, or within this duration (2h, 3d, 1w)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --session <SESSION>
+          Only the changes of this session
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus memory revert`
+
+```text
+Undo a revision (recorded as a new revision with origin user)
+
+Usage: prometheus memory revert [OPTIONS] <REV>
+
+Arguments:
+  <REV>
+          The revision number (see `memory log`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus memory search`
+
+```text
+Rank archival entries for a query as recall would
+
+Usage: prometheus memory search [OPTIONS] <QUERY>
+
+Arguments:
+  <QUERY>
+          The query
+
+Options:
+      --explain
+          Show each score's parts
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus memory reset`
 
 ```text
@@ -3963,6 +4154,10 @@ Commands:
   pending  List memory changes staged for approval
   approve  Apply a staged change (`all` for every one)
   reject   Drop a staged change (`all` for every one)
+  log      List memory revisions, oldest first
+  diff     Show memory changes as a unified diff per entry
+  revert   Undo a revision (recorded as a new revision with origin user)
+  search   Rank archival entries for a query as recall would
   reset    Delete every entry of a store
   help     Print this message or the help of the given subcommand(s)
 ```
@@ -4069,6 +4264,38 @@ Usage: prometheus memory help approve
 Drop a staged change (`all` for every one)
 
 Usage: prometheus memory help reject
+```
+
+## `prometheus memory help log`
+
+```text
+List memory revisions, oldest first
+
+Usage: prometheus memory help log
+```
+
+## `prometheus memory help diff`
+
+```text
+Show memory changes as a unified diff per entry
+
+Usage: prometheus memory help diff
+```
+
+## `prometheus memory help revert`
+
+```text
+Undo a revision (recorded as a new revision with origin user)
+
+Usage: prometheus memory help revert
+```
+
+## `prometheus memory help search`
+
+```text
+Rank archival entries for a query as recall would
+
+Usage: prometheus memory help search
 ```
 
 ## `prometheus memory help reset`
@@ -19400,6 +19627,10 @@ Commands:
   pending  List memory changes staged for approval
   approve  Apply a staged change (`all` for every one)
   reject   Drop a staged change (`all` for every one)
+  log      List memory revisions, oldest first
+  diff     Show memory changes as a unified diff per entry
+  revert   Undo a revision (recorded as a new revision with origin user)
+  search   Rank archival entries for a query as recall would
   reset    Delete every entry of a store
 ```
 
@@ -19505,6 +19736,38 @@ Usage: prometheus help memory approve
 Drop a staged change (`all` for every one)
 
 Usage: prometheus help memory reject
+```
+
+## `prometheus help memory log`
+
+```text
+List memory revisions, oldest first
+
+Usage: prometheus help memory log
+```
+
+## `prometheus help memory diff`
+
+```text
+Show memory changes as a unified diff per entry
+
+Usage: prometheus help memory diff
+```
+
+## `prometheus help memory revert`
+
+```text
+Undo a revision (recorded as a new revision with origin user)
+
+Usage: prometheus help memory revert
+```
+
+## `prometheus help memory search`
+
+```text
+Rank archival entries for a query as recall would
+
+Usage: prometheus help memory search
 ```
 
 ## `prometheus help memory reset`

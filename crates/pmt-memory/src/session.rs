@@ -18,6 +18,7 @@ use pmt_tools::ToolResult;
 use serde_json::{Value, json};
 
 use crate::ops::{self, Action, Call, Op};
+use crate::rank::Embedder;
 use crate::review::Nudge;
 use crate::write::{self, Written};
 use crate::{budget, recall, scan, snapshot};
@@ -56,6 +57,8 @@ pub struct MemorySetup {
     pub redactor: Redactor,
     /// User turns the session already had (a resumed session).
     pub prior_user_turns: u32,
+    /// Embeddings for hybrid recall (`memory.recall.embedding_model`).
+    pub embedder: Option<Arc<dyn Embedder>>,
 }
 
 impl MemorySetup {
@@ -76,6 +79,7 @@ impl MemorySetup {
             approver: None,
             redactor: Redactor::default(),
             prior_user_turns: 0,
+            embedder: None,
         }
     }
 }
@@ -262,11 +266,22 @@ fn reply(target: &str, written: &Written) -> Value {
 }
 
 impl MemoryPort for MemorySession {
-    fn begin_turn(&self, text: &str) -> Option<Recalled> {
+    fn begin_turn<'a>(&'a self, text: &'a str) -> BoxFuture<'a, Option<Recalled>> {
         *self.lock_turn() = TurnState::default();
-        recall::recall(&self.setup.store, self.config(), text).unwrap_or_else(|err| {
-            tracing::warn!("memory recall skipped: {err}");
-            None
+        Box::pin(async move {
+            let setup = &self.setup;
+            recall::recall(
+                &setup.store,
+                self.config(),
+                setup.embedder.as_deref(),
+                &setup.redactor,
+                text,
+            )
+            .await
+            .unwrap_or_else(|err| {
+                tracing::warn!("memory recall skipped: {err}");
+                None
+            })
         })
     }
 

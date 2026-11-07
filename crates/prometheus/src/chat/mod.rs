@@ -433,6 +433,12 @@ async fn start(
                 ..TurnInput::text(first.text.unwrap_or_default())
             };
             let status = oneshot::run(&live, input, ui.json, run_budget).await;
+            let mode = factory.scope.config().memory.review_mode;
+            if let Ok(Some(line)) =
+                pmt_memory::journal::summary(&factory.store, mode, &live.id.to_string())
+            {
+                eprintln!("{line}");
+            }
             live.close(&factory.store, end_reason(status)).await;
             Ok(status)
         }

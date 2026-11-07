@@ -155,13 +155,18 @@ fn state_command(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<String,
             }
             reply.text
         }),
-        "memory" => pmt_memory::slash::run(&ctx.factory.store, &ctx.scope.config().memory, args)
-            .map(|reply| {
-                if reply.rebuild_now {
-                    live.agent.rebuild_prompt(Rebuild::Now("memory".to_owned()));
-                }
-                reply.text
-            }),
+        "memory" => pmt_memory::slash::run(
+            &ctx.factory.store,
+            &ctx.scope.config().memory,
+            Some(&live.id.to_string()),
+            args,
+        )
+        .map(|reply| {
+            if reply.rebuild_now {
+                live.agent.rebuild_prompt(Rebuild::Now("memory".to_owned()));
+            }
+            reply.text
+        }),
         "personality" => crate::slash_handlers::personality(ctx.scope, args).map(|(text, now)| {
             if let Some(name) = now {
                 live.agent.apply_personality_now(&name);

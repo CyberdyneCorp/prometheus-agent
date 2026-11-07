@@ -45,6 +45,8 @@ pub mod listing;
 pub mod location;
 pub mod mcp_spend;
 pub mod memory;
+pub mod memory_index;
+pub mod memory_revisions;
 pub mod messages;
 mod migrate;
 pub mod model;
@@ -83,6 +85,7 @@ pub use leases::{Acquire, Holder, Lease, LeaseKind};
 pub use listing::ListOptions;
 pub use location::StoreLocation;
 pub use memory::{MemoryBatch, MemoryEntry, MemoryPending};
+pub use memory_revisions::{Author, Operation, Revision, RevisionFilter};
 pub use messages::{Message, NewMessage, Visibility};
 pub use model::{
     Archived, CostStatus, EndReason, LineageKind, MemoryKind, MemoryOrigin, MemoryStatus,
@@ -108,7 +111,7 @@ pub use usage_query::UsageFilter;
 /// The newest `state.db` schema version this build reads and writes
 /// (`store_meta.schema_version`); every embedded migration bumps it, and a
 /// newer store opens read-only. Reported by `prometheus version --json`.
-pub const SCHEMA_VERSION: u32 = 31;
+pub const SCHEMA_VERSION: u32 = 32;
 
 #[cfg(test)]
 mod tests {

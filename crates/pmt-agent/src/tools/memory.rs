@@ -25,7 +25,7 @@ pub struct Recalled {
 pub trait MemoryPort: Send + Sync {
     /// A new user turn with `text`: resets per-turn state and returns this
     /// turn's recall, if any.
-    fn begin_turn(&self, text: &str) -> Option<Recalled>;
+    fn begin_turn<'a>(&'a self, text: &'a str) -> BoxFuture<'a, Option<Recalled>>;
 
     /// Runs one `memory` tool call.
     fn call(&self, arguments: Value) -> BoxFuture<'_, ToolResult>;

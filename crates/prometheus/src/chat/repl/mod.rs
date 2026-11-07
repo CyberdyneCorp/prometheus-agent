@@ -239,6 +239,7 @@ pub async fn run(
     repl.banner();
     if repl.start.resumed {
         repl.recap();
+        repl.memory_summary(repl.live().id);
         Box::pin(repl.offer_resume()).await;
     }
     repl.spacer();
@@ -416,7 +417,20 @@ impl Repl {
     /// Ends the current session.
     async fn finish(&mut self, reason: EndReason) {
         if let Some(live) = self.live.take() {
+            self.memory_summary(live.id);
             live.close(&self.factory.store, reason).await;
+        }
+    }
+
+    /// `Memory: +a ~p -r (review with /memory review)` when the agent
+    /// changed memory in session `id` (spec: memory, Reviewable memory
+    /// changes per session): at the end and on resume.
+    fn memory_summary(&self, id: pmt_core::id::SessionId) {
+        let mode = self.factory.scope.config().memory.review_mode;
+        match pmt_memory::journal::summary(&self.factory.store, mode, &id.to_string()) {
+            Ok(Some(line)) => self.notice(&line),
+            Ok(None) => {}
+            Err(err) => tracing::warn!(error = %err, "memory review summary skipped"),
         }
     }
 

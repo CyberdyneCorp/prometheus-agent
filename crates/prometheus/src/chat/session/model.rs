@@ -45,6 +45,8 @@ pub struct Models {
     aux: Arc<AuxCaller>,
     /// `privacy.redact_pii`: what every request is redacted with.
     pii: Option<Arc<pmt_core::pii::Pii>>,
+    /// The HTTP client of model calls (embeddings).
+    client: reqwest::Client,
 }
 
 /// The shareable parts of a [`ProviderSetup`].
@@ -159,7 +161,7 @@ impl Models {
             .with_mock(Arc::clone(&mock))
             .with_recorder(Arc::clone(&recorder))
             .with_credentials(Arc::clone(&accounts) as _);
-        let caller = ModelCaller::new(client)
+        let caller = ModelCaller::new(client.clone())
             .with_mock(mock)
             .with_recorder(recorder)
             .with_credentials(Arc::clone(&accounts) as _)
@@ -188,6 +190,7 @@ impl Models {
             caller,
             aux: Arc::new(aux),
             pii,
+            client,
         })
     }
 
@@ -311,6 +314,7 @@ impl Models {
             caller,
             aux: Arc::clone(&self.aux),
             pii: self.pii.clone(),
+            client: self.client.clone(),
         };
         Ok((reloaded, changed))
     }
@@ -449,6 +453,23 @@ impl Models {
             model: Arc::clone(model),
             session,
         }
+    }
+
+    /// The embedder of `memory.recall.embedding_model`, if one is set
+    /// (`main` is the session's model: a bare model name runs on its
+    /// provider).
+    #[must_use]
+    pub fn embedder(
+        &self,
+        main: Option<&Arc<SwitchableModel>>,
+    ) -> Option<Arc<dyn pmt_memory::rank::Embedder>> {
+        let spec = self.setup.config.memory.recall.embedding_model.clone()?;
+        Some(Arc::new(super::embed::RouteEmbedder::new(
+            Arc::clone(&self.setup),
+            self.client.clone(),
+            spec,
+            main.map(|m| m.target().provider),
+        )))
     }
 
     /// The session's approval guardian on its `approval` auxiliary route.

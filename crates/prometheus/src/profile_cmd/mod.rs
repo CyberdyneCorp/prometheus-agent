@@ -293,6 +293,10 @@ fn clone_memory(
         return Ok(());
     }
     open(target.clone())?.memory_batch(None, |batch| {
+        batch.author = Some(pmt_store::Author {
+            origin: pmt_store::MemoryOrigin::Import,
+            session: None,
+        });
         batch.entries.clone_from(&entries);
         Ok(())
     })

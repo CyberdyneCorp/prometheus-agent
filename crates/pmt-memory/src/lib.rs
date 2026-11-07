@@ -14,14 +14,17 @@
 //!   view; [`slash`] is `/memory`, [`status`] its status, [`review`] the
 //!   background review, [`tool`] the registry entry.
 //!
-//! External memory providers and the revision journal arrive in M2.
+//! [`journal`] reads the revision journal the store writes with every
+//! committed batch (`memory log/diff/revert`, `/memory review`).
 
 pub mod batch;
 pub mod budget;
 pub mod id;
+pub mod journal;
 pub mod manage;
 pub mod markdown;
 pub mod ops;
+pub mod rank;
 pub mod recall;
 pub mod review;
 pub mod scan;

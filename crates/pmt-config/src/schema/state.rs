@@ -72,7 +72,7 @@ impl Default for SnapshotsConfig {
 }
 
 /// The `[memory]` section.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 #[schemars(extend("x-apply" = "next_session"))]
 pub struct MemoryConfig {
@@ -126,13 +126,19 @@ pub enum MemoryReviewMode {
 }
 
 /// The `[memory.recall]` section.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct RecallConfig {
     /// Archival entries recalled per turn.
     pub top_k: u32,
     /// Character cap of recalled content per turn.
     pub max_chars: u32,
+    /// Embedding model (`provider/model` or a model on the main route's
+    /// provider) for hybrid semantic recall; unset ranks lexically (BM25).
+    pub embedding_model: Option<String>,
+    /// Hybrid recall drops entries scoring below this.
+    #[schemars(range(min = 0.0, max = 1.0))]
+    pub min_score: f64,
 }
 
 impl Default for RecallConfig {
@@ -140,6 +146,8 @@ impl Default for RecallConfig {
         Self {
             top_k: 5,
             max_chars: 1500,
+            embedding_model: None,
+            min_score: 0.35,
         }
     }
 }

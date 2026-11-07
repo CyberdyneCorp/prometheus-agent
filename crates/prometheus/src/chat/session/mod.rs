@@ -13,6 +13,7 @@ pub mod cron;
 pub mod delegation;
 pub mod documents;
 pub mod downgrades;
+mod embed;
 pub mod env;
 mod guardian;
 pub mod judge;
@@ -558,7 +559,7 @@ impl Factory {
         let at = place::At { vision, ..at };
         let environment =
             self.environment(&session, target, &capabilities, &current, &skills, &at)?;
-        let memory = Arc::new(MemorySession::new(self.memory_setup(id)?));
+        let memory = Arc::new(MemorySession::new(self.memory_setup(id, &model)?));
         let summarizer = self.models.summarizer(&model, id);
         let cards = shows_cards(self.options.interactive, &session_surface);
         let delegation = self.delegation_for(
@@ -1020,7 +1021,11 @@ impl Factory {
         setup
     }
 
-    fn memory_setup(&self, id: SessionId) -> Result<MemorySetup, Error> {
+    fn memory_setup(
+        &self,
+        id: SessionId,
+        model: &Arc<SwitchableModel>,
+    ) -> Result<MemorySetup, Error> {
         let mut setup = MemorySetup::new(
             self.scope.clone(),
             Arc::clone(&self.store),
@@ -1029,6 +1034,7 @@ impl Factory {
         );
         setup.redactor = self.redactor.clone();
         setup.approver.clone_from(&self.approver);
+        setup.embedder = self.models.embedder(Some(model));
         let prior = self
             .store
             .messages(id, pmt_store::Visibility::Active)?

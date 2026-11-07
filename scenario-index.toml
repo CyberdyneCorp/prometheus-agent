@@ -3109,3 +3109,13 @@ capabilities = [
 
 [context-compression."Opt-in proactive prune"]
 "Disabled by default" = ["crates/pmt-agent/tests/turn/compaction_upgrades.rs::no_proactive_prune_runs_by_default"]
+
+# Group 44.8: memory revision journal, per-session review, semantic recall.
+[memory."Memory revision journal (upgrade)"]
+"Revert an agent mistake" = ["crates/pmt-memory/tests/memory/journal.rs::reverting_an_agent_patch_restores_the_entry_as_a_new_user_revision", "crates/prometheus/tests/memory_journal.rs::an_agent_mistake_is_summarized_at_session_end_and_reverted_by_the_user"]
+
+[memory."Reviewable memory changes per session (upgrade)"]
+"Session end shows a summary" = ["crates/pmt-memory/tests/memory/journal.rs::a_session_that_changed_memory_gets_a_one_line_summary", "crates/prometheus/tests/memory_journal.rs::an_agent_mistake_is_summarized_at_session_end_and_reverted_by_the_user"]
+
+[memory."Semantic recall (upgrade)"]
+"Paraphrase is recalled with embeddings" = ["crates/pmt-memory/tests/memory/journal.rs::a_paraphrase_is_recalled_with_embeddings", "crates/prometheus/tests/memory_journal.rs::memory_search_ranks_a_paraphrase_with_the_configured_embedding_model"]

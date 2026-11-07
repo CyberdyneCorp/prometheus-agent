@@ -238,7 +238,10 @@ async fn send_http(
     ModelStream::start(Source::Http(body), limits).await
 }
 
-fn authenticate(builder: reqwest::RequestBuilder, route: &Route) -> reqwest::RequestBuilder {
+pub(crate) fn authenticate(
+    builder: reqwest::RequestBuilder,
+    route: &Route,
+) -> reqwest::RequestBuilder {
     let builder = if route.wire_format == WireFormat::AnthropicMessages {
         builder.header("anthropic-version", wire::ANTHROPIC_VERSION)
     } else {

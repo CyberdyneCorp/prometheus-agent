@@ -457,7 +457,9 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `memory.memory_char_limit` | integer | `2200` | ≥ 0 | `next_session` | Character budget of core memory entries. |
 | `memory.memory_enabled` | boolean | `true` | any | `next_session` | The agent memory store. |
 | `memory.nudge_interval` | integer | `10` | ≥ 0 | `next_session` | User turns without a memory call before a background review; `0` disables. |
+| `memory.recall.embedding_model` | string | unset | any | `next_session` | Embedding model (`provider/model` or a model on the main route's provider) for hybrid semantic recall; unset ranks lexically (BM25). |
 | `memory.recall.max_chars` | integer | `1500` | ≥ 0 | `next_session` | Character cap of recalled content per turn. |
+| `memory.recall.min_score` | number | `0.35` | 0.0 to 1.0 | `next_session` | Hybrid recall drops entries scoring below this. |
 | `memory.recall.top_k` | integer | `5` | ≥ 0 | `next_session` | Archival entries recalled per turn. |
 | `memory.review_mode` | one of "summary", "off", "require" | `"summary"` | `"summary"`, `"off"`, `"require"` | `next_session` | How agent memory changes are reviewed. |
 | `memory.user_char_limit` | integer | `1375` | ≥ 0 | `next_session` | Character budget of core user-profile entries. |

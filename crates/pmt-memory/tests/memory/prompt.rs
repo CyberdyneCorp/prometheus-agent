@@ -95,12 +95,18 @@ async fn memory_reload_now_rebuilds_with_reason_memory_now() {
     let run = agent(&profile, session, model.clone());
     run.turn(&profile, "first question here").await;
     add(&run.memory, "user", "Likes tea.").await;
-    let reply =
-        pmt_memory::slash::run(&profile.store, &profile.scope.config().memory, "reload").unwrap();
+    let reply = pmt_memory::slash::run(
+        &profile.store,
+        &profile.scope.config().memory,
+        None,
+        "reload",
+    )
+    .unwrap();
     assert!(!reply.rebuild_now && reply.text.contains("next session"));
     let reply = pmt_memory::slash::run(
         &profile.store,
         &profile.scope.config().memory,
+        None,
         "reload --now",
     )
     .unwrap();

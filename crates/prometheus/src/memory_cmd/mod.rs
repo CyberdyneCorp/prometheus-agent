@@ -6,8 +6,10 @@
 
 pub mod args;
 mod edit;
+mod journal;
 
 use std::fmt::Write as _;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use pmt_config::ProfileScope;
@@ -78,6 +80,17 @@ pub fn run(command: &MemoryCommand, ctx: &Context<'_>) -> Result<u8, Error> {
         MemoryCommand::Approve { id } => reply(&env, &format!("approve {id}")),
         MemoryCommand::Reject { id } => reply(&env, &format!("reject {id}")),
         MemoryCommand::Reset { target, yes } => reset(&env, *target, *yes),
+        MemoryCommand::Log { since, origin } => journal::log(&env, since.as_deref(), *origin),
+        MemoryCommand::Diff { since, session } => {
+            journal::diff(&env, since.as_deref(), session.as_deref())
+        }
+        MemoryCommand::Revert { rev } => journal::revert(&env, *rev),
+        MemoryCommand::Search { query, explain } => journal::search(
+            &env,
+            query,
+            *explain,
+            ctx.launch.user_home().map(PathBuf::as_path),
+        ),
     }
 }
 
@@ -351,7 +364,7 @@ fn reply(env: &Env, args: &str) -> Result<u8, Error> {
         let pending = env.store.memory_pending()?;
         return json(&pending.iter().map(write::pending_json).collect::<Vec<_>>());
     }
-    let reply = slash::run(&env.store, env.config(), args)?;
+    let reply = slash::run(&env.store, env.config(), None, args)?;
     print_raw(&format!("{}\n", reply.text))
 }
 
@@ -377,6 +390,7 @@ fn reset(env: &Env, which: ResetTarget, yes: bool) -> Result<u8, Error> {
         }
     }
     let removed = env.store.memory_batch(None, |b| {
+        b.author = Some(pmt_store::Author::user());
         let before = b.entries.len();
         b.entries.retain(|e| !wanted.contains(&e.target));
         Ok(before - b.entries.len())

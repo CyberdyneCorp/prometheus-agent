@@ -2,6 +2,7 @@
 
 mod approval;
 mod import;
+mod journal;
 mod prompt;
 mod support;
 mod tool;
