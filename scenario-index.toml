@@ -3119,3 +3119,11 @@ capabilities = [
 
 [memory."Semantic recall (upgrade)"]
 "Paraphrase is recalled with embeddings" = ["crates/pmt-memory/tests/memory/journal.rs::a_paraphrase_is_recalled_with_embeddings", "crates/prometheus/tests/memory_journal.rs::memory_search_ranks_a_paraphrase_with_the_configured_embedding_model"]
+
+# Group 44.11: session forking API, portable export and import.
+[session-storage."Session forking API (upgrade)"]
+"Fork from an earlier message" = ["crates/prometheus/tests/session_portable.rs::a_fork_keeps_the_messages_up_to_the_chosen_one_and_the_tree_lists_it", "crates/prometheus/tests/session_portable.rs::the_daemon_serves_tree_and_siblings_over_rpc"]
+"Tree lists forks and continuations" = ["crates/prometheus/tests/session_portable.rs::a_fork_keeps_the_messages_up_to_the_chosen_one_and_the_tree_lists_it"]
+
+[session-storage."Portable export and import"]
+"Collision without remap" = ["crates/prometheus/tests/session_portable.rs::an_export_round_trips_between_two_homes_with_its_blobs"]

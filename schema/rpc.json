@@ -1663,6 +1663,62 @@
       ],
       "type": "object"
     },
+    "Lineage": {
+      "additionalProperties": false,
+      "description": "`session.tree` / `session.siblings` result.",
+      "properties": {
+        "nodes": {
+          "description": "The related sessions, by depth then age.",
+          "items": {
+            "$ref": "#/$defs/LineageNode"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "nodes"
+      ],
+      "type": "object"
+    },
+    "LineageNode": {
+      "additionalProperties": false,
+      "description": "One related session in `session.tree` / `session.siblings`.",
+      "properties": {
+        "depth": {
+          "description": "Distance from the asked session (its children are 1).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "description": "How it relates to the parent: `fork`, `compression`, `delegate`,\n`reset`, `import` or `background`.",
+          "type": "string"
+        },
+        "parent_session_id": {
+          "description": "Its parent.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        },
+        "title": {
+          "default": null,
+          "description": "Its title.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "session_id",
+        "parent_session_id",
+        "kind",
+        "depth"
+      ],
+      "type": "object"
+    },
     "LspServerStatus": {
       "additionalProperties": false,
       "description": "One running language server.",
@@ -4062,6 +4118,16 @@
       },
       "since": "1.0"
     },
+    "session.siblings": {
+      "owner": "session-storage",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/Lineage"
+      },
+      "since": "1.0"
+    },
     "session.steer": {
       "owner": "agent-turn-loop",
       "params": {
@@ -4080,6 +4146,16 @@
       },
       "result": {
         "$ref": "#/$defs/Transcript"
+      },
+      "since": "1.0"
+    },
+    "session.tree": {
+      "owner": "session-storage",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/Lineage"
       },
       "since": "1.0"
     },

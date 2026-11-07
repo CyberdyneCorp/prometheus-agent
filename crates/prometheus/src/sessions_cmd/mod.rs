@@ -3,6 +3,7 @@
 //! Retention; Rewind is a soft delete).
 
 pub mod args;
+mod lineage;
 
 use std::fmt::Write as _;
 use std::io::Write as _;
@@ -83,6 +84,15 @@ pub fn run(command: &SessionsCommand, ctx: &Context<'_>, ui: crate::chat::Ui) ->
         ),
         SessionsCommand::Tree { session: r } => tree(ctx, &store, session(r)?),
         SessionsCommand::Stats { session: r } => stats(ctx, &store, session(r)?),
+        SessionsCommand::Fork {
+            session: r,
+            at,
+            title,
+        } => lineage::fork(ctx, &store, session(r)?, at.as_deref(), title.as_deref()),
+        SessionsCommand::Siblings { session: r } => lineage::siblings(ctx, &store, session(r)?),
+        SessionsCommand::Import { file, remap_ids } => {
+            lineage::import(ctx, &store, file, *remap_ids)
+        }
         SessionsCommand::Export(args) => export(ctx, &scope, &store, args),
         SessionsCommand::Delete {
             session: r,
@@ -364,6 +374,7 @@ fn export(
     let options = ExportOptions {
         format: args.format,
         include_inactive: args.include_inactive,
+        with_blobs: args.with_blobs,
         redactor: redactor.as_ref(),
     };
     let Some(path) = &args.output else {

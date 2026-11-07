@@ -58,6 +58,15 @@ cost totals for the session and for its whole lineage, counting
 continuations, forks and delegated children under their root. All of them
 accept `--json`.
 
+`sessions fork <ref> [--at <message>] [--title T]` starts a new session
+from the active messages up to and including `<message>` (default: the
+last one). The copies get new ids and an `origin_message_id` back to the
+original; the fork is titled `<title> #<n>` unless you give one, and the
+original session is unchanged. `sessions siblings <ref>` lists the other
+children of the session's parent. Clients of the daemon get the same
+operations as `session.fork`, `session.tree` and `session.siblings` (see
+the [RPC reference](../reference/rpc.md)).
+
 `rename`, `pin`, `unpin`, `archive` and `unarchive` change a session.
 Titles are unique per profile and at most 100 characters; a pinned session
 is never pruned.
@@ -140,6 +149,24 @@ credential (API keys, tokens, private keys) with `[REDACTED]`:
 
 ```console
 $ prometheus sessions export --all --format md --redact
+```
+
+`--with-blobs` (JSONL) also embeds the files the messages reference, such
+as attachments, base64 encoded, so the export is complete on another
+machine.
+
+`sessions import FILE` reads a JSONL export into the current profile. The
+whole file is checked first (header, every record, at most 500 sessions,
+50000 messages and 256 MiB) and then written in one transaction: an import
+either writes everything or nothing. Ids the profile already has are
+refused with `import.id_collision`, which lists them; `--remap-ids` gives
+every session, message and usage row a new id instead, keeping forks and
+continuations linked to their parents inside the file. An imported title
+that is already taken gets the next free `#<n>`.
+
+```console
+$ prometheus sessions export ses_01JC3W8Q5ZK7Y2V4N6B8D0F1H3 --with-blobs -o atlas.jsonl
+$ prometheus --profile work sessions import atlas.jsonl
 ```
 
 Inside a session, `/save [json|md|html] [file] [redact]` writes the current

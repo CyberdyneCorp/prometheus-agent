@@ -417,6 +417,32 @@ pub struct ForkParams {
     pub title: Option<String>,
 }
 
+/// One related session in `session.tree` / `session.siblings`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct LineageNode {
+    /// The session.
+    pub session_id: String,
+    /// Its parent.
+    pub parent_session_id: String,
+    /// How it relates to the parent: `fork`, `compression`, `delegate`,
+    /// `reset`, `import` or `background`.
+    pub kind: String,
+    /// Distance from the asked session (its children are 1).
+    pub depth: u32,
+    /// Its title.
+    #[serde(default)]
+    pub title: Option<String>,
+}
+
+/// `session.tree` / `session.siblings` result.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Lineage {
+    /// The related sessions, by depth then age.
+    pub nodes: Vec<LineageNode>,
+}
+
 /// `session.attach` / `session.resume` result.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -1039,6 +1065,11 @@ method!(/// `session.resolve`: the session a `-r`/`-c` reference names.
 method!(/// `session.fork`: a new session with the parent's active messages up
     /// to `at_message_id`, the parent unchanged.
     SessionFork = "session.fork" (ForkParams) -> SessionRef);
+method!(/// `session.tree`: every descendant of a session (forks, compression
+    /// continuations, delegates) with its relation.
+    SessionTree = "session.tree" (SessionRef) -> Lineage);
+method!(/// `session.siblings`: the other children of a session's parent.
+    SessionSiblings = "session.siblings" (SessionRef) -> Lineage);
 method!(/// `session.compact`.
     SessionCompact = "session.compact" (CompactParams) -> Compacted);
 method!(/// `session.transcript`.

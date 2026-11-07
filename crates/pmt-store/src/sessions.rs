@@ -495,6 +495,26 @@ impl Store {
     }
 }
 
+impl Store {
+    /// The other children of `id`'s parent with their relation, oldest
+    /// first; empty for a root session.
+    ///
+    /// # Errors
+    ///
+    /// `session.not_found`, `store.sqlite`.
+    pub fn siblings(&self, id: SessionId) -> Result<Vec<TreeNode>, Error> {
+        let session = self.session(id)?;
+        let Some(parent) = session.parent_session_id else {
+            return Ok(Vec::new());
+        };
+        Ok(self
+            .tree(parent)?
+            .into_iter()
+            .filter(|n| n.depth == 1 && n.id != id)
+            .collect())
+    }
+}
+
 /// `id` and its ancestors, root first; empty when `id` does not exist.
 fn ancestors(conn: &Connection, id: SessionId) -> Result<Vec<SessionId>, Error> {
     let mut stmt = conn

@@ -57,6 +57,7 @@ pub mod secrets_cmd;
 pub mod security_cmd;
 pub mod self_test_cmd;
 pub mod session_export;
+pub mod session_import;
 pub mod sessions_browse;
 pub mod sessions_cmd;
 pub mod setup_cmd;

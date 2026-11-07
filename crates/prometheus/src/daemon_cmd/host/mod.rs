@@ -957,6 +957,34 @@ impl Host for DaemonHost {
         })
     }
 
+    fn lineage<'a>(
+        &'a self,
+        profile: &'a str,
+        session: &'a str,
+        siblings: bool,
+    ) -> HostFuture<'a, pmt_rpc::contracts::Lineage> {
+        Box::pin(async move {
+            let store = &self.profile(profile)?.store;
+            let id = session_id(session)?;
+            let nodes = if siblings {
+                store.siblings(id)?
+            } else {
+                store.tree(id)?
+            };
+            let nodes = nodes
+                .into_iter()
+                .map(|n| pmt_rpc::contracts::LineageNode {
+                    session_id: n.id.to_string(),
+                    parent_session_id: n.parent.to_string(),
+                    kind: n.kind.as_str().to_owned(),
+                    depth: n.depth,
+                    title: store.session(n.id).ok().and_then(|s| s.title),
+                })
+                .collect();
+            Ok(pmt_rpc::contracts::Lineage { nodes })
+        })
+    }
+
     fn config(&self) -> Vec<pmt_rpc::control::ProfileConfig> {
         self.config_states()
     }

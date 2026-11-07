@@ -125,6 +125,18 @@ pub(crate) fn inherited(
     }
 }
 
+/// Whether a session has `title`.
+pub(crate) fn in_use(conn: &Connection, title: &str) -> Result<bool, Error> {
+    conn.prepare_cached("SELECT 1 FROM sessions WHERE title = ?1")
+        .and_then(|mut stmt| stmt.exists([title]))
+        .map_err(sql)
+}
+
+/// The next free `<title> #<n>` (an imported title already in use).
+pub(crate) fn next_free(conn: &Connection, title: &str) -> Result<String, Error> {
+    next_numbered(conn, title)
+}
+
 /// Fails when another session (other than `except`) has `title`.
 pub(crate) fn ensure_unused(
     conn: &Connection,

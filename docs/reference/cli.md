@@ -9255,6 +9255,9 @@ Commands:
   archive    Archive a session (hidden from the default listing)
   unarchive  Unarchive a session
   tree       Show a session's lineage tree (forks, continuations, delegates)
+  fork       Fork a session: a new session with its active messages up to --at
+  siblings   List the other children of a session's parent (forks, continuations)
+  import     Import a JSONL export (all-or-none; ids must be new unless --remap-ids)
   stats      Show a session's and its lineage's message and token totals
   export     Export sessions (jsonl, md, html, prompts or trace)
   delete     Delete a session (asks for confirmation unless --yes)
@@ -9829,6 +9832,144 @@ Options:
           Print help
 ```
 
+## `prometheus sessions fork`
+
+```text
+Fork a session: a new session with its active messages up to --at
+
+Usage: prometheus sessions fork [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session id, id prefix or title
+
+Options:
+      --at <MESSAGE>
+          The last message the fork keeps (default: the last active one)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --title <TITLE>
+          The fork's title (default: `<title> #<n>`)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions siblings`
+
+```text
+List the other children of a session's parent (forks, continuations)
+
+Usage: prometheus sessions siblings [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session id, id prefix or title
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions import`
+
+```text
+Import a JSONL export (all-or-none; ids must be new unless --remap-ids)
+
+Usage: prometheus sessions import [OPTIONS] <FILE>
+
+Arguments:
+  <FILE>
+          The export file
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --remap-ids
+          Give every session, message and usage row a new id
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus sessions stats`
 
 ```text
@@ -9914,17 +10055,20 @@ Options:
       --json
           Print one JSON document on stdout; errors go to stderr as JSON
 
+      --with-blobs
+          Embed the blobs (attachments) the messages reference, base64 (jsonl)
+
       --redact
           Replace secrets and credential-shaped text with [REDACTED]
-
-  -o, --output <FILE>
-          Write to this file instead of stdout
 
   -v, --verbose...
           More detail; repeatable
 
       --no-color
           No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -o, --output <FILE>
+          Write to this file instead of stdout
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
@@ -10185,6 +10329,9 @@ Commands:
   archive    Archive a session (hidden from the default listing)
   unarchive  Unarchive a session
   tree       Show a session's lineage tree (forks, continuations, delegates)
+  fork       Fork a session: a new session with its active messages up to --at
+  siblings   List the other children of a session's parent (forks, continuations)
+  import     Import a JSONL export (all-or-none; ids must be new unless --remap-ids)
   stats      Show a session's and its lineage's message and token totals
   export     Export sessions (jsonl, md, html, prompts or trace)
   delete     Delete a session (asks for confirmation unless --yes)
@@ -10281,6 +10428,30 @@ Usage: prometheus sessions help unarchive
 Show a session's lineage tree (forks, continuations, delegates)
 
 Usage: prometheus sessions help tree
+```
+
+## `prometheus sessions help fork`
+
+```text
+Fork a session: a new session with its active messages up to --at
+
+Usage: prometheus sessions help fork
+```
+
+## `prometheus sessions help siblings`
+
+```text
+List the other children of a session's parent (forks, continuations)
+
+Usage: prometheus sessions help siblings
+```
+
+## `prometheus sessions help import`
+
+```text
+Import a JSONL export (all-or-none; ids must be new unless --remap-ids)
+
+Usage: prometheus sessions help import
 ```
 
 ## `prometheus sessions help stats`
@@ -20539,6 +20710,9 @@ Commands:
   archive    Archive a session (hidden from the default listing)
   unarchive  Unarchive a session
   tree       Show a session's lineage tree (forks, continuations, delegates)
+  fork       Fork a session: a new session with its active messages up to --at
+  siblings   List the other children of a session's parent (forks, continuations)
+  import     Import a JSONL export (all-or-none; ids must be new unless --remap-ids)
   stats      Show a session's and its lineage's message and token totals
   export     Export sessions (jsonl, md, html, prompts or trace)
   delete     Delete a session (asks for confirmation unless --yes)
@@ -20634,6 +20808,30 @@ Usage: prometheus help sessions unarchive
 Show a session's lineage tree (forks, continuations, delegates)
 
 Usage: prometheus help sessions tree
+```
+
+## `prometheus help sessions fork`
+
+```text
+Fork a session: a new session with its active messages up to --at
+
+Usage: prometheus help sessions fork
+```
+
+## `prometheus help sessions siblings`
+
+```text
+List the other children of a session's parent (forks, continuations)
+
+Usage: prometheus help sessions siblings
+```
+
+## `prometheus help sessions import`
+
+```text
+Import a JSONL export (all-or-none; ids must be new unless --remap-ids)
+
+Usage: prometheus help sessions import
 ```
 
 ## `prometheus help sessions stats`

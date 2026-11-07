@@ -106,6 +106,8 @@ pub fn declare_builtin(d: &mut Declarations) {
         .method::<c::SessionSteer>()
         .method::<c::SessionResolve>()
         .method::<c::SessionFork>()
+        .method::<c::SessionTree>()
+        .method::<c::SessionSiblings>()
         .method::<c::SessionCompact>()
         .method::<c::SessionTranscript>()
         .method::<c::SessionEventsSince>()

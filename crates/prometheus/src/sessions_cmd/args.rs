@@ -78,6 +78,30 @@ pub enum SessionsCommand {
         /// Session id, id prefix or title.
         session: String,
     },
+    /// Fork a session: a new session with its active messages up to --at.
+    Fork {
+        /// Session id, id prefix or title.
+        session: String,
+        /// The last message the fork keeps (default: the last active one).
+        #[arg(long, value_name = "MESSAGE")]
+        at: Option<String>,
+        /// The fork's title (default: `<title> #<n>`).
+        #[arg(long)]
+        title: Option<String>,
+    },
+    /// List the other children of a session's parent (forks, continuations).
+    Siblings {
+        /// Session id, id prefix or title.
+        session: String,
+    },
+    /// Import a JSONL export (all-or-none; ids must be new unless --remap-ids).
+    Import {
+        /// The export file.
+        file: PathBuf,
+        /// Give every session, message and usage row a new id.
+        #[arg(long)]
+        remap_ids: bool,
+    },
     /// Show a session's and its lineage's message and token totals.
     Stats {
         /// Session id, id prefix or title.
@@ -174,6 +198,7 @@ pub struct SearchArgs {
 
 /// `prometheus sessions export` arguments.
 #[derive(Debug, clap::Args)]
+#[allow(clippy::struct_excessive_bools)] // independent command-line switches
 pub struct ExportArgs {
     /// Sessions to export (id, id prefix or title).
     #[arg(required_unless_present = "all", conflicts_with = "all")]
@@ -187,6 +212,9 @@ pub struct ExportArgs {
     /// Include rewound and compacted messages.
     #[arg(long)]
     pub include_inactive: bool,
+    /// Embed the blobs (attachments) the messages reference, base64 (jsonl).
+    #[arg(long)]
+    pub with_blobs: bool,
     /// Replace secrets and credential-shaped text with [REDACTED].
     #[arg(long)]
     pub redact: bool,

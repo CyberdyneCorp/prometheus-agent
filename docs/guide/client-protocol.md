@@ -109,7 +109,10 @@ connection to it; `session.resume` loads a stored one and attaches;
 `session.attach` and `session.detach` join and leave. `session.resolve`
 turns a chat's `-r`/`-c` reference into a session id, `session.fork` copies
 a session's active messages up to a chosen one into a new session (the
-parent is unchanged) and `session.interrupt` stops the running turn.
+parent is unchanged), `session.tree` lists a session's descendants (forks,
+compression continuations, delegates) with their relation and
+`session.siblings` the other children of its parent, and
+`session.interrupt` stops the running turn.
 Creating or resuming with `exclusive: true` makes the connection the
 session's interactive owner: until it detaches or disconnects, another
 exclusive resume fails with `-32004` `session <id> is open in another

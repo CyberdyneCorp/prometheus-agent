@@ -109,6 +109,8 @@ pub const INDEX: &[IndexEntry] = &[
     long("daemon.update", WA),
     // session-storage
     long("session.fork", "session-storage"),
+    method("session.tree", "session-storage"),
+    method("session.siblings", "session-storage"),
     // tui
     method("commands.catalog", "tui"),
     method("complete.slash", "tui"),

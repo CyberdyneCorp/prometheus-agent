@@ -112,8 +112,10 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `session.list` | `workspace-architecture` | 1.0 | [`SessionListParams`](#sessionlistparams) | [`SessionList`](#sessionlist) |
 | `session.resolve` | `workspace-architecture` | 1.0 | [`ResolveParams`](#resolveparams) | [`SessionRef`](#sessionref) |
 | `session.resume` | `workspace-architecture` | 1.0 | [`ResumeParams`](#resumeparams) | [`Attached`](#attached) |
+| `session.siblings` | `session-storage` | 1.0 | [`SessionRef`](#sessionref) | [`Lineage`](#lineage) |
 | `session.steer` | `agent-turn-loop` | 1.0 | [`SteerParams`](#steerparams) | [`Ack`](#ack) |
 | `session.transcript` | `workspace-architecture` | 1.0 | [`SessionRef`](#sessionref) | [`Transcript`](#transcript) |
+| `session.tree` | `session-storage` | 1.0 | [`SessionRef`](#sessionref) | [`Lineage`](#lineage) |
 | `subagent.list` | `tui` | 1.0 | [`SessionRef`](#sessionref) | [`SubagentList`](#subagentlist) |
 | `subagent.subscribe` | `tui` | 1.0 | not served yet | |
 | `system.health` | `observability` | 1.0 | not served yet | |
@@ -707,6 +709,26 @@ The system prompt a session froze on its first turn.
 | `profiles` | array of string | yes | The profiles the connection's ticket grants. |
 | `protocol` | [`Version`](#version) | yes | The protocol the daemon speaks. |
 | `server_version` | string | yes | The daemon's semantic version. |
+
+### `Lineage`
+
+`session.tree` / `session.siblings` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `nodes` | array of [`LineageNode`](#lineagenode) | yes | The related sessions, by depth then age. |
+
+### `LineageNode`
+
+One related session in `session.tree` / `session.siblings`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `depth` | integer | yes | Distance from the asked session (its children are 1). |
+| `kind` | string | yes | How it relates to the parent: `fork`, `compression`, `delegate`, `reset`, `import` or `background`. |
+| `parent_session_id` | string | yes | Its parent. |
+| `session_id` | string | yes | The session. |
+| `title` | string or null | no | Its title. |
 
 ### `LspServerStatus`
 

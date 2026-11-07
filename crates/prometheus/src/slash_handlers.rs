@@ -147,6 +147,7 @@ pub fn save(
     let options = ExportOptions {
         format,
         include_inactive: false,
+        with_blobs: false,
         redactor: redactor.as_ref(),
     };
     let io_error = |e: &std::io::Error| {

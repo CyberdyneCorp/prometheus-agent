@@ -43,6 +43,8 @@ pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
         .register::<c::SessionSteer, _, _>(catalog, steer)?
         .register::<c::SessionResolve, _, _>(catalog, resolve)?
         .register::<c::SessionFork, _, _>(catalog, fork)?
+        .register::<c::SessionTree, _, _>(catalog, tree)?
+        .register::<c::SessionSiblings, _, _>(catalog, siblings)?
         .register::<c::SessionDetach, _, _>(catalog, detach)?
         .register::<c::SessionListing, _, _>(catalog, list)?
         .register::<c::SessionEventsSince, _, _>(catalog, events_since)?
@@ -316,6 +318,27 @@ async fn fork(call: Call, params: c::ForkParams) -> Result<c::SessionRef, RpcErr
         .map_err(|e| rpc(&e))?;
     call.server.hub().register(&forked.session_id, &profile);
     Ok(forked)
+}
+
+async fn tree(call: Call, params: c::SessionRef) -> Result<c::Lineage, RpcError> {
+    lineage(call, params, false).await
+}
+
+async fn siblings(call: Call, params: c::SessionRef) -> Result<c::Lineage, RpcError> {
+    lineage(call, params, true).await
+}
+
+async fn lineage(
+    call: Call,
+    params: c::SessionRef,
+    siblings: bool,
+) -> Result<c::Lineage, RpcError> {
+    let profile = attached_profile(&call, &params.session_id, Need::Attached)?;
+    call.server
+        .host()
+        .lineage(&profile, &params.session_id, siblings)
+        .await
+        .map_err(|e| rpc(&e))
 }
 
 async fn detach(call: Call, params: c::SessionRef) -> Result<c::Ack, RpcError> {

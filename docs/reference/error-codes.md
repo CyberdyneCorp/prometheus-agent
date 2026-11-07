@@ -118,6 +118,9 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `store.replaced` | `conflict` | 75 | `state.db` was replaced (restored or copied over) while it was open; the write was refused and the file left untouched. Restart the process to open the new file. |
 | `store.corrupt` | `io` | 74 | `state.db` reported structural corruption; writes stopped. The next start quarantines the file and salvages every readable row (see `prometheus doctor`). |
 | `store.rewind_target_invalid` | `invalid_input` | 65 | Rewind targets an active user message of the session; the given message is missing, inactive or not a user message. |
+| `import.id_collision` | `conflict` | 75 | A session, message or usage id of the import file already exists in this profile; nothing was imported. Rerun with `--remap-ids` to import under new ids. |
+| `import.invalid` | `invalid_input` | 65 | The import file is not a valid `prometheus.sessions` version 1 export (or a record in it is malformed); nothing was imported. |
+| `import.too_large` | `invalid_input` | 65 | The import file holds more than 500 sessions, 50000 messages or 256 MiB; nothing was imported. Export fewer sessions per file. |
 | `store.fork_target_invalid` | `invalid_input` | 65 | `session.fork` names an `at_message_id` that is not an active message of the forked session. |
 | `store.rewind_conflict` | `conflict` | 75 | The messages the rewind or restore expected changed in the meantime; nothing changed. Look at the transcript again and retry. |
 | `session.in_use` | `conflict` | 75 | A live turn lease or compaction lock is held on the session; retry when the turn or compaction finished. |

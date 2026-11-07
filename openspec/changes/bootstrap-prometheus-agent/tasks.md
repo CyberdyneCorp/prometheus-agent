@@ -435,7 +435,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 - [x] 44.8 Implement the memory revision journal, reviewable changes per session and semantic recall; verify that a change can be reverted (spec: memory)
 - [ ] 44.9 Implement the external memory provider contract (one provider, isolated and bounded, gated tools and prompt block, egress redaction and mirroring, profile-bound, pre-compress checkpoint, loud degradation, setup writing to the right stores) and context-engine plugins; verify with a sample WASM provider (spec: memory)
 - [ ] 44.10 Implement the learning journey timeline (JSON nodes) with pruning and editing, per-turn memory notifications (staged changes not announced), background review controls (input budget, extra tools must exist on the parent) and the external provider recall budget with spill to file; verify with memory tests (spec: memory)
-- [ ] 44.11 Implement the session forking API and portable session export/import; verify a round trip between two homes (spec: session-storage)
+- [x] 44.11 Implement the session forking API and portable session export/import; verify a round trip between two homes (spec: session-storage)
 - [ ] 44.12 Implement offline recovery with journal-mode control (refused while the store is open), prompt refresh and retitling (user titles kept), the low-disk prune prompt ("later" postpones a week) and the attachment storage location; verify with storage tests (spec: session-storage)
 
 ## 45. M2 Additional subscription providers and routing

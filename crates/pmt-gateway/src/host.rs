@@ -247,6 +247,22 @@ pub trait Host: Send + Sync + 'static {
     /// Forks a session (the parent is unchanged).
     fn fork<'a>(&'a self, profile: &'a str, params: ForkParams) -> HostFuture<'a, SessionRef>;
 
+    /// The descendants (`siblings = false`) or the siblings of a session
+    /// (`session.tree` / `session.siblings`).
+    fn lineage<'a>(
+        &'a self,
+        _profile: &'a str,
+        _session_id: &'a str,
+        _siblings: bool,
+    ) -> HostFuture<'a, pmt_rpc::contracts::Lineage> {
+        Box::pin(async {
+            Err(Error::new(
+                &pmt_core::error::codes::RPC_NOT_SERVED,
+                "this host does not serve session lineage",
+            ))
+        })
+    }
+
     /// The session's slash commands, with their disposition for `client`
     /// (`commands.catalog`). Never changes the live session.
     fn commands<'a>(

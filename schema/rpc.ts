@@ -572,6 +572,26 @@ export interface HelloResult {
   server_version: string;
 }
 
+/** `session.tree` / `session.siblings` result. */
+export interface Lineage {
+  /** The related sessions, by depth then age. */
+  nodes: Array<LineageNode>;
+}
+
+/** One related session in `session.tree` / `session.siblings`. */
+export interface LineageNode {
+  /** Distance from the asked session (its children are 1). */
+  depth: number;
+  /** How it relates to the parent: `fork`, `compression`, `delegate`, `reset`, `import` or `background`. */
+  kind: string;
+  /** Its parent. */
+  parent_session_id: string;
+  /** The session. */
+  session_id: string;
+  /** Its title. */
+  title?: string | null;
+}
+
 /** One running language server. */
 export interface LspServerStatus {
   /** The server id (`pyright`, `rust-analyzer`...). */
@@ -1229,8 +1249,10 @@ export interface Methods {
   "session.list": { params: SessionListParams; result: SessionList };
   "session.resolve": { params: ResolveParams; result: SessionRef };
   "session.resume": { params: ResumeParams; result: Attached };
+  "session.siblings": { params: SessionRef; result: Lineage };
   "session.steer": { params: SteerParams; result: Ack };
   "session.transcript": { params: SessionRef; result: Transcript };
+  "session.tree": { params: SessionRef; result: Lineage };
   "subagent.list": { params: SessionRef; result: SubagentList };
   "vault.add": { params: VaultAddParams; result: VaultItem };
   "vault.list": { params: VaultListParams; result: VaultItems };

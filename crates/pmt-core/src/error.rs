@@ -359,6 +359,15 @@ error_codes! {
     /// A rewind target is missing or not a user message.
     STORE_REWIND_TARGET_INVALID = ("store.rewind_target_invalid", InvalidInput,
         "Rewind targets an active user message of the session; the given message is missing, inactive or not a user message.");
+    /// `sessions import` found ids the profile already has.
+    IMPORT_ID_COLLISION = ("import.id_collision", Conflict,
+        "A session, message or usage id of the import file already exists in this profile; nothing was imported. Rerun with `--remap-ids` to import under new ids.");
+    /// `sessions import` read a file that is not a valid export.
+    IMPORT_INVALID = ("import.invalid", InvalidInput,
+        "The import file is not a valid `prometheus.sessions` version 1 export (or a record in it is malformed); nothing was imported.");
+    /// `sessions import` read a file over the import bounds.
+    IMPORT_TOO_LARGE = ("import.too_large", InvalidInput,
+        "The import file holds more than 500 sessions, 50000 messages or 256 MiB; nothing was imported. Export fewer sessions per file.");
     /// The fork point is not an active message of the session.
     STORE_FORK_TARGET_INVALID = ("store.fork_target_invalid", InvalidInput,
         "`session.fork` names an `at_message_id` that is not an active message of the forked session.");

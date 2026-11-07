@@ -53,6 +53,7 @@ pub mod model;
 pub mod model_context;
 pub mod onboarding;
 pub mod pins;
+pub mod portable;
 pub mod prefill;
 pub mod process_receipts;
 pub mod prompts;
