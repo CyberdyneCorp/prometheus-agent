@@ -78,8 +78,56 @@ pub fn trigger_tokens(
     main: ModelWindow,
     compressor_window: Option<u64>,
 ) -> u64 {
+    trigger_with(config, config.threshold, main, compressor_window)
+}
+
+/// [`trigger_tokens`] for `model` of `provider`: the base threshold is
+/// its `compression.model_thresholds` override when one matches
+/// ([`base_threshold`]), re-resolved on every model switch.
+#[must_use]
+pub fn trigger_tokens_for(
+    config: &CompressionConfig,
+    (provider, model): (&str, &str),
+    main: ModelWindow,
+    compressor_window: Option<u64>,
+) -> u64 {
+    let base = base_threshold(config, provider, model);
+    trigger_with(config, base, main, compressor_window)
+}
+
+/// The base threshold of `model` (spec: context-compression, Per-model
+/// threshold overrides): the `compression.model_thresholds` entry whose
+/// key is the longest substring of the model name, a
+/// `"<provider>:<substring>"` key beating a bare key with the same
+/// substring; else `compression.threshold`. The small-window floor is
+/// applied on top by the caller.
+#[must_use]
+pub fn base_threshold(config: &CompressionConfig, provider: &str, model: &str) -> f64 {
+    config
+        .model_thresholds
+        .iter()
+        .filter_map(|(key, value)| {
+            let (qualified, needle) = match key.split_once(':') {
+                Some((p, needle)) if p == provider => (true, needle),
+                Some(_) => return None,
+                None => (false, key.as_str()),
+            };
+            model
+                .contains(needle)
+                .then_some(((needle.len(), qualified), *value))
+        })
+        .max_by_key(|(rank, _)| *rank)
+        .map_or(config.threshold, |(_, value)| value)
+}
+
+fn trigger_with(
+    config: &CompressionConfig,
+    base: f64,
+    main: ModelWindow,
+    compressor_window: Option<u64>,
+) -> u64 {
     let budget = main.input_budget();
-    let threshold = effective_threshold(config.threshold, main.context_window);
+    let threshold = effective_threshold(base, main.context_window);
     let mut trigger = share(budget, threshold)
         .max(MIN_TRIGGER)
         .min(share(budget, MAX_TRIGGER_SHARE));
@@ -165,6 +213,28 @@ mod tests {
                 "{ctx} {reserved} {threshold} {tokens} {compressor:?}"
             );
         }
+    }
+
+    #[test]
+    fn the_longest_matching_key_wins_and_a_provider_key_beats_a_bare_one() {
+        let config = CompressionConfig {
+            model_thresholds: [
+                ("glm-5".to_owned(), 0.40),
+                ("glm-5-1m".to_owned(), 0.25),
+                ("zai:glm-5".to_owned(), 0.30),
+            ]
+            .into(),
+            ..CompressionConfig::default()
+        };
+        assert!((base_threshold(&config, "other", "glm-5-1m") - 0.25).abs() < f64::EPSILON);
+        assert!((base_threshold(&config, "other", "glm-5") - 0.40).abs() < f64::EPSILON);
+        assert!((base_threshold(&config, "zai", "glm-5") - 0.30).abs() < f64::EPSILON);
+        assert!((base_threshold(&config, "zai", "gpt-5") - 0.50).abs() < f64::EPSILON);
+        // The small-window floor still applies on top.
+        let small = trigger_tokens_for(&config, ("other", "glm-5-1m"), window(200_000, 0), None);
+        assert_eq!(small, 150_000);
+        let large = trigger_tokens_for(&config, ("other", "glm-5-1m"), window(1_000_000, 0), None);
+        assert_eq!(large, 250_000);
     }
 
     #[test]

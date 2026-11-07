@@ -156,7 +156,8 @@ fn session_search() -> ToolDescriptor {
         "session_search",
         "Search this profile's past conversations. Returns matching messages with \
          snippets grouped by session. To read around a hit, pass session_id and \
-         around_message_id (window messages on each side).",
+         around_message_id (window messages on each side). To read a tool result that \
+         compaction pruned (`ref <12 hex>`), pass ref.",
         json!({
             "type": "object",
             "properties": {
@@ -170,7 +171,8 @@ fn session_search() -> ToolDescriptor {
                 "detail": {"type": "string", "enum": ["adaptive", "full"]},
                 "session_id": {"type": "string"},
                 "around_message_id": {"type": "string"},
-                "window": {"type": "integer", "minimum": 0, "maximum": SEARCH_MAX_WINDOW}
+                "window": {"type": "integer", "minimum": 0, "maximum": SEARCH_MAX_WINDOW},
+                "ref": {"type": "string", "pattern": "^[0-9a-f]{12}$", "description": "The ref of a pruned or summarized tool result of this session."}
             },
             "additionalProperties": false
         }),

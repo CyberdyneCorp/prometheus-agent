@@ -932,3 +932,58 @@ async fn a_compaction_boundary_refreshes_the_tool_array() {
     assert_eq!(tool_names(&requests[last]), ["lookup", "fresh"]);
     assert_eq!(rebuilds(&run), ["new_session", "compaction"]);
 }
+
+/// Scenario: Agent needs an old log (Pruned content is retrievable by the
+/// agent).
+#[tokio::test]
+async fn a_pruned_tool_result_is_read_back_by_its_ref() {
+    let profile = Profile::new(SMALL);
+    let s = profile.session(Source::Cli);
+    let log = format!("build log start\n{}\nbuild log end", "x".repeat(40_000));
+    let mut call = NewMessage::new(Role::Assistant, "");
+    call.tool_calls = Some(serde_json::json!([
+        {"id": "c1", "name": "terminal", "arguments": "{\"command\":\"make\"}"}
+    ]));
+    let mut result = NewMessage::new(Role::Tool, log.clone());
+    result.tool_call_id = Some("c1".into());
+    result.tool_name = Some("terminal".into());
+    profile
+        .store
+        .append_messages(s, &[NewMessage::new(Role::User, "build it"), call, result])
+        .unwrap();
+    exchanges(&profile, s, 30, 10);
+    let model = mock_model(&profile, "[[rule]]\ntext = \"ok\"\n", "mock").await;
+    let summarizer = FakeSummarizer::new();
+    let run = agent(
+        &profile,
+        s,
+        model,
+        FakeTools::new(),
+        with_summarizer(&summarizer),
+    );
+    let outcome = run
+        .agent
+        .compress(&profile.scope, &manual::parse("here").unwrap())
+        .await
+        .unwrap();
+    assert_eq!(outcome.status, Status::Compressed);
+    assert!(
+        active(&profile, s)
+            .iter()
+            .all(|m| m.content.as_deref() != Some(log.as_str())),
+        "the log left the active transcript"
+    );
+
+    let reference = pmt_agent::compress::prune::short_ref(log.as_bytes());
+    let search = pmt_agent::tools::SessionSearch::new(profile.store.clone(), s);
+    let found = search.call(serde_json::json!({ "ref": reference })).await;
+    assert_eq!(found.text_content(), log);
+    let missing = search
+        .call(serde_json::json!({ "ref": "000000000000" }))
+        .await;
+    assert!(
+        missing
+            .text_content()
+            .starts_with("no pruned tool result with ref")
+    );
+}

@@ -29,7 +29,7 @@ use super::run::{Ending, Turn};
 use crate::compress::compactor::{Compactor, Outcome, Run, Status};
 use crate::compress::decision::{self, Blocked, Decision, Gate, Measure};
 use crate::compress::manual::Manual;
-use crate::compress::threshold::{ModelWindow, trigger_tokens};
+use crate::compress::threshold::{ModelWindow, trigger_tokens_for};
 use crate::compress::{Trigger, rows_tokens};
 use crate::prompt::frozen::{Frozen, Rebuild};
 
@@ -84,7 +84,12 @@ impl Agent {
             .summarizer
             .as_ref()
             .and_then(|s| s.context_window());
-        trigger_tokens(&config.compression, window(route), compressor)
+        trigger_tokens_for(
+            &config.compression,
+            (&route.provider, &route.model),
+            window(route),
+            compressor,
+        )
     }
 
     fn compactor<'a>(

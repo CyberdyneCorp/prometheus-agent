@@ -3080,3 +3080,9 @@ capabilities = [
 [web-and-media-tools."Image embed budget, per-image cap and replay"]
 "Cap inside a subagent" = ["crates/pmt-agent/tests/vision.rs::a_delegated_child_embeds_one_image_at_most_three_times", "crates/pmt-agent/tests/vision.rs::an_oversized_native_image_is_embedded_as_a_fitting_jpeg"]
 "Resume replays images" = ["crates/pmt-agent/tests/turn/images.rs::a_resumed_session_replays_its_photo_byte_identically"]
+
+[context-compression."Per-model threshold overrides"]
+"Longest key wins" = ["crates/pmt-agent/src/compress/threshold.rs::the_longest_matching_key_wins_and_a_provider_key_beats_a_bare_one"]
+
+[context-compression."Pruned content is retrievable by the agent (upgrade)"]
+"Agent needs an old log" = ["crates/pmt-agent/tests/turn/compression.rs::a_pruned_tool_result_is_read_back_by_its_ref"]

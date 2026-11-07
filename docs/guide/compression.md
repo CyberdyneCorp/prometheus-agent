@@ -16,6 +16,17 @@ tokens; a non-zero `compression.threshold_tokens` and a smaller window of
 the compression model lower it further. Everything is re-derived on every
 model switch.
 
+`compression.model_thresholds` sets the base threshold per model: keys are
+model-name substrings or `"<provider>:<substring>"`, the longest matching
+key wins and a provider-qualified key beats a bare one with the same
+substring; the small-window floor still applies on top:
+
+```toml
+[compression.model_thresholds]
+"glm-5" = 0.40
+"glm-5-1m" = 0.25
+```
+
 With `compression.enabled = true` (the default) the turn checks the context
 at turn start, before each model request and after each tool round. It
 uses the size the provider reported for the latest request plus estimates
@@ -54,7 +65,10 @@ to keep only the last exchanges, or /new to start a new session."
   `[duplicate tool output, same as a later call]` and tool results over 200
   characters become one line such as
   `[pruned tool result] terminal({"command":"make"}) -> 40000 chars, ref 1f2e3d4c5b6a`;
-  the original stays in the session's blob store under that ref.
+  the original stays in the session's blob store under that ref, and the
+  agent reads it back with
+  [`session_search`](../reference/tools.md#session_search) and
+  `ref = "1f2e3d4c5b6a"` (within the normal tool-result size budget).
 
 The summary comes from the auxiliary `compression` route (see
 `[auxiliary.compression]`), within 20% of the summarized tokens (at least
