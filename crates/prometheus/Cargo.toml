@@ -134,6 +134,8 @@ sha2.workspace = true
 
 [dev-dependencies]
 flate2.workspace = true
+# Large test images for the vision embed budget.
+image.workspace = true
 pmt-mcp = { workspace = true, features = ["testkit"] }
 # The reference MCP client of the `mcp serve` conformance tests.
 rmcp = { workspace = true, features = ["client", "transport-async-rw", "transport-streamable-http-client-reqwest"] }

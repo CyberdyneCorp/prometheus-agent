@@ -3575,6 +3575,7 @@ dependencies = [
  "crossterm",
  "expectrl",
  "flate2",
+ "image",
  "jiff",
  "minisign",
  "nix 0.31.3",

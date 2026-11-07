@@ -299,6 +299,7 @@ impl<'a> Turn<'a> {
                 row.metadata = Some(metadata);
             }
         }
+        crate::vision::mark_attached(&setup.session.to_string(), &input.images);
         let message_id = row.id;
         self.user_row = Some(message_id);
         let wire = row.content.clone().unwrap_or_default();

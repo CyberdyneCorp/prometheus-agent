@@ -3078,7 +3078,7 @@ capabilities = [
 "Resume replays recent images" = ["crates/pmt-agent/tests/turn/images.rs::a_resumed_session_replays_its_photo_byte_identically", "crates/pmt-agent/tests/turn/images.rs::older_images_retire_in_batches_and_the_current_message_keeps_its_own"]
 
 [web-and-media-tools."Image embed budget, per-image cap and replay"]
-"Cap inside a subagent" = ["crates/pmt-agent/tests/vision.rs::a_delegated_child_embeds_one_image_at_most_three_times", "crates/pmt-agent/tests/vision.rs::an_oversized_native_image_is_embedded_as_a_fitting_jpeg"]
+"Cap inside a subagent" = ["crates/prometheus/tests/vision_session.rs::a_delegated_child_is_refused_on_its_fourth_load_of_one_image", "crates/prometheus/tests/vision_session.rs::the_main_agent_follows_the_configured_cap_and_embed_target", "crates/pmt-agent/tests/vision.rs::a_delegated_child_embeds_one_image_at_most_three_times", "crates/pmt-agent/tests/vision.rs::an_oversized_native_image_is_embedded_as_a_fitting_jpeg"]
 "Resume replays images" = ["crates/pmt-agent/tests/turn/images.rs::a_resumed_session_replays_its_photo_byte_identically"]
 
 [context-compression."Per-model threshold overrides"]

@@ -51,6 +51,8 @@ pub struct EnvInputs<'a> {
     pub browser: Option<&'a Shared>,
     /// The session's model accepts images (browser screenshots).
     pub image_input: bool,
+    /// The session's `vision_analyze`.
+    pub vision: &'a super::vision::Vision,
     /// Where finished `notify_on_complete` background processes go.
     pub completions: Option<tokio::sync::mpsc::UnboundedSender<Notice>>,
     /// Provider objects of the profile's plugins (web backends by name).
@@ -238,7 +240,7 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         lsp,
         terminal: terminal.clone(),
         web: web(scope, &inputs.providers, &inputs.plugin_call, inputs.egress).map(Arc::new),
-        vision: None,
+        vision: vision(inputs),
         vault: browser.as_ref().map(|browser| vault(inputs, browser)),
         browser: browser.clone(),
     };
@@ -517,6 +519,42 @@ fn terminal(
     })
 }
 
+/// `vision_analyze` of the session: downloads under its URL policy,
+/// returned images kept with the profile's attachments.
+fn vision(inputs: &EnvInputs<'_>) -> Option<Arc<pmt_tools::vision::VisionSession>> {
+    let scope = inputs.scope;
+    inputs.vision.session(
+        || fetcher(scope, inputs.egress, "vision"),
+        scope.dir().join("cache").join("media"),
+    )
+}
+
+/// The profile's outbound network settings.
+fn outbound(scope: &ProfileScope) -> OutboundPolicy {
+    let config = scope.config();
+    OutboundPolicy {
+        force_ipv4: config.network.force_ipv4,
+        extra_ca_file: config.network.extra_ca_file.as_ref().map(Into::into),
+        proxy: config.network.proxy.clone(),
+    }
+}
+
+/// A fetcher under the session's URL policy and egress hosts; `tool`
+/// names the tools in its refusals.
+fn fetcher(
+    scope: &ProfileScope,
+    egress: &crate::egress::SessionEgress,
+    tool: &'static str,
+) -> Option<Arc<pmt_net::fetch::Fetcher>> {
+    let destinations = crate::egress::destinations(&scope.config().security.egress).ok()?;
+    let fetcher = pmt_net::fetch::Fetcher::new(&outbound(scope), destinations).ok()?;
+    Some(Arc::new(fetcher.with_hosts(
+        Arc::clone(&egress.hosts),
+        tool,
+        Some(Arc::clone(&egress.observer)),
+    )))
+}
+
 /// The web tools, when the profile can build an outbound client; a
 /// backend id this build does not implement may name a plugin's provider.
 fn web(
@@ -526,22 +564,8 @@ fn web(
     egress: &crate::egress::SessionEgress,
 ) -> Option<WebSession> {
     let config = scope.config();
-    let policy = OutboundPolicy {
-        force_ipv4: config.network.force_ipv4,
-        extra_ca_file: config.network.extra_ca_file.as_ref().map(Into::into),
-        proxy: config.network.proxy.clone(),
-    };
-    let client = pmt_net::client(&policy).ok()?;
-    let destinations = crate::egress::destinations(&config.security.egress).ok()?;
-    let fetcher = Arc::new(
-        pmt_net::fetch::Fetcher::new(&policy, destinations)
-            .ok()?
-            .with_hosts(
-                Arc::clone(&egress.hosts),
-                "web",
-                Some(Arc::clone(&egress.observer)),
-            ),
-    );
+    let client = pmt_net::client(&outbound(scope)).ok()?;
+    let fetcher = fetcher(scope, egress, "web")?;
     let secrets = scope.secrets().clone();
     let lookup: pmt_tools::web::SecretLookup =
         Arc::new(move |name: &str| secrets.resolve(name).ok());

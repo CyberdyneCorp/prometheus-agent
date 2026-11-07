@@ -35,6 +35,7 @@ pub mod sudo;
 pub mod summarize;
 mod tool_state;
 pub mod tools;
+pub mod vision;
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -552,14 +553,11 @@ impl Factory {
         let attached = SkillSessions::process().attach(&id.to_string(), Arc::clone(&skills));
         let capabilities = self.capabilities_for(id, &skills, child)?;
         let current = SharedScope::new(self.scope_for(child));
-        let environment = self.environment(
-            &session,
-            target,
-            &capabilities,
-            &current,
-            &skills,
-            &place::At::open(&self.options.cwd, clients.as_ref()),
-        )?;
+        let vision = self.vision_plan(id, target, child.is_some()).await;
+        let at = place::At::open(&self.options.cwd, clients.as_ref());
+        let at = place::At { vision, ..at };
+        let environment =
+            self.environment(&session, target, &capabilities, &current, &skills, &at)?;
         let memory = Arc::new(MemorySession::new(self.memory_setup(id)?));
         let summarizer = self.models.summarizer(&model, id);
         let cards = shows_cards(self.options.interactive, &session_surface);
@@ -848,6 +846,7 @@ impl Factory {
             redactor: self.redactor.clone(),
             browser: self.browser(),
             image_input: self.image_input(target),
+            vision: &at.vision,
             completions: clients
                 .and_then(|c| c.completions.clone())
                 .or_else(|| self.notices.clone()),

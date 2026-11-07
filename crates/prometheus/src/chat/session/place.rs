@@ -37,6 +37,8 @@ pub struct At<'a> {
     pub hosts: Option<Arc<pmt_net::egress::HostPolicy>>,
     /// The running session's refusal sink (`None`: a new one).
     pub denials: Option<Denials>,
+    /// The session's `vision_analyze`.
+    pub vision: super::vision::Vision,
 }
 
 impl<'a> At<'a> {
@@ -48,6 +50,7 @@ impl<'a> At<'a> {
             clients,
             hosts: None,
             denials: None,
+            vision: super::vision::Vision::Off,
         }
     }
 }
@@ -223,6 +226,10 @@ impl Live {
         let session = factory.store.session(self.id)?;
         let target = self.model.target();
         let denials = self.place.denials();
+        let vision = pmt_tools::environments::Environments::process()
+            .session(&self.id.to_string())
+            .and_then(|env| env.vision.clone())
+            .map_or(super::vision::Vision::Off, super::vision::Vision::Kept);
         if let Some(old) = self.place.take() {
             if let Some(browser) = &old.browser {
                 browser.close_session(&self.id.to_string()).await;
@@ -237,6 +244,7 @@ impl Live {
             clients: self.clients.as_ref(),
             hosts: Some(Arc::clone(&self.egress.hosts)),
             denials,
+            vision,
         };
         let attached = factory.environment(
             &session,
