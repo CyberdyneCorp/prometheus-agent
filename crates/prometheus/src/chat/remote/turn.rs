@@ -109,6 +109,9 @@ pub(super) async fn run(
                 let Some(event) = event else {
                     return Err(lost(attached.daemon_pid));
                 };
+                if event.event == "automation.state" {
+                    render::automation(&mut attached.automation, &attached.session, &event.data);
+                }
                 if let Some(finished) = on_event(&event, &turn_id, out, &mut asking) {
                     if let Some(report) = &finished.report {
                         attached.record.remote_turn(report);
@@ -177,7 +180,8 @@ fn on_event(
     None
 }
 
-async fn interrupt(attached: &Attached) {
+/// Interrupts whatever turn the session runs (`session.interrupt`).
+pub(super) async fn interrupt(attached: &Attached) {
     let params = SessionRef {
         session_id: attached.session.clone(),
     };

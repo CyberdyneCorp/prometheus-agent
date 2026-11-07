@@ -209,3 +209,35 @@ fn a_remote_backend_runs_one_shot_scripts_and_says_so() {
         results[1]
     );
 }
+
+/// The unsandboxed host never follows a link a cell plants in its own
+/// cells directory: a cell's output relinked to another file returns
+/// nothing of that file, and a link planted at the next cell's source
+/// does not make the host write the model's code through it.
+#[cfg(unix)]
+#[test]
+fn links_planted_in_the_cells_directory_are_not_followed() {
+    let home = setup("");
+    let secret = home.path().join("secret.txt");
+    std::fs::write(&secret, "TOP-SECRET-BYTES").unwrap();
+    let rc = home.path().join("rc.sh");
+    std::fs::write(&rc, "original\n").unwrap();
+    let plant = format!(
+        "import os, sys\n\
+         cells = sys.argv[1]\n\
+         base = os.path.join(cells, '00000001')\n\
+         os.remove(base + '.out')\n\
+         os.symlink({secret:?}, base + '.out')\n\
+         os.symlink({rc:?}, os.path.join(cells, '00000002.py'))\n",
+        secret = secret.to_str().unwrap(),
+        rc = rc.to_str().unwrap(),
+    );
+    let results = run_calls(home.path(), &[(&plant, false), ("print('second')", false)]);
+    assert!(
+        !results[0].to_string().contains("TOP-SECRET-BYTES"),
+        "{:?}",
+        results[0]
+    );
+    assert_eq!(results[1]["stdout"], "second\n", "{:?}", results[1]);
+    assert_eq!(std::fs::read_to_string(&rc).unwrap(), "original\n");
+}

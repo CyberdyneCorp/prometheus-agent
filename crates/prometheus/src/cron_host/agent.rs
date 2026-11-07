@@ -130,12 +130,17 @@ pub(super) async fn credential(
     let store = Arc::new(Store::open(scope).map_err(|e| e.message().to_owned())?);
     let factory =
         factory(scope, launch, store, job, false, None).map_err(|e| e.message().to_owned())?;
-    factory
+    match factory
         .models
         .primary(&flags(job, &scope.config().cron))
         .await
-        .map(drop)
-        .map_err(|e| e.message().to_owned())
+    {
+        Ok(_) => Ok(()),
+        // The credential is configured, only benched: a closed usage
+        // window, which the run itself turns into a hold.
+        Err(err) if pmt_providers::resolve::bench_end(&err).is_some() => Ok(()),
+        Err(err) => Err(err.message().to_owned()),
+    }
 }
 
 /// When the run last showed activity, in ms since it started.
@@ -195,9 +200,17 @@ pub(super) async fn run(
         cost_usd: 0.0,
         reached_model: false,
     };
+    let mut closed = None;
     match Box::pin(session(scope, launch, &store, &request, &mut outcome)).await {
         Ok(end) => outcome.end = end,
-        Err(err) => outcome.end = AgentEnd::Failed(err.message().to_owned()),
+        Err(err) => {
+            // With a fallback chain configured, the job is not held: a
+            // fallback may answer the next run.
+            closed = pmt_providers::resolve::bench_end(&err)
+                .filter(|_| scope.config().fallback.chain.is_empty())
+                .map(jiff::Timestamp::as_millisecond);
+            outcome.end = AgentEnd::Failed(err.message().to_owned());
+        }
     }
     if let Some(id) = outcome.session_id.as_deref().and_then(|id| id.parse().ok())
         && let Ok(totals) = store.usage_totals(UsageScope::Lineage(id))
@@ -210,37 +223,27 @@ pub(super) async fn run(
     outcome.reached_model = matches!(outcome.end, AgentEnd::Completed(_))
         || outcome.input_tokens + outcome.output_tokens > 0;
     if !outcome.reached_model {
-        outcome.end = unreached(outcome.end);
+        outcome.end = unreached(outcome.end, closed);
     }
     outcome
 }
 
 /// A failure before any model response: a network or DNS error is
-/// `Unreachable` (re-run automatically), a closed subscription usage
-/// window `UsageClosed` (the job is held); anything else stays a failure.
-fn unreached(end: AgentEnd) -> AgentEnd {
+/// `Unreachable` (re-run automatically); every credential of the provider
+/// benched until `closed` (Unix ms, no fallback answered) is a closed
+/// usage window, `UsageClosed` (the job is held: no run can reach the
+/// model before then); anything else stays a failure.
+fn unreached(end: AgentEnd, closed: Option<i64>) -> AgentEnd {
     let AgentEnd::Failed(message) = end else {
         return end;
     };
-    if let Some(until) = usage_window(&message) {
+    if let Some(until) = closed {
         return AgentEnd::UsageClosed(until);
     }
     if message.contains(": network error") {
         return AgentEnd::Unreachable(message);
     }
     AgentEnd::Failed(message)
-}
-
-/// The reopening instant of a `provider.usage_window_closed` error
-/// (`... usage window closed until <RFC 3339>`).
-fn usage_window(message: &str) -> Option<i64> {
-    let (_, rest) = message.split_once("usage window closed until ")?;
-    let instant = rest.split_whitespace().next()?;
-    instant
-        .trim_end_matches(['.', ',', ';', ')'])
-        .parse::<jiff::Timestamp>()
-        .ok()
-        .map(jiff::Timestamp::as_millisecond)
 }
 
 async fn session(
@@ -309,30 +312,36 @@ async fn agent(
             reason = watched => {
                 // The turn was told to stop: let it wind down, briefly.
                 let _ = tokio::time::timeout(STOP_GRACE, &mut turn).await;
-                AgentEnd::TimedOut(reason)
+                Ok(AgentEnd::TimedOut(reason))
             }
         }
     };
-    let reason = if matches!(end, AgentEnd::Completed(_)) {
+    let reason = if matches!(end, Ok(AgentEnd::Completed(_))) {
         EndReason::UserExit
     } else {
         EndReason::Error
     };
     live.close(store, reason).await;
-    Ok(end)
+    end
 }
 
-/// How an ended turn maps to a run's end.
-fn turn_end(result: Result<pmt_agent::turn::TurnResult, Error>) -> AgentEnd {
+/// How an ended turn maps to a run's end; a benched-credentials refusal
+/// stays an error so [`run`] can tell a closed usage window.
+fn turn_end(result: Result<pmt_agent::turn::TurnResult, Error>) -> Result<AgentEnd, Error> {
     match result {
-        Ok(result) if result.exit_reason == ExitReason::Completed => {
-            AgentEnd::Completed(result.final_response.unwrap_or_default())
-        }
-        Ok(result) => AgentEnd::Failed(match result.error {
-            Some(err) => format!("{}: {}", result.exit_reason.as_str(), err.message()),
-            None => result.exit_reason.as_str().to_owned(),
-        }),
-        Err(err) => AgentEnd::Failed(err.message().to_owned()),
+        Ok(result) if result.exit_reason == ExitReason::Completed => Ok(AgentEnd::Completed(
+            result.final_response.unwrap_or_default(),
+        )),
+        Ok(result) => match result.error {
+            Some(err) if pmt_providers::resolve::bench_end(&err).is_some() => Err(err),
+            Some(err) => Ok(AgentEnd::Failed(format!(
+                "{}: {}",
+                result.exit_reason.as_str(),
+                err.message()
+            ))),
+            None => Ok(AgentEnd::Failed(result.exit_reason.as_str().to_owned())),
+        },
+        Err(err) => Err(err),
     }
 }
 
@@ -365,19 +374,21 @@ mod tests {
     #[test]
     fn failures_before_the_model_are_classified() {
         assert_eq!(
-            unreached(AgentEnd::Failed(
-                "provider_error: openai: network error: dns error".into()
-            )),
+            unreached(
+                AgentEnd::Failed("provider_error: openai: network error: dns error".into()),
+                None
+            ),
             AgentEnd::Unreachable("provider_error: openai: network error: dns error".into())
         );
         assert_eq!(
-            unreached(AgentEnd::Failed(
-                "anthropic: usage window closed until 2026-11-04T13:00:00Z".into()
-            )),
+            unreached(
+                AgentEnd::Failed("every credential of 'x' is benched until ...".into()),
+                Some(1_793_797_200_000)
+            ),
             AgentEnd::UsageClosed(1_793_797_200_000)
         );
         assert_eq!(
-            unreached(AgentEnd::Failed("anthropic: rate_limit error".into())),
+            unreached(AgentEnd::Failed("anthropic: rate_limit error".into()), None),
             AgentEnd::Failed("anthropic: rate_limit error".into())
         );
     }

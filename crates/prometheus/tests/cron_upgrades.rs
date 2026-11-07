@@ -627,3 +627,106 @@ fn failed_ended(run: &Value) -> i64 {
         .unwrap()
         .as_millisecond()
 }
+
+/// Scenario: Tool workdir outside the session's workspace refused.
+#[test]
+fn a_tool_workdir_outside_the_sessions_workspace_is_refused() {
+    let home = cron_home("[[rule]]\nrepeat = true\ntext = \"ok\"\n");
+    let workspace = home.path().join("acme");
+    std::fs::create_dir_all(workspace.join("docs")).unwrap();
+    let scope = scope(home.path());
+    let store = std::sync::Arc::new(pmt_store::Store::open(&scope).unwrap());
+    let mut new = pmt_store::NewSession::new(pmt_store::Source::Cli);
+    new.cwd = Some(workspace.to_string_lossy().into_owned());
+    let session = store.create_session(&new).unwrap().id;
+    let port = prometheus::cron_host::tool::port(
+        &scope,
+        &pmt_core::env::LaunchEnv::default(),
+        &store,
+        true,
+    );
+    let create = |workdir: &Path, token: Option<&str>| {
+        let mut args = json!({"action": "create", "schedule": "every 1d", "prompt": "x",
+            "workdir": workdir.to_string_lossy()});
+        if let Some(token) = token {
+            args["confirm_token"] = json!(token);
+        }
+        tool_call(&port, session, args)
+    };
+    let outside = home.path().canonicalize().unwrap();
+    for token in [None, Some("forged")] {
+        let reply = create(&outside, token);
+        let error = reply["error"].as_str().unwrap_or_default();
+        assert!(
+            error.contains(&format!(
+                "workdir {} is outside this session's workspace",
+                outside.display()
+            )),
+            "{reply}"
+        );
+    }
+    assert!(store.cron_jobs().unwrap().is_empty());
+    let inside = create(&workspace.join("docs"), None);
+    assert_eq!(inside["status"], "needs_confirmation", "{inside}");
+}
+
+/// Scenario: Sub-hourly job does not alert every tick, with the provider's
+/// own signal: every credential of the profile's only provider (no
+/// fallback chain) is benched for 5 hours, so the run fails before any
+/// request, the job is held until the bench ends, and a later tick runs
+/// nothing.
+#[test]
+fn a_benched_provider_holds_a_sub_hourly_job() {
+    let home = common::temp_home();
+    ok(&run(home.path(), &["config", "path"]));
+    std::fs::write(
+        home.path().join("profiles/default/config.toml"),
+        "[model]\nprovider = \"openrouter\"\ndefault = \"x/y\"\n\n\
+         [budgets]\nallow_unpriced = true\n\n[cron]\ntimezone = \"UTC\"\n",
+    )
+    .unwrap();
+    ok(&common::run_with_stdin(
+        home.path(),
+        &["auth", "add", "openrouter"],
+        "sk-or-v1-0123456789abcdef",
+    ));
+    let id = add(home.path(), &["every 15m", "--prompt", "brief"]);
+    let store = pmt_store::Store::open(&scope(home.path())).unwrap();
+    let now = jiff::Timestamp::now();
+    let until = jiff::Timestamp::from_second(now.as_second() + 5 * 3600).unwrap();
+    store
+        .bench_credential(
+            "openrouter",
+            "secret:OPENROUTER_API_KEY",
+            Some(until),
+            Some("rate_limit"),
+        )
+        .unwrap();
+    let due = |store: &pmt_store::Store| {
+        store
+            .cron_modify_job(&id, |row| {
+                row.next_run_at = Some(jiff::Timestamp::now().as_millisecond() - 1_000);
+                Ok(())
+            })
+            .unwrap();
+    };
+    due(&store);
+    ok(&run(home.path(), &["cron", "tick"]));
+    let runs = json(home.path(), &["cron", "runs", &id])["runs"].clone();
+    assert_eq!(runs.as_array().unwrap().len(), 1, "{runs}");
+    assert_eq!(runs[0]["status"], "failed", "{runs}");
+    assert!(
+        runs[0]["error"]
+            .as_str()
+            .is_some_and(|e| e.starts_with("usage window closed until")),
+        "{runs}"
+    );
+    let row = store.cron_job(&id).unwrap().unwrap();
+    assert_eq!(row.quota_hold_until, Some(until.as_millisecond()));
+    // The single held notice goes to messaging targets (a `local` job
+    // records it only); the scripted scheduler test counts it.
+    due(&store);
+    ok(&run(home.path(), &["cron", "tick"]));
+    let runs = json(home.path(), &["cron", "runs", &id])["runs"].clone();
+    assert_eq!(runs.as_array().unwrap().len(), 1, "held: {runs}");
+}

@@ -533,7 +533,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 - [ ] 58.1 Implement streaming JSONL output (ends with a result record), the planning-only turn (writes outside plans refused) and exit-with-delete and profile archive slash forms; verify with CLI tests (spec: cli)
 - [ ] 58.2 Implement theme commands with branding keys, setup wizard modes (quick setup asks only unset values, adapter fields from the schema) and the Windows console behaviour (code page restored); verify with snapshot tests (spec: cli)
-- [ ] 58.3 Implement the safe command console (shell metacharacters refused), webhook subscriptions (secret printed once) and background sessions with results delivered back; verify with CLI tests (spec: cli)
+- [ ] 58.3 Implement the safe command console (shell metacharacters refused) and webhook subscriptions (secret printed once); verify with CLI tests. Background sessions (`/background`, alias `/bg`) are owned by subagent-delegation › User-launched background sessions and already implemented by task 40.1: do not build a second one (spec: cli)
 
 ## 59. M2 OpenAI-compatible API server
 

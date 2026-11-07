@@ -8,6 +8,7 @@
 //! never takes a model: `pinned` only freezes or releases the profile's
 //! current main model.
 
+use std::path::Path;
 use std::sync::Arc;
 
 use jiff::Timestamp;
@@ -218,7 +219,7 @@ impl ToolPort {
             "list" => Ok(
                 json!({"jobs": self.store.cron_jobs()?.into_iter().filter_map(|r| Job::from_row(r).ok()).map(|j| summary(&j)).collect::<Vec<_>>()}),
             ),
-            "update" => self.update(&job()?, arguments, now),
+            "update" => self.update(session, &job()?, arguments, now),
             "pause" => Ok(summary(&ops::pause(
                 &self.store,
                 &job()?,
@@ -248,6 +249,38 @@ impl ToolPort {
         })
     }
 
+    /// A workdir the model sets must lie inside the calling session's
+    /// workspace: the run's sandbox may write there, and the confirm
+    /// token is the model's own to repeat, so it is no human approval. A
+    /// wider directory is a person's call (`prometheus cron add/edit
+    /// --workdir`). An empty one (clears it) and one that is not an
+    /// existing absolute directory are left to the shared validation.
+    fn check_workdir(&self, session: SessionId, workdir: Option<&str>) -> Result<(), Error> {
+        let Some(target) = workdir
+            .map(Path::new)
+            .filter(|dir| dir.is_absolute())
+            .and_then(|dir| dir.canonicalize().ok())
+        else {
+            return Ok(());
+        };
+        let workspace = self
+            .store
+            .session(session)?
+            .cwd
+            .and_then(|cwd| Path::new(&cwd).canonicalize().ok());
+        if workspace.is_some_and(|w| target.starts_with(w)) {
+            return Ok(());
+        }
+        Err(Error::new(
+            &codes::CRON_INVALID_WORKDIR,
+            format!(
+                "workdir {} is outside this session's workspace; a person can set it with \
+                 `prometheus cron add|edit --workdir`",
+                target.display()
+            ),
+        ))
+    }
+
     fn origin(&self, session: SessionId) -> Option<JobOrigin> {
         match self.store.session(session).ok()?.origin {
             Origin::Gateway {
@@ -272,7 +305,9 @@ impl ToolPort {
     ) -> Result<Value, Error> {
         let scripts = scripts_dir(&self.scope);
         let profile = self.profile(&scripts)?;
-        let mut spec = fields(arguments, &self.scope)?.new_spec(now, &profile.zone)?;
+        let fields = fields(arguments, &self.scope)?;
+        self.check_workdir(session, fields.workdir.as_deref())?;
+        let mut spec = fields.new_spec(now, &profile.zone)?;
         let origin = self.origin(session);
         if spec.deliver.is_empty() {
             spec.deliver = ops::default_deliver(origin.as_ref());
@@ -304,10 +339,17 @@ impl ToolPort {
         }
     }
 
-    fn update(&self, key: &str, arguments: &Value, now: Timestamp) -> Result<Value, Error> {
+    fn update(
+        &self,
+        session: SessionId,
+        key: &str,
+        arguments: &Value,
+        now: Timestamp,
+    ) -> Result<Value, Error> {
         let scripts = scripts_dir(&self.scope);
         let profile = self.profile(&scripts)?;
         let fields = fields(arguments, &self.scope)?;
+        self.check_workdir(session, fields.workdir.as_deref())?;
         let name = text(arguments, "name");
         if fields.reschedules() {
             let current = ops::find(&self.store, key)?;

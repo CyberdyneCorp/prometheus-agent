@@ -1462,6 +1462,9 @@ capabilities = [
 [cli."Shell completions (upgrade)"]
 "Config key completion" = ["crates/prometheus/tests/completions_cli.rs::zsh_completes_a_config_key_on_tab"]
 
+[cli."Background sessions"]
+"Result delivered back" = { tests = ["crates/prometheus/tests/delegation_gateway.rs::a_background_result_is_posted_to_the_chat_and_not_into_its_session", "crates/pmt-gateway/tests/messaging/chats.rs::a_background_task_reports_back_while_the_chat_keeps_talking"], note = "the requirement defers to subagent-delegation > User-launched background sessions; `/bg` and `/background` are one registry entry (slash/builtins.rs)" }
+
 [configuration-and-profiles."Live reload with apply classes"]
 "Prompt-affecting key deferred" = ["crates/prometheus/tests/daemon_config.rs::a_next_session_key_leaves_the_live_session_and_reaches_new_ones", "crates/pmt-config/src/reload.rs::changed_keys_carry_their_apply_class"]
 "Live key applies to a running session" = ["crates/prometheus/tests/daemon_config.rs::a_live_key_changed_mid_session_applies_on_the_next_turn", "crates/pmt-config/src/layers.rs::a_session_takes_the_reloaded_live_keys_and_keeps_the_rest"]
@@ -2843,6 +2846,7 @@ capabilities = [
 [scheduled-jobs."Per-job working directory"]
 "Project job loads its context files" = ["crates/prometheus/tests/cron_upgrades.rs::a_project_job_loads_its_context_files_and_works_there"]
 "Relative workdir refused" = ["crates/prometheus/tests/cron_upgrades.rs::a_relative_workdir_is_refused"]
+"Tool workdir outside the session's workspace refused" = ["crates/prometheus/tests/cron_upgrades.rs::a_tool_workdir_outside_the_sessions_workspace_is_refused"]
 
 [scheduled-jobs."Model pinning and cron fleet default"]
 "Unpinned jobs follow the cron default" = ["crates/prometheus/tests/cron_upgrades.rs::unpinned_jobs_follow_the_cron_default_and_pins_freeze"]
@@ -2859,7 +2863,7 @@ capabilities = [
 "Laptop wakes before Wi-Fi" = ["crates/pmt-cron/tests/failures.rs::an_unreachable_model_is_re_run_without_a_failure_notice", "crates/prometheus/tests/cron_upgrades.rs::an_unreachable_provider_schedules_a_re_run", "crates/prometheus/src/cron_host/agent.rs::failures_before_the_model_are_classified"]
 
 [scheduled-jobs."Hold through a closed provider usage window"]
-"Sub-hourly job does not alert every tick" = { tests = ["crates/pmt-cron/tests/failures.rs::a_closed_usage_window_holds_the_job_with_one_notice", "crates/prometheus/src/cron_host/agent.rs::failures_before_the_model_are_classified"], note = "the hold is driven by a provider error `... usage window closed until <RFC 3339>`; subscription providers raise it (model-providers, group 45)" }
+"Sub-hourly job does not alert every tick" = { tests = ["crates/pmt-cron/tests/failures.rs::a_closed_usage_window_holds_the_job_with_one_notice", "crates/prometheus/tests/cron_upgrades.rs::a_benched_provider_holds_a_sub_hourly_job"], note = "the provider's signal is `auth.credentials_benched` (every credential benched until a reset instant, carried as the error's typed `BenchEnd` source) raised before any request with no fallback chain; the scripted test drives the 5-hour schedule" }
 
 [scheduled-jobs."Failure incidents with alert-once and acknowledge"]
 "Same error alerts once" = ["crates/pmt-cron/tests/failures.rs::the_same_error_alerts_once"]
@@ -2969,7 +2973,7 @@ capabilities = [
 
 [session-automation."Loop stop conditions"]
 "Run cap" = { tests = ["crates/prometheus/tests/automation_line.rs::loops_refuse_short_intervals_stop_at_their_cap_and_pause_on_ctrl_c", "crates/pmt-automation/src/cadence.rs::the_run_cap_and_loop_complete_remove_the_loop"], note = "the line test runs `--times 3` at a 1 s interval (`loops.min_interval_secs = 1`) instead of 2 m" }
-"Interrupt pauses" = ["crates/prometheus/tests/automation_line.rs::loops_refuse_short_intervals_stop_at_their_cap_and_pause_on_ctrl_c"]
+"Interrupt pauses" = ["crates/prometheus/tests/automation_line.rs::loops_refuse_short_intervals_stop_at_their_cap_and_pause_on_ctrl_c", "crates/prometheus/tests/automation_daemon.rs::the_attached_line_interface_shows_the_loop_and_ctrl_c_pauses_it"]
 
 [session-automation."Session heartbeat"]
 "Missed ticks coalesce" = ["crates/pmt-automation/src/cadence.rs::missed_heartbeats_coalesce_into_one_fire_and_re_anchor", "crates/pmt-automation/src/arbiter.rs::a_stored_heartbeat_fires_once_after_a_restart_and_re_anchors"]
@@ -2980,7 +2984,7 @@ capabilities = [
 "Restored after restart in its profile" = ["crates/prometheus/tests/automation_daemon.rs::a_chat_heartbeat_is_restored_after_a_restart_in_its_profile"]
 
 [session-automation."Automation status on every surface"]
-"Desktop closed, loop keeps firing" = { tests = ["crates/prometheus/tests/automation_daemon.rs::a_client_sessions_loop_keeps_firing_with_no_client_attached", "crates/pmt-tui/src/status.rs::automation_rows_show_after_the_other_items"], note = "the desktop app is M3 (desktop-app); the daemon side is proven with a client session whose client leaves: its `/loop` (1 s instead of 5 m) keeps firing and the replies are stored; `automation.state` reaches clients and the TUI shows the row" }
+"Desktop closed, loop keeps firing" = { tests = ["crates/prometheus/tests/automation_daemon.rs::a_client_sessions_loop_keeps_firing_with_no_client_attached", "crates/prometheus/tests/automation_daemon.rs::the_attached_line_interface_shows_the_loop_and_ctrl_c_pauses_it", "crates/pmt-tui/src/status.rs::automation_rows_show_after_the_other_items"], note = "the desktop app is M3 (desktop-app); the daemon side is proven with a client session whose client leaves: its `/loop` (1 s instead of 5 m) keeps firing and the replies are stored; `automation.state` reaches clients and the TUI shows the row" }
 
 [session-automation."Automation configuration"]
 "Inverted self-paced bounds" = ["crates/prometheus/tests/automation_config.rs::an_inverted_self_paced_range_fails_validation_naming_both_keys", "crates/pmt-config/src/automation_check.rs::an_inverted_self_paced_range_names_both_keys"]

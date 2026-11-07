@@ -819,7 +819,13 @@ impl Factory {
         let clients = at.clients;
         let denials = at.denials.clone().unwrap_or_default();
         let cron = self.options.cron.as_ref();
-        let capabilities = &place::with_worktree_git(capabilities, at.cwd)
+        let protected = pmt_sandbox::credential_stores(&pmt_sandbox::Paths {
+            user_home: self.launch.user_home().cloned().unwrap_or_default(),
+            prometheus_home: self.scope.home().to_path_buf(),
+            workspace: at.cwd.to_path_buf(),
+            scratch: Vec::new(),
+        });
+        let capabilities = &place::with_worktree_git(capabilities, at.cwd, &protected)
             .union(&cron.map(cron::CronRun::sandbox_grants).unwrap_or_default());
         let processes =
             processes::Wiring::of(self.scope.config(), &self.store, id, &session.origin);

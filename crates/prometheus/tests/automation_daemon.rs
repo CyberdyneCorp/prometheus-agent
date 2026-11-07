@@ -307,3 +307,48 @@ fn a_client_turn_on_a_chats_goal_session_continues_in_the_chat() {
     assert_eq!(automated(home, "default", "goal"), 2);
     daemon.stop(home);
 }
+
+/// Scenarios: Automation status on every surface; Interrupt pauses, on
+/// the line interface attached to the daemon: the loop's live row joins
+/// the status line, and Ctrl+C while the daemon runs a wakeup turn
+/// interrupts it (the loop pauses) instead of arming the client's exit.
+#[cfg(unix)]
+#[test]
+fn the_attached_line_interface_shows_the_loop_and_ctrl_c_pauses_it() {
+    use expectrl::Expect as _;
+
+    let home = common::mock_home();
+    let script = home.path().join("slow.toml");
+    std::fs::write(
+        &script,
+        "[[rule]]\nuser = \"slow watch\"\nrepeat = true\nlatency_ms = 20000\ntext = \"watched\"\n\n\
+         [[rule]]\nrepeat = true\ntext = \"pending\"\n",
+    )
+    .unwrap();
+    common::append_config(
+        home.path(),
+        &format!(
+            "\n[providers.mock]\nscript = {:?}\n\n[loops]\nmin_interval_secs = 1\n",
+            script.display().to_string()
+        ),
+    );
+    let _daemon = daemon::start(home.path(), &[]);
+    let mut p = common::pty::spawn(home.path(), &["--set", "ui.status_bar=true"]);
+    p.expect("attached to the gateway daemon").unwrap();
+    common::pty::prompt(&mut p);
+    p.send_line("/loop 1s slow watch").unwrap();
+    p.expect("loop · every 1s").unwrap();
+    common::pty::wait_for_turns(&mut p, home.path(), 1);
+    // Inside the 20 s wakeup turn; the terminal is read meanwhile.
+    for _ in 0..10 {
+        let _ = p.check(expectrl::Regex("(?s).+"));
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    p.send("\x03").unwrap();
+    p.expect("Loop paused: the wakeup turn was interrupted")
+        .unwrap();
+    common::pty::prompt(&mut p);
+    p.send_line("/loop status").unwrap();
+    p.expect("paused").unwrap();
+    common::pty::exit(p);
+}

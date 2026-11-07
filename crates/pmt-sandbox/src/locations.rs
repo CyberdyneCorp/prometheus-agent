@@ -70,7 +70,7 @@ const SYSTEM_STORES: &[&str] = &[];
 /// Every store the default profile denies for `paths`: the lists above plus
 /// `PROMETHEUS_HOME` (the session's scratch and spill directories inside it
 /// stay reachable through their own grants).
-pub(crate) fn credential_stores(paths: &Paths) -> Vec<PathBuf> {
+pub fn credential_stores(paths: &Paths) -> Vec<PathBuf> {
     let home = HOME_STORES
         .iter()
         .chain(HOME_OS_STORES)

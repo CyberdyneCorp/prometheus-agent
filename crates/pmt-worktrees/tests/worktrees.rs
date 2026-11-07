@@ -493,3 +493,33 @@ fn a_tree_whose_directory_is_gone_is_forgotten_with_its_branch_kept() {
         &["rev-parse", "--verify", "refs/heads/prometheus/gone"],
     );
 }
+
+/// A checkout's `.git` file is writable by whatever runs in it, so it
+/// never widens a sandbox on its own: only a verified Prometheus tree
+/// whose `.git` names its own admin directory has shared git directories.
+#[test]
+fn only_a_verified_prometheus_tree_has_shared_git_directories() {
+    let fx = Fixture::new();
+    let real = create::create(&fx.work, &named("real")).unwrap().tree;
+    let other = create::create(&fx.work, &named("other")).unwrap().tree;
+    let dirs = tree::shared_git_dirs(&real.path).unwrap();
+    assert_eq!(dirs.common, fx.work.join(".git").canonicalize().unwrap());
+    assert!(dirs.writes.contains(&real.admin.canonicalize().unwrap()));
+
+    let gitdir = |dir: &Path| format!("gitdir: {}\n", dir.display());
+    // A hand-made checkout under .worktrees naming some other directory.
+    let elsewhere = fx.work.parent().unwrap().join("elsewhere/worktrees/x");
+    std::fs::create_dir_all(&elsewhere).unwrap();
+    let forged = fx.work.join(".worktrees/forged");
+    std::fs::create_dir_all(&forged).unwrap();
+    std::fs::write(forged.join(".git"), gitdir(&elsewhere)).unwrap();
+    assert_eq!(tree::shared_git_dirs(&forged), None);
+    // A hand-made checkout naming a genuine tree's admin directory.
+    std::fs::write(forged.join(".git"), gitdir(&other.admin)).unwrap();
+    assert_eq!(tree::shared_git_dirs(&forged), None);
+    // A genuine tree whose `.git` was rewritten to another tree's admin.
+    std::fs::write(real.path.join(".git"), gitdir(&other.admin)).unwrap();
+    assert_eq!(tree::shared_git_dirs(&real.path), None);
+    // The main checkout has none.
+    assert_eq!(tree::shared_git_dirs(&fx.work), None);
+}

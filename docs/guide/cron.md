@@ -215,7 +215,10 @@ posts the outcome in the chat when the run ends.
   run's terminal, file and code tools work there, the sandbox may write
   there, and its `AGENTS.md` / `CLAUDE.md` / `.cursorrules` are loaded.
   Without it a run is detached and loads no project context.
-  `cron doctor` reports a workdir that disappeared.
+  `cron doctor` reports a workdir that disappeared. Through the `cronjob`
+  tool the model may only pick a workdir inside its own session's
+  workspace (its confirmation token is no human approval); anything wider
+  is refused (`cron.invalid_workdir`) and needs `cron add|edit --workdir`.
 - The model is the job's pin (`--model m [--provider p]`, or `--pin` to
   freeze the profile's current main model; `--unpin` releases it), else
   `cron.model` / `cron.model_provider`, else the main model at fire time.
@@ -241,10 +244,13 @@ posts the outcome in the chat when the run ends.
 - A run that never reached the model because of a network or DNS error is
   re-run after 5, 15 and 30 minutes (`cron.retry_unreachable`), without a
   notice, as long as the re-run comes before the next occurrence.
-- A provider reporting its subscription usage window closed until `t`
-  holds the job: one notice, nothing fires before `t`, then the next
-  occurrence after it (a cron-kind job whose window reopens at least half
-  a period early re-runs once at `t`).
+- When every credential of the run's provider is benched until `t` (a
+  rate-limit or billing reset, `auth.credentials_benched` before any
+  request) and no fallback chain is configured, the job is held: one
+  notice (`usage window closed until t`), nothing fires before `t`, then
+  the next occurrence after it (a cron-kind job whose window reopens at
+  least half a period early re-runs once at `t`). Preflight lets a merely
+  benched credential through so the hold applies.
 
 ## Gates, monitors, chains and the notepad
 
