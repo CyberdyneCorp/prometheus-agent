@@ -1,0 +1,16 @@
+# First-party terminal backend: Daytona sandboxes (spec: execution-environments,
+# First-party backend plugins). Select it with `terminal.backend = "daytona"`
+# after `prometheus secrets set DAYTONA_API_KEY` and
+# `prometheus plugins enable daytona`.
+manifest_version = 1
+id = "daytona"
+version = "1.0.0"
+kind = "wasm"
+description = "Runs terminal commands in a Daytona cloud sandbox, one per session."
+license = "MIT"
+requires_prometheus = ">=0.1"
+worlds = ["terminal-backend@1.1"]
+
+[capabilities]
+network = ["app.daytona.io"]
+secrets = ["DAYTONA_API_KEY"]

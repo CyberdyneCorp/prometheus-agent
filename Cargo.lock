@@ -3193,6 +3193,7 @@ name = "pmt-plugins"
 version = "0.1.0"
 dependencies = [
  "base64 0.23.1",
+ "flate2",
  "jiff",
  "minisign",
  "minisign-verify",
