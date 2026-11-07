@@ -9018,6 +9018,7 @@ Usage: prometheus sessions [OPTIONS] <COMMAND>
 
 Commands:
   browse     Pick a session interactively (status tags, search) and resume it
+  resume     Resume a session (id, id prefix or title) in a chat; a turn the process stopped during is resumed, closed or offered by `agent.resume_on_crash`
   list       List sessions, most recently active first
   show       Show a session (id, id prefix or title)
   search     Full-text search over the profile's messages
@@ -9084,6 +9085,49 @@ Options:
 
       --all
           Also hidden, archived and integration (oneshot, tool) sessions
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions resume`
+
+```text
+Resume a session (id, id prefix or title) in a chat; a turn the process stopped during is resumed, closed or offered by `agent.resume_on_crash`
+
+Usage: prometheus sessions resume [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session id, id prefix or title
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
@@ -9904,6 +9948,7 @@ Usage: prometheus sessions help [COMMAND]
 
 Commands:
   browse     Pick a session interactively (status tags, search) and resume it
+  resume     Resume a session (id, id prefix or title) in a chat; a turn the process stopped during is resumed, closed or offered by `agent.resume_on_crash`
   list       List sessions, most recently active first
   show       Show a session (id, id prefix or title)
   search     Full-text search over the profile's messages
@@ -9929,6 +9974,14 @@ Commands:
 Pick a session interactively (status tags, search) and resume it
 
 Usage: prometheus sessions help browse
+```
+
+## `prometheus sessions help resume`
+
+```text
+Resume a session (id, id prefix or title) in a chat; a turn the process stopped during is resumed, closed or offered by `agent.resume_on_crash`
+
+Usage: prometheus sessions help resume
 ```
 
 ## `prometheus sessions help list`
@@ -20213,6 +20266,7 @@ Usage: prometheus help sessions [COMMAND]
 
 Commands:
   browse     Pick a session interactively (status tags, search) and resume it
+  resume     Resume a session (id, id prefix or title) in a chat; a turn the process stopped during is resumed, closed or offered by `agent.resume_on_crash`
   list       List sessions, most recently active first
   show       Show a session (id, id prefix or title)
   search     Full-text search over the profile's messages
@@ -20237,6 +20291,14 @@ Commands:
 Pick a session interactively (status tags, search) and resume it
 
 Usage: prometheus help sessions browse
+```
+
+## `prometheus help sessions resume`
+
+```text
+Resume a session (id, id prefix or title) in a chat; a turn the process stopped during is resumed, closed or offered by `agent.resume_on_crash`
+
+Usage: prometheus help sessions resume
 ```
 
 ## `prometheus help sessions list`

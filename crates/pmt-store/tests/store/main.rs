@@ -12,6 +12,7 @@ mod fork;
 mod gateway;
 mod gateway_chats;
 mod integrity;
+mod journal;
 mod lifecycle;
 mod mcp_spend;
 mod open;

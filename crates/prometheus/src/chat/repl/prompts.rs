@@ -123,6 +123,8 @@ pub(super) enum Pending {
         /// The command line.
         line: String,
     },
+    /// A turn a crash left unfinished, waiting for `y` to resume it.
+    Resume(pmt_agent::turn::Unfinished),
 }
 
 impl Pending {
@@ -137,6 +139,7 @@ impl Pending {
             Self::Install(_) => "install? [Y/n] › ".to_owned(),
             Self::Secret(_) => "secret › ".to_owned(),
             Self::Confirm { .. } => "once / always / cancel › ".to_owned(),
+            Self::Resume(_) => "resume the interrupted turn? [y/N] › ".to_owned(),
         }
     }
 
@@ -151,7 +154,8 @@ impl Pending {
             Self::Secret(reply) => {
                 let _ = reply.send(None);
             }
-            Self::Confirm { .. } => {}
+            // Left open: the next message closes the crashed turn.
+            Self::Confirm { .. } | Self::Resume(_) => {}
         }
     }
 }

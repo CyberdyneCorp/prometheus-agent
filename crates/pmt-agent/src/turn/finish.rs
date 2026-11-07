@@ -34,6 +34,13 @@ impl Turn<'_> {
         }
         if frozen.is_some() {
             self.close_failed(&ending)?;
+            self.journal(
+                &pmt_store::JournalRecord::new(
+                    self.id.as_str(),
+                    pmt_store::JournalKind::TurnFinished,
+                )
+                .with_data(ending.reason.as_str()),
+            )?;
         }
         if self.options.interrupt.is_hard() {
             self.agent.steers.discard();
@@ -127,7 +134,7 @@ impl Turn<'_> {
     /// message never merges into the failed request (not for an overflow,
     /// which compaction handles). Once written, the last row is an
     /// assistant row, so a second call writes nothing.
-    fn close_failed(&mut self, ending: &Ending) -> Result<(), Error> {
+    pub(super) fn close_failed(&mut self, ending: &Ending) -> Result<(), Error> {
         let open = matches!(self.last_role, Some(Role::User | Role::Tool));
         if ending.reason == ExitReason::Completed
             || ending.reason == ExitReason::ContextExhausted

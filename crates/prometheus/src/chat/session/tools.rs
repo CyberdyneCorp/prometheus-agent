@@ -385,6 +385,23 @@ impl SwappableTools {
     fn tools(&self) -> Arc<SessionTools> {
         Arc::clone(&self.current.read().unwrap_or_else(PoisonError::into_inner))
     }
+
+    /// Puts a pending toolset announcement before the batch's first result.
+    fn with_announcement(&self, mut batch: ToolBatch) -> ToolBatch {
+        if let Some(first) = batch.outcomes.first_mut()
+            && let Some(note) = self
+                .announcement
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .take()
+        {
+            first
+                .result
+                .content
+                .insert(0, pmt_tools::result::Content::Text { text: note });
+        }
+        batch
+    }
 }
 
 impl ToolPort for SwappableTools {
@@ -411,21 +428,27 @@ impl ToolPort for SwappableTools {
     ) -> BoxFuture<'a, ToolBatch> {
         let tools = self.tools();
         Box::pin(async move {
-            let mut batch = tools.run(calls, turn_id, cancel).await;
-            if let Some(first) = batch.outcomes.first_mut()
-                && let Some(note) = self
-                    .announcement
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .take()
-            {
-                first
-                    .result
-                    .content
-                    .insert(0, pmt_tools::result::Content::Text { text: note });
-            }
-            batch
+            let batch = tools.run(calls, turn_id, cancel).await;
+            self.with_announcement(batch)
         })
+    }
+
+    fn run_journaled<'a>(
+        &'a self,
+        calls: &'a [RequestedCall],
+        turn_id: &'a str,
+        cancel: &'a CancelToken,
+        journal: Arc<dyn pmt_agent::turn::CallJournal>,
+    ) -> BoxFuture<'a, ToolBatch> {
+        let tools = self.tools();
+        Box::pin(async move {
+            let batch = tools.run_journaled(calls, turn_id, cancel, journal).await;
+            self.with_announcement(batch)
+        })
+    }
+
+    fn declared(&self, name: &str) -> Option<pmt_agent::turn::Declared> {
+        self.tools().declared(name)
     }
 
     fn settle(&self) -> BoxFuture<'_, Option<String>> {

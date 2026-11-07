@@ -202,6 +202,12 @@ pub trait DispatchObserver: Send + Sync {
     fn tool_call(&self, call_id: &str, tool: &str, arguments: &str);
     /// The final result (after hooks and budgets).
     fn tool_result(&self, call_id: &str, tool: &str, result: &ToolResult, duration_ms: u64);
+    /// One call of a planned batch finished executing, before the rest of
+    /// the batch and the turn-level budget (the turn journal records it at
+    /// once, so a crash later in the batch keeps it).
+    fn tool_executed(&self, call_id: &str, result: &ToolResult) {
+        let _ = (call_id, result);
+    }
 }
 
 /// Records nothing.

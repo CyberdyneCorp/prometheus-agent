@@ -39,6 +39,35 @@ pub struct ToolBatch {
     pub plan: Option<BatchPlanned>,
 }
 
+/// Hears each call of a running batch start and finish: the turn journal
+/// commits `tool_started` before the call runs and `tool_finished` as soon
+/// as it is done (spec: agent-turn-loop, Deterministic turn journal).
+pub trait CallJournal: Send + Sync {
+    /// `call_id` is about to run.
+    fn started(&self, call_id: &str);
+    /// `call_id` finished with `result`.
+    fn finished(&self, call_id: &str, result: &ToolResult);
+}
+
+/// A tool's declared effect (`none`, `read`, `write`...) and idempotence,
+/// as the turn journal records them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Declared {
+    /// The descriptor's `effect`.
+    pub effect: String,
+    /// The descriptor's `idempotent`.
+    pub idempotent: bool,
+}
+
+impl Declared {
+    /// Whether running the call again is safe (`effect = "none"` or
+    /// `idempotent = true`).
+    #[must_use]
+    pub fn rerunnable(&self) -> bool {
+        self.idempotent || self.effect == "none"
+    }
+}
+
 /// The tools as the turn loop runs them.
 pub trait ToolPort: Send + Sync {
     /// The session's tool schemas in request order.
@@ -60,6 +89,36 @@ pub trait ToolPort: Send + Sync {
         cancel: &'a CancelToken,
     ) -> BoxFuture<'a, ToolBatch>;
 
+    /// [`ToolPort::run`] telling `journal` when each call starts and
+    /// finishes. The default reports every call started before the batch
+    /// and finished after it; a port that runs calls one by one should
+    /// report each at its own time.
+    fn run_journaled<'a>(
+        &'a self,
+        calls: &'a [RequestedCall],
+        turn_id: &'a str,
+        cancel: &'a CancelToken,
+        journal: Arc<dyn CallJournal>,
+    ) -> BoxFuture<'a, ToolBatch> {
+        Box::pin(async move {
+            for call in calls {
+                journal.started(&call.id);
+            }
+            let batch = self.run(calls, turn_id, cancel).await;
+            for (call, outcome) in calls.iter().zip(&batch.outcomes) {
+                journal.finished(&call.id, &outcome.result);
+            }
+            batch
+        })
+    }
+
+    /// The declared effect and idempotence of `name`; `None` for a tool
+    /// without a descriptor (treated as not idempotent).
+    fn declared(&self, name: &str) -> Option<Declared> {
+        let _ = name;
+        None
+    }
+
     /// Findings that must reach the model before the turn's final answer
     /// is accepted: language-server diagnostics of edits still being
     /// checked, waited for within their own bound (spec: lsp-diagnostics,
@@ -71,9 +130,17 @@ pub trait ToolPort: Send + Sync {
 
 /// Per-call wall times reported by the dispatcher (pass one as the
 /// dispatcher's observer and to [`SessionTools::new`]).
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct Timings {
     durations: Mutex<HashMap<String, u64>>,
+    /// The running batch's journal.
+    journal: Mutex<Option<Arc<dyn CallJournal>>>,
+}
+
+impl std::fmt::Debug for Timings {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Timings").finish_non_exhaustive()
+    }
 }
 
 impl Timings {
@@ -85,8 +152,31 @@ impl Timings {
     }
 }
 
+impl Timings {
+    fn journal(&self) -> Option<Arc<dyn CallJournal>> {
+        self.journal
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    fn set_journal(&self, journal: Option<Arc<dyn CallJournal>>) {
+        *self.journal.lock().unwrap_or_else(PoisonError::into_inner) = journal;
+    }
+}
+
 impl DispatchObserver for Timings {
-    fn tool_call(&self, _: &str, _: &str, _: &str) {}
+    fn tool_call(&self, call_id: &str, _: &str, _: &str) {
+        if let Some(journal) = self.journal() {
+            journal.started(call_id);
+        }
+    }
+
+    fn tool_executed(&self, call_id: &str, result: &ToolResult) {
+        if let Some(journal) = self.journal() {
+            journal.finished(call_id, result);
+        }
+    }
 
     fn tool_result(&self, call_id: &str, _: &str, _: &ToolResult, duration_ms: u64) {
         self.durations
@@ -216,6 +306,35 @@ impl ToolPort for SessionTools {
         cancel: &'a CancelToken,
     ) -> BoxFuture<'a, ToolBatch> {
         Box::pin(self.run_all(calls, turn_id, cancel))
+    }
+
+    fn run_journaled<'a>(
+        &'a self,
+        calls: &'a [RequestedCall],
+        turn_id: &'a str,
+        cancel: &'a CancelToken,
+        journal: Arc<dyn CallJournal>,
+    ) -> BoxFuture<'a, ToolBatch> {
+        Box::pin(async move {
+            // The dispatcher reports each call right before it runs and
+            // right after (one batch per session at a time).
+            self.timings.set_journal(Some(journal));
+            let batch = self.run_all(calls, turn_id, cancel).await;
+            self.timings.set_journal(None);
+            batch
+        })
+    }
+
+    fn declared(&self, name: &str) -> Option<Declared> {
+        self.dispatcher.surface().get(name).map(|t| Declared {
+            effect: match t.descriptor.effect {
+                Effect::None => "none",
+                Effect::Workspace => "workspace",
+                Effect::External => "external",
+            }
+            .to_owned(),
+            idempotent: t.descriptor.idempotent,
+        })
     }
 
     fn settle(&self) -> BoxFuture<'_, Option<String>> {

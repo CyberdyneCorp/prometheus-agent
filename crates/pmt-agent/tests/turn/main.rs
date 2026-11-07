@@ -10,6 +10,7 @@ mod guardrails;
 mod hints;
 mod hooks;
 mod images;
+mod journal;
 mod prompt;
 mod reasoning;
 mod recovery;

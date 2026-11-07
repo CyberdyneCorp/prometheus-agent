@@ -239,6 +239,7 @@ pub async fn run(
     repl.banner();
     if repl.start.resumed {
         repl.recap();
+        Box::pin(repl.offer_resume()).await;
     }
     repl.spacer();
     let status = Box::pin(repl.main_loop()).await;

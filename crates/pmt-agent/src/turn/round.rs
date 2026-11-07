@@ -50,8 +50,9 @@ impl Turn<'_> {
         let turn_id = self.id.to_string();
         // A redirect steer cancels this token: cooperative tools yield.
         self.agent.steers.watch_batch(Some(token.clone()));
+        let journal = self.batch_journal(&runnable);
         let raced = self
-            .race_tools(tools.run(&runnable, &turn_id, &token))
+            .race_tools(tools.run_journaled(&runnable, &turn_id, &token, journal))
             .await;
         self.agent.steers.watch_batch(None);
         let batch = match raced {
@@ -122,7 +123,7 @@ impl Turn<'_> {
 
     /// Stores the results in call order and emits their events and the
     /// iteration's `turn.step`.
-    async fn keep_results(
+    pub(super) async fn keep_results(
         &mut self,
         calls: &[RequestedCall],
         outcomes: &[ToolOutcome],

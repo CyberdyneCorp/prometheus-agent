@@ -143,6 +143,7 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `turn.context_exhausted` | `provider` | 69 | The request exceeds the model's context window and could not be compacted; start a new session or use a model with a larger window. |
 | `turn.guardrail_stop` | `cancelled` | 130 | The model kept repeating a failing or unproductive tool call; see `tool_loop_guardrails` to tune the thresholds. |
 | `turn.empty_steer` | `usage` | 2 | A steer message needs text; empty or whitespace-only steers are rejected. |
+| `turn.crashed` | `internal` | 70 | The process stopped while this turn ran; set `agent.resume_on_crash` to `auto` or `ask` to continue such turns from their journal. |
 | `personality.unknown` | `usage` | 2 | `agent.personality` and `/personality` take `none`, a built-in personality or a key of `[agent.personalities]`. |
 | `prompt.unknown_platform` | `usage` | 2 | `--platform` takes a surface with a built-in platform hint (cli, tui, desktop, telegram, discord, ...). |
 | `config.timezone` | `config` | 78 | `cron.timezone` must be an IANA time zone name such as `Europe/Lisbon`. |

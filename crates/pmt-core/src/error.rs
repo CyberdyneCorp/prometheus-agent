@@ -434,6 +434,9 @@ error_codes! {
     /// A steer message without text.
     TURN_EMPTY_STEER = ("turn.empty_steer", Usage,
         "A steer message needs text; empty or whitespace-only steers are rejected.");
+    /// A turn the process stopped during was closed instead of resumed.
+    TURN_CRASHED = ("turn.crashed", Internal,
+        "The process stopped while this turn ran; set `agent.resume_on_crash` to `auto` or `ask` to continue such turns from their journal.");
     /// An unknown personality name.
     PERSONALITY_UNKNOWN = ("personality.unknown", Usage,
         "`agent.personality` and `/personality` take `none`, a built-in personality or a key of `[agent.personalities]`.");

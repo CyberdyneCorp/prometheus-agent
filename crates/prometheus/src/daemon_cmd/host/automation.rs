@@ -70,7 +70,7 @@ pub(super) enum Follow {
 }
 
 /// Shows `text` on the session's clients as a `command.notice` event.
-fn notice(link: &Link, text: &str) {
+pub(super) fn notice(link: &Link, text: &str) {
     link.emit::<SessionEvent>(&serde_json::json!({
         "type": COMMAND_NOTICE,
         "ts": jiff::Timestamp::now().to_string(),
@@ -384,6 +384,7 @@ impl DaemonHost {
             run_budget: None,
             link,
             from_lane: false,
+            resume: None,
         };
         Self::start_with(
             Arc::clone(&self.turns),

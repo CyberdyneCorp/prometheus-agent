@@ -426,7 +426,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 ## 44. M2 Turn loop, compression, memory and storage upgrades
 
 - [x] 44.1 Implement unpriced-model handling under a cost budget, the budget checkpoint notice and structured steering; verify with the spec scenarios (spec: agent-turn-loop)
-- [ ] 44.2 Implement the deterministic turn journal and crash resume mid-tool-batch (re-run only `effect = none` or idempotent calls, otherwise "outcome unknown"); verify by killing the process mid-batch and resuming (spec: agent-turn-loop)
+- [x] 44.2 Implement the deterministic turn journal and crash resume mid-tool-batch (re-run only `effect = none` or idempotent calls, otherwise "outcome unknown"); verify by killing the process mid-batch and resuming (spec: agent-turn-loop)
 - [x] 44.3 Implement install-tree context suppression and subdirectory hints that ride tool results; verify with fixtures (spec: agent-turn-loop)
 - [ ] 44.4 Implement host validation of engine output, per-model threshold overrides, gateway session hygiene, retrievable pruned content, the summary quality check, pinned messages, micro-compaction, prepared-ahead summaries and proactive prune; verify with golden transcripts (spec: context-compression)
 - [ ] 44.5 Implement `/btw` side questions (answered outside the main transcript, busy-safe), `/init` project instructions bootstrap (existing files preserved), prefill messages frozen at session start, verify-on-stop (unverified code edits nudged, docs-only edits pass) and the coding posture with standing coding instructions (messaging sessions unaffected); verify with mock-provider tests (spec: agent-turn-loop)

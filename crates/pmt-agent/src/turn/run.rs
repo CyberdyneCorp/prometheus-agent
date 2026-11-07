@@ -17,7 +17,7 @@ use pmt_core::id::MessageId;
 use pmt_obs::trajectory::events::Event;
 use pmt_obs::trajectory::payload::{MessageText, Reasoning, TurnStart, Usage};
 use pmt_providers::request::{CacheControl, Request};
-use pmt_store::{NewMessage, Role, Visibility};
+use pmt_store::{JournalKind, NewMessage, Role, Visibility};
 use tokio::time::Instant;
 
 use super::events;
@@ -217,7 +217,12 @@ pub(super) struct Turn<'a> {
 }
 
 impl<'a> Turn<'a> {
-    fn new(agent: &'a Agent, config: &'a Config, id: TurnId, options: TurnOptions) -> Self {
+    pub(super) fn new(
+        agent: &'a Agent,
+        config: &'a Config,
+        id: TurnId,
+        options: TurnOptions,
+    ) -> Self {
         let budget = options
             .run_budget
             .or(config.agent.run_budget_secs.map(Duration::from_secs));
@@ -258,6 +263,8 @@ impl<'a> Turn<'a> {
 
     async fn run(mut self, input: TurnInput) -> Result<TurnResult, Error> {
         let setup = &self.agent.setup;
+        self.close_unfinished().await?;
+        self.journal_kind(JournalKind::TurnStarted)?;
         setup.model.start_turn().await;
         self.start_stream();
         let route = setup.model.route().await;
@@ -300,7 +307,7 @@ impl<'a> Turn<'a> {
         self.finish(ending, Some(&frozen)).await
     }
 
-    async fn iterate(&mut self, frozen: &mut Frozen) -> Result<Ending, Error> {
+    pub(super) async fn iterate(&mut self, frozen: &mut Frozen) -> Result<Ending, Error> {
         loop {
             if let Some(end) = self.stopped() {
                 return Ok(end);
@@ -344,8 +351,12 @@ impl<'a> Turn<'a> {
         request: &Request,
         route: &RouteInfo,
     ) -> Result<Sent, Error> {
+        self.journal_request(request)?;
         match self.call(request).await {
-            Ok(reply) => Ok(Sent::Reply(Box::new(reply))),
+            Ok(reply) => {
+                self.journal_kind(JournalKind::ResponseReceived)?;
+                Ok(Sent::Reply(Box::new(reply)))
+            }
             Err(end) if end.reason == ExitReason::ContextExhausted => {
                 Ok(match self.overflow(frozen, route).await? {
                     None => {

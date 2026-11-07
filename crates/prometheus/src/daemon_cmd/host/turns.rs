@@ -40,6 +40,9 @@ pub(super) struct Queued {
     /// A messaging conversation's lane submitted it: the lane takes the
     /// turn's automation boundary once it delivered the answer.
     pub(super) from_lane: bool,
+    /// Instead of `input`: a turn a crash left unfinished, resumed
+    /// (`true`) or closed.
+    pub(super) resume: Option<(pmt_agent::turn::Unfinished, bool)>,
 }
 
 impl DaemonHost {
@@ -88,6 +91,7 @@ impl DaemonHost {
             link,
             // The lane is the gateway's only submitter.
             from_lane: author.client_kind == "gateway",
+            resume: None,
         };
         let turn_id = job.turn_id.clone();
         let admission = {
@@ -353,6 +357,67 @@ fn waiting(link: &Link, ahead: usize) {
     }
 }
 
+impl DaemonHost {
+    /// A loaded session whose last turn a crash left unfinished: resumed
+    /// or closed as its first job, or (`ask`) its clients are told and
+    /// the next message closes it (spec: agent-turn-loop, Crash resume
+    /// mid-tool-batch).
+    pub(super) fn after_crash(
+        &self,
+        profile: Arc<Profile>,
+        id: SessionId,
+        session: &Arc<Loaded>,
+        link: &Link,
+    ) {
+        use pmt_config::schema::ResumeOnCrash;
+        let unfinished = match session.live.agent.unfinished_turn() {
+            Ok(Some(unfinished)) => unfinished,
+            Ok(None) => return,
+            Err(err) => return tracing::warn!(error = %err, "turn journal unreadable"),
+        };
+        let resume = match profile.scope().config().agent.resume_on_crash {
+            ResumeOnCrash::Auto => true,
+            ResumeOnCrash::Never => false,
+            ResumeOnCrash::Ask => {
+                let tools = unfinished.interrupted_tools().join(", ");
+                super::automation::notice(
+                    link,
+                    &format!(
+                        "The last turn of this session stopped when the process ended{}. \
+                         Set agent.resume_on_crash = \"auto\" to continue such turns; \
+                         your next message closes it.",
+                        if tools.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" while {tools} ran")
+                        }
+                    ),
+                );
+                return;
+            }
+        };
+        let job = Queued {
+            input: TurnInput::default(),
+            turn_id: unfinished.turn_id.clone(),
+            run_budget: None,
+            link: link.clone(),
+            from_lane: false,
+            resume: Some((unfinished, resume)),
+        };
+        if session.busy.swap(true, Ordering::AcqRel) {
+            session
+                .queue
+                .lock()
+                .expect("queue poisoned")
+                .push_front(job);
+            return;
+        }
+        if let Err(err) = self.start(profile, id, Arc::clone(session), job) {
+            tracing::warn!(error = %err, "crashed turn not resumed");
+        }
+    }
+}
+
 /// How long a stopping daemon waits for an interrupted turn to end.
 const STOP_WAIT: Duration = Duration::from_secs(5);
 
@@ -367,6 +432,7 @@ fn automated(wakeup: pmt_automation::arbiter::Wakeup, link: Link) -> Queued {
         run_budget: None,
         link,
         from_lane: false,
+        resume: None,
     }
 }
 
@@ -418,11 +484,15 @@ async fn run_one(
         .origin
         .as_deref()
         .and_then(pmt_automation::Kind::parse);
-    let outcome = session
-        .live
-        .agent
-        .run_turn(Some(&scope), id, job.input, options)
-        .await;
+    let agent = &session.live.agent;
+    let outcome = match job.resume {
+        Some((unfinished, resume)) => {
+            agent
+                .resume_turn(Some(&scope), unfinished, resume, options)
+                .await
+        }
+        None => agent.run_turn(Some(&scope), id, job.input, options).await,
+    };
     session.interrupt.lock().expect("interrupt poisoned").take();
     let end = super::automation::TurnEnd {
         origin,

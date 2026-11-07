@@ -39,6 +39,7 @@ pub mod gateway;
 mod index;
 pub mod inspect;
 pub mod integrity;
+pub mod journal;
 pub mod leases;
 pub mod listing;
 pub mod location;
@@ -75,6 +76,7 @@ pub use contention::WriteClass;
 pub use delete::Deleted;
 pub use index::DOCTOR_GROUP;
 pub use integrity::{QuarantineReport, quarantine_reports};
+pub use journal::{JournalKind, JournalRecord};
 pub use leases::{Acquire, Holder, Lease, LeaseKind};
 pub use listing::ListOptions;
 pub use location::StoreLocation;
@@ -102,7 +104,7 @@ pub use usage_query::UsageFilter;
 /// The newest `state.db` schema version this build reads and writes
 /// (`store_meta.schema_version`); every embedded migration bumps it, and a
 /// newer store opens read-only. Reported by `prometheus version --json`.
-pub const SCHEMA_VERSION: u32 = 28;
+pub const SCHEMA_VERSION: u32 = 29;
 
 #[cfg(test)]
 mod tests {

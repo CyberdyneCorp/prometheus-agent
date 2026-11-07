@@ -17,6 +17,14 @@ use pmt_core::secret::SecretString;
 use super::input::Event;
 use super::prompts::{self, Pending};
 use super::{Flow, Repl};
+
+/// What a turn of the line interface runs.
+pub(super) enum Work {
+    /// A new turn of this input.
+    Input(TurnInput),
+    /// A turn a crash left unfinished: resumed (`true`) or closed.
+    Resume(pmt_agent::turn::Unfinished, bool),
+}
 use crate::chat::session::Live;
 use crate::chat::theme::Role;
 use crate::slash::{BusyPolicy, Resolution, Surface};
@@ -37,19 +45,34 @@ impl Repl {
     }
 
     /// Runs one turn of `input` to its end, then shows the outcome.
-    pub(super) async fn run_input(&mut self, mut input: TurnInput) {
+    pub(super) async fn run_input(&mut self, input: TurnInput) {
+        self.run_work(Work::Input(input)).await;
+    }
+
+    /// Runs a new turn, or resumes (or closes) one a crash left
+    /// unfinished, to its end, then shows the outcome.
+    pub(super) async fn run_work(&mut self, work: Work) {
         let Some(live) = self.live.take() else {
             return;
         };
-        let origin = input.origin.clone();
+        let origin = match &work {
+            Work::Input(input) => input.origin.clone(),
+            Work::Resume(..) => None,
+        };
         if let Err(err) = pmt_core::pause::check(live.scope.home()) {
             self.error(&err);
             self.live = Some(live);
             return;
         }
-        if let Some(note) = live.skills.change_note() {
-            input.additions.push(note);
-        }
+        let work = match work {
+            Work::Input(mut input) => {
+                if let Some(note) = live.skills.change_note() {
+                    input.additions.push(note);
+                }
+                Work::Input(input)
+            }
+            resume @ Work::Resume(..) => resume,
+        };
         live.record.turn();
         let mut options = TurnOptions::new(&CancelToken::new());
         options.run_budget = self.start.run_budget;
@@ -61,10 +84,20 @@ impl Repl {
         let started = std::time::Instant::now();
         let result = {
             // Boxed: the turn's state machine is large.
-            let turn = Box::pin(
-                live.agent
-                    .run_turn(Some(&live.scope), live.id, input, options),
-            );
+            let turn = Box::pin(async {
+                match work {
+                    Work::Input(input) => {
+                        live.agent
+                            .run_turn(Some(&live.scope), live.id, input, options)
+                            .await
+                    }
+                    Work::Resume(unfinished, resume) => {
+                        live.agent
+                            .resume_turn(Some(&live.scope), unfinished, resume, options)
+                            .await
+                    }
+                }
+            });
             Box::pin(self.busy(turn, &live, &interrupt)).await
         };
         self.input.set_busy(false);
@@ -278,7 +311,7 @@ impl Repl {
                 let value = (!line.is_empty()).then(|| SecretString::new(line));
                 let _ = reply.send(value);
             }
-            Pending::Confirm { .. } => {}
+            Pending::Confirm { .. } | Pending::Resume(_) => {}
         }
     }
 
@@ -355,6 +388,11 @@ impl Repl {
     pub(super) async fn answer(&mut self, pending: Pending, line: &str) -> Flow {
         match pending {
             Pending::Confirm { line: command } => self.confirmed(&command, line).await,
+            Pending::Resume(unfinished) => {
+                let yes = matches!(line.trim().to_lowercase().as_str(), "y" | "yes");
+                self.run_work(Work::Resume(unfinished, yes)).await;
+                Flow::Continue
+            }
             other => {
                 self.answer_now(other, line);
                 Flow::Continue
@@ -378,5 +416,36 @@ async fn recv<T>(rx: &mut Option<tokio::sync::mpsc::UnboundedReceiver<T>>) -> Op
     match rx {
         Some(rx) => rx.recv().await,
         None => std::future::pending().await,
+    }
+}
+
+impl Repl {
+    /// A resumed session whose last turn a crash left unfinished: resumed,
+    /// closed or offered, by `agent.resume_on_crash` (spec:
+    /// agent-turn-loop, Crash resume mid-tool-batch).
+    pub(super) async fn offer_resume(&mut self) {
+        use pmt_config::schema::ResumeOnCrash;
+        let Some(live) = &self.live else {
+            return;
+        };
+        let unfinished = match live.agent.unfinished_turn() {
+            Ok(Some(unfinished)) => unfinished,
+            Ok(None) => return,
+            Err(err) => return self.error(&err),
+        };
+        let tools = unfinished.interrupted_tools();
+        let running = if tools.is_empty() {
+            String::new()
+        } else {
+            format!(" while {} ran", tools.join(", "))
+        };
+        self.notice(&format!(
+            "The last turn of this session stopped when the process ended{running}."
+        ));
+        match self.factory.scope.config().agent.resume_on_crash {
+            ResumeOnCrash::Auto => self.run_work(Work::Resume(unfinished, true)).await,
+            ResumeOnCrash::Never => self.run_work(Work::Resume(unfinished, false)).await,
+            ResumeOnCrash::Ask => self.ask(Pending::Resume(unfinished)),
+        }
     }
 }

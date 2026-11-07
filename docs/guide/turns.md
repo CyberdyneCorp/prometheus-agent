@@ -78,6 +78,34 @@ steer opens your next message. An empty steer is refused with
 Several pending steers of different kinds share one message, each run of
 one kind under its own `kind=` wrapper.
 
+## Crash resume
+
+Every turn keeps a journal in `state.db`: `turn_started`, then
+`request_sent` (a hash of the request) and `response_received` per model
+call, `tool_started` (with the tool's declared effect and idempotence)
+before each tool call runs and `tool_finished` (its stored result) as soon
+as it is done, and `turn_finished`. Each record is committed before the
+step it announces begins.
+
+When a session whose last turn has no `turn_finished` is opened again
+(`prometheus sessions resume <session>`, `chat -r`, or the daemon loading
+it), `agent.resume_on_crash` decides:
+
+| Value | What happens |
+|---|---|
+| `ask` (default) | The line interface asks `resume the interrupted turn? [y/N]`; on the daemon your clients get a notice and your next message closes the turn. |
+| `auto` | The turn is resumed. |
+| `never` | The turn is closed. |
+
+Resuming reuses every finished tool result, runs calls that never
+started, runs a started-but-unfinished call again only when its tool
+declares `effect = "none"` or `idempotent = true`, and gives every other
+interrupted call the result `[prometheus] outcome unknown: the process
+stopped while '<tool>' was running. Verify its effect before retrying.`;
+then the turn goes on with the next model request. Closing (or sending a
+new message instead) answers the open calls the same way without running
+anything and ends the turn as `crashed` with a boundary message.
+
 ## Failures and retries
 
 Each model call is tried up to `agent.api_max_retries` times (default 3)
@@ -229,8 +257,11 @@ source tree, no project context is loaded and a warning advises setting
 `terminal.cwd`: Prometheus's own rules are never mistaken for your
 project's.
 
-**Subdirectory hints.** When a file tool (`read_file`, `write_file`,
-`patch`, `search_files`) reaches into a subdirectory of the working tree
+**Subdirectory hints.** When a file tool
+([`read_file`](../reference/tools.md#read_file),
+[`write_file`](../reference/tools.md#write_file),
+[`patch`](../reference/tools.md#patch),
+[`search_files`](../reference/tools.md#search_files)) reaches into a subdirectory of the working tree
 whose `AGENTS.md` is not loaded yet, that file is appended to the tool's
 result under `[Subdirectory context: <path>]` (scanned like a context file,
 first 70% and last 20% kept past 32,000 characters). It never goes into the

@@ -360,6 +360,9 @@ impl DaemonHost {
         if let Some(delegation) = delegation {
             delegations::deliver_owed(profile, &session, delegation);
         }
+        if let Ok(owner) = self.profile(&profile.scope().name().to_string()) {
+            self.after_crash(owner, id, &session, link);
+        }
         Ok(session)
     }
 

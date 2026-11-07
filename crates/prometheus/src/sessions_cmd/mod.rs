@@ -50,6 +50,14 @@ pub fn run(command: &SessionsCommand, ctx: &Context<'_>, ui: crate::chat::Ui) ->
         SessionsCommand::Browse { source, all } => {
             crate::sessions_browse::run(*source, *all, ctx, ui)
         }
+        SessionsCommand::Resume { session: r } => {
+            let args = crate::chat::args::ChatArgs {
+                resume: Some(session(r)?.to_string()),
+                ..crate::chat::args::ChatArgs::default()
+            };
+            drop(store);
+            crate::chat::run(&args, ctx, ui)
+        }
         SessionsCommand::Show { session: r } => show(ctx, &store, session(r)?),
         SessionsCommand::Search(args) => search(ctx, &store, args),
         SessionsCommand::Rename { session: r, title } => {

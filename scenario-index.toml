@@ -3050,3 +3050,10 @@ capabilities = [
 
 [agent-turn-loop."Subdirectory hints ride tool results"]
 "Reading a subpackage" = ["crates/pmt-agent/tests/turn/hints.rs::reading_a_subpackage_appends_its_agents_file_to_that_result_once", "crates/pmt-agent/tests/turn/hints.rs::paths_outside_the_working_tree_bring_no_hint"]
+
+[agent-turn-loop."Deterministic turn journal (upgrade)"]
+"Journal order" = ["crates/pmt-agent/tests/turn/journal.rs::a_turn_with_one_tool_call_journals_every_step_in_order", "crates/pmt-store/tests/store/journal.rs::only_the_newest_turn_is_kept_and_an_unfinished_one_is_reported"]
+
+[agent-turn-loop."Crash resume mid-tool-batch (upgrade)"]
+"Crash during a terminal command" = ["crates/prometheus/tests/crash_resume.rs::a_crash_during_a_terminal_command_resumes_with_the_read_reused_and_the_command_unknown", "crates/prometheus/tests/crash_resume.rs::the_daemon_resumes_a_crashed_turn_when_the_session_loads", "crates/pmt-agent/tests/turn/journal.rs::declining_closes_the_turn_as_crashed_with_a_boundary_row", "crates/pmt-agent/tests/turn/journal.rs::a_new_message_closes_a_crashed_turn_first"]
+"Idempotent call re-run" = ["crates/pmt-agent/tests/turn/journal.rs::resuming_reuses_finished_results_reruns_safe_calls_and_marks_the_rest_unknown"]

@@ -17,6 +17,13 @@ pub enum SessionsCommand {
         #[arg(long)]
         all: bool,
     },
+    /// Resume a session (id, id prefix or title) in a chat; a turn the
+    /// process stopped during is resumed, closed or offered by
+    /// `agent.resume_on_crash`.
+    Resume {
+        /// Session id, id prefix or title.
+        session: String,
+    },
     /// List sessions, most recently active first.
     List {
         /// At most this many sessions.

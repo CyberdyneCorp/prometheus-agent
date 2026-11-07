@@ -73,6 +73,11 @@ full-text hits (each query narrows again),
 type a row number to resume that session in the chat, or press Enter to
 leave. It needs a terminal (exit 2 otherwise; use `sessions list`).
 
+`prometheus sessions resume <session>` (id, id prefix or title) opens
+that session in the chat, like `chat -r`. A turn the process stopped
+during is resumed, closed or offered as
+[Turns › Crash resume](turns.md#crash-resume) describes.
+
 ## Searching
 
 `sessions search <query>` searches every message of the profile:

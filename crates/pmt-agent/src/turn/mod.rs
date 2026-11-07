@@ -23,12 +23,14 @@ mod guards;
 mod hints;
 pub mod interrupt;
 pub mod iteration;
+mod journal;
 pub mod lease;
 pub mod model;
 mod observe;
 mod recall;
 mod recovery;
 pub mod repair;
+mod resume;
 mod round;
 mod run;
 mod steer;
@@ -58,9 +60,10 @@ pub use interrupt::{Interrupt, Issuer};
 pub use iteration::IterationBudget;
 pub use lease::LeaseTiming;
 pub use model::{DeltaSink, ModelPort, NoDeltas, ProviderModel, ProviderSetup};
+pub use resume::{Unfinished, outcome_unknown};
 pub use round::WRAP_UP_NOTICE;
 pub use steer::SteerKind;
-pub use tools::{SessionTools, Timings, ToolBatch, ToolPort};
+pub use tools::{CallJournal, Declared, SessionTools, Timings, ToolBatch, ToolPort};
 
 use crate::compress::Summarizer;
 use crate::prompt::frozen::Rebuild;
@@ -555,6 +558,16 @@ impl Agent {
         input: TurnInput,
         options: TurnOptions,
     ) -> Result<TurnResult, Error> {
+        let scope = self.check_scope(scope, session)?;
+        run::run(self, scope, input, options).await
+    }
+
+    /// `scope` when it is this agent's profile and `session` its session.
+    fn check_scope<'s>(
+        &self,
+        scope: Option<&'s ProfileScope>,
+        session: SessionId,
+    ) -> Result<&'s ProfileScope, Error> {
         let Some(scope) = scope else {
             return Err(Error::new(
                 &codes::TURN_SCOPE_REQUIRED,
@@ -572,6 +585,6 @@ impl Agent {
                 ),
             ));
         }
-        run::run(self, scope, input, options).await
+        Ok(scope)
     }
 }

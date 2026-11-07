@@ -130,6 +130,11 @@ impl TurnId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// The id a turn journal recorded.
+    pub(crate) fn recorded(text: &str) -> Self {
+        Self(text.to_owned())
+    }
 }
 
 impl Default for TurnId {

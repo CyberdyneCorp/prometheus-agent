@@ -137,24 +137,38 @@ impl Turn<'_> {
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
         let loaded = guard.get_or_insert_with(|| seed(&setup.store, setup.session, &root, &cwd));
+        let place = Place {
+            cwd: &cwd,
+            root: &root,
+        };
         for (call, outcome) in calls.iter().zip(outcomes.iter_mut()) {
-            if !matches!(outcome.result.status, Status::Ok | Status::Degraded) {
-                continue;
-            }
-            for path in touched(&call.name, &call.arguments) {
-                let Some(dir) = directory(&cwd, &root, &path) else {
-                    continue;
-                };
-                for file in agents_files(&root, &dir) {
-                    if !loaded.insert(file.clone()) {
-                        continue;
-                    }
-                    if let Some(text) = hint(&root, &file) {
-                        outcome.result.content.push(Content::Text { text });
-                    }
-                }
+            if matches!(outcome.result.status, Status::Ok | Status::Degraded) {
+                let texts = place.new_hints(call, loaded);
+                outcome
+                    .result
+                    .content
+                    .extend(texts.into_iter().map(|text| Content::Text { text }));
             }
         }
+    }
+}
+
+/// Where a session's file tools resolve paths.
+struct Place<'a> {
+    cwd: &'a Path,
+    root: &'a Path,
+}
+
+impl Place<'_> {
+    /// The hints `call` brings that are not in `loaded` yet (now added).
+    fn new_hints(&self, call: &RequestedCall, loaded: &mut HashSet<PathBuf>) -> Vec<String> {
+        touched(&call.name, &call.arguments)
+            .iter()
+            .filter_map(|path| directory(self.cwd, self.root, path))
+            .flat_map(|dir| agents_files(self.root, &dir))
+            .filter(|file| loaded.insert(file.clone()))
+            .filter_map(|file| hint(self.root, &file))
+            .collect()
     }
 }
 
