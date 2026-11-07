@@ -188,6 +188,8 @@ pub(super) struct Turn<'a> {
     pub(super) appended: Vec<MessageId>,
     /// The role of the newest row this turn stored.
     pub(super) last_role: Option<Role>,
+    /// This turn's user row (its images are always sent).
+    pub(super) user_row: Option<MessageId>,
     pub(super) notices: Vec<String>,
     pub(super) guard: LoopGuard,
     /// Empty replies retried in the current streak.
@@ -246,6 +248,7 @@ impl<'a> Turn<'a> {
             usage: TurnUsage::default(),
             appended: Vec::new(),
             last_role: None,
+            user_row: None,
             notices: Vec::new(),
             guard: LoopGuard::new(&config.tool_loop_guardrails, agent.setup.interactive),
             empty_streak: 0,
@@ -297,6 +300,7 @@ impl<'a> Turn<'a> {
             }
         }
         let message_id = row.id;
+        self.user_row = Some(message_id);
         let wire = row.content.clone().unwrap_or_default();
         self.append(&row)?;
         self.emit(Event::TurnStart(TurnStart {
@@ -501,13 +505,20 @@ impl<'a> Turn<'a> {
         let setup = &self.agent.setup;
         let rows = setup.store.messages(setup.session, Visibility::Active)?;
         self.request_rows = rows.len();
+        let vision = &self.config.vision;
+        let replay = super::replay::Replay::of(
+            &rows,
+            vision.replay_recent_images,
+            self.user_row,
+            vision.embed_target_bytes,
+        );
         let mut cache =
             CacheControl::for_session(&self.config.prompt_cache, &setup.session.to_string());
         cache.ttl = self.agent.cache_ttl(&self.config.prompt_cache, route);
         let mut request = Request {
             model: route.model.clone(),
             system: system_blocks(&frozen.tiers),
-            messages: repair::wire_with(&rows, &|row| image_parts(&setup.store, row)),
+            messages: repair::wire_with(&rows, &|row| replay.parts(&setup.store, row)),
             tools: if with_tools {
                 frozen.tools.clone()
             } else {
@@ -666,39 +677,4 @@ pub(super) fn usage_payload(usage: &TurnUsage) -> Usage {
         .into(),
         cost_usd: usage.cost_usd,
     }
-}
-
-/// The images `row` stored, as request parts (pixels or descriptions). An image whose
-/// blob is gone becomes a note, so it cannot fail the request.
-fn image_parts(
-    store: &pmt_store::Store,
-    row: &pmt_store::Message,
-) -> Vec<pmt_providers::request::Part> {
-    use pmt_providers::request::Part;
-    use pmt_tools::vision::routing::{Inline, inline};
-    transcript::images_of(row)
-        .into_iter()
-        .map(|image| {
-            if let Some(description) = &image.description {
-                return Part::Text {
-                    text: format!("[image {}: {description}]", image.name),
-                };
-            }
-            let bytes = pmt_store::BlobRef::parse(&image.blob)
-                .ok_or_else(|| "bad blob key".to_owned())
-                .and_then(|blob| store.get_blob(&blob).map_err(|e| e.to_string()));
-            let data = bytes.and_then(pmt_tools::vision::ImageData::sniff);
-            match data.map(|data| inline(data, &image.name)) {
-                Ok(Inline::Image(image)) => Part::Image {
-                    data: image.base64(),
-                    media_type: image.mime,
-                    is_url: false,
-                },
-                Ok(Inline::Note(note)) => Part::Text { text: note },
-                Err(why) => Part::Text {
-                    text: format!("[image {} is unavailable: {why}]", image.name),
-                },
-            }
-        })
-        .collect()
 }

@@ -105,6 +105,10 @@ impl VisionSession {
             Err(why) => return ToolResult::error(format!("vision_analyze: {why}")),
         };
         if self.native() {
+            // Region crops count against the same image.
+            if let Err(loads) = self.count_load(image_key(files, &args.image_url)) {
+                return ToolResult::error(super::budget::refusal(loads));
+            }
             return self.attached_result(image, &args.image_url);
         }
         self.described(image, args).await
@@ -169,11 +173,16 @@ impl VisionSession {
         Ok(bytes)
     }
 
-    /// The image itself as the result (written under the media dir).
+    /// The image itself as the result (written under the media dir),
+    /// within the embed budget.
     fn attached_result(&self, image: ImageData, source: &str) -> ToolResult {
         let image = match inline(image, source) {
             Inline::Image(image) => image,
             Inline::Note(note) => return ToolResult::ok(note),
+        };
+        let image = match image.fitted(self.setup.embed_target) {
+            Ok(image) => image,
+            Err(why) => return ToolResult::error(format!("vision_analyze: {why}")),
         };
         let (width, height) = image.dimensions().unwrap_or_default();
         let extension = image.mime.trim_start_matches("image/");
@@ -216,6 +225,30 @@ impl VisionSession {
             Err(why) => ToolResult::error(format!("vision_analyze failed: {why}")),
         }
     }
+}
+
+/// The identity of an image for the per-image cap: a local path by its
+/// resolved path, a URL as written, a `data:` URL by its digest.
+fn image_key(files: Option<&FileSession>, source: &str) -> String {
+    if source.starts_with("data:") {
+        use sha2::Digest as _;
+        let digest = sha2::Sha256::digest(source.as_bytes());
+        let hex = digest.iter().fold(String::new(), |mut hex, b| {
+            let _ = std::fmt::Write::write_fmt(&mut hex, format_args!("{b:02x}"));
+            hex
+        });
+        return format!("data:{hex}");
+    }
+    if source.starts_with("http://") || source.starts_with("https://") {
+        return source.to_owned();
+    }
+    files.map_or_else(
+        || source.to_owned(),
+        |files| {
+            let path = files.resolve(source);
+            path.canonicalize().unwrap_or(path).display().to_string()
+        },
+    )
 }
 
 fn descriptor() -> ToolDescriptor {

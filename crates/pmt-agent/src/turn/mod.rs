@@ -30,6 +30,7 @@ mod observe;
 mod recall;
 mod recovery;
 pub mod repair;
+mod replay;
 mod resume;
 mod round;
 mod run;
