@@ -76,12 +76,14 @@ macro_rules! event {
     };
 }
 
+mod cron;
 mod files;
 mod lsp;
 mod messaging;
 mod security;
 mod tui;
 mod worktree;
+pub use cron::*;
 pub use files::*;
 pub use lsp::*;
 pub use messaging::*;

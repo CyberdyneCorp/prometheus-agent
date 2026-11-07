@@ -523,7 +523,9 @@ fn a_live_replay_reruns_the_inputs_and_diffs_the_outputs() {
 
 /// Scenario (/cron slash command) in the line interface: `/cron add`
 /// without `--yes` shows the echo, and the next line `yes` saves the job
-/// (no turn is sent to the model).
+/// (no turn is sent to the model). The line interface is driven through a
+/// pseudo-terminal, which these tests have on Unix only.
+#[cfg(unix)]
 #[test]
 fn the_line_interface_saves_a_slash_cron_job_on_yes() {
     use common::pty::{exit, prompt, spawn};

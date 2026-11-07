@@ -288,6 +288,10 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "cron notepad",
     },
     JsonShape {
+        schema: "prometheus.cron_suggestions.v1",
+        command: "cron suggestions",
+    },
+    JsonShape {
         schema: "prometheus.worktrees_prune.v1",
         command: "worktrees prune",
     },

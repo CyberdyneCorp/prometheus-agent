@@ -229,4 +229,36 @@ pub trait Agents: Host {
             ))
         })
     }
+    /// The id of `profile`'s scheduled job `job` (an id or name).
+    ///
+    /// # Errors
+    ///
+    /// The job is unknown or ambiguous; no scheduler in this host.
+    fn find_cron_job<'a>(&'a self, _profile: &'a str, _job: &'a str) -> HostFuture<'a, String> {
+        Box::pin(async {
+            Err(pmt_core::error::Error::new(
+                &pmt_core::error::codes::GATEWAY_DAEMON_REQUIRED,
+                "scheduled jobs need the daemon's scheduler",
+            ))
+        })
+    }
+    /// Fires `profile`'s scheduled job `job` once with `context` as its
+    /// transient run context (a webhook route's `cron_job`).
+    ///
+    /// # Errors
+    ///
+    /// As [`find_cron_job`](Self::find_cron_job); store errors.
+    fn fire_cron_job<'a>(
+        &'a self,
+        _profile: &'a str,
+        _job: &'a str,
+        _context: &'a str,
+    ) -> HostFuture<'a, crate::messaging::adapter::CronFire> {
+        Box::pin(async {
+            Err(pmt_core::error::Error::new(
+                &pmt_core::error::codes::GATEWAY_DAEMON_REQUIRED,
+                "scheduled jobs need the daemon's scheduler",
+            ))
+        })
+    }
 }

@@ -12,7 +12,10 @@
 //! - [`deliver`]: response framing, silence and the durable outbox.
 //! - [`ops`]: lifecycle operations shared by the CLI and the `cronjob`
 //!   tool, [`doctor`] the health report.
+//! - [`blueprint`]: parameterised automation blueprints; [`suggest`]: the
+//!   suggested automations inbox.
 
+pub mod blueprint;
 pub mod clock;
 pub mod deliver;
 pub mod diff;
@@ -30,5 +33,6 @@ pub mod prompt;
 pub mod scan;
 pub mod schedule;
 pub mod scheduler;
+pub mod suggest;
 pub mod target;
 pub mod validate;

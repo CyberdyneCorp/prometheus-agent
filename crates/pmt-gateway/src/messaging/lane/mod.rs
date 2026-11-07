@@ -88,12 +88,10 @@ pub(crate) enum Msg {
         action: confirm::Action,
         routing: Box<Routing>,
     },
-    /// A message another session sent to this chat (`send_message`), to
-    /// mirror into this session once no turn runs.
-    Mirror {
-        text: String,
-        from_session: Option<String>,
-    },
+    /// A message to append to this session once no turn runs: one another
+    /// session sent to this chat (`send_message`), or a continuable
+    /// scheduled delivery's seed.
+    Mirror(pmt_store::NewMessage),
     /// A model was chosen on a picker card: switch to it.
     ModelPicked {
         reference: String,
@@ -247,7 +245,7 @@ struct Lane {
     /// The chat policy frozen for the current session.
     policy: Option<pmt_config::schema::ChatPolicy>,
     /// Mirrored messages waiting for the running turn to end.
-    mirrors: Vec<(String, Option<String>)>,
+    mirrors: Vec<pmt_store::NewMessage>,
     /// The event being handled was a voice note.
     voice_input: bool,
     /// The session whose thread already had its title offered (after its
@@ -494,8 +492,8 @@ impl Lane {
             Msg::ModelPicked { reference, routing } => {
                 self.switch_model(&routing, &reference).await;
             }
-            Msg::Mirror { text, from_session } => {
-                self.mirrors.push((text, from_session));
+            Msg::Mirror(row) => {
+                self.mirrors.push(row);
                 if self.running.is_none() {
                     self.flush_mirrors();
                 }
@@ -549,6 +547,7 @@ impl Lane {
             kind,
             body,
             attachments: Vec::new(),
+            notify: None,
         }
     }
 
@@ -567,8 +566,8 @@ impl Lane {
             self.mirrors.clear();
             return;
         };
-        for (text, from) in self.mirrors.drain(..) {
-            crate::messaging::send::append_mirror(&store, session, &text, from.as_deref());
+        for row in self.mirrors.drain(..) {
+            crate::messaging::send::append_row(&store, session, &row);
         }
     }
 

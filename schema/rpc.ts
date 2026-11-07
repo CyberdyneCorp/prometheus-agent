@@ -156,6 +156,84 @@ export interface BannerInfo {
   tools: Array<string>;
 }
 
+/** `cron.blueprints.fill` params. */
+export interface BlueprintFillParams {
+  /** Save the job (after the caller showed the echo); otherwise only check and echo. */
+  create?: boolean;
+  /** The blueprint (key, prefix or near spelling). */
+  key: string;
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+  /** Slot values by name. */
+  values?: Record<string, string>;
+}
+
+/** `cron.blueprints.fill` result. */
+export interface BlueprintFilled {
+  /** The schedule echo: the canonical form and the next instants. */
+  echo?: string | null;
+  /** The created job's id. */
+  job_id?: string | null;
+  /** The blueprint's key. */
+  key: string;
+  /** The slot that needs a value. */
+  missing?: string | null;
+  /** The job's prompt. */
+  prompt?: string | null;
+  /** Its question. */
+  question?: string | null;
+  /** The canonical schedule (`cron 0 8 * * 1-5`). */
+  schedule?: string | null;
+  /** `missing` (a slot needs a value), `ready` (echoed, not saved) or `created`. */
+  status: string;
+}
+
+/** One blueprint. */
+export interface BlueprintInfo {
+  /** Its category. */
+  category: string;
+  /** What it does. */
+  description: string;
+  /** Its key (`<plugin>:<key>`, `skill:<key>` outside the built-ins). */
+  key: string;
+  /** Its slots, in the order they are asked. */
+  slots: Array<BlueprintSlot>;
+  /** `builtin`, `plugin` or `skill`. */
+  source: string;
+  /** Its title. */
+  title: string;
+}
+
+/** `cron.blueprints.list` result. */
+export interface BlueprintList {
+  /** The profile's catalog. */
+  blueprints: Array<BlueprintInfo>;
+}
+
+/** One slot, as a form field. */
+export interface BlueprintSlot {
+  /** The value used when none is given. */
+  default?: string | null;
+  /** `time`, `enum`, `text` or `weekdays`. */
+  kind: string;
+  /** The field name (`time`, `days`...). */
+  name: string;
+  /** The options of an `enum`; the presets of `weekdays`. */
+  options: Array<string>;
+  /** The question asked for it. */
+  question: string;
+  /** Needs a value (given or default). */
+  required: boolean;
+  /** An `enum` accepts only its options. */
+  strict: boolean;
+}
+
+/** `cron.blueprints.list` params. */
+export interface BlueprintsListParams {
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+}
+
 /** `clarify.request` result. */
 export interface ClarifyAnswers {
   /** One answer per question, as the `clarify` tool defines them. */
@@ -1065,6 +1143,8 @@ export interface Methods {
   "complete.path": { params: CompleteParams; result: Completions };
   "complete.slash": { params: CompleteParams; result: Completions };
   "config.get": { params: ConfigGetParams; result: ConfigValue };
+  "cron.blueprints.fill": { params: BlueprintFillParams; result: BlueprintFilled };
+  "cron.blueprints.list": { params: BlueprintsListParams; result: BlueprintList };
   "egress.set": { params: EgressSetParams; result: EgressState };
   "files.rollback": { params: FilesRollbackParams; result: FilesRolledBack };
   "files.undo": { params: FilesUndoParams; result: FilesUndone };
@@ -1121,8 +1201,6 @@ export const UNDECLARED = [
   "bot.relay.deliver",
   "bot.relay.drain",
   "bot.roster.list",
-  "cron.blueprints.fill",
-  "cron.blueprints.list",
   "daemon.update",
   "evolve.cancel",
   "evolve.choose",

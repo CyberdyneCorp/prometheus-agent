@@ -267,6 +267,39 @@ impl Store {
         })
     }
 
+    /// Inserts `run` unless its job is running or has a run queued or
+    /// running, in one transaction, so concurrent triggers (a webhook
+    /// burst) start one run; `false` when one is already active.
+    ///
+    /// # Errors
+    ///
+    /// `cron.job_not_found`, `store.constraint` when the (job, instant)
+    /// pair exists, `store.sqlite`.
+    pub fn cron_insert_exclusive_run(&self, run: &RunRow) -> Result<bool, Error> {
+        self.write(|tx| {
+            let job = load_job(tx, &run.job_id)?.ok_or_else(|| job_not_found(&run.job_id))?;
+            let active: i64 = tx
+                .query_row(
+                    "SELECT count(*) FROM cron_runs WHERE job_id = ?1 \
+                     AND status IN ('queued', 'running')",
+                    params![run.job_id],
+                    |r| r.get(0),
+                )
+                .map_err(sql)?;
+            if job.state == "running" || active > 0 {
+                return Ok(false);
+            }
+            if insert_run(tx, run)? {
+                Ok(true)
+            } else {
+                Err(Error::new(
+                    &pmt_core::error::codes::STORE_CONSTRAINT,
+                    format!("a run of job {} at {} exists", run.job_id, run.scheduled_at),
+                ))
+            }
+        })
+    }
+
     /// Inserts a run without touching its job (manual and replay runs).
     ///
     /// # Errors

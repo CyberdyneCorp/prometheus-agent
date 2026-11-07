@@ -213,3 +213,9 @@ $ prometheus skills lint --strict
 
 `prometheus skills doctor` reports skills that do not load at all, with the
 file and line.
+
+A skill can carry a `blueprint` block (a scheduled job with typed slots,
+see [Scheduled jobs](cron.md#blueprints)). It never schedules anything by
+itself: the blueprint is offered in `/suggestions` and `prometheus cron
+suggestions` (and as `skill:<name>` in `/blueprint`), and a job exists only
+once you accept it.

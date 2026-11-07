@@ -267,19 +267,22 @@ impl Agents for DaemonHost {
                 Ok(id) => profile.loaded.lock().await.get(&id).cloned(),
                 Err(_) => None,
             };
-            let registry = match &loaded {
-                Some(session) => commands::registry(&scope, &session.live),
-                None => commands::profile_registry(&scope),
-            };
             if !line.trim_start().starts_with('/') {
-                // A `yes` answering the `/cron` echo the session was shown
-                // runs as that command (its access rules and busy policy).
+                // An input answering what the session waits for (the `yes`
+                // to a `/cron` echo, a `/blueprint` answer) runs as
+                // `/cron` (its access rules and busy policy).
                 let awaited = loaded
                     .as_ref()
                     .is_some_and(|s| commands::cron::awaits(s.live.id, line));
                 if !awaited {
                     return Ok(Lookup::Text);
                 }
+            }
+            let registry = match &loaded {
+                Some(session) => commands::registry(&scope, &session.live),
+                None => commands::profile_registry(&scope),
+            };
+            if !line.trim_start().starts_with('/') {
                 return Ok(lookup_of(registry.resolve("/cron", Surface::Gateway)));
             }
             Ok(lookup_of(registry.resolve(line, Surface::Gateway)))
@@ -392,6 +395,19 @@ impl Agents for DaemonHost {
                 .await
                 .map_err(|e| Error::new(&pmt_core::error::codes::RPC_INTERNAL, e.to_string()))?
         })
+    }
+
+    fn find_cron_job<'a>(&'a self, profile: &'a str, job: &'a str) -> HostFuture<'a, String> {
+        Box::pin(async move { self.cron_job_id(profile, job) })
+    }
+
+    fn fire_cron_job<'a>(
+        &'a self,
+        profile: &'a str,
+        job: &'a str,
+        context: &'a str,
+    ) -> HostFuture<'a, pmt_gateway::messaging::CronFire> {
+        Box::pin(async move { self.fire_cron(profile, job, context) })
     }
 
     fn end_conversation<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()> {

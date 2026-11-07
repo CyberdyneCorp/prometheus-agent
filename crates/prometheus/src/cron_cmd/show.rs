@@ -112,6 +112,8 @@ fn run_json(run: &RunRow) -> Value {
         "output_tokens": run.output_tokens,
         "cost_usd": run.cost_usd,
         "delivered": run.delivered.as_deref().and_then(|d| serde_json::from_str::<Value>(d).ok()),
+        "receipt": run.receipt,
+        "delivery_unverified": run.unverified,
         "output": run.output,
         "output_blob": run.output_blob,
     })
@@ -188,6 +190,8 @@ pub(super) fn show_run(env: &Env<'_>, id: &str) -> Result<u8, Error> {
         "output_tokens",
         "cost_usd",
         "delivered",
+        "receipt",
+        "delivery_unverified",
     ] {
         let value = &doc[key];
         if !value.is_null() {

@@ -174,6 +174,7 @@ impl Lane {
             kind: OutboundKind::Reply,
             body: text.to_owned(),
             attachments: Vec::new(),
+            notify: None,
         };
         if answer.addressed {
             NOTHING_TO_ADD.clone_into(&mut new.body);
@@ -292,6 +293,7 @@ impl Lane {
                 kind: OutboundKind::Reply,
                 body,
                 attachments: attached,
+                notify: None,
             };
             self.shared.deliver(&self.profile, &new);
         }
@@ -328,6 +330,7 @@ impl Lane {
                     kind: OutboundKind::Reply,
                     body: String::new(),
                     attachments: vec![file],
+                    notify: None,
                 };
                 self.shared.deliver(&self.profile, &new);
             }

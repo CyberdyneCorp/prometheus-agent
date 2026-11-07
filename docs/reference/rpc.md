@@ -59,8 +59,8 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `complete.path` | `tui` | 1.0 | [`CompleteParams`](#completeparams) | [`Completions`](#completions) |
 | `complete.slash` | `tui` | 1.0 | [`CompleteParams`](#completeparams) | [`Completions`](#completions) |
 | `config.get` | `tui` | 1.0 | [`ConfigGetParams`](#configgetparams) | [`ConfigValue`](#configvalue) |
-| `cron.blueprints.fill` | `scheduled-jobs` | 1.0 | not served yet | |
-| `cron.blueprints.list` | `scheduled-jobs` | 1.0 | not served yet | |
+| `cron.blueprints.fill` | `scheduled-jobs` | 1.0 | [`BlueprintFillParams`](#blueprintfillparams) | [`BlueprintFilled`](#blueprintfilled) |
+| `cron.blueprints.list` | `scheduled-jobs` | 1.0 | [`BlueprintsListParams`](#blueprintslistparams) | [`BlueprintList`](#blueprintlist) |
 | `daemon.update` | `workspace-architecture` | 1.0 | not served yet | |
 | `egress.set` | `security-boundaries` | 1.0 | [`EgressSetParams`](#egresssetparams) | [`EgressState`](#egressstate) |
 | `evolve.cancel` | `harness-evolution` | 1.0 | not served yet | |
@@ -283,6 +283,75 @@ What an attached connection may do in the session.
 | `skills` | array of string | yes | The installed skills the session can load. |
 | `system_prompt` | [`FrozenPrompt`](#frozenprompt) or null | no | The frozen system prompt; none before the first turn. |
 | `tools` | array of string | yes | The session's tool names, in request order. |
+
+### `BlueprintFillParams`
+
+`cron.blueprints.fill` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `create` | boolean | no | Save the job (after the caller showed the echo); otherwise only check and echo. |
+| `key` | string | yes | The blueprint (key, prefix or near spelling). |
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
+| `values` | object | no | Slot values by name. |
+
+### `BlueprintFilled`
+
+`cron.blueprints.fill` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `echo` | string or null | no | The schedule echo: the canonical form and the next instants. |
+| `job_id` | string or null | no | The created job's id. |
+| `key` | string | yes | The blueprint's key. |
+| `missing` | string or null | no | The slot that needs a value. |
+| `prompt` | string or null | no | The job's prompt. |
+| `question` | string or null | no | Its question. |
+| `schedule` | string or null | no | The canonical schedule (`cron 0 8 * * 1-5`). |
+| `status` | string | yes | `missing` (a slot needs a value), `ready` (echoed, not saved) or `created`. |
+
+### `BlueprintInfo`
+
+One blueprint.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `category` | string | yes | Its category. |
+| `description` | string | yes | What it does. |
+| `key` | string | yes | Its key (`<plugin>:<key>`, `skill:<key>` outside the built-ins). |
+| `slots` | array of [`BlueprintSlot`](#blueprintslot) | yes | Its slots, in the order they are asked. |
+| `source` | string | yes | `builtin`, `plugin` or `skill`. |
+| `title` | string | yes | Its title. |
+
+### `BlueprintList`
+
+`cron.blueprints.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `blueprints` | array of [`BlueprintInfo`](#blueprintinfo) | yes | The profile's catalog. |
+
+### `BlueprintSlot`
+
+One slot, as a form field.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `default` | string or null | no | The value used when none is given. |
+| `kind` | string | yes | `time`, `enum`, `text` or `weekdays`. |
+| `name` | string | yes | The field name (`time`, `days`...). |
+| `options` | array of string | yes | The options of an `enum`; the presets of `weekdays`. |
+| `question` | string | yes | The question asked for it. |
+| `required` | boolean | yes | Needs a value (given or default). |
+| `strict` | boolean | yes | An `enum` accepts only its options. |
+
+### `BlueprintsListParams`
+
+`cron.blueprints.list` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
 
 ### `ClarifyAnswers`
 

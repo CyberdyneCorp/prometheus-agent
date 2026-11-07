@@ -123,6 +123,7 @@ fn tell_home_channels(shared: &Shared, profile: &str, down: &str, started: i64, 
             kind: OutboundKind::Warning,
             body: text.to_owned(),
             attachments: Vec::new(),
+            notify: None,
         };
         shared.deliver(profile, &new);
     }

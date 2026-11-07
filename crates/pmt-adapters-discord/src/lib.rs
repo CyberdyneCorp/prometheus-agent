@@ -216,6 +216,10 @@ fn payload(message: &Outgoing) -> Value {
     if let Some(reply) = &message.reply_to {
         body["message_reference"] = json!({"message_id": reply, "fail_if_not_exists": false});
     }
+    if message.notify == Some(false) {
+        // SUPPRESS_NOTIFICATIONS: delivered without a push or desktop alert.
+        body["flags"] = json!(1 << 12);
+    }
     body
 }
 

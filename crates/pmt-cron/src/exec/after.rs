@@ -124,12 +124,13 @@ fn queue_deliveries(
         let Ok(target) = Target::parse(text) else {
             continue;
         };
-        let to = match resolve(&target, job.origin.as_ref()) {
+        let (to, body) = match resolve(&target, job.origin.as_ref()) {
             Resolved::Stored => continue,
-            Resolved::Messaging(to) => ctx.thread_of(&target, to),
-            Resolved::BotChat(profile) => {
-                deliver::bot_chat_target(profile.as_deref().unwrap_or(ctx.profile))
-            }
+            Resolved::Messaging(to) => (ctx.thread_of(&target, to), body.clone()),
+            Resolved::BotChat(profile) => (
+                deliver::bot_chat_target(profile.as_deref().unwrap_or(ctx.profile)),
+                deliver::bot_chat_body(&job.row.name, &ctx.runner.redact(content)),
+            ),
         };
         let mut row = deliver::row(run, &to, &body, false, ctx.now_ms());
         row.continuable = continuable(ctx, job, &target);

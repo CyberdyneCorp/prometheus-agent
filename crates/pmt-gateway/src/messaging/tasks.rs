@@ -297,6 +297,7 @@ fn end(shared: &Shared, session: &str, finished: &TurnFinished) {
         kind: OutboundKind::Notification,
         body,
         attachments: Vec::new(),
+        notify: None,
     };
     shared.deliver(&task.profile, &new);
 }

@@ -52,6 +52,8 @@ pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
         .register::<c::FilesUndo, _, _>(catalog, files_undo)?
         .register::<c::FilesRollback, _, _>(catalog, files_rollback)?
         .register::<c::LspStatusCall, _, _>(catalog, lsp_status)?
+        .register::<c::BlueprintsListCall, _, _>(catalog, blueprints_list)?
+        .register::<c::BlueprintsFillCall, _, _>(catalog, blueprints_fill)?
         .register::<c::PromptSubmit, _, _>(catalog, submit)?
         .register::<c::CommandDispatch, _, _>(catalog, dispatch)?
         .register::<c::ApprovalRespond, _, _>(catalog, approval_respond)?;
@@ -362,6 +364,28 @@ async fn egress(call: Call, params: c::EgressSetParams) -> Result<c::EgressState
 async fn lsp_status(call: Call, params: c::LspStatusParams) -> Result<c::LspStatus, RpcError> {
     let profile = profile_for(&call, params.profile.as_deref())?;
     call.server.host().lsp_status(&profile).map_err(|e| rpc(&e))
+}
+
+async fn blueprints_list(
+    call: Call,
+    params: c::BlueprintsListParams,
+) -> Result<c::BlueprintList, RpcError> {
+    let profile = profile_for(&call, params.profile.as_deref())?;
+    call.server
+        .host()
+        .cron_blueprints(&profile)
+        .map_err(|e| rpc(&e))
+}
+
+async fn blueprints_fill(
+    call: Call,
+    params: c::BlueprintFillParams,
+) -> Result<c::BlueprintFilled, RpcError> {
+    let profile = profile_for(&call, params.profile.as_deref())?;
+    call.server
+        .host()
+        .cron_blueprint_fill(&profile, &params)
+        .map_err(|e| rpc(&e))
 }
 
 async fn files_undo(call: Call, params: c::FilesUndoParams) -> Result<c::FilesUndone, RpcError> {

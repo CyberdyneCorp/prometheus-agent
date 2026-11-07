@@ -5,10 +5,15 @@
 //! `prometheus cron tick`), and the `cronjob` model tool ([`tool`]).
 
 mod agent;
+pub mod blueprint_rpc;
+pub mod blueprints;
 mod fetch;
+mod inbox;
 pub mod notepad;
 mod script;
 pub mod tool;
+
+pub use inbox::inbox;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

@@ -39,12 +39,15 @@ pub(super) struct Queued {
 }
 
 impl DaemonHost {
+    /// Admits `params` as an input of its session; `busy` overrides
+    /// `busy.input_mode` (a turn the daemon starts on its own always
+    /// queues: it neither steers nor interrupts someone's turn).
     pub(super) async fn submit_turn(
         &self,
         profile: &Arc<Profile>,
         params: SubmitParams,
-        author: Author,
-        link: Link,
+        (author, link): (Author, Link),
+        busy: Option<BusyInputMode>,
     ) -> Result<Submitted, Error> {
         let id = session_id(&params.session_id)?;
         // No new turn starts while the home is paused (spec: messaging-
@@ -74,7 +77,9 @@ impl DaemonHost {
         let admission = {
             let mut queue = session.queue.lock().expect("queue poisoned");
             if session.busy.swap(true, Ordering::AcqRel) {
-                Self::while_busy(&session, &mut queue, job, &params.text)?
+                let mode =
+                    busy.unwrap_or_else(|| session.live.config.get().config().busy.input_mode);
+                Self::while_busy(&session, &mut queue, job, &params.text, mode)?
             } else {
                 drop(queue);
                 self.start(Arc::clone(profile), id, Arc::clone(&session), job)?;
@@ -94,8 +99,8 @@ impl DaemonHost {
         queue: &mut std::collections::VecDeque<Queued>,
         job: Queued,
         text: &str,
+        mode: BusyInputMode,
     ) -> Result<Submitted, Error> {
-        let mode = session.live.config.get().config().busy.input_mode;
         let turn_id = job.turn_id.clone();
         match mode {
             BusyInputMode::Queue => queue.push_back(job),

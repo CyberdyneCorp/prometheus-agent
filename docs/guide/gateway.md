@@ -277,7 +277,9 @@ replaces the payload, other output is added as `script_output`, and no
 output, `[SILENT]` or `{"ignore": true}` drops the event. `skills` and
 `toolsets` shape each delivery's session. With `deliver_only = true` no
 model runs: the rendered prompt goes straight to `deliver` (a send
-target such as `telegram`).
+target such as `telegram`). With `cron_job = "<job>"` the event fires that
+scheduled job instead, the rendered prompt as its run context (see
+[Scheduled jobs](cron.md#webhook-triggered-runs)).
 
 ```toml
 [gateway.platforms.webhook.routes.alerts]

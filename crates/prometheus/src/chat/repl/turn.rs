@@ -335,6 +335,10 @@ impl Repl {
             child,
             model: Arc::clone(&live.model) as _,
             focus: None,
+            suggestions: Some(crate::cron_host::inbox(
+                &self.factory.scope,
+                Arc::clone(&self.factory.store),
+            )),
         };
         tokio::spawn(async move {
             if let Err(err) = pmt_memory::review::run(review).await {

@@ -32,6 +32,9 @@ pub enum CronCommand {
         /// approval.`).
         #[arg(long, requires = "paused")]
         paused_reason: Option<String>,
+        /// The suggestion this job accepts (`cron suggestions accept`).
+        #[arg(long, hide = true)]
+        from_suggestion: Option<String>,
     },
     /// Change a job; a new schedule is echoed and confirmed again.
     Edit {
@@ -123,6 +126,13 @@ pub enum CronCommand {
         #[command(subcommand)]
         action: Option<NotepadAction>,
     },
+    /// Suggested automations: `list` (default), `accept <n> [--yes]`,
+    /// `dismiss <n>`, `catalog` (adds the curated starters), `clear`.
+    Suggestions {
+        /// What to do.
+        #[command(subcommand)]
+        action: Option<SuggestionAction>,
+    },
     /// Job counts, the next due job and who ticks the profile.
     Status,
     /// Trigger, tick lease, due-but-unfired occurrences, jobs in error,
@@ -166,6 +176,32 @@ pub enum NotepadAction {
         /// The key.
         key: String,
     },
+}
+
+/// `cron suggestions` actions.
+#[derive(Debug, Clone, Subcommand)]
+pub enum SuggestionAction {
+    /// The pending suggestions, numbered.
+    List,
+    /// Create suggestion `n`'s job (its schedule is echoed and confirmed).
+    Accept {
+        /// Its number in the list.
+        n: usize,
+        /// Save without asking.
+        #[arg(long, short = 'y')]
+        yes: bool,
+    },
+    /// Never offer suggestion `n` again.
+    Dismiss {
+        /// Its number in the list.
+        n: usize,
+    },
+    /// Add the curated starters (daily briefing, important-mail monitor,
+    /// weekly review, workday-start reminder).
+    Catalog,
+    /// Drop accepted and dismissed suggestions from the inbox (dismissed
+    /// keys stay remembered).
+    Clear,
 }
 
 /// The fields of a job.

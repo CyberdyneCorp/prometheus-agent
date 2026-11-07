@@ -272,8 +272,11 @@ posts the outcome in the chat when the run ends.
 
 ## Delivery details
 
-- `cron.delivery.notify` (default true) sends output and notices as
-  notifying messages, never muted as warnings.
+- `cron.delivery.notify` (default true) sends output and notices as final,
+  notifying messages, text and media alike, overriding an adapter's quiet
+  notification mode and never muted as warnings. With `false` output is
+  sent silently where the platform can (Telegram `disable_notification`,
+  Discord suppressed notifications) and failure notices are warnings.
   `cron.delivery.threads.<platform> = "<thread>"` sends home-chat
   deliveries to that thread or topic.
 - A delivery is verified when the platform returns a message id; otherwise
@@ -281,15 +284,123 @@ posts the outcome in the chat when the run ends.
   lists it until a verified delivery. An empty answer is never sent
   (`delivery_failed`, `empty payload`).
 
+## Bot Chat deliveries
+
+`bot_chat` (the job's own profile) and `bot_chat:<profile>` (another
+profile of the same home; an unknown one is refused when the job is
+created) hand the output to that profile's canonical Bot Chat as an
+incoming message `[Scheduled: <job name>]`, and that profile takes one turn
+under its own configuration. The Bot Chat is created on the first
+delivery. The run stays `delivery_queued` until the daemon accepts the
+turn, then `ok`, and shows the receipt id (`cron show-run`); a retried
+delivery reuses the receipt and never starts a second turn. A target
+profile the daemon does not serve fails the delivery (`delivery_failed`)
+with no turn anywhere else.
+
+## Continuable deliveries
+
+With `--attach-to-session true` (or `cron.continuable = true` when the job
+leaves it unset) a delivery to the job's origin chat or a home channel (or
+to the single explicit chat of a job that set `--attach-to-session true`)
+starts a conversation a reply continues. Where the platform has threads or
+topics, each delivery opens a new one titled with the job's name, whose
+session starts with the delivered text as a user turn
+`[Cron delivery: <job name>]`: a reply in that thread is answered with the
+delivered text in context. On a platform without threads (or a named
+thread) the same turn is added to the chat's session. On an adapter that
+supports it (Slack), `cron.continuable_surface.<platform> = "in_channel"`
+posts top-level and seeds the channel's session instead.
+
+## Suggested automations
+
+The inbox (`/suggestions`, alias `/suggest`, or `prometheus cron
+suggestions`) offers jobs you have not set up yet: the curated starters
+(`catalog` adds a morning brief, an important-mail monitor, a weekly review
+and a workday-start reminder), the `blueprint` block of an installed skill,
+a request the background review noticed you keep making, and a starter for
+a newly connected account (`prometheus connectors connect`). At most five
+wait at once.
+
+```text
+/suggestions             numbered list
+/suggestions accept 2    shows the schedule echo; reply `yes` (or add --yes)
+/suggestions dismiss 1   never offered again
+/suggestions catalog     adds the starters
+/suggestions clear       drops accepted and dismissed entries
+```
+
+Nothing becomes a job until you accept it: accepting runs the same
+validated create as `/cron add`, so the schedule echo is shown and the job
+delivers to the chat you accepted it in. A dismissed key stays remembered,
+so the same suggestion is not offered again. A skill's blueprint that still
+needs values asks for them (`prometheus cron suggestions accept` points
+you to `/blueprint` for it).
+
+## Blueprints
+
+`/blueprint` (alias `/bp`) lists ready-made automations; `/blueprint
+<name> [slot=value ...]` fills one. The name matches a key, a prefix or a
+near spelling (`/bp price` is `price-watch`). Each missing value is asked
+one question at a time (your next message answers it); then the job's
+prompt and schedule echo are shown, and the job is created only after you
+reply `yes` (or pass `--yes`). It delivers to the chat you asked from.
+
+```text
+/blueprint morning-brief time=08:00 days=weekdays
+  -> cron 0 8 * * 1-5 (UTC) ... reply `yes` to save this job
+/bp morning-brief time=25:00
+  -> invalid value for slot 'time': expected a time of day as HH:MM (00:00-23:59)
+```
+
+Slots are typed: `time` (`HH:MM`, `8am`, `6:30pm`), `weekdays`
+(`everyday`, `weekdays`, `weekends` or days such as `mon,wed`), `enum` (one
+of its options, or any text when not strict) and `text`. The built-ins are
+`morning-brief`, `important-mail`, `weekly-review`, `workday-start`,
+`custom-reminder`, `evening-winddown`, `news-digest`, `bill-renewal-watch`,
+`price-watch`, `competitor-watch`, `habit-checkin`, `hydration-move`,
+`meal-plan`, `learn-daily`, `gratitude-journal` and `on-this-day`. Enabled
+plugins add theirs as `<plugin>:<key>` and skills as `skill:<key>`; none
+replaces a built-in. The dashboard and desktop fill the same slots as a
+form through RPC `cron.blueprints.list` and `cron.blueprints.fill`.
+
+A blueprint is data: a key, title, description, category, a
+`schedule_template` and a `prompt_template` with `{slot}` placeholders (in
+a schedule, `{days}` is a cron day field and `{time.hour}` /
+`{time.minute}` the parts of a time), and its slots:
+
+```yaml
+blueprint:
+  title: Daily digest
+  schedule: "{time.minute} {time.hour} * * {days}"
+  prompt: Write my daily digest about {topic}
+  slots:
+    - {name: time, kind: time, default: "18:00"}
+    - {name: days, kind: weekdays, default: weekdays}
+    - {name: topic, kind: text, question: "Which topic?"}
+```
+
+## Webhook-triggered runs
+
+A webhook route can fire a job instead of a turn: `cron_job` names the
+job (id or name; checked when the route loads). A verified event renders
+the route's `prompt` from the payload and queues one run of the job with
+that text as its `## Run Context` (used for that run only, never saved);
+the caller gets `202` at once. The job's own delivery, skills and toolsets
+apply (the route's `deliver` and `skills` are not used), and a route cannot
+set both `cron_job` and `deliver_only`. An event for a paused job, or one
+arriving while the job is already queued or running (a burst), is logged
+and answered `{"status": "dropped"}`: one run, never two.
+
+```toml
+[gateway.platforms.webhook.routes.pr-feedback]
+secret_secret = "PR_SECRET"
+events = ["pull_request_review"]
+cron_job = "pr-review-sweeper"
+prompt = "Review {review.state} on pull request {pull_request.number}"
+```
+
 ## Not in this build yet
 
 - `cron replay <run>` without `--live` (replaying recorded model responses)
   needs the model-call cache and exits 69.
 - Natural-language schedules (`--nl`, `schedule_text`) are refused.
-- `bot_chat[:<profile>]` is validated (an unknown profile is refused) and
-  queued with a receipt, but the delivery fails: Bot Chat turns are not
-  available in this build.
-- Continuable deliveries (`attach_to_session`, `cron.continuable`) are
-  stored but not yet linked to a conversation.
-- `cron suggestions`, `/suggestions`, `/blueprint` and webhook-triggered
-  job runs are not available yet.

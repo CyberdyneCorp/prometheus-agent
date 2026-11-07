@@ -343,6 +343,14 @@ pub fn active(store: &Store, job_id: &str) -> Result<bool, Error> {
         .any(|r| r.job_id == job_id))
 }
 
+/// `cron.already_running` for `job`.
+fn already_running(job: &Job) -> Error {
+    Error::new(
+        &codes::CRON_ALREADY_RUNNING,
+        format!("job {} ({}) is already running", job.id(), job.row.name),
+    )
+}
+
 /// Queues a run of `key` (`queued`) with `how`'s trigger and context; the
 /// job's schedule and state are untouched. An exclusive run is refused
 /// while another is queued or running (`cron.already_running`). The
@@ -369,17 +377,23 @@ pub fn queue_run(
         ));
     }
     if how.exclusive && (job.state() == JobState::Running || active(store, job.id())?) {
-        return Err(Error::new(
-            &codes::CRON_ALREADY_RUNNING,
-            format!("job {} ({}) is already running", job.id(), job.row.name),
-        ));
+        return Err(already_running(&job));
     }
     let mut run = run_row(&job, now, how.trigger.unwrap_or("manual"), Status::Ok);
     "queued".clone_into(&mut run.status);
     run.run_context.clone_from(&how.context);
     // Two manual runs in one millisecond still get distinct keys.
     for _ in 0..1000 {
-        match store.cron_insert_run(&run) {
+        let inserted = if how.exclusive {
+            // Checked again with the insert, so a burst starts one run.
+            match store.cron_insert_exclusive_run(&run) {
+                Ok(false) => return Err(already_running(&job)),
+                other => other.map(|_| ()),
+            }
+        } else {
+            store.cron_insert_run(&run)
+        };
+        match inserted {
             Ok(()) => return Ok((job, run)),
             Err(e) if e.code().code == codes::STORE_CONSTRAINT.code => run.scheduled_at += 1,
             Err(e) => return Err(e),

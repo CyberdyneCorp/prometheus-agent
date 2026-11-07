@@ -105,6 +105,8 @@ impl Adapter for FileAdapter {
             supports_threads: true,
             interactive: Interactive::Native,
             stateless_send: true,
+            // Threads and, like Slack, top-level continuations.
+            continuable_surface: pmt_gateway::messaging::descriptor::ContinuableSurface::InChannel,
             ..Descriptor::new(PLATFORM, 4096)
         }
     }
@@ -135,7 +137,7 @@ impl Adapter for FileAdapter {
                 "sent.jsonl",
                 &json!({"kind": "send", "chat": message.chat_id, "thread": message.thread_id,
                     "text": message.text, "buttons": buttons, "message_id": id,
-                    "attachments": message.attachments}),
+                    "attachments": message.attachments, "notify": message.notify}),
             );
             Ok(Sent {
                 message_id: Some(id),

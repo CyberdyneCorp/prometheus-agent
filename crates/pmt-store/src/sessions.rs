@@ -278,61 +278,43 @@ impl Store {
             .map(titles::sanitize)
             .transpose()?
             .flatten();
-        let id = SessionId::new();
-        let origin = serde_json::to_string(&new.origin).expect("origins serialize");
         let profile_id = self.profile_id().to_string();
+        self.write(|tx| insert(tx, new, given_title.as_deref(), &profile_id))
+    }
+
+    /// The profile's canonical Bot Chat, created from `new` (with the
+    /// `bot_chat` flag) when it has none that is not archived (spec:
+    /// bot-mode, Canonical Bot Chat; the get-or-create transaction of
+    /// `bot.chat.ensure`); `true` when it was created now.
+    ///
+    /// # Errors
+    ///
+    /// As [`create_session`](Self::create_session).
+    ///
+    /// # Panics
+    ///
+    /// Never: origins always serialize.
+    pub fn ensure_bot_chat(&self, new: &NewSession) -> Result<(Session, bool), Error> {
+        let profile_id = self.profile_id().to_string();
+        let new = NewSession {
+            bot_chat: true,
+            ..new.clone()
+        };
         self.write(|tx| {
-            let parent = new
-                .parent
-                .map(|(parent, kind)| {
-                    load(tx, parent)?
-                        .map(|session| (session, kind))
-                        .ok_or_else(|| not_found(parent))
-                })
-                .transpose()?;
-            let (title, title_source) = match (&given_title, &parent) {
-                (Some(title), _) => (Some(title.clone()), Some(new.title_source)),
-                (None, Some((parent, kind))) => titles::inherited(tx, parent, *kind)?,
-                (None, None) => (None, None),
-            };
-            if let Some(title) = &title {
-                titles::ensure_unused(tx, title, None)?;
+            let current: Option<String> = tx
+                .query_row(
+                    "SELECT id FROM sessions WHERE bot_chat = 1 AND archived = 'none' \
+                     ORDER BY started_at DESC, id DESC LIMIT 1",
+                    [],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(sql)?;
+            if let Some(id) = current {
+                let id: SessionId = id.parse().map_err(|e| corrupt("sessions.id", e))?;
+                return Ok((load(tx, id)?.ok_or_else(|| not_found(id))?, false));
             }
-            let root = match &parent {
-                Some((p, kind)) if *kind != LineageKind::Background => p.root_session_id,
-                _ => id,
-            };
-            let now = now_ms();
-            tx.execute(
-                "INSERT INTO sessions (id, profile_id, source, origin, model, provider, cwd, \
-                 git_repo_root, git_branch, title, title_source, started_at, last_activity_at, \
-                 hidden, bot_chat, system_prompt_hash, parent_session_id, lineage_kind, \
-                 root_session_id, source_tag) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, \
-                 ?11, ?12, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
-                params![
-                    id.to_string(),
-                    profile_id,
-                    new.source.as_str(),
-                    origin,
-                    new.model,
-                    new.provider,
-                    new.cwd,
-                    new.git_repo_root,
-                    new.git_branch,
-                    title,
-                    title_source.map(TitleSource::as_str),
-                    now,
-                    new.hidden,
-                    new.bot_chat,
-                    new.system_prompt_hash,
-                    parent.as_ref().map(|(p, _)| p.id.to_string()),
-                    parent.as_ref().map(|(_, kind)| kind.as_str()),
-                    root.to_string(),
-                    new.source_tag,
-                ],
-            )
-            .map_err(sql)?;
-            load(tx, id)?.ok_or_else(|| not_found(id))
+            Ok((insert(tx, &new, None, &profile_id)?, true))
         })
     }
 
@@ -544,4 +526,66 @@ fn continuation(conn: &Connection, id: SessionId) -> Result<Option<SessionId>, E
     .map_err(sql)?
     .map(|id| SessionId::parse(&id))
     .transpose()
+}
+
+/// Inserts the session `new` describes (its title already sanitised).
+fn insert(
+    tx: &Connection,
+    new: &NewSession,
+    given_title: Option<&str>,
+    profile_id: &str,
+) -> Result<Session, Error> {
+    let id = SessionId::new();
+    let origin = serde_json::to_string(&new.origin).expect("origins serialize");
+    let parent = new
+        .parent
+        .map(|(parent, kind)| {
+            load(tx, parent)?
+                .map(|session| (session, kind))
+                .ok_or_else(|| not_found(parent))
+        })
+        .transpose()?;
+    let (title, title_source) = match (&given_title, &parent) {
+        (Some(title), _) => (Some((*title).to_owned()), Some(new.title_source)),
+        (None, Some((parent, kind))) => titles::inherited(tx, parent, *kind)?,
+        (None, None) => (None, None),
+    };
+    if let Some(title) = &title {
+        titles::ensure_unused(tx, title, None)?;
+    }
+    let root = match &parent {
+        Some((p, kind)) if *kind != LineageKind::Background => p.root_session_id,
+        _ => id,
+    };
+    let now = now_ms();
+    tx.execute(
+        "INSERT INTO sessions (id, profile_id, source, origin, model, provider, cwd, \
+                 git_repo_root, git_branch, title, title_source, started_at, last_activity_at, \
+                 hidden, bot_chat, system_prompt_hash, parent_session_id, lineage_kind, \
+                 root_session_id, source_tag) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, \
+                 ?11, ?12, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+        params![
+            id.to_string(),
+            profile_id,
+            new.source.as_str(),
+            origin,
+            new.model,
+            new.provider,
+            new.cwd,
+            new.git_repo_root,
+            new.git_branch,
+            title,
+            title_source.map(TitleSource::as_str),
+            now,
+            new.hidden,
+            new.bot_chat,
+            new.system_prompt_hash,
+            parent.as_ref().map(|(p, _)| p.id.to_string()),
+            parent.as_ref().map(|(_, kind)| kind.as_str()),
+            root.to_string(),
+            new.source_tag,
+        ],
+    )
+    .map_err(sql)?;
+    load(tx, id)?.ok_or_else(|| not_found(id))
 }

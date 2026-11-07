@@ -8066,6 +8066,13 @@
       "additionalProperties": false,
       "description": "One webhook route.",
       "properties": {
+        "cron_job": {
+          "description": "Fire this scheduled job (its id or name) instead of a turn: the\nrendered prompt becomes the run's `## Run Context`, and the job's\nown delivery, skills and toolsets apply (`deliver` and `skills`\nare ignored). A paused or running job drops the event.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "deliver": {
           "description": "Where the answer goes: `origin` (the HTTP caller's response),\n`log` (recorded under `<profile>/logs/webhook/<route>.jsonl`),\n`github_comment` (a comment on the payload's pull request or issue)\nor a send target `platform[:chat_id[:thread_id]]`. Unset: `origin`.",
           "type": [

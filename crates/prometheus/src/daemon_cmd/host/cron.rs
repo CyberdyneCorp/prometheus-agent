@@ -82,7 +82,7 @@ async fn profile_loop(host: Arc<DaemonHost>, name: String, profile: Arc<Profile>
     }
     let permits = cron_host::permits(&first.config().cron);
     let sender = GatewaySender {
-        gateway: Arc::clone(&host.gateway),
+        host: Arc::clone(&host),
         profile: name.clone(),
         store: Arc::clone(&profile.store),
     };
@@ -108,7 +108,11 @@ async fn profile_loop(host: Arc<DaemonHost>, name: String, profile: Arc<Profile>
             }
             tick(&runner, &permits, &sender).await;
         }
-        tokio::time::sleep(next_wake(&profile.store, interval)).await;
+        // A webhook's queued run wakes the loop early.
+        tokio::select! {
+            () = tokio::time::sleep(next_wake(&profile.store, interval)) => {}
+            () = profile.cron_wake.notified() => {}
+        }
     }
 }
 

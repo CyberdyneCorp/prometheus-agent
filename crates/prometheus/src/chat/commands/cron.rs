@@ -39,55 +39,100 @@ pub const CONFIRM_REPLY: &str = "yes";
 /// confirmation tokens).
 const CONFIRM_WITHIN: Duration = Duration::from_mins(10);
 
-/// The `/cron` words whose echo each session was shown last, and when.
-type ShownEchoes = Mutex<HashMap<SessionId, (Vec<String>, Instant)>>;
+/// What a session's next input answers.
+#[derive(Debug, Clone)]
+pub(super) enum Pending {
+    /// A shown `/cron add|edit` echo: `yes` runs these words with `--yes`.
+    Echo(Vec<String>),
+    /// A `/blueprint` question: any input that is not a command answers it.
+    Question(super::blueprint::Asking),
+}
 
-/// The shown echoes waiting for the `yes` reply.
-fn shown() -> &'static ShownEchoes {
-    static SHOWN: OnceLock<ShownEchoes> = OnceLock::new();
+/// What each session's next input answers, and since when.
+type Waiting = Mutex<HashMap<SessionId, (Pending, Instant)>>;
+
+/// The inputs sessions wait for.
+fn shown() -> &'static Waiting {
+    static SHOWN: OnceLock<Waiting> = OnceLock::new();
     SHOWN.get_or_init(Mutex::default)
 }
 
-/// A `yes` reply to a shown `/cron add|edit` echo.
+/// Makes the next input of session `id` answer `pending`.
+pub(super) fn wait_for(id: SessionId, pending: Pending) {
+    shown()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .insert(id, (pending, Instant::now()));
+}
+
+/// An input answering what its session waited for: the `yes` to a shown
+/// echo, or the answer to a `/blueprint` question.
 #[derive(Debug)]
-pub struct Confirmation(Vec<String>);
+pub enum Confirmation {
+    /// Save the shown job.
+    Echo(Vec<String>),
+    /// The answer to a blueprint question.
+    Answer(super::blueprint::Asking, String),
+}
 
 fn is_reply(text: &str) -> bool {
     text.trim().eq_ignore_ascii_case(CONFIRM_REPLY)
 }
 
-/// Whether `text` is the reply that saves the echo session `id` was shown.
-#[must_use]
-pub fn awaits(id: SessionId, text: &str) -> bool {
-    is_reply(text)
-        && shown()
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .get(&id)
-            .is_some_and(|(_, at)| at.elapsed() <= CONFIRM_WITHIN)
+/// Whether `text` answers what `pending` waits for.
+fn answers(pending: &Pending, text: &str) -> bool {
+    match pending {
+        Pending::Echo(_) => is_reply(text),
+        Pending::Question(_) => {
+            let text = text.trim();
+            !text.is_empty() && !text.starts_with('/')
+        }
+    }
 }
 
-/// The next input `text` of session `id`: the confirmation of its shown
-/// echo when `text` is the `yes` reply; any input drops the shown job.
+/// Whether `text` answers what session `id` waits for (the `yes` saving
+/// a shown echo, the answer to a blueprint question).
+#[must_use]
+pub fn awaits(id: SessionId, text: &str) -> bool {
+    shown()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get(&id)
+        .is_some_and(|(pending, at)| at.elapsed() <= CONFIRM_WITHIN && answers(pending, text))
+}
+
+/// The next input `text` of session `id`: what it answers, when it
+/// answers what the session waited for; any input ends the wait.
 #[must_use]
 pub fn take(id: SessionId, text: &str) -> Option<Confirmation> {
-    let (words, at) = shown()
+    let (pending, at) = shown()
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .remove(&id)?;
-    (is_reply(text) && at.elapsed() <= CONFIRM_WITHIN).then_some(Confirmation(words))
+    if at.elapsed() > CONFIRM_WITHIN || !answers(&pending, text) {
+        return None;
+    }
+    Some(match pending {
+        Pending::Echo(words) => Confirmation::Echo(words),
+        Pending::Question(asking) => Confirmation::Answer(asking, text.trim().to_owned()),
+    })
 }
 
-/// Saves the confirmed job: the shown command again, with `--yes` (it is
-/// validated again, so a job that stopped being valid is refused).
+/// Acts on `confirmation`: saves the shown job (the shown command again,
+/// with `--yes`: it is validated again, so a job that stopped being valid
+/// is refused), or takes the blueprint answer and asks the next question.
 ///
 /// # Errors
 ///
-/// As `/cron add|edit`.
+/// As `/cron add|edit` and `/blueprint`.
 pub fn confirm(ctx: &Ctx<'_>, confirmation: Confirmation) -> Result<String, Error> {
-    let mut words = confirmation.0;
-    words.insert(1.min(words.len()), "--yes".to_owned());
-    dispatch(ctx, words)
+    match confirmation {
+        Confirmation::Echo(mut words) => {
+            words.insert(1.min(words.len()), "--yes".to_owned());
+            dispatch(ctx, words)
+        }
+        Confirmation::Answer(asking, text) => super::blueprint::answer(ctx, asking, &text),
+    }
 }
 
 fn usage(message: impl Into<String>) -> Error {
@@ -97,7 +142,7 @@ fn usage(message: impl Into<String>) -> Error {
 /// Splits `args` like a shell: whitespace separates words, single and
 /// double quotes group them (a backslash escapes the next character
 /// inside double quotes and outside quotes).
-fn words(args: &str) -> Result<Vec<String>, Error> {
+pub(super) fn words(args: &str) -> Result<Vec<String>, Error> {
     let mut words = Vec::new();
     let mut word = String::new();
     let mut started = false;
@@ -143,16 +188,14 @@ pub(super) fn cron(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
     dispatch(ctx, words(args)?)
 }
 
-fn dispatch(ctx: &Ctx<'_>, words: Vec<String>) -> Result<String, Error> {
+/// Runs `/cron` with `words` (a shown echo waits for its `yes`).
+pub(super) fn dispatch(ctx: &Ctx<'_>, words: Vec<String>) -> Result<String, Error> {
     let parsed = Slash::try_parse_from(&words).map_err(|e| usage(e.to_string()))?;
     let command = parsed.command.unwrap_or(CronCommand::List { all: false });
     let text = match run(ctx, command)? {
         Shown::Done(text) => text,
         Shown::Echo(text) => {
-            shown()
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .insert(ctx.live.id, (words, Instant::now()));
+            wait_for(ctx.live.id, Pending::Echo(words));
             text
         }
     };
@@ -228,12 +271,17 @@ fn run(ctx: &Ctx<'_>, command: CronCommand) -> Result<Shown, Error> {
             mut flags,
             paused,
             paused_reason,
+            from_suggestion,
         } => {
             if prompt_text.is_some() {
                 flags.prompt = prompt_text;
             }
             let paused = paused.then(|| paused_reason.unwrap_or_default());
-            add(ctx, schedule.as_deref(), &flags, paused, now)
+            let shown = add(ctx, schedule.as_deref(), &flags, paused, now)?;
+            if let (Shown::Done(_), Some(key)) = (&shown, from_suggestion) {
+                pmt_cron::suggest::accepted(&ctx.factory.store, &key)?;
+            }
+            Ok(shown)
         }
         CronCommand::Edit {
             job,

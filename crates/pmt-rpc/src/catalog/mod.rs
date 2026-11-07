@@ -128,6 +128,8 @@ pub fn declare_builtin(d: &mut Declarations) {
         .method::<c::FilesUndo>()
         .method::<c::FilesRollback>()
         .method::<c::LspStatusCall>()
+        .method::<c::BlueprintsListCall>()
+        .method::<c::BlueprintsFillCall>()
         .method::<c::WorktreeNew>()
         .method::<c::WorktreeStatusCall>()
         .method::<c::WorktreeList>()

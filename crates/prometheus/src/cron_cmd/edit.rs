@@ -43,11 +43,19 @@ fn saved(env: &Env<'_>, verb: &str, job: &Job, echo: Option<&Echo>) -> Result<u8
     print_raw(&format!("{verb} job {} ({})\n", job.id(), job.row.name))
 }
 
+/// How `cron add` creates its job.
+pub(super) struct Creation<'a> {
+    /// Created paused, with this reason.
+    pub paused: Option<String>,
+    /// The suggestion it accepts (marked accepted once saved).
+    pub suggestion: Option<&'a str>,
+}
+
 pub(super) fn add(
     env: &Env<'_>,
     schedule: Option<&str>,
     flags: &JobFlags,
-    paused: Option<String>,
+    how: Creation<'_>,
     now: Timestamp,
 ) -> Result<u8, Error> {
     let runner = env.runner();
@@ -67,9 +75,12 @@ pub(super) fn add(
     let new = ops::NewJob {
         name: flags.name.clone(),
         origin: None,
-        paused,
+        paused: how.paused,
     };
     let job = ops::create(&profile, spec, new, now)?;
+    if let Some(key) = how.suggestion {
+        pmt_cron::suggest::accepted(&env.store, key)?;
+    }
     saved(env, "created", &job, Some(&echo))
 }
 

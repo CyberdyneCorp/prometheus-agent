@@ -32,6 +32,9 @@ use super::turn::{SecretsToClients, SudoToClients, ToClients, approvals, clarify
 
 mod commands;
 mod cron;
+mod cron_admit;
+mod cron_continue;
+mod cron_fire;
 mod cron_send;
 mod delegations;
 mod discovery;
@@ -104,6 +107,8 @@ struct Profile {
     factories: Mutex<HashMap<(PathBuf, SessionSetup), Arc<Factory>>>,
     setups: Mutex<HashMap<SessionId, SessionSetup>>,
     loaded: tokio::sync::Mutex<HashMap<SessionId, Arc<Loaded>>>,
+    /// Wakes the profile's scheduler loop (a webhook queued a run).
+    cron_wake: tokio::sync::Notify,
 }
 
 /// The daemon's host over every served profile.
@@ -158,6 +163,7 @@ impl Profile {
             factories: Mutex::default(),
             setups: Mutex::default(),
             loaded: tokio::sync::Mutex::default(),
+            cron_wake: tokio::sync::Notify::new(),
         }))
     }
 
@@ -690,6 +696,21 @@ impl Host for DaemonHost {
         Ok(crate::lsp_cmd::status(&scope))
     }
 
+    fn cron_blueprints(&self, profile: &str) -> Result<pmt_rpc::contracts::BlueprintList, Error> {
+        let scope = self.profile(profile)?.scope();
+        Ok(crate::cron_host::blueprint_rpc::list(&scope, &self.launch))
+    }
+
+    fn cron_blueprint_fill(
+        &self,
+        profile: &str,
+        params: &pmt_rpc::contracts::BlueprintFillParams,
+    ) -> Result<pmt_rpc::contracts::BlueprintFilled, Error> {
+        let served = self.profile(profile)?;
+        let store = Arc::clone(&served.store);
+        crate::cron_host::blueprint_rpc::fill(&served.scope(), &self.launch, store, params)
+    }
+
     fn vault(&self, profile: &str) -> Result<pmt_gateway::vault::VaultAccess, Error> {
         let scope = self.profile(profile)?.scope();
         Ok(pmt_gateway::vault::VaultAccess {
@@ -740,7 +761,8 @@ impl Host for DaemonHost {
         Box::pin(
             async move {
                 let profile = &self.profile(profile)?;
-                self.submit_turn(profile, params, author, link).await
+                self.submit_turn(profile, params, (author, link), None)
+                    .await
             }
             .instrument(span),
         )

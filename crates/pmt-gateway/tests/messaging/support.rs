@@ -485,6 +485,10 @@ impl Agents for FakeAgents {
     }
 
     fn lookup<'a>(&'a self, _: &'a str, _: &'a str, line: &'a str) -> HostFuture<'a, Lookup> {
+        // Plain text is a turn: this host never waits for an answer.
+        if !line.trim_start().starts_with('/') {
+            return Box::pin(async { Ok(Lookup::Text) });
+        }
         let line = line.trim().trim_start_matches('/');
         let (token, args) = line.split_once(' ').unwrap_or((line, ""));
         let token = token.to_lowercase();

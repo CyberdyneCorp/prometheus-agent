@@ -41,6 +41,21 @@ pub fn frame(job_id: &str, job_name: &str, content: &str, wrap: bool) -> String 
     )
 }
 
+/// What a Bot Chat receives: the output as an incoming message labelled
+/// `[Scheduled: <job name>]` (spec: Bot Chat delivery target).
+#[must_use]
+pub fn bot_chat_body(job_name: &str, content: &str) -> String {
+    format!("[Scheduled: {job_name}]\n\n{}", content.trim_end())
+}
+
+/// The seed of a continuable delivery's conversation: the delivered text
+/// as a user turn labelled `[Cron delivery: <job name>]` (spec:
+/// Continuable deliveries).
+#[must_use]
+pub fn continuation_seed(job_name: &str, delivered: &str) -> String {
+    format!("[Cron delivery: {job_name}]\n\n{}", delivered.trim_end())
+}
+
 /// A failed send.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SendError {

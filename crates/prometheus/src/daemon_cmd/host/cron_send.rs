@@ -4,9 +4,15 @@
 //!
 //! A platform the profile does not enable fails rather than borrowing
 //! another profile's adapter. A home-chat target with a configured cron
-//! thread arrives as `<platform>::<thread>`. A send is confirmed by the
+//! thread arrives as `<platform>::<thread>`. Output is sent as a final,
+//! notifying message (overriding an adapter's quiet notification mode)
+//! unless `cron.delivery.notify = false`, which sends it silently. A
+//! continuable row first links the delivery to a conversation
+//! (`cron_continue`); a `bot_chat:<profile>` row is admitted as a turn of
+//! that profile's Bot Chat (`cron_admit`). A send is confirmed by the
 //! gateway outbox entry it becomes: sent with a platform message id is
-//! verified, sent without one (or not settled in time) is unverified.
+//! verified, sent without one (or not settled in time) is unverified; an
+//! admitted Bot Chat turn is verified by its session.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -19,7 +25,8 @@ use pmt_store::Store;
 use pmt_store::cron::DeliveryRow;
 use pmt_store::gateway::outbox::OutboundState;
 
-use super::send_tool::GatewayCell;
+use super::DaemonHost;
+use super::cron_admit::BotChatDelivery;
 
 /// How long a send waits for its outbox entry to settle.
 const CONFIRM_WAIT: Duration = Duration::from_secs(20);
@@ -28,9 +35,16 @@ const CONFIRM_POLL: Duration = Duration::from_millis(100);
 
 /// Sends one profile's deliveries.
 pub(super) struct GatewaySender {
-    pub(super) gateway: GatewayCell,
+    pub(super) host: Arc<DaemonHost>,
     pub(super) profile: String,
     pub(super) store: Arc<Store>,
+}
+
+fn not_running() -> SendError {
+    SendError {
+        transient: true,
+        message: "the messaging gateway is not running yet".to_owned(),
+    }
 }
 
 fn permanent(message: String) -> SendError {
@@ -54,13 +68,17 @@ impl GatewaySender {
         }
     }
 
+    /// The job's name, for labels.
+    fn job_name(&self, row: &DeliveryRow) -> String {
+        self.store
+            .cron_job(&row.job_id)
+            .ok()
+            .flatten()
+            .map_or_else(|| row.job_id.clone(), |job| job.name)
+    }
+
     async fn messaging(&self, row: &DeliveryRow) -> Result<Sent, SendError> {
-        let Some(gateway) = self.gateway.get() else {
-            return Err(SendError {
-                transient: true,
-                message: "the messaging gateway is not running yet".to_owned(),
-            });
-        };
+        let gateway = self.host.gateway.get().ok_or_else(not_running)?;
         let (target, thread) = match row.target.split_once("::") {
             Some((platform, thread)) => (platform, Some(thread.to_owned())),
             None => (row.target.as_str(), None),
@@ -72,6 +90,14 @@ impl GatewaySender {
         if thread.is_some() {
             to.thread_id = thread;
         }
+        if row.continuable {
+            let name = self.job_name(row);
+            to = self
+                .host
+                .continue_delivery(gateway, &self.profile, to, (&name, &row.body))
+                .await
+                .map_err(|err| self.refused(target, &err))?;
+        }
         let entry = if row.warning {
             let request = SendRequest {
                 target: to.label(),
@@ -81,10 +107,42 @@ impl GatewaySender {
             };
             gateway.send(&self.profile, &request).await
         } else {
-            gateway.enqueue(&self.profile, &to, &row.body, &[])
+            gateway.enqueue_notifying(&self.profile, &to, &row.body, &[], self.notify())
         }
         .map_err(|err| self.refused(target, &err))?;
         self.confirm(entry.id).await
+    }
+
+    /// `cron.delivery.notify` of the profile now.
+    fn notify(&self) -> bool {
+        self.host
+            .profile(&self.profile)
+            .map_or(true, |p| p.scope().config().cron.delivery.notify)
+    }
+
+    /// Admits a Bot Chat row as one turn of `profile`'s Bot Chat.
+    async fn bot_chat(&self, profile: &str, row: &DeliveryRow) -> Result<Sent, SendError> {
+        let gateway = self.host.gateway.get().ok_or_else(not_running)?;
+        let delivery = BotChatDelivery {
+            target: profile,
+            receipt: &row.id,
+            from: &self.profile,
+            job_id: &row.job_id,
+            text: &row.body,
+        };
+        let session = self
+            .host
+            .admit_bot_chat(gateway, &delivery)
+            .await
+            .map_err(|err| {
+                permanent(format!(
+                    "the Bot Chat of profile '{profile}' cannot be reached: {}",
+                    err.message()
+                ))
+            })?;
+        Ok(Sent {
+            message_id: Some(session),
+        })
     }
 
     /// Waits for outbox entry `id` to settle.
@@ -124,13 +182,10 @@ impl GatewaySender {
 impl Sender for GatewaySender {
     fn send<'a>(&'a self, row: &'a DeliveryRow) -> BoxFuture<'a, Result<Sent, SendError>> {
         Box::pin(async move {
-            if let Some(profile) = row.target.strip_prefix(BOT_CHAT) {
-                return Err(permanent(format!(
-                    "the Bot Chat of profile '{profile}' cannot be reached: Bot Chat deliveries \
-                     are not available in this build"
-                )));
+            match row.target.strip_prefix(BOT_CHAT) {
+                Some(profile) => self.bot_chat(profile, row).await,
+                None => self.messaging(row).await,
             }
-            self.messaging(row).await
         })
     }
 }

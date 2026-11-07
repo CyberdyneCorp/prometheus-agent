@@ -146,7 +146,27 @@ async fn wait(
     }
 }
 
+/// A newly connected account may suggest a starter automation (spec:
+/// scheduled-jobs, Suggested automations inbox: `integration`); never a
+/// job by itself.
+fn suggest(ctx: &Context<'_>, connector: &str) {
+    let offered = ctx.scope().and_then(|scope| {
+        let store = pmt_store::Store::open(&scope)?;
+        crate::cron_host::blueprints::offer_integration(&store, connector)
+    });
+    match offered {
+        Ok(true) if !ctx.json => {
+            println!("Suggested an automation for {connector}: see `prometheus cron suggestions`");
+        }
+        Ok(_) => {}
+        Err(err) => tracing::debug!("no automation suggested: {err}"),
+    }
+}
+
 fn done(ctx: &Context<'_>, result: &ConnectResult, state: &str) -> u8 {
+    if state == "connected" {
+        suggest(ctx, &result.connector);
+    }
     if ctx.json {
         println!(
             "{}",

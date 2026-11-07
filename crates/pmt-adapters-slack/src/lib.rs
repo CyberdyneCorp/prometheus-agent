@@ -291,6 +291,9 @@ impl Adapter for Slack {
             task_cards: true,
             status_line: true,
             private_replies: true,
+            // A continuable scheduled delivery may post top-level and
+            // seed the channel's session (`cron.continuable_surface`).
+            continuable_surface: pmt_gateway::messaging::descriptor::ContinuableSurface::InChannel,
             ..Descriptor::new(PLATFORM, limit)
         }
     }

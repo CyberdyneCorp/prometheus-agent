@@ -373,6 +373,9 @@ impl Adapter for Telegram {
                 if let Some(thread) = &message.thread_id {
                     fields.push(("message_thread_id", thread.clone()));
                 }
+                if message.notify == Some(false) {
+                    fields.push(("disable_notification", "true".to_owned()));
+                }
                 let sent = api.upload(method, &fields, field, path).await?;
                 first = first.or_else(|| normalize::id(&sent["message_id"]));
             }

@@ -12,7 +12,7 @@ use pmt_store::gateway::routes::ResetReason;
 
 use super::{Deferred, Lane, Origin, Pending};
 use crate::messaging::adapter::Inbound;
-use crate::messaging::agents::{BusyPolicy, CONFIRM_REPLY, Lookup};
+use crate::messaging::agents::{BusyPolicy, Lookup};
 use crate::messaging::auth::{self, ADMIN_ONLY};
 use crate::messaging::hooks::PreCommand;
 use crate::messaging::key::Routing;
@@ -58,7 +58,9 @@ impl Lane {
 
     async fn dispatch(&mut self, seq: u64, routing: Routing, inbound: Inbound, depth: u8) {
         let line = inbound.text.trim().to_owned();
-        if !line.starts_with('/') && !line.eq_ignore_ascii_case(CONFIRM_REPLY) {
+        // Plain text is a turn unless the session waits for it (the `yes`
+        // to a shown echo, the answer to a question): the host says which.
+        if line.is_empty() {
             self.text(routing, &inbound).await;
             return;
         }

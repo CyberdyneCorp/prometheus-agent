@@ -2865,10 +2865,14 @@ capabilities = [
 "Failures go to an ops channel" = ["crates/pmt-cron/tests/failures.rs::failures_go_to_the_failure_targets"]
 
 [scheduled-jobs."Bot Chat delivery target"]
-"Unknown profile rejected at create" = ["crates/pmt-cron/src/validate.rs::an_unknown_bot_chat_profile_is_refused"]
+"Output processed by another profile's bot" = ["crates/prometheus/tests/cron_delivery.rs::another_profiles_bot_chat_takes_one_turn_per_receipt"]
+"Unknown profile rejected at create" = ["crates/pmt-cron/src/validate.rs::an_unknown_bot_chat_profile_is_refused", "crates/prometheus/tests/cron_delivery.rs::another_profiles_bot_chat_takes_one_turn_per_receipt"]
 
 [scheduled-jobs."Push notification flag, cron threads and delivery confirmation"]
 "Adapter ack without message id" = ["crates/pmt-cron/tests/gates.rs::an_acknowledgement_without_a_message_id_is_unverified"]
+
+[scheduled-jobs."Continuable deliveries"]
+"Reply to a daily brief continues it" = { tests = ["crates/prometheus/tests/cron_delivery.rs::a_reply_in_the_delivery_thread_continues_with_the_brief"], note = "the debug-build file adapter opens threads as Telegram opens topics (the gateway thread path every threaded adapter shares)" }
 
 [scheduled-jobs."Agent-declared run failure"]
 "Agent reports a failed subtask" = ["crates/pmt-cron/tests/failures.rs::an_agent_declared_failure_fails_the_run", "crates/pmt-cron/src/failure.rs::the_marker_counts_only_alone_on_the_first_line"]
@@ -2896,3 +2900,17 @@ capabilities = [
 
 [scheduled-jobs."/cron slash command"]
 "Add from a Discord thread" = { tests = ["crates/prometheus/tests/cron_daemon.rs::a_job_added_with_slash_cron_in_a_thread_delivers_there", "crates/prometheus/tests/cron_daemon.rs::a_slash_cron_job_waits_for_the_yes_reply", "crates/prometheus/tests/tui_daemon.rs::a_yes_after_a_cron_echo_saves_the_job_without_a_turn", "crates/prometheus/tests/cron_cli.rs::the_line_interface_saves_a_slash_cron_job_on_yes"], note = "proven on the debug-build file adapter's platform (`test`), the gateway slash path every adapter shares; the `yes` reply (instead of `--yes`) on the gateway, a daemon client and the line interface" }
+
+[scheduled-jobs."Suggested automations inbox"]
+"Dismissed suggestion is not re-offered" = ["crates/pmt-cron/tests/suggestions.rs::a_dismissed_suggestion_is_not_offered_again", "crates/prometheus/tests/cron_automations.rs::the_review_cannot_offer_a_dismissed_suggestion_again"]
+
+[scheduled-jobs."Automation blueprint catalog"]
+"Inline values skip the questions" = ["crates/pmt-cron/src/blueprint/tests.rs::inline_values_render_the_schedule_and_prompt", "crates/prometheus/tests/cron_automations.rs::a_blueprint_echoes_its_schedule_and_saves_only_on_yes"]
+"Invalid slot value" = ["crates/pmt-cron/src/blueprint/tests.rs::an_invalid_slot_value_is_refused_by_name", "crates/prometheus/tests/cron_automations.rs::a_blueprint_echoes_its_schedule_and_saves_only_on_yes"]
+
+[scheduled-jobs."Webhook-triggered job runs"]
+"PR review feedback fires a sweeper job" = ["crates/prometheus/tests/cron_webhooks.rs::a_signed_review_event_fires_the_sweeper_job_once"]
+"Burst does not double-fire" = ["crates/prometheus/tests/cron_webhooks.rs::a_signed_review_event_fires_the_sweeper_job_once"]
+
+[skills."Blueprint skills never auto-schedule"]
+"Install does not create a job" = { tests = ["crates/prometheus/tests/cron_automations.rs::the_inbox_offers_starters_and_skill_blueprints_without_creating_jobs"], note = "the skill is placed in the profile's skills directory (what an install writes); the inbox offers its blueprint and no job exists" }

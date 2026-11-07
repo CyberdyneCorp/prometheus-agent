@@ -8,6 +8,7 @@ mod edit;
 mod incidents;
 pub mod notepad;
 mod show;
+mod suggestions;
 mod tick;
 
 use std::sync::Arc;
@@ -17,7 +18,9 @@ use pmt_config::ProfileScope;
 use pmt_core::error::Error;
 use pmt_store::Store;
 
-pub use self::args::{CronCommand, IncidentAction, JobFlags, NotepadAction, main_model};
+pub use self::args::{
+    CronCommand, IncidentAction, JobFlags, NotepadAction, SuggestionAction, main_model,
+};
 
 use crate::context::Context;
 use crate::cron_host::HostRunner;
@@ -54,14 +57,20 @@ pub fn run(command: &CronCommand, ctx: &Context<'_>) -> Result<u8, Error> {
             flags,
             paused,
             paused_reason,
+            from_suggestion,
         } => {
             let paused = paused.then(|| paused_reason.clone().unwrap_or_default());
             let mut flags = flags.clone();
             if prompt_text.is_some() {
                 flags.prompt.clone_from(prompt_text);
             }
-            edit::add(&env, schedule.as_deref(), &flags, paused, now)
+            let how = edit::Creation {
+                paused,
+                suggestion: from_suggestion.as_deref(),
+            };
+            edit::add(&env, schedule.as_deref(), &flags, how, now)
         }
+        CronCommand::Suggestions { action } => suggestions::run(&env, action.as_ref(), now),
         CronCommand::Edit {
             job,
             schedule,

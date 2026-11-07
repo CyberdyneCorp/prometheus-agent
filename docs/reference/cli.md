@@ -4737,22 +4737,23 @@ Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and t
 Usage: prometheus cron [OPTIONS] <COMMAND>
 
 Commands:
-  list       The jobs: id, name, schedule, state, next run and last status
-  add        Create a job; the schedule is echoed with its next three instants and saved only after confirmation
-  edit       Change a job; a new schedule is echoed and confirmed again
-  pause      Stop a job from firing until it is resumed
-  resume     Fire a paused job again, from now
-  run        Run a job now, in the foreground (its schedule and state are untouched)
-  remove     Delete a job (its run records are kept under run retention) [alias: rm]
-  runs       A job's runs, newest first
-  show-run   One run in full: times, status, error, session, cost and output
-  replay     Re-execute a recorded run without delivering it
-  incidents  Failure incidents, newest activity first; `ack <id>` silences one
-  notepad    A job's notepad: `list` (default), `get <key>`, `set <key> <value>`, `delete <key>`
-  status     Job counts, the next due job and who ticks the profile
-  doctor     Trigger, tick lease, due-but-unfired occurrences, jobs in error, undelivered outbox rows and every `cron.*` setting; exits 1 when a job is in error or a delivery outcome is unknown
-  tick       Run one tick in this process (for OS schedulers); does nothing while a gateway daemon owns scheduling
-  help       Print this message or the help of the given subcommand(s)
+  list         The jobs: id, name, schedule, state, next run and last status
+  add          Create a job; the schedule is echoed with its next three instants and saved only after confirmation
+  edit         Change a job; a new schedule is echoed and confirmed again
+  pause        Stop a job from firing until it is resumed
+  resume       Fire a paused job again, from now
+  run          Run a job now, in the foreground (its schedule and state are untouched)
+  remove       Delete a job (its run records are kept under run retention) [alias: rm]
+  runs         A job's runs, newest first
+  show-run     One run in full: times, status, error, session, cost and output
+  replay       Re-execute a recorded run without delivering it
+  incidents    Failure incidents, newest activity first; `ack <id>` silences one
+  notepad      A job's notepad: `list` (default), `get <key>`, `set <key> <value>`, `delete <key>`
+  suggestions  Suggested automations: `list` (default), `accept <n> [--yes]`, `dismiss <n>`, `catalog` (adds the curated starters), `clear`
+  status       Job counts, the next due job and who ticks the profile
+  doctor       Trigger, tick lease, due-but-unfired occurrences, jobs in error, undelivered outbox rows and every `cron.*` setting; exits 1 when a job is in error or a delivery outcome is unknown
+  tick         Run one tick in this process (for OS schedulers); does nothing while a gateway daemon owns scheduling
+  help         Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -5828,6 +5829,323 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus cron notepad help help
 ```
 
+## `prometheus cron suggestions`
+
+```text
+Suggested automations: `list` (default), `accept <n> [--yes]`, `dismiss <n>`, `catalog` (adds the curated starters), `clear`
+
+Usage: prometheus cron suggestions [OPTIONS] [COMMAND]
+
+Commands:
+  list     The pending suggestions, numbered
+  accept   Create suggestion `n`'s job (its schedule is echoed and confirmed)
+  dismiss  Never offer suggestion `n` again
+  catalog  Add the curated starters (daily briefing, important-mail monitor, weekly review, workday-start reminder)
+  clear    Drop accepted and dismissed suggestions from the inbox (dismissed keys stay remembered)
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus cron suggestions list`
+
+```text
+The pending suggestions, numbered
+
+Usage: prometheus cron suggestions list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus cron suggestions accept`
+
+```text
+Create suggestion `n`'s job (its schedule is echoed and confirmed)
+
+Usage: prometheus cron suggestions accept [OPTIONS] <N>
+
+Arguments:
+  <N>
+          Its number in the list
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -y, --yes
+          Save without asking
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus cron suggestions dismiss`
+
+```text
+Never offer suggestion `n` again
+
+Usage: prometheus cron suggestions dismiss [OPTIONS] <N>
+
+Arguments:
+  <N>
+          Its number in the list
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus cron suggestions catalog`
+
+```text
+Add the curated starters (daily briefing, important-mail monitor, weekly review, workday-start reminder)
+
+Usage: prometheus cron suggestions catalog [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus cron suggestions clear`
+
+```text
+Drop accepted and dismissed suggestions from the inbox (dismissed keys stay remembered)
+
+Usage: prometheus cron suggestions clear [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus cron suggestions help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus cron suggestions help [COMMAND]
+
+Commands:
+  list     The pending suggestions, numbered
+  accept   Create suggestion `n`'s job (its schedule is echoed and confirmed)
+  dismiss  Never offer suggestion `n` again
+  catalog  Add the curated starters (daily briefing, important-mail monitor, weekly review, workday-start reminder)
+  clear    Drop accepted and dismissed suggestions from the inbox (dismissed keys stay remembered)
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus cron suggestions help list`
+
+```text
+The pending suggestions, numbered
+
+Usage: prometheus cron suggestions help list
+```
+
+## `prometheus cron suggestions help accept`
+
+```text
+Create suggestion `n`'s job (its schedule is echoed and confirmed)
+
+Usage: prometheus cron suggestions help accept
+```
+
+## `prometheus cron suggestions help dismiss`
+
+```text
+Never offer suggestion `n` again
+
+Usage: prometheus cron suggestions help dismiss
+```
+
+## `prometheus cron suggestions help catalog`
+
+```text
+Add the curated starters (daily briefing, important-mail monitor, weekly review, workday-start reminder)
+
+Usage: prometheus cron suggestions help catalog
+```
+
+## `prometheus cron suggestions help clear`
+
+```text
+Drop accepted and dismissed suggestions from the inbox (dismissed keys stay remembered)
+
+Usage: prometheus cron suggestions help clear
+```
+
+## `prometheus cron suggestions help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus cron suggestions help help
+```
+
 ## `prometheus cron status`
 
 ```text
@@ -5953,22 +6271,23 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus cron help [COMMAND]
 
 Commands:
-  list       The jobs: id, name, schedule, state, next run and last status
-  add        Create a job; the schedule is echoed with its next three instants and saved only after confirmation
-  edit       Change a job; a new schedule is echoed and confirmed again
-  pause      Stop a job from firing until it is resumed
-  resume     Fire a paused job again, from now
-  run        Run a job now, in the foreground (its schedule and state are untouched)
-  remove     Delete a job (its run records are kept under run retention)
-  runs       A job's runs, newest first
-  show-run   One run in full: times, status, error, session, cost and output
-  replay     Re-execute a recorded run without delivering it
-  incidents  Failure incidents, newest activity first; `ack <id>` silences one
-  notepad    A job's notepad: `list` (default), `get <key>`, `set <key> <value>`, `delete <key>`
-  status     Job counts, the next due job and who ticks the profile
-  doctor     Trigger, tick lease, due-but-unfired occurrences, jobs in error, undelivered outbox rows and every `cron.*` setting; exits 1 when a job is in error or a delivery outcome is unknown
-  tick       Run one tick in this process (for OS schedulers); does nothing while a gateway daemon owns scheduling
-  help       Print this message or the help of the given subcommand(s)
+  list         The jobs: id, name, schedule, state, next run and last status
+  add          Create a job; the schedule is echoed with its next three instants and saved only after confirmation
+  edit         Change a job; a new schedule is echoed and confirmed again
+  pause        Stop a job from firing until it is resumed
+  resume       Fire a paused job again, from now
+  run          Run a job now, in the foreground (its schedule and state are untouched)
+  remove       Delete a job (its run records are kept under run retention)
+  runs         A job's runs, newest first
+  show-run     One run in full: times, status, error, session, cost and output
+  replay       Re-execute a recorded run without delivering it
+  incidents    Failure incidents, newest activity first; `ack <id>` silences one
+  notepad      A job's notepad: `list` (default), `get <key>`, `set <key> <value>`, `delete <key>`
+  suggestions  Suggested automations: `list` (default), `accept <n> [--yes]`, `dismiss <n>`, `catalog` (adds the curated starters), `clear`
+  status       Job counts, the next due job and who ticks the profile
+  doctor       Trigger, tick lease, due-but-unfired occurrences, jobs in error, undelivered outbox rows and every `cron.*` setting; exits 1 when a job is in error or a delivery outcome is unknown
+  tick         Run one tick in this process (for OS schedulers); does nothing while a gateway daemon owns scheduling
+  help         Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus cron help list`
@@ -6114,6 +6433,61 @@ Usage: prometheus cron help notepad set
 Deletes a key
 
 Usage: prometheus cron help notepad delete
+```
+
+## `prometheus cron help suggestions`
+
+```text
+Suggested automations: `list` (default), `accept <n> [--yes]`, `dismiss <n>`, `catalog` (adds the curated starters), `clear`
+
+Usage: prometheus cron help suggestions [COMMAND]
+
+Commands:
+  list     The pending suggestions, numbered
+  accept   Create suggestion `n`'s job (its schedule is echoed and confirmed)
+  dismiss  Never offer suggestion `n` again
+  catalog  Add the curated starters (daily briefing, important-mail monitor, weekly review, workday-start reminder)
+  clear    Drop accepted and dismissed suggestions from the inbox (dismissed keys stay remembered)
+```
+
+## `prometheus cron help suggestions list`
+
+```text
+The pending suggestions, numbered
+
+Usage: prometheus cron help suggestions list
+```
+
+## `prometheus cron help suggestions accept`
+
+```text
+Create suggestion `n`'s job (its schedule is echoed and confirmed)
+
+Usage: prometheus cron help suggestions accept
+```
+
+## `prometheus cron help suggestions dismiss`
+
+```text
+Never offer suggestion `n` again
+
+Usage: prometheus cron help suggestions dismiss
+```
+
+## `prometheus cron help suggestions catalog`
+
+```text
+Add the curated starters (daily briefing, important-mail monitor, weekly review, workday-start reminder)
+
+Usage: prometheus cron help suggestions catalog
+```
+
+## `prometheus cron help suggestions clear`
+
+```text
+Drop accepted and dismissed suggestions from the inbox (dismissed keys stay remembered)
+
+Usage: prometheus cron help suggestions clear
 ```
 
 ## `prometheus cron help status`
@@ -19039,21 +19413,22 @@ Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and t
 Usage: prometheus help cron [COMMAND]
 
 Commands:
-  list       The jobs: id, name, schedule, state, next run and last status
-  add        Create a job; the schedule is echoed with its next three instants and saved only after confirmation
-  edit       Change a job; a new schedule is echoed and confirmed again
-  pause      Stop a job from firing until it is resumed
-  resume     Fire a paused job again, from now
-  run        Run a job now, in the foreground (its schedule and state are untouched)
-  remove     Delete a job (its run records are kept under run retention)
-  runs       A job's runs, newest first
-  show-run   One run in full: times, status, error, session, cost and output
-  replay     Re-execute a recorded run without delivering it
-  incidents  Failure incidents, newest activity first; `ack <id>` silences one
-  notepad    A job's notepad: `list` (default), `get <key>`, `set <key> <value>`, `delete <key>`
-  status     Job counts, the next due job and who ticks the profile
-  doctor     Trigger, tick lease, due-but-unfired occurrences, jobs in error, undelivered outbox rows and every `cron.*` setting; exits 1 when a job is in error or a delivery outcome is unknown
-  tick       Run one tick in this process (for OS schedulers); does nothing while a gateway daemon owns scheduling
+  list         The jobs: id, name, schedule, state, next run and last status
+  add          Create a job; the schedule is echoed with its next three instants and saved only after confirmation
+  edit         Change a job; a new schedule is echoed and confirmed again
+  pause        Stop a job from firing until it is resumed
+  resume       Fire a paused job again, from now
+  run          Run a job now, in the foreground (its schedule and state are untouched)
+  remove       Delete a job (its run records are kept under run retention)
+  runs         A job's runs, newest first
+  show-run     One run in full: times, status, error, session, cost and output
+  replay       Re-execute a recorded run without delivering it
+  incidents    Failure incidents, newest activity first; `ack <id>` silences one
+  notepad      A job's notepad: `list` (default), `get <key>`, `set <key> <value>`, `delete <key>`
+  suggestions  Suggested automations: `list` (default), `accept <n> [--yes]`, `dismiss <n>`, `catalog` (adds the curated starters), `clear`
+  status       Job counts, the next due job and who ticks the profile
+  doctor       Trigger, tick lease, due-but-unfired occurrences, jobs in error, undelivered outbox rows and every `cron.*` setting; exits 1 when a job is in error or a delivery outcome is unknown
+  tick         Run one tick in this process (for OS schedulers); does nothing while a gateway daemon owns scheduling
 ```
 
 ## `prometheus help cron list`
@@ -19199,6 +19574,61 @@ Usage: prometheus help cron notepad set
 Deletes a key
 
 Usage: prometheus help cron notepad delete
+```
+
+## `prometheus help cron suggestions`
+
+```text
+Suggested automations: `list` (default), `accept <n> [--yes]`, `dismiss <n>`, `catalog` (adds the curated starters), `clear`
+
+Usage: prometheus help cron suggestions [COMMAND]
+
+Commands:
+  list     The pending suggestions, numbered
+  accept   Create suggestion `n`'s job (its schedule is echoed and confirmed)
+  dismiss  Never offer suggestion `n` again
+  catalog  Add the curated starters (daily briefing, important-mail monitor, weekly review, workday-start reminder)
+  clear    Drop accepted and dismissed suggestions from the inbox (dismissed keys stay remembered)
+```
+
+## `prometheus help cron suggestions list`
+
+```text
+The pending suggestions, numbered
+
+Usage: prometheus help cron suggestions list
+```
+
+## `prometheus help cron suggestions accept`
+
+```text
+Create suggestion `n`'s job (its schedule is echoed and confirmed)
+
+Usage: prometheus help cron suggestions accept
+```
+
+## `prometheus help cron suggestions dismiss`
+
+```text
+Never offer suggestion `n` again
+
+Usage: prometheus help cron suggestions dismiss
+```
+
+## `prometheus help cron suggestions catalog`
+
+```text
+Add the curated starters (daily briefing, important-mail monitor, weekly review, workday-start reminder)
+
+Usage: prometheus help cron suggestions catalog
+```
+
+## `prometheus help cron suggestions clear`
+
+```text
+Drop accepted and dismissed suggestions from the inbox (dismissed keys stay remembered)
+
+Usage: prometheus help cron suggestions clear
 ```
 
 ## `prometheus help cron status`
@@ -21218,6 +21648,7 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.cron_incidents.v1` | `prometheus cron incidents` |
 | `prometheus.cron_incident.v1` | `prometheus cron incidents ack` |
 | `prometheus.cron_notepad.v1` | `prometheus cron notepad` |
+| `prometheus.cron_suggestions.v1` | `prometheus cron suggestions` |
 | `prometheus.worktrees_prune.v1` | `prometheus worktrees prune` |
 | `prometheus.worktrees_restore.v1` | `prometheus worktrees restore` |
 | `prometheus.daemon_status.v1` | `prometheus daemon status` |

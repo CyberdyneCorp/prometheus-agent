@@ -77,6 +77,7 @@ pub(crate) fn announce(shared: &Shared) {
                 kind: OutboundKind::System,
                 body: restarted(&identity.version, &identity.build_id),
                 attachments: Vec::new(),
+                notify: None,
             };
             shared.deliver(&requester.profile, &new);
         }
@@ -113,6 +114,7 @@ fn tell_home_channels(shared: &Shared, profile: &str, stamp: &str) {
             kind: OutboundKind::System,
             body: INTERRUPTED.to_owned(),
             attachments: Vec::new(),
+            notify: None,
         };
         shared.deliver(profile, &new);
     }

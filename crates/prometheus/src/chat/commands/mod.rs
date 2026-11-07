@@ -7,6 +7,7 @@
 
 mod agents;
 mod background;
+mod blueprint;
 mod browser;
 pub mod cron;
 mod delegation;
@@ -18,6 +19,7 @@ pub(crate) mod quick;
 mod refine;
 mod review;
 pub(crate) mod session;
+mod suggestions;
 pub mod worktree;
 
 use std::sync::Arc;
@@ -123,6 +125,8 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "browser" => browser::browser(ctx, args).await,
         "worktree" => worktree::worktree(ctx, args).await,
         "cron" => cron::cron(ctx, args),
+        "suggestions" => suggestions::suggestions(ctx, args),
+        "blueprint" => blueprint::blueprint(ctx, args),
         other => return state_command(ctx, other, args).map(|r| r.map(Reply::Text)),
     };
     Some(text.map(Reply::Text))
