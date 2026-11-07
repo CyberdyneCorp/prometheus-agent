@@ -1,15 +1,15 @@
-//! `cron incidents [ack]` and `cron notepad` (spec: scheduled-jobs,
-//! Failure incidents with alert-once and acknowledge; Per-job notepad).
+//! `cron incidents [ack]` (spec: scheduled-jobs, Failure incidents with
+//! alert-once and acknowledge).
 
 use std::fmt::Write as _;
 
 use jiff::Timestamp;
 use pmt_core::error::Error;
-use pmt_cron::{notepad, ops};
+use pmt_cron::ops;
 use pmt_store::cron::IncidentRow;
 use serde_json::{Value, json};
 
-use super::{Env, NotepadAction};
+use super::Env;
 use crate::output::{document, print_raw};
 
 const STATES: &[&str] = &["detected", "alerted", "resolved", "closed"];
@@ -71,48 +71,4 @@ pub(super) fn ack(env: &Env<'_>, id: &str, now: Timestamp) -> Result<u8, Error> 
         "acknowledged incident {} of job {}: this error stays silent\n",
         row.id, row.job_name
     ))
-}
-
-pub(super) fn notepad(
-    env: &Env<'_>,
-    key: &str,
-    action: Option<&NotepadAction>,
-) -> Result<u8, Error> {
-    let job = ops::find(&env.store, key)?;
-    let id = job.id();
-    match action.unwrap_or(&NotepadAction::List) {
-        NotepadAction::List => {
-            let notes = env.store.cron_notepad(id)?;
-            if env.ctx.json {
-                let map: serde_json::Map<String, Value> = notes
-                    .into_iter()
-                    .map(|(k, v)| (k, Value::String(v)))
-                    .collect();
-                return document("cron notepad", &json!({"job": id, "notes": map}));
-            }
-            let text = notes.iter().fold(String::new(), |mut text, (k, v)| {
-                let _ = writeln!(text, "{k}\t{v}");
-                text
-            });
-            print_raw(&text)
-        }
-        NotepadAction::Get { key } => {
-            let notes = env.store.cron_notepad(id)?;
-            match notes.iter().find(|(k, _)| k == key) {
-                Some((_, value)) => print_raw(&format!("{value}\n")),
-                None => Err(Error::new(
-                    &pmt_core::error::codes::CRON_JOB_NOT_FOUND,
-                    format!("job {id} has no notepad key '{key}'"),
-                )),
-            }
-        }
-        NotepadAction::Set { key, value } => {
-            notepad::set(&env.store, id, key, value)?;
-            print_raw("")
-        }
-        NotepadAction::Delete { key } => {
-            notepad::delete(&env.store, id, key)?;
-            print_raw("")
-        }
-    }
 }

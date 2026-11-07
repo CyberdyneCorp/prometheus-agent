@@ -76,6 +76,11 @@
           "const": "steered",
           "description": "Handed to the running turn after its current tool step\n(`busy.input_mode = \"steer\"`).",
           "type": "string"
+        },
+        {
+          "const": "handled",
+          "description": "Answered without a turn: the `yes` that saves the job a `/cron`\necho just showed (spec: scheduled-jobs, /cron slash command); the\nresult's `notice` says what happened.",
+          "type": "string"
         }
       ]
     },
@@ -2215,6 +2220,13 @@
           "$ref": "#/$defs/Admission",
           "default": "started",
           "description": "How the input was admitted."
+        },
+        "notice": {
+          "description": "What a `handled` input did, to show in place of a turn.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "turn_id": {
           "description": "The admission id: the turn that runs the input (for a steered\ninput, the running turn it joined).",

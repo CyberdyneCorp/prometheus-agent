@@ -2,16 +2,20 @@
 //! every chat surface (spec: scheduled-jobs, /cron slash command): the
 //! arguments of `prometheus cron`, parsed by the same definitions; a job
 //! created here records the invoking chat as its origin; saving shows the
-//! schedule echo and needs `--yes`; `/cron run` starts the run in the
+//! schedule echo and needs `--yes` or a `yes` reply (the next input of the
+//! session; any other input drops the shown job); `/cron run` starts the run in the
 //! background and posts its outcome to the same chat; output on
 //! messaging platforms is cut to the platform's message limit.
 
+use std::collections::HashMap;
 use std::fmt::Write as _;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::time::{Duration, Instant};
 
 use clap::Parser;
 use jiff::Timestamp;
 use pmt_core::error::{Error, codes};
+use pmt_core::id::SessionId;
 use pmt_cron::job::Job;
 use pmt_cron::ops;
 use pmt_cron::target::JobOrigin;
@@ -27,6 +31,63 @@ use crate::cron_host::{HostRunner, profile_zone, scripts_dir};
 struct Slash {
     #[command(subcommand)]
     command: Option<CronCommand>,
+}
+
+/// The reply that saves the job a `/cron add|edit` echo showed.
+pub const CONFIRM_REPLY: &str = "yes";
+/// How long a shown echo waits for its reply (as long as the CLI's
+/// confirmation tokens).
+const CONFIRM_WITHIN: Duration = Duration::from_mins(10);
+
+/// The `/cron` words whose echo each session was shown last, and when.
+type ShownEchoes = Mutex<HashMap<SessionId, (Vec<String>, Instant)>>;
+
+/// The shown echoes waiting for the `yes` reply.
+fn shown() -> &'static ShownEchoes {
+    static SHOWN: OnceLock<ShownEchoes> = OnceLock::new();
+    SHOWN.get_or_init(Mutex::default)
+}
+
+/// A `yes` reply to a shown `/cron add|edit` echo.
+#[derive(Debug)]
+pub struct Confirmation(Vec<String>);
+
+fn is_reply(text: &str) -> bool {
+    text.trim().eq_ignore_ascii_case(CONFIRM_REPLY)
+}
+
+/// Whether `text` is the reply that saves the echo session `id` was shown.
+#[must_use]
+pub fn awaits(id: SessionId, text: &str) -> bool {
+    is_reply(text)
+        && shown()
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(&id)
+            .is_some_and(|(_, at)| at.elapsed() <= CONFIRM_WITHIN)
+}
+
+/// The next input `text` of session `id`: the confirmation of its shown
+/// echo when `text` is the `yes` reply; any input drops the shown job.
+#[must_use]
+pub fn take(id: SessionId, text: &str) -> Option<Confirmation> {
+    let (words, at) = shown()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .remove(&id)?;
+    (is_reply(text) && at.elapsed() <= CONFIRM_WITHIN).then_some(Confirmation(words))
+}
+
+/// Saves the confirmed job: the shown command again, with `--yes` (it is
+/// validated again, so a job that stopped being valid is refused).
+///
+/// # Errors
+///
+/// As `/cron add|edit`.
+pub fn confirm(ctx: &Ctx<'_>, confirmation: Confirmation) -> Result<String, Error> {
+    let mut words = confirmation.0;
+    words.insert(1.min(words.len()), "--yes".to_owned());
+    dispatch(ctx, words)
 }
 
 fn usage(message: impl Into<String>) -> Error {
@@ -78,10 +139,31 @@ fn words(args: &str) -> Result<Vec<String>, Error> {
 ///
 /// Usage errors, the errors of the job operations.
 pub(super) fn cron(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
-    let parsed = Slash::try_parse_from(words(args)?).map_err(|e| usage(e.to_string()))?;
+    let _ = take(ctx.live.id, "");
+    dispatch(ctx, words(args)?)
+}
+
+fn dispatch(ctx: &Ctx<'_>, words: Vec<String>) -> Result<String, Error> {
+    let parsed = Slash::try_parse_from(&words).map_err(|e| usage(e.to_string()))?;
     let command = parsed.command.unwrap_or(CronCommand::List { all: false });
-    let text = run(ctx, command)?;
+    let text = match run(ctx, command)? {
+        Shown::Done(text) => text,
+        Shown::Echo(text) => {
+            shown()
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .insert(ctx.live.id, (words, Instant::now()));
+            text
+        }
+    };
     Ok(fit(ctx, text))
+}
+
+/// What a `/cron` command shows: its outcome, or a schedule echo whose job
+/// waits for the `yes` reply.
+enum Shown {
+    Done(String),
+    Echo(String),
 }
 
 /// Cuts `text` to the platform's message limit with a pointer to the CLI.
@@ -137,11 +219,9 @@ fn line(job: &Job) -> String {
     )
 }
 
-fn run(ctx: &Ctx<'_>, command: CronCommand) -> Result<String, Error> {
-    let store = &ctx.factory.store;
+fn run(ctx: &Ctx<'_>, command: CronCommand) -> Result<Shown, Error> {
     let now = Timestamp::now();
     match command {
-        CronCommand::List { all } => list(ctx, all),
         CronCommand::Add {
             schedule,
             prompt_text,
@@ -160,6 +240,15 @@ fn run(ctx: &Ctx<'_>, command: CronCommand) -> Result<String, Error> {
             schedule,
             flags,
         } => edit(ctx, &job, schedule.as_deref(), &flags, now),
+        other => operate(ctx, other, now).map(Shown::Done),
+    }
+}
+
+/// The commands that never wait for a confirmation.
+fn operate(ctx: &Ctx<'_>, command: CronCommand, now: Timestamp) -> Result<String, Error> {
+    let store = &ctx.factory.store;
+    match command {
+        CronCommand::List { all } => list(ctx, all),
         CronCommand::Pause { job, reason } => {
             let job = ops::pause(store, &job, reason.as_deref(), now)?;
             Ok(format!("paused job {} ({})", job.id(), job.row.name))
@@ -210,7 +299,7 @@ fn add(
     flags: &JobFlags,
     paused: Option<String>,
     now: Timestamp,
-) -> Result<String, Error> {
+) -> Result<Shown, Error> {
     let runner = runner(ctx);
     let scripts = scripts_dir(ctx.scope);
     let profile = runner.profile(&scripts);
@@ -223,10 +312,11 @@ fn add(
     }
     let echo = ops::check(&profile, &spec, now)?;
     if !flags.yes {
-        return Ok(format!(
-            "{}\nNot saved: send the same command with --yes to save this job.",
+        return Ok(Shown::Echo(format!(
+            "{}\nNot saved yet: reply `{CONFIRM_REPLY}` to save this job (or send the same \
+             command with --yes).",
             echo.render()
-        ));
+        )));
     }
     let new = ops::NewJob {
         name: flags.name.clone(),
@@ -234,12 +324,12 @@ fn add(
         paused,
     };
     let job = ops::create(&profile, spec, new, now)?;
-    Ok(format!(
+    Ok(Shown::Done(format!(
         "{}\ncreated job {} ({})",
         echo.render(),
         job.id(),
         job.row.name
-    ))
+    )))
 }
 
 fn edit(
@@ -248,7 +338,7 @@ fn edit(
     schedule: Option<&str>,
     flags: &JobFlags,
     now: Timestamp,
-) -> Result<String, Error> {
+) -> Result<Shown, Error> {
     let runner = runner(ctx);
     let scripts = scripts_dir(ctx.scope);
     let profile = runner.profile(&scripts);
@@ -257,10 +347,11 @@ fn edit(
         let mut spec = ops::find(&ctx.factory.store, key)?.spec;
         fields.apply(&mut spec, now, &profile.zone)?;
         let echo = ops::check(&profile, &spec, now)?;
-        return Ok(format!(
-            "{}\nNot saved: send the same command with --yes to save the new schedule.",
+        return Ok(Shown::Echo(format!(
+            "{}\nNot saved yet: reply `{CONFIRM_REPLY}` to save the new schedule (or send the \
+             same command with --yes).",
             echo.render()
-        ));
+        )));
     }
     let (job, _) = ops::update(
         &profile,
@@ -269,7 +360,11 @@ fn edit(
         |spec| fields.apply(spec, now, &profile.zone),
         now,
     )?;
-    Ok(format!("updated job {}\n{}", job.id(), line(&job)))
+    Ok(Shown::Done(format!(
+        "updated job {}\n{}",
+        job.id(),
+        line(&job)
+    )))
 }
 
 /// Starts the run in the background; its outcome is posted to the chat.

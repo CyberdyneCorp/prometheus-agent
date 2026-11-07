@@ -27,7 +27,13 @@ pub enum BusyPolicy {
     Immediate,
 }
 
-/// What a slash line is on the gateway surface.
+/// The plain reply the host may take as a command's answer (the `yes`
+/// that saves the job a `/cron` echo showed): the lane asks
+/// [`Agents::lookup`] about it, which answers [`Lookup::Text`] when
+/// nothing waits for it, instead of starting a turn at once.
+pub const CONFIRM_REPLY: &str = "yes";
+
+/// What a slash line (or a [`CONFIRM_REPLY`]) is on the gateway surface.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Lookup {
     /// Not a known command: ordinary text.

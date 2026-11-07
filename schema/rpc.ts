@@ -59,7 +59,7 @@ export interface AdapterStatePayload {
 }
 
 /** How `prompt.submit` admitted an input (spec: tui, Prompt submission while busy). */
-export type Admission = "started" | "queued" | "steered";
+export type Admission = "started" | "queued" | "steered" | "handled";
 
 /** The answer to `approval.request` (also `approval.respond` params, with its `id`). */
 export interface ApprovalAnswer {
@@ -762,6 +762,8 @@ export interface SubmitParams {
 export interface Submitted {
   /** How the input was admitted. */
   admission?: Admission;
+  /** What a `handled` input did, to show in place of a turn. */
+  notice?: string | null;
   /** The admission id: the turn that runs the input (for a steered input, the running turn it joined). */
   turn_id: string;
 }

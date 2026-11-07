@@ -817,7 +817,9 @@ impl Factory {
         let id = session.id;
         let clients = at.clients;
         let denials = at.denials.clone().unwrap_or_default();
-        let capabilities = &place::with_worktree_git(capabilities, at.cwd);
+        let cron = self.options.cron.as_ref();
+        let capabilities = &place::with_worktree_git(capabilities, at.cwd)
+            .union(&cron.map(cron::CronRun::sandbox_grants).unwrap_or_default());
         let processes =
             processes::Wiring::of(self.scope.config(), &self.store, id, &session.origin);
         let environment = env::attach(&env::EnvInputs {
@@ -843,6 +845,7 @@ impl Factory {
             snapshots: snapshots::opener(&self.scope, &self.store, id),
             input_roots: input_roots(&self.scope, skills),
             automatic_trust: automatic_trust(session),
+            cron_notepad: cron.and_then(|c| c.notepad.as_deref()),
         })?;
         // Skills pass their declared secrets to the terminal.
         if let Some(terminal) = &environment.terminal {
@@ -856,40 +859,6 @@ impl Factory {
             )));
         }
         Ok(environment)
-    }
-
-    /// Where `browser_vault` asks for a password or code: the session's
-    /// clients (a daemon session) or the local terminal (an interactive
-    /// chat); nobody in cron, webhook, API and single-query runs.
-    fn vault_prompt(
-        &self,
-        clients: Option<&Clients>,
-    ) -> Option<Arc<dyn pmt_tools::browser::vault::MaskedPrompt>> {
-        if !self.options.interactive {
-            return None;
-        }
-        let secrets = clients
-            .map(|c| Arc::clone(&c.secrets))
-            .or_else(|| self.secret_prompt.clone())?;
-        Some(Arc::new(env::VaultPrompt(secrets)))
-    }
-
-    /// Where a sudo password is asked: the session's clients
-    /// (`sudo.request`) or the local terminal's hidden line, on an
-    /// interactive session only.
-    fn sudo_prompt(
-        &self,
-        clients: Option<&Clients>,
-    ) -> Option<Arc<dyn pmt_tools::terminal::sudo::SudoPrompt>> {
-        if !self.options.interactive {
-            return None;
-        }
-        match clients {
-            Some(clients) => clients.sudo.clone(),
-            None => self.secret_prompt.clone().map(|p| {
-                Arc::new(sudo::HiddenLine(p)) as Arc<dyn pmt_tools::terminal::sudo::SudoPrompt>
-            }),
-        }
     }
 
     /// The baseline and granted capabilities, plus reads of the session's

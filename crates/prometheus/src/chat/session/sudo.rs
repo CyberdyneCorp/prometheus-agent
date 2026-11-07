@@ -44,3 +44,24 @@ pub fn handling(
     });
     Sudo::new(surface, secret)
 }
+
+impl super::Factory {
+    /// Where a sudo password is asked: the session's clients
+    /// (`sudo.request`) or the local terminal's hidden line, on an
+    /// interactive session only.
+    pub(super) fn sudo_prompt(
+        &self,
+        clients: Option<&super::Clients>,
+    ) -> Option<Arc<dyn pmt_tools::terminal::sudo::SudoPrompt>> {
+        if !self.options.interactive {
+            return None;
+        }
+        match clients {
+            Some(clients) => clients.sudo.clone(),
+            None => self
+                .secret_prompt
+                .clone()
+                .map(|p| Arc::new(HiddenLine(p)) as Arc<dyn pmt_tools::terminal::sudo::SudoPrompt>),
+        }
+    }
+}

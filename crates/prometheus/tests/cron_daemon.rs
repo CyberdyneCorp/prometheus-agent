@@ -280,3 +280,85 @@ fn a_job_added_with_slash_cron_in_a_thread_delivers_there() {
     );
     daemon.stop(home.path());
 }
+
+/// Waits until `profile` said something containing `text` `count` times.
+fn wait_said_times(home: &Path, profile: &str, text: &str, count: usize) {
+    wait(
+        &format!("{count} x {text:?}"),
+        Duration::from_mins(1),
+        || {
+            self::common::gateway::texts(home, profile)
+                .iter()
+                .filter(|t| t.contains(text))
+                .count()
+                >= count
+        },
+    );
+}
+
+fn jobs(home: &Path) -> Vec<Value> {
+    json(home, &["cron", "list", "--all"])["jobs"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// Scenario: /cron slash command, saved by the `yes` reply: the echo keeps
+/// the job waiting, `yes` saves it with the thread as its origin, and any
+/// other reply drops it.
+#[test]
+fn a_slash_cron_job_waits_for_the_yes_reply() {
+    use self::common::gateway::send_in;
+    let home = gateway_home_with(RULES, CRON);
+    let daemon = Daemon::start(home.path());
+    let shown = "reply `yes` to save this job";
+    send_in(
+        home.path(),
+        "default",
+        "u1",
+        "chat-7",
+        "thread-4",
+        "/cron add \"every day at 18:00\" \"summarize today's commits\"",
+    );
+    wait_said_times(home.path(), "default", shown, 1);
+    assert!(jobs(home.path()).is_empty());
+    send_in(home.path(), "default", "u1", "chat-7", "thread-4", "yes");
+    wait("the job is created", Duration::from_mins(1), || {
+        !jobs(home.path()).is_empty()
+    });
+    let job = &jobs(home.path())[0];
+    assert_eq!(job["prompt"], "summarize today's commits");
+    assert_eq!(job["deliver"], json!(["origin"]));
+    let id = job["id"].as_str().unwrap().to_owned();
+    self::common::gateway::wait_said(home.path(), "default", &format!("created job {id}"));
+    let store = pmt_store::Store::open(&scope_of(home.path(), "default")).unwrap();
+    let origin = store.cron_job(&id).unwrap().unwrap().origin.unwrap();
+    assert!(
+        origin.contains("chat-7") && origin.contains("thread-4"),
+        "{origin}"
+    );
+
+    // Any other reply drops the shown job: a later `yes` is a plain turn.
+    send_in(
+        home.path(),
+        "default",
+        "u1",
+        "chat-7",
+        "thread-4",
+        "/cron add \"every day at 9:00\" \"standup\"",
+    );
+    wait_said_times(home.path(), "default", shown, 2);
+    send_in(
+        home.path(),
+        "default",
+        "u1",
+        "chat-7",
+        "thread-4",
+        "not now",
+    );
+    wait_said_times(home.path(), "default", "default says hi", 1);
+    send_in(home.path(), "default", "u1", "chat-7", "thread-4", "yes");
+    wait_said_times(home.path(), "default", "default says hi", 2);
+    assert_eq!(jobs(home.path()).len(), 1);
+    daemon.stop(home.path());
+}

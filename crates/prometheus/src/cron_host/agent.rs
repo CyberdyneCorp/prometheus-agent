@@ -79,6 +79,7 @@ fn factory(
     store: Arc<Store>,
     job: &Job,
     replay: bool,
+    notepad: Option<&std::path::Path>,
 ) -> Result<Factory, Error> {
     let config = &scope.config().cron;
     let workspace = super::script::cwd(scope, job);
@@ -105,6 +106,7 @@ fn factory(
                 .or_else(|| config.default_toolsets.clone()),
             memory_write: job.spec.memory == MemoryMode::ReadWrite,
             allow_scheduling: config.allow_agent_scheduling,
+            notepad: notepad.map(std::path::Path::to_path_buf),
         }),
         ..Options::default()
     };
@@ -126,7 +128,8 @@ pub(super) async fn credential(
     job: &Job,
 ) -> Result<(), String> {
     let store = Arc::new(Store::open(scope).map_err(|e| e.message().to_owned())?);
-    let factory = factory(scope, launch, store, job, false).map_err(|e| e.message().to_owned())?;
+    let factory =
+        factory(scope, launch, store, job, false, None).map_err(|e| e.message().to_owned())?;
     factory
         .models
         .primary(&flags(job, &scope.config().cron))
@@ -248,7 +251,29 @@ async fn session(
     outcome: &mut AgentOutcome,
 ) -> Result<AgentEnd, Error> {
     let job = &request.job;
-    let factory = factory(scope, launch, Arc::clone(store), job, request.replay)?;
+    let channel = super::notepad::Channel::open(scope, store, job, &request.run_id)?;
+    let ended = Box::pin(agent(scope, launch, store, request, &channel, outcome)).await;
+    channel.settle(store);
+    ended
+}
+
+async fn agent(
+    scope: &ProfileScope,
+    launch: &LaunchEnv,
+    store: &Arc<Store>,
+    request: &AgentRequest,
+    channel: &super::notepad::Channel,
+    outcome: &mut AgentOutcome,
+) -> Result<AgentEnd, Error> {
+    let job = &request.job;
+    let factory = factory(
+        scope,
+        launch,
+        Arc::clone(store),
+        job,
+        request.replay,
+        Some(channel.dir()),
+    )?;
     let target = factory
         .models
         .primary(&flags(job, &scope.config().cron))

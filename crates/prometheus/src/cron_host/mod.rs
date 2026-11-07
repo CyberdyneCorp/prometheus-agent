@@ -6,6 +6,7 @@
 
 mod agent;
 mod fetch;
+pub mod notepad;
 mod script;
 pub mod tool;
 
@@ -125,36 +126,31 @@ impl Catalog for HostCatalog {
 }
 
 /// Whether secret `name` is a provider credential (an API key of a
-/// registered provider, any label, or a subscription token) or owned by
-/// the messaging gateway (a platform token or proxy URL).
+/// registered provider, any label, or a subscription token) or owned by a
+/// surface (the canonical surface-only list: built-in platform tokens
+/// whether or not the config names them, plus every secret the gateway
+/// configuration names).
 fn reserved_secret(scope: &ProfileScope, name: &str) -> bool {
     if name.starts_with("OAUTH_") {
         return true;
     }
     let config = scope.config();
-    if let Ok(registry) = pmt_providers::registry::ProviderRegistry::for_profile(config, Vec::new())
-    {
-        let provider_key = registry
-            .iter()
-            .flat_map(pmt_providers::Provider::secret_names)
-            .any(|key| {
-                name == key
-                    || name
-                        .strip_prefix(key.as_str())
-                        .is_some_and(|r| r.starts_with('_'))
-            });
-        if provider_key {
-            return true;
-        }
+    if pmt_config::secrets::surface::SurfaceOnly::of(config).contains(name) {
+        return true;
     }
-    let gateway = &config.gateway;
-    let named =
-        |secret: Option<&pmt_config::schema::SecretName>| secret.is_some_and(|s| s.0 == name);
-    named(gateway.proxy_url_secret.as_ref())
-        || gateway
-            .platforms
-            .values()
-            .any(|p| named(p.token_secret.as_ref()) || named(p.proxy_url_secret.as_ref()))
+    pmt_providers::registry::ProviderRegistry::for_profile(config, Vec::new()).is_ok_and(
+        |registry| {
+            registry
+                .iter()
+                .flat_map(pmt_providers::Provider::secret_names)
+                .any(|key| {
+                    name == key
+                        || name
+                            .strip_prefix(key.as_str())
+                            .is_some_and(|r| r.starts_with('_'))
+                })
+        },
+    )
 }
 
 /// Runs jobs of one profile: agent sessions through the session factory,

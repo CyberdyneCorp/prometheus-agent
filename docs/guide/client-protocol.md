@@ -152,7 +152,8 @@ and one-shot sessions get none (quiet-wait never switches there).
 `prompt.submit` never drops an input: while a turn runs it follows
 `busy.input_mode` (queued, steered into the running turn, or run after
 interrupting it) and says how in `admission` (`started`, `queued`,
-`steered`); a resend with the same `input_id` returns the original
+`steered`, or `handled` when no turn runs: the `yes` that saves the job a
+`/cron` echo just showed, with the outcome in `notice`); a resend with the same `input_id` returns the original
 admission. The gateway stamps each input's author (client kind, client id,
 principal) into its stored message; a client-supplied `author` is refused
 with `-32002 rpc.forged_author`.

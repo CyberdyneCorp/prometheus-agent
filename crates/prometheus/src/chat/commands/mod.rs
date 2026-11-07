@@ -8,7 +8,7 @@
 mod agents;
 mod background;
 mod browser;
-mod cron;
+pub mod cron;
 mod delegation;
 pub mod files;
 pub mod info;

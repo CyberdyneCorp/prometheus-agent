@@ -56,6 +56,19 @@ fn main() -> ExitCode {
         let done = prometheus::completions::complete(*shell, current.as_deref(), words, &launch);
         return ExitCode::from(done.unwrap_or(0));
     }
+    // A scheduled run's terminal edits its job's notepad through the run's
+    // channel: its sandbox denies the home, so nothing below may run.
+    if let Some(Command::Cron {
+        command: prometheus::cron_cmd::CronCommand::Notepad { job, action },
+    }) = &cli.command
+        && let Some(channel) = launch.cron_notepad()
+    {
+        return match prometheus::cron_cmd::notepad::in_run(channel, job, action.as_ref(), cli.json)
+        {
+            Ok(code) => ExitCode::from(code),
+            Err(err) => failure(&err, cli.json),
+        };
+    }
     // Commands that need the home report the resolution error themselves.
     // `demo` runs in a temporary home of its own and never touches the
     // user's: it writes no log files and keeps no crash reports there.

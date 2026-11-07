@@ -222,6 +222,9 @@ impl Tui<'_> {
     pub(super) async fn on_done(&mut self, done: Done) {
         match done {
             Done::Submitted(Ok((session, submitted))) => {
+                if let Some(notice) = submitted.notice {
+                    self.notice(notice);
+                }
                 self.admitted(&session, &submitted.turn_id, submitted.admission);
             }
             Done::Submitted(Err(err))
@@ -278,6 +281,8 @@ impl Tui<'_> {
                 self.notice("steering the running turn");
                 return;
             }
+            // No turn runs (its notice was shown).
+            Admission::Handled => return,
         }
         self.pending
             .entry(session.to_owned())

@@ -75,6 +75,10 @@ pub struct EnvInputs<'a> {
     /// The working directory's git root is trusted for language servers
     /// (not for cron jobs and kanban workers).
     pub automatic_trust: bool,
+    /// A scheduled run's notepad channel directory: its terminal finds
+    /// `prometheus` in the channel's `bin/` and edits the job's notepad
+    /// through `PMT_CRON_NOTEPAD`.
+    pub cron_notepad: Option<&'a Path>,
 }
 
 /// `browser_vault`'s masked prompt over a skill secret prompt (the CLI's
@@ -443,6 +447,13 @@ fn processes(
     env.set_temp_dir(scratch);
     // `prometheus verify` run by the session records its evidence here.
     env.set("PROMETHEUS_SESSION_ID", inputs.session_id);
+    if let Some(dir) = inputs.cron_notepad {
+        env.set(
+            pmt_core::env::CRON_NOTEPAD,
+            crate::cron_host::notepad::file_in(dir).as_os_str(),
+        );
+        env.prepend_path(&[crate::cron_host::notepad::bin_in(dir)]);
+    }
     if let Some(url) = proxy.map(pmt_net::egress::Proxy::url) {
         env.set_proxy(&url);
     }
@@ -572,4 +583,22 @@ fn browser_exec(
 fn limit(config: &SharedScope, key: fn(&pmt_config::Config) -> u64) -> pmt_tools::setting::Limit {
     let config = config.clone();
     Arc::new(move || usize::try_from(key(config.get().config())).unwrap_or(usize::MAX))
+}
+
+impl super::Factory {
+    /// Where `browser_vault` asks for a password or code: the session's
+    /// clients (a daemon session) or the local terminal (an interactive
+    /// chat); nobody in cron, webhook, API and single-query runs.
+    pub(super) fn vault_prompt(
+        &self,
+        clients: Option<&super::Clients>,
+    ) -> Option<Arc<dyn pmt_tools::browser::vault::MaskedPrompt>> {
+        if !self.options.interactive {
+            return None;
+        }
+        let secrets = clients
+            .map(|c| Arc::clone(&c.secrets))
+            .or_else(|| self.secret_prompt.clone())?;
+        Some(Arc::new(VaultPrompt(secrets)))
+    }
 }

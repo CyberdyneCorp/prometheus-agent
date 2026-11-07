@@ -2852,7 +2852,7 @@ capabilities = [
 "Third consecutive failure nudges" = ["crates/pmt-cron/tests/failures.rs::the_third_consecutive_failure_nudges"]
 
 [scheduled-jobs."Automatic re-runs when the model was unreachable"]
-"Laptop wakes before Wi-Fi" = ["crates/pmt-cron/tests/failures.rs::an_unreachable_model_is_re_run_without_a_failure_notice", "crates/prometheus/src/cron_host/agent.rs::failures_before_the_model_are_classified"]
+"Laptop wakes before Wi-Fi" = ["crates/pmt-cron/tests/failures.rs::an_unreachable_model_is_re_run_without_a_failure_notice", "crates/prometheus/tests/cron_upgrades.rs::an_unreachable_provider_schedules_a_re_run", "crates/prometheus/src/cron_host/agent.rs::failures_before_the_model_are_classified"]
 
 [scheduled-jobs."Hold through a closed provider usage window"]
 "Sub-hourly job does not alert every tick" = { tests = ["crates/pmt-cron/tests/failures.rs::a_closed_usage_window_holds_the_job_with_one_notice", "crates/prometheus/src/cron_host/agent.rs::failures_before_the_model_are_classified"], note = "the hold is driven by a provider error `... usage window closed until <RFC 3339>`; subscription providers raise it (model-providers, group 45)" }
@@ -2875,17 +2875,17 @@ capabilities = [
 
 [scheduled-jobs."Script wake gate and script credentials"]
 "Unchanged poll skips the model" = ["crates/pmt-cron/tests/gates.rs::a_sleeping_wake_gate_skips_the_model"]
-"Provider key cannot reach a script" = ["crates/pmt-cron/src/validate.rs::a_provider_key_cannot_reach_a_script"]
+"Provider key cannot reach a script" = ["crates/pmt-cron/src/validate.rs::a_provider_key_cannot_reach_a_script", "crates/prometheus/tests/cron_upgrades.rs::provider_and_gateway_secrets_cannot_reach_a_script"]
 
 [scheduled-jobs."Monitor mode"]
-"Unchanged page is free" = ["crates/pmt-cron/tests/gates.rs::an_unchanged_monitored_page_skips_the_model"]
+"Unchanged page is free" = ["crates/pmt-cron/tests/gates.rs::an_unchanged_monitored_page_skips_the_model", "crates/prometheus/tests/cron_upgrades.rs::a_monitored_url_obeys_the_egress_destination_policy"]
 
 [scheduled-jobs."Job chaining and continuity"]
 "Pipeline stage receives upstream output" = ["crates/pmt-cron/tests/gates.rs::a_pipeline_stage_receives_upstream_output"]
 "Continuity skips quiet ticks" = ["crates/pmt-cron/tests/gates.rs::continuity_carries_the_last_report_over_quiet_ticks"]
 
 [scheduled-jobs."Per-job notepad"]
-"Cursor carried across runs" = ["crates/prometheus/tests/cron_upgrades.rs::a_notepad_value_reaches_the_next_run", "crates/pmt-cron/tests/gates.rs::the_notepad_rides_the_next_prompt"]
+"Cursor carried across runs" = ["crates/prometheus/tests/cron_upgrades.rs::a_run_writes_its_notepad_from_its_terminal", "crates/prometheus/tests/cron_upgrades.rs::a_run_cannot_write_another_jobs_notepad", "crates/prometheus/tests/cron_upgrades.rs::a_notepad_value_reaches_the_next_run", "crates/pmt-cron/tests/gates.rs::the_notepad_rides_the_next_prompt"]
 
 [scheduled-jobs."Asynchronous tool-initiated runs with per-run context"]
 "Agent keeps working while the job runs" = ["crates/prometheus/tests/cron_upgrades.rs::a_tool_run_starts_in_the_background_and_reports_back"]
@@ -2895,4 +2895,4 @@ capabilities = [
 "Timezone pin through the tool" = ["crates/prometheus/tests/cron_upgrades.rs::the_tool_pins_a_timezone"]
 
 [scheduled-jobs."/cron slash command"]
-"Add from a Discord thread" = { tests = ["crates/prometheus/tests/cron_daemon.rs::a_job_added_with_slash_cron_in_a_thread_delivers_there"], note = "proven on the debug-build file adapter's platform (`test`), the gateway slash path every adapter shares" }
+"Add from a Discord thread" = { tests = ["crates/prometheus/tests/cron_daemon.rs::a_job_added_with_slash_cron_in_a_thread_delivers_there", "crates/prometheus/tests/cron_daemon.rs::a_slash_cron_job_waits_for_the_yes_reply", "crates/prometheus/tests/tui_daemon.rs::a_yes_after_a_cron_echo_saves_the_job_without_a_turn", "crates/prometheus/tests/cron_cli.rs::the_line_interface_saves_a_slash_cron_job_on_yes"], note = "proven on the debug-build file adapter's platform (`test`), the gateway slash path every adapter shares; the `yes` reply (instead of `--yes`) on the gateway, a daemon client and the line interface" }

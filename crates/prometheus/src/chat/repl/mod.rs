@@ -316,6 +316,16 @@ impl Repl {
         if trimmed.is_empty() {
             return Flow::Continue;
         }
+        // A `yes` saves the job a `/cron` echo just showed; any other input
+        // drops it.
+        if let Some(confirmation) = crate::chat::commands::cron::take(self.live().id, trimmed) {
+            let session = self.live();
+            self.show(crate::chat::commands::cron::confirm(
+                &self.ctx(session),
+                confirmation,
+            ));
+            return Flow::Continue;
+        }
         if trimmed.starts_with('/') {
             return self.slash(trimmed.to_owned()).await;
         }

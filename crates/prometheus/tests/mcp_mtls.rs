@@ -177,6 +177,20 @@ fn home_with(dir: &Path, port: u16, extra: &str) -> tempfile::TempDir {
     home
 }
 
+/// Whether the front counts a refused handshake within 5 s: under TLS 1.3
+/// the client finishes its side before the server rejects the certificate,
+/// so the CLI can exit before the server's accept task records the refusal.
+fn refused_soon(refused: &AtomicUsize) -> bool {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while refused.load(Ordering::SeqCst) == 0 {
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    true
+}
+
 #[test]
 fn the_client_certificate_is_presented_in_the_handshake() {
     let dir = tempfile::tempdir().unwrap();
@@ -188,10 +202,7 @@ fn the_client_certificate_is_presented_in_the_handshake() {
     let bare = home_with(dir.path(), front.port, "");
     let out = run(bare.path(), &["mcp", "test", "tls"]);
     assert_eq!(out.status.code(), Some(69), "{}", stderr(&out));
-    assert!(
-        front.refused.load(Ordering::SeqCst) > 0,
-        "refused in the handshake"
-    );
+    assert!(refused_soon(&front.refused), "refused in the handshake");
 
     // A combined PEM (certificate and key in one file).
     let combined = home_with(

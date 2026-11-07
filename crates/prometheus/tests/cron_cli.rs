@@ -520,3 +520,31 @@ fn a_live_replay_reruns_the_inputs_and_diffs_the_outputs() {
     let listed = json(home.path(), &["sessions", "list", "--all"]);
     assert!(listed.to_string().contains("cron_replay"), "{listed}");
 }
+
+/// Scenario (/cron slash command) in the line interface: `/cron add`
+/// without `--yes` shows the echo, and the next line `yes` saves the job
+/// (no turn is sent to the model).
+#[test]
+fn the_line_interface_saves_a_slash_cron_job_on_yes() {
+    use common::pty::{exit, prompt, spawn};
+    use expectrl::Expect as _;
+    let home = cron_home(ANSWER);
+    let mut p = spawn(home.path(), &[]);
+    prompt(&mut p);
+    p.send_line("/cron add \"every day at 18:00\" \"summarize today's commits\"")
+        .unwrap();
+    p.expect("reply `yes` to save this job").unwrap();
+    prompt(&mut p);
+    p.send_line("yes").unwrap();
+    p.expect("created job ").unwrap();
+    prompt(&mut p);
+    exit(p);
+    let jobs = json(home.path(), &["cron", "list"]);
+    assert_eq!(jobs["jobs"][0]["prompt"], "summarize today's commits");
+    let session = common::newest_session(home.path());
+    let messages = common::session_messages(home.path(), &session);
+    assert!(
+        messages.iter().all(|m| m["role"] != "assistant"),
+        "{messages:?}"
+    );
+}

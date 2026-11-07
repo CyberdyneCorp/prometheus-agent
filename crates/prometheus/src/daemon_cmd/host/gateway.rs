@@ -271,6 +271,17 @@ impl Agents for DaemonHost {
                 Some(session) => commands::registry(&scope, &session.live),
                 None => commands::profile_registry(&scope),
             };
+            if !line.trim_start().starts_with('/') {
+                // A `yes` answering the `/cron` echo the session was shown
+                // runs as that command (its access rules and busy policy).
+                let awaited = loaded
+                    .as_ref()
+                    .is_some_and(|s| commands::cron::awaits(s.live.id, line));
+                if !awaited {
+                    return Ok(Lookup::Text);
+                }
+                return Ok(lookup_of(registry.resolve("/cron", Surface::Gateway)));
+            }
             Ok(lookup_of(registry.resolve(line, Surface::Gateway)))
         })
     }

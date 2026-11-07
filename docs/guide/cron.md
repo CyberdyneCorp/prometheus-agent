@@ -203,9 +203,11 @@ to that run only, under `## Run Context`.
 `/cron list|add|edit|pause|resume|run|remove|runs|incidents ...` takes the
 arguments of `prometheus cron` on every chat surface. A job added from a
 chat records it as its origin, so `deliver = origin` posts back to that
-chat and thread. Saving shows the echo and needs `--yes`
-(`/cron add "every day at 18:00" "summarize today's commits" --yes`);
-`/cron run` posts the outcome in the chat when the run ends.
+chat and thread. Saving shows the echo and waits: reply `yes` (your next
+message in that chat or session) to save the job, or pass `--yes` up front
+(`/cron add "every day at 18:00" "summarize today's commits" --yes`). Any
+other reply, or ten minutes without one, drops the shown job. `/cron run`
+posts the outcome in the chat when the run ends.
 
 ## Where and with which model a run works
 
@@ -249,18 +251,23 @@ chat and thread. Saving shows the echo and needs `--yes`
 - A script whose last stdout line is `{"wakeAgent": false}` skips the
   agent (`silent`, reason `wake_agent_false`); `{"wakeAgent": true,
   "context": {...}}` adds the context as a JSON block. Scripts run with
-  only the secrets named by `--script-secret` (never provider or gateway
-  credentials); `.sh` files run with bash, `.py` files with the managed
+  only the secrets named by `--script-secret` (never provider credentials
+  or a surface's secrets, such as `TELEGRAM_BOT_TOKEN`, whether or not the
+  config names them); `.sh` files run with bash, `.py` files with the managed
   Python or `--interpreter`.
 - `--monitor-script` or `--monitor-url` (30 s, 1 MiB) runs first each
-  tick: unchanged output skips the model (`silent`, reason `no_change`), a
+  tick. The URL is fetched under the egress rules (`security.egress`: its
+  mode, allowlist and blocklist; private, loopback and metadata addresses
+  are refused unless `allow_private` is set), on every redirect too: unchanged output skips the model (`silent`, reason `no_change`), a
   change adds a `MONITOR CHANGE DETECTED` diff to the prompt.
 - `--context-from JOB` prepends the latest output of another job;
   `--continuity` prepends the job's own previous report (quiet runs are
   skipped over).
 - `prometheus cron notepad <job> set <key> <value>` keeps notes a run sees
-  at the top of its prompt (`## Job notepad`); a run can call it from its
-  terminal. Limits: keys 128 characters, values 16 KiB, 64 KiB per job
+  at the top of its prompt (`## Job notepad`). A run can call it from its
+  terminal: the run's sandbox keeps it away from the home, so there the
+  command edits a copy of the job's notepad (and only that job's) that is
+  saved when the run ends. Limits: keys 128 characters, values 16 KiB, 64 KiB per job
   (exit 65 `notepad limit exceeded`).
 
 ## Delivery details

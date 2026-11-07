@@ -269,6 +269,191 @@ fn a_notepad_value_reaches_the_next_run() {
     assert!(stderr(&out).contains("notepad limit exceeded"));
 }
 
+/// Scenario: Cursor carried across runs, with the cursor written by the
+/// run itself: its sandboxed terminal runs `prometheus cron notepad`.
+#[test]
+fn a_run_writes_its_notepad_from_its_terminal() {
+    let rules = "[[rule]]\nuser = \"read the feed\"\n[[rule.tool_calls]]\nname = \"terminal\"\n\
+                 arguments = { command = \"prometheus cron notepad feed set last_id 4812\" }\n\n\
+                 [[rule]]\nrepeat = true\ntext = \"cursor saved\"\n";
+    let home = cron_home(rules);
+    let id = add(
+        home.path(),
+        &[
+            "every 1h",
+            "--prompt",
+            "read the feed",
+            "--name",
+            "feed",
+            "--toolsets",
+            "terminal",
+        ],
+    );
+    let first = run_job(home.path(), &id);
+    assert_eq!(first["status"], "ok", "{first}");
+    let messages = common::session_messages(home.path(), first["session_id"].as_str().unwrap());
+    let tool = messages
+        .iter()
+        .find(|m| m["role"] == "tool")
+        .expect("a terminal result")
+        .to_string();
+    assert!(!tool.contains("not permitted"), "{tool}");
+    assert_eq!(
+        ok(&run(
+            home.path(),
+            &["cron", "notepad", "feed", "get", "last_id"]
+        )),
+        "4812\n"
+    );
+    let second = run_job(home.path(), &id);
+    let messages = common::session_messages(home.path(), second["session_id"].as_str().unwrap());
+    let user = messages
+        .iter()
+        .find(|m| m["role"] == "user")
+        .unwrap()
+        .to_string();
+    assert!(
+        user.contains("## Job notepad") && user.contains("last_id: 4812"),
+        "{user}"
+    );
+}
+
+/// A run's terminal reaches only its own job's notepad, and the notepad
+/// limits hold there too.
+#[test]
+fn a_run_cannot_write_another_jobs_notepad() {
+    let rules = "[[rule]]\nuser = \"other\"\n[[rule.tool_calls]]\nname = \"terminal\"\n\
+                 arguments = { command = \"prometheus cron notepad feed set stolen 1; echo rc=$?\" }\n\n\
+                 [[rule]]\nrepeat = true\ntext = \"done\"\n";
+    let home = cron_home(rules);
+    add(
+        home.path(),
+        &["every 1h", "--prompt", "x", "--name", "feed"],
+    );
+    let id = add(
+        home.path(),
+        &[
+            "every 1h",
+            "--prompt",
+            "other",
+            "--name",
+            "other",
+            "--toolsets",
+            "terminal",
+        ],
+    );
+    let done = run_job(home.path(), &id);
+    let messages = common::session_messages(home.path(), done["session_id"].as_str().unwrap());
+    let tool = messages
+        .iter()
+        .find(|m| m["role"] == "tool")
+        .expect("a terminal result")
+        .to_string();
+    assert!(
+        tool.contains("edits only its own job's notepad") && tool.contains("rc=66"),
+        "{tool}"
+    );
+    assert_eq!(
+        ok(&run(home.path(), &["cron", "notepad", "feed", "list"])),
+        ""
+    );
+}
+
+/// Scenario: Provider key cannot reach a script, through the profile's
+/// real catalog: a provider credential and a gateway-owned token (a
+/// built-in platform's default secret, named nowhere in the config) are
+/// both refused; an ordinary secret is accepted.
+#[test]
+fn provider_and_gateway_secrets_cannot_reach_a_script() {
+    let home = cron_home("[[rule]]\nrepeat = true\ntext = \"ok\"\n");
+    let scripts = home.path().join("profiles/default/scripts");
+    std::fs::create_dir_all(&scripts).unwrap();
+    std::fs::write(scripts.join("poll.sh"), "echo hi\n").unwrap();
+    let add_with = |secret: &str| {
+        run(
+            home.path(),
+            &[
+                "cron",
+                "add",
+                "every 1h",
+                "--prompt",
+                "x",
+                "--script",
+                "poll.sh",
+                "--script-secret",
+                secret,
+                "--yes",
+            ],
+        )
+    };
+    for reserved in ["OPENAI_API_KEY", "TELEGRAM_BOT_TOKEN"] {
+        let out = add_with(reserved);
+        assert_eq!(out.status.code(), Some(65), "{}", stderr(&out));
+        assert!(
+            stderr(&out).contains(&format!(
+                "secret '{reserved}' cannot be passed to cron scripts"
+            )),
+            "{}",
+            stderr(&out)
+        );
+    }
+    assert_eq!(
+        json(home.path(), &["cron", "list", "--all"])["jobs"],
+        json!([])
+    );
+    ok(&add_with("FEED_TOKEN"));
+}
+
+/// A loopback HTTP server answering every GET with `body`.
+fn page_server(body: &'static str) -> u16 {
+    use std::io::{Read as _, Write as _};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for mut stream in listener.incoming().flatten() {
+            let mut request = [0_u8; 4096];
+            let _ = stream.read(&mut request);
+            let _ = write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+        }
+    });
+    port
+}
+
+/// Scenario: Unchanged page is free, with the page fetched under the
+/// profile's egress rules: a private address is refused (the agent sets
+/// `monitor_url`) until `security.egress.allow_private` admits it; then
+/// the first tick runs the agent and an unchanged page skips the model.
+#[test]
+fn a_monitored_url_obeys_the_egress_destination_policy() {
+    let home = cron_home("[[rule]]\nrepeat = true\ntext = \"page changed\"\n");
+    let url = format!("http://127.0.0.1:{}/feed", page_server("v1"));
+    let id = add(
+        home.path(),
+        &["every 1h", "--prompt", "watch", "--monitor-url", &url],
+    );
+    let refused = run_job(home.path(), &id);
+    assert_eq!(refused["status"], "failed", "{refused}");
+    assert!(
+        refused["error"]
+            .as_str()
+            .is_some_and(|e| e.contains("is a private address")),
+        "{refused}"
+    );
+    ok(&run(
+        home.path(),
+        &["config", "set", "security.egress.allow_private", "true"],
+    ));
+    let first = run_job(home.path(), &id);
+    assert_eq!(first["status"], "ok", "{first}");
+    let second = run_job(home.path(), &id);
+    assert_eq!(second["status"], "silent", "{second}");
+    assert!(second.to_string().contains("no_change"), "{second}");
+}
+
 fn tool_call(
     port: &std::sync::Arc<dyn pmt_agent::tools::CronPort>,
     session: pmt_core::id::SessionId,
@@ -373,4 +558,72 @@ fn a_tool_run_starts_in_the_background_and_reports_back() {
     );
     let job = &json(home.path(), &["cron", "list"])["jobs"][0];
     assert_eq!((&job["id"], &job["prompt"]), (&json!(id), &json!("digest")));
+}
+
+/// Scenario: Laptop wakes before Wi-Fi, against a real provider transport:
+/// the model's endpoint refuses connections, so the scheduled run fails
+/// before any model response; it is re-run automatically (300 s later,
+/// `retry_of` the failed run) instead of sending a failure notice.
+#[test]
+fn an_unreachable_provider_schedules_a_re_run() {
+    let home = common::temp_home();
+    ok(&run(home.path(), &["config", "path"]));
+    let port = {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.local_addr().unwrap().port()
+    };
+    std::fs::write(
+        home.path().join("profiles/default/config.toml"),
+        format!(
+            "[model]\nprovider = \"acme\"\ndefault = \"r1\"\n\n\
+             [providers.acme]\nbase_url = \"http://127.0.0.1:{port}/v1\"\n\
+             wire_format = \"chat_completions\"\nauth = \"none\"\nmax_retries = 0\n\n\
+             [agent]\napi_max_retries = 1\nauto_recovery_cycles = 0\n\n\
+             [budgets]\nallow_unpriced = true\n\n[cron]\ntimezone = \"UTC\"\n"
+        ),
+    )
+    .unwrap();
+    let id = add(home.path(), &["every 1d", "--prompt", "brief"]);
+    let store = pmt_store::Store::open(&scope(home.path())).unwrap();
+    let now = jiff::Timestamp::now().as_millisecond();
+    store
+        .cron_modify_job(&id, |row| {
+            row.next_run_at = Some(now - 1_000);
+            Ok(())
+        })
+        .unwrap();
+    ok(&run(home.path(), &["cron", "tick"]));
+    let runs = json(home.path(), &["cron", "runs", &id])["runs"].clone();
+    let failed = &runs[0];
+    assert_eq!(
+        (&failed["trigger"], &failed["status"]),
+        (&json!("schedule"), &json!("failed")),
+        "{runs}"
+    );
+    assert!(
+        failed["error"]
+            .as_str()
+            .is_some_and(|e| e.contains("network error")),
+        "{failed}"
+    );
+    let row = store.cron_job(&id).unwrap().unwrap();
+    let retry_at = row.retry_at.expect("a re-run is scheduled");
+    let wait = retry_at - failed_ended(failed);
+    assert!((299_000..=301_000).contains(&wait), "re-run in {wait} ms");
+    assert_eq!(row.retry_of.as_deref(), failed["run_id"].as_str());
+    let run_id = failed["run_id"].as_str().unwrap();
+    assert!(
+        store.cron_deliveries_of(run_id).unwrap().is_empty(),
+        "no failure notice"
+    );
+}
+
+/// When run `run` (a `cron runs` entry) ended, in Unix ms.
+fn failed_ended(run: &Value) -> i64 {
+    run["ended_at"]
+        .as_str()
+        .unwrap()
+        .parse::<jiff::Timestamp>()
+        .unwrap()
+        .as_millisecond()
 }

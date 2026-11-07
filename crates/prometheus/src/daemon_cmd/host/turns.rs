@@ -52,6 +52,15 @@ impl DaemonHost {
         pmt_core::pause::check(profile.scope().home())?;
         Self::check_budget(profile, id)?;
         let session = self.load(profile, id, &link).await?;
+        // A `yes` saves the job a `/cron` echo just showed; any other input
+        // drops it.
+        if let Some(confirmation) = crate::chat::commands::cron::take(id, &params.text) {
+            return Ok(Submitted {
+                turn_id: pmt_agent::turn::TurnId::new().to_string(),
+                admission: Admission::Handled,
+                notice: Some(Self::confirm_cron(profile, &session, &link, confirmation)),
+            });
+        }
         let mut input = setup::input(&session.factory, &session.live, &params).await?;
         input.prefix.clone_from(&author.prefix);
         input.author = serde_json::to_value(&author).ok();
@@ -72,6 +81,7 @@ impl DaemonHost {
                 return Ok(Submitted {
                     turn_id,
                     admission: Admission::Started,
+                    notice: None,
                 });
             }
         };
@@ -99,12 +109,14 @@ impl DaemonHost {
                 return Ok(Submitted {
                     turn_id: running.unwrap_or(turn_id),
                     admission: Admission::Steered,
+                    notice: None,
                 });
             }
         }
         Ok(Submitted {
             turn_id,
             admission: Admission::Queued,
+            notice: None,
         })
     }
 

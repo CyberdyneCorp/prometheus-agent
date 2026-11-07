@@ -6,6 +6,7 @@
 mod args;
 mod edit;
 mod incidents;
+pub mod notepad;
 mod show;
 mod tick;
 
@@ -79,7 +80,7 @@ pub fn run(command: &CronCommand, ctx: &Context<'_>) -> Result<u8, Error> {
             Some(IncidentAction::Ack { id }) => incidents::ack(&env, id, now),
             None => incidents::list(&env, state.as_deref(), job.as_deref()),
         },
-        CronCommand::Notepad { job, action } => incidents::notepad(&env, job, action.as_ref()),
+        CronCommand::Notepad { job, action } => notepad::notepad(&env, job, action.as_ref()),
         CronCommand::Status => show::status(&env, now),
         CronCommand::Doctor => show::doctor(&env, now),
         CronCommand::Tick => tick::tick(&env),

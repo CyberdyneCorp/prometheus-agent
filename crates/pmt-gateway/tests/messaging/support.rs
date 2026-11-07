@@ -332,6 +332,7 @@ impl Host for FakeAgents {
             Ok(Submitted {
                 turn_id: turn,
                 admission: RpcAdmission::Started,
+                notice: None,
             })
         })
     }

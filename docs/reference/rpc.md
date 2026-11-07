@@ -192,6 +192,7 @@ How `prompt.submit` admitted an input (spec: tui, Prompt submission while busy).
 | `started` | Its turn started. |
 | `queued` | A turn was running: it runs after the queued inputs before it (`busy.input_mode = "queue"`, or `interrupt`, which stops the running turn first). |
 | `steered` | Handed to the running turn after its current tool step (`busy.input_mode = "steer"`). |
+| `handled` | Answered without a turn: the `yes` that saves the job a `/cron` echo just showed (spec: scheduled-jobs, /cron slash command); the result's `notice` says what happened. |
 
 ### `ApprovalAnswer`
 
@@ -914,6 +915,7 @@ One delegated child of a session.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `admission` | [`Admission`](#admission) | no | How the input was admitted. |
+| `notice` | string or null | no | What a `handled` input did, to show in place of a turn. |
 | `turn_id` | string | yes | The admission id: the turn that runs the input (for a steered input, the running turn it joined). |
 
 ### `SudoAnswer`
