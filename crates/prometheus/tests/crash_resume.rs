@@ -44,14 +44,27 @@ fn home() -> tempfile::TempDir {
             script.display().to_string()
         ),
     );
-    std::fs::write(home.path().join("a.txt"), "version before the crash\n").unwrap();
+    std::fs::create_dir_all(work(home.path())).unwrap();
+    std::fs::write(
+        work(home.path()).join("a.txt"),
+        "version before the crash\n",
+    )
+    .unwrap();
     home
+}
+
+/// The session's workspace. Not the Prometheus home itself: that holds the
+/// isolated user home, whose credential stores the sandbox denies, and
+/// Landlock (Linux) can then only list the directory above them, so the
+/// command could not create `started` there.
+fn work(home: &Path) -> std::path::PathBuf {
+    home.join("work")
 }
 
 /// Runs the one-shot turn and kills it once `terminal` is running.
 fn crash(home: &Path) {
     let mut child: std::process::Child = common::command(home)
-        .current_dir(home)
+        .current_dir(work(home))
         .args(["--json", "--yolo", "-z", "deploy it"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -59,12 +72,16 @@ fn crash(home: &Path) {
         .spawn()
         .unwrap();
     let started = Instant::now();
-    while !home.join("started").exists() {
+    while !work(home).join("started").exists() {
         assert!(
             started.elapsed() < Duration::from_mins(1),
             "terminal never ran"
         );
-        assert!(child.try_wait().unwrap().is_none(), "the chat ended early");
+        if child.try_wait().unwrap().is_some() {
+            let session = common::newest_session(home);
+            let messages = common::session_messages(home, &session);
+            panic!("the chat ended early: {messages:#?}");
+        }
         std::thread::sleep(Duration::from_millis(50));
     }
     child.kill().unwrap();
@@ -80,7 +97,7 @@ fn resume(home: &Path, session: &str) -> OsSession {
         "agent.resume_on_crash=auto",
     ])
     .args(["sessions", "resume", session])
-    .current_dir(home)
+    .current_dir(work(home))
     .env("TERM", "xterm")
     .env_remove("NO_COLOR");
     let mut p = OsSession::spawn(cmd).unwrap();
@@ -94,7 +111,7 @@ fn a_crash_during_a_terminal_command_resumes_with_the_read_reused_and_the_comman
     crash(home.path());
     let session = common::newest_session(home.path());
     // Changed after the crash: a re-run read would see it.
-    std::fs::write(home.path().join("a.txt"), "version after the crash\n").unwrap();
+    std::fs::write(work(home.path()).join("a.txt"), "version after the crash\n").unwrap();
 
     let mut p = resume(home.path(), &session);
     p.expect("stopped when the process ended while terminal ran")
@@ -126,7 +143,7 @@ fn a_crash_during_a_terminal_command_resumes_with_the_read_reused_and_the_comman
         .unwrap();
     assert_eq!(last["content"], "checked the deploy", "the loop went on");
     assert!(
-        !home.path().join("deployed").exists(),
+        !work(home.path()).join("deployed").exists(),
         "terminal never re-ran"
     );
 }
@@ -142,7 +159,7 @@ fn the_daemon_resumes_a_crashed_turn_when_the_session_loads() {
     common::append_config(home.path(), "\n[agent]\nresume_on_crash = \"auto\"\n");
     let _daemon = common::daemon::start(home.path(), &[]);
     let out = common::command(home.path())
-        .current_dir(home.path())
+        .current_dir(work(home.path()))
         .args(["--json", "-r", &session, "-z", "anything else?"])
         .stdin(Stdio::null())
         .output()
