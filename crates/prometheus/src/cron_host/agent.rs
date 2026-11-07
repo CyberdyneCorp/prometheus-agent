@@ -92,6 +92,7 @@ fn factory(
     let options = Options {
         interactive: false,
         cwd: workspace,
+        cwd_fallback: false,
         skills: job.spec.skills.clone(),
         // A job with a workdir loads its project context files; a
         // detached one loads none.

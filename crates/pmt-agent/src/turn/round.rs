@@ -80,6 +80,7 @@ impl Turn<'_> {
             .collect();
         let stop = self.guard_outcomes(calls, &mut outcomes);
         self.wrap_up(&mut outcomes);
+        self.subdirectory_hints(calls, &mut outcomes);
         self.checkpoint(&mut outcomes)?;
         self.keep_results(calls, &outcomes).await?;
         Ok(stop.map(|why| {

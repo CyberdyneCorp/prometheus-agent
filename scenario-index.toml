@@ -3044,3 +3044,9 @@ capabilities = [
 [agent-turn-loop."Structured steering (upgrade)"]
 "Note during a tool batch" = ["crates/pmt-agent/tests/turn/steering.rs::a_steer_is_a_new_row_after_the_last_tool_result", "crates/pmt-agent/tests/turn/structured.rs::a_redirect_makes_running_tools_yield_and_is_a_real_user_message"]
 "Wrap-up" = ["crates/pmt-agent/tests/turn/structured.rs::a_wrap_up_steer_ends_the_turn_with_one_toolless_request"]
+
+[agent-turn-loop."Install-tree context suppression"]
+"Desktop fallback cwd" = ["crates/pmt-agent/tests/turn/context.rs::a_fallback_cwd_inside_the_source_tree_loads_no_project_context"]
+
+[agent-turn-loop."Subdirectory hints ride tool results"]
+"Reading a subpackage" = ["crates/pmt-agent/tests/turn/hints.rs::reading_a_subpackage_appends_its_agents_file_to_that_result_once", "crates/pmt-agent/tests/turn/hints.rs::paths_outside_the_working_tree_bring_no_hint"]

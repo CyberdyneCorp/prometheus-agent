@@ -64,6 +64,8 @@ impl DaemonHost {
             interactive: true,
             yolo: setup.yolo,
             cwd: key.0.clone(),
+            // No recorded or given working directory: the profile's own.
+            cwd_fallback: key.0 == profile.scope().dir().join("workspace"),
             skills: setup.skills.clone(),
             pass_session_id: setup.pass_session_id,
             no_context_files: setup.no_context_files,

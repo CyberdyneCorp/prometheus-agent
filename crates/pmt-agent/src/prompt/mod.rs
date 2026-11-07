@@ -14,6 +14,7 @@
 pub mod blocks;
 pub mod context;
 pub mod frozen;
+pub mod install_tree;
 pub mod personality;
 pub mod platform;
 pub mod scan;
@@ -253,6 +254,8 @@ pub struct PromptInputs {
     pub registered_hint: Option<String>,
     /// The working directory (project context, runtime block).
     pub cwd: Option<PathBuf>,
+    /// `cwd` was chosen by fallback rather than configured or given.
+    pub cwd_fallback: bool,
     /// `--no-context-files`.
     pub no_context_files: bool,
     /// The model the prompt is built for.
@@ -377,6 +380,14 @@ fn project_context(inputs: &PromptInputs) -> context::Loaded {
         return context::Loaded::default();
     };
     if !prompt.load_context_files || inputs.no_context_files {
+        return context::Loaded::default();
+    }
+    if inputs.cwd_fallback && install_tree::contains(&install_tree::roots(), cwd) {
+        tracing::warn!(
+            cwd = %cwd.display(),
+            "the working directory is a fallback inside the Prometheus installation or source tree: \
+             project context files are not loaded; set terminal.cwd to your project"
+        );
         return context::Loaded::default();
     }
     context::load(

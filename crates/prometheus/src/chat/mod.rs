@@ -288,6 +288,7 @@ fn session_options(args: &ChatArgs, mode: Mode) -> Result<Options, Error> {
         interactive: mode == Mode::Line,
         yolo: args.yolo,
         cwd: current_dir()?,
+        cwd_fallback: false,
         skills: args.skills.clone(),
         pass_session_id: args.pass_session_id,
         no_context_files: args.no_context_files,

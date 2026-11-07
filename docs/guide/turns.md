@@ -222,6 +222,21 @@ first 70% and last 20% with a marker in between. A file that cannot be read
 within `prompt.context_file_read_timeout_secs` (default 5), for example on
 a hung network mount, is skipped with a warning.
 
+When a session's working directory was not configured or given (a daemon
+session without a recorded directory falls back to the profile's
+`workspace`) and that fallback lies inside the Prometheus installation or
+source tree, no project context is loaded and a warning advises setting
+`terminal.cwd`: Prometheus's own rules are never mistaken for your
+project's.
+
+**Subdirectory hints.** When a file tool (`read_file`, `write_file`,
+`patch`, `search_files`) reaches into a subdirectory of the working tree
+whose `AGENTS.md` is not loaded yet, that file is appended to the tool's
+result under `[Subdirectory context: <path>]` (scanned like a context file,
+first 70% and last 20% kept past 32,000 characters). It never goes into the
+system prompt, each file is added once per session (also across restarts),
+and paths outside the working tree are ignored.
+
 ### Platform hints
 
 Each surface has a built-in hint. Change it per platform:

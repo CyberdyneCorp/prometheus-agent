@@ -129,6 +129,7 @@ fn run_session(place: &Place, launch: &LaunchEnv) -> Result<Session, Error> {
         interactive: false,
         yolo: false,
         cwd: place.repository(),
+        cwd_fallback: false,
         skills: Vec::new(),
         pass_session_id: false,
         // Nothing from the machine shapes the prompt: the demo is the same

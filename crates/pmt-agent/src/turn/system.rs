@@ -81,6 +81,7 @@ impl Turn<'_> {
             platform: p.platform.clone(),
             registered_hint: p.registered_hint.clone(),
             cwd: p.cwd.clone(),
+            cwd_fallback: p.cwd_fallback,
             no_context_files: p.no_context_files,
             model: route.model.clone(),
             context_window: route.context_window,

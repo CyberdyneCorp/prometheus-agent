@@ -20,6 +20,7 @@ mod exit;
 mod finish;
 mod guardrails;
 mod guards;
+mod hints;
 pub mod interrupt;
 pub mod iteration;
 pub mod lease;
@@ -77,6 +78,9 @@ pub struct PromptSetup {
     pub registered_hint: Option<String>,
     /// The session's working directory.
     pub cwd: Option<PathBuf>,
+    /// `cwd` was chosen by fallback rather than configured or given
+    /// (spec: agent-turn-loop, Install-tree context suppression).
+    pub cwd_fallback: bool,
     /// `--no-context-files`.
     pub no_context_files: bool,
     /// `--pass-session-id`.
@@ -103,6 +107,7 @@ impl PromptSetup {
             platform: platform.to_owned(),
             registered_hint: None,
             cwd,
+            cwd_fallback: false,
             no_context_files: false,
             pass_session_id: false,
             caller_system: None,
@@ -398,6 +403,7 @@ pub struct Agent {
     pending_rebuild: Mutex<Option<Rebuild>>,
     personality: Mutex<Option<String>>,
     steers: steer::Steers,
+    hints: hints::Hints,
     /// The previous request's prefix (cache break detection).
     prefix: Mutex<Option<cache::Prefix>>,
     /// Reported usage, for the compression preflight.
@@ -422,6 +428,7 @@ impl Agent {
             pending_rebuild: Mutex::new(None),
             personality: Mutex::new(None),
             steers: steer::Steers::default(),
+            hints: hints::Hints::default(),
             prefix: Mutex::new(None),
             usage: Mutex::new(compression::UsageMemory::new()),
             cache_ttl: OnceLock::new(),

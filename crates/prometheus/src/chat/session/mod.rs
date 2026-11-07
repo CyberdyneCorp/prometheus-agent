@@ -82,6 +82,9 @@ pub struct Options {
     pub yolo: bool,
     /// The session's working directory.
     pub cwd: PathBuf,
+    /// `cwd` is a fallback, not configured or given (spec: agent-turn-loop,
+    /// Install-tree context suppression).
+    pub cwd_fallback: bool,
     /// `-s/--skills`.
     pub skills: Vec<String>,
     /// `--pass-session-id`.
@@ -1113,6 +1116,7 @@ impl Factory {
         notices: &mut Vec<String>,
     ) -> PromptSetup {
         let mut prompt = PromptSetup::new("cli", Some(self.options.cwd.clone()));
+        prompt.cwd_fallback = self.options.cwd_fallback;
         prompt.no_context_files = self.options.no_context_files;
         prompt.pass_session_id = self.options.pass_session_id;
         prompt.started_at = Timestamp::now();

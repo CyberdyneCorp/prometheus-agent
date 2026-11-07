@@ -7,6 +7,7 @@ mod compression;
 mod context;
 mod exits;
 mod guardrails;
+mod hints;
 mod hooks;
 mod images;
 mod prompt;

@@ -31,6 +31,7 @@ async fn the_report_sums_to_the_request_size() {
         platform: "cli".into(),
         registered_hint: None,
         cwd: Some(cwd),
+        cwd_fallback: false,
         no_context_files: false,
         model: "mock".into(),
         context_window: Some(128_000),
