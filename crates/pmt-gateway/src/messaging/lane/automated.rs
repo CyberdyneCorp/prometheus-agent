@@ -11,8 +11,20 @@ use super::{Lane, Origin, Pending};
 use crate::messaging::automation::{AfterTurn, Automated};
 
 impl Lane {
-    /// Starts `automated` when the conversation is idle.
-    pub(super) async fn automated(&mut self, automated: Automated) {
+    /// Starts `automated` when the conversation is idle, and tells the host
+    /// whether its turn started (a drop gives back the reserved tick).
+    pub(super) async fn automated(&mut self, mut automated: Automated) {
+        let started = automated.started.take();
+        let ran = self.run_automated(automated).await;
+        if let Some(started) = started {
+            // The host may have stopped waiting (a daemon stopping).
+            let _ = started.send(ran);
+        }
+    }
+
+    /// Whether `automated` ran: its command, or its turn started or waits
+    /// in the lane's queue behind a held one.
+    async fn run_automated(&mut self, automated: Automated) -> bool {
         let busy = self.running.is_some()
             || self.buffer.is_some()
             || self.pending.iter().any(|p| p.origin != Origin::Internal);
@@ -21,7 +33,7 @@ impl Lane {
                 origin = automated.origin,
                 "automated turn dropped: the chat is busy"
             );
-            return;
+            return false;
         }
         if let Some(notice) = &automated.notice {
             self.say(notice);
@@ -34,7 +46,7 @@ impl Lane {
             let routing = self.routing.clone();
             self.run_now(routing, &automated.text).await;
             self.automating = None;
-            return;
+            return true;
         }
         let pending = Pending {
             origin: Origin::Queued,
@@ -46,8 +58,12 @@ impl Lane {
             sent_at: jiff::Timestamp::now(),
             addressed: !quiet,
         };
+        let queued = self.pending.len();
         self.start_turn(pending).await;
         self.automating = None;
+        // A paused home, a session that could not open or a refused submit
+        // leave nothing running and nothing held.
+        self.running.is_some() || self.pending.len() > queued
     }
 
     /// What the host decided when the lane's turn ended: its status lines,

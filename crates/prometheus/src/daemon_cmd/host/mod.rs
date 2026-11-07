@@ -74,9 +74,9 @@ struct Loaded {
     /// A one-shot run's session: it ends once its turn is done, as an
     /// in-process one-shot run's does.
     oneshot: bool,
-    /// A messaging conversation's session (its lane runs its automated
-    /// turns).
-    gateway: bool,
+    /// The daemon's gateway, for a messaging conversation's session (its
+    /// lane runs its automated turns).
+    chat: Option<send_tool::GatewayCell>,
     /// What the last turn's automation boundary left for the lane: status
     /// lines and a goal continuation.
     after: Mutex<pmt_gateway::messaging::automation::AfterTurn>,
@@ -293,7 +293,8 @@ impl DaemonHost {
         // sessions (one-shot runs, cron, subagents) cannot receive a later
         // notice, so quiet-wait never promises one there.
         let oneshot = row.source_tag.as_deref() == Some(pmt_store::sessions::ONESHOT_TAG);
-        let gateway = matches!(row.origin, pmt_store::Origin::Gateway { .. });
+        let chat = matches!(row.origin, pmt_store::Origin::Gateway { .. })
+            .then(|| Arc::clone(&self.gateway));
         let completions = match row.origin {
             pmt_store::Origin::Gateway { .. } => Some(notify::completions(
                 Arc::clone(&self.gateway),
@@ -345,7 +346,7 @@ impl DaemonHost {
             queue: Mutex::default(),
             current: Mutex::default(),
             oneshot,
-            gateway,
+            chat,
             after: Mutex::default(),
         });
         loaded.insert(id, Arc::clone(&session));

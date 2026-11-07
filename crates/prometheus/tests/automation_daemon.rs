@@ -252,3 +252,58 @@ fn a_client_sessions_loop_keeps_firing_with_no_client_attached() {
     let replies = messages.iter().filter(|m| m["role"] == "assistant").count();
     assert!(replies >= 3, "{messages:?}");
 }
+
+/// Goal judge loop on a conversation's session when the turn comes from
+/// an attached client, not the chat: the judge's continuation runs in the
+/// chat once the session is idle (it is not left for the lane's next own
+/// turn).
+#[test]
+fn a_client_turn_on_a_chats_goal_session_continues_in_the_chat() {
+    let rules = format!(
+        "[[rule]]\nuser = \"{JUDGE}\"\ntimes = 1\ntext = '{{\"verdict\":\"wait\",\"wait_for_seconds\":600,\"reason\":\"CI runs\"}}'\n\n\
+         [[rule]]\nuser = \"{JUDGE}\"\ntimes = 1\ntext = '{{\"verdict\":\"continue\",\"reason\":\"1 file remains\"}}'\n\n\
+         [[rule]]\nuser = \"{JUDGE}\"\nrepeat = true\ntext = '{{\"verdict\":\"done\",\"reason\":\"all ported\"}}'\n\n\
+         [[rule]]\nrepeat = true\ntext = \"worked on it\"\n"
+    );
+    let home = gateway_home_with(&rules, "");
+    let home = home.path();
+    let daemon = Daemon::start(home);
+    send(home, "default", "u1", "/goal port the parser");
+    wait_said(home, "default", "Goal parked on a timer");
+    // Unparked without a new first turn: the goal drives the next turn's
+    // judge, whoever submits that turn.
+    send(home, "default", "u1", "/goal unwait");
+    wait_said(home, "default", "Goal unparked.");
+    let id = common::newest_session(home);
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(async {
+        let (client, mut inbox) = daemon::connect(home, "default").await;
+        client
+            .call("session.attach", json!({"session_id": id}))
+            .await
+            .unwrap();
+        client
+            .call(
+                "prompt.submit",
+                json!({"session_id": id, "text": "how far along is it?"}),
+            )
+            .await
+            .unwrap();
+        while let Some(event) = inbox.events.recv().await {
+            if event.event == "turn.finished" {
+                break;
+            }
+        }
+    });
+    drop(runtime);
+    wait_said(home, "default", "Goal achieved: all ported");
+    let said = texts(home, "default");
+    assert!(
+        said.iter()
+            .any(|t| t.contains("Continuing toward goal (1/20): 1 file remains")),
+        "{said:?}"
+    );
+    // The first turn and the continuation; the client's turn was a person's.
+    assert_eq!(automated(home, "default", "goal"), 2);
+    daemon.stop(home);
+}

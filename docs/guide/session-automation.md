@@ -207,7 +207,9 @@ conversation like any other turn — after the chat's own messages — and
 their replies are posted to the chat or thread without quoting the
 message that set them. The status lines (`Goal set`, `Continuing toward
 goal`, `Goal achieved`, `Goal paused`, `Goal judged unachievable —
-paused`) are posted there too.
+paused`) are posted there too. A turn typed in a TUI or desktop attached
+to the chat's session counts for the goal as well: the judge looks at it,
+and its continuation runs in the chat once the session is idle.
 
 A heartbeat set from a chat fires from the gateway and answers in that
 chat even while the session is open in the TUI or desktop. A heartbeat
@@ -216,8 +218,8 @@ prompts and failures still do), and a final reply of exactly `NO_REPLY`
 or `[SILENT]` sends nothing. When the daemon starts it restores every
 chat's loops and heartbeats under the profile that owns them, from the
 stored conversation, without a new message; a wakeup the chat cannot take
-yet (a turn running, a message waiting) is not spent and is tried again
-on a later poll.
+yet (a turn running, a message waiting, also one that arrives just as the
+wakeup is handed over) is not spent and is tried again on a later poll.
 
 ## Status on every surface
 

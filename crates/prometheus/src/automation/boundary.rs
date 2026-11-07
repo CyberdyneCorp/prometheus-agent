@@ -64,6 +64,9 @@ pub struct Reserved {
     pub wakeup: Wakeup,
     /// The state before the reservation (a refund restores its kind).
     before: Option<Stored>,
+    /// The state the reservation left (a kind changed since, by a command,
+    /// is not refunded).
+    left: Option<Stored>,
 }
 
 impl Reserved {
@@ -73,6 +76,7 @@ impl Reserved {
         Self {
             wakeup,
             before: None,
+            left: None,
         }
     }
 }
@@ -265,6 +269,7 @@ pub fn due(
         let reserved = wakeup.map(|wakeup| Reserved {
             wakeup,
             before: Some(before),
+            left: Some(st.clone()),
         });
         (reserved, notice)
     });
@@ -278,20 +283,22 @@ pub fn due(
 }
 
 /// Hands back a reservation whose turn did not start: its kind returns to
-/// what it was before (no tick spent).
+/// what it was before (no tick spent), unless a command changed it since.
 pub fn refund(store: &Store, id: SessionId, reserved: Reserved) {
     let kind = reserved.wakeup.kind;
-    let Some(before) = reserved.before else {
+    let (Some(before), Some(left)) = (reserved.before, reserved.left) else {
         return;
     };
     let result = modify(store, id, |st| {
-        let automation = &mut st.automation;
+        let now = &mut st.automation;
+        let (before, left) = (before.automation, left.automation);
         match kind {
-            Kind::Goal => automation.goal.clone_from(&before.automation.goal),
-            Kind::Loop => automation.looping.clone_from(&before.automation.looping),
-            Kind::Heartbeat => automation
-                .heartbeat
-                .clone_from(&before.automation.heartbeat),
+            Kind::Goal if now.goal == left.goal => now.goal = before.goal,
+            Kind::Loop if now.looping == left.looping => now.looping = before.looping,
+            Kind::Heartbeat if now.heartbeat == left.heartbeat => {
+                now.heartbeat = before.heartbeat;
+            }
+            _ => tracing::debug!(kind = kind.as_str(), "changed since reserved; not refunded"),
         }
     });
     if let Err(err) = result {
@@ -330,4 +337,75 @@ pub fn next_check(store: &Store, id: SessionId, host: Host) -> Option<i64> {
         ..automation.clone()
     };
     [fires.next_fire_ms(), parked].into_iter().flatten().min()
+}
+
+#[cfg(test)]
+mod tests {
+    use pmt_automation::command::LoopSpec;
+
+    use super::*;
+
+    fn store() -> (tempfile::TempDir, Store, SessionId) {
+        let root = tempfile::tempdir().unwrap();
+        let home = pmt_config::Home::open(root.path()).unwrap();
+        let profile = home
+            .profile(&pmt_config::ProfileName::default_profile())
+            .unwrap();
+        let scope = pmt_config::ProfileScope::open(
+            profile,
+            &pmt_config::Overrides::default(),
+            pmt_config::Launch::Other,
+        )
+        .unwrap();
+        let store = Store::open(&scope).unwrap();
+        let id = store
+            .create_session(&pmt_store::NewSession::new(pmt_store::Source::Cli))
+            .unwrap()
+            .id;
+        (root, store, id)
+    }
+
+    fn set_loop(store: &Store, id: SessionId) {
+        let spec = LoopSpec {
+            every_secs: Some(60),
+            prompt: "poll CI".into(),
+            times: None,
+            until: None,
+        };
+        modify(store, id, |st| {
+            st.automation.looping = Some(cadence::new_loop(spec, now_ms(), &Limits::default()));
+            st.owners.insert(Kind::Loop, "cli".into());
+        })
+        .unwrap();
+    }
+
+    fn looping(store: &Store, id: SessionId) -> Option<pmt_automation::state::Loop> {
+        super::super::load(store, id).unwrap().automation.looping
+    }
+
+    /// Heartbeat ownership, recovery and silence on the gateway: a tick
+    /// reserved at admission is refunded when the attempt is rejected
+    /// before the turn starts.
+    #[test]
+    fn a_refused_wakeup_gives_its_tick_back() {
+        let (_root, store, id) = store();
+        set_loop(&store, id);
+        let before = looping(&store, id);
+        let (reserved, _) = due(&store, id, Host::Line, &Limits::default());
+        let reserved = reserved.expect("the new loop's first wakeup is due");
+        assert_eq!(looping(&store, id).unwrap().fired, 1);
+        refund(&store, id, reserved);
+        assert_eq!(looping(&store, id), before);
+    }
+
+    /// A refund never brings back a loop a command changed meanwhile.
+    #[test]
+    fn a_refund_leaves_a_loop_stopped_since_alone() {
+        let (_root, store, id) = store();
+        set_loop(&store, id);
+        let (reserved, _) = due(&store, id, Host::Line, &Limits::default());
+        modify(&store, id, |st| st.automation.looping = None).unwrap();
+        refund(&store, id, reserved.unwrap());
+        assert_eq!(looping(&store, id), None);
+    }
 }

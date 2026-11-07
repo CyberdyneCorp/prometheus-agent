@@ -8,6 +8,7 @@
 //! own input and are delivered like any reply, without quoting).
 
 use pmt_store::gateway::outbox::{NewOutbound, OutboundKind};
+use tokio::sync::oneshot;
 
 use crate::Link;
 
@@ -18,7 +19,7 @@ use super::key::{KeyParts, Routing, SessionKey};
 use super::lane::{self, Msg};
 
 /// An automated turn for a conversation.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub struct Automated {
     /// `goal`, `loop` or `heartbeat` (the stored message's `origin`).
     pub origin: String,
@@ -26,11 +27,15 @@ pub struct Automated {
     pub text: String,
     /// A status line said first (`Continuing toward goal (1/20): …`).
     pub notice: Option<String>,
+    /// Told whether its turn started: the lane can still drop it after
+    /// [`Gateway::automate`] accepted it (a person's input reached the
+    /// chat in between), and the host then gives back what it reserved.
+    pub started: Option<oneshot::Sender<bool>>,
 }
 
 /// What the host decided at the end of a conversation's turn: status lines
 /// to say after the answer, and the automated turn to run next.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Default)]
 pub struct AfterTurn {
     /// Status lines (`Goal achieved`, `Goal paused …`).
     pub notices: Vec<String>,
@@ -70,8 +75,9 @@ impl Gateway {
     /// Starts `automated` in the conversation of `session_id` when it is
     /// idle: `Accepted`, or `Dropped` while it runs a turn, a person's
     /// input waits, or the session is no conversation's (the caller gives
-    /// back what it reserved). A conversation without a lane (after a
-    /// restart) gets one from its stored route.
+    /// back what it reserved). An accepted one can still be dropped by the
+    /// lane: its `started` sender says so. A conversation without a lane
+    /// (after a restart) gets one from its stored route.
     #[must_use]
     pub fn automate(&self, profile: &str, session_id: &str, automated: Automated) -> Admission {
         let handle = self

@@ -322,3 +322,57 @@ fn loops_refuse_short_intervals_stop_at_their_cap_and_pause_on_ctrl_c() {
         .count();
     assert_eq!(loops, 4);
 }
+
+/// `--until` (spec: Loop stop conditions): the judge is asked after each
+/// wakeup; an unreadable verdict keeps the loop going, yes stops it, and an
+/// unachievable condition pauses it with the reason.
+#[test]
+fn a_loop_until_a_condition_stops_on_yes_and_pauses_when_unachievable() {
+    let judge = format!(
+        "{}{}{}{}",
+        judge_says(Some(1), "not a verdict"),
+        judge_says(Some(1), r#"{"verdict":"continue","reason":"still red"}"#),
+        judge_says(
+            Some(1),
+            r#"{"verdict":"done","reason":"the deploy is green"}"#
+        ),
+        judge_says(
+            None,
+            r#"{"verdict":"blocked","reason":"the branch was deleted"}"#
+        ),
+    );
+    let home = home_with(&judge);
+    let mut p = spawn(home.path(), &["--set", "loops.min_interval_secs=1"]);
+    prompt(&mut p);
+    p.send_line("/loop 1s poll the deploy --until the deploy is green")
+        .unwrap();
+    p.expect("Loop condition met: the deploy is green").unwrap();
+    prompt(&mut p);
+    p.send_line("/loop status").unwrap();
+    p.expect("No loop.").unwrap();
+    let polls = user_turns(home.path())
+        .iter()
+        .filter(|(o, _)| o.as_deref() == Some("loop"))
+        .count();
+    assert_eq!(
+        polls, 3,
+        "an unreadable and an undecided verdict kept it going"
+    );
+    prompt(&mut p);
+    p.send_line("/loop 1s check the branch --until the branch is merged")
+        .unwrap();
+    p.expect("Loop paused: judged unachievable: the branch was deleted")
+        .unwrap();
+    prompt(&mut p);
+    p.send_line("/loop status").unwrap();
+    p.expect("paused").unwrap();
+    exit(p);
+    let turns = user_turns(home.path());
+    let loops: Vec<&str> = turns
+        .iter()
+        .filter(|(o, _)| o.as_deref() == Some("loop"))
+        .map(|(_, t)| t.as_str())
+        .collect();
+    assert_eq!(loops.len(), 4, "one wakeup of the paused loop: {loops:?}");
+    assert!(loops[3].contains("check the branch"), "{loops:?}");
+}

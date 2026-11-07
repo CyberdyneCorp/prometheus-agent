@@ -338,6 +338,42 @@ mod tests {
         ));
     }
 
+    /// `--until`: yes stops the loop, unachievable pauses it with the
+    /// reason, and a failed or undecided judge keeps it going.
+    #[test]
+    fn the_until_verdict_stops_pauses_or_keeps_the_loop() {
+        use crate::judge::Verdict;
+        let mut looping = self_paced();
+        assert_eq!(
+            until(
+                &mut looping,
+                Ok(Verdict::Done("the deploy is green".into()))
+            ),
+            LoopEnd::Removed("Loop condition met: the deploy is green".into())
+        );
+        assert_eq!(
+            until(&mut looping, Ok(Verdict::Continue("still red".into()))),
+            LoopEnd::Next
+        );
+        assert_eq!(
+            until(&mut looping, Err("provider unavailable".into())),
+            LoopEnd::Next
+        );
+        assert_eq!(looping.status, RunStatus::Active);
+        assert_eq!(
+            until(
+                &mut looping,
+                Ok(Verdict::Blocked("the branch was deleted".into()))
+            ),
+            LoopEnd::Paused("Loop paused: judged unachievable: the branch was deleted".into())
+        );
+        assert_eq!(looping.status, RunStatus::Paused);
+        assert_eq!(
+            looping.reason.as_deref(),
+            Some("judged unachievable: the branch was deleted")
+        );
+    }
+
     #[test]
     fn missed_heartbeats_coalesce_into_one_fire_and_re_anchor() {
         let mut heartbeat = new_heartbeat(600, "check CI".into(), 0);
