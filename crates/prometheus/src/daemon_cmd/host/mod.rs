@@ -111,6 +111,9 @@ struct Profile {
     store: Arc<Store>,
     /// What the reloads did, for `daemon status`.
     config: Mutex<reload::State>,
+    /// Held across a whole config re-read, so a plugin reload that finds
+    /// the file unchanged waits for the poll that is still applying it.
+    rereading: tokio::sync::Mutex<()>,
     /// Session machinery per working directory and setup.
     factories: Mutex<HashMap<(PathBuf, SessionSetup), Arc<Factory>>>,
     setups: Mutex<HashMap<SessionId, SessionSetup>>,
@@ -169,6 +172,7 @@ impl Profile {
         Ok(Arc::new(Self {
             current: SharedScope::new(scope),
             config: Mutex::new(state),
+            rereading: tokio::sync::Mutex::default(),
             store,
             factories: Mutex::default(),
             setups: Mutex::default(),

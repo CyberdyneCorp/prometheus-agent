@@ -2816,6 +2816,10 @@ capabilities = [
 [scheduled-jobs."Run history (upgrade)"]
 "Inspect a failed night" = ["crates/prometheus/tests/cron_cli.rs::an_idle_run_is_interrupted_and_listed_by_its_status"]
 
+[scheduled-jobs."Run replay (upgrade)"]
+"Compare against current harness" = ["crates/prometheus/tests/cron_cli.rs::a_live_replay_reruns_the_inputs_and_diffs_the_outputs"]
+"Deterministic replay" = { deferred = "needs the model-call cache and replay provider of group 51 (task 51.2 owns it)" }
+
 [scheduled-jobs."Lifecycle operations"]
 "Run-now is synchronous by default" = ["crates/prometheus/tests/cron_cli.rs::run_now_executes_a_paused_job_in_the_foreground_and_keeps_it_paused", "crates/pmt-cron/tests/exec.rs::a_manual_run_of_a_paused_job_keeps_it_paused"]
 
