@@ -3091,7 +3091,7 @@ capabilities = [
 "Plugin engine breaks alternation" = ["crates/pmt-agent/tests/turn/compaction_upgrades.rs::a_plugin_engine_breaking_alternation_leaves_the_transcript_unchanged", "crates/pmt-agent/src/compress/validate.rs::two_adjacent_assistant_rows_are_refused"]
 
 [context-compression."Gateway session hygiene"]
-"Overnight growth" = ["crates/pmt-agent/tests/turn/compaction_upgrades.rs::gateway_hygiene_compacts_a_session_near_its_window_before_the_turn", "crates/pmt-agent/src/compress/hygiene.rs::hygiene_table"]
+"Overnight growth" = ["crates/pmt-agent/tests/turn/compaction_upgrades.rs::gateway_hygiene_compacts_a_session_near_its_window_before_the_turn", "crates/prometheus/tests/gateway_daemon.rs::an_inbound_message_on_a_session_near_its_window_is_compacted_first", "crates/pmt-agent/src/compress/hygiene.rs::hygiene_table"]
 
 [context-compression."Summary quality check (upgrade)"]
 "Summary forgot a file" = ["crates/pmt-agent/tests/turn/compaction_upgrades.rs::a_file_the_summary_forgot_is_preserved_and_the_coverage_recorded"]

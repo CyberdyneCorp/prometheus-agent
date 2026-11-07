@@ -368,3 +368,77 @@ fn errors_only_announces_the_failed_background_process_alone() {
     assert_eq!(notes.len(), 1, "only the failure: {notes:?}");
     daemon.stop(home);
 }
+
+/// The `compression.committed` events of the default profile's live
+/// trajectories.
+fn compactions(home: &Path) -> Vec<String> {
+    std::fs::read_dir(home.join("profiles/default/trajectories"))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| std::fs::read_to_string(entry.path()).ok())
+        .flat_map(|text| {
+            text.lines()
+                .filter(|l| l.contains("\"compression.committed\""))
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+/// Spec: context-compression, Gateway session hygiene, Overnight growth.
+/// A conversation whose last answer pushed it past 85% of the window is
+/// compacted by the daemon before the next inbound message runs.
+#[test]
+fn an_inbound_message_on_a_session_near_its_window_is_compacted_first() {
+    // An 80K window with 40K reserved for output: the in-turn trigger is
+    // 34K (85% of the input budget), hygiene compacts at 68K (85% of the
+    // window). The second request (~8K plus the prompt) stays under the
+    // in-turn trigger; its 62K answer takes the session past hygiene's.
+    let rules = format!(
+        "[[rule]]\nuser_regex = '^first$'\ntext = \"{}\"\n\n\
+         [[rule]]\nuser_regex = '^second$'\ntext = \"{}\"\n\n\
+         [[rule]]\nrepeat = true\ntext = \"fast done\"\n",
+        "early notes ".repeat(2_700),
+        "long answer ".repeat(20_700),
+    );
+    let home = gateway_home_with(
+        &rules,
+        "\n[models.\"mock/mock\"]\ncontext_window = 80000\nmax_output_tokens = 40000\n",
+    );
+    let home = home.path();
+    let daemon = Daemon::start(home);
+    // The first three rows are protected from compaction: two short
+    // exchanges open the conversation.
+    for opener in ["hi", "how are things"] {
+        send(home, "default", "u1", opener);
+    }
+    wait("both openers answered", Duration::from_mins(1), || {
+        texts(home, "default")
+            .iter()
+            .filter(|t| t.contains("fast done"))
+            .count()
+            == 2
+    });
+    send(home, "default", "u1", "first");
+    wait_said(home, "default", "early notes");
+    send(home, "default", "u1", "second");
+    wait_said(home, "default", "long answer");
+    assert!(compactions(home).is_empty(), "{:?}", compactions(home));
+    send(home, "default", "u1", "third");
+    wait("the third answer", Duration::from_mins(1), || {
+        texts(home, "default")
+            .iter()
+            .filter(|t| t.contains("fast done"))
+            .count()
+            == 3
+    });
+    let committed = compactions(home);
+    assert!(
+        committed
+            .first()
+            .is_some_and(|c| c.contains("\"gateway_hygiene\"")),
+        "{committed:?}"
+    );
+    daemon.stop(home);
+}
