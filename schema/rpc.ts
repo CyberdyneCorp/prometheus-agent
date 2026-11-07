@@ -846,6 +846,19 @@ export interface SessionSummary {
   title?: string | null;
 }
 
+/** How a steer is delivered. */
+export type SteerKind = "note" | "redirect" | "wrap_up";
+
+/** `session.steer` params. */
+export interface SteerParams {
+  /** How it is delivered (default `note`). */
+  kind?: SteerKind;
+  /** The session. */
+  session_id: string;
+  /** The steer; empty or whitespace-only text is refused (`empty steer`). */
+  text: string;
+}
+
 /** `subagent.list` result. */
 export interface SubagentList {
   /** The session's children, oldest first. */
@@ -1216,6 +1229,7 @@ export interface Methods {
   "session.list": { params: SessionListParams; result: SessionList };
   "session.resolve": { params: ResolveParams; result: SessionRef };
   "session.resume": { params: ResumeParams; result: Attached };
+  "session.steer": { params: SteerParams; result: Ack };
   "session.transcript": { params: SessionRef; result: Transcript };
   "subagent.list": { params: SessionRef; result: SubagentList };
   "vault.add": { params: VaultAddParams; result: VaultItem };

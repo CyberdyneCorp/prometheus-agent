@@ -196,6 +196,8 @@ pub(super) struct Turn<'a> {
     nudges: u32,
     /// The run-budget wrap-up notice was sent.
     pub(super) wrap_up_sent: bool,
+    /// The budget checkpoint notice was sent.
+    pub(super) checkpoint_sent: bool,
     /// The label of the next compression check.
     pub(super) next_trigger: Trigger,
     /// Compaction attempts this turn.
@@ -242,6 +244,7 @@ impl<'a> Turn<'a> {
             empty_streak: 0,
             nudges: 0,
             wrap_up_sent: false,
+            checkpoint_sent: false,
             next_trigger: Trigger::TurnStart,
             compression_attempts: 0,
             request_rows: 0,
@@ -260,7 +263,7 @@ impl<'a> Turn<'a> {
         let route = setup.model.route().await;
         let mut frozen = self.freeze(&route).await?;
         let text = match self.agent.steers.take() {
-            Some(steer) => format!("{steer}\n\n{}", input.text),
+            Some(steer) => format!("{}\n\n{}", steer.text, input.text),
             None => input.text,
         };
         let mut row = transcript::user_row(
@@ -302,10 +305,12 @@ impl<'a> Turn<'a> {
             if let Some(end) = self.stopped() {
                 return Ok(end);
             }
+            if self.deliver_steers()? {
+                return self.wrap_up_final(frozen).await;
+            }
             if !self.iterations.consume() {
                 return Ok(Ending::new(ExitReason::IterationLimit));
             }
-            self.deliver_steers()?;
             let route = self.agent.setup.model.route().await;
             let estimate = self.request(frozen, &route, true)?.estimated_tokens();
             self.preflight(frozen, &route, estimate).await?;

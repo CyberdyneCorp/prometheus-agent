@@ -878,6 +878,34 @@ impl Host for DaemonHost {
         })
     }
 
+    fn steer_session<'a>(
+        &'a self,
+        profile: &'a str,
+        params: pmt_rpc::contracts::SteerParams,
+    ) -> HostFuture<'a, ()> {
+        Box::pin(async move {
+            let profile = &self.profile(profile)?;
+            let id = self::session_id(&params.session_id)?;
+            let kind = {
+                use pmt_agent::turn::SteerKind as K;
+                use pmt_rpc::contracts::SteerKind as W;
+                match params.kind {
+                    W::Note => K::Note,
+                    W::Redirect => K::Redirect,
+                    W::WrapUp => K::WrapUp,
+                }
+            };
+            let session = profile.loaded.lock().await.get(&id).cloned();
+            let Some(session) = session else {
+                return Err(Error::new(
+                    &pmt_core::error::codes::SESSION_NOT_FOUND,
+                    format!("session {id} is not loaded"),
+                ));
+            };
+            session.live.agent.steer_with(&params.text, kind)
+        })
+    }
+
     fn resolve<'a>(
         &'a self,
         profile: &'a str,

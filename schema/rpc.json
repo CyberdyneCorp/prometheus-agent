@@ -2471,6 +2471,50 @@
       ],
       "type": "object"
     },
+    "SteerKind": {
+      "description": "How a steer is delivered.",
+      "oneOf": [
+        {
+          "const": "note",
+          "description": "Inserted before the next model request.",
+          "type": "string"
+        },
+        {
+          "const": "redirect",
+          "description": "Running cooperative tools yield; inserted as a real user message.",
+          "type": "string"
+        },
+        {
+          "const": "wrap_up",
+          "description": "The current tool batch finishes, then one toolless request ends\nthe turn as `completed`.",
+          "type": "string"
+        }
+      ]
+    },
+    "SteerParams": {
+      "additionalProperties": false,
+      "description": "`session.steer` params.",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/SteerKind",
+          "default": "note",
+          "description": "How it is delivered (default `note`)."
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        },
+        "text": {
+          "description": "The steer; empty or whitespace-only text is refused (`empty steer`).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "text"
+      ],
+      "type": "object"
+    },
     "SubagentList": {
       "additionalProperties": false,
       "description": "`subagent.list` result.",
@@ -4015,6 +4059,16 @@
       },
       "result": {
         "$ref": "#/$defs/Attached"
+      },
+      "since": "1.0"
+    },
+    "session.steer": {
+      "owner": "agent-turn-loop",
+      "params": {
+        "$ref": "#/$defs/SteerParams"
+      },
+      "result": {
+        "$ref": "#/$defs/Ack"
       },
       "since": "1.0"
     },

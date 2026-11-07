@@ -67,6 +67,17 @@ results it becomes a new message wrapped in
 steer opens your next message. An empty steer is refused with
 `empty steer`.
 
+`session.steer {session_id, text, kind}` takes one of three kinds:
+
+| Kind | Delivery |
+|---|---|
+| `note` (default) | Added before the next model request, as above. |
+| `redirect` | Running tools are asked to yield (cooperative tools stop early), then the text is added before the next request as a real user message (`kind=redirect`). |
+| `wrap_up` | The current tool batch finishes, then one request without tools asks for the final answer and the turn ends `completed`. |
+
+Several pending steers of different kinds share one message, each run of
+one kind under its own `kind=` wrapper.
+
 ## Failures and retries
 
 Each model call is tried up to `agent.api_max_retries` times (default 3)
@@ -145,6 +156,14 @@ and sends one request without tools (retried once if the answer is
 empty). Its text becomes the turn's answer and the exit reason stays the
 budget one. That summary request does not count against the iteration
 limit, but its tokens and cost are recorded like every other call.
+
+With `agent.budget_warning_ratio` set (strictly between 0 and 1; unset is
+off), the first tool round in which the most-constrained budget of the
+turn (iterations, the run budget, or a `budgets.*` limit) reaches that
+share gets `[budget checkpoint] used <used> of <max> <unit>` appended to
+its newest tool result, once per turn. Unlimited budgets never count, and
+the notice never goes into the system prompt or into anything already
+sent.
 
 Budgets are described in [Usage, costs and budgets](usage-and-budgets.md).
 A model without a known price under a USD budget is never called: the turn

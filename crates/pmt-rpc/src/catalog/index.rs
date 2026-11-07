@@ -102,6 +102,8 @@ pub const INDEX: &[IndexEntry] = &[
     method("session.context_usage", WA),
     method("prompt.submit", WA),
     method("session.interrupt", WA),
+    // agent-turn-loop
+    method("session.steer", "agent-turn-loop"),
     long("session.resolve", WA),
     long("command.dispatch", WA),
     long("daemon.update", WA),

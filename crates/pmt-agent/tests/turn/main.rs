@@ -16,4 +16,5 @@ mod references;
 mod session_tools;
 mod size;
 mod steering;
+mod structured;
 mod support;

@@ -13,6 +13,7 @@
 pub mod breakpoints;
 mod budget;
 mod cache;
+mod checkpoint;
 mod compression;
 pub mod events;
 mod exit;
@@ -57,6 +58,7 @@ pub use iteration::IterationBudget;
 pub use lease::LeaseTiming;
 pub use model::{DeltaSink, ModelPort, NoDeltas, ProviderModel, ProviderSetup};
 pub use round::WRAP_UP_NOTICE;
+pub use steer::SteerKind;
 pub use tools::{SessionTools, Timings, ToolBatch, ToolPort};
 
 use crate::compress::Summarizer;
@@ -460,7 +462,20 @@ impl Agent {
     ///
     /// `turn.empty_steer` (`empty steer`) for empty or whitespace text.
     pub fn steer(&self, text: &str) -> Result<(), Error> {
-        self.steers.push(text)
+        self.steers.push(text, SteerKind::Note)
+    }
+
+    /// Steers the running turn with `kind` (spec: agent-turn-loop,
+    /// Structured steering): a `note` is inserted before the next request,
+    /// a `redirect` asks the running tools to yield and becomes a real user
+    /// message, a `wrap_up` ends the turn after the current tool batch with
+    /// one toolless request.
+    ///
+    /// # Errors
+    ///
+    /// `turn.empty_steer` (`empty steer`) for empty or whitespace text.
+    pub fn steer_with(&self, text: &str, kind: SteerKind) -> Result<(), Error> {
+        self.steers.push(text, kind)
     }
 
     /// Takes the steers no turn delivered (a delegated child that ended

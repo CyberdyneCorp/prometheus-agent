@@ -112,6 +112,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `session.list` | `workspace-architecture` | 1.0 | [`SessionListParams`](#sessionlistparams) | [`SessionList`](#sessionlist) |
 | `session.resolve` | `workspace-architecture` | 1.0 | [`ResolveParams`](#resolveparams) | [`SessionRef`](#sessionref) |
 | `session.resume` | `workspace-architecture` | 1.0 | [`ResumeParams`](#resumeparams) | [`Attached`](#attached) |
+| `session.steer` | `agent-turn-loop` | 1.0 | [`SteerParams`](#steerparams) | [`Ack`](#ack) |
 | `session.transcript` | `workspace-architecture` | 1.0 | [`SessionRef`](#sessionref) | [`Transcript`](#transcript) |
 | `subagent.list` | `tui` | 1.0 | [`SessionRef`](#sessionref) | [`SubagentList`](#subagentlist) |
 | `subagent.subscribe` | `tui` | 1.0 | not served yet | |
@@ -981,6 +982,26 @@ One listed session.
 | `session_id` | string | yes | `ses_<ULID>`. |
 | `started_at` | string | yes | When it started (RFC 3339). |
 | `title` | string or null | no | Its title, when it has one. |
+
+### `SteerKind`
+
+How a steer is delivered.
+
+| Value | Meaning |
+|---|---|
+| `note` | Inserted before the next model request. |
+| `redirect` | Running cooperative tools yield; inserted as a real user message. |
+| `wrap_up` | The current tool batch finishes, then one toolless request ends the turn as `completed`. |
+
+### `SteerParams`
+
+`session.steer` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `kind` | [`SteerKind`](#steerkind) | no | How it is delivered (default `note`). |
+| `session_id` | string | yes | The session. |
+| `text` | string | yes | The steer; empty or whitespace-only text is refused (`empty steer`). |
 
 ### `SubagentList`
 

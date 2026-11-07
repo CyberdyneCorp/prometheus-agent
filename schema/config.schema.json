@@ -48,12 +48,32 @@
           "minimum": 0,
           "type": "integer"
         },
+        "budget_warning_ratio": {
+          "description": "Share of the most-constrained budget at which a one-time\n`[budget checkpoint]` notice rides the newest tool result; unset is\noff.",
+          "exclusiveMaximum": 1.0,
+          "exclusiveMinimum": 0.0,
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "clarify_timeout_secs": {
           "default": 3600,
           "description": "How long the `clarify` tool waits for an answer.",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
+        },
+        "coding_context": {
+          "$ref": "#/$defs/CodingContext",
+          "default": "auto",
+          "description": "The coding brief and workspace snapshot in the session tier."
+        },
+        "coding_instructions": {
+          "default": "",
+          "description": "Standing instructions appended to the coding brief.",
+          "type": "string"
         },
         "empty_response_guard": {
           "$ref": "#/$defs/EmptyResponseGuard",
@@ -123,6 +143,11 @@
           "description": "Provider-specific tier names mapped to a level, for example\n`ultra = \"max\"`.",
           "type": "object"
         },
+        "resume_on_crash": {
+          "$ref": "#/$defs/ResumeOnCrash",
+          "default": "ask",
+          "description": "What happens to a turn a crash left unfinished."
+        },
         "run_budget_secs": {
           "description": "Optional per-turn wall-clock budget; unset means no budget.",
           "format": "uint64",
@@ -139,6 +164,16 @@
           "maximum": 64,
           "minimum": 1,
           "type": "integer"
+        },
+        "verify_guidance": {
+          "default": true,
+          "description": "Append clean-diff guidance to the verification nudge.",
+          "type": "boolean"
+        },
+        "verify_on_stop": {
+          "$ref": "#/$defs/VerifyOnStop",
+          "default": false,
+          "description": "Refuse a final answer after unverified code edits: `true`, `false`\nor `\"auto\"` (on for CLI, TUI, desktop, ACP and API callers)."
         }
       },
       "type": "object",
@@ -283,6 +318,16 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "AutoMode": {
+      "description": "The named `\"auto\"` mode of a switch.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Decided by the surface.",
+          "type": "string"
+        }
+      ]
     },
     "AutoResume": {
       "description": "What a TUI opens when nothing names a session.",
@@ -1045,6 +1090,26 @@
         }
       ]
     },
+    "CodingContext": {
+      "description": "`agent.coding_context`.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "On for interactive sessions in a code workspace.",
+          "type": "string"
+        },
+        {
+          "const": "on",
+          "description": "Always on.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "Never.",
+          "type": "string"
+        }
+      ]
+    },
     "ComposerConfig": {
       "additionalProperties": false,
       "description": "The `[ui.composer]` section (spec: tui, Large pastes collapse into\nchips).",
@@ -1106,6 +1171,16 @@
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
+        },
+        "model_thresholds": {
+          "additionalProperties": {
+            "exclusiveMaximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "type": "number"
+          },
+          "default": {},
+          "description": "Per-model base thresholds: a model-name substring or\n`\"<provider>:<substring>\"`; the longest match wins.",
+          "type": "object"
         },
         "pinned_max_tokens": {
           "default": 8000,
@@ -5588,6 +5663,13 @@
           "default": {},
           "description": "Per-platform hint overrides, keyed by platform.",
           "type": "object"
+        },
+        "prefill_messages_file": {
+          "description": "A JSON file of `{role, content}` few-shot messages (roles `user`\nand `assistant`) inserted after the system prompt, frozen at\nsession start.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "type": "object",
@@ -6197,6 +6279,26 @@
         {
           "const": "off",
           "description": "No recap.",
+          "type": "string"
+        }
+      ]
+    },
+    "ResumeOnCrash": {
+      "description": "`agent.resume_on_crash`.",
+      "oneOf": [
+        {
+          "const": "ask",
+          "description": "Ask before resuming (non-interactive callers close the turn).",
+          "type": "string"
+        },
+        {
+          "const": "auto",
+          "description": "Resume without asking.",
+          "type": "string"
+        },
+        {
+          "const": "never",
+          "description": "Close the turn as `crashed`.",
           "type": "string"
         }
       ]
@@ -7963,14 +8065,50 @@
       },
       "type": "object"
     },
+    "VerifyOnStop": {
+      "anyOf": [
+        {
+          "description": "Always on or always off.",
+          "type": "boolean"
+        },
+        {
+          "$ref": "#/$defs/AutoMode",
+          "description": "`\"auto\"`."
+        }
+      ],
+      "description": "`agent.verify_on_stop`: a switch or `\"auto\"`."
+    },
     "VisionConfig": {
       "additionalProperties": false,
       "description": "The `[vision]` section.",
       "properties": {
+        "embed_target_bytes": {
+          "default": 262144,
+          "description": "Largest natively embedded image in bytes (clamped to\n65,536..4,194,304); bigger or wider images are downscaled.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
         "image_input_mode": {
           "$ref": "#/$defs/ImageInputMode",
           "default": "auto",
           "description": "How images reach the model."
+        },
+        "max_calls_per_image": {
+          "description": "Times one image may be embedded by `vision_analyze` per session;\nunset is 3 in delegated children and unlimited for the main agent,\n`0` is unlimited.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "replay_recent_images": {
+          "default": 3,
+          "description": "Newest user images re-sent when history is rebuilt from storage;\n`0` disables.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
         }
       },
       "type": "object",
@@ -8481,6 +8619,8 @@
         "api_max_retries": 3,
         "auto_recovery_cycles": 5,
         "clarify_timeout_secs": 3600,
+        "coding_context": "auto",
+        "coding_instructions": "",
         "empty_response_guard": {
           "cost_threshold_usd": 0.25
         },
@@ -8491,7 +8631,10 @@
         "personality": "none",
         "reasoning_overrides": {},
         "reasoning_tiers": {},
-        "tool_concurrency": 8
+        "resume_on_crash": "ask",
+        "tool_concurrency": 8,
+        "verify_guidance": true,
+        "verify_on_stop": false
       },
       "description": "Turn loop limits, retries and reasoning effort."
     },
@@ -8600,6 +8743,7 @@
         "micro_compact": false,
         "micro_compact_every_n_turns": 1,
         "min_tail_user_messages": 1,
+        "model_thresholds": {},
         "pinned_max_tokens": 8000,
         "prepare_ahead": false,
         "proactive_prune_tokens": 0,
@@ -9317,7 +9461,9 @@
     "vision": {
       "$ref": "#/$defs/VisionConfig",
       "default": {
-        "image_input_mode": "auto"
+        "embed_target_bytes": 262144,
+        "image_input_mode": "auto",
+        "replay_recent_images": 3
       },
       "description": "Image input routing."
     },

@@ -10,7 +10,10 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 |---|---|---|---|---|---|
 | `agent.api_max_retries` | integer | `3` | 1 to 10 | `next_session` | Attempts per model call before the fallback chain is consulted. |
 | `agent.auto_recovery_cycles` | integer | `5` | ≥ 0 | `next_session` | Extra wait-and-retry cycles after retries and fallbacks are spent on a transient failure with nothing streamed; `0` disables. |
+| `agent.budget_warning_ratio` | number | unset | > 0.0, < 1.0 | `next_session` | Share of the most-constrained budget at which a one-time `[budget checkpoint]` notice rides the newest tool result; unset is off. |
 | `agent.clarify_timeout_secs` | integer | `3600` | ≥ 0 | `next_session` | How long the `clarify` tool waits for an answer. |
+| `agent.coding_context` | one of "auto", "on", "off" | `"auto"` | `"auto"`, `"on"`, `"off"` | `next_session` | The coding brief and workspace snapshot in the session tier. |
+| `agent.coding_instructions` | string | `""` | any | `next_session` | Standing instructions appended to the coding brief. |
 | `agent.empty_response_guard.cost_threshold_usd` | number | `0.25` | ≥ 0.0 | `next_session` | Estimated input cost (USD) of one empty attempt at which the retry budget drops to one. |
 | `agent.intent_continuation` | one of "auto" or boolean or array of string | `"auto"` | any | `next_session` | Nudge a model that announces an action without calling a tool: `"auto"` (Responses-wire models only), `true`, `false` or a list of model-name substrings. |
 | `agent.max_iterations` | integer | `500` | 0 to 100000 | `next_session` | Maximum model calls per turn; `0` means unlimited. |
@@ -20,8 +23,11 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `agent.reasoning_effort` | one of "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra" | unset | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`, `"ultra"` | `next_session` | Reasoning effort; unset means `medium`. |
 | `agent.reasoning_overrides` | table | `{}` | any | `next_session` | Per-model reasoning overrides: model id to a level or a tier name of `[agent.reasoning_tiers]`. |
 | `agent.reasoning_tiers` | table | `{}` | any | `next_session` | Provider-specific tier names mapped to a level, for example `ultra = "max"`. |
+| `agent.resume_on_crash` | one of "ask", "auto", "never" | `"ask"` | `"ask"`, `"auto"`, `"never"` | `next_session` | What happens to a turn a crash left unfinished. |
 | `agent.run_budget_secs` | integer | unset | ≥ 0 | `next_session` | Optional per-turn wall-clock budget; unset means no budget. |
 | `agent.tool_concurrency` | integer | `8` | 1 to 64 | `next_session` | Tool calls of one batch that may run at once. |
+| `agent.verify_guidance` | boolean | `true` | any | `next_session` | Append clean-diff guidance to the verification nudge. |
+| `agent.verify_on_stop` | boolean or one of "auto" | `false` | any | `next_session` | Refuse a final answer after unverified code edits: `true`, `false` or `"auto"` (on for CLI, TUI, desktop, ACP and API callers). |
 | `approvals.cron_mode` | one of "deny", "approve" | `"deny"` | `"deny"`, `"approve"` | `live` | Decision for approvals in cron jobs. |
 | `approvals.denial_breaker_threshold` | integer | `3` | ≥ 0 | `live` | In `smart` mode, after this many consecutive denials by the approval guardian the denial tells the model to stop trying variations (`0` disables); a human approval resets the count. |
 | `approvals.deny` | array of string | `[]` | any | `live` | Command patterns that are always blocked. |
@@ -118,6 +124,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `compression.micro_compact` | boolean | `false` | any | `next_session` | Compact tool results between turns. |
 | `compression.micro_compact_every_n_turns` | integer | `1` | ≥ 1 | `next_session` | Turns between micro-compactions. |
 | `compression.min_tail_user_messages` | integer | `1` | ≥ 0 | `next_session` | User messages always kept in the tail. |
+| `compression.model_thresholds` | table | `{}` | any | `next_session` | Per-model base thresholds: a model-name substring or `"<provider>:<substring>"`; the longest match wins. |
 | `compression.pinned_max_tokens` | integer | `8000` | ≥ 0 | `next_session` | Token cap for pinned content carried across compactions. |
 | `compression.prepare_ahead` | boolean | `false` | any | `next_session` | Prepare the next summary ahead of the trigger. |
 | `compression.proactive_prune_tokens` | integer | `0` | ≥ 0 | `next_session` | Prune old tool output above this many tokens; `0` is off. |
@@ -496,6 +503,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `prompt.load_identity` | boolean | `true` | any | `next_session` | Load the identity file `SOUL.md`. |
 | `prompt.platform_hints.<name>.append` | string | unset | any | `next_session` | Appended after the (possibly replaced) hint. |
 | `prompt.platform_hints.<name>.replace` | string | unset | any | `next_session` | Replaces the built-in hint. |
+| `prompt.prefill_messages_file` | string | unset | any | `next_session` | A JSON file of `{role, content}` few-shot messages (roles `user` and `assistant`) inserted after the system prompt, frozen at session start. |
 | `prompt_cache.ttl` | one of "5m", "1h", "auto", "off" | `"5m"` | `"5m"`, `"1h"`, `"auto"`, `"off"` | `next_session` | Provider prompt-cache lifetime. |
 | `providers.<name>.aliases` | array of string | `[]` | any | `next_session` | Extra names a custom provider answers to. |
 | `providers.<name>.allow_insecure_http` | boolean | `false` | any | `next_session` | Allow a plain `http://` base URL on a public host (plain HTTP to loopback and private-network hosts is always allowed). |
@@ -693,7 +701,10 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `vault.bitwarden.enabled` | boolean | `true` | any | `next_session` | Offer its logins when its CLI is installed and signed in. |
 | `vault.key_storage` | one of "file", "keychain" | `"file"` | `"file"`, `"keychain"` | `next_session` | Where a new vault's key is kept: `file` (`<profile>/vault/vault.key`) or `keychain` (the OS keychain; the file when none is reachable). `prometheus vault key migrate --to` moves an existing key. |
 | `vault.onepassword.enabled` | boolean | `true` | any | `next_session` | Offer its logins when its CLI is installed and signed in. |
+| `vision.embed_target_bytes` | integer | `262144` | ≥ 0 | `next_session` | Largest natively embedded image in bytes (clamped to 65,536..4,194,304); bigger or wider images are downscaled. |
 | `vision.image_input_mode` | one of "auto", "native", "text" | `"auto"` | `"auto"`, `"native"`, `"text"` | `next_session` | How images reach the model. |
+| `vision.max_calls_per_image` | integer | unset | ≥ 0 | `next_session` | Times one image may be embedded by `vision_analyze` per session; unset is 3 in delegated children and unlimited for the main agent, `0` is unlimited. |
+| `vision.replay_recent_images` | integer | `3` | ≥ 0 | `next_session` | Newest user images re-sent when history is rebuilt from storage; `0` disables. |
 | `web.backend` | string | `"auto"` | any | `next_session` | Shared backend for web search and extract (`auto` picks the first with credentials). |
 | `web.extract_backend` | string | unset | any | `next_session` | Extract backend; unset uses `backend`. |
 | `web.extract_char_limit` | integer | `15000` | 2000 to 500000 | `next_session` | Characters per extracted page. |

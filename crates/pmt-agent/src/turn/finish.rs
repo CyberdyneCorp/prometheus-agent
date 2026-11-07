@@ -83,6 +83,27 @@ impl Turn<'_> {
     /// limit and the budget check, but recorded like every call.
     async fn handoff(&mut self, frozen: &Frozen) -> Result<Option<String>, Error> {
         self.append(&transcript::notice_row(HANDOFF_NOTICE, "budget_handoff"))?;
+        self.toolless_final(frozen).await
+    }
+
+    /// A `wrap_up` steer was delivered: one toolless request for the final
+    /// response, and the turn ends `completed` (spec: agent-turn-loop,
+    /// Structured steering).
+    pub(super) async fn wrap_up_final(&mut self, frozen: &Frozen) -> Result<Ending, Error> {
+        let text = self.toolless_final(frozen).await?;
+        if text.is_none()
+            && let Some(stopped) = self.stopped()
+        {
+            return Ok(stopped);
+        }
+        let mut end = Ending::new(ExitReason::Completed);
+        end.final_response = text;
+        Ok(end)
+    }
+
+    /// Asks for a final answer without tools (one retry of an empty
+    /// reply); `None` when interrupted, failed or still empty.
+    async fn toolless_final(&mut self, frozen: &Frozen) -> Result<Option<String>, Error> {
         for _ in 0..HANDOFF_ATTEMPTS {
             let route = self.agent.setup.model.route().await;
             let request = self.request(frozen, &route, false)?;

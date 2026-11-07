@@ -3036,3 +3036,11 @@ capabilities = [
 
 [model-providers."Provider spend caps (upgrade)"]
 "Monthly cap reached falls back" = ["crates/pmt-providers/tests/providers/routing.rs::monthly_cap_reached_falls_back", "crates/pmt-providers/tests/providers/routing.rs::the_eighty_percent_warning_is_emitted_once_per_period"]
+
+# Group 44 (turn loop, compression, memory and storage upgrades).
+[agent-turn-loop."Budget checkpoint notice"]
+"Ratio crossed" = ["crates/pmt-agent/tests/turn/structured.rs::the_budget_checkpoint_rides_the_newest_unsent_tool_result_once", "crates/pmt-agent/tests/turn/structured.rs::no_checkpoint_without_the_ratio_or_for_unlimited_budgets"]
+
+[agent-turn-loop."Structured steering (upgrade)"]
+"Note during a tool batch" = ["crates/pmt-agent/tests/turn/steering.rs::a_steer_is_a_new_row_after_the_last_tool_result", "crates/pmt-agent/tests/turn/structured.rs::a_redirect_makes_running_tools_yield_and_is_a_real_user_message"]
+"Wrap-up" = ["crates/pmt-agent/tests/turn/structured.rs::a_wrap_up_steer_ends_the_turn_with_one_toolless_request"]

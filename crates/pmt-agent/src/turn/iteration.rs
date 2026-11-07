@@ -40,6 +40,12 @@ impl IterationBudget {
         self.used
     }
 
+    /// The limit; `None` when unlimited.
+    #[must_use]
+    pub const fn max(&self) -> Option<u32> {
+        if self.max == 0 { None } else { Some(self.max) }
+    }
+
     /// Iterations left; `None` when unlimited.
     #[must_use]
     pub const fn remaining(&self) -> Option<u32> {

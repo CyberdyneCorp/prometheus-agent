@@ -40,6 +40,7 @@ pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
         .register::<c::SessionAttach, _, _>(catalog, attach)?
         .register::<c::SessionResume, _, _>(catalog, resume)?
         .register::<c::SessionInterrupt, _, _>(catalog, interrupt)?
+        .register::<c::SessionSteer, _, _>(catalog, steer)?
         .register::<c::SessionResolve, _, _>(catalog, resolve)?
         .register::<c::SessionFork, _, _>(catalog, fork)?
         .register::<c::SessionDetach, _, _>(catalog, detach)?
@@ -278,6 +279,16 @@ async fn interrupt(call: Call, params: c::SessionRef) -> Result<c::Ack, RpcError
     call.server
         .host()
         .interrupt(&profile, &params.session_id)
+        .await
+        .map_err(|e| rpc(&e))?;
+    Ok(c::Ack::YES)
+}
+
+async fn steer(call: Call, params: c::SteerParams) -> Result<c::Ack, RpcError> {
+    let profile = attached_profile(&call, &params.session_id, Need::Driver)?;
+    call.server
+        .host()
+        .steer_session(&profile, params)
         .await
         .map_err(|e| rpc(&e))?;
     Ok(c::Ack::YES)

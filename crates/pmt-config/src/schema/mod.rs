@@ -43,10 +43,10 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 pub use agent::{
-    AgentConfig, CompressionConfig, ContextConfig, ContinuationMode, EmptyResponseGuard,
-    GuardrailThresholds, ImageInputMode, IntentContinuation, LoopCaps, PlatformHint,
-    PromptCacheConfig, PromptCacheTtl, PromptConfig, ReasoningLevel, TailMode, ToolLoopGuardrails,
-    VisionConfig,
+    AgentConfig, AutoMode, CodingContext, CompressionConfig, ContextConfig, ContinuationMode,
+    EmptyResponseGuard, GuardrailThresholds, ImageInputMode, IntentContinuation, LoopCaps,
+    PlatformHint, PromptCacheConfig, PromptCacheTtl, PromptConfig, ReasoningLevel, ResumeOnCrash,
+    TailMode, ToolLoopGuardrails, VerifyOnStop, VisionConfig,
 };
 pub use automation::{GoalsConfig, HeartbeatConfig, LoopsConfig};
 pub use connectors::{ConnectorsConfig, DEFAULT_CONNECTOR_GATEWAY};

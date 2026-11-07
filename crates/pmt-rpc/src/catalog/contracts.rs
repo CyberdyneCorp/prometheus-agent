@@ -83,6 +83,7 @@ mod lsp;
 mod messaging;
 mod security;
 mod tui;
+mod turn;
 mod worktree;
 pub use automation::*;
 pub use cron::*;
@@ -91,6 +92,7 @@ pub use lsp::*;
 pub use messaging::*;
 pub use security::*;
 pub use tui::*;
+pub use turn::*;
 pub use worktree::*;
 
 /// A `<major>.<minor>` protocol version on the wire.

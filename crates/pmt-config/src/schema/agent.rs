@@ -52,6 +52,23 @@ pub struct AgentConfig {
     pub intent_continuation: IntentContinuation,
     /// Empty-response retry guard.
     pub empty_response_guard: EmptyResponseGuard,
+    /// Share of the most-constrained budget at which a one-time
+    /// `[budget checkpoint]` notice rides the newest tool result; unset is
+    /// off.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("exclusiveMinimum" = 0.0, "exclusiveMaximum" = 1.0))]
+    pub budget_warning_ratio: Option<f64>,
+    /// What happens to a turn a crash left unfinished.
+    pub resume_on_crash: ResumeOnCrash,
+    /// Refuse a final answer after unverified code edits: `true`, `false`
+    /// or `"auto"` (on for CLI, TUI, desktop, ACP and API callers).
+    pub verify_on_stop: VerifyOnStop,
+    /// Append clean-diff guidance to the verification nudge.
+    pub verify_guidance: bool,
+    /// The coding brief and workspace snapshot in the session tier.
+    pub coding_context: CodingContext,
+    /// Standing instructions appended to the coding brief.
+    pub coding_instructions: String,
 }
 
 impl Default for AgentConfig {
@@ -71,8 +88,58 @@ impl Default for AgentConfig {
             reasoning_tiers: BTreeMap::new(),
             intent_continuation: IntentContinuation::Mode(ContinuationMode::Auto),
             empty_response_guard: EmptyResponseGuard::default(),
+            budget_warning_ratio: None,
+            resume_on_crash: ResumeOnCrash::Ask,
+            verify_on_stop: VerifyOnStop::Enabled(false),
+            verify_guidance: true,
+            coding_context: CodingContext::Auto,
+            coding_instructions: String::new(),
         }
     }
+}
+
+/// `agent.resume_on_crash`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ResumeOnCrash {
+    /// Ask before resuming (non-interactive callers close the turn).
+    #[default]
+    Ask,
+    /// Resume without asking.
+    Auto,
+    /// Close the turn as `crashed`.
+    Never,
+}
+
+/// `agent.verify_on_stop`: a switch or `"auto"`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum VerifyOnStop {
+    /// Always on or always off.
+    Enabled(bool),
+    /// `"auto"`.
+    Mode(AutoMode),
+}
+
+/// The named `"auto"` mode of a switch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AutoMode {
+    /// Decided by the surface.
+    Auto,
+}
+
+/// `agent.coding_context`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum CodingContext {
+    /// On for interactive sessions in a code workspace.
+    #[default]
+    Auto,
+    /// Always on.
+    On,
+    /// Never.
+    Off,
 }
 
 /// Reasoning effort levels, in increasing order.
@@ -192,6 +259,11 @@ pub struct PromptConfig {
     pub include_session_id: bool,
     /// Per-platform hint overrides, keyed by platform.
     pub platform_hints: BTreeMap<String, PlatformHint>,
+    /// A JSON file of `{role, content}` few-shot messages (roles `user`
+    /// and `assistant`) inserted after the system prompt, frozen at
+    /// session start.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prefill_messages_file: Option<String>,
 }
 
 impl Default for PromptConfig {
@@ -203,6 +275,7 @@ impl Default for PromptConfig {
             context_file_read_timeout_secs: 5,
             include_session_id: false,
             platform_hints: BTreeMap::new(),
+            prefill_messages_file: None,
         }
     }
 }
@@ -309,6 +382,12 @@ pub struct CompressionConfig {
     pub prepare_ahead: bool,
     /// Time allowed for one summary call.
     pub summary_timeout_secs: u64,
+    /// Per-model base thresholds: a model-name substring or
+    /// `"<provider>:<substring>"`; the longest match wins.
+    #[schemars(extend("additionalProperties" = {
+        "type": "number", "exclusiveMinimum": 0.0, "exclusiveMaximum": 1.0
+    }))]
+    pub model_thresholds: BTreeMap<String, f64>,
 }
 
 impl Default for CompressionConfig {
@@ -331,6 +410,7 @@ impl Default for CompressionConfig {
             proactive_prune_tokens: 0,
             prepare_ahead: false,
             summary_timeout_secs: 120,
+            model_thresholds: BTreeMap::new(),
         }
     }
 }
@@ -423,12 +503,34 @@ impl Default for LoopCaps {
 }
 
 /// The `[vision]` section.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 #[schemars(extend("x-apply" = "next_session"))]
 pub struct VisionConfig {
     /// How images reach the model.
     pub image_input_mode: ImageInputMode,
+    /// Largest natively embedded image in bytes (clamped to
+    /// 65,536..4,194,304); bigger or wider images are downscaled.
+    pub embed_target_bytes: u64,
+    /// Times one image may be embedded by `vision_analyze` per session;
+    /// unset is 3 in delegated children and unlimited for the main agent,
+    /// `0` is unlimited.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_calls_per_image: Option<u32>,
+    /// Newest user images re-sent when history is rebuilt from storage;
+    /// `0` disables.
+    pub replay_recent_images: u32,
+}
+
+impl Default for VisionConfig {
+    fn default() -> Self {
+        Self {
+            image_input_mode: ImageInputMode::Auto,
+            embed_target_bytes: 262_144,
+            max_calls_per_image: None,
+            replay_recent_images: 3,
+        }
+    }
 }
 
 /// Image input routing modes.

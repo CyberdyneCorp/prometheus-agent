@@ -103,6 +103,7 @@ pub fn declare_builtin(d: &mut Declarations) {
         .method::<c::SessionListing>()
         .method::<c::SessionResume>()
         .method::<c::SessionInterrupt>()
+        .method::<c::SessionSteer>()
         .method::<c::SessionResolve>()
         .method::<c::SessionFork>()
         .method::<c::SessionCompact>()

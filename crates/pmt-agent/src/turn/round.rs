@@ -48,10 +48,13 @@ impl Turn<'_> {
         let token = self.options.interrupt.token().child();
         let tools = self.agent.setup.tools.clone();
         let turn_id = self.id.to_string();
-        let batch = match self
+        // A redirect steer cancels this token: cooperative tools yield.
+        self.agent.steers.watch_batch(Some(token.clone()));
+        let raced = self
             .race_tools(tools.run(&runnable, &turn_id, &token))
-            .await
-        {
+            .await;
+        self.agent.steers.watch_batch(None);
+        let batch = match raced {
             Ok(batch) => batch,
             Err(end) => {
                 token.cancel();
@@ -77,6 +80,7 @@ impl Turn<'_> {
             .collect();
         let stop = self.guard_outcomes(calls, &mut outcomes);
         self.wrap_up(&mut outcomes);
+        self.checkpoint(&mut outcomes)?;
         self.keep_results(calls, &outcomes).await?;
         Ok(stop.map(|why| {
             self.notices.push(why.clone());

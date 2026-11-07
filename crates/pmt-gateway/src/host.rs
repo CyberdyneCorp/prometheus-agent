@@ -223,6 +223,23 @@ pub trait Host: Send + Sync + 'static {
     /// when none runs.
     fn interrupt<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()>;
 
+    /// Steers the session's running turn (spec: agent-turn-loop,
+    /// Structured steering); with no turn running the steer opens the next
+    /// user message.
+    fn steer_session<'a>(
+        &'a self,
+        profile: &'a str,
+        params: pmt_rpc::contracts::SteerParams,
+    ) -> HostFuture<'a, ()> {
+        let _ = (profile, params);
+        Box::pin(async {
+            Err(Error::new(
+                &pmt_core::error::codes::RPC_NOT_SERVED,
+                "this host cannot steer sessions",
+            ))
+        })
+    }
+
     /// The session a chat's `-r`/`-c` reference names.
     fn resolve<'a>(&'a self, profile: &'a str, params: ResolveParams)
     -> HostFuture<'a, SessionRef>;
