@@ -410,10 +410,10 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 42. M2 Scheduled job upgrades
 
-- [x] 42.1 Implement the per-job working directory (context files loaded, relative paths refused), model pinning with the cron fleet default (the agent cannot choose a model), creating jobs paused with an auditable reason, the complete cronjob tool field set (timezone pin) and the `/cron` slash command; verify with job tests (spec: scheduled-jobs)
+- [ ] 42.1 Implement the per-job working directory (context files loaded, relative paths refused), model pinning with the cron fleet default (the agent cannot choose a model), creating jobs paused with an auditable reason, the complete cronjob tool field set (timezone pin) and the `/cron` slash command; verify with job tests (spec: scheduled-jobs)
 - [x] 42.2 Implement the failure streak with a review nudge, automatic re-runs when the model was unreachable, holding through a closed provider usage window, failure incidents with alert-once and acknowledge, failure notice routing and agent-declared run failure; verify with a fake clock and fault-injected providers (spec: scheduled-jobs)
 - [ ] 42.3 Implement the Bot Chat delivery target (`bot_chat[:<profile>]`, unknown profile rejected at create), the push notification flag, cron threads and delivery confirmation, and continuable deliveries (a reply continues the run's session); verify with the fake adapter (spec: scheduled-jobs)
-- [x] 42.4 Implement the script wake gate with script credentials (unchanged polls skip the model, provider keys never reach scripts), monitor mode, job chaining with continuity, the per-job notepad and asynchronous tool-initiated runs with per-run context; verify with job tests (spec: scheduled-jobs)
+- [ ] 42.4 Implement the script wake gate with script credentials (unchanged polls skip the model, provider keys never reach scripts), monitor mode, job chaining with continuity, the per-job notepad and asynchronous tool-initiated runs with per-run context; verify with job tests (spec: scheduled-jobs)
 - [ ] 42.5 Implement the suggested automations inbox (dismissals remembered), the automation blueprint catalog (slot validation, inline values) and webhook-triggered job runs (bursts never double-fire); verify with fixtures and document the additions (spec: scheduled-jobs)
 
 ## 43. M2 Session automation: /goal, /loop and /heartbeat
