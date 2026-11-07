@@ -95,6 +95,24 @@ impl Fetcher {
         self
     }
 
+    /// The same client and policies, with refusals reported as
+    /// `requester`. Shares the connection pool and TLS setup: building a
+    /// client loads the platform's trust roots, which costs milliseconds of
+    /// session start on Linux.
+    #[must_use]
+    pub fn for_requester(&self, requester: &str) -> Self {
+        Self {
+            client: self.client.clone(),
+            resolver: self.resolver.clone(),
+            policy: Arc::clone(&self.policy),
+            hosts: self.hosts.as_ref().map(|hosts| SessionHosts {
+                hosts: Arc::clone(&hosts.hosts),
+                requester: requester.to_owned(),
+                observer: hosts.observer.clone(),
+            }),
+        }
+    }
+
     /// GETs `url`, following redirects through the destination checks.
     ///
     /// # Errors

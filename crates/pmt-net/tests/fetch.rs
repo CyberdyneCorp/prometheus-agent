@@ -302,6 +302,23 @@ async fn tls_is_verified_and_extra_ca_file_roots_are_trusted() {
     assert_eq!(response.text().await.unwrap(), "hello");
 }
 
+/// Clients share a verifier for a while (session start builds several);
+/// a rewritten `network.extra_ca_file` still applies to the next client.
+#[tokio::test]
+async fn a_rewritten_extra_ca_file_applies_to_the_next_client() {
+    let first = corp_https().await;
+    let second = corp_https().await;
+    let dir = tempfile::tempdir().unwrap();
+    let ca = dir.path().join("corp-ca.pem");
+    std::fs::write(&ca, &first.ca_pem).unwrap();
+    assert!(fetch_corp(first.port, Some(&ca)).await.is_ok());
+    assert!(fetch_corp(second.port, Some(&ca)).await.is_err());
+
+    std::fs::write(&ca, &second.ca_pem).unwrap();
+    assert!(fetch_corp(second.port, Some(&ca)).await.is_ok());
+    assert!(fetch_corp(first.port, Some(&ca)).await.is_err());
+}
+
 /// Set by [`corporate_root_in_the_os_store_is_trusted`] for the child run.
 const CHILD_PORT: &str = "PMT_TEST_CORP_PORT";
 
@@ -390,4 +407,32 @@ async fn an_allowlist_session_fetches_only_allowed_hosts() {
     assert_eq!(denials[0].port, port);
     assert_eq!(denials[0].requester, "web_extract");
     assert_eq!(denials[0].reason, Reason::NotAllowlisted);
+}
+
+/// A fetcher derived for another tool obeys the same session egress policy
+/// and reports its refusals under its own name.
+#[tokio::test]
+async fn a_fetcher_for_another_requester_keeps_the_policy_and_names_its_refusals() {
+    use pmt_net::egress::{Allowed, Denial, HostPolicy, Mode, Observer};
+    let (port, _seen) = serve(routes).await;
+    let hosts = Arc::new(HostPolicy::new(
+        Mode::Allowlist,
+        vec![Allowed::parse("corp.test")],
+    ));
+    let denials: Arc<Mutex<Vec<Denial>>> = Arc::default();
+    let sink = Arc::clone(&denials);
+    let observer: Observer = Arc::new(move |d| sink.lock().unwrap().push(d));
+    let web = fetcher(public_loopback()).with_hosts(hosts, "web", Some(observer));
+    let vision = web.for_requester("vision");
+
+    blocked(vision.get(&format!("http://public.test:{port}/ok")).await);
+    assert!(
+        vision
+            .get(&format!("http://corp.test:{port}/ok"))
+            .await
+            .is_ok()
+    );
+    let denials = denials.lock().unwrap();
+    assert_eq!(denials.len(), 1);
+    assert_eq!(denials[0].requester, "vision");
 }

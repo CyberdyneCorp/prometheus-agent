@@ -6,7 +6,8 @@
 //! `network.extra_ca_file`. No setting disables verification.
 
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
+use std::time::{Duration, Instant};
 
 use pmt_core::error::{Error, codes};
 use rustls::ClientConfig;
@@ -46,24 +47,64 @@ pub fn client_config_with(
 ) -> Result<ClientConfig, Error> {
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let extra = extra_ca_file.map(read_pem_certs).transpose()?;
-    let verifier = platform_verifier(extra, provider.clone()).map_err(|e| {
-        init_error(&format!(
-            "cannot start the platform certificate verifier: {e}"
-        ))
-    })?;
+    let verifier = shared_verifier(extra, &provider)?;
     let config = ClientConfig::builder_with_provider(provider)
         .with_safe_default_protocol_versions()
         .map_err(|e| init_error(&e.to_string()))?
         // A custom verifier is rustls' way to plug in the platform one;
         // it verifies, nothing is skipped.
         .dangerous()
-        .with_custom_certificate_verifier(Arc::new(verifier));
+        .with_custom_certificate_verifier(verifier);
     match identity {
         None => Ok(config.with_no_client_auth()),
         Some(identity) => config
             .with_client_auth_cert(identity.certs, identity.key)
             .map_err(|e| init_error(&format!("the client certificate was refused: {e}"))),
     }
+}
+
+/// How long a platform verifier is reused. On Linux a verifier is a
+/// snapshot of the system bundle that takes milliseconds to load and parse,
+/// and one session start builds several clients (provider, web, fetchers):
+/// they share one load. A long-running daemon still sees a changed system
+/// store after this long.
+const VERIFIER_TTL: Duration = Duration::from_mins(1);
+
+/// The verifier built last, for the extra roots it was built with.
+struct CachedVerifier {
+    extra: Option<Vec<CertificateDer<'static>>>,
+    built: Instant,
+    verifier: Arc<Verifier>,
+}
+
+static VERIFIER: Mutex<Option<CachedVerifier>> = Mutex::new(None);
+
+/// The platform verifier trusting `extra` too: the cached one while it is
+/// fresh and was built from the same extra roots (compared by content, so
+/// a rewritten `network.extra_ca_file` takes effect at once).
+fn shared_verifier(
+    extra: Option<Vec<CertificateDer<'static>>>,
+    provider: &Arc<CryptoProvider>,
+) -> Result<Arc<Verifier>, Error> {
+    let mut cached = VERIFIER.lock().unwrap_or_else(PoisonError::into_inner);
+    if let Some(hit) = cached
+        .as_ref()
+        .filter(|c| c.extra == extra && c.built.elapsed() < VERIFIER_TTL)
+    {
+        return Ok(Arc::clone(&hit.verifier));
+    }
+    let verifier = platform_verifier(extra.clone(), Arc::clone(provider)).map_err(|e| {
+        init_error(&format!(
+            "cannot start the platform certificate verifier: {e}"
+        ))
+    })?;
+    let verifier = Arc::new(verifier);
+    *cached = Some(CachedVerifier {
+        extra,
+        built: Instant::now(),
+        verifier: Arc::clone(&verifier),
+    });
+    Ok(verifier)
 }
 
 #[cfg(not(target_os = "android"))]

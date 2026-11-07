@@ -227,6 +227,7 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         .map(|r| remote_parts(inputs, r, terminal.as_ref()))
         .unwrap_or_default();
     let lsp = super::lsp::diagnostics(inputs, remote.as_ref(), child_env.as_ref(), proxy.as_ref());
+    let (web, vision) = network_tools(inputs);
     let env = SessionEnv {
         files: Some(Arc::new(files(
             inputs,
@@ -239,8 +240,8 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         ))),
         lsp,
         terminal: terminal.clone(),
-        web: web(scope, &inputs.providers, &inputs.plugin_call, inputs.egress).map(Arc::new),
-        vision: vision(inputs),
+        web,
+        vision,
         vault: browser.as_ref().map(|browser| vault(inputs, browser)),
         browser: browser.clone(),
     };
@@ -519,13 +520,33 @@ fn terminal(
     })
 }
 
+/// The web tools and `vision_analyze`, sharing one fetcher (one
+/// connection pool) under the session's URL policy.
+fn network_tools(
+    inputs: &EnvInputs<'_>,
+) -> (
+    Option<Arc<WebSession>>,
+    Option<Arc<pmt_tools::vision::VisionSession>>,
+) {
+    let fetcher = fetcher(inputs.scope, inputs.egress, "web");
+    let web = web(
+        inputs.scope,
+        &inputs.providers,
+        &inputs.plugin_call,
+        fetcher.clone(),
+    );
+    (web.map(Arc::new), vision(inputs, fetcher.as_deref()))
+}
+
 /// `vision_analyze` of the session: downloads under its URL policy,
 /// returned images kept with the profile's attachments.
-fn vision(inputs: &EnvInputs<'_>) -> Option<Arc<pmt_tools::vision::VisionSession>> {
-    let scope = inputs.scope;
+fn vision(
+    inputs: &EnvInputs<'_>,
+    web: Option<&pmt_net::fetch::Fetcher>,
+) -> Option<Arc<pmt_tools::vision::VisionSession>> {
     inputs.vision.session(
-        || fetcher(scope, inputs.egress, "vision"),
-        scope.dir().join("cache").join("media"),
+        || web.map(|web| Arc::new(web.for_requester("vision"))),
+        inputs.scope.dir().join("cache").join("media"),
     )
 }
 
@@ -561,11 +582,11 @@ fn web(
     scope: &ProfileScope,
     providers: &pmt_plugins::providers::ProviderRegistry,
     call: &pmt_plugins::host::CallInfo,
-    egress: &crate::egress::SessionEgress,
+    fetcher: Option<Arc<pmt_net::fetch::Fetcher>>,
 ) -> Option<WebSession> {
     let config = scope.config();
+    let fetcher = fetcher?;
     let client = pmt_net::client(&outbound(scope)).ok()?;
-    let fetcher = fetcher(scope, egress, "web")?;
     let secrets = scope.secrets().clone();
     let lookup: pmt_tools::web::SecretLookup =
         Arc::new(move |name: &str| secrets.resolve(name).ok());
