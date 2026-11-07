@@ -94,6 +94,20 @@ pub struct Policy {
     pub(crate) spawn: bool,
     pub(crate) unrepresentable: Vec<String>,
     pub(crate) limits: Option<ResourceLimits>,
+    /// What the child is.
+    pub(crate) kind: ChildKind,
+}
+
+/// What a confined child is: a browser needs a few platform services
+/// other programs do not (see [`Policy::for_browser`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ChildKind {
+    /// Any program.
+    Program,
+    /// A Chromium-family browser.
+    Browser,
+    /// A Chromium-family browser with a window ([`Policy::with_display`]).
+    HeadedBrowser,
 }
 
 impl Policy {
@@ -125,6 +139,7 @@ impl Policy {
             spawn: false,
             unrepresentable: Vec::new(),
             limits: None,
+            kind: ChildKind::Program,
         };
         for capability in capabilities {
             policy.apply(capability, paths);
@@ -284,6 +299,42 @@ impl Policy {
     pub fn with_limits(mut self, limits: ResourceLimits) -> Self {
         self.limits = Some(limits);
         self
+    }
+
+    /// The policy of a Chromium-family browser (run with its own sandbox
+    /// off: this one replaces it). On macOS the profile also allows what
+    /// the browser's process model needs and nothing a page could use to
+    /// leave it: its own Mach rendezvous services, the power-management
+    /// user client, and Unix sockets (its process singleton) inside the
+    /// writable roots. Elsewhere it changes nothing.
+    #[must_use]
+    pub fn for_browser(mut self) -> Self {
+        self.kind = ChildKind::Browser;
+        self
+    }
+
+    /// The policy of a browser that opens a window: on macOS it may also
+    /// reach the window server and the services a window uses (the
+    /// display's read paths are ordinary read roots elsewhere). Only a
+    /// browser's policy can have a display.
+    #[must_use]
+    pub fn with_display(mut self) -> Self {
+        if self.kind == ChildKind::Browser {
+            self.kind = ChildKind::HeadedBrowser;
+        }
+        self
+    }
+
+    /// Whether this is a browser's policy.
+    #[must_use]
+    pub fn is_browser(&self) -> bool {
+        matches!(self.kind, ChildKind::Browser | ChildKind::HeadedBrowser)
+    }
+
+    /// Whether this browser opens a window.
+    #[must_use]
+    pub fn has_display(&self) -> bool {
+        self.kind == ChildKind::HeadedBrowser
     }
 
     /// The resource bounds, if any.

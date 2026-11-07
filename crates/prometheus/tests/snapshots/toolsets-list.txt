@@ -1,24 +1,24 @@
-  acp  (23 tools)
+  acp  (24 tools)
     The coding tools for ACP editor sessions
     includes: coding
-  acp_unattended  (19 tools)
+  acp_unattended  (20 tools)
     ACP tools for clients that cannot answer prompts: no shell or code execution
-    tools: web_search, web_extract, read_file, write_file, patch, search_files, vision_analyze, skills_list, skill_view, skill_manage, browser_cdp, browser_dialog, browser_vault, todo, memory, session_search, clarify, delegate_task, manage_connections
-  api_server  (24 tools)
+    tools: web_search, web_extract, read_file, write_file, patch, search_files, vision_analyze, skills_list, skill_view, skill_manage, browser_cdp, browser_dialog, browser_vault, browser_close_profile, todo, memory, session_search, clarify, delegate_task, manage_connections
+  api_server  (25 tools)
     The core tools without speech, clarify and computer use, for API server callers
-    tools: web_search, web_extract, terminal, process, read_file, write_file, patch, search_files, vision_analyze, image_generate, skills_list, skill_view, skill_manage, browser_exec, browser_cdp, browser_dialog, browser_vault, todo, memory, session_search, execute_code, delegate_task, cronjob, manage_connections
-  browser  (4 tools)
+    tools: web_search, web_extract, terminal, process, read_file, write_file, patch, search_files, vision_analyze, image_generate, skills_list, skill_view, skill_manage, browser_exec, browser_cdp, browser_dialog, browser_vault, browser_close_profile, todo, memory, session_search, execute_code, delegate_task, cronjob, manage_connections
+  browser  (5 tools)
     Browser automation
-    tools: browser_exec, browser_cdp, browser_dialog, browser_vault
+    tools: browser_exec, browser_cdp, browser_dialog, browser_vault, browser_close_profile
   clarify  (1 tool)
     Ask the user a question
     tools: clarify
   code_execution  (1 tool)
     Run code in a sandbox
     tools: execute_code
-  coding  (23 tools)  [posture]
+  coding  (24 tools)  [posture]
     Software work: core without media generation, speech, scheduling or computer use
-    tools: web_search, web_extract, terminal, process, read_file, write_file, patch, search_files, vision_analyze, skills_list, skill_view, skill_manage, browser_exec, browser_cdp, browser_dialog, browser_vault, todo, memory, session_search, clarify, execute_code, delegate_task, manage_connections
+    tools: web_search, web_extract, terminal, process, read_file, write_file, patch, search_files, vision_analyze, skills_list, skill_view, skill_manage, browser_exec, browser_cdp, browser_dialog, browser_vault, browser_close_profile, todo, memory, session_search, clarify, execute_code, delegate_task, manage_connections
   computer_use  (1 tool)
     Desktop control
     tools: computer_use
@@ -27,9 +27,9 @@
     tools: manage_connections
   context_engine  (0 tools)
     Tools of the active context engine
-* core  (27 tools)  [active]
+* core  (28 tools)  [active]
     The default tool set of every surface
-    tools: web_search, web_extract, terminal, process, read_file, write_file, patch, search_files, vision_analyze, image_generate, skills_list, skill_view, skill_manage, browser_exec, browser_cdp, browser_dialog, browser_vault, text_to_speech, todo, memory, session_search, clarify, execute_code, delegate_task, cronjob, computer_use, manage_connections
+    tools: web_search, web_extract, terminal, process, read_file, write_file, patch, search_files, vision_analyze, image_generate, skills_list, skill_view, skill_manage, browser_exec, browser_cdp, browser_dialog, browser_vault, browser_close_profile, text_to_speech, todo, memory, session_search, clarify, execute_code, delegate_task, cronjob, computer_use, manage_connections
   cronjob  (1 tool)
     Scheduled jobs
     tools: cronjob
@@ -43,7 +43,7 @@
   file  (4 tools)
     Read, write, patch and search files
     tools: read_file, write_file, patch, search_files
-  gateway  (27 tools)
+  gateway  (28 tools)
     Every messaging platform bundle: core plus each platform's tools
   image_gen  (1 tool)
     Image generation
@@ -56,25 +56,25 @@
   messaging  (1 tool)
     Send messages and reactions to messaging chats (needs the gateway daemon)
     tools: send_message
-  platform-discord  (27 tools)
+  platform-discord  (28 tools)
     The core tools plus those of the discord platform
     includes: core
-  platform-email  (27 tools)
+  platform-email  (28 tools)
     The core tools plus those of the email platform
     includes: core
-  platform-matrix  (27 tools)
+  platform-matrix  (28 tools)
     The core tools plus those of the matrix platform
     includes: core
-  platform-signal  (27 tools)
+  platform-signal  (28 tools)
     The core tools plus those of the signal platform
     includes: core
-  platform-slack  (27 tools)
+  platform-slack  (28 tools)
     The core tools plus those of the slack platform
     includes: core
-  platform-telegram  (27 tools)
+  platform-telegram  (28 tools)
     The core tools plus those of the telegram platform
     includes: core
-  platform-whatsapp  (27 tools)
+  platform-whatsapp  (28 tools)
     The core tools plus those of the whatsapp platform
     includes: core
   process  (1 tool)

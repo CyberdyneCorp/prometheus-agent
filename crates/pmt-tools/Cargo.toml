@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 base64.workspace = true
+getrandom.workspace = true
 dunce.workspace = true
 futures-util.workspace = true
 glob.workspace = true
@@ -24,6 +25,10 @@ pmt-vault.workspace = true
 regex.workspace = true
 reqwest.workspace = true
 resvg.workspace = true
+# read_file document extraction: .docx/.xlsx parts and SQLite overviews.
+roxmltree.workspace = true
+rusqlite.workspace = true
+zip.workspace = true
 saphyr-parser.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -54,6 +59,7 @@ nix = { workspace = true, features = ["signal", "process"] }
 wiremock.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
+tracing-subscriber.workspace = true
 
 [lints]
 workspace = true

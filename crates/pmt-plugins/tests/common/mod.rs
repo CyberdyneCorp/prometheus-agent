@@ -14,7 +14,7 @@ use pmt_plugins::grants::{Identity, approve};
 use pmt_plugins::host::ports::{
     ActionError, ConfigPort, EventsPort, HttpPort, HttpRequest, HttpResponse, InjectTarget,
     LlmCall, LlmPort, MessagingPort, PlatformAction, PortFuture, Ports, PostFailure, Posted,
-    SecretsPort, ToolsPort,
+    SecretsPort, SubagentAnswer, SubagentFailure, SubagentRequest, SubagentsPort, ToolsPort,
 };
 use pmt_plugins::host::{CallInfo, Instance, Runtime};
 use pmt_plugins::load::{LoadInputs, Loaded, load};
@@ -30,6 +30,8 @@ pub(crate) struct Seen {
     pub events: Mutex<Vec<String>>,
     /// `post <session> <text>`, `edit ...`, `inject ...`, `action <verb> ...`.
     pub messaging: Mutex<Vec<String>>,
+    /// The `subagents` requests, with their session.
+    pub subagents: Mutex<Vec<(String, SubagentRequest)>>,
 }
 
 /// Ports backed by memory.
@@ -67,7 +69,41 @@ impl Fake {
             events: self.clone(),
             config: self.clone(),
             messaging: self.clone(),
+            subagents: self.clone(),
         }
+    }
+}
+
+/// Launches answer the handle `h-<session>`; only that handle is known.
+impl SubagentsPort for Fake {
+    fn call<'a>(
+        &'a self,
+        session: &'a str,
+        _: &'a str,
+        request: SubagentRequest,
+    ) -> PortFuture<'a, Result<SubagentAnswer, SubagentFailure>> {
+        self.seen
+            .subagents
+            .lock()
+            .unwrap()
+            .push((session.to_owned(), request.clone()));
+        let known = |handle: &str| handle == format!("h-{session}");
+        let answer = match request {
+            SubagentRequest::Launch { .. } => Ok(SubagentAnswer::Handle(format!("h-{session}"))),
+            SubagentRequest::Status { handle } if known(&handle) => {
+                Ok(SubagentAnswer::State("running"))
+            }
+            SubagentRequest::Wait { handle, .. } if known(&handle) => Ok(SubagentAnswer::Result(
+                Some(r#"{"status":"completed"}"#.to_owned()),
+            )),
+            SubagentRequest::Steer { handle, .. } | SubagentRequest::Cancel { handle }
+                if known(&handle) =>
+            {
+                Ok(SubagentAnswer::Done)
+            }
+            _ => Err(SubagentFailure::UnknownHandle),
+        };
+        Box::pin(async move { answer })
     }
 }
 

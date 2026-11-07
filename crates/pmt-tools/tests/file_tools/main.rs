@@ -2,6 +2,7 @@
 //! tool requirements): one test binary, one module per tool.
 
 mod dispatch;
+mod documents;
 mod golden;
 mod patch;
 mod read;

@@ -8,7 +8,7 @@ Every tool name the shipped toolsets refer to, and every shipped toolset. Pages 
 
 | Toolset | Tools | Includes | Flags | Description |
 |---|---|---|---|---|
-| `core` | `web_search`, `web_extract`, `terminal`, `process`, `read_file`, `write_file`, `patch`, `search_files`, `vision_analyze`, `image_generate`, `skills_list`, `skill_view`, `skill_manage`, `browser_exec`, `browser_cdp`, `browser_dialog`, `browser_vault`, `text_to_speech`, `todo`, `memory`, `session_search`, `clarify`, `execute_code`, `delegate_task`, `cronjob`, `computer_use`, `manage_connections` |  |  | The default tool set of every surface |
+| `core` | `web_search`, `web_extract`, `terminal`, `process`, `read_file`, `write_file`, `patch`, `search_files`, `vision_analyze`, `image_generate`, `skills_list`, `skill_view`, `skill_manage`, `browser_exec`, `browser_cdp`, `browser_dialog`, `browser_vault`, `browser_close_profile`, `text_to_speech`, `todo`, `memory`, `session_search`, `clarify`, `execute_code`, `delegate_task`, `cronjob`, `computer_use`, `manage_connections` |  |  | The default tool set of every surface |
 | `web` | `web_search`, `web_extract` |  |  | Web search and page extraction |
 | `search` | `web_search` |  |  | Web search only |
 | `x_search` | `x_search` |  | default-off | Search posts on X |
@@ -21,7 +21,7 @@ Every tool name the shipped toolsets refer to, and every shipped toolset. Pages 
 | `process` | `process` |  |  | Background process management |
 | `file` | `read_file`, `write_file`, `patch`, `search_files` |  |  | Read, write, patch and search files |
 | `skills` | `skills_list`, `skill_view`, `skill_manage` |  |  | List, view and manage skills |
-| `browser` | `browser_exec`, `browser_cdp`, `browser_dialog`, `browser_vault` |  |  | Browser automation |
+| `browser` | `browser_exec`, `browser_cdp`, `browser_dialog`, `browser_vault`, `browser_close_profile` |  |  | Browser automation |
 | `cronjob` | `cronjob` |  |  | Scheduled jobs |
 | `tts` | `text_to_speech` |  |  | Text to speech |
 | `todo` | `todo` |  |  | The session task list |
@@ -37,10 +37,10 @@ Every tool name the shipped toolsets refer to, and every shipped toolset. Pages 
 | `debugging` | `terminal`, `process` | `web`, `file` |  | Terminal, processes, web and files |
 | `safe` |  | `web`, `vision`, `image_gen` |  | Web, vision and image generation; nothing that executes |
 | `webhook-safe` | `web_search`, `web_extract`, `vision_analyze`, `clarify` |  |  | Read-only web and vision tools for webhook-triggered runs; nothing that executes or writes |
-| `coding` | `web_search`, `web_extract`, `terminal`, `process`, `read_file`, `write_file`, `patch`, `search_files`, `vision_analyze`, `skills_list`, `skill_view`, `skill_manage`, `browser_exec`, `browser_cdp`, `browser_dialog`, `browser_vault`, `todo`, `memory`, `session_search`, `clarify`, `execute_code`, `delegate_task`, `manage_connections` |  | posture | Software work: core without media generation, speech, scheduling or computer use |
+| `coding` | `web_search`, `web_extract`, `terminal`, `process`, `read_file`, `write_file`, `patch`, `search_files`, `vision_analyze`, `skills_list`, `skill_view`, `skill_manage`, `browser_exec`, `browser_cdp`, `browser_dialog`, `browser_vault`, `browser_close_profile`, `todo`, `memory`, `session_search`, `clarify`, `execute_code`, `delegate_task`, `manage_connections` |  | posture | Software work: core without media generation, speech, scheduling or computer use |
 | `acp` |  | `coding` |  | The coding tools for ACP editor sessions |
-| `acp_unattended` | `web_search`, `web_extract`, `read_file`, `write_file`, `patch`, `search_files`, `vision_analyze`, `skills_list`, `skill_view`, `skill_manage`, `browser_cdp`, `browser_dialog`, `browser_vault`, `todo`, `memory`, `session_search`, `clarify`, `delegate_task`, `manage_connections` |  |  | ACP tools for clients that cannot answer prompts: no shell or code execution |
-| `api_server` | `web_search`, `web_extract`, `terminal`, `process`, `read_file`, `write_file`, `patch`, `search_files`, `vision_analyze`, `image_generate`, `skills_list`, `skill_view`, `skill_manage`, `browser_exec`, `browser_cdp`, `browser_dialog`, `browser_vault`, `todo`, `memory`, `session_search`, `execute_code`, `delegate_task`, `cronjob`, `manage_connections` |  |  | The core tools without speech, clarify and computer use, for API server callers |
+| `acp_unattended` | `web_search`, `web_extract`, `read_file`, `write_file`, `patch`, `search_files`, `vision_analyze`, `skills_list`, `skill_view`, `skill_manage`, `browser_cdp`, `browser_dialog`, `browser_vault`, `browser_close_profile`, `todo`, `memory`, `session_search`, `clarify`, `delegate_task`, `manage_connections` |  |  | ACP tools for clients that cannot answer prompts: no shell or code execution |
+| `api_server` | `web_search`, `web_extract`, `terminal`, `process`, `read_file`, `write_file`, `patch`, `search_files`, `vision_analyze`, `image_generate`, `skills_list`, `skill_view`, `skill_manage`, `browser_exec`, `browser_cdp`, `browser_dialog`, `browser_vault`, `browser_close_profile`, `todo`, `memory`, `session_search`, `execute_code`, `delegate_task`, `cronjob`, `manage_connections` |  |  | The core tools without speech, clarify and computer use, for API server callers |
 | `gateway` |  |  |  | Every messaging platform bundle: core plus each platform's tools |
 | `platform-telegram` |  | `core` |  | The core tools plus those of the telegram platform |
 | `platform-discord` |  | `core` |  | The core tools plus those of the discord platform |
@@ -117,6 +117,10 @@ Toolsets: `core`, `browser`, `coding`, `acp_unattended`, `api_server`.
 Toolsets: `core`, `browser`, `coding`, `acp_unattended`, `api_server`.
 
 ### `browser_vault`
+
+Toolsets: `core`, `browser`, `coding`, `acp_unattended`, `api_server`.
+
+### `browser_close_profile`
 
 Toolsets: `core`, `browser`, `coding`, `acp_unattended`, `api_server`.
 

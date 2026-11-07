@@ -151,19 +151,6 @@ impl Default for BudgetsConfig {
     }
 }
 
-/// The `[cron]` section. Only the profile time zone exists in M1; it is
-/// also the zone daily and monthly budgets and `prometheus usage --by day`
-/// use (the scheduler's keys arrive with M2).
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(default, deny_unknown_fields)]
-#[schemars(extend("x-apply" = "live"))]
-pub struct CronConfig {
-    /// IANA time zone of this profile (`Europe/Lisbon`); unset uses the
-    /// host's zone.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub timezone: Option<String>,
-}
-
 /// The `[telemetry]` section.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
@@ -174,6 +161,40 @@ pub struct TelemetryConfig {
     /// HTTPS endpoint (loopback HTTP allowed).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub endpoint: Option<String>,
+}
+
+/// The `[worktrees]` section (spec: git-worktrees).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+#[schemars(extend("x-apply" = "live"))]
+pub struct WorktreesConfig {
+    /// Fetch the default remote before creating a tree (a failed fetch
+    /// falls back to the local tip).
+    pub sync_remote: bool,
+    /// Archive dirty or unpushed trees past their idle tier before
+    /// removing them; `false` keeps such trees.
+    pub archive_dirty: bool,
+    /// Untracked files larger than this keep a tree from the sweep
+    /// (`keep-large-untracked`) and are left out of archives.
+    pub archive_max_file_bytes: u64,
+    /// Total bytes of trees above which the oldest idle ones past their
+    /// tier are archived and removed first (`0` = off).
+    pub max_total_bytes: u64,
+    /// Seconds an archive is kept before the sweep deletes it (`0` =
+    /// forever).
+    pub archive_retention_secs: u64,
+}
+
+impl Default for WorktreesConfig {
+    fn default() -> Self {
+        Self {
+            sync_remote: true,
+            archive_dirty: true,
+            archive_max_file_bytes: 52_428_800,
+            max_total_bytes: 0,
+            archive_retention_secs: 2_592_000,
+        }
+    }
 }
 
 /// The `[vault]` section: the credential vault.
@@ -360,6 +381,10 @@ pub enum DegradedFeature {
     ReadOnlyRootfs,
     /// Container `--cap-drop ALL`.
     CapDrop,
+    /// Chromium's own sandbox (`browser.chromium_args` `--no-sandbox`...).
+    ChromiumSandbox,
+    /// Chromium's same-origin policy (`--disable-web-security`...).
+    WebSecurity,
     /// Every feature.
     All,
 }
@@ -377,6 +402,8 @@ impl DegradedFeature {
             Self::NoNewPrivileges => "no_new_privileges",
             Self::ReadOnlyRootfs => "read_only_rootfs",
             Self::CapDrop => "cap_drop",
+            Self::ChromiumSandbox => "chromium_sandbox",
+            Self::WebSecurity => "web_security",
             Self::All => "all",
         }
     }

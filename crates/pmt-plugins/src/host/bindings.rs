@@ -7,16 +7,21 @@ wasmtime::component::bindgen!({
     path: [
         "../../wit/host",
         "../../wit/messaging",
+        "../../wit/subagents",
         "../../wit/tool",
         "../../wit/hook",
         "../../wit/provider",
+        "../../wit/terminal-backend",
+        "../../wit/delegation-router",
     ],
     inline: "
         package prometheus:runtime;
         world plugin-host {
-            include prometheus:tool/tool@1.1.0;
+            include prometheus:tool/tool@1.2.0;
             include prometheus:hook/hook@1.3.0;
             include prometheus:provider/provider@1.1.0;
+            include prometheus:terminal-backend/terminal-backend@1.1.0;
+            include prometheus:delegation-router/delegation-router@1.0.0;
         }
     ",
     world: "prometheus:runtime/plugin-host",

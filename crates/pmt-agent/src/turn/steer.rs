@@ -45,6 +45,11 @@ impl Steers {
         (!pending.is_empty()).then(|| wrap(&pending))
     }
 
+    /// Takes every pending steer as sent.
+    pub(super) fn drain(&self) -> Vec<String> {
+        std::mem::take(&mut *self.lock())
+    }
+
     /// Drops every pending steer (a hard interrupt).
     pub(super) fn discard(&self) {
         self.lock().clear();

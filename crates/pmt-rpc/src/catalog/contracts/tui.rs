@@ -251,6 +251,11 @@ pub struct BannerInfo {
     pub system_prompt: Option<FrozenPrompt>,
     /// The session's MCP servers.
     pub mcp_servers: Vec<McpServerState>,
+    /// The degraded marker while the session runs below full hardening,
+    /// for example `sandbox: partial:landlock_net` (spec:
+    /// security-boundaries, Hardening downgrades are never silent).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub degraded: Option<String>,
 }
 
 method!(/// `commands.catalog`: the session's slash commands with their

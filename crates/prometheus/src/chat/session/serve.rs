@@ -63,7 +63,15 @@ impl Factory {
         let target = pmt_providers::resolve::Target::default();
         // An `mcp serve` session has no trajectory: refusals go to the
         // audit log only.
-        let environment = self.environment(id, &target, &capabilities, &current, &skills, None)?;
+        let session = self.store.session(id)?;
+        let environment = self.environment(
+            &session,
+            &target,
+            &capabilities,
+            &current,
+            &skills,
+            &super::place::At::open(&self.options.cwd, None),
+        )?;
         let gate = self.gate(id, None, None)?.gate;
         // No one can answer a prompt: a call that needs approval is denied.
         let mut approvals = self.scope.config().approvals.clone();

@@ -188,3 +188,40 @@ async fn a_failing_step_subscriber_does_not_abort_the_turn() {
         .count();
     assert_eq!(steps, 3, "one per iteration");
 }
+
+/// Session automation's continuations are plain user turns (spec:
+/// session-automation, Automated turns are plain user turns): the third
+/// goal continuation keeps the cached prefix and its stored message says
+/// where it came from.
+#[tokio::test]
+async fn automated_goal_continuations_keep_the_cache_prefix() {
+    let profile = Profile::new("");
+    let s = profile.session(Source::Cli);
+    let model = mock_model(
+        &profile,
+        "[[rule]]\nrepeat = true\ntext = \"working\"\n",
+        "mock",
+    )
+    .await;
+    let run = agent(&profile, s, model, FakeTools::new(), |_| {});
+    run.turn(&profile, "port the parser").await;
+    for n in 1..=3 {
+        let input = pmt_agent::turn::TurnInput {
+            origin: Some("goal".to_owned()),
+            ..pmt_agent::turn::TurnInput::text(format!("[goal continuation] step {n}"))
+        };
+        run.turn_with(&profile, input, crate::support::options())
+            .await;
+    }
+    assert!(breaks(&run.events).is_empty());
+    let messages = profile
+        .store
+        .messages(s, pmt_store::Visibility::Active)
+        .unwrap();
+    let origins: Vec<Option<&str>> = messages
+        .iter()
+        .filter(|m| m.role == pmt_store::model::Role::User)
+        .map(|m| m.metadata.as_ref().and_then(|v| v["origin"].as_str()))
+        .collect();
+    assert_eq!(origins, [None, Some("goal"), Some("goal"), Some("goal")]);
+}

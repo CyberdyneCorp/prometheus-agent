@@ -207,6 +207,7 @@ fn the_banner_heads_the_transcript_and_answers_render_math() {
         skills: (0..80).map(|n| format!("skill-{n}")).collect(),
         system_prompt: vec!["You are Prometheus.".into()],
         mcp_servers: Vec::new(),
+        degraded: None,
     };
     let mut app = App::new(Theme::new(TuiTheme::Dark, true), Status::default());
     app.banner = Some(Banner::new(

@@ -27,7 +27,13 @@ pub enum BusyPolicy {
     Immediate,
 }
 
-/// What a slash line is on the gateway surface.
+/// The plain reply the host may take as a command's answer (the `yes`
+/// that saves the job a `/cron` echo showed): the lane asks
+/// [`Agents::lookup`] about it, which answers [`Lookup::Text`] when
+/// nothing waits for it, instead of starting a turn at once.
+pub const CONFIRM_REPLY: &str = "yes";
+
+/// What a slash line (or a [`CONFIRM_REPLY`]) is on the gateway surface.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Lookup {
     /// Not a known command: ordinary text.
@@ -57,11 +63,20 @@ pub struct Conversation {
     pub thread_id: Option<String>,
     /// The sender who started it.
     pub user_id: String,
-    /// The session it replaces (`/new`, suspension).
+    /// The session it replaces (`/new`, suspension), or for a background
+    /// task the chat's session that launched it.
     pub parent: Option<String>,
+    /// A `/bg` task's own session (spec: subagent-delegation, User-launched
+    /// background sessions): recorded with `source = background`, its
+    /// `parent` linked for lineage only.
+    pub background: bool,
     /// The chat policy the session is created with (frozen with it).
     pub policy: Option<pmt_config::schema::ChatPolicy>,
 }
+
+/// A background task's concurrency slot, held while it runs (dropping it
+/// frees the slot).
+pub type BackgroundSlot = Box<dyn std::any::Any + Send>;
 
 /// A configured provider and the models a chat's picker offers of it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -146,6 +161,18 @@ pub trait Agents: Host {
     /// suspension).
     fn end_conversation<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()>;
 
+    /// What the host decided when `session_id`'s turn ended (status lines
+    /// and a goal continuation), taken once (spec: session-automation,
+    /// Goal messages on messaging platforms); hosts without automation
+    /// have nothing.
+    fn take_automated<'a>(
+        &'a self,
+        _profile: &'a str,
+        _session_id: &'a str,
+    ) -> HostFuture<'a, crate::messaging::automation::AfterTurn> {
+        Box::pin(async { Ok(crate::messaging::automation::AfterTurn::default()) })
+    }
+
     /// The mounts of `session`'s container, when its terminal runs in
     /// one (its reply's container paths are then translated to host
     /// paths).
@@ -183,6 +210,17 @@ pub trait Agents: Host {
             Ok(())
         })
     }
+    /// Waits for a slot of the profile's child concurrency limit for the
+    /// background task of `session` (spec: subagent-delegation,
+    /// User-launched background sessions count against
+    /// `delegation.max_concurrent_children`). The default admits at once.
+    fn admit_background<'a>(
+        &'a self,
+        _profile: &'a str,
+        _session: &'a str,
+    ) -> HostFuture<'a, BackgroundSlot> {
+        Box::pin(async { Ok(Box::new(()) as BackgroundSlot) })
+    }
     /// The providers configured for `profile` and their models, for the
     /// chat model picker (`/model` without arguments).
     fn model_choices(&self, _profile: &str) -> Vec<ModelChoice> {
@@ -200,6 +238,38 @@ pub trait Agents: Host {
             Err(pmt_core::error::Error::new(
                 &pmt_core::error::codes::GATEWAY_DAEMON_REQUIRED,
                 "updates from chat need the daemon's updater",
+            ))
+        })
+    }
+    /// The id of `profile`'s scheduled job `job` (an id or name).
+    ///
+    /// # Errors
+    ///
+    /// The job is unknown or ambiguous; no scheduler in this host.
+    fn find_cron_job<'a>(&'a self, _profile: &'a str, _job: &'a str) -> HostFuture<'a, String> {
+        Box::pin(async {
+            Err(pmt_core::error::Error::new(
+                &pmt_core::error::codes::GATEWAY_DAEMON_REQUIRED,
+                "scheduled jobs need the daemon's scheduler",
+            ))
+        })
+    }
+    /// Fires `profile`'s scheduled job `job` once with `context` as its
+    /// transient run context (a webhook route's `cron_job`).
+    ///
+    /// # Errors
+    ///
+    /// As [`find_cron_job`](Self::find_cron_job); store errors.
+    fn fire_cron_job<'a>(
+        &'a self,
+        _profile: &'a str,
+        _job: &'a str,
+        _context: &'a str,
+    ) -> HostFuture<'a, crate::messaging::adapter::CronFire> {
+        Box::pin(async {
+            Err(pmt_core::error::Error::new(
+                &pmt_core::error::codes::GATEWAY_DAEMON_REQUIRED,
+                "scheduled jobs need the daemon's scheduler",
             ))
         })
     }

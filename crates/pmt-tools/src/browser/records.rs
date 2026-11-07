@@ -31,6 +31,10 @@ pub struct Record {
     /// Its temporary directory.
     #[serde(default)]
     pub temp_dir: Option<PathBuf>,
+    /// The profile directory outlives the browser (`browser.user_data_dir`
+    /// or a real-profile snapshot): reaping leaves it.
+    #[serde(default)]
+    pub keep_profile: bool,
 }
 
 /// The records directory of a profile's browser cache.
@@ -58,6 +62,7 @@ impl Records {
         browser_pid: u32,
         profile_dir: &Path,
         temp_dir: &Path,
+        keep_profile: bool,
     ) -> io::Result<PathBuf> {
         pmt_core::private_fs::create_dir(&self.dir)?;
         let owner_pid = std::process::id();
@@ -68,6 +73,7 @@ impl Records {
             browser_start: start_time(browser_pid).unwrap_or_default(),
             profile_dir: profile_dir.to_owned(),
             temp_dir: Some(temp_dir.to_owned()),
+            keep_profile,
         };
         let path = self
             .dir
@@ -96,7 +102,9 @@ impl Records {
             if kill_if_same(&record) {
                 wait_for_exit(record.browser_pid, record.browser_start);
             }
-            cleanup::remove_dir(&record.profile_dir);
+            if !record.keep_profile {
+                cleanup::remove_dir(&record.profile_dir);
+            }
             if let Some(temp) = &record.temp_dir {
                 cleanup::remove_dir(temp);
             }

@@ -52,6 +52,8 @@ pub struct GateInputs<'a> {
     pub user_home: Option<&'a Path>,
     /// Someone can answer prompts.
     pub interactive: bool,
+    /// A scheduled run: approvals follow `approvals.cron_mode`.
+    pub cron: bool,
     /// `--yolo`.
     pub yolo: bool,
     /// Plugin approval observers and transport.
@@ -82,16 +84,58 @@ pub fn gate(inputs: &GateInputs<'_>) -> Result<Gate, Error> {
         let (channel, surface) =
             Channel::attached(Duration::from_secs(config.approvals.timeout_secs.max(1)));
         (channel, Some(surface), Context::Interactive)
+    } else if inputs.cron {
+        (Channel::unattended(), None, Context::Cron)
     } else {
         (Channel::unattended(), None, Context::SingleQuery)
     };
+    Ok(Gate {
+        gate: Arc::new(build_gate(
+            inputs,
+            channel,
+            context,
+            config.approvals.clone(),
+        )?),
+        prompts,
+    })
+}
+
+/// A delegated child's gate (spec: subagent-delegation, Child approvals
+/// fail closed): every approval goes to `channel` (the child's forwarder,
+/// which denies or escalates), never decided by a policy, a guardian or
+/// `--yolo`; `approvals.mode` `off` or `smart` asks all the same.
+///
+/// # Errors
+///
+/// As [`gate`].
+pub fn child_gate(
+    inputs: &GateInputs<'_>,
+    channel: Channel<ApprovalRequest, Decision>,
+) -> Result<Arc<CommandGate>, Error> {
+    let mut approvals = inputs.scope.config().approvals.clone();
+    approvals.mode = pmt_config::schema::ApprovalMode::Manual;
+    Ok(Arc::new(build_gate(
+        inputs,
+        channel,
+        Context::Interactive,
+        approvals,
+    )?))
+}
+
+fn build_gate(
+    inputs: &GateInputs<'_>,
+    channel: Channel<ApprovalRequest, Decision>,
+    context: Context,
+    approvals: pmt_config::schema::ApprovalsConfig,
+) -> Result<CommandGate, Error> {
+    let config = inputs.scope.config();
     let binary = std::env::current_exe().ok();
     let floors = Floors::new(inputs.cwd)
         .user_home(inputs.user_home)
         .prometheus_home(inputs.scope.home())
         .binary(binary.as_deref());
     let gate = CommandGate::new(GateSetup {
-        approvals: config.approvals.clone(),
+        approvals,
         context,
         floors,
         grants: Arc::clone(inputs.grants),
@@ -112,13 +156,9 @@ pub fn gate(inputs: &GateInputs<'_>) -> Result<Gate, Error> {
         Some(previewer) => gate.with_previewer(previewer.clone()),
         None => gate,
     };
-    let gate = match &inputs.hosted {
+    Ok(match &inputs.hosted {
         Some((daemon, own)) => gate.hosted_by(daemon.clone(), Arc::clone(own)),
         None => gate,
-    };
-    Ok(Gate {
-        gate: Arc::new(gate),
-        prompts,
     })
 }
 
@@ -306,6 +346,11 @@ pub async fn dispatcher(
 /// The session's tool port; a `--now` change swaps it at a turn boundary.
 pub struct SwappableTools {
     current: RwLock<Arc<SessionTools>>,
+    /// A note for the model put before the next tool result (a moved
+    /// working directory), so the prompt itself never changes.
+    announcement: std::sync::Mutex<Option<String>>,
+    /// The session's form of `delegate_task` (fixed at creation).
+    delegation: std::sync::OnceLock<pmt_delegation::shape::Shape>,
 }
 
 impl SwappableTools {
@@ -314,7 +359,22 @@ impl SwappableTools {
     pub fn new(tools: Arc<SessionTools>) -> Self {
         Self {
             current: RwLock::new(tools),
+            announcement: std::sync::Mutex::default(),
+            delegation: std::sync::OnceLock::new(),
         }
+    }
+
+    /// Offers `delegate_task` in `shape`'s form.
+    pub fn shape_delegation(&self, shape: pmt_delegation::shape::Shape) {
+        let _ = self.delegation.set(shape);
+    }
+
+    /// Puts `note` before the next tool result the model gets.
+    pub fn announce(&self, note: String) {
+        *self
+            .announcement
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(note);
     }
 
     /// Serves `tools` from the next turn.
@@ -329,7 +389,14 @@ impl SwappableTools {
 
 impl ToolPort for SwappableTools {
     fn definitions(&self) -> Vec<Tool> {
-        self.tools().definitions()
+        let mut tools = self.tools().definitions();
+        let shape = self.delegation.get().copied().unwrap_or_default();
+        for tool in &mut tools {
+            if pmt_delegation::shape::Shape::applies_to(&tool.name) {
+                shape.tailor(&mut tool.parameters);
+            }
+        }
+        tools
     }
 
     fn idempotent(&self, name: &str) -> bool {
@@ -343,6 +410,26 @@ impl ToolPort for SwappableTools {
         cancel: &'a CancelToken,
     ) -> BoxFuture<'a, ToolBatch> {
         let tools = self.tools();
-        Box::pin(async move { tools.run(calls, turn_id, cancel).await })
+        Box::pin(async move {
+            let mut batch = tools.run(calls, turn_id, cancel).await;
+            if let Some(first) = batch.outcomes.first_mut()
+                && let Some(note) = self
+                    .announcement
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .take()
+            {
+                first
+                    .result
+                    .content
+                    .insert(0, pmt_tools::result::Content::Text { text: note });
+            }
+            batch
+        })
+    }
+
+    fn settle(&self) -> BoxFuture<'_, Option<String>> {
+        let tools = self.tools();
+        Box::pin(async move { tools.settle().await })
     }
 }

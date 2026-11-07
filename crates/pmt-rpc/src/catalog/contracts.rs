@@ -76,12 +76,22 @@ macro_rules! event {
     };
 }
 
+mod automation;
+mod cron;
+mod files;
+mod lsp;
 mod messaging;
 mod security;
 mod tui;
+mod worktree;
+pub use automation::*;
+pub use cron::*;
+pub use files::*;
+pub use lsp::*;
 pub use messaging::*;
 pub use security::*;
 pub use tui::*;
+pub use worktree::*;
 
 /// A `<major>.<minor>` protocol version on the wire.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -616,6 +626,13 @@ pub enum PromptImage {
 /// text to show. Every other `session.event` is a trajectory event.
 pub const COMMAND_NOTICE: &str = "command.notice";
 
+/// The `session.event` type of a background process notice of the session
+/// (an exit, a watched line, a heartbeat; spec: execution-environments,
+/// Background notifications are throttled, Quiet-wait auto-notify):
+/// `payload.kind` is `result` (exit 0), `error` or `progress`, and
+/// `payload.text` is the text to show as its own message.
+pub const PROCESS_NOTICE: &str = "process.notice";
+
 /// `command.dispatch` params: a slash command the client does not handle
 /// itself (spec: tui, Slash command flow).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -665,6 +682,9 @@ pub struct Submitted {
     /// How the input was admitted.
     #[serde(default)]
     pub admission: Admission,
+    /// What a `handled` input did, to show in place of a turn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notice: Option<String>,
 }
 
 /// How `prompt.submit` admitted an input (spec: tui, Prompt submission
@@ -682,6 +702,10 @@ pub enum Admission {
     /// Handed to the running turn after its current tool step
     /// (`busy.input_mode = "steer"`).
     Steered,
+    /// Answered without a turn: the `yes` that saves the job a `/cron`
+    /// echo just showed (spec: scheduled-jobs, /cron slash command); the
+    /// result's `notice` says what happened.
+    Handled,
 }
 
 /// An approval answer.

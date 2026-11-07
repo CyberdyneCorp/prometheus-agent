@@ -5,14 +5,14 @@ use std::time::{Duration, Instant};
 
 use pmt_config::schema::TerminalConfig;
 use pmt_tools::terminal::shell::INIT_TIMEOUT_HINT;
-use pmt_tools::terminal::{LocalTerminal, Status};
+use pmt_tools::terminal::{Status, Terminal};
 
 use crate::common::{Fixture, run};
 
 /// The sandbox may read the rc files the test writes.
 const READ_RC: &[&str] = &["fs.read:~/.bashrc", "fs.read:~/init/**"];
 
-fn session(fixture: &Fixture, terminal: TerminalConfig) -> LocalTerminal {
+fn session(fixture: &Fixture, terminal: TerminalConfig) -> Terminal {
     fixture.session_with(terminal, READ_RC)
 }
 

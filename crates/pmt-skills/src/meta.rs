@@ -56,8 +56,9 @@ pub struct Meta {
     /// `secrets` (alias `required_environment_variables`, legacy
     /// `prerequisites.env_vars`).
     pub secrets: Vec<SecretDecl>,
-    /// Whether a `blueprint` block is present (scheduling is M2).
-    pub blueprint: bool,
+    /// The `blueprint` block, as written: a suggested scheduled job, never
+    /// one created without an accept (scheduled-jobs reads it).
+    pub blueprint: Option<Value>,
 }
 
 impl Meta {
@@ -84,7 +85,7 @@ impl Meta {
                 .filter(|v| !v.is_empty()),
             config: config_decls(field(front, "config")),
             secrets: secret_decls(front),
-            blueprint: field(front, "blueprint").is_some_and(|v| !v.is_null()),
+            blueprint: field(front, "blueprint").filter(|v| !v.is_null()).cloned(),
         }
     }
 }

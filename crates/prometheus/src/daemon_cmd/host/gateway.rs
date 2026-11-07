@@ -199,11 +199,14 @@ impl Agents for DaemonHost {
                 .unwrap_or_default();
             let factory = self.factory(profile, cwd.clone(), &setup)?;
             let target = factory.models.primary(&setup::flags(&setup)).await?;
+            let (source, kind) = if conversation.background {
+                (Source::Background, LineageKind::Background)
+            } else {
+                (Source::Gateway, LineageKind::Reset)
+            };
             let mut new = match &conversation.parent {
-                Some(parent) => {
-                    NewSession::child(Source::Gateway, session_id(parent)?, LineageKind::Reset)
-                }
-                None => NewSession::new(Source::Gateway),
+                Some(parent) => NewSession::child(source, session_id(parent)?, kind),
+                None => NewSession::new(source),
             };
             new.origin = Origin::Gateway {
                 platform: conversation.platform,
@@ -264,10 +267,24 @@ impl Agents for DaemonHost {
                 Ok(id) => profile.loaded.lock().await.get(&id).cloned(),
                 Err(_) => None,
             };
+            if !line.trim_start().starts_with('/') {
+                // An input answering what the session waits for (the `yes`
+                // to a `/cron` echo, a `/blueprint` answer) runs as
+                // `/cron` (its access rules and busy policy).
+                let awaited = loaded
+                    .as_ref()
+                    .is_some_and(|s| commands::cron::awaits(s.live.id, line));
+                if !awaited {
+                    return Ok(Lookup::Text);
+                }
+            }
             let registry = match &loaded {
                 Some(session) => commands::registry(&scope, &session.live),
                 None => commands::profile_registry(&scope),
             };
+            if !line.trim_start().starts_with('/') {
+                return Ok(lookup_of(registry.resolve("/cron", Surface::Gateway)));
+            }
             Ok(lookup_of(registry.resolve(line, Surface::Gateway)))
         })
     }
@@ -329,6 +346,28 @@ impl Agents for DaemonHost {
         })
     }
 
+    fn admit_background<'a>(
+        &'a self,
+        profile: &'a str,
+        session: &'a str,
+    ) -> HostFuture<'a, pmt_gateway::messaging::agents::BackgroundSlot> {
+        Box::pin(async move {
+            let scope = self.profile(profile)?.scope();
+            let delegation = &scope.config().delegation;
+            let admission = pmt_delegation::limiter::Limiter::for_profile(
+                scope.dir(),
+                delegation.max_concurrent_children,
+                delegation.max_queued,
+            )
+            .admit(session, 1)
+            .map_err(|refusal| refusal.error())?
+            .pop()
+            .expect("one admission per task");
+            let permit = admission.ready().await;
+            Ok(Box::new(permit) as pmt_gateway::messaging::agents::BackgroundSlot)
+        })
+    }
+
     fn model_choices(&self, profile: &str) -> Vec<ModelChoice> {
         let Ok(profile) = self.profile(profile) else {
             return Vec::new();
@@ -356,6 +395,27 @@ impl Agents for DaemonHost {
                 .await
                 .map_err(|e| Error::new(&pmt_core::error::codes::RPC_INTERNAL, e.to_string()))?
         })
+    }
+
+    fn take_automated<'a>(
+        &'a self,
+        profile: &'a str,
+        session_id: &'a str,
+    ) -> HostFuture<'a, pmt_gateway::messaging::automation::AfterTurn> {
+        Box::pin(async move { Ok(self.take_after(profile, session_id).await) })
+    }
+
+    fn find_cron_job<'a>(&'a self, profile: &'a str, job: &'a str) -> HostFuture<'a, String> {
+        Box::pin(async move { self.cron_job_id(profile, job) })
+    }
+
+    fn fire_cron_job<'a>(
+        &'a self,
+        profile: &'a str,
+        job: &'a str,
+        context: &'a str,
+    ) -> HostFuture<'a, pmt_gateway::messaging::CronFire> {
+        Box::pin(async move { self.fire_cron(profile, job, context) })
     }
 
     fn end_conversation<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()> {

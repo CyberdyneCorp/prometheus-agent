@@ -308,3 +308,30 @@ async fn descriptions_reference_only_present_tools() {
     let with = build(vec!["browser".into(), "vision".into()]).await;
     assert!(with.definitions()[0].description.contains("vision_analyze"));
 }
+
+/// A session's own opt-in answers the probe for the tools it names only:
+/// `browser_cdp` after `/browser connect` is exposed though the profile
+/// probe fails, the other probed tools stay unavailable.
+#[tokio::test]
+async fn a_session_opt_in_answers_only_its_own_tools_probe() {
+    let fixture = Fixture::new();
+    fixture.browser.up.store(false, Ordering::SeqCst);
+    let selection = Selection::resolve(&fixture.registry, &["core".to_owned()], &[])
+        .unwrap()
+        .with_session_opt_ins(["browser_cdp", "not_selected"]);
+    assert_eq!(selection.session_opt_ins.len(), 1);
+    let surface = ToolSurface::build(SurfaceInputs {
+        registry: &fixture.registry,
+        selection: &selection,
+        capabilities: &baseline(),
+        config: &fixture.config,
+        probes: &fixture.probes,
+        route: &crate::variants::RouteTraits::default(),
+    })
+    .await;
+    assert!(surface.get("browser_cdp").is_some());
+    assert_eq!(
+        reason(&surface, "browser_dialog"),
+        "unavailable:browser not found"
+    );
+}

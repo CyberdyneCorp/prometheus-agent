@@ -848,6 +848,32 @@ impl AdapterLink for Link {
         })
     }
 
+    fn find_cron_job<'a>(&'a self, job: &'a str) -> AdapterFuture<'a, Result<String, String>> {
+        Box::pin(async move {
+            let shared = self.shared.upgrade().ok_or("the gateway stopped")?;
+            shared
+                .agents
+                .find_cron_job(&self.profile, job)
+                .await
+                .map_err(|e| e.message().to_owned())
+        })
+    }
+
+    fn fire_cron_job<'a>(
+        &'a self,
+        job: &'a str,
+        context: &'a str,
+    ) -> AdapterFuture<'a, Result<super::adapter::CronFire, String>> {
+        Box::pin(async move {
+            let shared = self.shared.upgrade().ok_or("the gateway stopped")?;
+            shared
+                .agents
+                .fire_cron_job(&self.profile, job, context)
+                .await
+                .map_err(|e| e.message().to_owned())
+        })
+    }
+
     fn authorized<'a>(&'a self, sender_id: &'a str) -> AdapterFuture<'a, bool> {
         Box::pin(async move {
             match self.shared.upgrade() {

@@ -28,9 +28,16 @@ use pmt_rpc::contracts::{
 use pmt_store::{NewSession, Source, Store, Visibility};
 use tracing::Instrument as _;
 
-use super::turn::{SecretsToClients, ToClients, approvals, clarify};
+use super::turn::{SecretsToClients, SudoToClients, ToClients, approvals, clarify};
 
+mod automation;
 mod commands;
+mod cron;
+mod cron_admit;
+mod cron_continue;
+mod cron_fire;
+mod cron_send;
+mod delegations;
 mod discovery;
 mod gateway;
 mod notify;
@@ -38,10 +45,14 @@ mod reload;
 mod send_tool;
 mod setup;
 mod turns;
+mod worktrees;
 
 use crate::chat::resume;
 use crate::chat::session::{Clients, Factory, Live};
+pub(super) use automation::schedule as schedule_automation;
+pub(super) use cron::schedule as schedule_cron;
 pub(super) use reload::watch;
+pub(super) use worktrees::sweep_worktrees;
 
 /// A loaded session.
 struct Loaded {
@@ -63,6 +74,12 @@ struct Loaded {
     /// A one-shot run's session: it ends once its turn is done, as an
     /// in-process one-shot run's does.
     oneshot: bool,
+    /// The daemon's gateway, for a messaging conversation's session (its
+    /// lane runs its automated turns).
+    chat: Option<send_tool::GatewayCell>,
+    /// What the last turn's automation boundary left for the lane: status
+    /// lines and a goal continuation.
+    after: Mutex<pmt_gateway::messaging::automation::AfterTurn>,
 }
 
 impl Loaded {
@@ -98,6 +115,10 @@ struct Profile {
     factories: Mutex<HashMap<(PathBuf, SessionSetup), Arc<Factory>>>,
     setups: Mutex<HashMap<SessionId, SessionSetup>>,
     loaded: tokio::sync::Mutex<HashMap<SessionId, Arc<Loaded>>>,
+    /// Wakes the profile's scheduler loop (a webhook queued a run).
+    cron_wake: tokio::sync::Notify,
+    /// Wakes the profile's automation loop (a command set something).
+    automation_wake: tokio::sync::Notify,
 }
 
 /// The daemon's host over every served profile.
@@ -137,9 +158,13 @@ fn busy(id: SessionId) -> Error {
 }
 
 impl Profile {
-    /// Opens the profile's store.
+    /// Opens the profile's store (and reaps its orphaned containers).
     fn open(scope: ProfileScope) -> Result<Arc<Self>, Error> {
         let store = Arc::new(Store::open(&scope)?);
+        crate::chat::session::backend::reap_orphans_in_background(&scope);
+        // Children a previous daemon left running end `interrupted`; their
+        // completions are owed to their sessions.
+        pmt_delegation::host::deliver::recover(&store);
         let state = reload::State::new(&scope);
         Ok(Arc::new(Self {
             current: SharedScope::new(scope),
@@ -148,6 +173,8 @@ impl Profile {
             factories: Mutex::default(),
             setups: Mutex::default(),
             loaded: tokio::sync::Mutex::default(),
+            cron_wake: tokio::sync::Notify::new(),
+            automation_wake: tokio::sync::Notify::new(),
         }))
     }
 
@@ -261,21 +288,40 @@ impl DaemonHost {
             .unwrap_or_default();
         let factory = self.factory(profile, cwd, &setup)?;
         let target = factory.models.primary(&setup::flags(&setup)).await?;
-        // A chat's session tells the chat when its background processes end.
-        let completions = matches!(row.origin, pmt_store::Origin::Gateway { .. }).then(|| {
-            notify::completions(
+        // A chat's session tells the chat when its background processes
+        // end; an interactive client session tells its clients. Other
+        // sessions (one-shot runs, cron, subagents) cannot receive a later
+        // notice, so quiet-wait never promises one there.
+        let oneshot = row.source_tag.as_deref() == Some(pmt_store::sessions::ONESHOT_TAG);
+        let chat = matches!(row.origin, pmt_store::Origin::Gateway { .. })
+            .then(|| Arc::clone(&self.gateway));
+        let completions = match row.origin {
+            pmt_store::Origin::Gateway { .. } => Some(notify::completions(
                 Arc::clone(&self.gateway),
                 profile.scope().name().to_string(),
                 id.to_string(),
-            )
+            )),
+            pmt_store::Origin::None if !oneshot => Some(notify::to_clients(link.clone())),
+            _ => None,
+        };
+        // Only a person at a client of an interactive session is asked
+        // for a sudo password.
+        let sudo = matches!(row.origin, pmt_store::Origin::None if !oneshot).then(|| {
+            Arc::new(SudoToClients {
+                link: link.clone(),
+                runtime: tokio::runtime::Handle::current(),
+            }) as Arc<dyn pmt_tools::terminal::sudo::SudoPrompt>
         });
+        let (inbox, delegation) = self.delegation_inbox(profile, &row, id, link, oneshot)?;
         let clients = Clients {
+            delegation: delegation.clone(),
             events: Arc::new(ToClients { link: link.clone() }),
             secrets: Arc::new(SecretsToClients {
                 link: link.clone(),
                 runtime: tokio::runtime::Handle::current(),
             }),
             completions,
+            sudo,
         };
         let mut live = factory.open_with(id, &target, Some(clients)).await?;
         if let Some(effective) = self.effective(profile, &setup, &live.scope) {
@@ -299,10 +345,55 @@ impl DaemonHost {
             interrupt: Mutex::default(),
             queue: Mutex::default(),
             current: Mutex::default(),
-            oneshot: row.source_tag.as_deref() == Some(pmt_store::sessions::ONESHOT_TAG),
+            oneshot,
+            chat,
+            after: Mutex::default(),
         });
         loaded.insert(id, Arc::clone(&session));
+        if let Some(inbox) = &inbox {
+            inbox.bind(&session);
+        }
+        if let Some(delegation) = delegation {
+            delegations::deliver_owed(profile, &session, delegation);
+        }
         Ok(session)
+    }
+
+    /// Where a loaded session's background delegations deliver: a client
+    /// session gets a queued turn, a gateway chat an injected one; other
+    /// sessions (one-shot runs, cron, subagents) wait for their children.
+    #[allow(clippy::type_complexity)] // the inbox and its trait object
+    fn delegation_inbox(
+        &self,
+        profile: &Profile,
+        row: &pmt_store::Session,
+        id: SessionId,
+        link: &Link,
+        oneshot: bool,
+    ) -> Result<
+        (
+            Option<Arc<delegations::ClientInbox>>,
+            Option<Arc<dyn pmt_delegation::host::Completions>>,
+        ),
+        Error,
+    > {
+        let name = profile.scope().name().to_string();
+        Ok(match row.origin {
+            pmt_store::Origin::Gateway { .. } => (
+                None,
+                Some(Arc::new(delegations::ChatInbox {
+                    gateway: Arc::clone(&self.gateway),
+                    profile: name,
+                    session: id.to_string(),
+                }) as _),
+            ),
+            pmt_store::Origin::None if !oneshot => {
+                let inbox =
+                    delegations::ClientInbox::new(self, &self.profile(&name)?, id, link.clone());
+                (Some(Arc::clone(&inbox)), Some(inbox as _))
+            }
+            _ => (None, None),
+        })
     }
 
     /// Refuses a turn when a budget of the session is already spent
@@ -555,6 +646,86 @@ impl Host for DaemonHost {
         })
     }
 
+    fn worktree<'a>(
+        &'a self,
+        profile: &'a str,
+        request: pmt_gateway::worktree::WorktreeCall,
+        link: Link,
+    ) -> HostFuture<'a, pmt_gateway::worktree::WorktreeReply> {
+        Box::pin(self.worktree_call(profile, request, link))
+    }
+
+    fn files_undo<'a>(
+        &'a self,
+        profile: &'a str,
+        params: pmt_rpc::contracts::FilesUndoParams,
+        link: Link,
+    ) -> HostFuture<'a, pmt_rpc::contracts::FilesUndone> {
+        Box::pin(async move {
+            let profile = &self.profile(profile)?;
+            let id = session_id(&params.session_id)?;
+            let session = self.load(profile, id, &link).await?;
+            let report = crate::chat::commands::files::undo_files(
+                &profile.store,
+                &session.live,
+                params.turns.unwrap_or(1),
+                params.force,
+                params.dry_run,
+            )?;
+            let shown = |paths: Vec<std::path::PathBuf>| {
+                paths.iter().map(|p| p.display().to_string()).collect()
+            };
+            Ok(pmt_rpc::contracts::FilesUndone {
+                turns: report.turns,
+                restored: shown(report.restored),
+                removed: shown(report.removed),
+                conflicts: report.conflicts,
+            })
+        })
+    }
+
+    fn files_rollback<'a>(
+        &'a self,
+        profile: &'a str,
+        params: pmt_rpc::contracts::FilesRollbackParams,
+        link: Link,
+    ) -> HostFuture<'a, pmt_rpc::contracts::FilesRolledBack> {
+        Box::pin(async move {
+            let profile = &self.profile(profile)?;
+            let id = session_id(&params.session_id)?;
+            let session = self.load(profile, id, &link).await?;
+            let output = crate::chat::commands::files::rollback_live(
+                &profile.store,
+                &session.live,
+                params.checkpoint.map(|n| n as usize),
+                params.file.as_deref(),
+                params.diff,
+                params.all,
+            )?;
+            Ok(pmt_rpc::contracts::FilesRolledBack { output })
+        })
+    }
+
+    fn lsp_status(&self, profile: &str) -> Result<pmt_rpc::contracts::LspStatus, Error> {
+        let scope = self.profile(profile)?.scope();
+        Ok(crate::lsp_cmd::status(&scope))
+    }
+
+    fn cron_blueprints(&self, profile: &str) -> Result<pmt_rpc::contracts::BlueprintList, Error> {
+        let scope = self.profile(profile)?.scope();
+        Ok(crate::cron_host::blueprint_rpc::list(&scope, &self.launch))
+    }
+
+    fn cron_blueprint_fill(
+        &self,
+        profile: &str,
+        params: &pmt_rpc::contracts::BlueprintFillParams,
+    ) -> Result<pmt_rpc::contracts::BlueprintFilled, Error> {
+        let served = self.profile(profile)?;
+        let store = Arc::clone(&served.store);
+        crate::cron_host::blueprint_rpc::fill(&served.scope(), &self.launch, store, params)
+    }
+
     fn vault(&self, profile: &str) -> Result<pmt_gateway::vault::VaultAccess, Error> {
         let scope = self.profile(profile)?.scope();
         Ok(pmt_gateway::vault::VaultAccess {
@@ -605,7 +776,8 @@ impl Host for DaemonHost {
         Box::pin(
             async move {
                 let profile = &self.profile(profile)?;
-                self.submit_turn(profile, params, author, link).await
+                self.submit_turn(profile, params, (author, link), None)
+                    .await
             }
             .instrument(span),
         )

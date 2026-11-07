@@ -45,5 +45,9 @@ chmod +x "$dest/uv"
 if [ -n "${GITHUB_PATH:-}" ]; then
     echo "$dest" >>"$GITHUB_PATH"
 fi
+# The rust cache restores target/ partially (it prunes files it considers
+# build output), which leaves a CPython uv sees as installed but broken
+# (missing _sysconfigdata_, EXTERNALLY-MANAGED). Always install fresh.
+rm -rf "$root/target/pybridge-python"
 UV_PYTHON_INSTALL_REGISTRY=0 "$dest/uv" python install 3.12 --no-bin --install-dir "$root/target/pybridge-python"
 echo "uv $("$dest/uv" --version) at $dest"

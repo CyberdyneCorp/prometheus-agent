@@ -20,7 +20,9 @@ pub mod package;
 pub mod providers;
 pub mod python;
 pub mod record;
+pub mod routers;
 pub mod surfaces;
+pub mod terminal;
 #[cfg(feature = "testkit")]
 pub mod testkit;
 pub mod tools;

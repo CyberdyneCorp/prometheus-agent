@@ -252,3 +252,40 @@ fn path_completion_lists_the_sessions_working_directory() {
         assert_eq!(texts, [("./src/lib/", true), ("./src/main.rs", false)]);
     });
 }
+
+/// Scenario (scheduled-jobs, /cron slash command) on a client surface:
+/// `/cron add` without `--yes` shows the echo; the client's next input
+/// `yes` saves the job without starting a turn (`handled`, with the
+/// outcome as its notice).
+#[test]
+fn a_yes_after_a_cron_echo_saves_the_job_without_a_turn() {
+    let home = mock_home();
+    let _daemon = daemon::start(home.path(), &[]);
+    let script = script(home.path());
+    runtime().block_on(async {
+        let (client, _inbox) = daemon::connect(home.path(), "default").await;
+        let session = session(&client, &script).await;
+        let shown = client
+            .call(
+                "command.dispatch",
+                json!({"session_id": session, "name": "cron",
+                    "args": "add \"every day at 18:00\" \"summarize today's commits\""}),
+            )
+            .await
+            .unwrap();
+        assert!(
+            shown.to_string().contains("reply `yes` to save this job"),
+            "{shown}"
+        );
+        let saved = submit(&client, &session, "yes").await;
+        assert_eq!(saved["admission"], "handled", "{saved}");
+        assert!(
+            saved["notice"]
+                .as_str()
+                .is_some_and(|n| n.contains("created job")),
+            "{saved}"
+        );
+    });
+    let listed = common::ok(&common::run(home.path(), &["--json", "cron", "list"]));
+    assert!(listed.contains("summarize today's commits"), "{listed}");
+}

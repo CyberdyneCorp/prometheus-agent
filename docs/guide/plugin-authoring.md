@@ -244,6 +244,31 @@ Tool and hook plugins also import `prometheus:messaging`:
 `inject.inject` (with `inject_messages`) and `platform.add-reaction` /
 `set-thread-title` (with `platform_actions`).
 
+Tool plugins (world 1.2) also import `prometheus:subagents/lifecycle`, with
+the `subagents` capability: `launch(task)` starts a subagent of the calling
+session (`task` is one [`delegate_task`](../reference/tools.md#delegate_task) task object as JSON, checked and
+narrowed exactly like a spawn by the model) and answers a signed handle;
+`status`, `wait(handle, timeout-ms)`, `steer`, `cancel` and `result` follow
+it. A handle works only for the conversation it was issued in; a forged,
+foreign or expired one answers `unknown-handle`. Results stay readable for
+an hour after the child ends.
+
+A `delegation-router` plugin routes [`delegate_task`](../reference/tools.md#delegate_task) tasks when
+`delegation.router` names it. `route(task)` receives the task as JSON and
+answers `{"model": ..., "profile": ..., "backend": ...}` (every field
+optional), or an error that refuses only that task. Its name and the task
+parameters it adds are declared in `plugin.toml`:
+
+```toml
+worlds = ["delegation-router@1.0"]
+
+[delegation_router]
+name = "tiers"                       # the plugin id when absent
+
+[delegation_router.params]
+tier = { type = "string", enum = ["fast", "deep"] }
+```
+
 A `provider` plugin registers named providers (image generation, web
 search, text-to-speech...) that config selects by name, such as
 `web.search_backend = "<name>"`. Its `models` interface (provider world
@@ -253,6 +278,13 @@ search, text-to-speech...) that config selects by name, such as
 
 A plugin that needs another declares `requires_plugins = ["other"]`; it
 loads after it, and not at all when `other` is missing, disabled or failed.
+
+A plugin can add [scheduled-job blueprints](cron.md#blueprints) as data:
+each `[[automation_blueprints]]` table (`key`, `title`, `description`,
+`category`, `schedule`, `prompt`, `slots`) joins the catalog as
+`<plugin>:<key>` while the plugin is enabled. A Python plugin calls
+`ctx.register_automation_blueprint(key, title=..., schedule=..., prompt=...,
+slots=[...])` instead.
 
 ## Limits worth designing for
 

@@ -68,10 +68,12 @@ pub(crate) struct HostState {
     pub(crate) limits: StoreLimits,
     /// Set only while a `run-cli` call runs.
     pub(crate) console: Option<Arc<dyn Console>>,
+    /// The budget of the call in progress.
+    pub(crate) meter: super::instance::Meter,
 }
 
 impl HostState {
-    fn require(&self, capability: &Capability) -> Result<(), HostError> {
+    pub(super) fn require(&self, capability: &Capability) -> Result<(), HostError> {
         self.require_as(capability, &label(capability))
     }
 
@@ -84,7 +86,7 @@ impl HostState {
         Err(HostError::Denied(message))
     }
 
-    fn ports(&self) -> &Ports {
+    pub(super) fn ports(&self) -> &Ports {
         &self.ctx.ports
     }
 }
@@ -94,7 +96,7 @@ impl HostState {
 /// plugin inside a session start) or outside any runtime, so the future
 /// runs on a short-lived thread of its own on the current runtime, or on a
 /// private one when there is none.
-fn block_on<T: Send>(future: impl Future<Output = T> + Send) -> Result<T, HostError> {
+pub(super) fn block_on<T: Send>(future: impl Future<Output = T> + Send) -> Result<T, HostError> {
     let failed = |e: &dyn std::fmt::Display| HostError::Failed(format!("host call failed: {e}"));
     let handle = tokio::runtime::Handle::try_current().ok();
     std::thread::scope(|scope| {

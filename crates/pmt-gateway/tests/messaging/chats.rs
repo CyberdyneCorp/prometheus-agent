@@ -166,7 +166,7 @@ async fn a_background_task_reports_back_while_the_chat_keeps_talking() {
     h.dm("telegram", "1", "/bg slow:400:the report").await;
     said(
         &h.adapter("telegram"),
-        "Background task started: slow:400:the report (id bg_",
+        "Background task #1 started: slow:400:the report (id bg_",
     )
     .await;
     h.dm("telegram", "1", "hello").await;
@@ -178,7 +178,7 @@ async fn a_background_task_reports_back_while_the_chat_keeps_talking() {
     );
     said(
         &h.adapter("telegram"),
-        "✅ Background task complete\n\nthe report",
+        "✅ Background task #1 complete\n\nthe report",
     )
     .await;
     let sessions = h.agents.turn_sessions();
@@ -205,7 +205,7 @@ async fn a_chat_runs_at_most_three_background_tasks_and_failures_say_why() {
         h.adapter("telegram")
             .texts()
             .iter()
-            .filter(|t| t.starts_with("Background task started"))
+            .filter(|t| t.starts_with("Background task #"))
             .count()
             == 3
     })
@@ -218,7 +218,7 @@ async fn a_chat_runs_at_most_three_background_tasks_and_failures_say_why() {
     .await;
     h.dm("telegram", "2", "/bg fail").await;
     let other = h.adapter("telegram");
-    said(&other, "❌ Background task failed: the provider failed").await;
+    said(&other, "❌ Background task #1 failed: the provider failed").await;
 }
 
 fn threaded() -> Descriptor {

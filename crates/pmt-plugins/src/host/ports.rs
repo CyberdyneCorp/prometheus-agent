@@ -197,6 +197,79 @@ pub trait MessagingPort: Send + Sync {
     fn platform_action(&self, action: &PlatformAction) -> PortFuture<'_, Result<(), ActionError>>;
 }
 
+/// One call of the `subagents` interface (the host checked the grant).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SubagentRequest {
+    /// Start a child; `task` is one `delegate_task` task object as JSON.
+    Launch {
+        /// The task.
+        task: String,
+    },
+    /// Its state.
+    Status {
+        /// The handle `launch` returned.
+        handle: String,
+    },
+    /// Wait for its end.
+    Wait {
+        /// The handle.
+        handle: String,
+        /// How long at most.
+        timeout: std::time::Duration,
+    },
+    /// Queue a message for its next iteration.
+    Steer {
+        /// The handle.
+        handle: String,
+        /// The message.
+        message: String,
+    },
+    /// Ask it to stop.
+    Cancel {
+        /// The handle.
+        handle: String,
+    },
+    /// Its result once ended.
+    Result {
+        /// The handle.
+        handle: String,
+    },
+}
+
+/// What a `subagents` call answered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SubagentAnswer {
+    /// `launch`: the child's handle.
+    Handle(String),
+    /// `status`: `queued`, `running`, `completed`, `failed`, `interrupted`,
+    /// `stalled`, `cancel_requested` or `cancelled`.
+    State(&'static str),
+    /// `wait` / `result`: the `SubagentResult` JSON, `None` while running.
+    Result(Option<String>),
+    /// `steer` / `cancel` done.
+    Done,
+}
+
+/// Why a `subagents` call did nothing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SubagentFailure {
+    /// Forged, altered, foreign or expired handle.
+    UnknownHandle,
+    /// Refused: `<error code>: <message>`.
+    Refused(String),
+}
+
+/// Subagents of the session a plugin call runs for.
+pub trait SubagentsPort: Send + Sync {
+    /// Runs `request` for `plugin` in session `session`.
+    fn call<'a>(
+        &'a self,
+        session: &'a str,
+        plugin: &'a str,
+        request: SubagentRequest,
+    ) -> PortFuture<'a, Result<SubagentAnswer, SubagentFailure>>;
+}
+
 /// Every port an instance uses.
 #[derive(Clone)]
 pub struct Ports {
@@ -214,6 +287,8 @@ pub struct Ports {
     pub config: Arc<dyn ConfigPort>,
     /// Live messages, injection and platform actions.
     pub messaging: Arc<dyn MessagingPort>,
+    /// Subagents of the calling session.
+    pub subagents: Arc<dyn SubagentsPort>,
 }
 
 impl Default for Ports {
@@ -227,7 +302,8 @@ impl Default for Ports {
             tools: none.clone(),
             events: none.clone(),
             config: none.clone(),
-            messaging: none,
+            messaging: none.clone(),
+            subagents: none,
         }
     }
 }
@@ -310,6 +386,21 @@ impl MessagingPort for Unavailable {
                 code: "gateway_unavailable",
                 detail: format!("platform actions are {UNAVAILABLE}"),
             })
+        })
+    }
+}
+
+impl SubagentsPort for Unavailable {
+    fn call<'a>(
+        &'a self,
+        _: &'a str,
+        _: &'a str,
+        _: SubagentRequest,
+    ) -> PortFuture<'a, Result<SubagentAnswer, SubagentFailure>> {
+        Box::pin(async {
+            Err(SubagentFailure::Refused(format!(
+                "delegation.session_closed: subagents are {UNAVAILABLE}"
+            )))
         })
     }
 }

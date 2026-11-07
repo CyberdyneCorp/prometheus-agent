@@ -192,6 +192,9 @@ pub struct ProviderModel {
     /// The session's `/reasoning` level (`None`: the config decides).
     session_reasoning: std::sync::Mutex<Option<ReasoningLevel>>,
     watch: std::sync::Mutex<Option<CredentialWatch>>,
+    /// Parameters set on every request body (a delegated child's
+    /// `delegation.request_overrides`).
+    body_overrides: std::sync::Mutex<Option<Arc<serde_json::Map<String, serde_json::Value>>>>,
 }
 
 impl ProviderModel {
@@ -206,7 +209,21 @@ impl ProviderModel {
             fallback: Mutex::new(fallback),
             session_reasoning: std::sync::Mutex::default(),
             watch: std::sync::Mutex::default(),
+            body_overrides: std::sync::Mutex::default(),
         }
+    }
+
+    /// Sets `overrides` on every later request body, on every route of
+    /// the chain (spec: subagent-delegation, Child request overrides and
+    /// direct endpoints).
+    pub fn set_body_overrides(
+        &self,
+        overrides: Option<Arc<serde_json::Map<String, serde_json::Value>>>,
+    ) {
+        *self
+            .body_overrides
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = overrides;
     }
 
     /// Calls `watch` with the credential of each route a call is sent on.
@@ -253,6 +270,11 @@ impl ProviderModel {
         );
         Request {
             reasoning: effort.ok().and_then(|e| e.sent),
+            body_overrides: self
+                .body_overrides
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone(),
             ..request.clone()
         }
     }
@@ -275,6 +297,27 @@ impl ProviderModel {
             .await?;
         let chain = fallback::chain(&setup.config, &setup.registry)?;
         let state = Fallback::new(route, chain, setup.config.fallback.min_health);
+        Ok(Self::new(setup, caller, state))
+    }
+
+    /// Like [`ProviderModel::start`] with no fallback chain: a delegated
+    /// child that pinned its own model fails on that model instead of
+    /// moving to the parent's chain (spec: subagent-delegation, Child model
+    /// routing).
+    ///
+    /// # Errors
+    ///
+    /// Resolution errors of `primary`.
+    pub async fn start_pinned(
+        setup: ProviderSetup,
+        caller: ModelCaller,
+        primary: &Target,
+    ) -> Result<Self, Error> {
+        let route = setup
+            .resolver()
+            .resolve_target(primary, &mut Trace::default())
+            .await?;
+        let state = Fallback::new(route, Vec::new(), setup.config.fallback.min_health);
         Ok(Self::new(setup, caller, state))
     }
 

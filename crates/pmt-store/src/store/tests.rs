@@ -194,3 +194,40 @@ fn credential_uses_from_schema_v6_survive_the_v7_upgrade() {
         .unwrap();
     assert_eq!(store.credential_states("p").unwrap()[0].use_seq, Some(1));
 }
+
+/// v23 rebuilds `sessions` to admit `/bg` task sessions: every v22 row
+/// (lineage, tags, counters) survives and the new source and lineage kind
+/// are accepted afterwards.
+#[test]
+fn v22_sessions_survive_the_v23_rebuild_that_admits_background_tasks() {
+    use crate::LineageKind;
+    let root = tempfile::tempdir().unwrap();
+    let scope = scope(root.path());
+    let (parent, fork) = {
+        let store = Store::open_with(&scope, &MIGRATIONS[..22]).unwrap();
+        let mut new = NewSession::new(Source::Tui);
+        new.source_tag = Some("demo".to_owned());
+        let parent = store.create_session(&new).unwrap();
+        let fork = store
+            .create_session(&NewSession::child(
+                Source::Tui,
+                parent.id,
+                LineageKind::Fork,
+            ))
+            .unwrap();
+        (parent, fork)
+    };
+    let store = Store::open(&scope).unwrap();
+    assert_eq!(store.session(parent.id).unwrap(), parent);
+    assert_eq!(store.session(fork.id).unwrap(), fork);
+    let task = store
+        .create_session(&NewSession::child(
+            Source::Background,
+            parent.id,
+            LineageKind::Background,
+        ))
+        .unwrap();
+    assert_eq!(task.root_session_id, task.id);
+    assert_eq!(task.parent_session_id, Some(parent.id));
+    assert_eq!(meta(&scope.path("state.db"), "min_read_version"), "23");
+}

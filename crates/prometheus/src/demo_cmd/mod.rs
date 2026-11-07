@@ -98,10 +98,19 @@ struct Session {
     turn: Result<TurnResult, Error>,
 }
 
+/// The demo must stay offline and the same everywhere, but its ledger
+/// repository may sit inside a git tree (a checkout holding the temporary
+/// directory), where a session would start a language server for the
+/// patched script and, with `lsp.install_strategy = "auto"`, install it
+/// over the network first. The demo's profile starts (and so installs) no
+/// language server.
+const OFFLINE: &str = "lsp.enabled=false";
+
 /// Runs the scenario's one turn in the demo's home.
 fn run_session(place: &Place, launch: &LaunchEnv) -> Result<Session, Error> {
     let home = place.home();
-    let set = unconfined_override();
+    let mut set = unconfined_override();
+    set.push(OFFLINE.to_owned());
     let ctx = Context {
         home_flag: Some(&home),
         launch,
@@ -129,6 +138,7 @@ fn run_session(place: &Place, launch: &LaunchEnv) -> Result<Session, Error> {
         ignore_user_config: false,
         ignore_rules: false,
         egress: crate::egress::Overrides::default(),
+        cron: None,
     };
     let factory = Factory::new(scope, launch, &flags, None, options)?;
     crate::model_cmd::block_on(session(factory, &flags))?

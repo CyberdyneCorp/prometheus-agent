@@ -26,6 +26,8 @@ type Operation = fn(&FileSession, &Value) -> ToolResult;
 struct FileHandler {
     environments: Arc<Environments>,
     operation: Operation,
+    /// The tool's name (recorded with every change it makes).
+    tool: String,
 }
 
 impl ToolHandler for FileHandler {
@@ -33,9 +35,15 @@ impl ToolHandler for FileHandler {
         Box::pin(async move {
             let files = part(&self.environments, context, "file", |env| env.files.clone())?;
             let operation = self.operation;
-            tokio::task::spawn_blocking(move || operation(&files, &arguments))
-                .await
-                .map_err(|err| ToolFailure::new("panic", err.to_string()))
+            let call = super::edits::EditCall {
+                call_id: context.call_id.clone(),
+                tool: self.tool.clone(),
+            };
+            tokio::task::spawn_blocking(move || {
+                super::edits::with_call(call, || operation(&files, &arguments))
+            })
+            .await
+            .map_err(|err| ToolFailure::new("panic", err.to_string()))
         })
     }
 }
@@ -47,6 +55,7 @@ pub fn tools(environments: &Arc<Environments>) -> Vec<RegisteredTool> {
         let handler = Arc::new(FileHandler {
             environments: Arc::clone(environments),
             operation,
+            tool: descriptor.name.clone(),
         });
         RegisteredTool::new(descriptor, Owner::Builtin, handler)
     };
@@ -139,7 +148,8 @@ fn write_file() -> ToolDescriptor {
         "Create a file or replace its whole content (parent directories are created). \
          An existing file must have been read in full in this session and be unchanged \
          since; otherwise the write is refused with stale_write_blocked. The result \
-         reports a syntax check of the new content as lint.",
+         reports a syntax check of the new content as lint and, in a git workspace, the \
+         language-server errors the write introduced as lsp_diagnostics.",
         json!({
             "type": "object",
             "properties": {
@@ -165,7 +175,8 @@ fn patch() -> ToolDescriptor {
          and quote differences are tolerated). mode=v4a: apply a multi-file patch \
          ('*** Begin Patch' ... '*** End Patch' with Add File, Update File (optionally \
          Move to) and Delete File sections); all files change or none. The result has a \
-         unified diff and a syntax check (lint).",
+         unified diff, a syntax check (lint) and the language-server errors the edit \
+         introduced (lsp_diagnostics).",
         json!({
             "type": "object",
             "properties": {
@@ -199,7 +210,8 @@ fn patch_variant(route: &RouteTraits) -> SchemaVariant {
         description: Some(
             "Edit a file: replace old_string with new_string in path; old_string must match \
              exactly one location unless replace_all=true (whitespace and quote differences \
-             are tolerated). The result has a unified diff and a syntax check (lint)."
+             are tolerated). The result has a unified diff, a syntax check (lint) and the \
+             language-server errors the edit introduced (lsp_diagnostics)."
                 .to_owned(),
         ),
         parameters: Some(json!({

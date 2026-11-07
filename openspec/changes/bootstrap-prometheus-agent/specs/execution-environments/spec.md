@@ -42,13 +42,18 @@ Every backend SHALL declare a typed descriptor with `isolation` (`os_sandbox`, `
 - **THEN** the container's file SHALL be returned, not the host's
 
 ### Requirement: Remote sandboxes are plugins
-Remote execution providers (such as Modal, Daytona, E2B or Vercel-style sandboxes) SHALL be implemented as `terminal-backend` WASM plugins that receive only the network hosts and secrets granted in their manifest, and the host SHALL forward `execute`, `upload`, `download`, `cancel` and `teardown` calls to them; a plugin backend's `execute` result SHALL carry `exit_code`, `stdout`, `stderr` and `cwd_observed` as typed fields so a missing exit code is a contract error, not exit 0.
+Remote execution providers (such as Modal, Daytona, E2B or Vercel-style sandboxes) SHALL be implemented as `terminal-backend` WASM plugins that receive only the network hosts and secrets granted in their manifest, and the host SHALL forward `execute`, `upload`, `download`, `cancel` and `teardown` calls to them, SHALL deliver `cancel` while the `execute` it names is still running without holding up other calls to the backend, and SHALL count only the plugin's own computation, not time blocked in host imports, against `plugins.wasm.call_timeout_ms` for these calls; a plugin backend's `execute` result SHALL carry `exit_code`, `stdout`, `stderr` and `cwd_observed` as typed fields so a missing exit code is a contract error, not exit 0.
 **Milestone:** M2
 
 #### Scenario: Plugin omits exit code
 - **GIVEN** a backend plugin whose `execute` result has no `exit_code`
 - **WHEN** a command completes
 - **THEN** the result SHALL have `status = "error"` naming the contract violation
+
+#### Scenario: Cancel reaches a running command
+- **GIVEN** a backend plugin whose `execute` waits on its remote command longer than `plugins.wasm.call_timeout_ms`
+- **WHEN** the background process running it is killed
+- **THEN** the plugin SHALL receive `cancel` for that command while its `execute` still runs, the `execute` SHALL NOT fail with `exceeded call timeout`, and a foreground command on the same backend SHALL complete meanwhile
 
 ### Requirement: Backend readiness checks
 The system SHALL check the selected backend's requirements (container runtime reachable and rootless, SSH `terminal.ssh.host` and `terminal.ssh.user` set, plugin `check` call) as the `terminal` tool's availability probe, SHALL expose the failure reason through `prometheus doctor terminal`, and `prometheus doctor terminal` SHALL exit 0 when the backend is ready and 1 otherwise.
@@ -100,9 +105,19 @@ The `container` backend SHALL use a rootless Podman or Docker runtime and start 
 - **WHEN** a container is created
 - **THEN** creation SHALL fail with `container hardening 'no_new_privileges' unsupported by runtime` and no container SHALL start
 
+#### Scenario: Reused container lost its waiver
+- **GIVEN** a persistent container created without `no_new_privileges` under `allow_degraded = ["no_new_privileges"]`, and that entry since removed
+- **WHEN** a later session, in a new process, starts on the same workspace
+- **THEN** the container SHALL NOT be reused; it SHALL be removed and created again, which fails naming the flag, and while the entry is still present every start of the reused container SHALL log the WARN
+
 ### Requirement: Container lifecycle and orphan reaping
-The system SHALL give each session its own container when `terminal.container.persistent = false`, SHALL tear down environments idle longer than `terminal.idle_lifetime_secs` except while a foreground call is in flight or a tracked background process is running, SHALL stop rather than remove persistent containers, and once per gateway start SHALL remove only exited containers labelled with the current profile that are older than twice the idle lifetime.
+The system SHALL give each session its own container when `terminal.container.persistent = false`; when it is true (default) and `terminal.container.shared_key` is empty, every session of the profile on the same mounted workspace (every session of the profile when the workspace is not mounted) SHALL use one container, so a later session reuses it. The system SHALL tear down environments idle longer than `terminal.idle_lifetime_secs` except while a foreground call is in flight or a tracked background process is running, SHALL stop rather than remove persistent containers, and once per gateway start SHALL remove only exited, non-persistent containers labelled with the current profile that are older than twice the idle lifetime.
 **Milestone:** M2
+
+#### Scenario: Persistent container is reused
+- **GIVEN** `terminal.container.persistent = true` and a session whose container was stopped at session end
+- **WHEN** a later session starts on the same workspace, after the orphan reaper has run
+- **THEN** it SHALL start that same container instead of creating a new one
 
 #### Scenario: Long foreground command
 - **GIVEN** a foreground command running longer than the idle lifetime
@@ -531,7 +546,7 @@ The browser surface exposed to models SHALL be `browser_exec(code, session?, tim
 - **THEN** `browser_exec` SHALL NOT be present
 
 ### Requirement: browser_cdp and browser_dialog tools
-`browser_cdp(method, params?, target_id?, frame_id?, timeout_secs?)` and `browser_dialog(action, prompt_text?, dialog_id?)` SHALL be offered only while an explicit CDP endpoint is configured (`/browser connect` or `browser.cdp_url`); `browser_cdp` SHALL require `target_id` for page-level domains (`Page`, `Runtime`, `DOM`, `Emulation`, `Input`, `Network` per-target), route `frame_id` calls through the supervisor's session for that out-of-process frame, default `timeout_secs` to 30 (max 300), and refuse `Browser.close`, `Browser.crash`, `Target.closeTarget` of a target it did not open, and any URL parameter blocked by browser URL safety; `browser_dialog` SHALL accept `accept` or `dismiss`, pass `prompt_text` to `prompt()` dialogs, target the oldest pending dialog when `dialog_id` is omitted, and return `no pending dialog` when none is open.
+`browser_cdp(method, params?, target_id?, frame_id?, timeout_secs?)` and `browser_dialog(action, prompt_text?, dialog_id?)` SHALL be offered only while an explicit CDP endpoint is configured (`/browser connect` or `browser.cdp_url`), deciding per session when its tool array is built: a session's `/browser connect` SHALL offer them to that session only, never to other sessions of the same process; `browser_cdp` SHALL require `target_id` for page-level domains (`Page`, `Runtime`, `DOM`, `Emulation`, `Input`, `Network` per-target), route `frame_id` calls through the supervisor's session for that out-of-process frame, default `timeout_secs` to 30 (max 300), and refuse `Browser.close`, `Browser.crash`, `Target.closeTarget` of a target it did not open, and any URL parameter blocked by browser URL safety; `browser_dialog` SHALL accept `accept` or `dismiss`, pass `prompt_text` to `prompt()` dialogs, target the oldest pending dialog when `dialog_id` is omitted, and return `no pending dialog` when none is open.
 **Milestone:** M2
 
 #### Scenario: Dialog answered
@@ -542,6 +557,11 @@ The browser surface exposed to models SHALL be `browser_exec(code, session?, tim
 #### Scenario: Closing the browser
 - **WHEN** the model calls `browser_cdp(method="Browser.close")`
 - **THEN** the call SHALL be refused
+
+#### Scenario: Connect offers the CDP tools to that session only
+- **GIVEN** a daemon serving sessions A and B and no `browser.cdp_url`
+- **WHEN** A runs `/browser connect <url>`, B is built while A is connected, and A then runs `/browser disconnect`
+- **THEN** A's tool array SHALL carry `browser_cdp` and `browser_dialog` while connected and not after disconnecting, and B's SHALL report them `unavailable`
 
 ### Requirement: Local browser options and headed mode
 The local browser SHALL honour `browser.executable_path` (default empty: managed `chromium` runtime, then a system Chromium-family binary), `browser.user_data_dir` (default empty: throwaway profile; a relative path resolves under `<profile>`), `browser.chromium_args` (default empty), `browser.launch_timeout_secs` (default 30) and `browser.headed` (default false); with `headed = true` the browser SHALL open a visible window and SHALL NOT be cleaned up between turns (idle reaping still applies); on a host without a display the browser SHALL run headless with a one-time notice; headed mode SHALL not affect cloud sessions, and `chromium_args` that disable the Chromium sandbox or web security SHALL require the matching `security.sandbox.allow_degraded` entry.
@@ -571,7 +591,7 @@ When a cloud browser provider is active and `browser.auto_local_for_private_urls
 - **THEN** the page SHALL load in a local sidecar and no request for it SHALL reach Browserbase
 
 ### Requirement: Real-profile browsing
-When `browser.use_real_profile = true` (default false) and the session holds the `browser.real_profile` grant, the system SHALL copy the user's default Chromium-family browser's active profile (or the directory named by `browser.real_profile_pin`) into a managed snapshot under `<profile>/cache/browser/real-profile/<browser>/` using SQLite online backup for databases, re-sync it when a new browser session launches, launch the user's real browser binary on the snapshot (never the live profile directory), and run it headless unless `browser.headed`; if the copy is impossible (locked database, unsupported default browser, missing pin) the session SHALL get a throwaway profile and its first result SHALL carry `real_profile_unavailable: <reason>`; with `browser.real_profile_autoclose = true` the agent MAY offer, and only after user approval run, `prometheus browser close-profile`, which terminates the browser process tree bound to that profile; turning the setting off SHALL delete the snapshot on next browser use; unattended contexts SHALL use the snapshot without prompting.
+When `browser.use_real_profile = true` (default false) and the session holds the `browser.real_profile` grant, the system SHALL copy the user's default Chromium-family browser's active profile (or the directory named by `browser.real_profile_pin`) into a managed snapshot under `<profile>/cache/browser/real-profile/<browser>/` using SQLite online backup for databases, re-sync it when a new browser session launches, launch the user's real browser binary on the snapshot (never the live profile directory), and run it headless unless `browser.headed`; if the copy is impossible (locked database, unsupported default browser, missing pin) the session SHALL get a throwaway profile and its first result SHALL carry `real_profile_unavailable: <reason>`; with `browser.real_profile_autoclose = true` the agent MAY offer, and only after user approval run, the same action as `prometheus browser close-profile`, which terminates the browser process tree bound to that profile: through the `browser_close_profile` tool, offered only with that setting and only to sessions with a person (never cron, API or single-query runs), which SHALL ask the user on every call in every approval mode including yolo without remembering the answer, SHALL be refused in unattended contexts, and SHALL run in the Prometheus process on the host, outside the terminal sandbox; the command line itself SHALL be a hardline command for the agent's shell tools; turning the setting off SHALL delete the snapshot on next browser use; unattended contexts SHALL use the snapshot without prompting.
 **Milestone:** M2
 
 #### Scenario: Missing pin
@@ -583,6 +603,11 @@ When `browser.use_real_profile = true` (default false) and the session holds the
 - **GIVEN** an existing snapshot and `browser.use_real_profile` changed to false
 - **WHEN** the next browser session starts
 - **THEN** the snapshot directory SHALL be deleted
+
+#### Scenario: Closing the locked browser asks every time
+- **GIVEN** `browser.real_profile_autoclose = true` and the user's browser holding the profile
+- **WHEN** the agent calls `browser_close_profile` under yolo
+- **THEN** the user SHALL be asked without an option to remember it, a denial SHALL leave the browser running, an approval SHALL end it, an unattended run SHALL be refused without asking, and with the setting off the tool SHALL NOT be offered and `prometheus browser close-profile` from the agent's terminal SHALL be `BLOCKED (hardline)`
 
 ### Requirement: Lightpanda engine
 `browser.engine` SHALL accept `auto` (default, Chromium) or `lightpanda`; with `lightpanda` and a `lightpanda` binary available (managed runtime or `PATH`) the system SHALL launch one `lightpanda serve --host 127.0.0.1 --port <free>` process per browser session, reap it with the same idle and crash rules as Chromium, and tell the model in the `browser_exec` description that screenshots are unavailable and only one page is supported; the engine setting SHALL have the lowest precedence (an explicit CDP endpoint, a cloud provider or real-profile browsing shadow it), and `prometheus browser status` and `prometheus doctor` SHALL report when it is shadowed.

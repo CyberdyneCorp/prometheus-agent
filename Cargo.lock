@@ -2925,6 +2925,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pmt-automation"
+version = "0.1.0"
+dependencies = [
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+]
+
+[[package]]
 name = "pmt-backup"
 version = "0.1.0"
 dependencies = [
@@ -2996,6 +3006,46 @@ dependencies = [
 [[package]]
 name = "pmt-cron"
 version = "0.1.0"
+dependencies = [
+ "getrandom 0.4.3",
+ "jiff",
+ "pmt-agent",
+ "pmt-config",
+ "pmt-core",
+ "pmt-store",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "ulid",
+]
+
+[[package]]
+name = "pmt-delegation"
+version = "0.1.0"
+dependencies = [
+ "getrandom 0.4.3",
+ "jiff",
+ "pmt-agent",
+ "pmt-config",
+ "pmt-core",
+ "pmt-obs",
+ "pmt-skills",
+ "pmt-store",
+ "pmt-tools",
+ "regex",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "ulid",
+]
 
 [[package]]
 name = "pmt-eval"
@@ -3150,6 +3200,7 @@ dependencies = [
  "pmt-core",
  "pmt-plugins",
  "pmt-providers",
+ "pmt-sandbox",
  "pmt-skills",
  "pmt-tools",
  "semver",
@@ -3238,11 +3289,15 @@ dependencies = [
 name = "pmt-sandbox"
 version = "0.1.0"
 dependencies = [
+ "jiff",
  "landlock",
  "libc",
  "pmt-config",
  "pmt-core",
  "seccompiler",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
  "tempfile",
  "tokio",
  "tracing",
@@ -3306,6 +3361,7 @@ dependencies = [
  "base64 0.23.1",
  "dunce",
  "futures-util",
+ "getrandom 0.4.3",
  "glob",
  "ignore",
  "image",
@@ -3319,6 +3375,8 @@ dependencies = [
  "regex",
  "reqwest",
  "resvg",
+ "roxmltree",
+ "rusqlite",
  "saphyr-parser",
  "serde",
  "serde_json",
@@ -3330,6 +3388,7 @@ dependencies = [
  "tokio-tungstenite",
  "toml",
  "tracing",
+ "tracing-subscriber",
  "tree-sitter",
  "tree-sitter-javascript",
  "tree-sitter-python",
@@ -3338,6 +3397,7 @@ dependencies = [
  "ulid",
  "url",
  "wiremock",
+ "zip",
 ]
 
 [[package]]
@@ -3405,6 +3465,21 @@ dependencies = [
 [[package]]
 name = "pmt-web"
 version = "0.1.0"
+
+[[package]]
+name = "pmt-worktrees"
+version = "0.1.0"
+dependencies = [
+ "getrandom 0.4.3",
+ "jiff",
+ "pmt-core",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "sysinfo",
+ "tempfile",
+ "tracing",
+]
 
 [[package]]
 name = "png"
@@ -3511,9 +3586,12 @@ dependencies = [
  "pmt-adapters-webhook",
  "pmt-adapters-whatsapp",
  "pmt-agent",
+ "pmt-automation",
  "pmt-backup",
  "pmt-config",
  "pmt-core",
+ "pmt-cron",
+ "pmt-delegation",
  "pmt-gateway",
  "pmt-mcp",
  "pmt-memory",
@@ -3530,6 +3608,7 @@ dependencies = [
  "pmt-tui",
  "pmt-update",
  "pmt-vault",
+ "pmt-worktrees",
  "pulldown-cmark",
  "qrcode",
  "ratatui",

@@ -23,6 +23,7 @@ pub(super) fn ports(scope: &ProfileScope) -> Ports {
     ports.secrets = Arc::new(Secrets(secrets));
     ports.http = Arc::new(Http::new(scope));
     ports.llm = Arc::new(super::llm::SessionsLlm);
+    ports.subagents = Arc::new(super::subagents::SessionsSubagents);
     ports.config = Arc::new(Settings {
         file: scope.profile().config_file(),
         entries: scope.config().plugins.entries.clone(),
@@ -55,6 +56,7 @@ impl SecretsPort for Secrets {
 /// through the host's `network` check. A request is bounded by
 /// `plugins.wasm.call_timeout_ms`: the plugin call waiting on it holds its
 /// instance, and the epoch deadline does not run while the host blocks.
+/// The request ends a margin before that bound (see [`request_bound`]).
 struct Http {
     scope: ProfileScope,
     outbound: OutboundPolicy,
@@ -80,7 +82,7 @@ impl Http {
                 extra_ca_file: network.extra_ca_file.as_ref().map(Into::into),
                 proxy: network.proxy.clone(),
             },
-            timeout: Duration::from_millis(config.plugins.wasm.call_timeout_ms),
+            timeout: request_bound(Duration::from_millis(config.plugins.wasm.call_timeout_ms)),
             fetchers: Mutex::default(),
         }
     }
@@ -169,6 +171,16 @@ impl HttpPort for Http {
     }
 }
 
+/// How long one plugin HTTP request may take under a call bound of
+/// `call_timeout`: a quarter less (at most a second less), so a timed-out
+/// request returns to the plugin while its call still has time to report
+/// it. Ending at the bound itself races the call's own wall deadline: the
+/// call would then trap with "exceeded call timeout" as soon as control
+/// came back, and the plugin would never see why.
+fn request_bound(call_timeout: Duration) -> Duration {
+    call_timeout.saturating_sub((call_timeout / 4).min(Duration::from_secs(1)))
+}
+
 /// What a plugin sees of a failed request: a timeout by name, else the
 /// error with its causes (reqwest's own text hides them).
 fn failure(err: &reqwest::Error) -> String {
@@ -215,6 +227,21 @@ mod tests {
     use pmt_config::{Home, Launch, Overrides, ProfileName};
 
     use super::*;
+
+    #[test]
+    fn a_request_ends_well_before_its_call_does() {
+        // Several epoch ticks of headroom: the call's deadline is checked
+        // once per tick.
+        for ms in [500, 30_000] {
+            let call = Duration::from_millis(ms);
+            let request = request_bound(call);
+            assert!(request > Duration::ZERO, "{ms}");
+            assert!(
+                call.saturating_sub(request) >= 5 * pmt_plugins::host::TICK,
+                "{ms}"
+            );
+        }
+    }
 
     fn scope(root: &std::path::Path, config: &str) -> ProfileScope {
         let home = Home::open(root).unwrap();

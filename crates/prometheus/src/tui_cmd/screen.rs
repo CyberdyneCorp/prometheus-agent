@@ -126,6 +126,8 @@ pub(super) struct Tui<'a> {
     panic_on_draw: bool,
     /// The connection is lost: give up re-attaching after this.
     lost: Option<Lost>,
+    /// The live subagent tree's lines (spawned, progress, finished).
+    pub(super) subagents: pmt_core::subagent_tree::TreeLines,
 }
 
 /// A server request on screen or waiting for it.
@@ -259,6 +261,7 @@ impl<'a> Tui<'a> {
             ending: None,
             panic_on_draw: open.panic_on_draw,
             lost: None,
+            subagents: pmt_core::subagent_tree::TreeLines::default(),
         };
         tui.shown_changed();
         tui

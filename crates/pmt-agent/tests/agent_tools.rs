@@ -62,7 +62,7 @@ fn body(result: &ToolResult) -> Value {
 
 async fn call(tools: &AgentTools, name: &str, arguments: Value) -> ToolResult {
     tools
-        .call(name, arguments)
+        .call(name, arguments, &pmt_core::cancel::CancelToken::new())
         .await
         .expect("an agent-level tool")
 }
@@ -401,5 +401,14 @@ async fn other_tools_are_not_agent_level() {
     let home = TestHome::new();
     let store = home.store("default");
     let agent = tools(&store, session(&store), Clarifier::unattended());
-    assert!(agent.call("read_file", json!({})).await.is_none());
+    assert!(
+        agent
+            .call(
+                "read_file",
+                json!({}),
+                &pmt_core::cancel::CancelToken::new()
+            )
+            .await
+            .is_none()
+    );
 }

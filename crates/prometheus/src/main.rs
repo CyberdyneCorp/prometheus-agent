@@ -56,6 +56,19 @@ fn main() -> ExitCode {
         let done = prometheus::completions::complete(*shell, current.as_deref(), words, &launch);
         return ExitCode::from(done.unwrap_or(0));
     }
+    // A scheduled run's terminal edits its job's notepad through the run's
+    // channel: its sandbox denies the home, so nothing below may run.
+    if let Some(Command::Cron {
+        command: prometheus::cron_cmd::CronCommand::Notepad { job, action },
+    }) = &cli.command
+        && let Some(channel) = launch.cron_notepad()
+    {
+        return match prometheus::cron_cmd::notepad::in_run(channel, job, action.as_ref(), cli.json)
+        {
+            Ok(code) => ExitCode::from(code),
+            Err(err) => failure(&err, cli.json),
+        };
+    }
     // Commands that need the home report the resolution error themselves.
     // `demo` runs in a temporary home of its own and never touches the
     // user's: it writes no log files and keeps no crash reports there.
@@ -122,7 +135,13 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Secrets { command }) => secrets_cmd::run(command, &ctx),
         Some(Command::Grants { command }) => grants_cmd::run(command, &ctx),
         Some(Command::Security { command }) => prometheus::security_cmd::run(command, &ctx),
+        Some(Command::Browser { command }) => prometheus::browser_cmd::run(command, &ctx),
+        Some(Command::Lsp { command }) => prometheus::lsp_cmd::run(command, &ctx),
+        Some(Command::Cron { command }) => prometheus::cron_cmd::run(command, &ctx),
+        Some(Command::Worktrees { command }) => prometheus::worktrees_cmd::run(command, &ctx),
         Some(Command::Vault { command }) => prometheus::vault_cmd::run(command, &ctx),
+        Some(Command::Files { command }) => prometheus::files_cmd::run(command, &ctx),
+        Some(Command::Verify(args)) => prometheus::verify_cmd::run(args, &ctx),
         Some(Command::Skills { command }) => skills_cmd::run(command, &ctx),
         Some(Command::Memory { command }) => memory_cmd::run(command, &ctx),
         Some(Command::Profile { command }) => profile_cmd::run(command, &ctx),
@@ -154,6 +173,7 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         #[cfg(feature = "mcp")]
         Some(Command::Mcp { command }) => prometheus::mcp_cmd::run(command.as_ref(), &ctx),
         Some(Command::Rpc { command }) => prometheus::rpc_cmd::run(command, &ctx),
+        Some(Command::Schema { command }) => prometheus::schema_cmd::run(command),
         Some(Command::Connectors { command }) => prometheus::connectors_cmd::run(command, &ctx),
         Some(Command::Bridge { command }) => prometheus::bridge_cmd::run(command, &ctx),
         Some(Command::SelfTest) => Ok(self_test_cmd::run(&ctx)),

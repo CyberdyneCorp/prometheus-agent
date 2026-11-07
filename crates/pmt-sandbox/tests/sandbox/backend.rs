@@ -2,10 +2,53 @@
 //! defaults (spec: execution-environments).
 
 use pmt_config::schema::{SandboxConfig, TerminalConfig};
-use pmt_sandbox::backend::{BackendRegistry, Kind};
+use std::sync::Arc;
+
+use pmt_sandbox::backend::{
+    BackendRegistry, Descriptor, ExecOutput, ExecRequest, Kind, RemoteBackend,
+};
 use pmt_sandbox::{Feature, FeatureReport, Gap, Level, Options, Sandbox, StrengthReport};
 
 use crate::common::{Fixture, launcher};
+
+/// A plugin backend that answers readiness with `check`.
+#[derive(Debug)]
+struct FakePlugin {
+    name: String,
+    descriptor: Descriptor,
+    check: Result<String, String>,
+}
+
+fn plugin(name: &str) -> Arc<dyn RemoteBackend> {
+    Arc::new(FakePlugin {
+        name: name.to_owned(),
+        descriptor: Descriptor::ssh(),
+        check: Ok("token present".to_owned()),
+    })
+}
+
+impl RemoteBackend for FakePlugin {
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn descriptor(&self) -> &Descriptor {
+        &self.descriptor
+    }
+    fn check(&self) -> Result<String, String> {
+        self.check.clone()
+    }
+    fn execute(&self, _: &ExecRequest) -> Result<ExecOutput, String> {
+        Err("not used".to_owned())
+    }
+    fn upload(&self, _: &str, _: &[u8]) -> Result<(), String> {
+        Err("not used".to_owned())
+    }
+    fn download(&self, _: &str) -> Result<Vec<u8>, String> {
+        Err("not used".to_owned())
+    }
+    fn cancel(&self, _: &str) {}
+    fn teardown(&self) {}
+}
 
 #[test]
 fn unknown_backend_exits_78_with_the_available_list() {
@@ -17,7 +60,7 @@ fn unknown_backend_exits_78_with_the_available_list() {
     );
 
     let mut registry = BackendRegistry::builtin();
-    registry.register_plugin("modal").unwrap();
+    registry.register_plugin(plugin("modal")).unwrap();
     let err = registry.select("acmebox").unwrap_err();
     assert!(
         err.message()
@@ -27,7 +70,11 @@ fn unknown_backend_exits_78_with_the_available_list() {
 
 #[test]
 fn reserved_backends_are_available_in_m2() {
-    let registry = BackendRegistry::builtin();
+    // M1 shipped `container` and `ssh` reserved; the mechanism stays for
+    // later built-ins.
+    let mut registry = BackendRegistry::builtin();
+    registry.reserve("container", "M2");
+    registry.reserve("ssh", "M2");
     for name in ["container", "ssh"] {
         let err = registry.select(name).unwrap_err();
         assert_eq!(err.exit_code(), 69);
@@ -43,7 +90,50 @@ fn reserved_backends_are_available_in_m2() {
 fn names_never_fall_back() {
     let mut registry = BackendRegistry::builtin();
     assert!(registry.select("Local").is_err());
-    assert!(registry.register_plugin("local").is_err());
+    assert!(registry.register_plugin(plugin("local")).is_err());
+}
+
+#[test]
+fn plugin_shadows_container() {
+    let mut registry = BackendRegistry::builtin();
+    for name in ["Docker", "PODMAN", "container", "Ssh", "local"] {
+        let err = registry.register_plugin(plugin(name)).unwrap_err();
+        assert_eq!(
+            err.message(),
+            format!("terminal backend name '{name}' is reserved")
+        );
+    }
+    assert_eq!(registry.select("container").unwrap().kind, Kind::Container);
+    assert_eq!(registry.names(), ["local", "container", "ssh"]);
+}
+
+#[test]
+fn a_plugin_backend_reports_its_check_and_descriptor() {
+    let fixture = Fixture::new();
+    let mut registry = BackendRegistry::builtin();
+    registry
+        .register_plugin(Arc::new(FakePlugin {
+            name: "modal".to_owned(),
+            descriptor: Descriptor::ssh(),
+            check: Err("no MODAL_TOKEN_ID secret and no subscription".to_owned()),
+        }))
+        .unwrap();
+    let config = TerminalConfig {
+        backend: "modal".to_owned(),
+        ..TerminalConfig::default()
+    };
+    let readiness = registry.readiness(
+        &config,
+        &sandbox_with(&fixture, full()),
+        &SandboxConfig::default(),
+    );
+    assert_eq!(readiness.exit_code(), 1);
+    assert_eq!(
+        readiness.reason(),
+        Some("modal backend unavailable: no MODAL_TOKEN_ID secret and no subscription")
+    );
+    let backend = registry.select("modal").unwrap();
+    assert!(!backend.descriptor(&config).uses_host_filesystem);
 }
 
 fn sandbox_with(fixture: &Fixture, report: StrengthReport) -> Sandbox {
@@ -67,8 +157,11 @@ fn full() -> StrengthReport {
 #[test]
 fn local_backend_is_ready_under_a_full_sandbox() {
     let fixture = Fixture::new();
-    let readiness = BackendRegistry::builtin()
-        .readiness(&TerminalConfig::default(), &sandbox_with(&fixture, full()));
+    let readiness = BackendRegistry::builtin().readiness(
+        &TerminalConfig::default(),
+        &sandbox_with(&fixture, full()),
+        &SandboxConfig::default(),
+    );
     assert!(readiness.is_ready());
     assert_eq!(readiness.exit_code(), 0);
     assert_eq!(
@@ -90,8 +183,11 @@ fn local_backend_is_not_ready_when_the_sandbox_refuses() {
             "landlock not supported by kernel",
         ),
     );
-    let readiness = BackendRegistry::builtin()
-        .readiness(&TerminalConfig::default(), &sandbox_with(&fixture, report));
+    let readiness = BackendRegistry::builtin().readiness(
+        &TerminalConfig::default(),
+        &sandbox_with(&fixture, report),
+        &SandboxConfig::default(),
+    );
     assert_eq!(readiness.exit_code(), 1);
     assert!(
         readiness
@@ -109,7 +205,11 @@ fn ssh_misconfigured() {
         ..TerminalConfig::default()
     };
     config.ssh.host = Some("build.example.com".to_owned());
-    let readiness = BackendRegistry::builtin().readiness(&config, &sandbox_with(&fixture, full()));
+    let readiness = BackendRegistry::builtin().readiness(
+        &config,
+        &sandbox_with(&fixture, full()),
+        &SandboxConfig::default(),
+    );
     assert_eq!(
         readiness.reason(),
         Some("ssh backend requires terminal.ssh.host and terminal.ssh.user")
@@ -117,10 +217,15 @@ fn ssh_misconfigured() {
     assert_eq!(readiness.exit_code(), 1);
 
     config.ssh.user = Some("ci".to_owned());
-    let readiness = BackendRegistry::builtin().readiness(&config, &sandbox_with(&fixture, full()));
+    let readiness = BackendRegistry::builtin().readiness(
+        &config,
+        &sandbox_with(&fixture, full()),
+        &SandboxConfig::default(),
+    );
+    assert!(readiness.is_ready());
     assert_eq!(
-        readiness.reason(),
-        Some("terminal backend 'ssh' is available in M2")
+        readiness.checks[0].message,
+        "ssh backend configured: ci@build.example.com:22"
     );
 }
 
@@ -131,7 +236,11 @@ fn unknown_backend_is_not_ready() {
         backend: "acmebox".to_owned(),
         ..TerminalConfig::default()
     };
-    let readiness = BackendRegistry::builtin().readiness(&config, &sandbox_with(&fixture, full()));
+    let readiness = BackendRegistry::builtin().readiness(
+        &config,
+        &sandbox_with(&fixture, full()),
+        &SandboxConfig::default(),
+    );
     assert_eq!(readiness.exit_code(), 1);
     assert!(
         readiness
@@ -147,7 +256,11 @@ fn settings_of_an_unselected_backend_do_not_block_the_selected_one() {
     let mut config = TerminalConfig::default();
     config.ssh.host = Some(String::new());
     config.container.cpus = 64.0;
-    let readiness = BackendRegistry::builtin().readiness(&config, &sandbox_with(&fixture, full()));
+    let readiness = BackendRegistry::builtin().readiness(
+        &config,
+        &sandbox_with(&fixture, full()),
+        &SandboxConfig::default(),
+    );
     assert!(readiness.is_ready());
 }
 

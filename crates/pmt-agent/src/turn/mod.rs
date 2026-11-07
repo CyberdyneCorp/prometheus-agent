@@ -368,6 +368,10 @@ pub struct TurnInput {
     /// Put in front of the text the model sees (a messaging session's send
     /// time); the clean text stays in the row's `user_text`.
     pub prefix: Option<String>,
+    /// What started an automated turn (`goal`, `loop`, `heartbeat`): kept
+    /// in the stored user message's metadata under `origin` (spec:
+    /// session-automation, Automated turns are plain user turns).
+    pub origin: Option<String>,
 }
 
 impl TurnInput {
@@ -380,6 +384,7 @@ impl TurnInput {
             images: Vec::new(),
             author: None,
             prefix: None,
+            origin: None,
         }
     }
 }
@@ -456,6 +461,12 @@ impl Agent {
     /// `turn.empty_steer` (`empty steer`) for empty or whitespace text.
     pub fn steer(&self, text: &str) -> Result<(), Error> {
         self.steers.push(text)
+    }
+
+    /// Takes the steers no turn delivered (a delegated child that ended
+    /// before using them reports them as missed).
+    pub fn take_undelivered_steers(&self) -> Vec<String> {
+        self.steers.drain()
     }
 
     /// Replaces the reference prefix, returning the previous one.

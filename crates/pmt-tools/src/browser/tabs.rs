@@ -39,6 +39,18 @@ pub struct Tabs {
     opened: Vec<String>,
 }
 
+impl Tabs {
+    /// Notes a target this session opened (it may close it).
+    pub(super) fn record_opened(&mut self, target: &str) {
+        self.opened.push(target.to_owned());
+    }
+
+    /// Whether this session opened `target`.
+    pub(super) fn was_opened(&self, target: &str) -> bool {
+        self.opened.iter().any(|t| t == target)
+    }
+}
+
 /// Identifies a connection object (a reconnect makes a new one).
 fn generation(cdp: &Arc<Cdp>) -> usize {
     Arc::as_ptr(cdp) as usize

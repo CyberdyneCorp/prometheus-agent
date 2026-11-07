@@ -130,6 +130,10 @@ pub struct Registrations {
     /// Skills.
     #[serde(default)]
     pub skills: Vec<Value>,
+    /// Automation blueprints (`register_automation_blueprint`), as data
+    /// scheduled-jobs reads.
+    #[serde(default)]
+    pub blueprints: Vec<Value>,
     /// Why the plugin runs degraded.
     #[serde(default)]
     pub degraded: Vec<String>,
@@ -165,6 +169,25 @@ pub fn cache_path(profile_dir: &Path, plugin: &str, key: &str) -> PathBuf {
         .join("cache")
         .join("bridge")
         .join(format!("{plugin}-{}.json", &key[..key.len().min(12)]))
+}
+
+/// The registrations `plugin` cached last in `profile_dir` (whatever its
+/// key), for readers that do not start the plugin.
+#[must_use]
+pub fn latest_cache(profile_dir: &Path, plugin: &str) -> Option<Registrations> {
+    let dir = profile_dir.join("cache").join("bridge");
+    let prefix = format!("{plugin}-");
+    let newest = std::fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .filter(|e| {
+            let name = e.file_name().to_string_lossy().into_owned();
+            name.strip_prefix(&prefix)
+                .and_then(|rest| rest.strip_suffix(".json"))
+                .is_some_and(|key| !key.contains('-'))
+        })
+        .max_by_key(|e| e.metadata().and_then(|m| m.modified()).ok())?;
+    read_cache(&newest.path())
 }
 
 /// The cached registrations, when present and readable.

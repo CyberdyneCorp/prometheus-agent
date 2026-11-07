@@ -237,9 +237,12 @@ impl Checker<'_> {
         }
         if !type_matches(schema, node) {
             let message = format!(
-                "{key}: expected {}, found {}",
+                "{key}: expected {}, found {}{}",
                 type_label(schema),
-                node.toml_type()
+                node.toml_type(),
+                accepted_range(schema)
+                    .map(|range| format!(" (accepted: {range})"))
+                    .unwrap_or_default()
             );
             return self.invalid(key, node, message);
         }
@@ -302,7 +305,7 @@ impl Checker<'_> {
             return;
         }
         if !allowed.contains(value) {
-            let message = format!("{key}: unknown value {value} (allowed: {})", list(allowed));
+            let message = unknown_value_message(key, value, allowed);
             self.invalid(key, node, message);
         }
     }
@@ -436,6 +439,22 @@ fn list(values: &[Value]) -> String {
         .join(", ")
 }
 
+/// The message for a value outside `allowed`; `cron.provider` words it
+/// as its spec does (scheduled-jobs, Pluggable trigger provider).
+fn unknown_value_message(key: &str, value: &Value, allowed: &[Value]) -> String {
+    if key == "cron.provider" {
+        let names: Vec<&str> = allowed.iter().filter_map(Value::as_str).collect();
+        let shown = value
+            .as_str()
+            .map_or_else(|| value.to_string(), str::to_owned);
+        return format!(
+            "unknown cron.provider '{shown}' (expected {})",
+            names.join("|")
+        );
+    }
+    format!("{key}: unknown value {value} (allowed: {})", list(allowed))
+}
+
 fn type_matches(schema: &Value, node: &Node) -> bool {
     let toml = node.toml_type();
     let accepts = |t: &str| match t {
@@ -480,6 +499,15 @@ fn range_error(value: &Value, schema: &Value) -> Option<String> {
         (None, Some(hi), ..) => format!("must be at most {}", show(hi)),
         _ => "is out of range".to_owned(),
     })
+}
+
+/// The declared range of a numeric key (`1 to 64`), when it has both
+/// bounds: a wrongly typed value is told what it may be.
+fn accepted_range(schema: &Value) -> Option<String> {
+    let min = schema.get("minimum").and_then(Value::as_f64)?;
+    let max = schema.get("maximum").and_then(Value::as_f64)?;
+    let show = |n: f64| Value::from(n).to_string().trim_end_matches(".0").to_owned();
+    Some(format!("{} to {}", show(min), show(max)))
 }
 
 /// Bounds implied by an unsigned integer `format`.
@@ -623,6 +651,34 @@ mod tests {
                 )]
             );
         }
+    }
+
+    /// Scenario: Unknown provider name (spec: scheduled-jobs, Pluggable
+    /// trigger provider).
+    #[test]
+    fn an_unknown_cron_provider_names_the_accepted_ones() {
+        let found = issues("[cron]\nprovider = \"cronos\"\n");
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(
+            found[0].message,
+            "unknown cron.provider 'cronos' (expected builtin|managed)"
+        );
+        assert_eq!(found[0].code.kind.exit_code(), 78);
+    }
+
+    /// Scenario: Invalid value fails validation (subagent-delegation).
+    #[test]
+    fn a_wrongly_typed_delegation_limit_names_the_key_and_its_range() {
+        assert_eq!(
+            messages("[delegation]\nmax_concurrent_children = \"lots\"\n"),
+            [
+                "delegation.max_concurrent_children: expected integer, found string (accepted: 1 to 64)"
+            ]
+        );
+        assert_eq!(
+            messages("[delegation]\nmax_spawn_depth = 9\n"),
+            ["delegation.max_spawn_depth: must be between 1 and 4"]
+        );
     }
 
     #[test]

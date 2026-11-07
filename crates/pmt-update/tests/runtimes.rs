@@ -92,7 +92,6 @@ impl Fixture {
             sources,
             Arc::new(|_| {}),
         )
-        .unwrap()
         .with_budget(Budget {
             max_stalled: 4,
             base: Duration::from_millis(5),
@@ -184,6 +183,42 @@ async fn a_digest_mismatch_deletes_the_download_and_installs_nothing() {
     assert_eq!(f.downloads_left(), 0, "the download is deleted");
     assert!(f.versions().is_empty(), "nothing is installed");
     assert!(f.store().installed("node").is_none());
+}
+
+/// An installer builds its HTTP client only when it downloads: every
+/// session start makes installers (browser, document tools) that rarely
+/// install anything, and a client build loads the system's root
+/// certificates. An installer whose client cannot be built (a bad
+/// `network.proxy`) is therefore made without error, serves what is
+/// installed, and fails only when it has to download.
+#[tokio::test]
+async fn an_installer_configures_its_http_client_only_when_it_downloads() {
+    let f = Fixture::new().await;
+    f.serve("/dist/node-v1.tar.gz", f.bytes.clone()).await;
+    let unbuildable = |store: Store| {
+        Installer::new(
+            store,
+            &pmt_net::OutboundPolicy {
+                proxy: Some("not a proxy url".to_owned()),
+                ..pmt_net::OutboundPolicy::default()
+            },
+            Sources::default(),
+            Arc::new(|_| {}),
+        )
+    };
+    let err = unbuildable(f.store()).install("node").await.unwrap_err();
+    assert_eq!(err.code().code, "net.client_init", "{}", err.message());
+
+    f.installer(Sources::default())
+        .install("node")
+        .await
+        .unwrap();
+    let installed = unbuildable(f.store()).install("node").await.unwrap();
+    assert!(
+        installed.dir.starts_with(&f.root),
+        "{}",
+        installed.dir.display()
+    );
 }
 
 #[tokio::test]

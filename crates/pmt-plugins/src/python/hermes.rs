@@ -198,6 +198,8 @@ fn read_as(dir: &Path, id: String) -> Result<Manifest, Error> {
         capabilities,
         requires_plugins: Vec::new(),
         kanban_lanes: Vec::new(),
+        automation_blueprints: Vec::new(),
+        delegation_router: None,
         build: None,
         launch: Some(launch),
         id,

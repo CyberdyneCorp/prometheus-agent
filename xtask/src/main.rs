@@ -260,7 +260,7 @@ mod tests {
 
         struct Changed;
         impl pmt_rpc::contracts::Method for Changed {
-            const NAME: &'static str = "worktree.new";
+            const NAME: &'static str = "journey.list";
             type Params = pmt_rpc::contracts::SessionRef;
             type Result = pmt_rpc::contracts::Ack;
         }

@@ -502,7 +502,19 @@ error_codes! {
         "`terminal.backend` names a backend that is neither built in nor provided by an enabled plugin; the error lists the available backends.");
     /// The selected terminal backend ships in a later milestone.
     TERMINAL_BACKEND_UNAVAILABLE = ("terminal.backend_unavailable", Unavailable,
-        "The selected terminal backend (`container`, `ssh`) is reserved but not available in this build.");
+        "The selected terminal backend is a reserved built-in name that is not available in this build.");
+    /// A plugin tried to register a built-in terminal backend name.
+    TERMINAL_BACKEND_RESERVED = ("terminal.backend_reserved", Config,
+        "A `terminal-backend` plugin registered a backend whose lower-cased name is `local`, `container`, `docker`, `podman` or `ssh`; the plugin backend is rejected and the built-in stays selectable.");
+    /// A plugin backend's isolation descriptor is missing a field or holds an invalid value.
+    TERMINAL_BACKEND_DESCRIPTOR = ("terminal.backend_descriptor", Config,
+        "A `terminal-backend` plugin's isolation descriptor (`isolation`, `uses_host_filesystem`, `default_cwd`, `session_isolated_when_ephemeral`, `persistent`) is missing a field or holds an invalid value, so the backend was rejected at load time.");
+    /// The container runtime is missing, unreachable or not rootless.
+    TERMINAL_CONTAINER_RUNTIME = ("terminal.container_runtime", Unavailable,
+        "The `container` backend found no reachable rootless Podman or Docker runtime (`terminal.container.runtime`).");
+    /// Container hardening would be weakened.
+    TERMINAL_CONTAINER_HARDENING = ("terminal.container_hardening", Sandbox,
+        "The container runtime rejected a hardening flag, or `terminal.container.extra_args`/`volumes` would weaken hardening, and `security.sandbox.allow_degraded` does not cover it; no container was started.");
     /// `terminal.env_passthrough` (or `terminal.container.env`) names a secret.
     TERMINAL_ENV_PASSTHROUGH_SECRET = ("terminal.env_passthrough_secret", Config,
         "`terminal.env_passthrough` or `terminal.container.env` names a secret (a stored secret, a provider credential, a `PMT_SECRET_*` or secret-looking name); grant it with `secrets.read:<NAME>` instead.");
@@ -827,8 +839,110 @@ error_codes! {
     /// A runtime store file could not be read or written.
     RUNTIME_IO = ("runtime.io", Io,
         "A file under `<PROMETHEUS_HOME>/runtimes/` could not be read, written or renamed.");
+    /// An id is neither a built-in nor a configured custom language server.
+    LSP_UNKNOWN_SERVER = ("lsp.unknown_server", Usage,
+        "The id is not a built-in language server or a custom server under `lsp.servers`; `prometheus lsp list` shows the ids.");
+    /// No binary of a language server was found.
+    LSP_NOT_FOUND = ("lsp.not_found", NotFound,
+        "The language server is neither in `<PROMETHEUS_HOME>/runtimes/lsp/` nor on `PATH`, and no `lsp.servers.<id>.command` names one; `prometheus lsp install <id>` installs `npm`, `go` and `pip` servers.");
+    /// A language server install failed or was skipped.
+    LSP_INSTALL = ("lsp.install", Unavailable,
+        "The server's installer (npm, pnpm, yarn, go or pip) is missing or failed; the message names it. A `manual` server is installed by following the printed instructions.");
+    /// `delegate_task` input that breaks the tool contract or a task rule.
+    DELEGATION_INVALID_TASK = ("delegation.invalid_task", InvalidInput,
+        "A `delegate_task` call has an unknown field, a blank or placeholder goal, too much context, too many images or an invalid `output_schema`; the message names the task index and the rule. No child was built.");
+    /// Spawning is paused for the profile.
+    DELEGATION_PAUSED = ("delegation.paused", Unavailable,
+        "`/delegation pause` stopped new spawns for this profile; control actions still work. Resume with `/delegation resume`.");
+    /// The caller is already at `delegation.max_spawn_depth`.
+    DELEGATION_DEPTH_LIMIT = ("delegation.depth_limit", PermissionDenied,
+        "The calling session is a child at `delegation.max_spawn_depth`; raise the setting (1-4) to let children spawn their own children.");
+    /// The session is closing or closed.
+    DELEGATION_SESSION_CLOSED = ("delegation.session_closed", Unavailable,
+        "The session ended (`/stop all`, `/new`, close); its children were stopped and it cannot spawn more.");
+    /// A spawn or cost budget of the run or root lineage is used up.
+    DELEGATION_BUDGET_EXHAUSTED = ("delegation.budget_exhausted", BudgetExceeded,
+        "The one-shot run used `delegation.oneshot_max_children` subagents, or the root lineage's budget has nothing left to give a child.");
+    /// A task asks for a tool, path, host or secret the parent lacks.
+    DELEGATION_GRANT_BROADENING = ("delegation.grant_broadening", PermissionDenied,
+        "A child's grant can only narrow its parent's: the task named tools, paths, hosts or secrets the parent does not hold (all listed in the message).");
+    /// A task names an agent definition the session does not know.
+    DELEGATION_UNKNOWN_AGENT = ("delegation.unknown_agent", InvalidInput,
+        "The task's `agent` is not among the definitions loaded at session start (`<profile>/agents/<name>.md`); definitions added later apply to new sessions.");
+    /// The concurrency queue is full.
+    DELEGATION_AT_CAPACITY = ("delegation.at_capacity", Unavailable,
+        "`delegation.max_concurrent_children` children run and `delegation.max_queued` spawns wait already; retry when one finishes.");
+    /// The configured router is unknown or unavailable.
+    DELEGATION_ROUTER_UNAVAILABLE = ("delegation.router_unavailable", Unavailable,
+        "`delegation.router` names a router no enabled plugin provides (or its plugin failed); spawns never fall back to `default`.");
+    /// A control action names a subagent outside the caller's spawn tree.
+    DELEGATION_NOT_IN_TREE = ("delegation.not_in_tree", NotFound,
+        "The subagent id is not a live child in this conversation's spawn tree; `delegate_task(action=\"list\")` shows the ones you can control.");
+    /// A plugin lifecycle handle is forged, foreign or expired.
+    DELEGATION_UNKNOWN_HANDLE = ("delegation.unknown_handle", NotFound,
+        "The subagent handle failed its signature check, belongs to another conversation or its result expired (results are kept 3600 s).");
+    /// `execute_code` would expose no tool.
+    EXECUTE_CODE_NO_TOOLS = ("execute_code.no_tools", PermissionDenied,
+        "The intersection of `code_execution.allowed_tools` with the session's granted tools is empty, so no script ran.");
+    /// `execute_code` refused before running anything.
+    EXECUTE_CODE_REFUSED = ("execute_code.refused", PermissionDenied,
+        "No code, no resolvable sandbox policy, a command that stops the serving gateway, or an approval that was not given; nothing ran.");
+    /// A worktree operation needs a git repository.
+    WORKTREE_NOT_A_REPOSITORY = ("worktree.not_a_repository", Usage,
+        "`chat -w`, `/worktree` and `worktrees prune --repo` need a directory inside a non-bare git repository with `git` on `PATH`.");
+    /// A worktree name is malformed or already used.
+    WORKTREE_INVALID_NAME = ("worktree.invalid_name", InvalidInput,
+        "A worktree name matches `[A-Za-z0-9._-]{1,64}` and must not exist yet under `<repo>/.worktrees/` or as branch `prometheus/<name>`.");
+    /// No archive of that tree exists.
+    WORKTREE_ARCHIVE_NOT_FOUND = ("worktree.archive_not_found", NotFound,
+        "No `refs/prometheus/archive/<name>` exists in the repository (or in any recorded repository); `prometheus worktrees list` shows the archives.");
+    /// A git command of a worktree operation failed.
+    WORKTREE_GIT = ("worktree.git", Io,
+        "git failed while creating, archiving, removing or restoring a worktree; the message carries git's error and nothing was removed.");
+    /// No scheduled job has that id or name.
+    CRON_JOB_NOT_FOUND = ("cron.job_not_found", NotFound,
+        "No job of the profile has that id or name; `prometheus cron list --all` shows every job, completed ones included.");
+    /// No run has that id.
+    CRON_RUN_NOT_FOUND = ("cron.run_not_found", NotFound,
+        "No run record has that id (records are kept for `cron.run_retention_secs`); `prometheus cron runs <job>` lists a job's runs.");
+    /// A job name matches several jobs.
+    CRON_AMBIGUOUS_NAME = ("cron.ambiguous_name", Usage,
+        "Several jobs share that name; the message lists their ids, and any of them selects one job.");
+    /// A schedule string is not in the grammar.
+    CRON_INVALID_SCHEDULE = ("cron.invalid_schedule", InvalidInput,
+        "The schedule is ambiguous (a bare duration), shorter than 60 s, in the past, or not one of `every <duration>`, a 5-field cron expression or day/time phrase, an RFC 3339 time, `at <time>`, `tomorrow at <time>` or `in <duration>`; nothing was saved.");
+    /// A job definition fails validation.
+    CRON_INVALID_JOB = ("cron.invalid_job", InvalidInput,
+        "The job has nothing to run, `no_agent` without a script, a script outside `<profile>/scripts`, an unknown skill, toolset, delivery target, model or provider, or a field out of range; nothing was saved.");
+    /// The prompt safety scan refused a job.
+    CRON_PROMPT_REJECTED = ("cron.prompt_rejected", PermissionDenied,
+        "The job's prompt holds an injection or concealment directive, a secret-exfiltration pattern or invisible Unicode; the message names the rule and nothing was saved.");
+    /// A job create or edit was not confirmed.
+    CRON_CONFIRMATION = ("cron.confirmation", PermissionDenied,
+        "Saving a job (or a changed schedule) needs a confirmation: answer `y` on a terminal or pass `--yes`; the command exits 4 and nothing was saved.");
+    /// Deterministic replay of a run is not available.
+    CRON_REPLAY_UNAVAILABLE = ("cron.replay_unavailable", Unavailable,
+        "Replaying a run against its recorded model responses needs the model-call cache and the replay provider, which this build does not have yet; `prometheus cron replay <run> --live` re-runs the recorded inputs against the current provider instead.");
+    /// A lifecycle operation does not apply to the job.
+    CRON_INVALID_STATE = ("cron.invalid_state", InvalidInput,
+        "The operation does not apply in the job's state (for example resuming a one-shot job whose time has passed); the message says how to change it.");
+    /// No incident has that id.
+    CRON_INCIDENT_NOT_FOUND = ("cron.incident_not_found", NotFound,
+        "No failure incident of the profile has that id; `prometheus cron incidents` lists them.");
+    /// A job's working directory is not an existing absolute directory.
+    CRON_INVALID_WORKDIR = ("cron.invalid_workdir", Usage,
+        "A job's `workdir` must be an absolute path to an existing directory; relative paths are refused and nothing was saved.");
+    /// A notepad write would exceed its limits.
+    CRON_NOTEPAD_LIMIT = ("cron.notepad_limit", InvalidInput,
+        "A job notepad key is at most 128 characters, a value at most 16 KiB and a notepad at most 64 KiB counting keys and values; the notepad is unchanged.");
+    /// A run of the job is already queued or running.
+    CRON_ALREADY_RUNNING = ("cron.already_running", Conflict,
+        "A run of the job is queued or running; wait for it (`prometheus cron runs <job>`) before starting another.");
+    /// An automation blueprint or slot value is not valid.
+    CRON_BLUEPRINT = ("cron.blueprint", InvalidInput,
+        "The blueprint name matches none of the catalog, or a slot value is invalid (the message names the slot and the accepted values); nothing was created.");
     /// A client frame is not JSON (JSON-RPC -32700).
-    RPC_PARSE = ("rpc.parse", InvalidInput,
+    RPC_PARSE =("rpc.parse", InvalidInput,
         "A client protocol frame is not valid JSON (JSON-RPC `-32700`); the connection keeps serving.");
     /// A frame is JSON but not a JSON-RPC 2.0 request (-32600).
     RPC_INVALID_REQUEST = ("rpc.invalid_request", InvalidInput,

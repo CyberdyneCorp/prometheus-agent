@@ -191,6 +191,34 @@ async fn model_calls_need_the_llm_grant_and_overrides_need_their_own() {
     assert_eq!(calls[0].session_id.as_deref(), Some("ses_test"));
 }
 
+/// Scenario: Plugin without the capability; Forged handle (the host
+/// import's side: the grant check, and the port's answer reaching the
+/// plugin as `unknown-handle`).
+#[tokio::test(flavor = "multi_thread")]
+async fn subagents_need_the_grant_and_reach_the_calling_session() {
+    let mut profile = Profile::new("default");
+    profile.install("bare", "testing-probe", TOOL, "");
+    profile.install("lead", "testing-probe", TOOL, "subagents = true");
+    let fake = Fake::new();
+    let runtime = Runtime::new().unwrap();
+    let loaded = profile.load(&runtime, &fake.ports());
+
+    let bare = instance(&loaded, "bare");
+    let denied = call(&bare, "subagent", "Map the parser").await.unwrap();
+    assert_eq!(denied.unwrap_err(), "capability_denied: subagents");
+    assert!(fake.seen.subagents.lock().unwrap().is_empty());
+
+    let lead = instance(&loaded, "lead");
+    let ran = call(&lead, "subagent", "Map the parser").await.unwrap();
+    assert_eq!(ran.unwrap(), r#"State::Running|{"status":"completed"}"#);
+    let forged = call(&lead, "forged_handle", "Map the parser")
+        .await
+        .unwrap();
+    assert_eq!(forged.unwrap_err(), "unknown_handle");
+    let seen = fake.seen.subagents.lock().unwrap();
+    assert!(seen.iter().all(|(session, _)| session == "ses_test"));
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn ungranted_imports_are_denied_and_always_on_ones_work() {
     let mut profile = Profile::new("default");

@@ -146,3 +146,20 @@ fn a_quick_command_shadows_a_skill_of_the_same_name() {
         assert!(r.warnings[0].contains("quick command") && r.warnings[0].contains("skill"));
     }
 }
+
+/// `/browser` belongs to terminal surfaces: a messaging platform refuses
+/// it with a message instead of sending it to the model (spec:
+/// execution-environments, Connecting to the user's browser).
+#[test]
+fn browser_is_refused_on_messaging_platforms() {
+    let r = registry();
+    assert!(r.help(Surface::Cli).contains("/browser"));
+    assert!(r.help(Surface::Tui).contains("/browser"));
+    assert!(!r.help(Surface::Gateway).contains("/browser"));
+    assert_eq!(
+        r.resolve("/browser connect", Surface::Gateway)
+            .message()
+            .unwrap(),
+        "/browser is not available here"
+    );
+}

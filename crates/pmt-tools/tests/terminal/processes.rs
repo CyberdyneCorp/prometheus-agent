@@ -4,13 +4,13 @@
 use std::time::Duration;
 
 use pmt_tools::terminal::process::{MAX_PROCESSES, ProcessArgs};
-use pmt_tools::terminal::{LocalTerminal, TerminalArgs};
+use pmt_tools::terminal::{Terminal, TerminalArgs};
 use serde_json::Value;
 
 use crate::common::{Fixture, ManualClock, with_notifications};
 use crate::foreground::gone;
 
-async fn background(session: &LocalTerminal, command: &str) -> String {
+async fn background(session: &Terminal, command: &str) -> String {
     let args = TerminalArgs {
         background: true,
         ..TerminalArgs::new(command)
@@ -20,7 +20,7 @@ async fn background(session: &LocalTerminal, command: &str) -> String {
     result.process_id.unwrap()
 }
 
-async fn act(session: &LocalTerminal, action: &str, id: Option<&str>) -> Value {
+async fn act(session: &Terminal, action: &str, id: Option<&str>) -> Value {
     session
         .processes()
         .handle(&ProcessArgs {
@@ -87,7 +87,7 @@ async fn bad_requests_name_the_problem() {
         act(&session, "kill", Some("proc_nope")).await["error"]
             .as_str()
             .unwrap()
-            .starts_with("no process matches")
+            .starts_with("unknown process id")
     );
 }
 
@@ -171,7 +171,7 @@ async fn a_long_job_is_kept_for_thirty_minutes_after_it_finishes() {
         act(&session, "poll", Some(&id)).await["error"]
             .as_str()
             .unwrap()
-            .starts_with("no process matches")
+            .starts_with("unknown process id")
     );
 }
 

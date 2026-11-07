@@ -176,5 +176,8 @@ def register(ctx):
     ctx.register_command("shout", lambda raw: raw.upper(), description="Shout it")
     ctx.register_cli_command("say", "Say a word", _cli_setup, _cli_run)
     ctx.register_system_prompt_section("echo.rules", "Echo plugin rules.")
+    ctx.register_automation_blueprint(
+        "standup", title="Standup notes", schedule="{time.minute} {time.hour} * * 1-5",
+        prompt="Collect standup notes", slots=[{"name": "time", "kind": "time", "default": "09:15"}])
     ctx.subscribe("other:*", _on_event)
     ctx.on_unload(lambda: open(os.path.join(os.environ["HOME"], "unloaded"), "w").close())

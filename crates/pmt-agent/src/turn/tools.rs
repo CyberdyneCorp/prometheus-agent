@@ -59,6 +59,14 @@ pub trait ToolPort: Send + Sync {
         turn_id: &'a str,
         cancel: &'a CancelToken,
     ) -> BoxFuture<'a, ToolBatch>;
+
+    /// Findings that must reach the model before the turn's final answer
+    /// is accepted: language-server diagnostics of edits still being
+    /// checked, waited for within their own bound (spec: lsp-diagnostics,
+    /// Diagnostics introduced by an edit).
+    fn settle(&self) -> BoxFuture<'_, Option<String>> {
+        Box::pin(async { None })
+    }
 }
 
 /// Per-call wall times reported by the dispatcher (pass one as the
@@ -161,13 +169,17 @@ impl AgentLoopCalls for LoopTools {
         &'a self,
         name: &'a str,
         arguments: Value,
-        _cancel: &'a CancelToken,
+        cancel: &'a CancelToken,
     ) -> SeamFuture<'a, ToolResult> {
-        // The dispatcher races the call against the cancel token.
+        // The dispatcher races the call against the cancel token; a
+        // delegation's synchronous children stop with it too.
         Box::pin(async move {
-            self.0.call(name, arguments).await.unwrap_or_else(|| {
-                ToolResult::error(format!("{name} must be handled by the agent loop"))
-            })
+            self.0
+                .call(name, arguments, cancel)
+                .await
+                .unwrap_or_else(|| {
+                    ToolResult::error(format!("{name} must be handled by the agent loop"))
+                })
         })
     }
 }
@@ -204,5 +216,17 @@ impl ToolPort for SessionTools {
         cancel: &'a CancelToken,
     ) -> BoxFuture<'a, ToolBatch> {
         Box::pin(self.run_all(calls, turn_id, cancel))
+    }
+
+    fn settle(&self) -> BoxFuture<'_, Option<String>> {
+        let lsp = pmt_tools::environments::Environments::process()
+            .session(self.dispatcher.session_id())
+            .and_then(|env| env.lsp.clone());
+        Box::pin(async move {
+            match lsp {
+                Some(lsp) => lsp.settle().await,
+                None => None,
+            }
+        })
     }
 }

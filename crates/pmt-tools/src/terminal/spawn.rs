@@ -38,25 +38,59 @@ pub struct Spawned {
     pub group: Group,
 }
 
-/// The process group of a command (Unix), for signalling the whole tree.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Group(Option<i32>);
+/// The process group of a command (Unix), for signalling the whole tree,
+/// and for a command on a container or SSH backend the remote group the
+/// local client stands for.
+#[derive(Debug, Clone)]
+pub struct Group {
+    pgid: Option<i32>,
+    remote: Option<std::sync::Arc<dyn RemoteGroup>>,
+}
+
+/// Signals a process group on a remote backend.
+pub trait RemoteGroup: Send + Sync + std::fmt::Debug {
+    /// Sends `TERM` (`kill = false`) or `KILL` to the remote group without
+    /// blocking the caller.
+    fn signal(&self, kill: bool);
+}
 
 impl Group {
+    /// The local group led by `pid` (Unix).
+    #[must_use]
+    pub fn local(pid: Option<u32>) -> Self {
+        Self {
+            pgid: if cfg!(unix) {
+                pid.and_then(|id| i32::try_from(id).ok())
+            } else {
+                None
+            },
+            remote: None,
+        }
+    }
+
+    /// Also signals `remote` whenever this group is signalled.
+    #[must_use]
+    pub fn with_remote(mut self, remote: std::sync::Arc<dyn RemoteGroup>) -> Self {
+        self.remote = Some(remote);
+        self
+    }
+
     /// Sends SIGTERM to every member.
-    pub fn terminate(self) {
+    pub fn terminate(&self) {
         self.signal(Signal::Term);
     }
 
     /// Sends SIGKILL to every member.
-    pub fn kill(self) {
+    pub fn kill(&self) {
         self.signal(Signal::Kill);
     }
 
-    #[cfg_attr(not(unix), allow(clippy::unused_self))]
-    fn signal(self, signal: Signal) {
+    fn signal(&self, signal: Signal) {
+        if let Some(remote) = &self.remote {
+            remote.signal(matches!(signal, Signal::Kill));
+        }
         #[cfg(unix)]
-        if let Some(pgid) = self.0 {
+        if let Some(pgid) = self.pgid {
             use nix::sys::signal::{Signal as Sig, killpg};
             let sig = match signal {
                 Signal::Term => Sig::SIGTERM,
@@ -106,11 +140,11 @@ impl GroupGuard {
 
 impl Drop for GroupGuard {
     fn drop(&mut self) {
-        let Some(group) = self.group else {
+        let Some(group) = self.group.take() else {
             return;
         };
         group.terminate();
-        if group.0.is_some() {
+        if group.pgid.is_some() || group.remote.is_some() {
             let grace = self.grace;
             std::thread::spawn(move || {
                 std::thread::sleep(grace);
@@ -170,16 +204,12 @@ pub fn spawn(
             Path::new(program).display()
         ))
     })?;
-    let group = Group(if cfg!(unix) {
-        child.id().and_then(|id| i32::try_from(id).ok())
-    } else {
-        None
-    });
+    let group = Group::local(child.id());
     Ok(Spawned { child, group })
 }
 
 /// Stops `child` and its group: SIGTERM, then SIGKILL after `grace`.
-pub async fn stop(child: &mut Child, group: Group, grace: Duration) -> Option<ExitStatus> {
+pub async fn stop(child: &mut Child, group: &Group, grace: Duration) -> Option<ExitStatus> {
     group.terminate();
     if cfg!(not(unix)) {
         let _ = child.start_kill();

@@ -31,6 +31,7 @@ mod artifacts;
 pub mod attachments;
 mod attention;
 pub mod auth;
+pub mod automation;
 mod cache;
 mod cards;
 pub mod conformance;
@@ -96,9 +97,9 @@ use tracing::Instrument as _;
 pub use adapter::{
     AccessPolicy, Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup,
     AdapterState, AdapterStatus, Addressing, Admission, Attachment, AudioOp, Button, ChatInfo,
-    Descriptor, HistoryEntry, HttpRequest, HttpResponse, Inbound, Interactive, LengthUnit, Markup,
-    MediaKind, MediaStream, MenuCommand, Outgoing, Private, Reaction, Select, SendError,
-    SenderVerdict, Sent, SessionHints, TaskCard, TaskStatus,
+    CronFire, Descriptor, HistoryEntry, HttpRequest, HttpResponse, Inbound, Interactive,
+    LengthUnit, Markup, MediaKind, MediaStream, MenuCommand, Outgoing, Private, Reaction, Select,
+    SendError, SenderVerdict, Sent, SessionHints, TaskCard, TaskStatus,
 };
 pub use agents::{Agents, BusyPolicy, Conversation, Lookup, ModelChoice, UpdateFromChat};
 pub use hooks::{Hook, HookBridge, Hooks, PreCommand};
@@ -299,6 +300,7 @@ pub fn paired_notice(pairing: &pmt_store::gateway::pairing::Pairing) -> NewOutbo
         kind: pmt_store::gateway::outbox::OutboundKind::System,
         body: "You are paired with this assistant now; send a message to start.".to_owned(),
         attachments: Vec::new(),
+        notify: None,
     }
 }
 
@@ -472,6 +474,16 @@ impl Gateway {
         }
         profile_routes::lend_configured(shared);
         menus::refresh(shared);
+    }
+
+    /// The message length limit of `profile`'s running `platform`
+    /// adapter.
+    #[must_use]
+    pub fn max_message_length(&self, profile: &str, platform: &str) -> Option<usize> {
+        self.shared
+            .adapters
+            .descriptor(profile, platform)
+            .map(|d| d.max_message_length)
     }
 
     /// Injects a background notification into a conversation (spec:

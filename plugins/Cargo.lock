@@ -500,6 +500,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "testing-backend"
+version = "0.1.0"
+dependencies = [
+ "wit-bindgen",
+]
+
+[[package]]
 name = "testing-hooks"
 version = "0.1.0"
 dependencies = [
@@ -523,6 +530,13 @@ dependencies = [
 
 [[package]]
 name = "testing-provider"
+version = "0.1.0"
+dependencies = [
+ "wit-bindgen",
+]
+
+[[package]]
+name = "testing-router"
 version = "0.1.0"
 dependencies = [
  "wit-bindgen",

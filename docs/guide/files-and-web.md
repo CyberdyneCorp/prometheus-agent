@@ -43,6 +43,48 @@ characters. When lines remain the result carries `next_offset`.
   `BLOCKED: You have already read this exact region ...`. A change on disk
   or a context compaction makes the region new again.
 
+### Documents
+
+Documents are converted to Markdown and paginated like text instead of
+being refused as binary:
+
+- `.ipynb` notebooks: cells in order, code fenced, outputs after them; an
+  output longer than 20,000 characters is cut with a marker giving a `jq`
+  command that prints all of it.
+- `.docx`: paragraphs (headings from the `Heading<N>` styles) and tables.
+- `.xlsx`: one table per sheet (the first row as header; at most 5,000 rows
+  and 256 columns per sheet).
+- SQLite databases (`.db`, `.sqlite`, `.sqlite3` with the SQLite header):
+  each table's `CREATE` statement, row count and first 5 rows, then the
+  indexes, views and triggers. The file is opened read-only and immutable,
+  so reading a live database never writes to it.
+- `.pdf`, `.doc`, `.xls`, `.ppt`, `.pptx`, `.odt`, `.ods`, `.odp`, `.rtf` and
+  `.epub` through the `doc-converter` runtime (the pinned
+  [xberg](https://github.com/xberg-io/xberg) CLI): from the managed runtime
+  store, else `xberg` on `PATH`, else installed on first use when
+  `runtimes.allow_lazy_install` allows (`prometheus runtimes install
+  doc-converter` installs it ahead of time). Without it these files keep the
+  binary-file refusal plus `install the doc-converter runtime to read <ext>
+  files`. A PDF in which more than 20% of the pages, or at least 10 pages,
+  have no text starts with `[EXTRACTION COVERAGE WARNING: <n> of <total>
+  pages in this PDF yielded no text ...]`, listing each empty page range with
+  the text extracted just before it.
+
+Files of a container, SSH or plugin backend are downloaded through the
+backend and converted on this host. Documents larger than 50 MB are not
+converted (a SQLite database read in place has no limit).
+
+The converter parses untrusted files, so it runs confined: under the OS
+sandbox it reads only a private copy of the document (under
+`<profile>/cache/documents/`, removed afterwards), its own runtime directory
+and the system toolchain, writes only a private temp directory and has no
+network; its environment is empty, it runs for at most two minutes and at
+most 64 MB of its output is read. It runs as `xberg extract <copy> --format
+json --no-config-discovery --extract-pages true --no-cache true
+--content-format markdown` with OCR disabled (a page without a text layer
+stays empty, which the coverage warning reports); PDFs are read page by page,
+other formats as one Markdown document.
+
 Refused outright: binary files, device files, named pipes and sockets,
 `/proc/<pid>/environ`, `mem`, `maps` and similar files, and project dotenv
 files (`.env`, `.env.*` except `.env.example`, `.env.sample` and
@@ -114,8 +156,9 @@ with the parser's message and line, or `skipped`. Rust, Python,
 JavaScript, TypeScript (and JSX/TSX), JSON, TOML and YAML are checked. A
 checker never fails or undoes the write: a file type without a checker, a
 file over 2 MiB, a checker that crashes or runs past 2 seconds all report
-`skipped`. Language-server diagnostics arrive with the LSP integration in a
-later release.
+`skipped`. When the syntax is clean, the file's language server reports
+the diagnostics the edit introduced as `lsp_diagnostics` (see
+[LSP diagnostics](lsp.md)).
 
 ## Searching
 

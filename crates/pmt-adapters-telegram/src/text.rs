@@ -184,5 +184,8 @@ fn text_body(message: &Outgoing, markup: Option<Markup>) -> Value {
     if !message.buttons.is_empty() {
         body["reply_markup"] = keyboard(message);
     }
+    if message.notify == Some(false) {
+        body["disable_notification"] = json!(true);
+    }
     body
 }

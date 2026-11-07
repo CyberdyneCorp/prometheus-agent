@@ -1,5 +1,5 @@
 //! The `terminal` and `process` tools over the session's
-//! [`LocalTerminal`] (spec: execution-environments, Local backend runs
+//! [`Terminal`] (spec: execution-environments, Local backend runs
 //! under the OS sandbox; Foreground result shaping; Background process
 //! registry).
 //!
@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 
 use super::process::{ACTIONS, ProcessArgs};
 use super::result::{Status as TerminalStatus, TerminalResult};
-use super::{LocalTerminal, TerminalArgs};
+use super::{Terminal, TerminalArgs};
 use crate::descriptor::{
     CallContext, Effect, HandlerFuture, Owner, RegisteredTool, ResourceClaims, ToolDescriptor,
     ToolFailure, ToolHandler,
@@ -49,10 +49,7 @@ pub fn tools(environments: &Arc<Environments>) -> Vec<RegisteredTool> {
     ]
 }
 
-fn terminal_of(
-    table: &Environments,
-    context: &CallContext,
-) -> Result<Arc<LocalTerminal>, ToolFailure> {
+fn terminal_of(table: &Environments, context: &CallContext) -> Result<Arc<Terminal>, ToolFailure> {
     part(table, context, "terminal", |env| env.terminal.clone())
 }
 

@@ -49,6 +49,11 @@ impl Fixture {
 
     /// A session with `linter` and capabilities beyond the fixture's.
     pub(crate) fn session_with(&self, linter: Linter, extra: &[&str]) -> FileSession {
+        FileSession::new(self.setup(linter, extra))
+    }
+
+    /// The setup of [`Fixture::session_with`].
+    pub(crate) fn setup(&self, linter: Linter, extra: &[&str]) -> FileSetup {
         let places = Places {
             user_home: self.home.clone(),
             workspace: self.work.clone(),
@@ -65,7 +70,7 @@ impl Fixture {
             .chain(extra.iter().map(|c| (*c).to_owned()));
         let capabilities = CapabilitySet::parse(caps).unwrap();
         let work = self.work.clone();
-        FileSession::new(FileSetup {
+        FileSetup {
             backend: Arc::new(LocalBackend::new(capabilities, places)),
             cwd: Arc::new(move || work.clone()),
             user_home: Some(self.home.clone()),
@@ -74,7 +79,9 @@ impl Fixture {
             },
             read_max_chars: pmt_tools::setting::fixed(100_000),
             linter,
-        })
+            documents: None,
+            edits: None,
+        }
     }
 
     pub(crate) fn path(&self, rel: &str) -> PathBuf {

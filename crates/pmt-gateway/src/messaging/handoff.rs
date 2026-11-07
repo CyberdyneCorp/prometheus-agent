@@ -82,9 +82,11 @@ impl Gateway {
         let store = shared.profile_store(profile)?;
         let id: pmt_core::id::SessionId = session.parse()?;
         let found = store.session(id)?;
-        let destination = self
-            .handoff_thread(profile, resolved, found.title.as_deref())
-            .await?;
+        let title = found
+            .title
+            .as_deref()
+            .unwrap_or("Continued from the terminal");
+        let destination = self.thread_for(profile, resolved, title).await?;
         store.park_handoff(
             &destination.platform,
             &destination.chat_id,
@@ -101,7 +103,7 @@ impl Gateway {
             &destination,
             &replay(session, &lines),
             &[],
-            OutboundKind::Notification,
+            (OutboundKind::Notification, None),
         )?;
         let label = destination.label();
         let notice = format!(
@@ -140,13 +142,18 @@ impl Gateway {
         }
     }
 
-    /// A new thread (or topic) for the session where the adapter opens
-    /// them and no thread was named; the chat itself otherwise.
-    async fn handoff_thread(
+    /// A new thread (or topic) titled `title` in `to` where its adapter
+    /// opens them and no thread was named; `to` itself otherwise (a
+    /// handoff, a continuable scheduled delivery).
+    ///
+    /// # Errors
+    ///
+    /// `gateway.target_refused` when the adapter fails to open one.
+    pub async fn thread_for(
         &self,
         profile: &str,
         to: Resolved,
-        title: Option<&str>,
+        title: &str,
     ) -> Result<Resolved, Error> {
         if to.thread_id.is_some() {
             return Ok(to);
@@ -157,7 +164,6 @@ impl Gateway {
         if !slot.adapter.describe().supports_threads {
             return Ok(to);
         }
-        let title = title.unwrap_or("Continued from the terminal");
         match slot.adapter.open_thread(&to.chat_id, title).await {
             Ok(thread) => Ok(Resolved {
                 thread_id: Some(thread),
@@ -166,7 +172,7 @@ impl Gateway {
             Err(SendError::Unsupported) => Ok(to),
             Err(err) => Err(Error::new(
                 &codes::GATEWAY_TARGET_REFUSED,
-                format!("no thread for the handoff: {}", err.describe()),
+                format!("no thread could be opened: {}", err.describe()),
             )),
         }
     }

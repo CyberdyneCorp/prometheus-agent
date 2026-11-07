@@ -111,8 +111,7 @@ async fn the_browser_runtime_is_installed_and_the_tools_become_available() {
         &pmt_net::OutboundPolicy::default(),
         Sources::default(),
         Arc::new(|_| {}),
-    )
-    .unwrap();
+    );
     let done = install(&installer, &runtimes(&steps)).await.unwrap();
     assert_eq!(done.len(), 2, "{done:?}");
 
@@ -144,8 +143,7 @@ async fn an_excluded_runtime_is_refused_before_any_download() {
             ..Sources::default()
         },
         Arc::new(|_| {}),
-    )
-    .unwrap();
+    );
     let err = install(&installer, &["chromium"]).await.unwrap_err();
     assert_eq!(err.code().code, "runtime.excluded");
     assert!(

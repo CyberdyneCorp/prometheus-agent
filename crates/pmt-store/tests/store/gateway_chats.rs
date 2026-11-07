@@ -184,6 +184,7 @@ fn attachments_survive_the_outbox() {
             as_document: true,
             as_voice: false,
         }],
+        notify: None,
     };
     let (entry, _) = store.enqueue_outbound(&new).unwrap();
     assert_eq!(entry.attachments, new.attachments);

@@ -18,11 +18,13 @@
 //! per-minute limit, its event list, its declarative filters, the
 //! one-hour idempotency window and its transform script. A
 //! `deliver_only` route then forwards the rendered prompt to its target
-//! without any model call.
+//! without any model call; a `cron_job` route fires that scheduled job
+//! with the rendered prompt as its run context (`jobs`).
 
 mod delivery;
 mod filter;
 mod guard;
+mod jobs;
 mod render;
 mod script;
 mod signature;
@@ -261,7 +263,9 @@ impl Webhook {
             text: &text,
             payload: &payload,
         };
-        let (answer, handled) = if route.deliver_only {
+        let (answer, handled) = if let Some(job) = &route.cron_job {
+            self.fire_job(&call, job).await
+        } else if route.deliver_only {
             self.forward(&call).await
         } else {
             self.start_turn(&call).await
@@ -557,8 +561,10 @@ impl Adapter for Webhook {
     }
 
     fn connect(&self, link: Arc<dyn AdapterLink>) -> AdapterFuture<'_, Result<(), AdapterError>> {
-        let connected = self.connect_with(link);
-        Box::pin(async move { connected })
+        Box::pin(async move {
+            jobs::check_routes(link.as_ref(), &self.routes).await?;
+            self.connect_with(link)
+        })
     }
 
     fn disconnect(&self) -> AdapterFuture<'_, ()> {

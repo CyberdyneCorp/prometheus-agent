@@ -39,6 +39,9 @@ pub(super) const CLIENT_COMMANDS: &[&str] = &[
     "battery",
 ];
 
+/// The session automation commands.
+const AUTOMATION: &[&str] = &["goal", "subgoal", "loop", "heartbeat"];
+
 fn refused(reason: impl Into<String>) -> Dispatched {
     Dispatched::Refused {
         reason: reason.into(),
@@ -63,6 +66,8 @@ struct Run<'a> {
     /// Where the command was typed: a client (`Cli`) or a messaging
     /// platform (`Gateway`).
     surface: Surface,
+    /// The platform's message length limit (gateway commands).
+    message_limit: Option<usize>,
     /// The surface plugin commands see in `session.info`: `gateway`, or
     /// for a client the surface that created the session (`cli`, `tui`,
     /// `desktop`...).
@@ -85,6 +90,7 @@ impl DaemonHost {
             registry: &registry,
             link: &link,
             surface: Surface::Cli,
+            message_limit: None,
             caller: session.live.surface(),
         };
         Ok(run.line(line_of(&params), 0).await)
@@ -110,14 +116,59 @@ impl DaemonHost {
             registry: &registry,
             link: &link,
             surface: Surface::Gateway,
+            message_limit: self.message_limit(profile, id),
             caller: "gateway",
         };
         Ok(run.line(input.to_owned(), 0).await)
     }
 }
 
+impl DaemonHost {
+    /// Saves the job the `/cron` echo of `session` showed (a client's `yes`
+    /// sent as a prompt); the notice says what happened.
+    pub(super) fn confirm_cron(
+        profile: &Profile,
+        session: &Loaded,
+        link: &Link,
+        confirmation: commands::cron::Confirmation,
+    ) -> String {
+        let registry = commands::registry(&profile.scope(), &session.live);
+        let run = Run {
+            session,
+            profile,
+            registry: &registry,
+            link,
+            surface: Surface::Cli,
+            message_limit: None,
+            caller: session.live.surface(),
+        };
+        let scope = profile.scope();
+        match commands::cron::confirm(&run.ctx(&scope), confirmation) {
+            Ok(notice) => notice,
+            Err(err) => reason(&err),
+        }
+    }
+
+    /// The message limit of the platform a gateway session talks on.
+    fn message_limit(&self, profile: &Profile, id: pmt_core::id::SessionId) -> Option<usize> {
+        let session = profile.store.session(id).ok()?;
+        let pmt_store::Origin::Gateway { platform, .. } = session.origin else {
+            return None;
+        };
+        self.gateway
+            .get()?
+            .max_message_length(&profile.scope().name().to_string(), &platform)
+    }
+}
+
 impl Run<'_> {
     async fn line(&self, line: String, depth: u8) -> Dispatched {
+        // A messaging `yes` the gateway's lookup routed here, answering a
+        // `/cron` echo; any other line drops the shown job.
+        if let Some(confirmation) = commands::cron::take(self.session.live.id, &line) {
+            let scope = self.profile.scope();
+            return done(commands::cron::confirm(&self.ctx(&scope), confirmation));
+        }
         match self.registry.resolve(&line, self.surface) {
             Resolution::Builtin { command, args } => self.builtin(command, &args).await,
             Resolution::External { command, args } => match command.source {
@@ -191,6 +242,14 @@ impl Run<'_> {
             }
         }
         match name {
+            "stop" if args.trim() == "all" => {
+                if let Some(delegation) = &session.live.delegation {
+                    delegation.stop_all();
+                }
+                Dispatched::Done {
+                    notice: "Stopped the turn and every subagent of this session.".to_owned(),
+                }
+            }
             "stop" => Dispatched::Done {
                 notice: "nothing is running".to_owned(),
             },
@@ -204,7 +263,20 @@ impl Run<'_> {
 
     async fn shared(&self, name: &str, args: &str) -> Dispatched {
         let scope = self.profile.scope();
-        match commands::run(&self.ctx(&scope), name, args).await {
+        let reply = commands::run(&self.ctx(&scope), name, args).await;
+        if AUTOMATION.contains(&name) {
+            // What a command set starts at the next idle boundary, and every
+            // surface shows it.
+            self.profile.automation_wake.notify_one();
+            let limits = crate::automation::limits(scope.config());
+            super::automation::publish(
+                &self.session.factory.store,
+                self.session.live.id,
+                self.link,
+                &limits,
+            );
+        }
+        match reply {
             Some(Ok(Reply::Text(notice))) => Dispatched::Done { notice },
             Some(Ok(Reply::Send(input))) => Dispatched::Send {
                 message: input.text,
@@ -230,6 +302,7 @@ impl Run<'_> {
             timestamps: scope.config().display.timestamps,
             running: self.session.busy.load(Ordering::Acquire),
             post: Arc::new(move |text| notice(&link, &text)),
+            message_limit: self.message_limit,
         }
     }
 

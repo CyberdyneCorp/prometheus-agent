@@ -5,13 +5,22 @@
 //! client drives. What only changes a client's display or which session
 //! it drives stays with that client.
 
+mod agents;
 mod background;
+mod blueprint;
+mod browser;
+pub mod cron;
+mod delegation;
+pub mod files;
 pub mod info;
 mod mcp;
 pub(crate) mod plugins;
 pub(crate) mod quick;
 mod refine;
+mod review;
 pub(crate) mod session;
+mod suggestions;
+pub mod worktree;
 
 use std::sync::Arc;
 
@@ -46,6 +55,8 @@ pub struct Ctx<'a> {
     pub running: bool,
     /// Where `/refine` posts its summary.
     pub post: Post,
+    /// The messaging platform's message length (gateway surfaces).
+    pub message_limit: Option<usize>,
 }
 
 /// What a command produced.
@@ -89,12 +100,21 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "reload-skills" => Ok(pmt_skills::reload::reload(&ctx.live.skills).render()),
         "refine" => refine::refine(ctx, args).await,
         "background" => background::background(ctx, args).await,
+        "agents" => agents::agents(ctx, args).await,
+        "review" => review::review(ctx, args).await,
+        "delegation" => delegation::delegation(ctx, args).await,
         "profile" => Ok(format!(
             "profile {} ({})",
             ctx.scope.name(),
             ctx.scope.dir().display()
         )),
-        "undo" => session::undo(ctx),
+        "undo" => files::undo(ctx, args),
+        "rollback" => files::rollback(ctx, args),
+        "diff" => Ok(files::diff(ctx, args)),
+        "sync" => Ok(ctx.live.sync_back().await.unwrap_or_else(|| {
+            "nothing to sync: the terminal backend has no remote workspace or terminal.sync_back is off"
+                .to_owned()
+        })),
         "rewind" => session::rewind(ctx, args),
         "compress" => session::compress(ctx, args).await,
         "model" => session::model(ctx, args).await,
@@ -102,6 +122,15 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "tools" => session::tools(ctx, args).await,
         "plugins" => plugins::plugins(ctx, args).await,
         "mcp" => mcp::mcp(ctx, args).await,
+        "browser" => browser::browser(ctx, args).await,
+        "worktree" => worktree::worktree(ctx, args).await,
+        "cron" => cron::cron(ctx, args),
+        "suggestions" => suggestions::suggestions(ctx, args),
+        "blueprint" => blueprint::blueprint(ctx, args),
+        "goal" => crate::automation::commands::goal(ctx, args).await,
+        "subgoal" => crate::automation::commands::subgoal(ctx, args),
+        "loop" => crate::automation::commands::looping(ctx, args),
+        "heartbeat" => crate::automation::commands::heartbeat(ctx, args),
         other => return state_command(ctx, other, args).map(|r| r.map(Reply::Text)),
     };
     Some(text.map(Reply::Text))

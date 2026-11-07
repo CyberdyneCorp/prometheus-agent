@@ -42,7 +42,7 @@ fn toolsets_list_marks_active_default_off_and_posture() {
     let toolsets = doc["toolsets"].as_array().unwrap();
     let get = |name: &str| toolsets.iter().find(|t| t["name"] == name).unwrap().clone();
     assert_eq!(get("core")["active"], true);
-    assert_eq!(get("core")["resolved"], 27);
+    assert_eq!(get("core")["resolved"], 28);
     assert_eq!(get("web")["active"], false);
     assert_eq!(get("video")["default_off"], true);
     assert_eq!(get("coding")["posture"], true);
@@ -72,7 +72,7 @@ fn surface_listing_follows_the_surface_config() {
 }
 
 #[test]
-fn core_listing_shows_the_27_tools_in_order() {
+fn core_listing_shows_the_28_tools_in_order() {
     let home = temp_home();
     let text = ok(&run(home.path(), &["toolsets", "show", "core"]));
     snapshot("toolsets-show-core.txt", &text);

@@ -113,6 +113,7 @@ fn every_shipped_toolset_expands_to_its_specified_tools() {
         "browser_cdp",
         "browser_dialog",
         "browser_vault",
+        "browser_close_profile",
     ];
     let file = ["read_file", "write_file", "patch", "search_files"];
     let table: Vec<(&str, Vec<String>)> = vec![
@@ -194,7 +195,7 @@ fn every_shipped_toolset_expands_to_its_specified_tools() {
     shipped.sort();
     listed.sort();
     assert_eq!(shipped, listed, "no toolset is missing from the table");
-    assert_eq!(CORE.len(), 27);
+    assert_eq!(CORE.len(), 28);
 }
 
 #[test]
@@ -293,11 +294,12 @@ async fn disabling_browser_keeps_search() {
         "browser_cdp",
         "browser_dialog",
         "browser_vault",
+        "browser_close_profile",
     ] {
         assert_eq!(surface.excluded()[name].to_string(), "disabled", "{name}");
     }
     let names: Vec<&str> = surface.names().collect();
-    assert_eq!(names.len(), CORE.len() - 4);
+    assert_eq!(names.len(), CORE.len() - 5);
 }
 
 /// spec: agent-turn-loop, clarify tool contract — surfaces with no

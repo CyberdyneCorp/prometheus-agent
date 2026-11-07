@@ -218,7 +218,7 @@ async fn undeclared_and_unserved_methods_have_their_codes() {
         .unwrap_err();
     assert_eq!(err.code, -32_601);
     assert_eq!(err.message, "unknown method: session.frobnicate");
-    let err = client.call("worktree.new", json!({})).await.unwrap_err();
+    let err = client.call("journey.list", json!({})).await.unwrap_err();
     assert_eq!(err.code, -32_006);
     assert_eq!(err.data.unwrap().code, "rpc.not_served");
 }

@@ -54,7 +54,11 @@ pub fn body(route: &Route, request: &Request) -> serde_json::Value {
         _ if route.supports_prompt_cache => request.cache.key.as_deref(),
         _ => None,
     };
-    wire::encode(route.wire_format, &request, &EncodeOptions { cache_key })
+    let mut body = wire::encode(route.wire_format, &request, &EncodeOptions { cache_key });
+    if let Some(overrides) = &request.body_overrides {
+        crate::request::apply_overrides(&mut body, overrides);
+    }
+    body
 }
 
 /// Request hooks of model providers registered by plugins (spec:

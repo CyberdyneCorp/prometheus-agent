@@ -109,6 +109,57 @@ pub trait Host: Send + Sync + 'static {
         })
     }
 
+    /// Undoes a session's file changes (`files.undo`), loading the
+    /// session first. Hosts without file snapshots refuse.
+    fn files_undo<'a>(
+        &'a self,
+        profile: &'a str,
+        params: pmt_rpc::contracts::FilesUndoParams,
+        link: Link,
+    ) -> HostFuture<'a, pmt_rpc::contracts::FilesUndone> {
+        let _ = (profile, params, link);
+        Box::pin(async {
+            Err(Error::new(
+                &pmt_core::error::codes::RPC_NOT_SERVED,
+                "this host has no file snapshots",
+            ))
+        })
+    }
+
+    /// Runs a `worktree.*` request on a session, loading it first. Hosts
+    /// without sessions in git checkouts refuse.
+    fn worktree<'a>(
+        &'a self,
+        profile: &'a str,
+        request: crate::worktree::WorktreeCall,
+        link: Link,
+    ) -> HostFuture<'a, crate::worktree::WorktreeReply> {
+        let _ = (profile, request, link);
+        Box::pin(async {
+            Err(Error::new(
+                &pmt_core::error::codes::RPC_NOT_SERVED,
+                "this host has no worktrees",
+            ))
+        })
+    }
+
+    /// Lists, previews or restores a session workspace's checkpoints
+    /// (`files.rollback`). Hosts without file snapshots refuse.
+    fn files_rollback<'a>(
+        &'a self,
+        profile: &'a str,
+        params: pmt_rpc::contracts::FilesRollbackParams,
+        link: Link,
+    ) -> HostFuture<'a, pmt_rpc::contracts::FilesRolledBack> {
+        let _ = (profile, params, link);
+        Box::pin(async {
+            Err(Error::new(
+                &pmt_core::error::codes::RPC_NOT_SERVED,
+                "this host has no file snapshots",
+            ))
+        })
+    }
+
     /// The credential vault of `profile` and its scope (`vault.*`). Hosts
     /// without profiles on disk refuse.
     ///
@@ -120,6 +171,51 @@ pub trait Host: Send + Sync + 'static {
         Err(Error::new(
             &pmt_core::error::codes::RPC_NOT_SERVED,
             "this host has no credential vault",
+        ))
+    }
+
+    /// The running language servers of `profile` (`lsp.status`). Hosts
+    /// without profiles on disk refuse.
+    ///
+    /// # Errors
+    ///
+    /// `rpc.not_served`; profile errors.
+    fn lsp_status(&self, profile: &str) -> Result<pmt_rpc::contracts::LspStatus, Error> {
+        let _ = profile;
+        Err(Error::new(
+            &pmt_core::error::codes::RPC_NOT_SERVED,
+            "this host runs no language servers",
+        ))
+    }
+
+    /// The automation blueprints of `profile` (`cron.blueprints.list`).
+    ///
+    /// # Errors
+    ///
+    /// `rpc.not_served`; profile errors.
+    fn cron_blueprints(&self, profile: &str) -> Result<pmt_rpc::contracts::BlueprintList, Error> {
+        let _ = profile;
+        Err(Error::new(
+            &pmt_core::error::codes::RPC_NOT_SERVED,
+            "this host has no scheduled jobs",
+        ))
+    }
+
+    /// Fills a blueprint of `profile` (`cron.blueprints.fill`).
+    ///
+    /// # Errors
+    ///
+    /// `rpc.not_served`; `cron.blueprint` for a bad value; the errors of
+    /// creating a job.
+    fn cron_blueprint_fill(
+        &self,
+        profile: &str,
+        params: &pmt_rpc::contracts::BlueprintFillParams,
+    ) -> Result<pmt_rpc::contracts::BlueprintFilled, Error> {
+        let _ = (profile, params);
+        Err(Error::new(
+            &pmt_core::error::codes::RPC_NOT_SERVED,
+            "this host has no scheduled jobs",
         ))
     }
 
@@ -235,6 +331,10 @@ pub struct Author {
     /// created with message timestamps; never stored in the text.
     #[serde(skip)]
     pub prefix: Option<String>,
+    /// What started an automated turn (`goal`, `loop`, `heartbeat`): the
+    /// host stores it as the user message's `origin`.
+    #[serde(skip)]
+    pub origin: Option<String>,
 }
 
 /// Receives a turn's answer text as it streams.
