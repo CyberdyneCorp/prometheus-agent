@@ -3137,6 +3137,7 @@ dependencies = [
  "serde",
  "serde_json",
  "similar",
+ "sysinfo",
  "tempfile",
  "tokio",
  "tracing",
