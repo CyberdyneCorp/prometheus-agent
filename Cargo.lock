@@ -3224,6 +3224,7 @@ name = "pmt-providers"
 version = "0.1.0"
 dependencies = [
  "base64 0.23.1",
+ "crc32fast",
  "fastrand",
  "getrandom 0.4.3",
  "jiff",
@@ -3238,6 +3239,7 @@ dependencies = [
  "ring",
  "serde",
  "serde_json",
+ "sha1",
  "sha2 0.11.1",
  "tempfile",
  "tokio",

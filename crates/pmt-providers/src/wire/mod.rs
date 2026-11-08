@@ -3,7 +3,9 @@
 //! stream decoding of the three native formats.
 
 mod anthropic;
+mod bedrock;
 mod chat;
+mod gemini;
 mod responses;
 
 pub(crate) use anthropic::API_VERSION as ANTHROPIC_VERSION;
@@ -17,7 +19,7 @@ use serde_json::Value;
 use pmt_core::error::{Error, codes};
 
 use crate::classify::ProviderError;
-use crate::descriptor::WireNeed;
+use crate::descriptor::{BundledWire, WireNeed};
 use crate::event::Normalizer;
 use crate::registry::Provider;
 use crate::request::Request;
@@ -37,6 +39,49 @@ pub enum WireSource {
     Model,
     /// Chat Completions, the format of OpenAI-compatible relays.
     Default,
+    /// The deployment's metadata (Azure AI Foundry).
+    Detected,
+}
+
+/// The wire a route speaks: a native format, or a bundled plugin's format
+/// (then `format` is only what native-format decisions of the turn loop,
+/// such as cache markers, see: Chat Completions).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Choice {
+    /// The native format.
+    pub format: WireFormat,
+    /// Why.
+    pub source: WireSource,
+    /// The bundled plugin format that replaces `format`, if any.
+    pub bundled: Option<BundledWire>,
+}
+
+impl Choice {
+    /// The name traces and listings show.
+    #[must_use]
+    pub fn name(&self) -> &'static str {
+        self.bundled
+            .map_or(self.format.as_str(), BundledWire::as_str)
+    }
+}
+
+/// [`select_for`] plus the bundled plugin format a descriptor declares,
+/// which applies unless config or a host rule chose a native format (a
+/// `gemini` base URL ending `/openai` speaks Chat Completions).
+#[must_use]
+pub fn choose(provider: &Provider, base_url: &str, model: Option<&str>) -> Choice {
+    let (format, source) = select_for(provider, base_url, model);
+    let bundled = match provider.descriptor().wire_need {
+        WireNeed::Bundled(wire) if !matches!(source, WireSource::Config | WireSource::HostRule) => {
+            Some(wire)
+        }
+        _ => None,
+    };
+    Choice {
+        format,
+        source,
+        bundled,
+    }
 }
 
 /// Selects the wire format of `provider` at `base_url`: explicit config,
@@ -149,6 +194,37 @@ pub(crate) fn encode(format: WireFormat, request: &Request, options: &EncodeOpti
         WireFormat::ChatCompletions => chat::encode(request, options),
         WireFormat::Responses => responses::encode(request, options),
         WireFormat::AnthropicMessages => anthropic::encode(request),
+    }
+}
+
+/// The request body of a bundled plugin format.
+pub(crate) fn encode_bundled(wire: BundledWire, request: &Request) -> Value {
+    match wire {
+        BundledWire::GeminiNative => gemini::encode(request),
+        BundledWire::BedrockConverse => bedrock::encode(request),
+    }
+}
+
+/// The streaming endpoint of a bundled plugin format for `model`.
+pub(crate) fn bundled_endpoint(wire: BundledWire, base_url: &str, model: &str) -> String {
+    let base = base_url.trim_end_matches('/');
+    match wire {
+        BundledWire::GeminiNative => {
+            let model = model.strip_prefix("models/").unwrap_or(model);
+            format!("{base}/models/{model}:streamGenerateContent?alt=sse")
+        }
+        BundledWire::BedrockConverse => {
+            let model = percent_encoding::utf8_percent_encode(model, crate::aws::PATH_SEGMENT);
+            format!("{base}/model/{model}/converse-stream")
+        }
+    }
+}
+
+/// A fresh decoder for a bundled plugin format.
+pub(crate) fn bundled_decoder(wire: BundledWire) -> Box<dyn Decode> {
+    match wire {
+        BundledWire::GeminiNative => Box::<gemini::Decoder>::default(),
+        BundledWire::BedrockConverse => Box::<bedrock::Decoder>::default(),
     }
 }
 

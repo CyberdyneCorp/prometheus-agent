@@ -111,6 +111,7 @@ pub(crate) fn pick(
         index -= 1;
     }
     let provider = providers[index];
+    super::list::list_scoped(models, provider);
     let choices = models.model_ids(provider);
     let Some(model) = ask_or_type(input, out, "model", &choices)? else {
         return Ok(None);

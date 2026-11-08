@@ -15,6 +15,7 @@ use tokio::time::{Instant, timeout_at};
 
 use crate::classify::{self, ErrorClass, ProviderError};
 use crate::cost::Pending;
+use crate::descriptor::BundledWire;
 use crate::event::{Normalizer, StopReason, StreamEvent, Usage};
 use crate::mock::{self, Feed, Mock};
 use crate::request::Request;
@@ -62,7 +63,10 @@ pub fn body(route: &Route, request: &Request) -> serde_json::Value {
         cache_key,
         compaction,
     };
-    let mut body = wire::encode(route.wire_format, &request, &options);
+    let mut body = match route.bundled {
+        Some(bundled) => wire::encode_bundled(bundled, &request),
+        None => wire::encode(route.wire_format, &request, &options),
+    };
     if let Some(extra) = &route.body_extra {
         crate::request::apply_overrides(&mut body, extra);
     }
@@ -299,15 +303,24 @@ async fn send_http(
     };
     headers.extend(extra);
     let body = serde_json::to_vec(&body).expect("JSON values serialize");
+    let url = match route.bundled {
+        Some(bundled) => wire::bundled_endpoint(bundled, &route.base_url, &route.model),
+        None => wire::endpoint(route.wire_format, &route.base_url),
+    };
+    if route.bundled == Some(BundledWire::BedrockConverse) {
+        headers.extend(bedrock_signature(route, &url, &body)?);
+    }
     let mut builder = client
-        .post(wire::endpoint(route.wire_format, &route.base_url))
+        .post(url)
         .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
-        .header("accept", "text/event-stream")
+        .header("accept", accept(route))
         .body(body);
     for (name, value) in headers {
         builder = builder.header(name, value);
     }
-    builder = authenticate(builder, route);
+    if route.bundled != Some(BundledWire::BedrockConverse) {
+        builder = authenticate(builder, route);
+    }
     let response = match timeout_at(limits.deadline, builder.send()).await {
         Err(_) => return Err(timed_out("no response within the request timeout")),
         Ok(Err(err)) => return Err(transport_error(&err)),
@@ -330,17 +343,100 @@ async fn send_http(
     }
     let body = HttpBody {
         response: Some(response),
-        parser: SseParser::default(),
-        decoder: wire::decoder(route.wire_format),
+        framing: Framing::of(route),
+        decoder: match route.bundled {
+            Some(bundled) => wire::bundled_decoder(bundled),
+            None => wire::decoder(route.wire_format),
+        },
     };
     ModelStream::start(Source::Http(body), limits).await
 }
 
+/// The `accept` header: Bedrock streams AWS event-stream frames.
+fn accept(route: &Route) -> &'static str {
+    if route.bundled == Some(BundledWire::BedrockConverse) {
+        "application/vnd.amazon.eventstream"
+    } else {
+        "text/event-stream"
+    }
+}
+
+/// The `SigV4` headers of a Bedrock request, signed with the AWS keys the
+/// credential chain minted for the route.
+fn bedrock_signature(
+    route: &Route,
+    url: &str,
+    body: &[u8],
+) -> Result<Vec<(String, String)>, ProviderError> {
+    let keys = route
+        .credential
+        .value()
+        .and_then(crate::aws::Keys::from_secret)
+        .ok_or_else(|| ProviderError::new(ErrorClass::Auth, "no AWS credentials for the route"))?;
+    let parsed = reqwest::Url::parse(url)
+        .map_err(|e| ProviderError::new(ErrorClass::Config, format!("bad Bedrock URL: {e}")))?;
+    let region = route
+        .region
+        .as_deref()
+        .unwrap_or(crate::aws::DEFAULT_REGION);
+    Ok(crate::aws::sigv4::sign(
+        &crate::aws::sigv4::Signing {
+            method: "POST",
+            url: &parsed,
+            headers: &[],
+            body,
+            region,
+            service: crate::aws::SERVICE,
+            now: Timestamp::now(),
+        },
+        &keys,
+    ))
+}
+
+/// How a response body is split into events.
+#[derive(Debug)]
+enum Framing {
+    /// Server-Sent Events (every format but Bedrock's).
+    Sse(SseParser),
+    /// AWS event-stream frames.
+    Aws(crate::aws::eventstream::Parser),
+}
+
+impl Framing {
+    fn of(route: &Route) -> Self {
+        if route.bundled == Some(BundledWire::BedrockConverse) {
+            Self::Aws(crate::aws::eventstream::Parser::default())
+        } else {
+            Self::Sse(SseParser::default())
+        }
+    }
+
+    fn feed(&mut self, bytes: &[u8]) -> Result<Vec<crate::sse::SseEvent>, ProviderError> {
+        match self {
+            Self::Sse(parser) => Ok(parser.feed(bytes)),
+            Self::Aws(parser) => parser.feed(bytes).map_err(|why| wire::malformed(&why)),
+        }
+    }
+
+    fn finish(&mut self) -> Option<crate::sse::SseEvent> {
+        match self {
+            Self::Sse(parser) => parser.finish(),
+            // A partial frame at the end is a truncated stream.
+            Self::Aws(_) => None,
+        }
+    }
+}
+
+/// Adds the route's credential: in its provider's key header
+/// (`x-goog-api-key`, `api-key`, Anthropic's `x-api-key`), else as a
+/// bearer token, which sign-ins and `key_header = "authorization"` routes
+/// always use.
 pub(crate) fn authenticate(
     builder: reqwest::RequestBuilder,
     route: &Route,
 ) -> reqwest::RequestBuilder {
-    let builder = if route.wire_format == WireFormat::AnthropicMessages {
+    let anthropic = route.wire_format == WireFormat::AnthropicMessages && route.bundled.is_none();
+    let builder = if anthropic {
         builder.header("anthropic-version", wire::ANTHROPIC_VERSION)
     } else {
         builder
@@ -348,18 +444,26 @@ pub(crate) fn authenticate(
     let Some(secret) = route.credential.value() else {
         return builder;
     };
-    let mut value =
-        if route.wire_format == WireFormat::AnthropicMessages && !route.credential.is_bearer() {
-            HeaderValue::from_str(secret.expose())
-        } else {
-            HeaderValue::from_str(&format!("Bearer {}", secret.expose()))
-        }
-        .unwrap_or_else(|_| HeaderValue::from_static(""));
-    value.set_sensitive(true);
-    if route.wire_format == WireFormat::AnthropicMessages && !route.credential.is_bearer() {
-        return builder.header("x-api-key", value);
+    let key_header = match route.key_header.as_deref() {
+        _ if route.credential.is_bearer() => None,
+        Some(name) if name.eq_ignore_ascii_case("authorization") => None,
+        Some(name) => Some(name),
+        None if anthropic => Some("x-api-key"),
+        None => None,
+    };
+    let sensitive = |text: &str| {
+        let mut value =
+            HeaderValue::from_str(text).unwrap_or_else(|_| HeaderValue::from_static(""));
+        value.set_sensitive(true);
+        value
+    };
+    if let Some(name) = key_header {
+        return builder.header(name, sensitive(secret.expose()));
     }
-    let builder = builder.header(reqwest::header::AUTHORIZATION, value);
+    let builder = builder.header(
+        reqwest::header::AUTHORIZATION,
+        sensitive(&format!("Bearer {}", secret.expose())),
+    );
     subscription_identity(builder, route)
 }
 
@@ -443,7 +547,7 @@ enum Source {
 #[derive(Debug)]
 struct HttpBody {
     response: Option<reqwest::Response>,
-    parser: SseParser,
+    framing: Framing,
     decoder: Box<dyn Decode>,
 }
 
@@ -459,7 +563,7 @@ impl HttpBody {
         };
         let Some(bytes) = chunk else {
             self.response = None;
-            if let Some(event) = self.parser.finish() {
+            if let Some(event) = self.framing.finish() {
                 self.decoder.event(&event, out)?;
             }
             if !out.is_finished() {
@@ -467,7 +571,7 @@ impl HttpBody {
             }
             return Ok(());
         };
-        for event in self.parser.feed(&bytes) {
+        for event in self.framing.feed(&bytes)? {
             self.decoder.event(&event, out)?;
         }
         Ok(())

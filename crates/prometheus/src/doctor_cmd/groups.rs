@@ -430,6 +430,7 @@ pub(super) async fn providers(inputs: &Inputs<'_>) -> Result<Vec<Check>, Error> 
         checks.push(check);
     }
     checks.extend(retired_models(inputs));
+    checks.extend(super::aws::checks(inputs).await);
     let local = super::wsl::local_endpoints(inputs.scope);
     checks.extend(
         super::wsl::checks(pmt_providers::wsl::detect(), &local, super::wsl::answers).await,

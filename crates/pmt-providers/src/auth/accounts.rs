@@ -504,6 +504,16 @@ impl CredentialExtras for Accounts {
     fn detector(&self) -> Option<&crate::detect::Detector> {
         self.detector.as_ref()
     }
+
+    fn mint<'a>(
+        &'a self,
+        provider: &'a Provider,
+    ) -> BoxFuture<'a, Option<Result<pmt_core::secret::SecretString, Error>>> {
+        Box::pin(async move {
+            let minter = self.minter.as_ref()?;
+            Some(minter.token(provider, &*self.secrets).await)
+        })
+    }
 }
 
 impl CredentialHooks for Accounts {

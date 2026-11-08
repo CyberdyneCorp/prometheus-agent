@@ -150,6 +150,15 @@ pub struct Route {
     pub body_extra: Option<std::sync::Arc<serde_json::Map<String, serde_json::Value>>>,
     /// The route's fast mode tier, when it has one.
     pub fast_tier: Option<crate::fast::FastTier>,
+    /// The bundled provider plugin format the route speaks instead of
+    /// `wire_format` (spec: model-providers, Gemini native and AWS Bedrock
+    /// providers).
+    pub bundled: Option<crate::descriptor::BundledWire>,
+    /// The header the credential is sent in instead of the format's own
+    /// (`authorization` forces a bearer token).
+    pub key_header: Option<String>,
+    /// The region a Bedrock route's requests are signed for.
+    pub region: Option<String>,
 }
 
 impl Route {
@@ -435,18 +444,18 @@ impl Resolver<'_> {
             .model
             .clone()
             .or_else(|| provider.descriptor().default_model.clone());
-        let (wire_format, wire_source) = wire::select_for(provider, &base_url, model.as_deref());
+        let choice = wire::choose(provider, &base_url, model.as_deref());
         trace.ok(
             "wire_format",
             format!(
                 "{} (from {})",
-                wire_format.as_str(),
-                wire_source_name(wire_source)
+                choice.name(),
+                wire_source_name(choice.source)
             ),
         );
         trace.check(
             "wire_format",
-            wire::available(provider, wire_source).map_or(Ok(()), Err),
+            wire::available(provider, choice.source).map_or(Ok(()), Err),
         )?;
         if let Some(model) = &model {
             // A retired model refuses the route whatever its credential, and
@@ -466,15 +475,33 @@ impl Resolver<'_> {
         trace.ok("credential", credential.describe());
         let model = trace.check("model", model.ok_or_else(|| no_model(provider.id())))?;
         trace.ok("model", model.clone());
+        let detected = self
+            .deployment_wire(provider, choice, base_url, &credential, &model, trace)
+            .await;
+        let (choice, base_url) = trace.check("wire_format", detected)?;
+        Ok(self.route(provider, choice, base_url, credential, model))
+    }
+
+    /// The route of `provider` once every step passed.
+    fn route(
+        &self,
+        provider: &Provider,
+        choice: wire::Choice,
+        base_url: String,
+        credential: Credential,
+        model: String,
+    ) -> Route {
         let settings = provider.settings();
-        Ok(Route {
+        let bedrock = choice.bundled == Some(crate::descriptor::BundledWire::BedrockConverse);
+        Route {
             provider: provider.id().to_owned(),
-            wire_format,
-            wire_source,
+            wire_format: choice.format,
+            wire_source: choice.source,
             credential,
-            supports_prompt_cache: provider.supports_prompt_cache(),
+            supports_prompt_cache: provider.supports_prompt_cache() && choice.bundled.is_none(),
             supports_server_compaction: provider.supports_server_compaction()
-                && wire_format == WireFormat::Responses,
+                && choice.format == WireFormat::Responses
+                && choice.bundled.is_none(),
             local: provider.descriptor().local,
             retry: RetryPolicy::new(settings.max_retries),
             timeouts: Timeouts {
@@ -483,10 +510,78 @@ impl Resolver<'_> {
             },
             affinity_header: provider.descriptor().session_affinity_header.clone(),
             body_extra: crate::upstream::extras(self.config, provider.id(), &model),
-            fast_tier: crate::fast::tier(provider.id(), wire_format, &base_url),
+            fast_tier: crate::fast::tier(provider.id(), choice.format, &base_url)
+                .filter(|_| choice.bundled.is_none()),
+            bundled: choice.bundled,
+            key_header: key_header(provider, choice),
+            region: bedrock.then(|| crate::aws::region(provider)),
             model,
             base_url,
-        })
+        }
+    }
+
+    /// The wire an Azure AI Foundry deployment needs (spec:
+    /// model-providers, Azure AI Foundry provider): Anthropic Messages at
+    /// the resource's `/anthropic` endpoint for a deployment serving a
+    /// Claude model, else Responses or Chat Completions, from the
+    /// deployment's metadata. Only for providers whose format is detected
+    /// and not chosen by config or a host rule; when the metadata cannot
+    /// be read the chosen format stays.
+    async fn deployment_wire(
+        &self,
+        provider: &Provider,
+        choice: wire::Choice,
+        base_url: String,
+        credential: &Credential,
+        model: &str,
+        trace: &mut Trace,
+    ) -> Result<(wire::Choice, String), Error> {
+        let detected = provider.descriptor().wire_need == crate::descriptor::WireNeed::Detected
+            && !matches!(choice.source, WireSource::Config | WireSource::HostRule);
+        let Some(detector) = self.extras.detector().filter(|_| detected) else {
+            return Ok((choice, base_url));
+        };
+        let auth = match credential.value() {
+            Some(key) => crate::azure::Auth::Key(key.clone()),
+            None => match self.extras.mint(provider).await {
+                Some(token) => crate::azure::Auth::Bearer(token?),
+                None => return Ok((choice, base_url)),
+            },
+        };
+        let ttl = provider.settings().catalog_ttl_secs;
+        let Some(deployment) = detector
+            .foundry_deployment(&base_url, model, &auth, ttl)
+            .await
+        else {
+            trace.ok(
+                "wire_format",
+                format!(
+                    "deployment '{model}' not found in the resource's deployment list; keeping {}",
+                    choice.name()
+                ),
+            );
+            return Ok((choice, base_url));
+        };
+        let format = crate::azure::wire_for(&deployment.model);
+        let base_url = if format == WireFormat::AnthropicMessages {
+            crate::azure::anthropic_base(&base_url)
+        } else {
+            base_url
+        };
+        trace.ok(
+            "wire_format",
+            format!(
+                "{} (from the deployment's metadata: it serves {})",
+                format.as_str(),
+                deployment.model
+            ),
+        );
+        let choice = wire::Choice {
+            format,
+            source: WireSource::Detected,
+            bundled: None,
+        };
+        Ok((choice, base_url))
     }
 
     /// The base URL and how it was found: the mock's fixed one, an
@@ -507,7 +602,9 @@ impl Resolver<'_> {
             return Ok(plain(url.to_owned()));
         }
         let id = provider.id();
-        if let Some(url) = vertex_endpoint(provider) {
+        if let Some(url) =
+            vertex_endpoint(provider).or_else(|| crate::aws::runtime_endpoint(provider))
+        {
             return Ok(plain(url));
         }
         if let Some(detected) = self.detected(provider).await? {
@@ -615,7 +712,26 @@ fn wire_source_name(source: WireSource) -> &'static str {
         WireSource::Descriptor => "descriptor",
         WireSource::Model => "the model's row of the descriptor",
         WireSource::Default => "default",
+        WireSource::Detected => "the deployment's metadata",
     }
+}
+
+/// The header the route's credential goes in: a bearer token for an
+/// Entra ID token, the provider's key header for its own format, else
+/// the format's (a Gemini route on the OpenAI-compatible endpoint uses
+/// Chat Completions' bearer token).
+fn key_header(provider: &Provider, choice: wire::Choice) -> Option<String> {
+    if provider.auth() == pmt_config::schema::ProviderAuth::EntraId {
+        return Some("authorization".to_owned());
+    }
+    let bundled_need = matches!(
+        provider.descriptor().wire_need,
+        crate::descriptor::WireNeed::Bundled(_)
+    );
+    if bundled_need && choice.bundled.is_none() {
+        return None;
+    }
+    provider.descriptor().key_header.clone()
 }
 
 #[cfg(test)]

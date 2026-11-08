@@ -570,7 +570,8 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `providers.<name>.aliases` | array of string | `[]` | any | `next_session` | Extra names a custom provider answers to. |
 | `providers.<name>.allow_insecure_http` | boolean | `false` | any | `next_session` | Allow a plain `http://` base URL on a public host (plain HTTP to loopback and private-network hosts is always allowed). |
 | `providers.<name>.args` | array of string | `[]` | any | `next_session` | Arguments of `command`. |
-| `providers.<name>.auth` | one of "api_key", "oauth", "token_mint", "external_process", "aws_chain", "none" | unset | `"api_key"`, `"oauth"`, `"token_mint"`, `"external_process"`, `"aws_chain"`, `"none"` | `next_session` | Credential kind of a custom provider; unset uses the built-in provider's, or `api_key` when `key_secret` is set and `none` otherwise. |
+| `providers.<name>.auth` | one of "api_key", "oauth", "token_mint", "external_process", "aws_chain", "entra_id", "none" | unset | `"api_key"`, `"oauth"`, `"token_mint"`, `"external_process"`, `"aws_chain"`, `"entra_id"`, `"none"` | `next_session` | Credential kind of a custom provider; unset uses the built-in provider's, or `api_key` when `key_secret` is set and `none` otherwise. |
+| `providers.<name>.aws_profile` | string | unset | any | `next_session` | The shared AWS profile (`~/.aws/config`, `~/.aws/credentials`) the `bedrock` credential chain reads; `default` when unset. |
 | `providers.<name>.base_url` | string | unset | any | `next_session` | API base URL. |
 | `providers.<name>.catalog_ttl_secs` | integer | `86400` | ≥ 0 | `next_session` | Lifetime of the cached live model listing. |
 | `providers.<name>.command` | string | unset | any | `next_session` | The agent CLI an `auth = "external_process"` provider drives over the Agent Client Protocol (`claude`), found by the executable lookup. |
@@ -600,7 +601,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `providers.<name>.pool_strategy` | one of "fill_first", "round_robin", "random", "least_used" | `"fill_first"` | `"fill_first"`, `"round_robin"`, `"random"`, `"least_used"` | `next_session` | Credential pool selection. |
 | `providers.<name>.prefer_credential` | one of "subscription", "api_key" | `"subscription"` | `"subscription"`, `"api_key"` | `next_session` | Which credential wins when both exist. |
 | `providers.<name>.project` | string | unset | any | `next_session` | Google Cloud project of a `vertex` provider. |
-| `providers.<name>.region` | string | unset | any | `next_session` | Google Cloud region of a `vertex` provider (`us-central1`). |
+| `providers.<name>.region` | string | unset | any | `next_session` | Cloud region: of a `vertex` provider (`us-central1`), or of a `bedrock` provider (`eu-west-1`; `us-east-1` when unset). |
 | `providers.<name>.request_timeout_secs` | integer | `600` | ≥ 0 | `next_session` | Per-request timeout. |
 | `providers.<name>.script` | string | unset | any | `next_session` | Script file of the built-in `mock` provider. |
 | `providers.<name>.stream_idle_timeout_secs` | integer | `120` | ≥ 0 | `next_session` | Longest gap between stream events. |

@@ -98,11 +98,9 @@ pub fn parse(body: &Value) -> Vec<Listed> {
 }
 
 fn parse_model(item: &Value) -> Option<Listed> {
-    let id = item
-        .get("id")
-        .or_else(|| item.get("name"))?
-        .as_str()?
-        .to_owned();
+    // Gemini names its models `models/<id>`.
+    let id = item.get("id").or_else(|| item.get("name"))?.as_str()?;
+    let id = id.strip_prefix("models/").unwrap_or(id).to_owned();
     let number = |keys: &[&str]| {
         keys.iter()
             .find_map(|k| item.pointer(k).and_then(Value::as_u64))
@@ -118,8 +116,13 @@ fn parse_model(item: &Value) -> Option<Listed> {
             "/context_window",
             "/max_model_len",
             "/meta/n_ctx_train",
+            "/inputTokenLimit",
         ]),
-        max_output_tokens: number(&["/top_provider/max_completion_tokens", "/max_output_tokens"]),
+        max_output_tokens: number(&[
+            "/top_provider/max_completion_tokens",
+            "/max_output_tokens",
+            "/outputTokenLimit",
+        ]),
         supports_tools: parameters.map(|p| p.iter().any(|v| v == "tools")),
         supports_vision: modalities.map(|m| m.iter().any(|v| v == "image")),
         price: price(item.get("pricing")),

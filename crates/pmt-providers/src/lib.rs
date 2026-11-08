@@ -12,6 +12,8 @@
 pub mod account;
 pub mod auth;
 pub mod auxiliary;
+pub mod aws;
+pub mod azure;
 pub mod builtin;
 pub mod caller;
 pub mod capability;

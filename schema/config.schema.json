@@ -5986,6 +5986,11 @@
           "type": "string"
         },
         {
+          "const": "entra_id",
+          "description": "A Microsoft Entra ID bearer token minted from the Azure CLI login\nor a managed identity (`azure-foundry`).",
+          "type": "string"
+        },
+        {
           "const": "none",
           "description": "No credential (local servers).",
           "type": "string"
@@ -6027,6 +6032,13 @@
             }
           ],
           "description": "Credential kind of a custom provider; unset uses the built-in\nprovider's, or `api_key` when `key_secret` is set and `none`\notherwise."
+        },
+        "aws_profile": {
+          "description": "The shared AWS profile (`~/.aws/config`, `~/.aws/credentials`) the\n`bedrock` credential chain reads; `default` when unset.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "base_url": {
           "description": "API base URL.",
@@ -6175,7 +6187,7 @@
           ]
         },
         "region": {
-          "description": "Google Cloud region of a `vertex` provider (`us-central1`).",
+          "description": "Cloud region: of a `vertex` provider (`us-central1`), or of a\n`bedrock` provider (`eu-west-1`; `us-east-1` when unset).",
           "type": [
             "string",
             "null"

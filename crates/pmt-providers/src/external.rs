@@ -261,6 +261,9 @@ pub(crate) fn route(
         affinity_header: None,
         body_extra: None,
         fast_tier: None,
+        bundled: None,
+        key_header: None,
+        region: None,
     })
 }
 

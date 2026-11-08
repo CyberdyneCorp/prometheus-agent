@@ -149,6 +149,12 @@ impl Catalog {
     }
 
     /// The cached listing of `provider` (memory, then disk), fresh or not.
+    /// Whether a listing of `provider` is cached (fresh or not).
+    #[must_use]
+    pub fn has_listing(&self, provider: &str) -> bool {
+        self.listing(provider).is_some()
+    }
+
     fn listing(&self, provider: &str) -> Option<Listing> {
         let mut listings = self.listings.lock().expect("catalog lock");
         if let Some(listing) = listings.get(provider) {
@@ -347,45 +353,106 @@ impl Catalog {
         credential: Option<&SecretString>,
         now: Timestamp,
     ) -> Result<bool, Error> {
-        if !provider.supports_model_listing() {
-            return Ok(false);
-        }
-        let ttl = provider.settings().catalog_ttl_secs;
-        if self
-            .listing(provider.id())
-            .is_some_and(|l| l.is_fresh(ttl, now))
-        {
+        if !self.wants_listing(provider, now) {
             return Ok(false);
         }
         let Some(url) = provider.models_url() else {
             return Ok(false);
         };
-        let mut request = client.get(&url);
-        if let Some(secret) = credential {
-            request = request.bearer_auth(secret.expose());
+        let auth =
+            credential.map(|secret| ("authorization", format!("Bearer {}", secret.expose())));
+        let models = fetch(client, provider, &url, auth, now).await?;
+        self.store(provider, models, now);
+        Ok(true)
+    }
+
+    /// [`refresh`](Self::refresh) with `route`'s credential (a minted one
+    /// already prepared): Bedrock lists its control plane's foundation
+    /// models and inference profiles (spec: model-providers, Gemini native
+    /// and AWS Bedrock providers), Azure AI Foundry its resource's
+    /// deployments, and every other provider its models URL with the
+    /// route's key header.
+    ///
+    /// # Errors
+    ///
+    /// As [`refresh`](Self::refresh).
+    ///
+    /// # Panics
+    ///
+    /// Only if another thread panicked while holding the catalog lock.
+    pub async fn refresh_route(
+        &self,
+        client: &reqwest::Client,
+        provider: &Provider,
+        route: &crate::Route,
+        now: Timestamp,
+    ) -> Result<bool, Error> {
+        if !self.wants_listing(provider, now) {
+            return Ok(false);
         }
-        let failed = |e: &dyn std::fmt::Display| {
-            Error::new(
-                &codes::PROVIDER_CALL_FAILED,
-                format!("{}: model listing failed: {e}", provider.id()),
-            )
+        let bearer = || {
+            route.credential.is_bearer()
+                || route
+                    .key_header
+                    .as_deref()
+                    .is_some_and(|h| h.eq_ignore_ascii_case("authorization"))
         };
-        let response = request.send().await.map_err(|e| failed(&e))?;
-        let status = response.status();
-        let text = response.text().await.map_err(|e| failed(&e))?;
-        if !status.is_success() {
-            let error = crate::classify::from_response(
-                status.as_u16(),
-                &reqwest::header::HeaderMap::new(),
-                &text,
-                now,
-            );
-            return Err(error.to_error(provider.id()));
-        }
-        let body: serde_json::Value = serde_json::from_str(&text).map_err(|e| failed(&e))?;
+        let models = if crate::aws::is_bedrock(provider) {
+            let keys = route
+                .credential
+                .value()
+                .and_then(crate::aws::Keys::from_secret)
+                .ok_or_else(|| {
+                    Error::new(
+                        &codes::PROVIDER_MISSING_CREDENTIAL,
+                        format!("{}: no AWS credentials to list models with", provider.id()),
+                    )
+                })?;
+            let control = crate::aws::control_endpoint(provider);
+            crate::aws::catalog::list(client, &control, &crate::aws::region(provider), &keys)
+                .await?
+        } else if provider.descriptor().wire_need == crate::descriptor::WireNeed::Detected {
+            let Some(secret) = route.credential.value().cloned() else {
+                return Ok(false);
+            };
+            let auth = if bearer() {
+                crate::azure::Auth::Bearer(secret)
+            } else {
+                crate::azure::Auth::Key(secret)
+            };
+            crate::azure::listed(&crate::azure::deployments(client, &route.base_url, &auth).await?)
+        } else {
+            let Some(url) = provider.models_url() else {
+                return Ok(false);
+            };
+            let auth = route
+                .credential
+                .value()
+                .map(|secret| match route.key_header.as_deref() {
+                    Some(name) if !bearer() => (name, secret.expose().to_owned()),
+                    _ => ("authorization", format!("Bearer {}", secret.expose())),
+                });
+            fetch(client, provider, &url, auth, now).await?
+        };
+        self.store(provider, models, now);
+        Ok(true)
+    }
+
+    /// Whether `provider` lists models and its cached listing is older
+    /// than `providers.<id>.catalog_ttl_secs`.
+    fn wants_listing(&self, provider: &Provider, now: Timestamp) -> bool {
+        provider.supports_model_listing()
+            && !self
+                .listing(provider.id())
+                .is_some_and(|l| l.is_fresh(provider.settings().catalog_ttl_secs, now))
+    }
+
+    /// Keeps `models` as `provider`'s listing: in memory, in the cache
+    /// file, and each reported context window in the discovered cache.
+    fn store(&self, provider: &Provider, models: Vec<Listed>, now: Timestamp) {
         let listing = Listing {
             fetched_at: now.as_second(),
-            models: listing::parse(&body),
+            models,
         };
         if let Some(base_url) = provider.base_url() {
             let found: Vec<DiscoveredContext> = listing
@@ -415,8 +482,44 @@ impl Catalog {
             .lock()
             .expect("catalog lock")
             .insert(provider.id().to_owned(), listing);
-        Ok(true)
     }
+}
+
+/// `GET url` with an optional credential header, parsed as a listing.
+async fn fetch(
+    client: &reqwest::Client,
+    provider: &Provider,
+    url: &str,
+    auth: Option<(&str, String)>,
+    now: Timestamp,
+) -> Result<Vec<Listed>, Error> {
+    let mut request = client.get(url);
+    if let Some((name, value)) = auth {
+        let mut value = reqwest::header::HeaderValue::from_str(&value)
+            .unwrap_or_else(|_| reqwest::header::HeaderValue::from_static(""));
+        value.set_sensitive(true);
+        request = request.header(name, value);
+    }
+    let failed = |e: &dyn std::fmt::Display| {
+        Error::new(
+            &codes::PROVIDER_CALL_FAILED,
+            format!("{}: model listing failed: {e}", provider.id()),
+        )
+    };
+    let response = request.send().await.map_err(|e| failed(&e))?;
+    let status = response.status();
+    let text = response.text().await.map_err(|e| failed(&e))?;
+    if !status.is_success() {
+        let error = crate::classify::from_response(
+            status.as_u16(),
+            &reqwest::header::HeaderMap::new(),
+            &text,
+            now,
+        );
+        return Err(error.to_error(provider.id()));
+    }
+    let body: serde_json::Value = serde_json::from_str(&text).map_err(|e| failed(&e))?;
+    Ok(listing::parse(&body))
 }
 
 impl Prices for Catalog {

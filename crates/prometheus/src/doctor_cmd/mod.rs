@@ -8,6 +8,7 @@
 //! the network.
 
 pub mod args;
+mod aws;
 mod bridge;
 mod daemon;
 mod fix;

@@ -135,6 +135,16 @@ pub trait CredentialExtras: Send + Sync {
     fn detector(&self) -> Option<&crate::detect::Detector> {
         None
     }
+
+    /// The current minted token of `provider` (resolution needs it before
+    /// any request to read an Azure AI Foundry deployment's metadata);
+    /// `None` when nothing here mints.
+    fn mint<'a>(
+        &'a self,
+        _provider: &'a Provider,
+    ) -> super::BoxFuture<'a, Option<Result<SecretString, Error>>> {
+        Box::pin(async { None })
+    }
 }
 
 /// No pools and no sign-ins.
@@ -458,7 +468,11 @@ fn launch_or_minted(
 /// Whether `provider`'s credential is minted per use (spec:
 /// model-providers, Minted short-lived credentials).
 fn mints(provider: &Provider) -> bool {
-    provider.settings().key_cmd.is_some() || provider.auth() == ProviderAuth::TokenMint
+    provider.settings().key_cmd.is_some()
+        || matches!(
+            provider.auth(),
+            ProviderAuth::TokenMint | ProviderAuth::AwsChain | ProviderAuth::EntraId
+        )
 }
 
 /// The minted credential of `provider`, bound to its key hosts like a

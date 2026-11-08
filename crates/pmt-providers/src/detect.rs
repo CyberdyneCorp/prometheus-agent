@@ -13,6 +13,8 @@
 //! Code, served at [`KIMI_CODING_URL`] over Anthropic Messages; that needs
 //! no probe.
 
+use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use jiff::Timestamp;
@@ -20,6 +22,7 @@ use pmt_core::secret::SecretString;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
+use crate::azure::Deployment;
 use crate::pool::PoolState;
 
 /// Z.AI endpoints in priority order.
@@ -108,12 +111,18 @@ pub fn memo_key(provider: &str, key: &SecretString) -> String {
 
 const FAILED_PREFIX: &str = "failed:";
 
+/// Foundry deployment lists by resource URL, with when they were read.
+type Deployments = BTreeMap<String, (Timestamp, Vec<Deployment>)>;
+
 /// Probes multi-region endpoints.
 #[derive(Debug, Clone)]
 pub struct Detector {
     client: reqwest::Client,
     candidates: Vec<String>,
     timeout: Duration,
+    /// Azure AI Foundry deployment lists by resource URL, with when they
+    /// were read.
+    foundry: Arc<Mutex<Deployments>>,
 }
 
 impl Detector {
@@ -124,7 +133,53 @@ impl Detector {
             client,
             candidates: ZAI_ENDPOINTS.iter().map(|s| (*s).to_owned()).collect(),
             timeout: PROBE_TIMEOUT,
+            foundry: Arc::default(),
         }
+    }
+
+    /// The deployment of the Foundry resource at `base_url` named `model`
+    /// (case-insensitively), from its deployment list, read again once it
+    /// is `ttl_secs` old. `None`: no such deployment, or the list cannot
+    /// be read.
+    pub async fn foundry_deployment(
+        &self,
+        base_url: &str,
+        model: &str,
+        auth: &crate::azure::Auth,
+        ttl_secs: u64,
+    ) -> Option<Deployment> {
+        let now = Timestamp::now();
+        let fresh = |at: Timestamp| {
+            u64::try_from(now.as_second().saturating_sub(at.as_second()))
+                .is_ok_and(|age| age < ttl_secs)
+        };
+        let cached = self
+            .foundry_cache()
+            .get(base_url)
+            .filter(|(at, _)| fresh(*at))
+            .map(|(_, list)| list.clone());
+        let list = match cached {
+            Some(list) => list,
+            None => match crate::azure::deployments(&self.client, base_url, auth).await {
+                Ok(list) => {
+                    self.foundry_cache()
+                        .insert(base_url.to_owned(), (now, list.clone()));
+                    list
+                }
+                Err(err) => {
+                    tracing::warn!(code = err.code().code, "{}", err.message());
+                    return None;
+                }
+            },
+        };
+        list.into_iter()
+            .find(|d| d.name.eq_ignore_ascii_case(model))
+    }
+
+    fn foundry_cache(&self) -> std::sync::MutexGuard<'_, Deployments> {
+        self.foundry
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// Probes `candidates` (priority order) instead (tests).

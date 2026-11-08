@@ -5,7 +5,9 @@
 mod accounts;
 mod auth;
 mod auxiliary;
+mod azure;
 mod borrowed;
+mod bundled;
 mod caching;
 mod external;
 mod faults;

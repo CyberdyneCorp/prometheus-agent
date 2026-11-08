@@ -19,6 +19,7 @@ use std::time::Duration;
 use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use jiff::{SignedDuration, Timestamp};
+use pmt_config::schema::ProviderAuth;
 use pmt_core::error::{Error, codes};
 use pmt_core::secret::SecretString;
 use serde_json::{Value, json};
@@ -51,6 +52,8 @@ pub struct Minter {
     client: reqwest::Client,
     user_home: Option<PathBuf>,
     cache: Mutex<BTreeMap<String, Minted>>,
+    aws: crate::aws::chain::Endpoints,
+    entra: crate::azure::EntraSources,
 }
 
 impl std::fmt::Debug for Minter {
@@ -68,7 +71,24 @@ impl Minter {
             client,
             user_home,
             cache: Mutex::new(BTreeMap::new()),
+            aws: crate::aws::chain::Endpoints::default(),
+            entra: crate::azure::EntraSources::default(),
         }
+    }
+
+    /// Asks `endpoints` for container, instance and SSO credentials of
+    /// the AWS credential chain instead of AWS's (tests).
+    #[must_use]
+    pub fn with_aws_endpoints(mut self, endpoints: crate::aws::chain::Endpoints) -> Self {
+        self.aws = endpoints;
+        self
+    }
+
+    /// Gets Entra ID tokens from `sources` (tests).
+    #[must_use]
+    pub fn with_entra(mut self, sources: crate::azure::EntraSources) -> Self {
+        self.entra = sources;
+        self
     }
 
     /// The current token of `provider`, minted when none is cached or the
@@ -86,9 +106,19 @@ impl Minter {
         if let Some(cached) = self.lock().get(provider.id()).filter(|m| m.use_until > now) {
             return Ok(cached.token.clone());
         }
-        let (token, lifetime) = match &provider.settings().key_cmd {
-            Some(command) => helper(provider.id(), command).await?,
-            None => self.google(provider, secrets).await?,
+        let (token, lifetime) = match (&provider.settings().key_cmd, provider.auth()) {
+            (Some(command), _) => helper(provider.id(), command).await?,
+            (None, ProviderAuth::AwsChain) => self.aws(provider, secrets).await?,
+            (None, ProviderAuth::EntraId) => {
+                crate::azure::entra_token(
+                    &self.client,
+                    &self.entra,
+                    self.user_home.as_deref(),
+                    provider.id(),
+                )
+                .await?
+            }
+            (None, _) => self.google(provider, secrets).await?,
         };
         let use_until = now + lifetime.unwrap_or(DEFAULT_LIFETIME) - EARLY;
         self.lock().insert(
@@ -104,6 +134,23 @@ impl Minter {
     /// Drops `provider`'s cached token (the provider refused it).
     pub fn invalidate(&self, provider: &str) {
         self.lock().remove(provider);
+    }
+
+    /// The AWS credential chain's keys, packed into one secret for the
+    /// signer, valid until the temporary keys expire.
+    async fn aws(
+        &self,
+        provider: &Provider,
+        secrets: &dyn SecretSource,
+    ) -> Result<(SecretString, Option<SignedDuration>), Error> {
+        let chain = crate::aws::chain::Chain::new(self.client.clone(), self.user_home.clone())
+            .with_endpoints(self.aws.clone());
+        let (keys, source) = chain.keys(provider, secrets).await?;
+        tracing::debug!(provider = provider.id(), source = %source.describe(), "AWS credentials found");
+        let lifetime = keys
+            .expires_at
+            .map(|at| at.duration_since(Timestamp::now()));
+        Ok((keys.to_secret(), lifetime))
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, BTreeMap<String, Minted>> {

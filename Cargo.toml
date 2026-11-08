@@ -96,6 +96,8 @@ resvg = { version = "0.49", default-features = false }
 tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect"] }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 percent-encoding = "2.3"
+# CRC-32 checks of AWS event-stream frames (Bedrock ConverseStream).
+crc32fast = "1.5"
 # Inbound mail of the email adapter.
 mail-parser = { version = "0.11", default-features = false }
 # CIDR ranges (`security.egress.fake_ip_ranges`, private-destination grants).

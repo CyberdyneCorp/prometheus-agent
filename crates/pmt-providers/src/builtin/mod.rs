@@ -6,7 +6,7 @@
 
 use pmt_config::schema::{LoginFlow, ProviderAuth, WireFormat};
 
-use crate::descriptor::{AccountUrls, Descriptor, HostRule, ModelWire, WireNeed};
+use crate::descriptor::{AccountUrls, BundledWire, Descriptor, HostRule, ModelWire, WireNeed};
 
 /// A wire format beyond the native one (const-friendly [`WireNeed`]).
 #[derive(Clone, Copy)]
@@ -15,6 +15,7 @@ enum Need {
     PerModel,
     Detected,
     Mock,
+    Bundled(BundledWire),
     Plugin {
         wire: &'static str,
         plugin: &'static str,
@@ -159,7 +160,6 @@ const fn need(mut row: Row, need: Need) -> Row {
     row
 }
 
-const GEMINI_HINT: &str = "until the bundled plugin ships, use Gemini's OpenAI-compatible endpoint: prometheus config set providers.gemini.base_url https://generativelanguage.googleapis.com/v1beta/openai";
 const COPILOT_HINT: &str = "prometheus plugins install github-copilot";
 
 /// Claude subscription caveats (spec: model-providers, Plan caveats shown
@@ -536,11 +536,7 @@ const ROWS: &[Row] = &[
             "https://generativelanguage.googleapis.com/v1beta",
             ChatCompletions,
         ),
-        Need::Plugin {
-            wire: "gemini_native",
-            plugin: "gemini",
-            hint: GEMINI_HINT,
-        },
+        Need::Bundled(BundledWire::GeminiNative),
     ),
     Row {
         id: "vertex",
@@ -554,13 +550,9 @@ const ROWS: &[Row] = &[
         id: "bedrock",
         aliases: &["aws", "aws-bedrock", "amazon-bedrock"],
         endpoint_note: Some("https://bedrock-runtime.<region>.amazonaws.com"),
-        need: Need::Plugin {
-            wire: "bedrock_converse",
-            plugin: "bedrock",
-            hint: "the bundled bedrock provider plugin is not part of this build yet",
-        },
+        need: Need::Bundled(BundledWire::BedrockConverse),
+        extra_hosts: &["*.amazonaws.com"],
         auth: AwsChain,
-        listing: false,
         ..BASE
     },
     Row {
@@ -709,12 +701,14 @@ const ROWS: &[Row] = &[
 ];
 
 /// Every secret name a built-in provider reads: the provider-native
-/// environment variables the launch environment treats as secrets.
+/// environment variables the launch environment treats as secrets
+/// (including the AWS credential chain's).
 #[must_use]
 pub fn secret_names() -> Vec<&'static str> {
     let mut names: Vec<&'static str> = ROWS
         .iter()
         .flat_map(|r| r.secrets.iter().copied())
+        .chain(crate::aws::chain::SECRET_NAMES.iter().copied())
         .collect();
     names.sort_unstable();
     names.dedup();
@@ -754,11 +748,15 @@ fn per_provider(d: &mut Descriptor) {
     match d.id.as_str() {
         // Gemini's OpenAI-compatible endpoint (`.../openai`) speaks Chat
         // Completions natively.
-        "gemini" => d.host_rules.push(HostRule {
-            host: None,
-            path_suffixes: vec!["/openai".to_owned()],
-            wire_format: ChatCompletions,
-        }),
+        "gemini" => {
+            d.host_rules.push(HostRule {
+                host: None,
+                path_suffixes: vec!["/openai".to_owned()],
+                wire_format: ChatCompletions,
+            });
+            d.key_header = Some("x-goog-api-key".to_owned());
+        }
+        "azure-foundry" => d.key_header = Some("api-key".to_owned()),
         // A Kimi Code key (`sk-kimi-`) is served at api.kimi.com/coding over
         // Anthropic Messages (spec: model-providers, Endpoint
         // auto-detection for multi-region key providers).
@@ -822,6 +820,7 @@ fn wire_need(need: Need) -> WireNeed {
         Need::PerModel => WireNeed::PerModel,
         Need::Detected => WireNeed::Detected,
         Need::Mock => WireNeed::Mock,
+        Need::Bundled(wire) => WireNeed::Bundled(wire),
         Need::Plugin { wire, plugin, hint } => WireNeed::Plugin {
             wire: wire.to_owned(),
             plugin: plugin.to_owned(),

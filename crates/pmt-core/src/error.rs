@@ -596,7 +596,7 @@ error_codes! {
         "`providers.<id>.confirm_metered_fallback = true` and the fallback would move the session from a subscription to a pay-per-token credential, which the user declined or which a non-interactive run cannot confirm; the turn failed instead.");
     /// The provider's wire format is implemented by a plugin that is not installed.
     PROVIDER_PLUGIN_UNAVAILABLE = ("provider.plugin_unavailable", Config,
-        "The provider speaks a wire format that only a provider plugin implements (`gemini_native`, `bedrock_converse`, bridged plugins such as `github-copilot`) or is a virtual provider of a capability this build does not include (`moa`); the message names what is missing.");
+        "The provider speaks a wire format that only a provider plugin that is not installed implements (bridged plugins such as `github-copilot` and `solstice`) or is a virtual provider of a capability this build does not include (`moa`); the message names what is missing.");
     /// No model, provider or launch endpoint is configured.
     MODEL_NOT_CONFIGURED = ("model.not_configured", Config,
         "The profile names no model and no provider, and no `--model`, `--provider` or `--base-url` was given, so a chat has nothing to talk to. Run `prometheus setup model` (or `prometheus model`).");

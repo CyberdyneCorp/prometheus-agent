@@ -73,6 +73,11 @@ pub enum WireNeed {
     /// Detected from the endpoint's deployment metadata; `wire_format`
     /// until detected.
     Detected,
+    /// A non-native format of a first-party provider plugin bundled with
+    /// the binary (spec: model-providers, Gemini native and AWS Bedrock
+    /// providers): always available, unless config or a host rule chose
+    /// a native format instead.
+    Bundled(BundledWire),
     /// A non-native format only a provider plugin implements. Routing
     /// fails with `provider.plugin_unavailable` unless config or a host
     /// rule selects a native format.
@@ -94,6 +99,26 @@ pub enum WireNeed {
         /// The owning capability (`mixture-of-agents`).
         owner: String,
     },
+}
+
+/// The wire formats the bundled first-party provider plugins implement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BundledWire {
+    /// Google AI Studio `generateContent` / `streamGenerateContent`.
+    GeminiNative,
+    /// AWS Bedrock `Converse` / `ConverseStream`, signed with `SigV4`.
+    BedrockConverse,
+}
+
+impl BundledWire {
+    /// The name listings and traces show.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::GeminiNative => "gemini_native",
+            Self::BedrockConverse => "bedrock_converse",
+        }
+    }
 }
 
 /// One provider's static description. The flags are the descriptor
@@ -166,6 +191,9 @@ pub struct Descriptor {
     /// Where a subscription's plan and billing are managed (`/subscription`,
     /// `/topup`).
     pub account_urls: AccountUrls,
+    /// The header an API key is sent in instead of `Authorization: Bearer`
+    /// (`x-goog-api-key` for Gemini, `api-key` for Azure AI Foundry).
+    pub key_header: Option<String>,
 }
 
 /// A subscription provider's account pages.
@@ -276,6 +304,7 @@ impl Descriptor {
             session_affinity_header: None,
             model_wire_formats: Vec::new(),
             account_urls: AccountUrls::default(),
+            key_header: None,
         }
     }
 
@@ -297,6 +326,7 @@ impl Descriptor {
             WireNeed::PerModel => "per-model",
             WireNeed::Detected => "auto-detected",
             WireNeed::Mock => "mock_script",
+            WireNeed::Bundled(wire) => wire.as_str(),
             WireNeed::Plugin { wire, .. } | WireNeed::Virtual { wire, .. } => wire,
         }
     }

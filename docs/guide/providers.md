@@ -95,14 +95,13 @@ the same provider draw from the same pool and see the same benches.
 Maintenance commands (`auth list` and `auth status` are peeks: they never
 refresh, rotate or bench anything):
 
-```console
-$ prometheus auth priority openrouter work 0      # fill_first takes 'work' first
-$ prometheus auth add openrouter --label spare --priority 1
-$ prometheus auth reset openrouter                # clear every bench and cooldown
-$ prometheus auth refresh openai-codex            # refresh sign-in tokens now
-$ prometheus auth logout openai-codex             # remove every sign-in of the provider
-$ prometheus auth remove openrouter work
-removed api_key 'work' of openrouter
+```sh
+prometheus auth priority openrouter work 0      # fill_first takes 'work' first
+prometheus auth add openrouter --label spare --priority 1
+prometheus auth reset openrouter                # clear every bench and cooldown
+prometheus auth refresh openai-codex            # refresh sign-in tokens now
+prometheus auth logout openai-codex             # remove every sign-in of the provider
+prometheus auth remove openrouter work          # removed api_key 'work' of openrouter
 ```
 
 A reset reaches running sessions (a gateway too) on their next request:
@@ -283,11 +282,11 @@ user token in the secret `tool_gateway.token_secret` names. A gateway call
 after the subscription lapsed fails with `auth.plan_not_eligible` pointing
 at the portal.
 
-```console
-$ prometheus setup --portal          # sign in, make nous the main provider, offer to route every category
-$ prometheus portal status           # sign-in, plan and per-category routing
-$ prometheus portal tools --route image_generation --route tts
-$ prometheus portal open             # the portal's plan page
+```sh
+prometheus setup --portal          # sign in, make nous the main provider, offer to route every category
+prometheus portal status           # sign-in, plan and per-category routing
+prometheus portal tools --route image_generation --route tts
+prometheus portal open             # the portal's plan page
 ```
 
 ## Endpoints found from the key

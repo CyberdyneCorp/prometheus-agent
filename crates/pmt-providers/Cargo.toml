@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 base64.workspace = true
+crc32fast.workspace = true
 fastrand.workspace = true
 getrandom.workspace = true
 jiff.workspace = true
@@ -23,6 +24,7 @@ reqwest.workspace = true
 ring.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha1.workspace = true
 sha2.workspace = true
 toml.workspace = true
 tokio = { workspace = true, features = ["net", "time", "io-util", "process"] }

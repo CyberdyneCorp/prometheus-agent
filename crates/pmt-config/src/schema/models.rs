@@ -157,9 +157,14 @@ pub struct ProviderConfig {
     /// Google Cloud project of a `vertex` provider.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
-    /// Google Cloud region of a `vertex` provider (`us-central1`).
+    /// Cloud region: of a `vertex` provider (`us-central1`), or of a
+    /// `bedrock` provider (`eu-west-1`; `us-east-1` when unset).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub region: Option<String>,
+    /// The shared AWS profile (`~/.aws/config`, `~/.aws/credentials`) the
+    /// `bedrock` credential chain reads; `default` when unset.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aws_profile: Option<String>,
     /// The agent CLI an `auth = "external_process"` provider drives over
     /// the Agent Client Protocol (`claude`), found by the executable
     /// lookup.
@@ -214,6 +219,7 @@ impl Default for ProviderConfig {
             key_cmd: None,
             project: None,
             region: None,
+            aws_profile: None,
             command: None,
             args: Vec::new(),
             command_path: None,
@@ -263,6 +269,9 @@ pub enum ProviderAuth {
     ExternalProcess,
     /// The AWS credential chain.
     AwsChain,
+    /// A Microsoft Entra ID bearer token minted from the Azure CLI login
+    /// or a managed identity (`azure-foundry`).
+    EntraId,
     /// No credential (local servers).
     None,
 }
@@ -277,6 +286,7 @@ impl ProviderAuth {
             Self::TokenMint => "token_mint",
             Self::ExternalProcess => "external_process",
             Self::AwsChain => "aws_chain",
+            Self::EntraId => "entra_id",
             Self::None => "none",
         }
     }

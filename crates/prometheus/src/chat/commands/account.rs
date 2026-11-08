@@ -53,8 +53,11 @@ fn duration(secs: i64) -> String {
 }
 
 /// `context <used> / <window> tokens (<n>%)` from the newest main call.
+/// While a turn runs its call holds the model route, and a busy `/usage`
+/// runs inside the turn's own loop: waiting for the route would never
+/// end, so the window then comes from the catalog entry of that call's
+/// model.
 async fn context_line(ctx: &Ctx<'_>) -> Result<Option<String>, Error> {
-    let route = ctx.live.model.route().await;
     let last = ctx
         .factory
         .store
@@ -62,7 +65,21 @@ async fn context_line(ctx: &Ctx<'_>) -> Result<Option<String>, Error> {
         .into_iter()
         .rev()
         .find(|e| e.purpose == "main");
-    let (Some(last), Some(window)) = (last, route.context_window) else {
+    let Some(last) = last else {
+        return Ok(None);
+    };
+    let window = if ctx.running {
+        let catalog = ctx.factory.models.catalog();
+        Some(
+            catalog
+                .metadata_at(&last.provider, &last.model, None)
+                .0
+                .context_window,
+        )
+    } else {
+        ctx.live.model.route().await.context_window
+    };
+    let Some(window) = window else {
         return Ok(None);
     };
     let used = last.tokens.input + last.tokens.cache_read + last.tokens.cache_write;
