@@ -403,7 +403,8 @@ pub(super) fn resolve(
         explicit,
         &mut seen,
     )?;
-    let key = pick_key(provider, keys, &states, now, &mut seen);
+    let priority = pool::priority(resolver.extras.pool_state(), id);
+    let key = pick_key(provider, keys, &states, &priority, now, &mut seen);
     if let Some(pooled) = key
         .as_ref()
         .filter(|k| matches!(k.source, CredentialSource::Pool { .. }))
@@ -500,6 +501,7 @@ fn bound_keys(
         Some(name) => vec![pool::Member {
             label: name.to_owned(),
             secret: name.to_owned(),
+            seeded: false,
             pooled: true,
         }],
         None => pool::key_members(provider, &secrets.names()?),
@@ -545,9 +547,10 @@ pub(crate) fn request_key(
     };
     let mut seen = Seen::default();
     let keys = bound_keys(registry, secrets, provider, &host, None, &mut seen)?;
+    let priority = pool::priority(state, provider.id());
     Ok(
         match (
-            pick_key(provider, keys, &states, now, &mut seen),
+            pick_key(provider, keys, &states, &priority, now, &mut seen),
             seen.benched,
         ) {
             (Some(key), _) => Ok(Some(key)),
@@ -557,31 +560,36 @@ pub(crate) fn request_key(
     )
 }
 
-/// One key: by `pool_strategy` among the pool keys (a `pool:` credential
-/// when there are two or more), else the first alternative secret name
-/// that is not benched.
+/// One key: by `pool_strategy` among the pooled keys in priority order
+/// (`auth priority`), skipping benched ones (a `pool:` credential when
+/// there are two or more), else the first alternative that is not
+/// benched.
 fn pick_key(
     provider: &Provider,
     keys: Vec<(pool::Member, SecretString)>,
     states: &[CredentialState],
+    priority: &[String],
     now: Timestamp,
     seen: &mut Seen,
 ) -> Option<Credential> {
-    let ids: Vec<String> = keys
-        .iter()
-        .map(|(m, _)| pool::secret_id(&m.secret))
+    let mut keys: Vec<(pool::Member, SecretString, String)> = keys
+        .into_iter()
+        .map(|(m, v)| {
+            let id = pool::secret_id(&m.secret);
+            (m, v, id)
+        })
         .collect();
-    for id in &ids {
+    pool::prioritize(&mut keys, priority, |(_, _, id)| id.as_str());
+    for (_, _, id) in &keys {
         if let Some(until) = pool::benched_until(states, id, now) {
             seen.bench(until);
         }
     }
-    let (pooled, alternates): (Vec<_>, Vec<_>) =
-        keys.into_iter().zip(ids).partition(|((m, _), _)| m.pooled);
-    let pool_ids: Vec<String> = pooled.iter().map(|(_, id)| id.clone()).collect();
+    let (pooled, alternates): (Vec<_>, Vec<_>) = keys.into_iter().partition(|(m, _, _)| m.pooled);
+    let ids: Vec<String> = pooled.iter().map(|(_, _, id)| id.clone()).collect();
     let several = pooled.len() > 1;
-    if let Some(index) = pool::select(provider.settings().pool_strategy, &pool_ids, states, now) {
-        let ((member, value), _) = pooled.into_iter().nth(index)?;
+    if let Some(index) = pool::select(provider.settings().pool_strategy, &ids, states, now) {
+        let (member, value, _) = pooled.into_iter().nth(index)?;
         let source = if several {
             CredentialSource::Pool {
                 provider: provider.id().to_owned(),
@@ -596,9 +604,9 @@ fn pick_key(
         };
         return Some(Credential::new(source, Some(value)));
     }
-    let ((member, value), _) = alternates
+    let (member, value, _) = alternates
         .into_iter()
-        .find(|(_, id)| pool::benched_until(states, id, now).is_none())?;
+        .find(|(_, _, id)| pool::benched_until(states, id, now).is_none())?;
     let source = CredentialSource::Secret {
         name: member.secret,
     };

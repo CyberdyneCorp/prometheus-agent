@@ -846,6 +846,8 @@ async fn the_summary_comes_from_the_auxiliary_compression_route() {
         source: AuxSource::Config,
         timeout: Duration::from_secs(5),
         retries: 0,
+        extra_body: None,
+        max_concurrency: None,
     };
     let script = Script::parse(
         "[[rule]]\ntext = \"## Goal\\nAUX-GOAL\\n## Next Steps\\nAUX-NEXT\"\n",

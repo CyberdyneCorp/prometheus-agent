@@ -39,52 +39,77 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `approvals.unattended_mode` | one of "deny", "approve" | `"deny"` | `"deny"`, `"approve"` | `live` | Decision for approvals in other unattended sessions. |
 | `attachments.storage` | one of "blobs", "workspace" | `"blobs"` | `"blobs"`, `"workspace"` | `next_session` | Where received attachments are kept. |
 | `auth.adopt_external_logins` | boolean | `true` | any | `next_session` | Use an existing Claude Code or Codex CLI sign-in when the profile holds no credential of its own. |
+| `auxiliary.approval.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.approval.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.approval.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.approval.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.approval.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.approval.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.compression.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.compression.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.compression.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.compression.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.compression.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.compression.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.curator.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.curator.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.curator.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.curator.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.curator.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.curator.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.evolution.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.evolution.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.evolution.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.evolution.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.evolution.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.evolution.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.goal_judge.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.goal_judge.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.goal_judge.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.goal_judge.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.goal_judge.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.goal_judge.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.max_concurrency` | integer | `8` | ≥ 1 | `next_session` | Auxiliary calls in flight at once across the profile's sessions; further calls wait. |
+| `auxiliary.memory.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.memory.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.memory.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.memory.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.memory.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.memory.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.side_question.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.side_question.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.side_question.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.side_question.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.side_question.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.side_question.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.skill_review.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.skill_review.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.skill_review.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.skill_review.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.skill_review.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.skill_review.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.title.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.title.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.title.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.title.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.title.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.title.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.transient_retries` | integer | `2` | 0 to 6 | `next_session` | Same-route retries of a retryable auxiliary failure. |
+| `auxiliary.vision.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.vision.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.vision.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.vision.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.vision.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.vision.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.voice_chat.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.voice_chat.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.voice_chat.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.voice_chat.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.voice_chat.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.voice_chat.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.web_extract.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.web_extract.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.web_extract.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.web_extract.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.web_extract.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.web_extract.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
@@ -487,6 +512,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `memory.write_approval` | boolean | `false` | any | `next_session` | Approve every memory write. |
 | `model.aliases` | table | `{}` | any | `next_session` | User model aliases: a name (matched case-insensitively) for a `"<provider>/<model>"` string or a route table. Usable wherever a model is named (`/model`, `prometheus model set`, fallback and auxiliary slots). |
 | `model.auto_order` | array of string | `["anthropic","openai","openrouter","google","nous"]` | any | `next_session` | Provider order tried by `auto` among providers with a stored secret. |
+| `model.codex_bin` | string | unset | any | `next_session` | Absolute path of the Codex CLI the Codex app-server runtime runs; unset finds `codex` on `PATH`, in the user-local bin directories and the vendor's install prefixes. |
 | `model.default` | string | unset | any | `next_session` | Default model id (or a `[model.aliases]` name). |
 | `model.min_context_window` | integer | `64000` | ≥ 16000 | `next_session` | Smallest context window (tokens) a session may start with. |
 | `model.provider` | string | unset | any | `next_session` | Provider id or alias; unset means `auto`. |
@@ -547,6 +573,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `providers.<name>.base_url` | string | unset | any | `next_session` | API base URL. |
 | `providers.<name>.catalog_ttl_secs` | integer | `86400` | ≥ 0 | `next_session` | Lifetime of the cached live model listing. |
 | `providers.<name>.command` | string | unset | any | `next_session` | The agent CLI an `auth = "external_process"` provider drives over the Agent Client Protocol (`claude`), found by the executable lookup. |
+| `providers.<name>.command_path` | string | unset | any | `next_session` | Absolute path of the agent CLI (one executable, never parsed as a shell command); wins over finding `command` by name. |
 | `providers.<name>.confirm_metered_fallback` | boolean | `false` | any | `next_session` | Ask (interactive sessions) or fail the turn (non-interactive ones) before a fallback moves the session from a subscription of this provider to a pay-per-token credential. |
 | `providers.<name>.daily_budget_usd` | number | unset | ≥ 0.0 | `next_session` | Spend cap per calendar day (UTC) in USD; once the profile's usage ledger reaches it the provider is unavailable until the next day. |
 | `providers.<name>.enabled` | boolean | `true` | any | `next_session` | `false` makes every request to this provider fail with `provider.disabled`. |

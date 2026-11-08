@@ -298,6 +298,13 @@ impl ProviderError {
     /// token (spec: model-providers, Anthropic Claude Max sign-in).
     #[must_use]
     pub fn to_route_error(&self, route: &crate::resolve::Route) -> Error {
+        if self.class == ErrorClass::Network && route.local {
+            // A local server on the Windows side of WSL2 NAT networking.
+            let advice = crate::wsl::detect().and_then(|w| crate::wsl::advice(&w, &route.base_url));
+            if let Some(advice) = advice {
+                return self.to_error(&route.provider).with_hint(advice);
+            }
+        }
         if self.refusal.is_some() || !self.refuses_plan() {
             return self.to_error(&route.provider);
         }

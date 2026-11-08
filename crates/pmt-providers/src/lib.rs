@@ -42,6 +42,7 @@ pub mod target;
 pub mod transport;
 pub mod upstream;
 pub mod wire;
+pub mod wsl;
 
 pub use caller::{CallError, CallObserver, Called, Failed, ModelCaller, Observed};
 pub use event::{StopReason, StreamEvent, Usage};

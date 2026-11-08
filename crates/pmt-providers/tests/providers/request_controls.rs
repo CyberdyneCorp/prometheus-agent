@@ -166,6 +166,8 @@ fn aux_route(route: &pmt_providers::Route) -> AuxRoute {
         source: AuxSource::Main,
         timeout: Duration::from_secs(10),
         retries: 0,
+        extra_body: None,
+        max_concurrency: None,
     }
 }
 

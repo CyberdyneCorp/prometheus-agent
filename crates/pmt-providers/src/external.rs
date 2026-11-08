@@ -52,9 +52,28 @@ const USER_BINS: &[&str] = &[
     ".cargo/bin",
 ];
 
+/// The install prefixes each vendor documents, searched last: user-home
+/// relative ones (`~/...`) and system ones. A gateway service, cron run
+/// or desktop launch with a bare `PATH` still finds the CLI an
+/// interactive shell would.
+const VENDOR_PREFIXES: &[(&str, &[&str])] = &[
+    ("claude", &["~/.claude/local", "~/.claude/bin"]),
+    ("codex", &["~/.codex/bin"]),
+    ("gemini", &["~/.gemini/bin"]),
+    ("opencode", &["~/.opencode/bin"]),
+    ("qwen", &["~/.qwen/bin"]),
+];
+
+/// System prefixes package managers install agent CLIs into.
+const SYSTEM_PREFIXES: &[&str] = if cfg!(windows) {
+    &[]
+} else {
+    &["/opt/homebrew/bin", "/usr/local/bin", "/snap/bin"]
+};
+
 /// The executable `command` names: itself when it is a path, else the
-/// first match on `path` and then in the user-local bin directories of
-/// `home`.
+/// first match on `path`, in the user-local bin directories of `home`,
+/// then in the vendor's documented install prefixes.
 #[must_use]
 pub fn locate(command: &str, path: Option<OsString>, home: Option<&Path>) -> Option<PathBuf> {
     let direct = Path::new(command);
@@ -67,6 +86,7 @@ pub fn locate(command: &str, path: Option<OsString>, home: Option<&Path>) -> Opt
     if let Some(home) = home {
         dirs.extend(USER_BINS.iter().map(|dir| home.join(dir)));
     }
+    dirs.extend(vendor_dirs(command, home));
     let names: Vec<String> = if cfg!(windows) {
         [".exe", ".cmd", ".bat", ""]
             .iter()
@@ -81,17 +101,71 @@ pub fn locate(command: &str, path: Option<OsString>, home: Option<&Path>) -> Opt
         .find(|candidate| candidate.is_file())
 }
 
+/// `command`'s vendor prefixes, then the system prefixes.
+fn vendor_dirs(command: &str, home: Option<&Path>) -> Vec<PathBuf> {
+    let own = VENDOR_PREFIXES
+        .iter()
+        .find(|(name, _)| *name == command)
+        .map_or(&[][..], |(_, dirs)| *dirs);
+    own.iter()
+        .filter_map(|dir| match dir.strip_prefix("~/") {
+            Some(rest) => home.map(|h| h.join(rest)),
+            None => Some(PathBuf::from(dir)),
+        })
+        .chain(SYSTEM_PREFIXES.iter().map(PathBuf::from))
+        .collect()
+}
+
+/// The executable at `command_path`: one absolute path to a file, never
+/// split or parsed as a shell command.
+///
+/// # Errors
+///
+/// `config.invalid` for a relative path, `provider.external_cli_missing`
+/// when no file is there.
+pub fn pinned(key: &str, provider: &str, command_path: &str) -> Result<PathBuf, Error> {
+    let path = Path::new(command_path);
+    if !path.is_absolute() {
+        return Err(Error::new(
+            &codes::CONFIG_INVALID,
+            format!("{key} '{command_path}' must be an absolute path to the executable"),
+        ));
+    }
+    if path.is_file() {
+        return Ok(path.to_path_buf());
+    }
+    Err(missing(provider, command_path))
+}
+
+/// The Codex CLI the Codex app-server runtime runs: `model.codex_bin`,
+/// else `codex` found by [`locate`].
+///
+/// # Errors
+///
+/// As [`pinned`]; `provider.external_cli_missing` when `codex` is not
+/// found.
+pub fn codex_executable(
+    codex_bin: Option<&str>,
+    path: Option<OsString>,
+    home: Option<&Path>,
+) -> Result<PathBuf, Error> {
+    match codex_bin {
+        Some(bin) => pinned("model.codex_bin", "openai-codex", bin),
+        None => locate("codex", path, home).ok_or_else(|| missing("openai-codex", "codex")),
+    }
+}
+
 /// `provider.external_cli_missing` naming `command`.
 #[must_use]
 pub fn missing(provider: &str, command: &str) -> Error {
     Error::new(
         &codes::PROVIDER_EXTERNAL_CLI_MISSING,
         format!(
-            "provider '{provider}' drives the agent CLI '{command}', which is not installed (not on PATH or in the user-local bin directories)"
+            "provider '{provider}' drives the agent CLI '{command}', which is not installed (not on PATH, in the user-local bin directories or the vendor's install prefixes)"
         ),
     )
     .with_hint(format!(
-        "install {command}, or set providers.{provider}.command to its full path"
+        "install {command}, or set providers.{provider}.command_path to its absolute path"
     ))
 }
 
@@ -115,6 +189,10 @@ fn user_home() -> Option<PathBuf> {
 pub fn endpoint(provider: &Provider) -> Result<String, Error> {
     let id = provider.id();
     let settings = provider.settings();
+    if let Some(command_path) = settings.command_path.as_deref() {
+        let key = format!("providers.{id}.command_path");
+        return Ok(launch_url(&pinned(&key, id, command_path)?, &settings.args));
+    }
     let Some(command) = settings.command.as_deref() else {
         let suggested = provider
             .descriptor()
@@ -210,7 +288,11 @@ fn parse_launch(endpoint: &str) -> Option<(PathBuf, Vec<String>)> {
         return None;
     }
     let url = url::Url::parse(endpoint).ok()?;
-    let path = url.path();
+    // The URL path is percent-encoded (a space in a directory name).
+    let path = percent_encoding::percent_decode_str(url.path())
+        .decode_utf8()
+        .ok()?;
+    let path = path.as_ref();
     // `/C:/x/claude.exe` on Windows.
     let program = match path.get(2..3) {
         Some(":") if cfg!(windows) => PathBuf::from(&path[1..]),

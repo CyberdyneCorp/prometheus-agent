@@ -204,6 +204,8 @@ async fn auxiliary_calls_draw_from_the_same_pool() {
         source: AuxSource::Config,
         timeout: std::time::Duration::from_secs(10),
         retries: 2,
+        extra_body: None,
+        max_concurrency: None,
     };
     let ctx = pmt_providers::cost::CallContext::new(pmt_core::id::SessionId::new(), "main");
     AuxCaller::new(crate::accounts::http())

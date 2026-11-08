@@ -85,6 +85,6 @@ pub fn confirm(question: &str) -> Result<bool, Error> {
     Ok(matches!(answer.trim(), "y" | "Y" | "yes"))
 }
 
-fn read_error(e: &io::Error) -> Error {
+pub(crate) fn read_error(e: &io::Error) -> Error {
     Error::new(&codes::OUTPUT_IO, format!("cannot read from stdin: {e}"))
 }

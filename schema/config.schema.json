@@ -443,6 +443,13 @@
           ],
           "description": "Goal judging (defaults to the main model)."
         },
+        "max_concurrency": {
+          "default": 8,
+          "description": "Auxiliary calls in flight at once across the profile's sessions;\nfurther calls wait.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        },
         "memory": {
           "anyOf": [
             {
@@ -536,6 +543,11 @@
       "additionalProperties": false,
       "description": "One `[auxiliary.<task>]` table.",
       "properties": {
+        "extra_body": {
+          "additionalProperties": true,
+          "description": "Fields merged into this task's request body after the wire format\nmapping (one level deep), e.g. an OpenRouter `provider` block.",
+          "type": "object"
+        },
         "fallback_chain": {
           "description": "Fallback routes (`\"<provider>/<model>\"`); `[]` disables fallback.",
           "items": {
@@ -543,6 +555,15 @@
           },
           "type": [
             "array",
+            "null"
+          ]
+        },
+        "max_concurrency": {
+          "description": "This task's calls in flight at once (within\n`auxiliary.max_concurrency`); unset is only the profile cap.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": [
+            "integer",
             "null"
           ]
         },
@@ -4543,6 +4564,13 @@
           },
           "type": "array"
         },
+        "codex_bin": {
+          "description": "Absolute path of the Codex CLI the Codex app-server runtime runs;\nunset finds `codex` on `PATH`, in the user-local bin directories\nand the vendor's install prefixes.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "default": {
           "description": "Default model id (or a `[model.aliases]` name).",
           "type": [
@@ -6009,6 +6037,13 @@
         },
         "command": {
           "description": "The agent CLI an `auth = \"external_process\"` provider drives over\nthe Agent Client Protocol (`claude`), found by the executable\nlookup.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "command_path": {
+          "description": "Absolute path of the agent CLI (one executable, never parsed as a\nshell command); wins over finding `command` by name.",
           "type": [
             "string",
             "null"
@@ -9128,6 +9163,7 @@
     "auxiliary": {
       "$ref": "#/$defs/AuxiliaryConfig",
       "default": {
+        "max_concurrency": 8,
         "transient_retries": 2
       },
       "description": "Side-model (auxiliary) task routing."

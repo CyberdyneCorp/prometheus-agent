@@ -13,6 +13,7 @@ mod idp;
 mod local;
 mod minting;
 mod mock;
+mod pool_seeding;
 mod pools;
 mod portals;
 mod refresh;

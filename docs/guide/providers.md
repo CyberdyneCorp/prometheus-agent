@@ -80,14 +80,35 @@ survive restarts. A key that fails is **benched** and skipped:
 The same-route retry of the failed request already takes the next key.
 When every credential of a provider is benched, requests fail with
 `auth.credentials_benched` (exit 69), or the fallback chain takes over.
-The provider's other secret names (a shared key next to a plan key) are
-not pool members: they are alternatives, used in order when no pool key
-is usable. `auth remove` deletes a key:
+The pool is seeded from the provider's secrets: the first of its secret
+names that is set and that name's numbered siblings (`OPENROUTER_API_KEY_2`,
+`OPENROUTER_API_KEY_3`...), plus the keys `prometheus auth add --label`
+stored. `auth list --json` shows each key's `pool` origin, `seeded` or
+`added`; a seeded key leaves the pool when its secret disappears, an added
+one stays until `auth remove`. The provider's later secret names (a shared
+key next to a plan key) and their siblings are alternatives, used in order
+when no pool key is usable, so the first name present supplies the
+credential. A `[providers.<custom>]` endpoint pools `key_secret` and its
+numbered siblings the same way. Delegated children and auxiliary calls on
+the same provider draw from the same pool and see the same benches.
+
+Maintenance commands (`auth list` and `auth status` are peeks: they never
+refresh, rotate or bench anything):
 
 ```console
+$ prometheus auth priority openrouter work 0      # fill_first takes 'work' first
+$ prometheus auth add openrouter --label spare --priority 1
+$ prometheus auth reset openrouter                # clear every bench and cooldown
+$ prometheus auth refresh openai-codex            # refresh sign-in tokens now
+$ prometheus auth logout openai-codex             # remove every sign-in of the provider
 $ prometheus auth remove openrouter work
 removed api_key 'work' of openrouter
 ```
+
+A reset reaches running sessions (a gateway too) on their next request:
+benches live in `state.db`, which every request reads. `prometheus auth`
+without a subcommand on a terminal opens a small manager for the same
+commands; off a terminal it lists the credentials.
 
 ## Subscription sign-ins
 
@@ -194,7 +215,16 @@ passes through Prometheus and the ledger records the calls as
 auth = "external_process"
 command = "claude-code-acp"   # found on PATH, then ~/.local/bin, ~/bin, npm, bun, cargo bins
 args = []
+# command_path = "/opt/tools/claude-code-acp"   # one absolute executable, wins over `command`
 ```
+
+The lookup of `command` searches `PATH`, the user-local bin directories and
+then the vendor's documented install prefixes (`~/.claude/local`,
+`~/.codex/bin`, Homebrew and `/usr/local/bin`), so a gateway service, cron
+run or desktop launch with a bare `PATH` finds the same CLI an interactive
+shell does. `command_path` is used as is and never split or run through a
+shell. The Codex CLI of the Codex app-server runtime is found the same way,
+or pinned with `model.codex_bin`.
 
 Each model call starts the CLI in the Prometheus process's working directory, opens one ACP
 session and sends the conversation as one prompt; the CLI's message and
@@ -268,6 +298,30 @@ turn, and `cold` only within that window of a session's first turn.
 Each ledger row records the `service_tier` it asked for and is priced at
 that tier's rates (twice the standard rates for OpenAI priority, six times
 for Anthropic fast mode) unless the provider reports the cost itself.
+
+## Auxiliary concurrency and request fields
+
+At most `auxiliary.max_concurrency` (8) auxiliary calls of a profile are in
+flight at once across its sessions, and at most `[auxiliary.<task>]
+max_concurrency` of one task; the rest wait. `[auxiliary.<task>]
+extra_body` is merged into that task's request body after the wire
+mapping, for example an OpenRouter routing block for compression only:
+
+```toml
+[auxiliary.compression]
+max_concurrency = 2
+[auxiliary.compression.extra_body.provider]
+sort = "price"
+```
+
+## Local servers from WSL2
+
+Under WSL2's default NAT networking a server listening on Windows (Ollama,
+LM Studio) is not on the Linux loopback. When a local provider's loopback
+endpoint does not answer there, `prometheus doctor` warns
+(`wsl2_loopback`) and the session error's hint suggests enabling mirrored
+networking (`networkingMode=mirrored` in `.wslconfig`) or pointing the
+provider at the Windows host address from the default route.
 
 ## Outbound IPv6 and IPv4
 

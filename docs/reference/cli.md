@@ -41,7 +41,7 @@ Commands:
   model        Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
   providers    Provider routing state: per-route health scores
   fallback     List and edit the profile's fallback chain (`[[fallback.chain]]`)
-  auth         Add, list and remove provider API keys and subscription sign-ins
+  auth         Add, list and remove provider API keys and subscription sign-ins (an interactive manager without a subcommand on a terminal)
   tools        List the profile's tools and explain one (exposure, capabilities, approvals)
   toolsets     List toolsets and show the tools a toolset resolves to
   approvals    Check how the approval gate treats a command, without running it
@@ -12206,17 +12206,21 @@ Usage: prometheus fallback help help
 ## `prometheus auth`
 
 ```text
-Add, list and remove provider API keys and subscription sign-ins
+Add, list and remove provider API keys and subscription sign-ins (an interactive manager without a subcommand on a terminal)
 
-Usage: prometheus auth [OPTIONS] <COMMAND>
+Usage: prometheus auth [OPTIONS] [COMMAND]
 
 Commands:
-  add     Store an API key (read from a hidden prompt or stdin) or sign in to a subscription
-  list    List every credential: provider, label, kind, source and status (never key or token material)
-  status  One provider's credentials, sign-in flows and plan notes
-  remove  Delete a credential (and revoke a sign-in's refresh token where the provider offers revocation) [alias: rm]
-  import  Copy another tool's sign-in into the secrets store
-  help    Print this message or the help of the given subcommand(s)
+  add       Store an API key (read from a hidden prompt or stdin) or sign in to a subscription
+  list      List every credential: provider, label, kind, source and status (never key or token material)
+  status    One provider's credentials, sign-in flows and plan notes
+  remove    Delete a credential (and revoke a sign-in's refresh token where the provider offers revocation) [alias: rm]
+  priority  Move an API key of the pool to a 0-based position (the order `fill_first` takes them in); the others are renumbered
+  reset     Clear benches and cooldowns (every credential of the provider, or one); running sessions use them on their next request
+  refresh   Refresh sign-in tokens now and return them to rotation
+  logout    Remove every subscription sign-in of a provider
+  import    Copy another tool's sign-in into the secrets store
+  help      Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -12289,6 +12293,9 @@ Options:
 
       --json
           Print one JSON document on stdout; errors go to stderr as JSON
+
+      --priority <N>
+          Put the new API key at this 0-based position of the pool order
 
   -v, --verbose...
           More detail; repeatable
@@ -12437,6 +12444,190 @@ Options:
           Print help
 ```
 
+## `prometheus auth priority`
+
+```text
+Move an API key of the pool to a 0-based position (the order `fill_first` takes them in); the others are renumbered
+
+Usage: prometheus auth priority [OPTIONS] <PROVIDER> <LABEL|INDEX> <POSITION>
+
+Arguments:
+  <PROVIDER>
+          Provider id or alias
+
+  <LABEL|INDEX>
+          Label, or 1-based position in `auth status <provider>`
+
+  <POSITION>
+          The new 0-based position
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus auth reset`
+
+```text
+Clear benches and cooldowns (every credential of the provider, or one); running sessions use them on their next request
+
+Usage: prometheus auth reset [OPTIONS] <PROVIDER> [LABEL|INDEX]
+
+Arguments:
+  <PROVIDER>
+          Provider id or alias
+
+  [LABEL|INDEX]
+          Label, or 1-based position in `auth status <provider>`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus auth refresh`
+
+```text
+Refresh sign-in tokens now and return them to rotation
+
+Usage: prometheus auth refresh [OPTIONS] <PROVIDER> [LABEL|INDEX]
+
+Arguments:
+  <PROVIDER>
+          Provider id or alias
+
+  [LABEL|INDEX]
+          Label, or 1-based position in `auth status <provider>`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus auth logout`
+
+```text
+Remove every subscription sign-in of a provider
+
+Usage: prometheus auth logout [OPTIONS] <PROVIDER>
+
+Arguments:
+  <PROVIDER>
+          Provider id or alias
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus auth import`
 
 ```text
@@ -12497,12 +12688,16 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus auth help [COMMAND]
 
 Commands:
-  add     Store an API key (read from a hidden prompt or stdin) or sign in to a subscription
-  list    List every credential: provider, label, kind, source and status (never key or token material)
-  status  One provider's credentials, sign-in flows and plan notes
-  remove  Delete a credential (and revoke a sign-in's refresh token where the provider offers revocation)
-  import  Copy another tool's sign-in into the secrets store
-  help    Print this message or the help of the given subcommand(s)
+  add       Store an API key (read from a hidden prompt or stdin) or sign in to a subscription
+  list      List every credential: provider, label, kind, source and status (never key or token material)
+  status    One provider's credentials, sign-in flows and plan notes
+  remove    Delete a credential (and revoke a sign-in's refresh token where the provider offers revocation)
+  priority  Move an API key of the pool to a 0-based position (the order `fill_first` takes them in); the others are renumbered
+  reset     Clear benches and cooldowns (every credential of the provider, or one); running sessions use them on their next request
+  refresh   Refresh sign-in tokens now and return them to rotation
+  logout    Remove every subscription sign-in of a provider
+  import    Copy another tool's sign-in into the secrets store
+  help      Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus auth help add`
@@ -12535,6 +12730,38 @@ Usage: prometheus auth help status
 Delete a credential (and revoke a sign-in's refresh token where the provider offers revocation)
 
 Usage: prometheus auth help remove
+```
+
+## `prometheus auth help priority`
+
+```text
+Move an API key of the pool to a 0-based position (the order `fill_first` takes them in); the others are renumbered
+
+Usage: prometheus auth help priority
+```
+
+## `prometheus auth help reset`
+
+```text
+Clear benches and cooldowns (every credential of the provider, or one); running sessions use them on their next request
+
+Usage: prometheus auth help reset
+```
+
+## `prometheus auth help refresh`
+
+```text
+Refresh sign-in tokens now and return them to rotation
+
+Usage: prometheus auth help refresh
+```
+
+## `prometheus auth help logout`
+
+```text
+Remove every subscription sign-in of a provider
+
+Usage: prometheus auth help logout
 ```
 
 ## `prometheus auth help import`
@@ -19860,7 +20087,7 @@ Commands:
   model        Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
   providers    Provider routing state: per-route health scores
   fallback     List and edit the profile's fallback chain (`[[fallback.chain]]`)
-  auth         Add, list and remove provider API keys and subscription sign-ins
+  auth         Add, list and remove provider API keys and subscription sign-ins (an interactive manager without a subcommand on a terminal)
   tools        List the profile's tools and explain one (exposure, capabilities, approvals)
   toolsets     List toolsets and show the tools a toolset resolves to
   approvals    Check how the approval gate treats a command, without running it
@@ -21733,16 +21960,20 @@ Usage: prometheus help fallback clear
 ## `prometheus help auth`
 
 ```text
-Add, list and remove provider API keys and subscription sign-ins
+Add, list and remove provider API keys and subscription sign-ins (an interactive manager without a subcommand on a terminal)
 
 Usage: prometheus help auth [COMMAND]
 
 Commands:
-  add     Store an API key (read from a hidden prompt or stdin) or sign in to a subscription
-  list    List every credential: provider, label, kind, source and status (never key or token material)
-  status  One provider's credentials, sign-in flows and plan notes
-  remove  Delete a credential (and revoke a sign-in's refresh token where the provider offers revocation)
-  import  Copy another tool's sign-in into the secrets store
+  add       Store an API key (read from a hidden prompt or stdin) or sign in to a subscription
+  list      List every credential: provider, label, kind, source and status (never key or token material)
+  status    One provider's credentials, sign-in flows and plan notes
+  remove    Delete a credential (and revoke a sign-in's refresh token where the provider offers revocation)
+  priority  Move an API key of the pool to a 0-based position (the order `fill_first` takes them in); the others are renumbered
+  reset     Clear benches and cooldowns (every credential of the provider, or one); running sessions use them on their next request
+  refresh   Refresh sign-in tokens now and return them to rotation
+  logout    Remove every subscription sign-in of a provider
+  import    Copy another tool's sign-in into the secrets store
 ```
 
 ## `prometheus help auth add`
@@ -21775,6 +22006,38 @@ Usage: prometheus help auth status
 Delete a credential (and revoke a sign-in's refresh token where the provider offers revocation)
 
 Usage: prometheus help auth remove
+```
+
+## `prometheus help auth priority`
+
+```text
+Move an API key of the pool to a 0-based position (the order `fill_first` takes them in); the others are renumbered
+
+Usage: prometheus help auth priority
+```
+
+## `prometheus help auth reset`
+
+```text
+Clear benches and cooldowns (every credential of the provider, or one); running sessions use them on their next request
+
+Usage: prometheus help auth reset
+```
+
+## `prometheus help auth refresh`
+
+```text
+Refresh sign-in tokens now and return them to rotation
+
+Usage: prometheus help auth refresh
+```
+
+## `prometheus help auth logout`
+
+```text
+Remove every subscription sign-in of a provider
+
+Usage: prometheus help auth logout
 ```
 
 ## `prometheus help auth import`

@@ -247,11 +247,12 @@ pub enum Command {
         #[command(subcommand)]
         command: FallbackCommand,
     },
-    /// Add, list and remove provider API keys and subscription sign-ins.
+    /// Add, list and remove provider API keys and subscription sign-ins
+    /// (an interactive manager without a subcommand on a terminal).
     Auth {
         /// The auth subcommand.
         #[command(subcommand)]
-        command: AuthCommand,
+        command: Option<AuthCommand>,
     },
     /// List the profile's tools and explain one (exposure, capabilities, approvals).
     Tools {

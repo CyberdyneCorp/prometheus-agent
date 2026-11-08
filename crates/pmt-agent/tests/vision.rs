@@ -63,6 +63,8 @@ async fn mock_describer() -> AuxDescriber {
         source: AuxSource::Config,
         timeout: Duration::from_secs(5),
         retries: 0,
+        extra_body: None,
+        max_concurrency: None,
     };
     let script = Script::parse(
         &format!("[[rule]]\ntext = \"{ANSWER}\"\nrepeat = true\n"),

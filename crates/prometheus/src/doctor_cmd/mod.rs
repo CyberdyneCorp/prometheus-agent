@@ -13,6 +13,7 @@ mod daemon;
 mod fix;
 mod groups;
 mod system;
+mod wsl;
 
 use std::fmt::Write as _;
 

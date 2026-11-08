@@ -176,3 +176,57 @@ async fn retries_are_capped_and_a_task_timeout_ends_an_attempt() {
     assert!(started.elapsed() < Duration::from_secs(3));
     assert!(err.message().contains("compression"), "{}", err.message());
 }
+
+/// Scenario: Compression concurrency capped (Auxiliary concurrency and
+/// request overrides): five sessions compressing at once on a cap of two
+/// run in three waves, and the task's `extra_body` rides each request.
+#[tokio::test]
+async fn compression_calls_wait_for_the_task_cap_and_carry_the_task_extra_body() {
+    use pmt_providers::auxiliary::limits::AuxLimits;
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/aux/v1/chat/completions"))
+        .respond_with(sse("chat_text.sse").set_delay(Duration::from_millis(300)))
+        .mount(&server)
+        .await;
+    let env = Env::new(
+        &format!(
+            "{}max_concurrency = 2\n[auxiliary.compression.extra_body.provider]\nsort = \"price\"\n",
+            config(&server.uri())
+        ),
+        KEYS,
+    );
+    let aux = Arc::new(compression_route(&env).await);
+    assert_eq!(aux.max_concurrency, Some(2));
+    // Every session of the profile shares the profile's caps.
+    let limits = Arc::new(AuxLimits::new(8));
+    let client = pmt_net::client(&pmt_net::OutboundPolicy::default()).unwrap();
+    let started = std::time::Instant::now();
+    let calls: Vec<_> = (0..5)
+        .map(|_| {
+            let caller = AuxCaller::new(client.clone()).with_limits(Arc::clone(&limits));
+            let aux = Arc::clone(&aux);
+            tokio::spawn(async move {
+                let ctx = CallContext::new(pmt_core::id::SessionId::new(), "main");
+                caller
+                    .call(&aux, &request("summarise"), &ctx)
+                    .await
+                    .unwrap();
+            })
+        })
+        .collect();
+    for call in calls {
+        call.await.unwrap();
+    }
+    assert!(
+        started.elapsed() >= Duration::from_millis(850),
+        "at most two in flight: three waves of 300 ms, took {:?}",
+        started.elapsed()
+    );
+    let sent = crate::support::bodies(&server, "/chat/completions").await;
+    assert_eq!(sent.len(), 5);
+    assert!(
+        sent.iter().all(|b| b["provider"]["sort"] == "price"),
+        "{sent:?}"
+    );
+}

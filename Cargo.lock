@@ -3227,6 +3227,7 @@ dependencies = [
  "fastrand",
  "getrandom 0.4.3",
  "jiff",
+ "percent-encoding",
  "pmt-config",
  "pmt-core",
  "pmt-net",

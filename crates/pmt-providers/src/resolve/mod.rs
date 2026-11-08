@@ -517,6 +517,11 @@ impl Resolver<'_> {
             .with_hint(hint));
         };
         if provider.descriptor().local && !self.probe.reachable(default).await {
+            let hint = match crate::wsl::detect().and_then(|wsl| crate::wsl::advice(&wsl, default))
+            {
+                Some(advice) => format!("{advice}; or {hint}"),
+                None => hint,
+            };
             return Err(Error::new(
                 &codes::PROVIDER_MISSING_BASE_URL,
                 format!(

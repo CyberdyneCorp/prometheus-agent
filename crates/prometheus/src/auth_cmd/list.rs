@@ -19,6 +19,9 @@ use super::Profile;
 use crate::context::Context;
 use crate::output::{document, print_raw};
 
+/// The pool origin of a key `prometheus auth add` stored.
+pub(super) const ADDED: &str = "added";
+
 /// One credential as listings show it.
 #[derive(Debug, Clone, Serialize)]
 pub(super) struct Row {
@@ -31,6 +34,11 @@ pub(super) struct Row {
     pub source: String,
     /// `ok`, `benched` or `dead`.
     pub status: &'static str,
+    /// An API key's pool membership: `seeded` from the provider's secret
+    /// names (pruned when the secret disappears) or `added` by `prometheus
+    /// auth add`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pool: Option<&'static str>,
     /// The provider refused the sign-in's plan for this use.
     pub ineligible: bool,
     /// Benched until then.
@@ -49,11 +57,16 @@ pub(super) struct Row {
     /// The sign-in record (owned subscriptions only).
     #[serde(skip)]
     pub subscription: Option<Subscription>,
+    /// The credential's id in the pool state (`secret:<NAME>`,
+    /// `subscription:<label>`, `borrowed:<cli>`).
+    #[serde(skip)]
+    pub state_id: String,
 }
 
 impl Row {
     /// Applies the credential's request count and bench.
     fn with_state(mut self, id: &str, states: &[CredentialState], now: Timestamp) -> Self {
+        id.clone_into(&mut self.state_id);
         let state = states.iter().find(|s| s.credential == id);
         self.request_count = state.map_or(0, |s| s.request_count);
         if let Some(until) = pool::benched_until(states, id, now) {
@@ -66,8 +79,9 @@ impl Row {
     }
 }
 
-/// Every credential of `provider`, in `auth status` order: API keys
-/// (`default` first), then sign-ins by label, then a borrowed login.
+/// Every credential of `provider`, in `auth status` order: API keys in
+/// pool order (`auth priority`, else `default` first), then sign-ins by
+/// label, then a borrowed login.
 pub(super) fn rows_of(profile: &Profile, provider: &Provider) -> Result<Vec<Row>, Error> {
     let sources = key_sources(profile)?;
     let states = match profile.accounts.state() {
@@ -76,6 +90,8 @@ pub(super) fn rows_of(profile: &Profile, provider: &Provider) -> Result<Vec<Row>
     };
     let now = Timestamp::now();
     let mut rows = key_rows(provider, &sources, &states, now);
+    let priority = pool::priority(profile.accounts.state(), provider.id());
+    pool::prioritize(&mut rows, &priority, |r| r.state_id.as_str());
     mark_minted(profile, provider, &mut rows)?;
     for sub in profile.credentials.subscriptions()? {
         if sub.provider == provider.id() {
@@ -90,8 +106,9 @@ pub(super) fn rows_of(profile: &Profile, provider: &Provider) -> Result<Vec<Row>
     Ok(rows)
 }
 
-/// Keys minted by a sign-in (OpenRouter OAuth) show that source, and
-/// `dead` once the provider refused them.
+/// Keys `auth add` stored are `added` to the pool; keys minted by a
+/// sign-in (OpenRouter OAuth) also show that source, and `dead` once the
+/// provider refused them.
 fn mark_minted(profile: &Profile, provider: &Provider, rows: &mut [Row]) -> Result<(), Error> {
     let Some(state) = profile.accounts.state() else {
         return Ok(());
@@ -99,7 +116,10 @@ fn mark_minted(profile: &Profile, provider: &Provider, rows: &mut [Row]) -> Resu
     for row in rows {
         let Some(secret) = &row.secret else { continue };
         if let Some((source, dead)) = state.key_origin(provider.id(), &pool::secret_id(secret))? {
-            row.source = source;
+            row.pool = Some(ADDED);
+            if source != ADDED {
+                row.source = source;
+            }
             if dead {
                 row.status = "dead";
             }
@@ -146,6 +166,7 @@ fn key_rows(
                 kind: "api_key",
                 source: sources[&member.secret].to_owned(),
                 status: "ok",
+                pool: Some(if member.seeded { "seeded" } else { ADDED }),
                 ineligible: false,
                 cooldown_until: None,
                 request_count: 0,
@@ -153,6 +174,7 @@ fn key_rows(
                 expires_at: None,
                 plan: None,
                 subscription: None,
+                state_id: String::new(),
             }
             .with_state(&id, states, now)
         })
@@ -169,6 +191,7 @@ fn subscription_row(sub: Subscription) -> Row {
             Status::Ok => "ok",
             Status::Dead => "dead",
         },
+        pool: None,
         ineligible: sub.ineligible,
         cooldown_until: None,
         request_count: 0,
@@ -176,6 +199,7 @@ fn subscription_row(sub: Subscription) -> Row {
         expires_at: sub.expires_at.clone(),
         plan: sub.plan.clone(),
         subscription: Some(sub),
+        state_id: String::new(),
     }
 }
 
@@ -196,6 +220,7 @@ fn borrowed_row(profile: &Profile, provider: &Provider) -> Option<Row> {
         kind: "subscription",
         source: "borrowed".to_owned(),
         status: "ok",
+        pool: None,
         ineligible: false,
         cooldown_until: None,
         request_count: 0,
@@ -203,6 +228,7 @@ fn borrowed_row(profile: &Profile, provider: &Provider) -> Option<Row> {
         expires_at: tokens.expires_at.map(|t| t.to_string()),
         plan: tokens.plan,
         subscription: None,
+        state_id: String::new(),
     })
 }
 

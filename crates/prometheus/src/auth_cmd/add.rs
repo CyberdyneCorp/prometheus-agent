@@ -23,6 +23,7 @@ pub(super) struct Args<'a> {
     pub label: Option<&'a str>,
     pub browser: bool,
     pub device: bool,
+    pub priority: Option<usize>,
     pub argv_key: &'a [String],
 }
 
@@ -76,7 +77,11 @@ pub(super) fn run(ctx: &Context<'_>, args: &Args<'_>) -> Result<u8, Error> {
             "--browser and --device choose a sign-in flow; they do not apply to --type api_key",
         ));
     }
-    api_key(ctx, &profile, provider, label)
+    let code = api_key(ctx, &profile, provider, label)?;
+    if let Some(position) = args.priority {
+        super::maintain::place_key(&profile, provider, label, position)?;
+    }
+    Ok(code)
 }
 
 fn api_key(
@@ -97,6 +102,13 @@ fn api_key(
     })?;
     let value = prompt::read_secret(&name)?;
     profile.scope.secrets().store().set(&name, &value)?;
+    // Keys stored here are the user's own pool members: never pruned like
+    // keys seeded from the provider's secret names.
+    pmt_store::Store::open(&profile.scope)?.set_key_origin(
+        id,
+        &pmt_providers::pool::secret_id(&name),
+        super::list::ADDED,
+    )?;
     let added = Added {
         profile: profile.scope.name().as_str(),
         provider: id,

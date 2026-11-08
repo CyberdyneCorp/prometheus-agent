@@ -8,6 +8,8 @@ mod add;
 pub mod args;
 mod import;
 mod list;
+mod maintain;
+mod manager;
 mod remove;
 
 use std::process::{Command, Stdio};
@@ -28,7 +30,10 @@ use crate::context::Context;
 /// # Errors
 ///
 /// The command's failure; the caller prints it and exits with its code.
-pub fn run(command: &AuthCommand, ctx: &Context<'_>) -> Result<u8, Error> {
+pub fn run(command: Option<&AuthCommand>, ctx: &Context<'_>) -> Result<u8, Error> {
+    let Some(command) = command else {
+        return manager::run(ctx);
+    };
     match command {
         AuthCommand::Add {
             provider,
@@ -36,6 +41,7 @@ pub fn run(command: &AuthCommand, ctx: &Context<'_>) -> Result<u8, Error> {
             label,
             browser,
             device,
+            priority,
             argv_key,
         } => add::run(
             ctx,
@@ -45,9 +51,24 @@ pub fn run(command: &AuthCommand, ctx: &Context<'_>) -> Result<u8, Error> {
                 label: label.as_deref(),
                 browser: *browser,
                 device: *device,
+                priority: *priority,
                 argv_key,
             },
         ),
+        AuthCommand::Priority {
+            provider,
+            credential,
+            position,
+        } => maintain::priority(ctx, provider, credential, *position),
+        AuthCommand::Reset {
+            provider,
+            credential,
+        } => maintain::reset(ctx, provider, credential.as_deref()),
+        AuthCommand::Refresh {
+            provider,
+            credential,
+        } => maintain::refresh(ctx, provider, credential.as_deref()),
+        AuthCommand::Logout { provider } => maintain::logout(ctx, provider),
         AuthCommand::List => list::list(ctx),
         AuthCommand::Status { provider } => list::status(ctx, provider),
         AuthCommand::Remove {

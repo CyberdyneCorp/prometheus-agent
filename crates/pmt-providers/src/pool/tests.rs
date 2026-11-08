@@ -131,7 +131,50 @@ fn members_are_the_default_key_then_labelled_keys() {
     let labels: Vec<&str> = members.iter().map(|m| m.label.as_str()).collect();
     assert_eq!(labels, ["default", "a-b", "work"]);
     assert_eq!(members[2].secret, "OPENROUTER_API_KEY_WORK");
-    assert!(members.iter().all(|m| m.pooled));
+    assert!(members[0].seeded && !members[1].seeded && !members[2].seeded);
+}
+
+#[test]
+fn every_secret_name_and_its_numbered_siblings_seed_the_pool() {
+    let config = Config::default();
+    let registry = ProviderRegistry::for_profile(&config, Vec::new()).unwrap();
+    let anthropic = registry.lookup("anthropic").unwrap();
+    let names: Vec<String> = [
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_API_KEY_10",
+        "ANTHROPIC_API_KEY_2",
+        "ANTHROPIC_API_KEY_01",
+        "ANTHROPIC_TOKEN",
+        "ANTHROPIC_TOKEN_2",
+        "ANTHROPIC_API_KEY_WORK",
+    ]
+    .map(str::to_owned)
+    .to_vec();
+    let members = key_members(anthropic, &names);
+    let found: Vec<(&str, &str, bool, bool)> = members
+        .iter()
+        .map(|m| (m.label.as_str(), m.secret.as_str(), m.seeded, m.pooled))
+        .collect();
+    assert_eq!(
+        found,
+        [
+            ("default", "ANTHROPIC_API_KEY", true, true),
+            ("2", "ANTHROPIC_API_KEY_2", true, true),
+            ("10", "ANTHROPIC_API_KEY_10", true, true),
+            // A later secret name is an alternative, with its siblings.
+            ("anthropic-token", "ANTHROPIC_TOKEN", true, false),
+            ("anthropic-token-2", "ANTHROPIC_TOKEN_2", true, false),
+            ("01", "ANTHROPIC_API_KEY_01", false, true),
+            ("work", "ANTHROPIC_API_KEY_WORK", false, true),
+        ]
+    );
+    // A seeded member whose secret disappeared is gone.
+    let fewer: Vec<String> = names
+        .iter()
+        .filter(|n| *n != "ANTHROPIC_TOKEN_2")
+        .cloned()
+        .collect();
+    assert_eq!(key_members(anthropic, &fewer).len(), members.len() - 1);
 }
 
 /// Regression: requests in one millisecond tied on `last_used_at` and the

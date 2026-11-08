@@ -164,6 +164,10 @@ impl Models {
         let conversation = Conversation::default();
         let aux = AuxCaller::new(client.clone())
             .with_conversation(conversation.clone())
+            .with_limits(pmt_providers::auxiliary::limits::AuxLimits::for_profile(
+                scope.dir(),
+                config.auxiliary.max_concurrency,
+            ))
             .with_mock(Arc::clone(&mock))
             .with_recorder(Arc::clone(&recorder))
             .with_credentials(Arc::clone(&accounts) as _);

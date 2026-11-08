@@ -3228,3 +3228,22 @@ capabilities = [
 
 [model-providers."Outbound IPv4 preference"]
 "Blackholed IPv6 falls back quickly" = ["crates/pmt-net/src/eyeballs.rs::ipv4_starts_250_ms_after_a_silent_ipv6_attempt_and_leads", "crates/pmt-net/tests/ipv6.rs::a_blackholed_ipv6_address_falls_back_to_ipv4_quickly"]
+
+# Group 46.3: pool maintenance, seeding and sharing, agent CLI lookup,
+# auxiliary concurrency, WSL2 diagnostics.
+[model-providers."Credential pool maintenance commands"]
+"Reset reaches a running session" = ["crates/pmt-providers/tests/providers/pool_seeding.rs::a_reset_in_state_db_reaches_a_running_session_on_its_next_request", "crates/prometheus/tests/auth_pool_cli.rs::reset_clears_a_bench_in_state_db_and_status_lists_it_ok"]
+"Status is a peek" = ["crates/prometheus/tests/auth_pool_cli.rs::status_reports_an_expiring_token_without_refreshing_it"]
+
+[model-providers."Credential pool seeding, custom endpoint pools and child sharing"]
+"Numbered siblings join the pool" = ["crates/prometheus/tests/auth_pool_cli.rs::numbered_siblings_are_seeded_members_and_auth_add_keys_are_added", "crates/pmt-providers/src/pool/tests.rs::every_secret_name_and_its_numbered_siblings_seed_the_pool"]
+"Child sees parent's bench" = ["crates/pmt-providers/tests/providers/pool_seeding.rs::a_delegated_child_skips_the_member_its_parent_benched"]
+
+[model-providers."External agent CLI executable resolution"]
+"Service launch with bare PATH" = ["crates/pmt-providers/tests/providers/external.rs::a_bare_service_path_still_finds_the_user_local_and_vendor_installs"]
+
+[model-providers."Auxiliary concurrency and request overrides"]
+"Compression concurrency capped" = ["crates/pmt-providers/tests/providers/auxiliary.rs::compression_calls_wait_for_the_task_cap_and_carry_the_task_extra_body", "crates/pmt-providers/src/auxiliary/limits.rs::the_task_cap_and_the_profile_cap_both_hold"]
+
+[model-providers."WSL2 local endpoint diagnostics"]
+"Windows-hosted Ollama unreachable from WSL2" = ["crates/prometheus/src/doctor_cmd/wsl.rs::an_unreachable_loopback_server_under_wsl2_nat_is_a_warn_with_the_host_ip", "crates/pmt-providers/src/wsl.rs::advice_names_mirrored_networking_and_the_host_for_loopback_only"]

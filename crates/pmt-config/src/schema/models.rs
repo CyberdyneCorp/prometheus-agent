@@ -28,6 +28,11 @@ pub struct ModelConfig {
     /// Smallest context window (tokens) a session may start with.
     #[schemars(range(min = 16_000))]
     pub min_context_window: u64,
+    /// Absolute path of the Codex CLI the Codex app-server runtime runs;
+    /// unset finds `codex` on `PATH`, in the user-local bin directories
+    /// and the vendor's install prefixes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub codex_bin: Option<String>,
 }
 
 impl Default for ModelConfig {
@@ -40,6 +45,7 @@ impl Default for ModelConfig {
                 .map(str::to_owned)
                 .to_vec(),
             min_context_window: 64_000,
+            codex_bin: None,
         }
     }
 }
@@ -161,6 +167,10 @@ pub struct ProviderConfig {
     pub command: Option<String>,
     /// Arguments of `command`.
     pub args: Vec<String>,
+    /// Absolute path of the agent CLI (one executable, never parsed as a
+    /// shell command); wins over finding `command` by name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub command_path: Option<String>,
     /// Spend cap per calendar day (UTC) in USD; once the profile's usage
     /// ledger reaches it the provider is unavailable until the next day.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -206,6 +216,7 @@ impl Default for ProviderConfig {
             region: None,
             command: None,
             args: Vec::new(),
+            command_path: None,
             daily_budget_usd: None,
             monthly_budget_usd: None,
             confirm_metered_fallback: false,
@@ -438,6 +449,10 @@ pub struct AuxiliaryConfig {
     /// Same-route retries of a retryable auxiliary failure.
     #[schemars(range(min = 0, max = 6))]
     pub transient_retries: u32,
+    /// Auxiliary calls in flight at once across the profile's sessions;
+    /// further calls wait.
+    #[schemars(range(min = 1))]
+    pub max_concurrency: u32,
     /// Context compression summaries.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub compression: Option<AuxiliaryTask>,
@@ -480,6 +495,7 @@ impl Default for AuxiliaryConfig {
     fn default() -> Self {
         Self {
             transient_retries: 2,
+            max_concurrency: 8,
             compression: None,
             title: None,
             vision: None,
@@ -514,6 +530,15 @@ pub struct AuxiliaryTask {
     /// Fallback routes (`"<provider>/<model>"`); `[]` disables fallback.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fallback_chain: Option<Vec<String>>,
+    /// This task's calls in flight at once (within
+    /// `auxiliary.max_concurrency`); unset is only the profile cap.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 1))]
+    pub max_concurrency: Option<u32>,
+    /// Fields merged into this task's request body after the wire format
+    /// mapping (one level deep), e.g. an OpenRouter `provider` block.
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub extra_body: BTreeMap<String, serde_json::Value>,
 }
 
 /// The `[fallback]` section.
