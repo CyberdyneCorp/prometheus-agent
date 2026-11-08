@@ -11,7 +11,7 @@ use pmt_rpc::contracts::AttachRole;
 use pmt_store::gateway::outbox::OutboundState;
 use serde_json::json;
 
-use crate::support::{Did, Harness, Setup, config, eventually, open, said};
+use crate::support::{Did, Harness, Setup, config, eventually, eventually_for, open, said};
 
 /// The id of the approval request open in the session, as the card's
 /// buttons carry it.
@@ -394,7 +394,12 @@ async fn replies_wait_out_an_outage_and_arrive_in_order() {
             .filter(|t| t.starts_with("echo:"))
             .collect()
     };
-    eventually("both replies arrive", || replies().len() == 2).await;
+    // Two outage waits of the real outbox backoff (2 s, then the entry's
+    // age) plus its 1 s poll: several seconds before anything arrives.
+    eventually_for("both replies arrive", Duration::from_secs(30), || {
+        replies().len() == 2
+    })
+    .await;
     assert_eq!(replies(), vec!["echo: one", "echo: two"]);
     let sent = h
         .store()

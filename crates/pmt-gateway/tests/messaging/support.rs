@@ -1359,8 +1359,15 @@ impl Harness {
 }
 
 /// Waits up to ten seconds for `check`.
-pub async fn eventually(what: &str, mut check: impl FnMut() -> bool) {
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+pub async fn eventually(what: &str, check: impl FnMut() -> bool) {
+    eventually_for(what, Duration::from_secs(10), check).await;
+}
+
+/// Waits up to `budget` for `check`: for flows that sit through real
+/// (wall-clock) backoff, where ten seconds leaves no headroom on a loaded
+/// CI runner.
+pub async fn eventually_for(what: &str, budget: Duration, mut check: impl FnMut() -> bool) {
+    let deadline = tokio::time::Instant::now() + budget;
     while !check() {
         assert!(
             tokio::time::Instant::now() < deadline,
