@@ -346,9 +346,10 @@ fn a_disabled_provider_warns_once_and_sessions_use_built_in_memory() {
     p.send_line("hello there").unwrap();
     step(&mut p, "mock: hello there");
     step(&mut p, "› ");
-    p.send_line("/new").unwrap();
-    step(&mut p, "cancel › ");
-    p.send_line("once").unwrap();
+    // `--yes` skips the destructive-command confirmation: its prompt can
+    // render twice, and a `› ` match on the first render raced the answer.
+    p.send_line("/new --yes").unwrap();
+    step(&mut p, "new session");
     step(&mut p, "› ");
     p.send_line("again").unwrap();
     step(&mut p, "mock: again");
