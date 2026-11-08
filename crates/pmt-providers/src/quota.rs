@@ -103,6 +103,50 @@ pub fn endpoint(provider: &str, base_url: &str) -> Option<String> {
     }
 }
 
+/// Whether `provider`'s plan banks usage limit resets the user can redeem
+/// (ChatGPT plans).
+#[must_use]
+pub fn resets(provider: &str) -> bool {
+    provider == "openai-codex"
+}
+
+/// Redeems a banked usage limit reset of `provider`'s plan (`POST
+/// <usage endpoint>/reset`).
+///
+/// # Errors
+///
+/// `provider.call_failed` when the provider has no resets, refuses or does
+/// not answer.
+pub async fn redeem_reset(
+    client: &reqwest::Client,
+    provider: &str,
+    base_url: &str,
+    token: &SecretString,
+    account_id: Option<&str>,
+) -> Result<(), Error> {
+    let url = endpoint(provider, base_url)
+        .filter(|_| resets(provider))
+        .ok_or_else(|| failed(provider, "the plan has no limit resets"))?;
+    let mut request = client
+        .post(format!("{url}/reset"))
+        .bearer_auth(token.expose())
+        .timeout(Duration::from_secs(10));
+    if let Some(account) = account_id {
+        request = request.header("ChatGPT-Account-ID", account);
+    }
+    let response = request
+        .send()
+        .await
+        .map_err(|e| failed(provider, &e.to_string()))?;
+    if response.status().is_success() {
+        return Ok(());
+    }
+    Err(failed(
+        provider,
+        &format!("limit reset refused (HTTP {})", response.status()),
+    ))
+}
+
 /// Probes `provider`'s usage endpoint with the subscription `token`.
 ///
 /// # Errors

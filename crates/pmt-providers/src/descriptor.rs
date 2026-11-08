@@ -163,6 +163,18 @@ pub struct Descriptor {
     /// Model id patterns mapped to the wire format serving them, first
     /// match wins; models matching none use `wire_format`.
     pub model_wire_formats: Vec<ModelWire>,
+    /// Where a subscription's plan and billing are managed (`/subscription`,
+    /// `/topup`).
+    pub account_urls: AccountUrls,
+}
+
+/// A subscription provider's account pages.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AccountUrls {
+    /// Plan management (upgrade, downgrade).
+    pub plan: Option<String>,
+    /// Billing and prepaid balance top-up.
+    pub billing: Option<String>,
 }
 
 /// One `model_wire_formats` row: a case-insensitive model id pattern
@@ -263,6 +275,7 @@ impl Descriptor {
             command: None,
             session_affinity_header: None,
             model_wire_formats: Vec::new(),
+            account_urls: AccountUrls::default(),
         }
     }
 

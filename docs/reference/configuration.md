@@ -409,6 +409,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `heartbeat.min_interval_secs` | integer | `60` | 1 to 86400 | `live` | Shortest `/heartbeat every` interval (seconds). |
 | `hooks.auto_accept` | boolean | `false` | any | `next_session` | Run shell hooks nobody approved yet without asking (as `--accept-hooks` does for one run); every hook still runs in the session's sandbox. |
 | `hooks.outbound` | array of table | `[]` | any | `next_session` | Outbound webhooks: hook events sent as HTTPS `POST` requests. |
+| `image_gen.provider` | string | unset | any | `next_session` | The provider serving the category (`nous` routes it through the subscription tool gateway); unset picks one automatically. |
 | `logging.level` | one of "error", "warn", "info", "debug", "trace" | `"info"` | `"error"`, `"warn"`, `"info"`, `"debug"`, `"trace"` | `restart` | Log level; `PMT_LOG` or `RUST_LOG` override it. |
 | `loops.max_ticks` | integer | `100` | 0 to 100000 | `live` | Wakeups after which a loop pauses (`0` = unlimited). |
 | `loops.min_interval_secs` | integer | `30` | 1 to 86400 | `live` | Shortest fixed interval a loop may use (seconds). |
@@ -660,6 +661,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `skills.write_approval` | boolean | `false` | any | `next_session` | Stage skill writes as pending for review. |
 | `snapshots.keep` | integer | `20` | ≥ 0 | `live` | Manual snapshots kept per profile. |
 | `storage.journal_mode` | one of "wal", "delete" | `"wal"` | `"wal"`, `"delete"` | `restart` | `state.db` journal mode; `delete` only for filesystems without WAL support. |
+| `stt.provider` | string | unset | any | `next_session` | The provider serving the category (`nous` routes it through the subscription tool gateway); unset picks one automatically. |
 | `telemetry.enabled` | boolean | `false` | any | `restart` | Send redacted aggregate counters. |
 | `telemetry.endpoint` | string | unset | any | `restart` | HTTPS endpoint (loopback HTTP allowed). |
 | `terminal.auto_source_bashrc` | boolean | `true` | any | `next_session` | Source `~/.bashrc` once when the shell is bash. |
@@ -700,6 +702,10 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `terminal.timeout_secs` | integer | `180` | ≥ 0 | `next_session` | Default foreground command timeout. |
 | `terminal.windows_bash_path` | string | unset | any | `next_session` | Git Bash path tried first by `windows_shell = "auto"`. |
 | `terminal.windows_shell` | one of "auto", "git-bash", "pwsh", "powershell" | `"auto"` | `"auto"`, `"git-bash"`, `"pwsh"`, `"powershell"` | `next_session` | Windows shell. |
+| `tool_gateway.domain` | string | `"nousresearch.com"` | any | `next_session` | Domain the gateways live under: `<label>-gateway.<domain>`. |
+| `tool_gateway.scheme` | string | `"https"` | any | `next_session` | URL scheme of the gateways (`https`; `http` only for a loopback or private self-hosted gateway). |
+| `tool_gateway.token_secret` | string | unset | a secret name | `next_session` | The secret holding a self-hosted gateway's user token; unset uses the subscription sign-in's token. |
+| `tool_gateway.urls` | table | `{}` | any | `next_session` | Per-label URL overrides (`web`, `image`, `video`, `tts`, `stt`, `browser`, `sandbox`, `connector`). |
 | `tool_loop_guardrails.hard_stop_after.exact_failure` | integer | unset | ≥ 1 | `next_session` | Same tool, same arguments, same error. |
 | `tool_loop_guardrails.hard_stop_after.idempotent_no_progress` | integer | unset | ≥ 1 | `next_session` | Idempotent calls returning identical results. |
 | `tool_loop_guardrails.hard_stop_after.same_tool_failure` | integer | unset | ≥ 1 | `next_session` | Failures of the same tool. |
@@ -734,6 +740,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `toolsets.surfaces.desktop` | array | unset | any | `next_session` | The desktop app (default `core`). |
 | `toolsets.surfaces.gateway` | table | unset | any | `next_session` | Messaging sessions per platform (`gateway.<platform>`, default `platform-<platform>`; `gateway.webhook` defaults to `webhook-safe`). |
 | `toolsets.surfaces.tui` | array | unset | any | `next_session` | The terminal UI (default `core`). |
+| `tts.provider` | string | unset | any | `next_session` | The provider serving the category (`nous` routes it through the subscription tool gateway); unset picks one automatically. |
 | `ui.composer.paste_collapse_chars` | integer | `2000` | ≥ 0 | `next_session` | A paste of at least this many characters collapses into a chip; `0` disables the character threshold. |
 | `ui.composer.paste_collapse_lines` | integer | `5` | ≥ 0 | `next_session` | A paste of at least this many lines collapses into a chip; `0` disables the line threshold. |
 | `ui.interface` | one of "tui", "line" | `"tui"` | `"tui"`, `"line"` | `next_session` | Interactive interface when stdin and stdout are terminals: the full-screen `tui` or the `line` CLI (`--tui`/`--line` override it). |
@@ -765,6 +772,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `vault.bitwarden.enabled` | boolean | `true` | any | `next_session` | Offer its logins when its CLI is installed and signed in. |
 | `vault.key_storage` | one of "file", "keychain" | `"file"` | `"file"`, `"keychain"` | `next_session` | Where a new vault's key is kept: `file` (`<profile>/vault/vault.key`) or `keychain` (the OS keychain; the file when none is reachable). `prometheus vault key migrate --to` moves an existing key. |
 | `vault.onepassword.enabled` | boolean | `true` | any | `next_session` | Offer its logins when its CLI is installed and signed in. |
+| `video_gen.provider` | string | unset | any | `next_session` | The provider serving the category (`nous` routes it through the subscription tool gateway); unset picks one automatically. |
 | `vision.embed_target_bytes` | integer | `262144` | ≥ 0 | `next_session` | Largest natively embedded image in bytes (clamped to 65,536..4,194,304); bigger or wider images are downscaled. |
 | `vision.image_input_mode` | one of "auto", "native", "text" | `"auto"` | `"auto"`, `"native"`, `"text"` | `next_session` | How images reach the model. |
 | `vision.max_calls_per_image` | integer | unset | ≥ 0 | `next_session` | Times one image may be embedded by `vision_analyze` per session; unset is 3 in delegated children and unlimited for the main agent, `0` is unlimited. |

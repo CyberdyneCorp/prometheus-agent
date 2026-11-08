@@ -83,6 +83,13 @@ pub enum AuthCommand {
         /// Provider id or alias.
         provider: String,
     },
+    /// Show a subscription's account usage windows without starting a
+    /// session (exit 1 when nothing can be shown).
+    Usage {
+        /// Provider id or alias; default `model.provider`.
+        #[arg(long, value_name = "ID")]
+        provider: Option<String>,
+    },
     /// Copy another tool's sign-in into the secrets store.
     Import {
         /// Where the sign-in comes from.

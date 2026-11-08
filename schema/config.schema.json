@@ -7780,6 +7780,43 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "ToolGatewayConfig": {
+      "additionalProperties": false,
+      "description": "The `[tool_gateway]` section: where a subscription's tool gateway\nanswers (Nous by default; a self-hosted one by `domain`, `scheme` or\nper-label `urls`).",
+      "properties": {
+        "domain": {
+          "default": "nousresearch.com",
+          "description": "Domain the gateways live under: `<label>-gateway.<domain>`.",
+          "type": "string"
+        },
+        "scheme": {
+          "default": "https",
+          "description": "URL scheme of the gateways (`https`; `http` only for a loopback or\nprivate self-hosted gateway).",
+          "type": "string"
+        },
+        "token_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The secret holding a self-hosted gateway's user token; unset uses\nthe subscription sign-in's token."
+        },
+        "urls": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Per-label URL overrides (`web`, `image`, `video`, `tts`, `stt`,\n`browser`, `sandbox`, `connector`).",
+          "type": "object"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
     "ToolListing": {
       "description": "`tools.tool_search.listing`.",
       "oneOf": [
@@ -7903,6 +7940,21 @@
           "type": "string"
         }
       ]
+    },
+    "ToolProviderConfig": {
+      "additionalProperties": false,
+      "description": "A media tool category's provider selection (`[image_gen]`,\n`[video_gen]`, `[tts]`, `[stt]`).",
+      "properties": {
+        "provider": {
+          "description": "The provider serving the category (`nous` routes it through the\nsubscription tool gateway); unset picks one automatically.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
     },
     "ToolSearchConfig": {
       "additionalProperties": false,
@@ -9496,6 +9548,11 @@
       },
       "description": "Shell hooks and outbound webhooks."
     },
+    "image_gen": {
+      "$ref": "#/$defs/ToolProviderConfig",
+      "default": {},
+      "description": "Image generation's provider selection."
+    },
     "logging": {
       "$ref": "#/$defs/LoggingConfig",
       "default": {
@@ -9828,6 +9885,11 @@
       },
       "description": "Session database."
     },
+    "stt": {
+      "$ref": "#/$defs/ToolProviderConfig",
+      "default": {},
+      "description": "Speech-to-text's provider selection."
+    },
     "telemetry": {
       "$ref": "#/$defs/TelemetryConfig",
       "default": {
@@ -9880,6 +9942,15 @@
         "windows_shell": "auto"
       },
       "description": "The terminal tool and its backends."
+    },
+    "tool_gateway": {
+      "$ref": "#/$defs/ToolGatewayConfig",
+      "default": {
+        "domain": "nousresearch.com",
+        "scheme": "https",
+        "urls": {}
+      },
+      "description": "The subscription tool gateway."
     },
     "tool_loop_guardrails": {
       "$ref": "#/$defs/ToolLoopGuardrails",
@@ -9944,6 +10015,11 @@
       },
       "description": "Per-surface toolset defaults."
     },
+    "tts": {
+      "$ref": "#/$defs/ToolProviderConfig",
+      "default": {},
+      "description": "Text-to-speech's provider selection."
+    },
     "ui": {
       "$ref": "#/$defs/UiConfig",
       "default": {
@@ -9996,6 +10072,11 @@
         }
       },
       "description": "The credential vault."
+    },
+    "video_gen": {
+      "$ref": "#/$defs/ToolProviderConfig",
+      "default": {},
+      "description": "Video generation's provider selection."
     },
     "vision": {
       "$ref": "#/$defs/VisionConfig",

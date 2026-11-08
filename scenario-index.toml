@@ -3247,3 +3247,15 @@ capabilities = [
 
 [model-providers."WSL2 local endpoint diagnostics"]
 "Windows-hosted Ollama unreachable from WSL2" = ["crates/prometheus/src/doctor_cmd/wsl.rs::an_unreachable_loopback_server_under_wsl2_nat_is_a_warn_with_the_host_ip", "crates/pmt-providers/src/wsl.rs::advice_names_mirrored_networking_and_the_host_for_loopback_only"]
+
+# Group 46.4: account usage, subscription account commands, tool gateway.
+[model-providers."Account usage windows command"]
+"JSON for scripts" = ["crates/prometheus/tests/account_cli.rs::usage_json_carries_the_plans_two_windows", "crates/pmt-providers/src/account.rs::windows_keep_their_percent_and_reset"]
+"Nothing to report" = ["crates/prometheus/tests/account_cli.rs::a_provider_without_a_usage_endpoint_exits_1_naming_it"]
+
+[model-providers."Subscription account commands"]
+"Login refused in a group" = ["crates/pmt-gateway/tests/messaging/pause.rs::login_in_a_group_is_refused_and_points_to_a_direct_message"]
+
+[model-providers."Subscription tool gateway routing"]
+"Stored selection wins over a present key" = ["crates/pmt-providers/tests/providers/tool_gateway.rs::a_stored_nous_selection_goes_through_the_gateway_despite_a_vendor_key"]
+"Selected vendor without key" = ["crates/pmt-providers/tests/providers/tool_gateway.rs::a_selected_vendor_without_its_key_fails_naming_the_selection", "crates/prometheus/tests/account_cli.rs::portal_tools_routes_categories_through_the_gateway"]

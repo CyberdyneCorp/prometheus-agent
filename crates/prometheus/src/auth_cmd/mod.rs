@@ -11,6 +11,7 @@ mod list;
 mod maintain;
 mod manager;
 mod remove;
+mod usage;
 
 use std::process::{Command, Stdio};
 
@@ -69,6 +70,7 @@ pub fn run(command: Option<&AuthCommand>, ctx: &Context<'_>) -> Result<u8, Error
             credential,
         } => maintain::refresh(ctx, provider, credential.as_deref()),
         AuthCommand::Logout { provider } => maintain::logout(ctx, provider),
+        AuthCommand::Usage { provider } => usage::run(ctx, provider.as_deref()),
         AuthCommand::List => list::list(ctx),
         AuthCommand::Status { provider } => list::status(ctx, provider),
         AuthCommand::Remove {

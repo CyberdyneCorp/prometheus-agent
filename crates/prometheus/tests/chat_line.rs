@@ -508,6 +508,13 @@ fn usage_shows_the_session_and_its_lineage() {
     p.send_line("/usage").unwrap();
     p.expect("session  calls 1 ").unwrap();
     p.expect("lineage  calls 2 ").unwrap();
+    // Spec: model-providers, Account usage windows command: the session's
+    // duration and its context window use follow the totals.
+    p.expect("session  0m ").unwrap();
+    p.expect(" tokens (").unwrap();
+    prompt(&mut p);
+    p.send_line("/usage reset").unwrap();
+    p.expect("limit resets are not available for mock").unwrap();
     prompt(&mut p);
     exit(p);
 }

@@ -163,6 +163,7 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Approvals { command }) => approvals_cmd::run(command, &ctx),
         Some(Command::Update(args)) => update_cmd::run(args, &ctx),
         Some(Command::Pause(args)) => prometheus::pause_cmd::run(args, &ctx),
+        Some(Command::Portal { command }) => prometheus::portal_cmd::run(command, &ctx),
         #[cfg(feature = "gateway")]
         Some(Command::Daemon { command }) => prometheus::daemon_cmd::run(command, &ctx),
         #[cfg(feature = "gateway")]

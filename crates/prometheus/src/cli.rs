@@ -278,6 +278,12 @@ pub enum Command {
     /// Emergency pause: no new turns or scheduled jobs on any profile of
     /// this home until `pause off` (running turns finish).
     Pause(crate::pause_cmd::PauseArgs),
+    /// The Nous Portal subscription and its tool gateway routing.
+    Portal {
+        /// The portal subcommand.
+        #[command(subcommand)]
+        command: crate::portal_cmd::PortalCommand,
+    },
     /// Run, start, stop and inspect the gateway daemon that owns this
     /// home's sessions (one per home; clients attach to it).
     #[cfg(feature = "gateway")]

@@ -80,7 +80,7 @@ pub(super) fn terminal(inputs: &Inputs<'_>) -> Vec<Check> {
         &shell,
     )
     .checks;
-    if config.backend == "modal" {
+    if config.backend == "modal" || config.backend == pmt_sandbox::backend::MANAGED_SANDBOX {
         checks.push(modal_mode(inputs.scope));
     }
     checks

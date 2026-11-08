@@ -6,7 +6,7 @@
 
 use pmt_config::schema::{LoginFlow, ProviderAuth, WireFormat};
 
-use crate::descriptor::{Descriptor, HostRule, ModelWire, WireNeed};
+use crate::descriptor::{AccountUrls, Descriptor, HostRule, ModelWire, WireNeed};
 
 /// A wire format beyond the native one (const-friendly [`WireNeed`]).
 #[derive(Clone, Copy)]
@@ -772,6 +772,20 @@ fn per_provider(d: &mut Descriptor) {
             d.model_wire_formats =
                 model_wires(&[("claude-*", AnthropicMessages), ("gpt-*", Responses)]);
         }
+        "nous" => {
+            d.account_urls = urls(
+                "https://portal.nousresearch.com/plans",
+                Some("https://portal.nousresearch.com/billing"),
+            );
+        }
+        "openai-codex" => d.account_urls = urls("https://chatgpt.com/#pricing", None),
+        "anthropic" => {
+            d.account_urls = urls(
+                "https://claude.ai/upgrade",
+                Some("https://claude.ai/settings/billing"),
+            );
+        }
+        "xai-oauth" => d.account_urls = urls("https://grok.com/plans", None),
         "opencode-go" => {
             d.session_affinity_header = Some(OPENCODE_AFFINITY.to_owned());
             d.model_wire_formats = model_wires(&[
@@ -780,6 +794,13 @@ fn per_provider(d: &mut Descriptor) {
             ]);
         }
         _ => {}
+    }
+}
+
+fn urls(plan: &str, billing: Option<&str>) -> AccountUrls {
+    AccountUrls {
+        plan: Some(plan.to_owned()),
+        billing: billing.map(str::to_owned),
     }
 }
 

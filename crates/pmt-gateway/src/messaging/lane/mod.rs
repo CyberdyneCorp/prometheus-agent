@@ -15,6 +15,7 @@ mod automated;
 mod branch;
 mod clarify;
 mod commands;
+pub use commands::LOGIN_IN_DM;
 mod compaction;
 mod confirm;
 mod controls;

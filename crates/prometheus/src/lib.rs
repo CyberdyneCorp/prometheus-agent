@@ -49,6 +49,7 @@ pub mod output;
 pub mod pause_cmd;
 pub mod plugins_cmd;
 pub mod plugins_host;
+pub mod portal_cmd;
 pub mod profile_cmd;
 pub mod prompt;
 pub mod prompt_cmd;

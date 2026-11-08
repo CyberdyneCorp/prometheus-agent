@@ -287,3 +287,23 @@ fn terminal_defaults() {
     assert_eq!((c.shm_size.as_str(), c.pids_limit), ("1g", 2048));
     assert_eq!(config.ssh.port, 22);
 }
+
+/// Spec: model-providers, Subscription tool gateway routing: the managed
+/// remote sandbox's selection names the subscription provider.
+#[test]
+fn the_nous_backend_is_the_modal_backend() {
+    let mut registry = BackendRegistry::builtin();
+    registry
+        .register_plugin(Arc::new(FakePlugin {
+            name: "modal".to_owned(),
+            descriptor: Descriptor::ssh(),
+            check: Ok("subscription".to_owned()),
+        }))
+        .unwrap();
+    let modal = registry.select("modal").unwrap();
+    let nous = registry
+        .select(pmt_sandbox::backend::MANAGED_SANDBOX)
+        .unwrap();
+    assert_eq!(nous.name, modal.name);
+    assert_eq!(nous.kind, modal.kind);
+}

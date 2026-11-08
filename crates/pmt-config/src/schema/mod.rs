@@ -37,6 +37,7 @@ mod plugins;
 mod provider_routing;
 mod python_bridge;
 mod state;
+mod tool_gateway;
 mod tools;
 mod webhook;
 
@@ -107,6 +108,7 @@ pub use state::{
     MemoryReviewConfig, MemoryReviewMode, RecallConfig, ReviewDefer, SessionsConfig, SkillsConfig,
     SnapshotsConfig, StorageConfig,
 };
+pub use tool_gateway::{ToolGatewayConfig, ToolProviderConfig};
 pub use tools::{
     ApprovalMode, ApprovalsConfig, BrowserConfig, ContainerConfig, DegradedMode, DialogPolicy,
     FilesConfig, FirecrawlConfig, KeylessConfig, ModalConfig, ModalMode, ResultBudget,
@@ -172,6 +174,8 @@ pub struct Config {
     pub goals: GoalsConfig,
     /// `/heartbeat` bounds.
     pub heartbeat: HeartbeatConfig,
+    /// Image generation's provider selection.
+    pub image_gen: ToolProviderConfig,
     /// Shell hooks and outbound webhooks.
     pub hooks: HooksConfig,
     /// Structured log files.
@@ -224,6 +228,8 @@ pub struct Config {
     pub security: SecurityConfig,
     /// Session storage limits and retention.
     pub sessions: SessionsConfig,
+    /// Speech-to-text's provider selection.
+    pub stt: ToolProviderConfig,
     /// Skills discovery and authoring.
     pub skills: SkillsConfig,
     /// Per-profile state snapshots.
@@ -234,6 +240,8 @@ pub struct Config {
     pub telemetry: TelemetryConfig,
     /// The terminal tool and its backends.
     pub terminal: TerminalConfig,
+    /// The subscription tool gateway.
+    pub tool_gateway: ToolGatewayConfig,
     /// Tool loop guardrails.
     pub tool_loop_guardrails: ToolLoopGuardrails,
     /// Terminal tool output shaping.
@@ -242,10 +250,14 @@ pub struct Config {
     pub tools: ToolsConfig,
     /// Per-surface toolset defaults.
     pub toolsets: ToolsetsConfig,
+    /// Text-to-speech's provider selection.
+    pub tts: ToolProviderConfig,
     /// Interactive interface selection.
     pub ui: UiConfig,
     /// The credential vault.
     pub vault: VaultConfig,
+    /// Video generation's provider selection.
+    pub video_gen: ToolProviderConfig,
     /// Image input routing.
     pub vision: VisionConfig,
     /// Web tools.
@@ -279,6 +291,7 @@ impl Default for Config {
             gateway: GatewayConfig::default(),
             goals: GoalsConfig::default(),
             heartbeat: HeartbeatConfig::default(),
+            image_gen: ToolProviderConfig::default(),
             hooks: HooksConfig::default(),
             logging: LoggingConfig::default(),
             loops: LoopsConfig::default(),
@@ -303,17 +316,21 @@ impl Default for Config {
             secrets: SecretsConfig::default(),
             security: SecurityConfig::default(),
             sessions: SessionsConfig::default(),
+            stt: ToolProviderConfig::default(),
             skills: SkillsConfig::default(),
             snapshots: SnapshotsConfig::default(),
             storage: StorageConfig::default(),
             telemetry: TelemetryConfig::default(),
             terminal: TerminalConfig::default(),
+            tool_gateway: ToolGatewayConfig::default(),
             tool_loop_guardrails: ToolLoopGuardrails::default(),
             tool_output: ToolOutputConfig::default(),
             tools: ToolsConfig::default(),
             toolsets: ToolsetsConfig::default(),
+            tts: ToolProviderConfig::default(),
             ui: UiConfig::default(),
             vault: VaultConfig::default(),
+            video_gen: ToolProviderConfig::default(),
             vision: VisionConfig::default(),
             web: WebConfig::default(),
             worktrees: WorktreesConfig::default(),

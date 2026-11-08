@@ -9,6 +9,7 @@
 //! inference servers ([`local`]), credentials and subscription sign-in
 //! ([`auth`]) and the deterministic in-process [`mock`] provider.
 
+pub mod account;
 pub mod auth;
 pub mod auxiliary;
 pub mod builtin;

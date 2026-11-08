@@ -235,6 +235,61 @@ own configuration. A CLI found nowhere fails the session with
 `provider.external_cli_missing` naming the command.
 
 
+## Account usage and subscription commands
+
+`prometheus auth usage [--provider ID] [--json]` shows a subscription's plan
+and usage windows without starting a session (the configured provider by
+default). The JSON document is `{provider, source, title, plan, fetched_at,
+windows: [{label, used_percent, resets_at, detail}], details,
+unavailable_reason}`; its keys only ever grow. Without a sign-in, a usage
+endpoint or an answer it prints why on stderr and exits 1.
+
+In a chat:
+
+- `/usage` adds the account block, the session's duration and its current
+  context window use to the token and cost totals; `/usage reset` redeems a
+  banked usage limit reset of a ChatGPT plan after asking (`/usage reset
+  --force` skips the question).
+- `/login [provider]` (default `nous`) runs the device-code sign-in off-turn:
+  the code and the outcome arrive as messages while the session goes on. On
+  the gateway it only runs in a direct message; a group or channel is told
+  to DM the bot.
+- `/subscription` (alias `/upgrade`) shows the plan and where to change it;
+  `/topup` shows the prepaid balance where the provider reports one and the
+  billing page. Providers without such pages answer `not available for
+  <provider>`.
+
+## Subscription tool gateway
+
+Each tool category has one selection key. Setting it to `nous` sends the
+category through the Nous Portal tool gateway with the portal sign-in, and
+the calls bill `subscription:nous/<label>`:
+
+| Category | Key |
+|---|---|
+| web search, web extract | `web.search_backend`, `web.extract_backend` (else `web.backend`) |
+| image / video generation | `image_gen.provider`, `video_gen.provider` |
+| speech | `tts.provider`, `stt.provider` |
+| cloud browser | `browser.provider` |
+| managed remote sandbox | `terminal.backend` (`nous` is Modal in managed mode) |
+
+A stored selection always wins, whatever keys exist: `image_gen.provider =
+"nous"` uses the gateway even with a `FAL_KEY`, and `image_gen.provider =
+"fal"` without `FAL_KEY` fails naming `image_gen.provider` instead of
+falling over to the gateway. Only a category never configured is detected
+(its vendor's key, else the signed-in portal). A self-hosted gateway is set
+with `[tool_gateway] domain`, `scheme` and per-label `urls.<label>`, its
+user token in the secret `tool_gateway.token_secret` names. A gateway call
+after the subscription lapsed fails with `auth.plan_not_eligible` pointing
+at the portal.
+
+```console
+$ prometheus setup --portal          # sign in, make nous the main provider, offer to route every category
+$ prometheus portal status           # sign-in, plan and per-category routing
+$ prometheus portal tools --route image_generation --route tts
+$ prometheus portal open             # the portal's plan page
+```
+
 ## Endpoints found from the key
 
 Some providers serve one key on several endpoints. With no

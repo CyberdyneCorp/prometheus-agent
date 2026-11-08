@@ -71,6 +71,10 @@ impl Backend {
     }
 }
 
+/// The `terminal.backend` value of the managed remote sandbox (Modal in
+/// managed mode, billed to the subscription).
+pub const MANAGED_SANDBOX: &str = "nous";
+
 /// Every backend name `terminal.backend` may select.
 #[derive(Debug, Clone)]
 pub struct BackendRegistry {
@@ -157,6 +161,14 @@ impl BackendRegistry {
     /// `terminal.unknown_backend` (exit 78) listing every available name;
     /// `terminal.backend_unavailable` (exit 69) for a reserved built-in.
     pub fn select(&self, name: &str) -> Result<&Backend, Error> {
+        // `nous` selects the managed remote sandbox: Modal through the
+        // subscription's tool gateway (spec: model-providers, Subscription
+        // tool gateway routing).
+        let name = if name == MANAGED_SANDBOX {
+            "modal"
+        } else {
+            name
+        };
         let Some(backend) = self.entries.iter().find(|e| e.name == name) else {
             return Err(Error::new(
                 &codes::TERMINAL_UNKNOWN_BACKEND,

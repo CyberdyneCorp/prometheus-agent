@@ -34,12 +34,13 @@ Commands:
   model        Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
   providers    Provider routing state: per-route health scores
   fallback     List and edit the profile's fallback chain (`[[fallback.chain]]`)
-  auth         Add, list and remove provider API keys and subscription sign-ins
+  auth         Add, list and remove provider API keys and subscription sign-ins (an interactive manager without a subcommand on a terminal)
   tools        List the profile's tools and explain one (exposure, capabilities, approvals)
   toolsets     List toolsets and show the tools a toolset resolves to
   approvals    Check how the approval gate treats a command, without running it
   update       Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
   pause        Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
+  portal       The Nous Portal subscription and its tool gateway routing
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`

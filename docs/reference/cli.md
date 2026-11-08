@@ -47,6 +47,7 @@ Commands:
   approvals    Check how the approval gate treats a command, without running it
   update       Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
   pause        Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
+  portal       The Nous Portal subscription and its tool gateway routing
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
@@ -417,6 +418,9 @@ Options:
 
       --reset-onboarding
           Clear the onboarding state (offered setup, shown tips, tour steps)
+
+      --portal
+          Sign in to the Nous Portal, make `nous` the main provider and offer to route every tool category through its tool gateway
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -12219,6 +12223,7 @@ Commands:
   reset     Clear benches and cooldowns (every credential of the provider, or one); running sessions use them on their next request
   refresh   Refresh sign-in tokens now and return them to rotation
   logout    Remove every subscription sign-in of a provider
+  usage     Show a subscription's account usage windows without starting a session (exit 1 when nothing can be shown)
   import    Copy another tool's sign-in into the secrets store
   help      Print this message or the help of the given subcommand(s)
 
@@ -12628,6 +12633,48 @@ Options:
           Print help
 ```
 
+## `prometheus auth usage`
+
+```text
+Show a subscription's account usage windows without starting a session (exit 1 when nothing can be shown)
+
+Usage: prometheus auth usage [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --provider <ID>
+          Provider id or alias; default `model.provider`
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus auth import`
 
 ```text
@@ -12696,6 +12743,7 @@ Commands:
   reset     Clear benches and cooldowns (every credential of the provider, or one); running sessions use them on their next request
   refresh   Refresh sign-in tokens now and return them to rotation
   logout    Remove every subscription sign-in of a provider
+  usage     Show a subscription's account usage windows without starting a session (exit 1 when nothing can be shown)
   import    Copy another tool's sign-in into the secrets store
   help      Print this message or the help of the given subcommand(s)
 ```
@@ -12762,6 +12810,14 @@ Usage: prometheus auth help refresh
 Remove every subscription sign-in of a provider
 
 Usage: prometheus auth help logout
+```
+
+## `prometheus auth help usage`
+
+```text
+Show a subscription's account usage windows without starting a session (exit 1 when nothing can be shown)
+
+Usage: prometheus auth help usage
 ```
 
 ## `prometheus auth help import`
@@ -13922,6 +13978,217 @@ Usage: prometheus pause help status
 Print this message or the help of the given subcommand(s)
 
 Usage: prometheus pause help help
+```
+
+## `prometheus portal`
+
+```text
+The Nous Portal subscription and its tool gateway routing
+
+Usage: prometheus portal [OPTIONS] <COMMAND>
+
+Commands:
+  status  The portal sign-in and the tool gateway routing
+  open    Open (or print) the portal's plan page
+  tools   Show the tool categories' routing, or route categories through the gateway (`--route web_search --route tts`, or `--route all`)
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus portal status`
+
+```text
+The portal sign-in and the tool gateway routing
+
+Usage: prometheus portal status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus portal open`
+
+```text
+Open (or print) the portal's plan page
+
+Usage: prometheus portal open [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus portal tools`
+
+```text
+Show the tool categories' routing, or route categories through the gateway (`--route web_search --route tts`, or `--route all`)
+
+Usage: prometheus portal tools [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --route <CATEGORY>
+          A category to route through the gateway (repeatable; `all`)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus portal help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus portal help [COMMAND]
+
+Commands:
+  status  The portal sign-in and the tool gateway routing
+  open    Open (or print) the portal's plan page
+  tools   Show the tool categories' routing, or route categories through the gateway (`--route web_search --route tts`, or `--route all`)
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus portal help status`
+
+```text
+The portal sign-in and the tool gateway routing
+
+Usage: prometheus portal help status
+```
+
+## `prometheus portal help open`
+
+```text
+Open (or print) the portal's plan page
+
+Usage: prometheus portal help open
+```
+
+## `prometheus portal help tools`
+
+```text
+Show the tool categories' routing, or route categories through the gateway (`--route web_search --route tts`, or `--route all`)
+
+Usage: prometheus portal help tools
+```
+
+## `prometheus portal help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus portal help help
 ```
 
 ## `prometheus daemon`
@@ -20093,6 +20360,7 @@ Commands:
   approvals    Check how the approval gate treats a command, without running it
   update       Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
   pause        Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
+  portal       The Nous Portal subscription and its tool gateway routing
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
@@ -21973,6 +22241,7 @@ Commands:
   reset     Clear benches and cooldowns (every credential of the provider, or one); running sessions use them on their next request
   refresh   Refresh sign-in tokens now and return them to rotation
   logout    Remove every subscription sign-in of a provider
+  usage     Show a subscription's account usage windows without starting a session (exit 1 when nothing can be shown)
   import    Copy another tool's sign-in into the secrets store
 ```
 
@@ -22038,6 +22307,14 @@ Usage: prometheus help auth refresh
 Remove every subscription sign-in of a provider
 
 Usage: prometheus help auth logout
+```
+
+## `prometheus help auth usage`
+
+```text
+Show a subscription's account usage windows without starting a session (exit 1 when nothing can be shown)
+
+Usage: prometheus help auth usage
 ```
 
 ## `prometheus help auth import`
@@ -22229,6 +22506,43 @@ Usage: prometheus help pause off
 Print whether the home is paused, why, by whom and since when
 
 Usage: prometheus help pause status
+```
+
+## `prometheus help portal`
+
+```text
+The Nous Portal subscription and its tool gateway routing
+
+Usage: prometheus help portal [COMMAND]
+
+Commands:
+  status  The portal sign-in and the tool gateway routing
+  open    Open (or print) the portal's plan page
+  tools   Show the tool categories' routing, or route categories through the gateway (`--route web_search --route tts`, or `--route all`)
+```
+
+## `prometheus help portal status`
+
+```text
+The portal sign-in and the tool gateway routing
+
+Usage: prometheus help portal status
+```
+
+## `prometheus help portal open`
+
+```text
+Open (or print) the portal's plan page
+
+Usage: prometheus help portal open
+```
+
+## `prometheus help portal tools`
+
+```text
+Show the tool categories' routing, or route categories through the gateway (`--route web_search --route tts`, or `--route all`)
+
+Usage: prometheus help portal tools
 ```
 
 ## `prometheus help daemon`

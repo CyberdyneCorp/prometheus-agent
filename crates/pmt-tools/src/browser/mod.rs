@@ -72,6 +72,7 @@ pub const TOOLSET: &str = "browser";
 pub fn validate_provider(config: &BrowserConfig, providers: &[&str]) -> Result<(), Error> {
     let first_party = cloud::names();
     if config.provider == "local"
+        || config.provider == cloud::NOUS
         || first_party.contains(&config.provider.as_str())
         || providers.contains(&config.provider.as_str())
     {

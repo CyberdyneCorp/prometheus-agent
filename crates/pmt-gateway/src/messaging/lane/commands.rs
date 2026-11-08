@@ -15,6 +15,7 @@ use crate::messaging::adapter::Inbound;
 use crate::messaging::agents::{BusyPolicy, Lookup};
 use crate::messaging::auth::{self, ADMIN_ONLY};
 use crate::messaging::hooks::PreCommand;
+use crate::messaging::key::ChatType;
 use crate::messaging::key::Routing;
 
 /// What `/stop` answers.
@@ -38,6 +39,11 @@ struct Call<'a> {
     args: String,
     busy: BusyPolicy,
 }
+
+/// The refusal of `/login` outside a direct message (spec:
+/// model-providers, Subscription account commands).
+pub const LOGIN_IN_DM: &str =
+    "Sign-in runs only in a direct message: DM the bot and send /login there.";
 
 impl Lane {
     /// An authorized event of the conversation.
@@ -172,6 +178,8 @@ impl Lane {
                 self.say(&text);
             }
             "update" => self.update_command(&call.routing, &call.args).await,
+            // A sign-in's device code never goes to a group or channel.
+            "login" if call.routing.chat_type != ChatType::Dm => self.say(LOGIN_IN_DM),
             "retry" => {
                 self.retry_releases();
                 self.registry(call).await;

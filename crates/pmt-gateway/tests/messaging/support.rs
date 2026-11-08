@@ -428,6 +428,7 @@ const REGISTRY: &[(&str, &[&str], BusyPolicy)] = &[
     ("approve", &[], BusyPolicy::Immediate),
     ("deny", &[], BusyPolicy::Immediate),
     ("whoami", &[], BusyPolicy::Immediate),
+    ("login", &[], BusyPolicy::Immediate),
     ("pair", &[], BusyPolicy::Immediate),
     ("pause", &[], BusyPolicy::Immediate),
     ("sethome", &["set-home"], BusyPolicy::Immediate),

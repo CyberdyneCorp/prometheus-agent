@@ -21,6 +21,7 @@ pub mod codex;
 pub mod credentials;
 pub mod device;
 mod extras;
+pub mod gateway;
 pub mod jwt;
 pub mod loopback;
 pub mod mint;

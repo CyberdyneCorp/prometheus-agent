@@ -22,4 +22,5 @@ mod routing;
 mod server_compaction;
 mod session;
 mod support;
+mod tool_gateway;
 mod wire;

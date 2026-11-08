@@ -5,6 +5,7 @@
 //! client drives. What only changes a client's display or which session
 //! it drives stays with that client.
 
+mod account;
 mod agents;
 mod background;
 mod blueprint;
@@ -83,7 +84,10 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "help" => Ok(ctx.registry.help(ctx.surface).trim_end().to_owned()),
         "btw" => side::btw(ctx, args),
         "autoprune" => crate::chat::autoprune::command(ctx.scope, &ctx.factory.store, args),
-        "usage" => session::usage(ctx),
+        "usage" => account::usage(ctx, args).await,
+        "login" => account::login(ctx, args),
+        "subscription" => account::subscription(ctx).await,
+        "topup" => account::topup(ctx).await,
         "context" => context::context(ctx, args).await,
         "budget" => budget(ctx, args),
         "title" => title(ctx, args),
