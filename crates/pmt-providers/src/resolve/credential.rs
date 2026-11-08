@@ -129,6 +129,12 @@ pub trait CredentialExtras: Send + Sync {
     fn pool_state(&self) -> Option<&dyn PoolState> {
         None
     }
+
+    /// Probes the endpoints of multi-region key providers; `None`: the
+    /// provider default is used without probing.
+    fn detector(&self) -> Option<&crate::detect::Detector> {
+        None
+    }
 }
 
 /// No pools and no sign-ins.

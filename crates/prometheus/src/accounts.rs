@@ -13,6 +13,7 @@ use pmt_providers::ProviderRegistry;
 use pmt_providers::auth::borrowed::Borrowed;
 use pmt_providers::auth::mint::Minter;
 use pmt_providers::auth::{Accounts, Credentials};
+use pmt_providers::detect::Detector;
 use pmt_providers::quota::QuotaTracker;
 use pmt_providers::spend::SpendCaps;
 
@@ -44,5 +45,6 @@ pub fn open(
         client.clone(),
         user_home.map(Path::to_path_buf),
     ))
+    .with_detector(Detector::new(client.clone()))
     .with_quota(QuotaTracker::new(client, store)))
 }

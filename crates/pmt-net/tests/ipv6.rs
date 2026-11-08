@@ -194,3 +194,34 @@ async fn ipv6_literal_is_refused_when_forced() {
             .is_err()
     );
 }
+
+/// Spec: model-providers, Outbound IPv4 preference, "Blackholed IPv6 falls
+/// back quickly": without `force_ipv4` the IPv6 address is tried first and
+/// the request succeeds over IPv4 (the 250 ms head start itself is
+/// asserted in `pmt_net::eyeballs`).
+#[tokio::test]
+async fn a_blackholed_ipv6_address_falls_back_to_ipv4_quickly() {
+    let v4 = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = v4.local_addr().unwrap().port();
+    serve(v4, "v4");
+    let lookup = Arc::new(FixedLookup(vec![ip(BLACKHOLE), ip("127.0.0.1")]));
+    let client = client_builder_with_lookup(&OutboundPolicy::default(), lookup)
+        .unwrap()
+        .build()
+        .unwrap();
+    let started = std::time::Instant::now();
+    let body = client
+        .get(format!("http://{HOST}:{port}/"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    assert_eq!(body, "v4");
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "took {:?}",
+        started.elapsed()
+    );
+}

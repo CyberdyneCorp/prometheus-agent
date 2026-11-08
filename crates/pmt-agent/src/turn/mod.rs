@@ -17,6 +17,7 @@ mod checkpoint;
 mod compression;
 pub mod events;
 mod exit;
+pub mod fast;
 mod finish;
 mod guardrails;
 mod guards;
@@ -434,6 +435,10 @@ pub struct Agent {
     ttl_lowered: std::sync::atomic::AtomicBool,
     /// A route without server-side compaction was logged.
     server_compaction_logged: std::sync::atomic::AtomicBool,
+    /// The session's `/fast` mode, over `agent.fast_mode`.
+    fast: Mutex<Option<pmt_config::schema::FastMode>>,
+    /// A route without a fast tier was announced.
+    fast_noticed: std::sync::atomic::AtomicBool,
 }
 
 impl Agent {
@@ -459,6 +464,8 @@ impl Agent {
             cache_ttl: OnceLock::new(),
             ttl_lowered: std::sync::atomic::AtomicBool::new(false),
             server_compaction_logged: std::sync::atomic::AtomicBool::new(false),
+            fast: Mutex::new(None),
+            fast_noticed: std::sync::atomic::AtomicBool::new(false),
         })
     }
 

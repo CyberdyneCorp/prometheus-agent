@@ -82,6 +82,14 @@ impl AuxCaller {
         self
     }
 
+    /// Tags every request with `conversation`'s affinity header on routes
+    /// whose provider routes by one.
+    #[must_use]
+    pub fn with_conversation(mut self, conversation: crate::transport::Conversation) -> Self {
+        self.sender = self.sender.with_conversation(conversation);
+        self
+    }
+
     /// Replaces PII in every request (`privacy.redact_pii`), the mock's
     /// included, before it is sent.
     #[must_use]

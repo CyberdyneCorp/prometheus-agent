@@ -41,6 +41,7 @@ pub struct Accounts {
     spend: Option<SpendCaps>,
     quota: Option<QuotaTracker>,
     minter: Option<Minter>,
+    detector: Option<crate::detect::Detector>,
 }
 
 impl std::fmt::Debug for Accounts {
@@ -71,7 +72,15 @@ impl Accounts {
             spend: None,
             quota: None,
             minter: None,
+            detector: None,
         }
+    }
+
+    /// Probes multi-region endpoints (`zai`) with `detector`.
+    #[must_use]
+    pub fn with_detector(mut self, detector: crate::detect::Detector) -> Self {
+        self.detector = Some(detector);
+        self
     }
 
     /// Mints short-lived credentials (`key_cmd`, `token_mint`) with
@@ -490,6 +499,10 @@ impl CredentialExtras for Accounts {
 
     fn pool_state(&self) -> Option<&dyn PoolState> {
         self.state()
+    }
+
+    fn detector(&self) -> Option<&crate::detect::Detector> {
+        self.detector.as_ref()
     }
 }
 

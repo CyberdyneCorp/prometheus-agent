@@ -119,6 +119,7 @@ pub(crate) fn request(user: &str) -> Request {
         reasoning: None,
         body_overrides: None,
         server_compaction: None,
+        speed: None,
     }
 }
 

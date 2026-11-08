@@ -85,6 +85,10 @@ impl Pending {
         call.parent_call_id.clone_from(&ctx.parent_call_id);
         call.billing_source = route.billing_source();
         call.request_hash = Some(request.hash(&route.provider, &route.model));
+        call.service_tier = request
+            .speed
+            .and(route.fast_tier)
+            .map(|tier| tier.label().to_owned());
         Self { recorder, call }
     }
 

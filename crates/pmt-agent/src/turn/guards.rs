@@ -116,6 +116,7 @@ mod tests {
             billing_source: "api_key:p".into(),
             server_compaction: false,
             local: false,
+            fast_tier: false,
         }
     }
 

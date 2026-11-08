@@ -12,6 +12,7 @@ mod browser;
 mod context;
 pub mod cron;
 mod delegation;
+mod fast;
 pub mod files;
 pub mod info;
 mod mcp;
@@ -129,6 +130,7 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "model" => session::model(ctx, args).await,
         "provider" => provider::provider(ctx, args).await,
         "reasoning" => session::reasoning(ctx, args).await,
+        "fast" => fast::fast(ctx, args).await,
         "tools" => session::tools(ctx, args).await,
         "plugins" => plugins::plugins(ctx, args).await,
         "mcp" => mcp::mcp(ctx, args).await,

@@ -222,6 +222,7 @@ impl ModelPort for Failing {
                 billing_source: "keyless:fake".into(),
                 server_compaction: false,
                 local: false,
+                fast_tier: false,
             }
         })
     }

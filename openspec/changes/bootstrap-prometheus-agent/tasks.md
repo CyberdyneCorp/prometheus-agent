@@ -448,7 +448,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 46. M2 Provider adapters, plans and request controls
 
-- [ ] 46.1 Implement endpoint auto-detection for multi-region key providers (probe results cached), session affinity headers with per-model wire routing, OpenRouter provider routing preferences, the fast mode service tier and the outbound IPv4 preference; verify with recorded HTTP fixtures (spec: model-providers)
+- [x] 46.1 Implement endpoint auto-detection for multi-region key providers (probe results cached), session affinity headers with per-model wire routing, OpenRouter provider routing preferences, the fast mode service tier and the outbound IPv4 preference; verify with recorded HTTP fixtures (spec: model-providers)
 - [ ] 46.2 Implement the Gemini native and AWS Bedrock providers (inference profiles, missing AWS credentials reported), the Azure AI Foundry provider (Entra ID keyless access, Anthropic wire for Claude deployments) and data-use confirmation for training-flagged models (refused non-interactively); verify with recorded fixtures (spec: model-providers)
 - [ ] 46.3 Implement credential pool maintenance commands (status is a peek, reset reaches running sessions), pool seeding with custom endpoint pools and child sharing, external agent CLI executable resolution under a bare service PATH, auxiliary concurrency and request overrides, and WSL2 local endpoint diagnostics; verify with tests (spec: model-providers)
 - [ ] 46.4 Implement the account usage windows command (`--json`), subscription account commands (login refused in group chats) and subscription tool gateway routing (stored selection wins over a present key); verify with mock subscription endpoints (spec: model-providers)

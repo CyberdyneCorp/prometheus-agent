@@ -582,6 +582,7 @@ impl Factory {
         let tool_port = tool_state.tools();
         delegation.parent_is(&tool_port, &capabilities, &gate.gate);
         let trajectory = self.trajectory(&session)?;
+        self.models.bind_conversation(&session);
         let mut notices = Vec::new();
         let (prompt, plugin_sections) = self
             .prompt_for(id, (&skills, &memory), &mut notices, child)

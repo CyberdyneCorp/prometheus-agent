@@ -34,6 +34,7 @@ mod mcp;
 mod models;
 mod operations;
 mod plugins;
+mod provider_routing;
 mod python_bridge;
 mod state;
 mod tools;
@@ -95,6 +96,10 @@ pub use operations::{
 pub use plugins::{
     DEFAULT_CATALOG_URL, GuidanceMode, PluginsConfig, PluginsWasmConfig, SecurityGuidanceConfig,
     SignaturePolicy, TransportFallback,
+};
+pub use provider_routing::{
+    DEFAULT_MIN_CODING_SCORE, DataCollection, FastMode, OpenRouterConfig, ProviderRoutingConfig,
+    RoutingPrefs, RoutingSort,
 };
 pub use python_bridge::{PYTHON_VERSIONS, PythonBridgeConfig, PythonVersion};
 pub use state::{
@@ -191,6 +196,8 @@ pub struct Config {
     pub network: NetworkConfig,
     /// Trajectories.
     pub observability: ObservabilityConfig,
+    /// OpenRouter-only request settings.
+    pub openrouter: OpenRouterConfig,
     /// Plugin enablement, hook bounds and WASM limits.
     pub plugins: PluginsConfig,
     /// System prompt assembly.
@@ -201,6 +208,8 @@ pub struct Config {
     pub prompt_cache: PromptCacheConfig,
     /// PII redaction.
     pub privacy: PrivacyConfig,
+    /// OpenRouter upstream provider routing preferences.
+    pub provider_routing: ProviderRoutingConfig,
     /// Per-provider overrides, keyed by provider id.
     #[schemars(extend("x-apply" = "next_session"))]
     pub providers: std::collections::BTreeMap<String, ProviderConfig>,
@@ -281,11 +290,13 @@ impl Default for Config {
             models: std::collections::BTreeMap::new(),
             network: NetworkConfig::default(),
             observability: ObservabilityConfig::default(),
+            openrouter: OpenRouterConfig::default(),
             plugins: PluginsConfig::default(),
             prompt: PromptConfig::default(),
             python_bridge: PythonBridgeConfig::default(),
             prompt_cache: PromptCacheConfig::default(),
             privacy: PrivacyConfig::default(),
+            provider_routing: ProviderRoutingConfig::default(),
             providers: std::collections::BTreeMap::new(),
             quick_commands: std::collections::BTreeMap::new(),
             routing: RoutingConfig::default(),

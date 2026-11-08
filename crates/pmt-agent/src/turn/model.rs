@@ -59,6 +59,8 @@ pub struct RouteInfo {
     /// A local inference server (memory reviews may wait for an idle
     /// machine).
     pub local: bool,
+    /// The route has a fast mode priority tier.
+    pub fast_tier: bool,
 }
 
 /// One tool call the model asked for.
@@ -364,6 +366,7 @@ impl ProviderModel {
             billing_source: route.billing_source(),
             server_compaction: route.supports_server_compaction,
             local: route.local,
+            fast_tier: route.fast_tier.is_some(),
         }
     }
 

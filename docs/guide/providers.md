@@ -204,3 +204,74 @@ no file system or terminal access is offered, so it acts only within its
 own configuration. A CLI found nowhere fails the session with
 `provider.external_cli_missing` naming the command.
 
+
+## Endpoints found from the key
+
+Some providers serve one key on several endpoints. With no
+`providers.<id>.base_url` set:
+
+- `zai`: the first session probes Z.AI's four endpoints (international and
+  mainland, general and coding plan) in parallel with a 1-token request and
+  keeps the highest-priority one that accepts the key. The winner is
+  remembered in `state.db` under a hash of the key (never the key itself),
+  so later sessions do not probe; a key no endpoint accepts is not probed
+  again for 5 minutes and uses the default endpoint meanwhile.
+- `kimi-coding`: a Kimi Code key (`sk-kimi-...`) goes to
+  `https://api.kimi.com/coding` over Anthropic Messages; any other key to
+  Moonshot's default endpoint.
+
+An explicit `base_url` always wins. `prometheus model explain` shows how the
+endpoint was found.
+
+## Per-conversation routing headers and per-model wire formats
+
+`opencode-zen` and `opencode-go` route a conversation to one backend by the
+`x-opencode-session` header. Prometheus sends it on the main and auxiliary
+calls of a conversation, with a stable hash of the root session id (a
+kanban worker uses its task id). Both providers also choose the wire format
+per model: on `opencode-go` MiniMax and Qwen models speak Anthropic
+Messages and the others Chat Completions; on `opencode-zen` Claude models
+speak Anthropic Messages and GPT models Responses. The choice is made again
+on every resume and model switch. A model id ending `-vision` takes images.
+
+## OpenRouter routing preferences
+
+`[provider_routing]` becomes the `provider` object of requests to
+`openrouter` (and only there):
+
+```toml
+[provider_routing]
+sort = "throughput"          # price | throughput | latency
+only = ["anthropic", "google-vertex"]
+data_collection = "deny"
+
+[provider_routing.models."anthropic/claude-sonnet-4.5"]
+sort = "latency"             # replaces the section's sort for this model
+```
+
+Per-model tables match case-insensitively with separators ignored and
+follow the current route, fallback entries, cron jobs and delegated
+children included. A `:nitro` model suffix sorts by throughput and
+`:floor` by price. The `openrouter/pareto-code` router gets
+`plugins = [{id = "pareto-router", min_coding_score = 0.65}]` from
+`openrouter.min_coding_score`; set it to `""` to send no block.
+
+## Fast mode
+
+`/fast [normal|fast|auto|cold|ultrafast|status] [--global]` asks the
+provider's priority tier: OpenAI priority processing (`service_tier =
+"priority"`) or Anthropic fast mode. `fast` and `ultrafast` ask on every
+request, `auto` only within the first `agent.fast_auto_secs` (60) of each
+turn, and `cold` only within that window of a session's first turn.
+`--global` saves the mode as `agent.fast_mode`. A route without such a tier
+(a relay, another provider) is sent unchanged and the session is told once.
+Each ledger row records the `service_tier` it asked for and is priced at
+that tier's rates (twice the standard rates for OpenAI priority, six times
+for Anthropic fast mode) unless the provider reports the cost itself.
+
+## Outbound IPv6 and IPv4
+
+Every outbound connection to a dual-stack host tries IPv6 first and IPv4
+250 ms later; whichever answers first is used, so a blackholed IPv6 route
+costs a quarter second, not a timeout. `network.force_ipv4 = true` makes no
+IPv6 attempt at all.

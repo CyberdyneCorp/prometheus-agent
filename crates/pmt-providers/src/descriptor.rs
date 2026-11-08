@@ -156,6 +156,54 @@ pub struct Descriptor {
     /// named in the hint: the host launches nothing a plugin chose, only
     /// the `providers.<id>.command` the user configured.
     pub command: Option<String>,
+    /// An opaque per-conversation header (spec: model-providers, Session
+    /// affinity headers and per-model wire routing) whose value is a
+    /// stable hash of the conversation, sent on main and auxiliary calls.
+    pub session_affinity_header: Option<String>,
+    /// Model id patterns mapped to the wire format serving them, first
+    /// match wins; models matching none use `wire_format`.
+    pub model_wire_formats: Vec<ModelWire>,
+}
+
+/// One `model_wire_formats` row: a case-insensitive model id pattern
+/// (`*` matches any run of characters) and its wire format.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelWire {
+    /// The pattern (`minimax*`, `claude-*`).
+    pub pattern: String,
+    /// The format of matching models.
+    pub wire_format: WireFormat,
+}
+
+impl ModelWire {
+    /// Whether `model` matches the pattern.
+    #[must_use]
+    pub fn matches(&self, model: &str) -> bool {
+        glob_matches(
+            &self.pattern.to_ascii_lowercase(),
+            &model.to_ascii_lowercase(),
+        )
+    }
+}
+
+/// `*`-only glob matching.
+fn glob_matches(pattern: &str, text: &str) -> bool {
+    let mut parts = pattern.split('*');
+    let first = parts.next().unwrap_or_default();
+    let Some(mut rest) = text.strip_prefix(first) else {
+        return false;
+    };
+    let tail: Vec<&str> = parts.collect();
+    let Some((last, middle)) = tail.split_last() else {
+        return rest.is_empty();
+    };
+    for part in middle {
+        let Some(at) = rest.find(part) else {
+            return false;
+        };
+        rest = &rest[at + part.len()..];
+    }
+    rest.ends_with(last)
 }
 
 /// A plugin's OAuth PKCE sign-in: a public client, its endpoints and the
@@ -213,7 +261,18 @@ impl Descriptor {
             keyless_on_loopback: false,
             oauth: None,
             command: None,
+            session_affinity_header: None,
+            model_wire_formats: Vec::new(),
         }
+    }
+
+    /// The wire format `model_wire_formats` maps `model` to, if any.
+    #[must_use]
+    pub fn model_wire(&self, model: &str) -> Option<WireFormat> {
+        self.model_wire_formats
+            .iter()
+            .find(|row| row.matches(model))
+            .map(|row| row.wire_format)
     }
 
     /// The wire format as listings show it: the native format, or
@@ -352,6 +411,20 @@ mod tests {
         assert!(host_matches("*.example.com", "a.example.com"));
         assert!(!host_matches("*.example.com", "example.com"));
         assert!(!host_matches("*.example.com", "badexample.com"));
+    }
+
+    #[test]
+    fn model_wire_patterns_match_case_insensitively() {
+        let row = ModelWire {
+            pattern: "minimax*".to_owned(),
+            wire_format: WireFormat::AnthropicMessages,
+        };
+        assert!(row.matches("MiniMax-M2.5"));
+        assert!(!row.matches("glm-5"));
+        assert!(glob_matches("claude-*-vision", "claude-x-vision"));
+        assert!(!glob_matches("claude-*-vision", "claude-x"));
+        assert!(glob_matches("exact", "exact"));
+        assert!(!glob_matches("exact", "exactly"));
     }
 
     #[test]

@@ -33,6 +33,8 @@ pub enum WireSource {
     HostRule,
     /// The descriptor's declared format.
     Descriptor,
+    /// The descriptor's `model_wire_formats` row of the model.
+    Model,
     /// Chat Completions, the format of OpenAI-compatible relays.
     Default,
 }
@@ -58,6 +60,25 @@ pub fn select(provider: &Provider, base_url: &str) -> (WireFormat, WireSource) {
     } else {
         (WireFormat::ChatCompletions, WireSource::Default)
     }
+}
+
+/// [`select`] for a route on `model`: a declared or default format gives
+/// way to the descriptor's `model_wire_formats` row of the model (config
+/// and host rules still win). Resolution runs on every session start,
+/// resume and model switch, so the row is always re-applied.
+#[must_use]
+pub fn select_for(
+    provider: &Provider,
+    base_url: &str,
+    model: Option<&str>,
+) -> (WireFormat, WireSource) {
+    let chosen = select(provider, base_url);
+    if matches!(chosen.1, WireSource::Config | WireSource::HostRule) {
+        return chosen;
+    }
+    model
+        .and_then(|m| provider.descriptor().model_wire(m))
+        .map_or(chosen, |format| (format, WireSource::Model))
 }
 
 /// Why `provider` cannot be routed with the format `select` chose: its

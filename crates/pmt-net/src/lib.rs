@@ -20,6 +20,7 @@
 pub mod destination;
 pub mod doctor;
 pub mod egress;
+pub mod eyeballs;
 pub mod fetch;
 pub mod http;
 pub mod identity;

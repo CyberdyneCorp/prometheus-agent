@@ -141,6 +141,15 @@ pub struct Route {
     pub retry: RetryPolicy,
     /// Time limits.
     pub timeouts: Timeouts,
+    /// The per-conversation header the provider routes by (spec:
+    /// model-providers, Session affinity headers and per-model wire
+    /// routing).
+    pub affinity_header: Option<String>,
+    /// Top-level body fields every request on the route carries (OpenRouter
+    /// routing preferences); a request's own overrides win over them.
+    pub body_extra: Option<std::sync::Arc<serde_json::Map<String, serde_json::Value>>>,
+    /// The route's fast mode tier, when it has one.
+    pub fast_tier: Option<crate::fast::FastTier>,
 }
 
 impl Route {
@@ -420,8 +429,13 @@ impl Resolver<'_> {
             "endpoint",
             self.endpoint(provider, target.base_url.as_deref()).await,
         )?;
-        trace.ok("endpoint", base_url.clone());
-        let (wire_format, wire_source) = wire::select(provider, &base_url);
+        trace.ok("endpoint", base_url.0.clone());
+        let base_url = base_url.1;
+        let model = target
+            .model
+            .clone()
+            .or_else(|| provider.descriptor().default_model.clone());
+        let (wire_format, wire_source) = wire::select_for(provider, &base_url, model.as_deref());
         trace.ok(
             "wire_format",
             format!(
@@ -434,10 +448,6 @@ impl Resolver<'_> {
             "wire_format",
             wire::available(provider, wire_source).map_or(Ok(()), Err),
         )?;
-        let model = target
-            .model
-            .clone()
-            .or_else(|| provider.descriptor().default_model.clone());
         if let Some(model) = &model {
             // A retired model refuses the route whatever its credential.
             trace.check(
@@ -454,10 +464,8 @@ impl Resolver<'_> {
         let settings = provider.settings();
         Ok(Route {
             provider: provider.id().to_owned(),
-            model,
             wire_format,
             wire_source,
-            base_url,
             credential,
             supports_prompt_cache: provider.supports_prompt_cache(),
             supports_server_compaction: provider.supports_server_compaction()
@@ -468,23 +476,37 @@ impl Resolver<'_> {
                 request: std::time::Duration::from_secs(settings.request_timeout_secs),
                 idle: std::time::Duration::from_secs(settings.stream_idle_timeout_secs),
             },
+            affinity_header: provider.descriptor().session_affinity_header.clone(),
+            body_extra: crate::upstream::extras(self.config, provider.id(), &model),
+            fast_tier: crate::fast::tier(provider.id(), wire_format, &base_url),
+            model,
+            base_url,
         })
     }
 
-    /// The base URL: the mock's fixed one, an explicit one, the configured
-    /// one, else the descriptor default (probed for local servers, which never fall back
-    /// to another provider).
-    async fn endpoint(&self, provider: &Provider, explicit: Option<&str>) -> Result<String, Error> {
+    /// The base URL and how it was found: the mock's fixed one, an
+    /// explicit one, the configured one, one detected from the key
+    /// (multi-region key providers), else the descriptor default (probed
+    /// for local servers, which never fall back to another provider).
+    async fn endpoint(
+        &self,
+        provider: &Provider,
+        explicit: Option<&str>,
+    ) -> Result<(String, String), Error> {
+        let plain = |url: String| (url.clone(), url);
         if provider.descriptor().wire_need == crate::descriptor::WireNeed::Mock {
             // Answered in-process; no endpoint is ever contacted.
-            return Ok(crate::mock::BASE_URL.to_owned());
+            return Ok(plain(crate::mock::BASE_URL.to_owned()));
         }
         if let Some(url) = explicit.or(provider.settings().base_url.as_deref()) {
-            return Ok(url.to_owned());
+            return Ok(plain(url.to_owned()));
         }
         let id = provider.id();
         if let Some(url) = vertex_endpoint(provider) {
-            return Ok(url);
+            return Ok(plain(url));
+        }
+        if let Some(detected) = self.detected(provider).await? {
+            return Ok(detected);
         }
         let hint = format!("prometheus config set providers.{id}.base_url http://<host>:<port>/v1");
         let Some(default) = provider.descriptor().base_url.as_deref() else {
@@ -503,7 +525,40 @@ impl Resolver<'_> {
             )
             .with_hint(hint));
         }
-        Ok(default.to_owned())
+        Ok(plain(default.to_owned()))
+    }
+
+    /// The endpoint of a multi-region key provider found from its key:
+    /// Kimi Code keys by prefix, `zai` keys by probing (spec:
+    /// model-providers, Endpoint auto-detection for multi-region key
+    /// providers). `None`: no key, or nothing detected (the default
+    /// applies; a failed detection is still traced).
+    async fn detected(&self, provider: &Provider) -> Result<Option<(String, String)>, Error> {
+        let detectable = matches!(provider.id(), "zai" | "kimi-coding");
+        if !detectable {
+            return Ok(None);
+        }
+        let mut key = None;
+        for name in provider.secret_names() {
+            key = self.secrets.secret(&name)?;
+            if key.is_some() {
+                break;
+            }
+        }
+        let Some(key) = key else {
+            return Ok(None);
+        };
+        if provider.id() == "kimi-coding" {
+            return Ok(crate::detect::kimi_endpoint(&key)
+                .map(|url| (format!("{url} (detected: a Kimi Code key)"), url.to_owned())));
+        }
+        let Some(detector) = self.extras.detector() else {
+            return Ok(None);
+        };
+        let detected = detector.zai(&key, self.extras.pool_state()).await;
+        Ok(detected
+            .url()
+            .map(|url| (detected.describe(), url.to_owned())))
     }
 }
 
@@ -548,6 +603,7 @@ fn wire_source_name(source: WireSource) -> &'static str {
         WireSource::Config => "config",
         WireSource::HostRule => "host rule",
         WireSource::Descriptor => "descriptor",
+        WireSource::Model => "the model's row of the descriptor",
         WireSource::Default => "default",
     }
 }

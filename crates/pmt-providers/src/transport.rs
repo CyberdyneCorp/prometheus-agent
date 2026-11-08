@@ -63,10 +63,67 @@ pub fn body(route: &Route, request: &Request) -> serde_json::Value {
         compaction,
     };
     let mut body = wire::encode(route.wire_format, &request, &options);
+    if let Some(extra) = &route.body_extra {
+        crate::request::apply_overrides(&mut body, extra);
+    }
+    if let (Some(speed), Some(tier)) = (request.speed, route.fast_tier) {
+        tier.apply(&mut body, speed);
+    }
     if let Some(overrides) = &request.body_overrides {
         crate::request::apply_overrides(&mut body, overrides);
     }
     body
+}
+
+/// The conversation a session's calls belong to (spec: model-providers,
+/// Session affinity headers and per-model wire routing): the root session
+/// id, or the kanban task id of a kanban worker. Shared by a session's
+/// main and auxiliary callers; set once the session is known.
+#[derive(Debug, Clone, Default)]
+pub struct Conversation(Arc<std::sync::RwLock<Option<String>>>);
+
+impl Conversation {
+    /// Calls from now on belong to `id`.
+    pub fn set(&self, id: &str) {
+        let mut slot = self
+            .0
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *slot = Some(id.to_owned());
+    }
+
+    /// The opaque affinity value: a stable hash of the conversation id.
+    #[must_use]
+    pub fn affinity(&self) -> Option<String> {
+        use sha2::{Digest, Sha256};
+        let slot = self
+            .0
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let digest = Sha256::digest(slot.as_deref()?.as_bytes());
+        Some(crate::request::hex(&digest[..16]))
+    }
+}
+
+/// The headers a request on `route` carries besides its credential: the
+/// conversation's affinity header, and the beta flags its body needs.
+pub fn route_headers(
+    route: &Route,
+    request: &Request,
+    conversation: &Conversation,
+) -> Vec<(String, String)> {
+    let mut headers = Vec::new();
+    if let (Some(name), Some(value)) = (&route.affinity_header, conversation.affinity()) {
+        headers.push((name.clone(), value));
+    }
+    let beta = request
+        .speed
+        .and(route.fast_tier)
+        .and_then(crate::fast::FastTier::beta);
+    if let Some(beta) = beta {
+        headers.push(("anthropic-beta".to_owned(), beta.to_owned()));
+    }
+    headers
 }
 
 /// Request hooks of model providers registered by plugins (spec:
@@ -98,6 +155,7 @@ pub(crate) struct Sender {
     mock: Arc<Mock>,
     hooks: Option<Arc<dyn RequestHooks>>,
     pii: Option<Arc<pmt_core::pii::Pii>>,
+    conversation: Conversation,
 }
 
 impl std::fmt::Debug for Sender {
@@ -114,7 +172,14 @@ impl Sender {
             mock: Arc::new(Mock::echo()),
             hooks: None,
             pii: None,
+            conversation: Conversation::default(),
         }
+    }
+
+    /// Tags every request with `conversation`'s affinity header.
+    pub(crate) fn with_conversation(mut self, conversation: Conversation) -> Self {
+        self.conversation = conversation;
+        self
     }
 
     /// Replaces PII in every request before it leaves the process.
@@ -158,7 +223,8 @@ impl Sender {
             return ModelStream::start(Source::Acp(Box::new(feed)), limits).await;
         }
         let hooks = self.hooks.as_deref().filter(|h| h.handles(&route.provider));
-        send_http(&self.client, hooks, route, request).await
+        let extra = route_headers(route, request, &self.conversation);
+        send_http(&self.client, hooks, route, request, extra).await
     }
 }
 
@@ -224,12 +290,14 @@ async fn send_http(
     hooks: Option<&dyn RequestHooks>,
     route: &Route,
     request: &Request,
+    extra: Vec<(String, String)>,
 ) -> Result<ModelStream, ProviderError> {
     let limits = Limits::of(route);
-    let (body, headers) = match hooks {
+    let (body, mut headers) = match hooks {
         Some(hooks) => hooked(hooks, route, body(route, request)).await?,
         None => (body(route, request), Vec::new()),
     };
+    headers.extend(extra);
     let body = serde_json::to_vec(&body).expect("JSON values serialize");
     let mut builder = client
         .post(wire::endpoint(route.wire_format, &route.base_url))

@@ -187,6 +187,11 @@ pub(super) struct Turn<'a> {
     pub(super) id: TurnId,
     pub(super) options: TurnOptions,
     pub(super) started_at: Timestamp,
+    /// When the turn started (the fast mode window).
+    pub(super) started: Instant,
+    /// Messages the session held before this turn (`cold` fast mode asks
+    /// only on a session's first turn).
+    pub(super) prior_rows: usize,
     /// `None` without a run budget: the clock is then never read.
     pub(super) clock: Option<RunClock>,
     pub(super) iterations: IterationBudget,
@@ -257,6 +262,8 @@ impl<'a> Turn<'a> {
             }),
             options,
             started_at: Timestamp::now(),
+            started: Instant::now(),
+            prior_rows: 0,
             iterations: IterationBudget::new(max),
             usage: TurnUsage::default(),
             appended: Vec::new(),
@@ -289,6 +296,10 @@ impl<'a> Turn<'a> {
             .then(|| self.init_snapshot())
             .flatten();
         self.close_unfinished().await?;
+        self.prior_rows = setup
+            .store
+            .messages(setup.session, Visibility::Active)?
+            .len();
         self.load_prefill()?;
         self.journal_kind(JournalKind::TurnStarted)?;
         setup.model.start_turn().await;
@@ -556,7 +567,9 @@ impl<'a> Turn<'a> {
             reasoning: None,
             body_overrides: None,
             server_compaction,
+            speed: None,
         };
+        request.speed = self.speed(route);
         if let Some(ephemeral) = &mut self.ephemeral {
             ephemeral.attach(&mut request.messages);
         }

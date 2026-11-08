@@ -69,6 +69,14 @@ pub struct AgentConfig {
     pub coding_context: CodingContext,
     /// Standing instructions appended to the coding brief.
     pub coding_instructions: String,
+    /// When requests ask the provider's priority tier (`/fast`): OpenAI
+    /// priority processing, Anthropic fast mode; ignored, with a one-time
+    /// notice, on routes without such a tier.
+    pub fast_mode: super::FastMode,
+    /// The window (seconds from the start of a turn) `auto` and `cold`
+    /// fast modes ask the priority tier in.
+    #[schemars(range(min = 1))]
+    pub fast_auto_secs: u64,
 }
 
 impl Default for AgentConfig {
@@ -94,6 +102,8 @@ impl Default for AgentConfig {
             verify_guidance: true,
             coding_context: CodingContext::Auto,
             coding_instructions: String::new(),
+            fast_mode: super::FastMode::Normal,
+            fast_auto_secs: 60,
         }
     }
 }

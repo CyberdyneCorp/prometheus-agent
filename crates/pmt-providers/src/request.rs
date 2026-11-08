@@ -194,6 +194,9 @@ pub struct Request {
     /// Server-side compaction (spec: context-compression, Server-side
     /// Responses compaction): sent only on a route that supports it.
     pub server_compaction: Option<ServerCompaction>,
+    /// The fast mode tier this request asks for (spec: model-providers,
+    /// Fast mode service tier): sent only on a route that has one.
+    pub speed: Option<crate::fast::Speed>,
 }
 
 /// The server-side compaction of one Responses request.

@@ -83,6 +83,24 @@ pub trait PoolState: Send + Sync {
     fn mark_key_dead(&self, _provider: &str, _credential: &str) -> Result<(), Error> {
         Ok(())
     }
+
+    /// A value the profile remembers under `key` (a detected endpoint).
+    ///
+    /// # Errors
+    ///
+    /// Store errors.
+    fn remembered(&self, _key: &str) -> Result<Option<String>, Error> {
+        Ok(None)
+    }
+
+    /// Remembers `value` under `key`.
+    ///
+    /// # Errors
+    ///
+    /// Store errors.
+    fn remember(&self, _key: &str, _value: &str) -> Result<(), Error> {
+        Ok(())
+    }
 }
 
 impl PoolState for pmt_store::Store {
@@ -100,6 +118,14 @@ impl PoolState for pmt_store::Store {
 
     fn mark_key_dead(&self, provider: &str, credential: &str) -> Result<(), Error> {
         pmt_store::Store::mark_key_dead(self, provider, credential)
+    }
+
+    fn remembered(&self, key: &str) -> Result<Option<String>, Error> {
+        self.pref(&format!("providers.{key}"))
+    }
+
+    fn remember(&self, key: &str, value: &str) -> Result<(), Error> {
+        self.set_pref(&format!("providers.{key}"), value)
     }
 
     fn record_use(&self, provider: &str, credential: &str, now: Timestamp) -> Result<(), Error> {
@@ -121,6 +147,7 @@ impl PoolState for pmt_store::Store {
 #[derive(Debug, Default)]
 pub struct MemoryState {
     rows: Mutex<BTreeMap<(String, String), CredentialState>>,
+    memo: Mutex<BTreeMap<String, String>>,
 }
 
 impl MemoryState {
@@ -189,6 +216,23 @@ impl PoolState for MemoryState {
             row.benched_until = until;
             row.bench_reason = reason.map(str::to_owned);
         });
+        Ok(())
+    }
+
+    fn remembered(&self, key: &str) -> Result<Option<String>, Error> {
+        let memo = self
+            .memo
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        Ok(memo.get(key).cloned())
+    }
+
+    fn remember(&self, key: &str, value: &str) -> Result<(), Error> {
+        let mut memo = self
+            .memo
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        memo.insert(key.to_owned(), value.to_owned());
         Ok(())
     }
 }

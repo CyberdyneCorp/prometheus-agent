@@ -6,7 +6,7 @@
 
 use pmt_config::schema::{LoginFlow, ProviderAuth, WireFormat};
 
-use crate::descriptor::{Descriptor, HostRule, WireNeed};
+use crate::descriptor::{Descriptor, HostRule, ModelWire, WireNeed};
 
 /// A wire format beyond the native one (const-friendly [`WireNeed`]).
 #[derive(Clone, Copy)]
@@ -745,16 +745,54 @@ fn descriptor(row: &Row) -> Descriptor {
     d.default_model = row.default_model.map(str::to_owned);
     d.endpoint_note = row.endpoint_note.map(str::to_owned);
     d.wire_need = wire_need(row.need);
-    if row.id == "gemini" {
+    per_provider(&mut d);
+    d
+}
+
+/// Rules only one provider has.
+fn per_provider(d: &mut Descriptor) {
+    match d.id.as_str() {
         // Gemini's OpenAI-compatible endpoint (`.../openai`) speaks Chat
         // Completions natively.
-        d.host_rules.push(HostRule {
+        "gemini" => d.host_rules.push(HostRule {
             host: None,
             path_suffixes: vec!["/openai".to_owned()],
             wire_format: ChatCompletions,
-        });
+        }),
+        // A Kimi Code key (`sk-kimi-`) is served at api.kimi.com/coding over
+        // Anthropic Messages (spec: model-providers, Endpoint
+        // auto-detection for multi-region key providers).
+        "kimi-coding" => d.host_rules.push(HostRule {
+            host: Some(crate::detect::KIMI_CODING_HOST.to_owned()),
+            path_suffixes: vec!["/coding".to_owned()],
+            wire_format: AnthropicMessages,
+        }),
+        "opencode-zen" => {
+            d.session_affinity_header = Some(OPENCODE_AFFINITY.to_owned());
+            d.model_wire_formats =
+                model_wires(&[("claude-*", AnthropicMessages), ("gpt-*", Responses)]);
+        }
+        "opencode-go" => {
+            d.session_affinity_header = Some(OPENCODE_AFFINITY.to_owned());
+            d.model_wire_formats = model_wires(&[
+                ("minimax*", AnthropicMessages),
+                ("qwen*", AnthropicMessages),
+            ]);
+        }
+        _ => {}
     }
-    d
+}
+
+/// The per-conversation routing header of `OpenCode`.
+const OPENCODE_AFFINITY: &str = "x-opencode-session";
+
+fn model_wires(rows: &[(&str, WireFormat)]) -> Vec<ModelWire> {
+    rows.iter()
+        .map(|(pattern, wire_format)| ModelWire {
+            pattern: (*pattern).to_owned(),
+            wire_format: *wire_format,
+        })
+        .collect()
 }
 
 fn wire_need(need: Need) -> WireNeed {

@@ -180,6 +180,9 @@ pub(crate) fn route(
             request: std::time::Duration::from_secs(settings.request_timeout_secs),
             idle: std::time::Duration::from_secs(settings.stream_idle_timeout_secs),
         },
+        affinity_header: None,
+        body_extra: None,
+        fast_tier: None,
     })
 }
 

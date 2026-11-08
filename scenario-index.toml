@@ -3208,3 +3208,23 @@ capabilities = [
 
 [session-storage."Attachment storage location"]
 "Workspace copy" = ["crates/prometheus/tests/session_maintenance.rs::a_workspace_attachment_is_copied_beside_the_blob", "crates/prometheus/tests/session_maintenance.rs::a_file_received_by_the_daemon_is_kept_in_the_blob_store_and_the_workspace"]
+
+# Group 46.1: endpoint detection, session affinity and per-model wires,
+# OpenRouter routing preferences, fast mode, outbound IPv4 preference.
+[model-providers."Endpoint auto-detection for multi-region key providers"]
+"Coding-plan key lands on the coding endpoint" = ["crates/pmt-providers/tests/providers/request_controls.rs::a_coding_plan_key_lands_on_the_coding_endpoint_and_is_not_probed_again"]
+"Failed probes are not repeated immediately" = ["crates/pmt-providers/tests/providers/request_controls.rs::a_rejected_key_is_probed_once_within_the_ttl_and_uses_the_default", "crates/pmt-providers/src/detect.rs::a_failure_is_remembered_for_its_ttl_only"]
+
+[model-providers."Session affinity headers and per-model wire routing"]
+"Affinity header stable within a conversation" = ["crates/pmt-providers/tests/providers/request_controls.rs::main_and_auxiliary_calls_of_a_conversation_share_one_affinity_value"]
+"Per-model wire format on resume" = ["crates/pmt-providers/tests/providers/request_controls.rs::opencode_go_serves_minimax_over_anthropic_messages_on_every_resolution"]
+
+[model-providers."OpenRouter provider routing preferences"]
+"Routing ignored for other providers" = ["crates/pmt-providers/tests/providers/request_controls.rs::routing_preferences_are_sent_to_openrouter_only", "crates/pmt-providers/src/upstream.rs::preferences_map_to_the_provider_object_on_openrouter_only"]
+"Pareto score sent only for the router model" = ["crates/pmt-providers/tests/providers/request_controls.rs::the_pareto_block_rides_only_the_router_model", "crates/pmt-providers/src/upstream.rs::the_pareto_block_needs_the_router_model_and_a_score"]
+
+[model-providers."Fast mode service tier"]
+"Auto window" = ["crates/pmt-agent/tests/turn/fast_mode.rs::auto_asks_the_priority_tier_only_within_the_first_minute_of_the_turn", "crates/pmt-providers/src/fast.rs::auto_asks_only_within_the_window_of_each_turn"]
+
+[model-providers."Outbound IPv4 preference"]
+"Blackholed IPv6 falls back quickly" = ["crates/pmt-net/src/eyeballs.rs::ipv4_starts_250_ms_after_a_silent_ipv6_attempt_and_leads", "crates/pmt-net/tests/ipv6.rs::a_blackholed_ipv6_address_falls_back_to_ipv4_quickly"]

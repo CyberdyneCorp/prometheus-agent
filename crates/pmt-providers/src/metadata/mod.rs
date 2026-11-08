@@ -190,6 +190,12 @@ impl Catalog {
             apply_listed(&mut meta, listed);
             sources.push(MetadataSource::Listing);
         }
+        // A `-vision` model takes images whatever else describes it (spec:
+        // model-providers, Session affinity headers and per-model wire
+        // routing); a `[models]` pin below still wins.
+        if model.to_ascii_lowercase().ends_with("-vision") {
+            meta.supports_vision = true;
+        }
         let route = self.overrides.get(&format!("{provider}/{model}"));
         if let Some(route) = route {
             apply_override(&mut meta, route);

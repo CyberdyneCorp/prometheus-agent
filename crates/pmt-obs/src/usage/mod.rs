@@ -123,7 +123,10 @@ impl UsageRecorder {
     ///
     /// As [`record`](Self::record).
     pub fn record_at(&self, call: Call, ts: Timestamp) -> Result<UsageEvent, Error> {
-        let price = self.prices.price(&call.provider, &call.model);
+        let price = self
+            .prices
+            .price(&call.provider, &call.model)
+            .map(|p| p.on_tier(call.service_tier.as_deref()));
         let (cost_usd, cost_status) = price_call(
             &Billing {
                 tokens: &call.tokens,

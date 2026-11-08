@@ -16,6 +16,7 @@ mod mock;
 mod pools;
 mod portals;
 mod refresh;
+mod request_controls;
 mod routing;
 mod server_compaction;
 mod session;

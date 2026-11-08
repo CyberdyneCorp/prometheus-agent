@@ -82,6 +82,18 @@
           },
           "description": "Empty-response retry guard."
         },
+        "fast_auto_secs": {
+          "default": 60,
+          "description": "The window (seconds from the start of a turn) `auto` and `cold`\nfast modes ask the priority tier in.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "fast_mode": {
+          "$ref": "#/$defs/FastMode",
+          "default": "normal",
+          "description": "When requests ask the provider's priority tier (`/fast`): OpenAI\npriority processing, Anthropic fast mode; ignored, with a one-time\nnotice, on routes without such a tier."
+        },
         "intent_continuation": {
           "$ref": "#/$defs/IntentContinuation",
           "default": "auto",
@@ -1668,6 +1680,21 @@
         }
       ]
     },
+    "DataCollection": {
+      "description": "Whether upstream providers that store or train on prompts may serve.",
+      "oneOf": [
+        {
+          "const": "allow",
+          "description": "Any provider.",
+          "type": "string"
+        },
+        {
+          "const": "deny",
+          "description": "Only providers that neither store nor train on prompts.",
+          "type": "string"
+        }
+      ]
+    },
     "DedupConfig": {
       "additionalProperties": false,
       "description": "`[gateway.dedup]`.",
@@ -2241,6 +2268,36 @@
         "model"
       ],
       "type": "object"
+    },
+    "FastMode": {
+      "description": "`agent.fast_mode`: when requests ask the provider's priority tier.",
+      "oneOf": [
+        {
+          "const": "normal",
+          "description": "Never.",
+          "type": "string"
+        },
+        {
+          "const": "fast",
+          "description": "Every request.",
+          "type": "string"
+        },
+        {
+          "const": "auto",
+          "description": "Requests within the first `agent.fast_auto_secs` of each turn.",
+          "type": "string"
+        },
+        {
+          "const": "cold",
+          "description": "That window on the first turn of a session only.",
+          "type": "string"
+        },
+        {
+          "const": "ultrafast",
+          "description": "Every request, on the provider's fastest tier where one exists\n(otherwise as `fast`).",
+          "type": "string"
+        }
+      ]
     },
     "FilesConfig": {
       "additionalProperties": false,
@@ -4840,6 +4897,19 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "OpenRouterConfig": {
+      "additionalProperties": false,
+      "description": "The `[openrouter]` section.",
+      "properties": {
+        "min_coding_score": {
+          "$ref": "#/$defs/ScoreSchema",
+          "default": 0.65,
+          "description": "Lowest coding score the `openrouter/pareto-code` router may pick a\nmodel below (0.0-1.0); an empty string sends no `pareto-router`\nplugin block."
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
     "OutboundHook": {
       "additionalProperties": false,
       "description": "One `[[hooks.outbound]]` webhook.",
@@ -6125,6 +6195,75 @@
       },
       "type": "object"
     },
+    "ProviderRoutingConfig": {
+      "additionalProperties": false,
+      "description": "The `[provider_routing]` section: OpenRouter routing preferences sent\nonly on `openrouter` routes, with per-model overrides.",
+      "properties": {
+        "data_collection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DataCollection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Whether upstream providers that store or train on prompts may serve."
+        },
+        "ignore": {
+          "default": [],
+          "description": "These upstream providers never serve.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "models": {
+          "additionalProperties": {
+            "$ref": "#/$defs/RoutingPrefs"
+          },
+          "default": {},
+          "description": "Per-model overrides (`[provider_routing.models.\"<model>\"]`), matched\ncase-insensitively ignoring separators; each set field replaces the\nsection's.",
+          "type": "object"
+        },
+        "only": {
+          "default": [],
+          "description": "Only these upstream providers may serve.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "order": {
+          "default": [],
+          "description": "Upstream providers tried first, in this order.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "require_parameters": {
+          "description": "Only upstream providers that support every request parameter.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "sort": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoutingSort"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Order upstream providers by price, throughput or latency."
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
     "PythonBridgeConfig": {
       "additionalProperties": false,
       "description": "The `[python_bridge]` section.",
@@ -6562,6 +6701,86 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "RoutingPrefs": {
+      "additionalProperties": false,
+      "description": "OpenRouter's `provider` request object, as preferences.",
+      "properties": {
+        "data_collection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DataCollection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Whether upstream providers that store or train on prompts may serve."
+        },
+        "ignore": {
+          "default": [],
+          "description": "These upstream providers never serve.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "only": {
+          "default": [],
+          "description": "Only these upstream providers may serve.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "order": {
+          "default": [],
+          "description": "Upstream providers tried first, in this order.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "require_parameters": {
+          "description": "Only upstream providers that support every request parameter.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "sort": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoutingSort"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Order upstream providers by price, throughput or latency."
+        }
+      },
+      "type": "object"
+    },
+    "RoutingSort": {
+      "description": "How OpenRouter orders the upstream providers of a model.",
+      "oneOf": [
+        {
+          "const": "price",
+          "description": "Cheapest first.",
+          "type": "string"
+        },
+        {
+          "const": "throughput",
+          "description": "Highest tokens per second first.",
+          "type": "string"
+        },
+        {
+          "const": "latency",
+          "description": "Lowest time to first token first.",
+          "type": "string"
+        }
+      ]
+    },
     "SandboxConfig": {
       "additionalProperties": false,
       "description": "The `[security.sandbox]` section.",
@@ -6596,6 +6815,23 @@
           "type": "string"
         }
       ]
+    },
+    "ScoreSchema": {
+      "anyOf": [
+        {
+          "description": "A score.",
+          "format": "double",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "description": "No score: the empty string.",
+          "maxLength": 0,
+          "type": "string"
+        }
+      ],
+      "description": "A score or the empty string (no score)."
     },
     "SearxngConfig": {
       "additionalProperties": false,
@@ -8846,6 +9082,8 @@
         "empty_response_guard": {
           "cost_threshold_usd": 0.25
         },
+        "fast_auto_secs": 60,
+        "fast_mode": "normal",
         "intent_continuation": "auto",
         "max_iterations": 500,
         "max_verify_nudges": 3,
@@ -9357,6 +9595,13 @@
       },
       "description": "Trajectories."
     },
+    "openrouter": {
+      "$ref": "#/$defs/OpenRouterConfig",
+      "default": {
+        "min_coding_score": 0.65
+      },
+      "description": "OpenRouter-only request settings."
+    },
     "plugins": {
       "$ref": "#/$defs/PluginsConfig",
       "default": {
@@ -9409,6 +9654,16 @@
         "ttl": "5m"
       },
       "description": "Provider prompt caching."
+    },
+    "provider_routing": {
+      "$ref": "#/$defs/ProviderRoutingConfig",
+      "default": {
+        "ignore": [],
+        "models": {},
+        "only": [],
+        "order": []
+      },
+      "description": "OpenRouter upstream provider routing preferences."
     },
     "providers": {
       "additionalProperties": {

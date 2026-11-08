@@ -419,6 +419,23 @@ pub static BUILTINS: &[Command] = &[
         Effect::Immediate,
     ),
     command(
+        "fast",
+        &[],
+        Model,
+        "Show or set fast mode: the provider's priority tier (--global saves agent.fast_mode)",
+        &[
+            arg(
+                "mode",
+                ArgKind::Choice(&["normal", "fast", "auto", "cold", "ultrafast", "status"]),
+                false,
+            ),
+            arg("global", ArgKind::Flag, false),
+        ],
+        CHATS,
+        BusyPolicy::Reject,
+        Effect::Immediate,
+    ),
+    command(
         "personality",
         &[],
         Model,

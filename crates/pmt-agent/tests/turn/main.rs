@@ -8,6 +8,7 @@ mod compaction_upgrades;
 mod compression;
 mod context;
 mod exits;
+mod fast_mode;
 mod guardrails;
 mod hints;
 mod hooks;
