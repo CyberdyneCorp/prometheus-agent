@@ -120,6 +120,21 @@ fn an_ambiguous_name_exits_2_listing_the_ids() {
     assert_eq!(out.status.code(), Some(2));
 }
 
+/// Scenario: Unknown cron subcommand prints the cron usage.
+#[test]
+fn an_unknown_cron_subcommand_exits_2_with_the_cron_usage() {
+    let home = cron_home(ANSWER);
+    let out = run(home.path(), &["cron", "statu"]);
+    assert_eq!(out.status.code(), Some(2), "{}", stderr(&out));
+    let err = stderr(&out);
+    assert!(
+        err.contains("unknown command 'statu' (did you mean 'status'?)"),
+        "{err}"
+    );
+    assert!(err.contains("Usage: prometheus cron"), "{err}");
+    assert!(err.contains("run: prometheus cron --help"), "{err}");
+}
+
 /// Scenario: Run-now is synchronous by default.
 #[test]
 fn run_now_executes_a_paused_job_in_the_foreground_and_keeps_it_paused() {

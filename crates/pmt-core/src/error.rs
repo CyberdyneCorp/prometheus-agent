@@ -932,6 +932,9 @@ error_codes! {
     /// A job's working directory is not an existing absolute directory.
     CRON_INVALID_WORKDIR = ("cron.invalid_workdir", Usage,
         "A job's `workdir` must be an absolute path to an existing directory, and one set through the `cronjob` tool must lie inside the calling session's workspace; nothing was saved.");
+    /// A `cronjob` tool call asks for more than its own session holds.
+    CRON_BEYOND_SESSION = ("cron.beyond_session", PermissionDenied,
+        "A job the model sets up through the `cronjob` tool cannot reach past the calling session: its `toolsets` must stay within the session's tools, each `script_secrets` name needs the session's `secrets.read:<NAME>` grant, and its `interpreter` must not be a file the session can write; a person can set them with `prometheus cron add|edit`. Nothing was saved.");
     /// A notepad write would exceed its limits.
     CRON_NOTEPAD_LIMIT = ("cron.notepad_limit", InvalidInput,
         "A job notepad key is at most 128 characters, a value at most 16 KiB and a notepad at most 64 KiB counting keys and values; the notepad is unchanged.");

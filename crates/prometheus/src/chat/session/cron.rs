@@ -6,7 +6,7 @@
 //! tool unless the job opts in, and approvals decided by
 //! `approvals.cron_mode` (the gate's cron context).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use pmt_core::capability::{Capability, CapabilitySet};
 use pmt_core::error::Error;
@@ -93,5 +93,27 @@ impl CronRun {
         selection.tools.retain(|t| !dropped.contains(t));
         selection.disabled.extend(dropped);
         Ok(selection)
+    }
+}
+
+/// What a job the session's model schedules through `cronjob` may not
+/// reach past: the session's selected tools and its capabilities in its
+/// working directory `cwd`.
+#[must_use]
+pub fn caller(
+    selection: &Selection,
+    capabilities: &CapabilitySet,
+    cwd: &Path,
+    user_home: Option<&PathBuf>,
+) -> crate::cron_host::caller::Caller {
+    crate::cron_host::caller::Caller {
+        tools: selection.tools.iter().cloned().collect(),
+        capabilities: capabilities.clone(),
+        places: pmt_core::capability::Places {
+            user_home: user_home.cloned().unwrap_or_default(),
+            workspace: pmt_core::capability::canonical(cwd),
+            scratch: Vec::new(),
+            toolchain: Vec::new(),
+        },
     }
 }

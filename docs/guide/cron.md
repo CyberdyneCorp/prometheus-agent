@@ -198,6 +198,13 @@ run_id}`; the outcome (status, targets, next run, an excerpt) arrives
 later as a `[cron run finished]` message. Its optional `prompt` is added
 to that run only, under `## Run Context`.
 
+The token is the agent's own to repeat, so it is no human approval, and a
+job the agent sets up never reaches past its session (`cron.beyond_session`
+otherwise): its `toolsets` stay within the session's tools, each
+`script_secrets` name needs the session's `secrets.read:<NAME>` grant, and
+its `interpreter` is never a file the session can write. A person can
+widen a job with `prometheus cron add|edit`.
+
 ## /cron in a chat
 
 `/cron list|add|edit|pause|resume|run|remove|runs|incidents ...` takes the
@@ -219,6 +226,9 @@ posts the outcome in the chat when the run ends.
   tool the model may only pick a workdir inside its own session's
   workspace (its confirmation token is no human approval); anything wider
   is refused (`cron.invalid_workdir`) and needs `cron add|edit --workdir`.
+  The workdir is saved with its links resolved; a run whose workdir is
+  gone or now resolves elsewhere (a link along it was repointed) is
+  refused rather than followed.
 - The model is the job's pin (`--model m [--provider p]`, or `--pin` to
   freeze the profile's current main model; `--unpin` releases it), else
   `cron.model` / `cron.model_provider`, else the main model at fire time.

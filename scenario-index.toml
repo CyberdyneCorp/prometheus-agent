@@ -2834,9 +2834,12 @@ capabilities = [
 
 [scheduled-jobs."CLI surface"]
 "Ambiguous name" = ["crates/prometheus/tests/cron_cli.rs::an_ambiguous_name_exits_2_listing_the_ids"]
+"Unknown cron subcommand prints the cron usage" = ["crates/prometheus/tests/cron_cli.rs::an_unknown_cron_subcommand_exits_2_with_the_cron_usage"]
 
 [scheduled-jobs."Model tool surface"]
 "Created from Telegram delivers back to Telegram" = { tests = ["crates/prometheus/tests/cron_daemon.rs::a_job_the_agent_creates_from_a_chat_needs_confirmation_and_delivers_back_there"], note = "proven on the debug-build file adapter's platform (`test`), the gateway path every adapter shares" }
+"Tool-created job cannot take secrets or an interpreter the session does not hold" = ["crates/prometheus/tests/cron_tool_reach.rs::a_model_job_cannot_take_secrets_or_a_writable_interpreter"]
+"Tool-created job cannot widen the session's toolsets" = ["crates/prometheus/tests/cron_tool_reach.rs::a_model_job_cannot_widen_the_sessions_toolsets"]
 
 [scheduled-jobs."Cron doctor"]
 "Healthy profile" = ["crates/prometheus/tests/cron_cli.rs::the_doctor_exits_0_on_a_healthy_profile"]
@@ -2847,6 +2850,7 @@ capabilities = [
 "Project job loads its context files" = ["crates/prometheus/tests/cron_upgrades.rs::a_project_job_loads_its_context_files_and_works_there"]
 "Relative workdir refused" = ["crates/prometheus/tests/cron_upgrades.rs::a_relative_workdir_is_refused"]
 "Tool workdir outside the session's workspace refused" = ["crates/prometheus/tests/cron_upgrades.rs::a_tool_workdir_outside_the_sessions_workspace_is_refused"]
+"Repointed workdir link does not move a job" = { tests = ["crates/prometheus/tests/cron_tool_reach.rs::a_repointed_workdir_link_does_not_move_the_job"], note = "unix-only test (symbolic links without Windows developer mode)" }
 
 [scheduled-jobs."Model pinning and cron fleet default"]
 "Unpinned jobs follow the cron default" = ["crates/prometheus/tests/cron_upgrades.rs::unpinned_jobs_follow_the_cron_default_and_pins_freeze"]

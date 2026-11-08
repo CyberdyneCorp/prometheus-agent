@@ -309,7 +309,7 @@ With `cron.provider = "managed"`, the system SHALL arm one external one-shot per
 - **THEN** the system SHALL return 401 `{"error":"invalid fire token"}`
 
 ### Requirement: CLI surface
-`prometheus cron` SHALL provide `list` (default; `--all` includes completed), `add`, `edit`, `pause`, `resume`, `run`, `remove` (alias `rm`), `runs`, `show-run`, `replay`, `incidents`, `notepad`, `suggestions`, `status`, `doctor` and `tick`, accepting a job by id or unique name; an unknown subcommand SHALL exit 2 with usage, and an ambiguous name SHALL exit 2 listing the matching ids.
+`prometheus cron` SHALL provide `list` (default; `--all` includes completed), `add`, `edit`, `pause`, `resume`, `run`, `remove` (alias `rm`), `runs`, `show-run`, `replay`, `incidents`, `notepad`, `suggestions`, `status`, `doctor` and `tick`, accepting a job by id or unique name; an unknown subcommand SHALL exit 2 printing `unknown command '<name>'` with a suggestion drawn from the `cron` subcommands, the `prometheus cron` usage line and the hint `run: prometheus cron --help`, and an ambiguous name SHALL exit 2 listing the matching ids.
 **Milestone:** M2
 
 #### Scenario: Ambiguous name
@@ -317,14 +317,28 @@ With `cron.provider = "managed"`, the system SHALL arm one external one-shot per
 - **WHEN** `prometheus cron pause digest` runs
 - **THEN** the command SHALL exit 2 and print both ids
 
+#### Scenario: Unknown cron subcommand prints the cron usage
+- **WHEN** `prometheus cron statu` runs
+- **THEN** the command SHALL exit 2 printing `unknown command 'statu' (did you mean 'status'?)`, the `Usage: prometheus cron` line and the hint `run: prometheus cron --help`
+
 ### Requirement: Model tool surface
-The system SHALL expose the `cronjob` tool in the `cronjob` toolset with actions `create`, `list`, `update`, `pause`, `resume`, `remove`, `run` and `runs`, whose JSON schema lists every accepted field (including `grace`, `timeout`, `memory`, `toolsets`, `schedule_text` and `confirm_token`) exactly once; the tool SHALL be available only to sessions whose surface can reach the user for confirmation (CLI, TUI, desktop, gateway chats) and SHALL record the creating chat as the job's `origin`.
+The system SHALL expose the `cronjob` tool in the `cronjob` toolset with actions `create`, `list`, `update`, `pause`, `resume`, `remove`, `run` and `runs`, whose JSON schema lists every accepted field (including `grace`, `timeout`, `memory`, `toolsets`, `schedule_text` and `confirm_token`) exactly once; the tool SHALL be available only to sessions whose surface can reach the user for confirmation (CLI, TUI, desktop, gateway chats) and SHALL record the creating chat as the job's `origin`. Because the tool's `confirm_token` is returned to the model (so it is no human approval), a job set up through the tool (create or update) SHALL NOT reach past the calling session: `toolsets` whose tools are not all in the session's own tool selection, a `script_secrets` name the session holds no `secrets.read:<NAME>` grant for, and an `interpreter` the session can write (inside its workspace or under an `fs.write` grant, checked for the path as given and the file it resolves to) SHALL each be refused with error `cron.beyond_session`, naming `prometheus cron add|edit` as the way for a person to set them and saving nothing.
 **Milestone:** M2
 
 #### Scenario: Created from Telegram delivers back to Telegram
 - **GIVEN** a user in a Telegram chat who confirms a job the agent proposed
 - **WHEN** the job later fires with `deliver = origin`
 - **THEN** the output SHALL be sent to that Telegram chat and thread
+
+#### Scenario: Tool-created job cannot take secrets or an interpreter the session does not hold
+- **GIVEN** a session without `secrets.read:SUDO_PASSWORD` whose workspace holds `x.sh`
+- **WHEN** its model calls `cronjob` `create` (even with the returned `confirm_token`) with `script_secrets = ["SUDO_PASSWORD"]`, or with `interpreter` set to that `x.sh`
+- **THEN** the call SHALL fail with `cron.beyond_session` and no job SHALL be saved, while a session holding the grant SHALL save the job with an interpreter it cannot write
+
+#### Scenario: Tool-created job cannot widen the session's toolsets
+- **GIVEN** a session whose tools are the `file` toolset
+- **WHEN** its model calls `cronjob` `create` with `toolsets = ["terminal", "file"]`
+- **THEN** the call SHALL fail with `cron.beyond_session` naming the missing tools, while `toolsets = ["file"]` SHALL be saved and `prometheus cron add --toolsets terminal` by a person SHALL still succeed
 
 ### Requirement: Cron doctor
 `prometheus cron doctor` SHALL report, per profile, the active trigger provider and any fallback reason, the tick lease holder, the number of due-but-unfired occurrences, jobs in `error` or `blocked_config`, undelivered outbox rows, and the effective values and sources of every `cron.*` setting, and SHALL exit 1 when any job is in `error` or any outbox row is `unknown`.
@@ -336,7 +350,7 @@ The system SHALL expose the `cronjob` tool in the `cronjob` toolset with actions
 - **THEN** it SHALL exit 0
 
 ### Requirement: Per-job working directory
-The system SHALL accept an optional job field `workdir` (CLI `--workdir`, tool field `workdir`) that MUST be an absolute path to an existing directory, rejected at create and update otherwise with `workdir must be an existing absolute directory: <path>`; when set, the run's terminal, file and code-execution tools SHALL use it as their working directory, the run's sandbox SHALL grant write access to it, and the project context files (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, discovered in the same order as an interactive session) under it SHALL be loaded into the run's frozen system prompt; when unset the run SHALL be detached, loading no project context files. The workdir SHALL be bound to the run (never to process-wide state) so concurrent runs with different workdirs never observe each other's directory, an empty string on edit SHALL clear it, and `prometheus cron doctor` SHALL report a job whose workdir no longer exists. Because the run's sandbox writes to the workdir and the `cronjob` tool's `confirm_token` is returned to the model (so it is no human approval), a `workdir` set through the tool (create or update) SHALL lie inside the calling session's workspace (its working directory); any other directory SHALL be refused with error `cron.invalid_workdir` and the message `workdir <path> is outside this session's workspace`, which names `prometheus cron add|edit --workdir` as the way for a person to set it, saving nothing.
+The system SHALL accept an optional job field `workdir` (CLI `--workdir`, tool field `workdir`) that MUST be an absolute path to an existing directory, rejected at create and update otherwise with `workdir must be an existing absolute directory: <path>`; when set, the run's terminal, file and code-execution tools SHALL use it as their working directory, the run's sandbox SHALL grant write access to it, and the project context files (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, discovered in the same order as an interactive session) under it SHALL be loaded into the run's frozen system prompt; when unset the run SHALL be detached, loading no project context files. The workdir SHALL be bound to the run (never to process-wide state) so concurrent runs with different workdirs never observe each other's directory, an empty string on edit SHALL clear it, and `prometheus cron doctor` SHALL report a job whose workdir no longer exists. Because the run's sandbox writes to the workdir and the `cronjob` tool's `confirm_token` is returned to the model (so it is no human approval), a `workdir` set through the tool (create or update) SHALL lie inside the calling session's workspace (its working directory); any other directory SHALL be refused with error `cron.invalid_workdir` and the message `workdir <path> is outside this session's workspace`, which names `prometheus cron add|edit --workdir` as the way for a person to set it, saving nothing. A workdir SHALL be saved as the path it resolves to (symbolic links resolved), and a run whose saved workdir no longer exists or now resolves to a different path (a link along it was repointed) SHALL be refused without running rather than follow it.
 **Milestone:** M2
 
 #### Scenario: Project job loads its context files
@@ -353,6 +367,11 @@ The system SHALL accept an optional job field `workdir` (CLI `--workdir`, tool f
 - **GIVEN** a session whose workspace is `/home/me/acme`
 - **WHEN** its model calls `cronjob` `create` (with or without a `confirm_token`) with `workdir = "/home/me"`
 - **THEN** the call SHALL fail with `workdir /home/me is outside this session's workspace` and no job SHALL be saved, while `workdir = "/home/me/acme/docs"` SHALL proceed to the usual confirmation
+
+#### Scenario: Repointed workdir link does not move a job
+- **GIVEN** a job created through the tool with `workdir` a link inside the session's workspace
+- **WHEN** the link is repointed, or a directory along the saved path is replaced by a link elsewhere, and the job runs
+- **THEN** the saved workdir SHALL be the link's original target and the run SHALL be refused with `now resolves to` instead of working in the new target
 
 ### Requirement: Model pinning and cron fleet default
 The system SHALL resolve a run's model at fire time as the job's pinned `model`/`provider`, then `cron.model`/`cron.model_provider` in the profile config, then the profile's main model at that moment; `prometheus cron add|edit --model <m> [--provider <p>]` SHALL pin an explicit model, `--pin` SHALL freeze the profile's current main model and provider onto the job (ignored when `--model` is given), `--unpin` SHALL clear the pin, and `--reasoning-effort <none|minimal|low|medium|high|xhigh|max>` SHALL pin a per-job reasoning level (empty string clears it; no effect on `no_agent` jobs). The `cronjob` tool SHALL expose only the boolean `pinned` (freeze or release the current main model, used only when the user asks) and SHALL NOT accept `model`, `provider` or `reasoning_effort`, so an agent can never point a job at a different model; `prometheus cron list` and the tool's `list` SHALL report `pinned` per job.

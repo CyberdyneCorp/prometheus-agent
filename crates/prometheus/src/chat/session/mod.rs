@@ -560,8 +560,9 @@ impl Factory {
             &memory,
             &environment,
         );
+        let reach = (&selection, &capabilities);
         let (agent_tools, clarify) =
-            self.agent_tools(id, &memory, &summarizer, &capabilities, cards, &delegation)?;
+            self.agent_tools(id, &memory, &summarizer, reach, cards, &delegation)?;
         let gate = self.gate_for(id, child, &model, &environment)?;
         skills::bind_shell(&inline_shell, environment.commands.as_ref(), &gate.gate);
         let ports = (&gate.gate, &agent_tools, &model);
@@ -887,7 +888,7 @@ impl Factory {
         id: SessionId,
         memory: &Arc<MemorySession>,
         summarizer: &Arc<summarize::RouteSummarizer>,
-        capabilities: &CapabilitySet,
+        (selection, capabilities): (&Selection, &CapabilitySet),
         cards: bool,
         delegation: &delegation::Wiring,
     ) -> Result<(Arc<AgentTools>, Option<ClarifyPrompts>), Error> {
@@ -916,6 +917,12 @@ impl Factory {
             &self.launch,
             &self.store,
             self.options.interactive,
+            cron::caller(
+                selection,
+                capabilities,
+                &self.options.cwd,
+                self.launch.user_home(),
+            ),
         ));
         let tools = match &self.messaging {
             Some(ports) => tools.with_messaging(ports.port(id, self.read_check(capabilities))),
