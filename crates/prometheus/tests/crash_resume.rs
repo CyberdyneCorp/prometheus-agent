@@ -105,6 +105,23 @@ fn resume(home: &Path, session: &str) -> OsSession {
     p
 }
 
+/// Waits for `needle`; on a timeout panics with what the screen and the
+/// stored transcript hold, so a slow-runner failure says where it stopped.
+fn expect_or_dump(p: &mut OsSession, home: &Path, session: &str, needle: &str) {
+    if let Err(err) = p.expect(needle) {
+        let mut screen = Vec::new();
+        let mut buf = [0_u8; 4096];
+        while let Ok(n @ 1..) = p.try_read(&mut buf) {
+            screen.extend_from_slice(&buf[..n]);
+        }
+        let messages = common::session_messages(home, session);
+        panic!(
+            "{needle:?}: {err}\nscreen after the last match:\n{}\ntranscript: {messages:#?}",
+            String::from_utf8_lossy(&screen)
+        );
+    }
+}
+
 #[test]
 fn a_crash_during_a_terminal_command_resumes_with_the_read_reused_and_the_command_unknown() {
     let home = home();
@@ -114,10 +131,13 @@ fn a_crash_during_a_terminal_command_resumes_with_the_read_reused_and_the_comman
     std::fs::write(work(home.path()).join("a.txt"), "version after the crash\n").unwrap();
 
     let mut p = resume(home.path(), &session);
-    p.expect("stopped when the process ended while terminal ran")
-        .unwrap();
-    p.expect("checked the deploy").unwrap();
-    p.expect("› ").unwrap();
+    for needle in [
+        "stopped when the process ended while terminal ran",
+        "checked the deploy",
+        "› ",
+    ] {
+        expect_or_dump(&mut p, home.path(), &session, needle);
+    }
     p.send_line("/exit").unwrap();
     p.expect(Eof).unwrap();
 
