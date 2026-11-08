@@ -191,6 +191,19 @@ pub struct Request {
     /// (spec: subagent-delegation, Child request overrides and direct
     /// endpoints). See [`apply_overrides`].
     pub body_overrides: Option<std::sync::Arc<serde_json::Map<String, Value>>>,
+    /// Server-side compaction (spec: context-compression, Server-side
+    /// Responses compaction): sent only on a route that supports it.
+    pub server_compaction: Option<ServerCompaction>,
+}
+
+/// The server-side compaction of one Responses request.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ServerCompaction {
+    /// The provider compacts once the input reaches this many tokens.
+    pub threshold: u64,
+    /// The opaque compaction item of an earlier response, sent first in
+    /// place of the history it covers (already left out of `messages`).
+    pub item: Option<Value>,
 }
 
 /// The key of [`Request::body_overrides`] merged one level deep.

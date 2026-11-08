@@ -129,7 +129,14 @@ impl Tui<'_> {
                     self.notice(line);
                 }
             }
-            _ => {}
+            Some(kind) => {
+                if let Some(line) =
+                    crate::chat::session::progress::context_line(kind, &data["payload"])
+                {
+                    self.notice(line);
+                }
+            }
+            None => {}
         }
     }
 

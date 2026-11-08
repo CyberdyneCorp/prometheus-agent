@@ -10,6 +10,10 @@ use crate::sse::SseEvent;
 
 pub(super) fn encode(request: &Request, options: &EncodeOptions<'_>) -> Value {
     let mut input = Vec::new();
+    // The compaction item stands for the history before it.
+    if let Some(item) = options.compaction.and_then(|c| c.item.as_ref()) {
+        input.push(item.clone());
+    }
     for message in &request.messages {
         encode_message(message, &mut input);
     }
@@ -37,6 +41,12 @@ pub(super) fn encode(request: &Request, options: &EncodeOptions<'_>) -> Value {
     body.insert("store".into(), json!(false));
     if let Some(key) = options.cache_key {
         body.insert("prompt_cache_key".into(), json!(key));
+    }
+    if let Some(compaction) = options.compaction {
+        body.insert(
+            "context_management".into(),
+            json!([{"type": "compaction", "compact_threshold": compaction.threshold}]),
+        );
     }
     Value::Object(body)
 }
@@ -92,6 +102,9 @@ impl super::Decode for Decoder {
             }
             "response.function_call_arguments.delta" => {
                 out.tool_arguments(index, data["delta"].as_str().unwrap_or_default());
+            }
+            "response.output_item.done" if data["item"]["type"] == "compaction" => {
+                out.compaction_item(data["item"].clone());
             }
             "response.output_item.done" => out.tool_end(index),
             "response.completed" => finish(&data["response"], None, out),

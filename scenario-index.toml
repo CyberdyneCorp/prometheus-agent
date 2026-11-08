@@ -3110,6 +3110,22 @@ capabilities = [
 [context-compression."Opt-in proactive prune"]
 "Disabled by default" = ["crates/pmt-agent/tests/turn/compaction_upgrades.rs::no_proactive_prune_runs_by_default"]
 
+# Group 44.7: idle compaction, progress notices and the pressure gauge,
+# server-side Responses compaction, the context window view.
+[context-compression."Idle compaction"]
+"Return after a long pause" = ["crates/pmt-agent/tests/turn/compaction_notices.rs::a_turn_after_a_long_pause_compacts_with_trigger_idle_before_its_model_call", "crates/prometheus/tests/gateway_compaction.rs::progress_notices_announce_the_idle_compaction", "crates/pmt-agent/src/turn/idle.rs::idle_needs_the_whole_period"]
+"Small context skipped" = ["crates/pmt-agent/tests/turn/compaction_notices.rs::a_small_context_is_not_compacted_after_a_pause"]
+
+[context-compression."Compaction progress notices and context pressure gauge"]
+"Silent on chat by default" = ["crates/prometheus/tests/gateway_compaction.rs::an_automatic_compaction_posts_nothing_to_the_chat_by_default", "crates/pmt-core/src/context_pressure.rs::manual_runs_and_unknown_events_get_no_notice"]
+"Gauge crossing" = ["crates/prometheus/tests/context_window.rs::a_turn_past_sixty_percent_of_the_trigger_prints_the_gauge", "crates/pmt-agent/tests/turn/compaction_notices.rs::each_turn_reports_its_context_pressure_and_no_request_carries_it", "crates/pmt-gateway/tests/messaging/display.rs::context_pressure_is_told_once_per_level_crossing", "crates/pmt-core/src/context_pressure.rs::the_gauge_fills_one_cell_per_five_percent"]
+
+[context-compression."Server-side Responses compaction (opt-in)"]
+"Compaction item replayed" = ["crates/prometheus/tests/context_window.rs::the_compaction_item_is_replayed_and_the_transcript_keeps_every_message", "crates/pmt-agent/tests/turn/compaction_notices.rs::the_stored_compaction_item_replaces_the_history_it_covers", "crates/pmt-providers/tests/providers/server_compaction.rs::a_supporting_route_sends_the_setting_and_the_item_and_returns_the_new_item"]
+
+[context-compression."Context window view"]
+"Why is my file ignored" = ["crates/prometheus/tests/context_window.rs::context_shows_the_loaded_and_the_shadowed_file_without_a_model_call", "crates/pmt-agent/src/turn/window_render.rs::the_grid_is_five_rows_of_twenty_cells"]
+
 # Group 44.8: memory revision journal, per-session review, semantic recall.
 [memory."Memory revision journal (upgrade)"]
 "Revert an agent mistake" = ["crates/pmt-memory/tests/memory/journal.rs::reverting_an_agent_patch_restores_the_entry_as_a_new_user_revision", "crates/prometheus/tests/memory_journal.rs::an_agent_mistake_is_summarized_at_session_end_and_reverted_by_the_user"]

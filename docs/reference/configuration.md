@@ -121,6 +121,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `code_execution.timeout_secs` | integer | `300` | 1 to 86400 | `next_session` | Seconds one execution may run. |
 | `compression.abort_on_summary_failure` | boolean | `false` | any | `next_session` | End the turn when the summary cannot be produced. |
 | `compression.enabled` | boolean | `true` | any | `next_session` | Compact the context automatically. |
+| `compression.idle_compact_after_secs` | integer | `0` | ≥ 0 | `next_session` | Compact (trigger `idle`) before the first model call of a turn that starts after this many seconds without activity; `0` is off. |
 | `compression.max_attempts` | integer | `3` | 1 to 10 | `next_session` | Compaction attempts per turn. |
 | `compression.micro_compact` | boolean | `false` | any | `next_session` | Compact tool results between turns. |
 | `compression.micro_compact_every_n_turns` | integer | `1` | ≥ 1 | `next_session` | Turns between micro-compactions. |
@@ -129,8 +130,11 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `compression.pinned_max_tokens` | integer | `8000` | ≥ 0 | `next_session` | Token cap for pinned content carried across compactions. |
 | `compression.prepare_ahead` | boolean | `false` | any | `next_session` | Prepare the next summary ahead of the trigger. |
 | `compression.proactive_prune_tokens` | integer | `0` | ≥ 0 | `next_session` | Prune old tool output above this many tokens; `0` is off. |
+| `compression.progress_notices` | boolean | `false` | any | `next_session` | Show routine automatic compaction statuses on messaging platforms (failures and manual `/compress` feedback always show). |
 | `compression.protect_first_n` | integer | `3` | ≥ 0 | `next_session` | Non-system messages protected at the head of the first compaction. |
 | `compression.quality_min_coverage` | number | `0.8` | 0.0 to 1.0 | `next_session` | Minimum coverage a summary must reach. |
+| `compression.responses_compact_threshold_tokens` | integer | `0` | ≥ 0 | `next_session` | Server-side compaction threshold in tokens; `0` is the local trigger minus 8192 (200000 when no local trigger is known). |
+| `compression.responses_native` | boolean | `false` | any | `next_session` | Ask a supporting Responses route to compact server-side and replay its compaction item. |
 | `compression.summary_max_tokens` | integer | `10000` | ≥ 0 | `next_session` | Summary length cap in tokens. |
 | `compression.summary_timeout_secs` | integer | `120` | ≥ 0 | `next_session` | Time allowed for one summary call. |
 | `compression.tail_mode` | one of "lean", "ratio" | `"lean"` | `"lean"`, `"ratio"` | `next_session` | How much recent conversation is kept verbatim. |
@@ -546,6 +550,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `providers.<name>.stream_idle_timeout_secs` | integer | `120` | ≥ 0 | `next_session` | Longest gap between stream events. |
 | `providers.<name>.supports_model_listing` | boolean | unset | any | `next_session` | Whether the provider lists its models; unset uses the provider default (true for custom providers). |
 | `providers.<name>.supports_prompt_cache` | boolean | unset | any | `next_session` | Whether the provider honours a prompt cache key; unset uses the provider default (false for custom providers). |
+| `providers.<name>.supports_server_compaction` | boolean | unset | any | `next_session` | Whether the provider compacts context server-side on the Responses wire (`compression.responses_native`); unset uses the provider default (false for custom providers). |
 | `providers.<name>.wire_format` | one of "chat_completions", "responses", "anthropic_messages" | unset | `"chat_completions"`, `"responses"`, `"anthropic_messages"` | `next_session` | Wire format; wins over host rules and the provider's own format. |
 | `python_bridge.allow_unbounded_requirements` | boolean | `false` | any | `next_session` | Accept requirements without an upper bound (`requests>=2`); by default they are refused so an install never picks up a new major. |
 | `python_bridge.call_timeout_ms` | integer | `30000` | 1 to 3600000 | `next_session` | Bound on one call into a sidecar (hook calls use `plugins.hook_timeout_ms`). |

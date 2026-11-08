@@ -117,6 +117,9 @@ pub(crate) struct EncodeOptions<'a> {
     /// The prompt cache key to send (`responses`/`chat_completions`
     /// providers that declare `supports_prompt_cache`).
     pub cache_key: Option<&'a str>,
+    /// The server-side compaction to ask for (`responses` routes that
+    /// declare `supports_server_compaction`).
+    pub compaction: Option<&'a crate::request::ServerCompaction>,
 }
 
 /// The request body for `format`.

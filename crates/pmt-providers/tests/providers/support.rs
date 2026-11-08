@@ -118,6 +118,7 @@ pub(crate) fn request(user: &str) -> Request {
         cache: pmt_providers::request::CacheControl::default(),
         reasoning: None,
         body_overrides: None,
+        server_compaction: None,
     }
 }
 

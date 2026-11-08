@@ -8,9 +8,9 @@ use serde_json::Value;
 
 use super::payload::{
     ApprovalDecision, ApprovalRequest, AuxCallEnd, AuxCallStart, BatchPlanned, Budget, CacheBreak,
-    ClarifyAnswer, ClarifyRequest, CompressionCommitted, CompressionFailed, EgressDenied,
-    ErrorEvent, EvolveJob, EvolveProposal, EvolveRollout, EvolveSelection, EvolveStage,
-    ExperienceEntry, HarnessActivated, HarnessNote, LessonDistilled, LessonsInjected,
+    ClarifyAnswer, ClarifyRequest, CompressionCommitted, CompressionFailed, CompressionStarted,
+    EgressDenied, ErrorEvent, EvolveJob, EvolveProposal, EvolveRollout, EvolveSelection,
+    EvolveStage, ExperienceEntry, HarnessActivated, HarnessNote, LessonDistilled, LessonsInjected,
     MemoryRecalled, MessageText, ModelCall, PromptRebuilt, ProviderFallback, Reasoning,
     RegistryReloaded, RouteSelected, SecurityDowngrade, SessionEnd, SessionStart, SubagentFinished,
     SubagentProgress, SubagentSpawned, ToolCall, ToolResult, ToolsRebuilt, TurnEnd, TurnStart,
@@ -88,6 +88,7 @@ events! {
     SubagentSpawned = "subagent.spawned" => SubagentSpawned;
     SubagentProgress = "subagent.progress" => SubagentProgress;
     SubagentFinished = "subagent.finished" => SubagentFinished;
+    CompressionStarted = "compression.started" => CompressionStarted;
     CompressionCommitted = "compression.committed" => CompressionCommitted;
     CompressionFailed = "compression.failed" => CompressionFailed;
     PromptRebuilt = "prompt.rebuilt" => PromptRebuilt;
@@ -126,7 +127,7 @@ mod tests {
         turn.end user.message assistant.message assistant.reasoning model.call aux_call.start \
         aux_call.end tool.call tool.result tool.batch_planned approval.request approval.decision \
         clarify.request clarify.answer subagent.spawned subagent.progress subagent.finished \
-        compression.committed compression.failed prompt.rebuilt cache.unexpected_break \
+        compression.started compression.committed compression.failed prompt.rebuilt cache.unexpected_break \
         provider.fallback provider.route_selected provider.registry_reloaded memory.recalled \
         budget.warning budget.exceeded egress.denied security.downgrade harness.note \
         harness.activated evolve.job.started evolve.job.finished evolve.stage.finished \

@@ -9,6 +9,7 @@ mod agents;
 mod background;
 mod blueprint;
 mod browser;
+mod context;
 pub mod cron;
 mod delegation;
 pub mod files;
@@ -82,6 +83,7 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "btw" => side::btw(ctx, args),
         "autoprune" => crate::chat::autoprune::command(ctx.scope, &ctx.factory.store, args),
         "usage" => session::usage(ctx),
+        "context" => context::context(ctx, args).await,
         "budget" => budget(ctx, args),
         "title" => title(ctx, args),
         "save" => crate::slash_handlers::save(

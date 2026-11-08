@@ -82,6 +82,23 @@ pub fn fallback_notice(fallback: &pmt_obs::trajectory::payload::ProviderFallback
     notice
 }
 
+/// The CLI/TUI line of a compaction lifecycle event or of a turn's
+/// context pressure (spec: context-compression, Compaction progress
+/// notices and context pressure gauge): the gauge from 60% of the
+/// compaction trigger, flagged from 85%. Display only.
+#[must_use]
+pub fn context_line(kind: &str, payload: &Value) -> Option<String> {
+    use pmt_core::context_pressure::{Level, compaction_notice, gauge, of_turn_end};
+    if kind == "turn.end" {
+        return match of_turn_end(payload)? {
+            (percent, Some(Level::Info)) => Some(gauge(percent)),
+            (percent, Some(Level::Warning)) => Some(format!("{} (compacts soon)", gauge(percent))),
+            (_, None) => None,
+        };
+    }
+    compaction_notice(kind, payload).map(|n| n.text)
+}
+
 /// Forwards every event to `inner`, tool activity to the line interface
 /// and notices to [`Notices`].
 pub struct Tee {
@@ -156,6 +173,15 @@ impl EventSink for Tee {
             }
             Event::ProviderFallback(fallback) => {
                 self.notices.show(fallback_notice(fallback));
+                None
+            }
+            Event::CompressionStarted(_)
+            | Event::CompressionCommitted(_)
+            | Event::CompressionFailed(_)
+            | Event::TurnEnd(_) => {
+                if let Some(line) = context_line(emit.event.kind(), &emit.event.payload()) {
+                    self.notices.show(line);
+                }
                 None
             }
             _ => None,

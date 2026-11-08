@@ -21,6 +21,7 @@ mod finish;
 mod guardrails;
 mod guards;
 mod hints;
+mod idle;
 pub mod interrupt;
 pub mod iteration;
 mod journal;
@@ -34,12 +35,15 @@ mod replay;
 mod resume;
 mod round;
 mod run;
+mod server_compaction;
 mod steer;
 mod system;
 pub mod tools;
 pub mod transcript;
 mod upkeep;
 mod verify;
+pub mod window;
+pub mod window_render;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
@@ -427,6 +431,8 @@ pub struct Agent {
     cache_ttl: OnceLock<CacheTtl>,
     /// The TTL lowering was logged.
     ttl_lowered: std::sync::atomic::AtomicBool,
+    /// A route without server-side compaction was logged.
+    server_compaction_logged: std::sync::atomic::AtomicBool,
 }
 
 impl Agent {
@@ -451,6 +457,7 @@ impl Agent {
             micro: Mutex::new(upkeep::MicroState::default()),
             cache_ttl: OnceLock::new(),
             ttl_lowered: std::sync::atomic::AtomicBool::new(false),
+            server_compaction_logged: std::sync::atomic::AtomicBool::new(false),
         })
     }
 

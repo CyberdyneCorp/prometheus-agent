@@ -212,6 +212,9 @@ pub(super) struct Turn<'a> {
     pub(super) compression_attempts: u32,
     /// Active rows the latest request was built from.
     pub(super) request_rows: usize,
+    /// The last row a server-side compaction item of the latest request
+    /// would cover.
+    pub(super) covers: Option<MessageId>,
     /// This turn's recall block (wire only).
     pub(super) ephemeral: Option<super::recall::Ephemeral>,
     /// The delta sink the plugin hooks watch (`None` without hooks).
@@ -264,6 +267,7 @@ impl<'a> Turn<'a> {
             next_trigger: Trigger::TurnStart,
             compression_attempts: 0,
             request_rows: 0,
+            covers: None,
             ephemeral: None,
             stream: None,
             held: false,
@@ -309,6 +313,7 @@ impl<'a> Turn<'a> {
         let message_id = row.id;
         self.user_row = Some(message_id);
         let wire = row.content.clone().unwrap_or_default();
+        let last_activity = self.last_activity()?;
         self.append(&row)?;
         self.emit(Event::TurnStart(TurnStart {
             message_id: Some(message_id.to_string()),
@@ -321,6 +326,8 @@ impl<'a> Turn<'a> {
         .await;
         self.recall(&text, &wire).await;
         self.hook_context(&text, &wire).await;
+        self.idle_compaction(&mut frozen, &route, last_activity)
+            .await?;
         let ending = self.iterate(&mut frozen).await?;
         if let Some((path, before)) = init {
             self.keep_user_sections(&path, &before);
@@ -522,10 +529,11 @@ impl<'a> Turn<'a> {
         let mut cache =
             CacheControl::for_session(&self.config.prompt_cache, &setup.session.to_string());
         cache.ttl = self.agent.cache_ttl(&self.config.prompt_cache, route);
+        let (server_compaction, from) = self.server_compaction(route, &rows);
         let mut request = Request {
             model: route.model.clone(),
             system: system_blocks(&frozen.tiers),
-            messages: repair::wire_with(&rows, &|row| replay.parts(&setup.store, row)),
+            messages: repair::wire_with(&rows[from..], &|row| replay.parts(&setup.store, row)),
             tools: if with_tools {
                 frozen.tools.clone()
             } else {
@@ -535,6 +543,7 @@ impl<'a> Turn<'a> {
             cache,
             reasoning: None,
             body_overrides: None,
+            server_compaction,
         };
         if let Some(ephemeral) = &mut self.ephemeral {
             ephemeral.attach(&mut request.messages);
@@ -592,6 +601,7 @@ impl<'a> Turn<'a> {
     /// Stores the assistant row and emits its events.
     pub(super) async fn keep_reply(&mut self, reply: &ModelReply) -> Result<(), Error> {
         let mut row = transcript::assistant_row(reply);
+        self.keep_compaction_item(reply, &mut row)?;
         let interim = !reply.tool_calls.is_empty() && !reply.text.is_empty();
         if interim {
             self.observe_hook("on_interim_message", [("text", reply.text.clone().into())]);
@@ -600,7 +610,10 @@ impl<'a> Turn<'a> {
         // never shown: only the hook's final reply reaches the person.
         let hidden = interim && self.held;
         if hidden {
-            row.metadata = Some(serde_json::json!({ "hidden": true, "kind": "interim" }));
+            let mut metadata = row.metadata.take().unwrap_or_else(|| serde_json::json!({}));
+            metadata["hidden"] = true.into();
+            metadata["kind"] = "interim".into();
+            row.metadata = Some(metadata);
         }
         let id = row.id.to_string();
         self.append(&row)?;

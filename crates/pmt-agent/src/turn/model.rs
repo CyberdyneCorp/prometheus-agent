@@ -53,6 +53,9 @@ pub struct RouteInfo {
     /// The route's `billing_source` (spec: model-providers, Billing source
     /// transparency).
     pub billing_source: String,
+    /// The route compacts context server-side (spec: context-compression,
+    /// Server-side Responses compaction).
+    pub server_compaction: bool,
 }
 
 /// One tool call the model asked for.
@@ -83,6 +86,8 @@ pub struct ModelReply {
     pub record: Option<ModelCall>,
     /// Fallback activations on the way (`provider.fallback` events).
     pub fallbacks: Vec<ProviderFallback>,
+    /// The server-side compaction item the response returned.
+    pub compaction_item: Option<serde_json::Value>,
 }
 
 impl ModelReply {
@@ -354,6 +359,7 @@ impl ProviderModel {
             max_output_tokens: meta.max_output_tokens,
             wire_format: route.wire_format,
             billing_source: route.billing_source(),
+            server_compaction: route.supports_server_compaction,
         }
     }
 
@@ -482,6 +488,7 @@ fn intake(
             arguments,
         }),
         StreamEvent::Usage { usage } => reply.usage = usage,
+        StreamEvent::CompactionItem { item } => reply.compaction_item = Some(item),
         StreamEvent::Stop { stop_reason } => reply.stop = Some(stop_reason),
         StreamEvent::ToolCallStart { .. } | StreamEvent::ToolCallDelta { .. } => {}
     }

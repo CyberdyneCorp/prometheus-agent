@@ -3,6 +3,7 @@
 
 mod budgets;
 mod cache;
+mod compaction_notices;
 mod compaction_upgrades;
 mod compression;
 mod context;

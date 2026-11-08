@@ -133,6 +133,8 @@ pub struct Route {
     pub credential: Credential,
     /// The provider honours a prompt cache key.
     pub supports_prompt_cache: bool,
+    /// The provider compacts context server-side (Responses wire only).
+    pub supports_server_compaction: bool,
     /// A local inference server.
     pub local: bool,
     /// Same-route retries.
@@ -455,6 +457,8 @@ impl Resolver<'_> {
             base_url,
             credential,
             supports_prompt_cache: provider.supports_prompt_cache(),
+            supports_server_compaction: provider.supports_server_compaction()
+                && wire_format == WireFormat::Responses,
             local: provider.descriptor().local,
             retry: RetryPolicy::new(settings.max_retries),
             timeouts: Timeouts {

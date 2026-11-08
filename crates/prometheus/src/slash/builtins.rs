@@ -349,6 +349,16 @@ pub static BUILTINS: &[Command] = &[
         Effect::None,
     ),
     command(
+        "context",
+        &["ctx"],
+        Info,
+        "Context window usage, what fills it and which context files load: /context [all]",
+        &[text("all")],
+        EVERYWHERE,
+        Immediate,
+        Effect::None,
+    ),
+    command(
         "usage",
         &[],
         Info,

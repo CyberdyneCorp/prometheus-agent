@@ -18,7 +18,7 @@ use pmt_config::schema::CompressionConfig;
 use pmt_core::error::Error;
 use pmt_core::id::{MessageId, SessionId};
 use pmt_obs::trajectory::events::Event;
-use pmt_obs::trajectory::payload::{CompressionCommitted, CompressionFailed};
+use pmt_obs::trajectory::payload::{CompressionCommitted, CompressionFailed, CompressionStarted};
 use pmt_obs::trajectory::writer::Emit;
 use pmt_store::{
     Acquire, Compacted, Compaction, Holder, Lease, LeaseKind, Message as Row, Store, Visibility,
@@ -322,6 +322,7 @@ impl Compactor<'_> {
         prepared: Option<PreparedSummary>,
     ) -> Result<Result<Written, Outcome>, Error> {
         let middle = &plan.rows[plan.split.middle.clone()];
+        self.started(run, plan, 1).await;
         let mut input = self.input(run, plan, pruned);
         let todos = TodoList::load(self.store, self.session)?;
         let pinned = pins::section(self.store, self.session)?;
@@ -345,6 +346,7 @@ impl Compactor<'_> {
                 let missing = checklist.missing(&document(&sections));
                 if checklist.coverage(&document(&sections)) < self.config.quality_min_coverage {
                     input.missing = missing;
+                    self.started(run, plan, 2).await;
                     match self.summarize(&input).await {
                         Ok(retry) => sections = Sections::parse(&retry),
                         Err(err) => tracing::warn!(
@@ -390,6 +392,7 @@ impl Compactor<'_> {
         plan: &Plan,
         started: Instant,
     ) -> Result<Outcome, Error> {
+        self.started(run, plan, 1).await;
         let assembled = match engine.compact(&plan.rows).await {
             Ok(output) => super::engine::assembled(&plan.rows, output),
             Err(why) => Err(why),
@@ -565,6 +568,16 @@ impl Compactor<'_> {
         let mut state = self.store.compression_state(self.session)?;
         decision::back_off(&mut state, Timestamp::now());
         self.store.save_compression_state(self.session, &state)
+    }
+
+    /// `compression.started` for summary attempt `attempt`.
+    async fn started(&self, run: &Run, plan: &Plan, attempt: u32) {
+        self.emit(Event::CompressionStarted(CompressionStarted {
+            trigger: run.trigger.as_str().to_owned(),
+            attempt,
+            tokens_before: plan.before,
+        }))
+        .await;
     }
 
     pub(crate) async fn failed(&self, reason: &str, message: &str) {

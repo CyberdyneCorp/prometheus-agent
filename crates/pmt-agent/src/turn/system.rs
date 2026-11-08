@@ -7,6 +7,7 @@ use pmt_core::error::{Error, codes};
 use pmt_obs::trajectory::events::Event;
 use pmt_obs::trajectory::payload::PromptRebuilt;
 
+use super::Agent;
 use super::model::RouteInfo;
 use super::run::Turn;
 use crate::prompt::frozen::{self, Frozen, Rebuild};
@@ -66,13 +67,25 @@ impl Turn<'_> {
     }
 
     fn inputs(&self, route: &RouteInfo, tool_names: Vec<String>) -> PromptInputs {
-        let setup = &self.agent.setup;
+        self.agent.prompt_inputs(self.config, route, tool_names)
+    }
+}
+
+impl Agent {
+    /// What the system prompt of this session is built from on `route`.
+    pub(super) fn prompt_inputs(
+        &self,
+        config: &pmt_config::Config,
+        route: &RouteInfo,
+        tool_names: Vec<String>,
+    ) -> PromptInputs {
+        let setup = &self.setup;
         let mut p = setup.prompt.clone();
         if let Some(refresh) = &setup.refresh_prompt {
             refresh(&mut p);
         }
-        let mut config = self.config.clone();
-        if let Some(name) = self.agent.personality_override() {
+        let mut config = config.clone();
+        if let Some(name) = self.personality_override() {
             config.agent.personality = name;
         }
         PromptInputs {

@@ -16,6 +16,7 @@ mod pools;
 mod portals;
 mod refresh;
 mod routing;
+mod server_compaction;
 mod session;
 mod support;
 mod wire;

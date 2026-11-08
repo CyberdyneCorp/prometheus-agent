@@ -103,6 +103,14 @@ impl Provider {
             .unwrap_or(self.descriptor.supports_prompt_cache)
     }
 
+    /// Whether the provider compacts context server-side.
+    #[must_use]
+    pub fn supports_server_compaction(&self) -> bool {
+        self.settings
+            .supports_server_compaction
+            .unwrap_or(self.descriptor.supports_server_compaction)
+    }
+
     /// Whether the provider lists its models.
     #[must_use]
     pub fn supports_model_listing(&self) -> bool {

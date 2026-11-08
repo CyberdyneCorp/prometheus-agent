@@ -114,6 +114,7 @@ mod tests {
             max_output_tokens: None,
             wire_format: wire,
             billing_source: "api_key:p".into(),
+            server_compaction: false,
         }
     }
 

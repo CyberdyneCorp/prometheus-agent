@@ -420,6 +420,10 @@ impl ToolPort for SwappableTools {
         self.tools().idempotent(name)
     }
 
+    fn toolset_of(&self, name: &str) -> Option<(String, bool)> {
+        self.tools().toolset_of(name)
+    }
+
     fn run<'a>(
         &'a self,
         calls: &'a [RequestedCall],

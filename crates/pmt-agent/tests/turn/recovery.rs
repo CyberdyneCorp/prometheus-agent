@@ -220,6 +220,7 @@ impl ModelPort for Failing {
                 max_output_tokens: None,
                 wire_format: WireFormat::ChatCompletions,
                 billing_source: "keyless:fake".into(),
+                server_compaction: false,
             }
         })
     }

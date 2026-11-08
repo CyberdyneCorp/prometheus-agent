@@ -194,6 +194,63 @@ last model call (since its last compaction), else an estimate. Sessions
 with fewer than 4 messages, and profiles with `compression.enabled =
 false`, are left alone.
 
+## Idle compaction
+
+With `compression.idle_compact_after_secs` above 0 (default 0, off), the
+first model call of a turn that starts at least that many seconds after
+the session's last message is preceded by a compaction with trigger
+`idle`: a conversation picked up after a long pause has lost its prompt
+cache anyway, so this is the cheapest moment to shrink it. A context
+already at or below `threshold * target_ratio` of the input budget is left
+alone. The usual lock, cooldown, backoff and per-turn attempt budget
+apply.
+
+## Progress notices and the context gauge
+
+Every compaction emits `compression.started` (attempt 2 when the summary
+is rewritten after the quality check), then `compression.committed` or
+`compression.failed`. The CLI, the TUI and attached clients show automatic
+compactions as notice lines; a manual `/compress` answers itself. In a
+messaging chat, routine statuses (start, retry, completion, idle) are
+posted only with `compression.progress_notices = true`; failures always
+are.
+
+After each turn the context is measured against the compaction trigger.
+From 60% the CLI and the TUI print a gauge line such as
+`context ████████████░░░░░░░░ 62% to compaction` (flagged `compacts soon`
+from 85%); a messaging chat gets one plain-text notice each time the
+session crosses into the 60% or the 85% level. None of this is ever added
+to the model's context.
+
+## Server-side compaction (Responses)
+
+`compression.responses_native = true` (default false) asks a route whose
+provider compacts server-side on the Responses wire (`openai-api`, or a
+custom provider with `supports_server_compaction = true`) to compact once
+the input reaches `compression.responses_compact_threshold_tokens`
+(default 0: the local trigger minus 8192 tokens, or 200000 without a local
+trigger). The opaque compaction item a response returns is stored as a
+blob linked to the session and sent first in later requests in place of
+the history it covers; the stored transcript keeps every message, and
+local compaction still runs at its own trigger (a local compaction that
+folds the covered history ends the replay). A route without support
+ignores the setting with one INFO log per session.
+
+## `/context`
+
+`/context` (alias `/ctx`) shows the window without a model call and without
+touching the prompt cache: a 5x20 grid of cells (each 1% of the window; a
+text gauge on messaging platforms), an estimated breakdown (system prompt,
+tool definitions, project rules, skills index, MCP tools, subagents,
+memory, conversation, free), the compaction trigger and headroom, the
+compaction count and time of the last one, the tokens processed so far,
+and every candidate context file (`PROMETHEUS.md`, the `AGENTS.md` chain,
+`CLAUDE.md`, Cursor rules, `SOUL.md`) with its estimated tokens and
+whether it was `loaded`, `truncated`, `shadowed` (a file that wins over it
+loaded instead), `blocked` by the threat scan, `unreadable` or
+`suppressed`. `/context all` adds the schema cost of each toolset and the
+index and full-load cost of each skill.
+
 ## Prompt-cache breakpoints
 
 For providers with explicit cache breakpoints (Anthropic Messages) each

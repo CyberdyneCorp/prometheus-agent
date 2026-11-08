@@ -388,6 +388,18 @@ pub struct CompressionConfig {
         "type": "number", "exclusiveMinimum": 0.0, "exclusiveMaximum": 1.0
     }))]
     pub model_thresholds: BTreeMap<String, f64>,
+    /// Compact (trigger `idle`) before the first model call of a turn
+    /// that starts after this many seconds without activity; `0` is off.
+    pub idle_compact_after_secs: u64,
+    /// Show routine automatic compaction statuses on messaging platforms
+    /// (failures and manual `/compress` feedback always show).
+    pub progress_notices: bool,
+    /// Ask a supporting Responses route to compact server-side and replay
+    /// its compaction item.
+    pub responses_native: bool,
+    /// Server-side compaction threshold in tokens; `0` is the local
+    /// trigger minus 8192 (200000 when no local trigger is known).
+    pub responses_compact_threshold_tokens: u64,
 }
 
 impl Default for CompressionConfig {
@@ -411,6 +423,10 @@ impl Default for CompressionConfig {
             prepare_ahead: false,
             summary_timeout_secs: 120,
             model_thresholds: BTreeMap::new(),
+            idle_compact_after_secs: 0,
+            progress_notices: false,
+            responses_native: false,
+            responses_compact_threshold_tokens: 0,
         }
     }
 }

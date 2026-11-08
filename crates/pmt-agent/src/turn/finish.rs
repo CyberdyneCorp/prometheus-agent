@@ -66,11 +66,14 @@ impl Turn<'_> {
             .usage_totals(UsageScope::Session(setup.session))
             .ok()
             .and_then(|totals| totals.tokens.cache_hit_rate());
+        let (context_tokens, compaction_trigger_tokens) = self.pressure().await;
         self.emit(Event::TurnEnd(TurnEnd {
             reason: ending.reason.as_str().to_owned(),
             iterations: self.iterations.used(),
             usage: usage_payload(&self.usage),
             cache_hit_rate,
+            context_tokens,
+            compaction_trigger_tokens,
         }))
         .await;
         Ok(TurnResult {

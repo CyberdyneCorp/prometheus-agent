@@ -100,6 +100,12 @@ pub enum StreamEvent {
         /// Arguments as canonical JSON text (the raw text when not JSON).
         arguments: String,
     },
+    /// An opaque server-side compaction item (Responses wire), to be sent
+    /// back in place of the history it covers.
+    CompactionItem {
+        /// The item as the provider returned it.
+        item: serde_json::Value,
+    },
     /// Token usage (exactly one, before `stop`).
     Usage {
         /// The usage.
@@ -212,6 +218,10 @@ impl Normalizer {
         }
     }
 
+    pub(crate) fn compaction_item(&mut self, item: serde_json::Value) {
+        self.out.push(StreamEvent::CompactionItem { item });
+    }
+
     pub(crate) fn usage(&mut self, report: UsageReport) {
         let u = &mut self.usage;
         let keep = |slot: &mut u64, value: Option<u64>| {
@@ -295,6 +305,7 @@ mod tests {
                 StreamEvent::Usage { .. } => "usage",
                 StreamEvent::Stop { .. } => "stop",
                 StreamEvent::ReasoningDelta { .. } => "reasoning",
+                StreamEvent::CompactionItem { .. } => "compaction",
             })
             .collect();
         assert_eq!(

@@ -91,7 +91,7 @@ impl Agent {
     /// The session's context: this agent's last reported count, the
     /// persisted usage of the last main call after the last compaction,
     /// or an estimate (each plus the rows added since).
-    fn known_context(&self, rows: &[Row]) -> Result<Known, Error> {
+    pub(super) fn known_context(&self, rows: &[Row]) -> Result<Known, Error> {
         if let Some((tokens, counted)) = self.usage_memory().reported()
             && rows.len() >= counted
         {

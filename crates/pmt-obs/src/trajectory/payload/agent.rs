@@ -83,6 +83,13 @@ pub struct TurnEnd {
     /// input tokens (0..1); absent before any input was counted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache_hit_rate: Option<f64>,
+    /// The context size after the turn (the provider's count plus the rows
+    /// added since), for the context pressure gauge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_tokens: Option<u64>,
+    /// The session's compaction trigger in tokens.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compaction_trigger_tokens: Option<u64>,
 }
 
 /// `user.message` and `assistant.message`.
@@ -311,6 +318,18 @@ pub struct SubagentFinished {
     pub duration_ms: u64,
     /// Total usage.
     pub usage: Usage,
+}
+
+/// `compression.started`: a compaction begins writing its summary
+/// (`attempt` 1), or writes it again after the quality check (`attempt` 2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct CompressionStarted {
+    /// `manual`, `turn_start`, `idle`, `gateway_hygiene`...
+    pub trigger: String,
+    /// The summary attempt, from 1.
+    pub attempt: u32,
+    /// Context tokens before.
+    pub tokens_before: u64,
 }
 
 /// `compression.committed`.

@@ -1173,6 +1173,13 @@
           "description": "Compact the context automatically.",
           "type": "boolean"
         },
+        "idle_compact_after_secs": {
+          "default": 0,
+          "description": "Compact (trigger `idle`) before the first model call of a turn\nthat starts after this many seconds without activity; `0` is off.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
         "max_attempts": {
           "default": 3,
           "description": "Compaction attempts per turn.",
@@ -1229,6 +1236,11 @@
           "minimum": 0,
           "type": "integer"
         },
+        "progress_notices": {
+          "default": false,
+          "description": "Show routine automatic compaction statuses on messaging platforms\n(failures and manual `/compress` feedback always show).",
+          "type": "boolean"
+        },
         "protect_first_n": {
           "default": 3,
           "description": "Non-system messages protected at the head of the first compaction.",
@@ -1243,6 +1255,18 @@
           "maximum": 1.0,
           "minimum": 0.0,
           "type": "number"
+        },
+        "responses_compact_threshold_tokens": {
+          "default": 0,
+          "description": "Server-side compaction threshold in tokens; `0` is the local\ntrigger minus 8192 (200000 when no local trigger is known).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "responses_native": {
+          "default": false,
+          "description": "Ask a supporting Responses route to compact server-side and replay\nits compaction item.",
+          "type": "boolean"
         },
         "summary_max_tokens": {
           "default": 10000,
@@ -5957,6 +5981,13 @@
             "null"
           ]
         },
+        "supports_server_compaction": {
+          "description": "Whether the provider compacts context server-side on the Responses\nwire (`compression.responses_native`); unset uses the provider\ndefault (false for custom providers).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "wire_format": {
           "anyOf": [
             {
@@ -8799,6 +8830,7 @@
       "default": {
         "abort_on_summary_failure": false,
         "enabled": true,
+        "idle_compact_after_secs": 0,
         "max_attempts": 3,
         "micro_compact": false,
         "micro_compact_every_n_turns": 1,
@@ -8807,8 +8839,11 @@
         "pinned_max_tokens": 8000,
         "prepare_ahead": false,
         "proactive_prune_tokens": 0,
+        "progress_notices": false,
         "protect_first_n": 3,
         "quality_min_coverage": 0.8,
+        "responses_compact_threshold_tokens": 0,
+        "responses_native": false,
         "summary_max_tokens": 10000,
         "summary_timeout_secs": 120,
         "tail_mode": "lean",

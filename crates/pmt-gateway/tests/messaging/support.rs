@@ -42,6 +42,8 @@ use tokio_util::sync::CancellationToken;
 /// - `wait:<n>` announces a wait for a turn slot with `n` ahead first;
 /// - `compact` reports a loop step calling `terminal` and `read_file` and
 ///   a committed compaction (epoch 2), then answers 600 `x`;
+/// - `pressure:<n>` ends at `n`% of a 100-token compaction trigger and
+///   answers `at <n>`;
 /// - anything else answers `echo: <text>` at once.
 async fn script(
     text: &str,
@@ -147,6 +149,17 @@ async fn script(
         };
     }
     ("completed", Some(format!("echo: {text}")))
+}
+
+/// A turn ending at `percent`% of a 100-token compaction trigger.
+fn pressure(percent: &str, link: &Link) -> (&'static str, Option<String>) {
+    let percent: u64 = percent.parse().unwrap_or(0);
+    link.emit::<pmt_rpc::contracts::SessionEvent>(&serde_json::json!({
+        "type": "turn.end",
+        "payload": {"reason": "completed", "iterations": 1, "usage": {},
+            "context_tokens": percent, "compaction_trigger_tokens": 100},
+    }));
+    ("completed", Some(format!("at {percent}")))
 }
 
 /// `tools:<n>[:fail]`: says "Let me look." then calls `terminal` `n`
@@ -312,7 +325,10 @@ impl Host for FakeAgents {
             let turns = Arc::clone(&self.turns);
             let turn_id = turn.clone();
             tokio::spawn(async move {
-                let (reason, answer) = script(&params.text, &link, &cancel, timeout).await;
+                let (reason, answer) = match params.text.strip_prefix("pressure:") {
+                    Some(percent) => pressure(percent, &link),
+                    None => script(&params.text, &link, &cancel, timeout).await,
+                };
                 // Gone before the end is announced, as in the daemon.
                 turns.lock().unwrap().remove(&session);
                 link.emit::<TurnEnded>(&TurnFinished {

@@ -104,6 +104,11 @@ pub struct ProviderConfig {
     /// provider default (false for custom providers).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub supports_prompt_cache: Option<bool>,
+    /// Whether the provider compacts context server-side on the Responses
+    /// wire (`compression.responses_native`); unset uses the provider
+    /// default (false for custom providers).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_server_compaction: Option<bool>,
     /// Name of the secret holding this provider's key.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub key_secret: Option<SecretName>,
@@ -183,6 +188,7 @@ impl Default for ProviderConfig {
             models_url: None,
             supports_model_listing: None,
             supports_prompt_cache: None,
+            supports_server_compaction: None,
             key_secret: None,
             key_hosts: Vec::new(),
             prefer_credential: PreferCredential::Subscription,

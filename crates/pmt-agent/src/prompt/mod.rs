@@ -16,6 +16,7 @@ pub mod coding;
 pub mod context;
 pub mod frozen;
 pub mod install_tree;
+pub mod inventory;
 pub mod personality;
 pub mod platform;
 pub mod prefill;

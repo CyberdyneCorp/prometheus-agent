@@ -81,7 +81,13 @@ pub(super) fn event(out: &dyn Out, data: &Value) {
             "[background] {}",
             data["payload"]["text"].as_str().unwrap_or_default()
         )),
-        _ => {}
+        Some(kind) => {
+            if let Some(line) = crate::chat::session::progress::context_line(kind, &data["payload"])
+            {
+                out.notice(&line);
+            }
+        }
+        None => {}
     }
 }
 

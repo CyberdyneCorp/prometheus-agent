@@ -8,6 +8,7 @@ pub mod audit;
 pub mod battery;
 pub mod cancel;
 pub mod capability;
+pub mod context_pressure;
 pub mod doctor;
 pub mod env;
 pub mod error;

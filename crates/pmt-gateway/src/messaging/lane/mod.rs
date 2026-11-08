@@ -15,6 +15,7 @@ mod automated;
 mod branch;
 mod clarify;
 mod commands;
+mod compaction;
 mod confirm;
 mod controls;
 mod history;
@@ -290,6 +291,9 @@ struct Lane {
     /// The automation origin of the turn being started (`goal`, `loop`,
     /// `heartbeat`).
     automating: Option<String>,
+    /// The context pressure level last seen, per session (one notice per
+    /// level crossing).
+    pressure_level: Option<(String, Option<pmt_core::context_pressure::Level>)>,
 }
 
 /// Hands an authorized event to its conversation's lane, starting it.
@@ -355,6 +359,7 @@ pub(crate) fn open(shared: &Arc<Shared>, key: &SessionKey, routing: &Routing) ->
         observed_since_turn: false,
         pickers: Vec::new(),
         automating: None,
+        pressure_level: None,
     };
     let span = tracing::info_span!(
         "conversation",
@@ -503,6 +508,7 @@ impl Lane {
             }
             Msg::Event { kind, payload } => {
                 self.hook_event(&kind, &payload).await;
+                self.compaction_event(&kind, &payload);
                 self.session_event(&kind, &payload).await;
             }
             Msg::Asked { id, method, params } => self.asked(id, &method, &params),

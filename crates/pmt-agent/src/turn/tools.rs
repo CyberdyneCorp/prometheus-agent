@@ -73,6 +73,13 @@ pub trait ToolPort: Send + Sync {
     /// The session's tool schemas in request order.
     fn definitions(&self) -> Vec<Tool>;
 
+    /// The toolset of exposed tool `name`, and whether an MCP server
+    /// provides it (the context window view groups schema costs by it).
+    fn toolset_of(&self, name: &str) -> Option<(String, bool)> {
+        let _ = name;
+        None
+    }
+
     /// Whether repeating a call of `name` changes nothing (read-only or
     /// declared idempotent): the no-progress guardrail counts it.
     fn idempotent(&self, name: &str) -> bool {
@@ -290,6 +297,13 @@ impl ToolPort for SessionTools {
                 parameters: d.parameters.clone(),
             })
             .collect()
+    }
+
+    fn toolset_of(&self, name: &str) -> Option<(String, bool)> {
+        let surface = self.dispatcher.surface();
+        let tool = surface.get(name)?;
+        let mcp = matches!(tool.owner, pmt_tools::descriptor::Owner::Mcp(_));
+        Some((tool.descriptor.toolset.clone(), mcp))
     }
 
     fn idempotent(&self, name: &str) -> bool {

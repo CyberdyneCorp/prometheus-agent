@@ -54,7 +54,15 @@ pub fn body(route: &Route, request: &Request) -> serde_json::Value {
         _ if route.supports_prompt_cache => request.cache.key.as_deref(),
         _ => None,
     };
-    let mut body = wire::encode(route.wire_format, &request, &EncodeOptions { cache_key });
+    let compaction = request
+        .server_compaction
+        .as_ref()
+        .filter(|_| route.supports_server_compaction);
+    let options = EncodeOptions {
+        cache_key,
+        compaction,
+    };
+    let mut body = wire::encode(route.wire_format, &request, &options);
     if let Some(overrides) = &request.body_overrides {
         crate::request::apply_overrides(&mut body, overrides);
     }

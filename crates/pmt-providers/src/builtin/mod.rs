@@ -739,6 +739,8 @@ fn descriptor(row: &Row) -> Descriptor {
     d.keyless_on_loopback = row.keyless_on_loopback;
     d.hidden = row.hidden;
     d.supports_prompt_cache = row.prompt_cache;
+    // OpenAI's own Responses endpoint compacts server-side.
+    d.supports_server_compaction = row.id == "openai-api";
     d.supports_model_listing = row.listing;
     d.default_model = row.default_model.map(str::to_owned);
     d.endpoint_note = row.endpoint_note.map(str::to_owned);

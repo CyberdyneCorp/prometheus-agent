@@ -125,6 +125,10 @@ pub struct Descriptor {
     pub supports_model_listing: bool,
     /// Whether the provider honours a prompt cache key.
     pub supports_prompt_cache: bool,
+    /// Whether the provider compacts context server-side on the Responses
+    /// wire (a `context_management` compaction setting answered with an
+    /// opaque compaction item).
+    pub supports_server_compaction: bool,
     /// Hidden from pickers and listings.
     pub hidden: bool,
     /// A local inference server: the default endpoint is probed and the
@@ -167,6 +171,7 @@ impl Descriptor {
             models_url: None,
             supports_model_listing: true,
             supports_prompt_cache: false,
+            supports_server_compaction: false,
             hidden: false,
             local: false,
             default_model: None,

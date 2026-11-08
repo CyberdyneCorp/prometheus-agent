@@ -67,6 +67,8 @@ pub enum Trigger {
     Overflow,
     /// The gateway's pre-turn hygiene (M2).
     GatewayHygiene,
+    /// A turn after a long pause (M2).
+    Idle,
 }
 
 impl Trigger {
@@ -80,6 +82,7 @@ impl Trigger {
             Self::PostTool => "post_tool",
             Self::Overflow => "overflow",
             Self::GatewayHygiene => "gateway_hygiene",
+            Self::Idle => "idle",
         }
     }
 }
