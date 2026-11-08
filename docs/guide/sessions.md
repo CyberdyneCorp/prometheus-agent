@@ -158,7 +158,10 @@ machine.
 `sessions import FILE` reads a JSONL export into the current profile. The
 whole file is checked first (header, every record, at most 500 sessions,
 50000 messages and 256 MiB) and then written in one transaction: an import
-either writes everything or nothing. Ids the profile already has are
+either writes every session, message and usage row or none. Embedded blobs
+are files, written just before that transaction; when it fails they stay
+unreferenced until the store's periodic maintenance collects unreferenced
+blobs. Ids the profile already has are
 refused with `import.id_collision`, which lists them; `--remap-ids` gives
 every session, message and usage row a new id instead, keeping forks and
 continuations linked to their parents inside the file. An imported title
@@ -219,7 +222,9 @@ $ prometheus config get sessions.retention_secs
 
 When the disk holding `state.db` runs low (less than
 `sessions.low_disk_bytes` free, 1 GiB by default) and pruning is off, an
-interactive start offers auto-prune once a day at most: `on` sets
+interactive start (the line interface, or the TUI on a card above its
+composer, where Enter alone means `later`) offers auto-prune once a day at
+most: `on` sets
 `sessions.retention_secs` to 90 days, `off` never asks again and `later`
 asks again after a week. `/autoprune [on|off|later|status]` does the same
 from any chat; `status` prints the retention, the store's size and the

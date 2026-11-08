@@ -111,8 +111,22 @@ impl Lane {
         };
         let (id, text) = (session.id, label(session));
         match self.route_to(routing, id) {
-            Ok(()) => self.say(&format!("Resumed {text}.")),
+            Ok(()) => {
+                self.say(&format!("Resumed {text}."));
+                self.say_memory_summary(&id.to_string());
+            }
             Err(err) => self.say(err.message()),
+        }
+    }
+
+    /// `Memory: +a ~p -r (review with /memory review)` for a session that
+    /// ended or was resumed here, when the agent changed memory in it
+    /// (spec: memory, Reviewable memory changes per session).
+    pub(super) fn say_memory_summary(&self, session: &str) {
+        match self.shared.agents.memory_summary(&self.profile, session) {
+            Ok(Some(line)) => self.say(&line),
+            Ok(None) => {}
+            Err(err) => tracing::warn!("memory review summary skipped: {err}"),
         }
     }
 

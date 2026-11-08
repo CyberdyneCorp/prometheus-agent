@@ -28,6 +28,8 @@ impl Repl {
         let live = self.factory.open(id, &target).await?;
         self.attach(live);
         self.load_registry();
+        // `/resume` of a stored session; a fresh one has nothing to show.
+        self.memory_summary(id);
         Ok(id)
     }
 

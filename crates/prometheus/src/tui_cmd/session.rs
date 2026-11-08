@@ -182,7 +182,8 @@ impl Tui<'_> {
             .asking
             .front()
             .map(|a| card(a, asked, typed))
-            .or_else(|| self.setup_card());
+            .or_else(|| self.setup_card())
+            .or_else(|| self.prune_card());
     }
 
     fn withdraw(&mut self, data: &Value, why: &str) {
@@ -281,6 +282,8 @@ impl Tui<'_> {
                 self.reload().await;
                 let shown = self.link.session.clone();
                 self.notice(format!("session {shown}"));
+                // `/resume` of a stored session; a new or forked one has none.
+                self.memory_summary(&shown).await;
                 if let Some(prompt) = prompt {
                     self.submit(prompt, Vec::new());
                 }

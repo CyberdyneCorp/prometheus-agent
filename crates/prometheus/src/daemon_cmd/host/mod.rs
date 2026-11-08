@@ -724,6 +724,19 @@ impl Host for DaemonHost {
         Ok(crate::lsp_cmd::status(&scope))
     }
 
+    fn memory_summary(&self, profile: &str, session: &str) -> Result<Option<String>, Error> {
+        let served = self.profile(profile)?;
+        let mode = served.scope().config().memory.review_mode;
+        pmt_memory::journal::summary(&served.store, mode, session)
+    }
+
+    fn autoprune_offer(&self, profile: &str) -> Result<Option<String>, Error> {
+        use crate::chat::autoprune;
+        let served = self.profile(profile)?;
+        let due = autoprune::due(&served.scope(), &served.store, jiff::Timestamp::now())?;
+        Ok(due.then(|| autoprune::QUESTION.to_owned()))
+    }
+
     fn cron_blueprints(&self, profile: &str) -> Result<pmt_rpc::contracts::BlueprintList, Error> {
         let scope = self.profile(profile)?.scope();
         Ok(crate::cron_host::blueprint_rpc::list(&scope, &self.launch))

@@ -111,6 +111,7 @@ pub const INDEX: &[IndexEntry] = &[
     long("session.fork", "session-storage"),
     method("session.tree", "session-storage"),
     method("session.siblings", "session-storage"),
+    method("autoprune.offer", "session-storage"),
     // tui
     method("commands.catalog", "tui"),
     method("complete.slash", "tui"),
@@ -153,6 +154,7 @@ pub const INDEX: &[IndexEntry] = &[
     // lsp-diagnostics, memory, scheduled-jobs
     method("lsp.status", "lsp-diagnostics"),
     method("journey.list", "memory"),
+    method("memory.summary", "memory"),
     method("cron.blueprints.list", "scheduled-jobs"),
     method("cron.blueprints.fill", "scheduled-jobs"),
     // mixture-of-agents

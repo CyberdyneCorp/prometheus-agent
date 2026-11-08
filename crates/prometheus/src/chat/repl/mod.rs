@@ -426,7 +426,7 @@ impl Repl {
     /// `Memory: +a ~p -r (review with /memory review)` when the agent
     /// changed memory in session `id` (spec: memory, Reviewable memory
     /// changes per session): at the end and on resume.
-    fn memory_summary(&self, id: pmt_core::id::SessionId) {
+    pub(super) fn memory_summary(&self, id: pmt_core::id::SessionId) {
         let mode = self.factory.scope.config().memory.review_mode;
         match pmt_memory::journal::summary(&self.factory.store, mode, &id.to_string()) {
             Ok(Some(line)) => self.notice(&line),

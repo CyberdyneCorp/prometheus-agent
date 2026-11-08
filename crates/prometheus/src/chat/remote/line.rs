@@ -177,6 +177,8 @@ pub(super) struct Chat<'a, 'b> {
     /// A turn the daemon started on its own runs (seen from its events
     /// until its `turn.finished`).
     pub(super) daemon_turn: bool,
+    /// The low-disk prune question waits for `on`, `off` or `later`.
+    prune: bool,
 }
 
 /// What the loop does after a line.
@@ -214,6 +216,7 @@ pub(super) async fn run(attached: &mut Attached, start: &Start<'_>) -> Result<u8
         status_bar: crate::chat::status_bar::StatusBar::new(start.scope, start.launch),
         model: None,
         daemon_turn: false,
+        prune: false,
     };
     chat.refresh_model().await;
     chat.screen.say(
@@ -223,10 +226,19 @@ pub(super) async fn run(attached: &mut Attached, start: &Start<'_>) -> Result<u8
             chat.attached.daemon_pid, chat.attached.session
         ),
     );
+    // A resumed session's summary (a new one has none), then the low-disk
+    // prune question when it is due.
+    chat.memory_summary().await;
+    if let Some(question) = crate::daemon_client::autoprune_offer(&chat.attached.client).await {
+        chat.screen.notice(question.as_str());
+        chat.prune = true;
+    }
     if let Some(first) = &start.first {
         chat.submit(first.clone()).await?;
     }
-    chat.main_loop().await
+    let status = chat.main_loop().await;
+    chat.memory_summary().await;
+    status
 }
 
 impl Chat<'_, '_> {
@@ -273,6 +285,17 @@ impl Chat<'_, '_> {
     }
 
     async fn line(&mut self, line: String) -> Result<Flow, Error> {
+        if std::mem::take(&mut self.prune)
+            && let Some(answer) = crate::chat::autoprune::Answer::parse(&line)
+        {
+            let word = match answer {
+                crate::chat::autoprune::Answer::On => "on",
+                crate::chat::autoprune::Answer::Off => "off",
+                crate::chat::autoprune::Answer::Later => "later",
+            };
+            self.dispatch("autoprune", word).await?;
+            return Ok(Flow::Continue);
+        }
         let text = line.trim();
         if text.is_empty() {
             return Ok(Flow::Continue);
@@ -433,10 +456,22 @@ impl Chat<'_, '_> {
         Ok(())
     }
 
+    /// The current session's memory summary, when it has one (it ends or
+    /// was resumed).
+    async fn memory_summary(&self) {
+        let summary =
+            crate::daemon_client::memory_summary(&self.attached.client, &self.attached.session)
+                .await;
+        if let Some(line) = summary {
+            self.screen.notice(&line);
+        }
+    }
+
     /// Leaves the current session for `next` (or reports why not).
     pub(super) async fn switch(&mut self, next: Result<String, Error>) {
         match next {
             Ok(next) => {
+                self.memory_summary().await;
                 let old = SessionRef {
                     session_id: std::mem::replace(&mut self.attached.session, next),
                 };
@@ -449,6 +484,7 @@ impl Chat<'_, '_> {
                     .await;
                 self.screen
                     .notice(&format!("session {}", self.attached.session));
+                self.memory_summary().await;
             }
             Err(err) => self.screen.error(&err),
         }

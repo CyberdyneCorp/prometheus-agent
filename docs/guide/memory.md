@@ -120,7 +120,12 @@ operation (add, patch, remove, or update for pin, tier and other
 fields), the entry before and after, the origin and the session.
 
 With `memory.review_mode = "summary"` (the default), a session in which
-the agent changed memory prints one line when it ends or is resumed:
+the agent changed memory prints one line when it ends or is resumed: the
+line interface and `chat -z` print it as the session ends, the TUI as it
+closes a session and once more for each session it held as it quits, and
+both when `/resume` (or `-r`/`-c`) opens such a session. A messaging chat
+gets it as a message when `/new` or `/reset` ends the session and when
+`/resume` brings it back.
 
 ```text
 Memory: +2 ~1 -0 (review with /memory review)

@@ -444,6 +444,11 @@ pub fn import(store: &Store, path: &Path, remap_ids: bool) -> Result<Imported, E
         collisions(store, &parsed)?;
     }
     order(&mut parsed)?;
+    // Blob files cannot join the database transaction: as everywhere in
+    // the store they are written before the rows that reference them, so
+    // a committed reference never dangles. A transaction that then fails
+    // leaves them unreferenced, and the blob collector removes them once
+    // they are older than its grace period.
     for bytes in parsed.blobs.values() {
         store.put_blob(bytes)?;
     }

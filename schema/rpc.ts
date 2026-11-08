@@ -160,6 +160,18 @@ export interface AutomationStatePayload {
   status: string;
 }
 
+/** `autoprune.offer` result. */
+export interface AutopruneOffer {
+  /** The question to ask (`on`, `off` or `later`, answered with `/autoprune <answer>`), when it is due; `null` otherwise. A non-null answer counts as today's check. */
+  question?: string | null;
+}
+
+/** `autoprune.offer` params. */
+export interface AutopruneOfferParams {
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+}
+
 /** `session.banner` result: what the TUI's startup banner lists. */
 export interface BannerInfo {
   /** The degraded marker while the session runs below full hardening, for example `sandbox: partial:landlock_net` (spec: security-boundaries, Hardening downgrades are never silent). */
@@ -630,6 +642,12 @@ export interface McpServerState {
   state: string;
   /** The tools it contributes. */
   tools: number;
+}
+
+/** `memory.summary` result. */
+export interface MemorySummary {
+  /** `Memory: +<added> ~<patched> -<removed> (review with /memory review)` when the agent changed memory in the session and `memory.review_mode` is not `off`; `null` otherwise. */
+  line?: string | null;
 }
 
 /** One `model.options` entry. */
@@ -1223,6 +1241,7 @@ export interface WorktreeStatus {
 
 export interface Methods {
   "approval.respond": { params: ApprovalRespondParams; result: Ack };
+  "autoprune.offer": { params: AutopruneOfferParams; result: AutopruneOffer };
   "command.dispatch": { params: DispatchParams; result: Dispatched };
   "commands.catalog": { params: SessionRef; result: CommandCatalog };
   "complete.path": { params: CompleteParams; result: Completions };
@@ -1234,6 +1253,7 @@ export interface Methods {
   "files.rollback": { params: FilesRollbackParams; result: FilesRolledBack };
   "files.undo": { params: FilesUndoParams; result: FilesUndone };
   "lsp.status": { params: LspStatusParams; result: LspStatus };
+  "memory.summary": { params: SessionRef; result: MemorySummary };
   "model.options": { params: SessionRef; result: ModelOptions };
   "pairing.approve": { params: PairingApproveParams; result: PairingApproved };
   "prompt.submit": { params: SubmitParams; result: Submitted };

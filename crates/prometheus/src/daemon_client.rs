@@ -105,6 +105,45 @@ pub async fn connect_cli(
     Ok((client, inbox))
 }
 
+/// The memory review summary of `session` (spec: memory, Reviewable
+/// memory changes per session), for a client to show as the session
+/// ends or is resumed; `None` when there is none or the daemon cannot
+/// say (an older daemon, a lost connection): a missing line never fails
+/// the client.
+pub async fn memory_summary(client: &Client, session: &str) -> Option<String> {
+    let params = pmt_rpc::contracts::SessionRef {
+        session_id: session.to_owned(),
+    };
+    match client
+        .call_typed::<pmt_rpc::contracts::MemorySummaryCall>(&params)
+        .await
+    {
+        Ok(summary) => summary.line,
+        Err(err) => {
+            tracing::debug!(error = %err.message, "no memory summary");
+            None
+        }
+    }
+}
+
+/// The low-disk prune question when it is due at this interactive start
+/// (spec: session-storage, Low-disk prune prompt); answered with
+/// `/autoprune on|off|later`. `None` when not due or the daemon cannot
+/// say.
+pub async fn autoprune_offer(client: &Client) -> Option<String> {
+    let params = pmt_rpc::contracts::AutopruneOfferParams::default();
+    match client
+        .call_typed::<pmt_rpc::contracts::AutopruneOfferCall>(&params)
+        .await
+    {
+        Ok(offer) => offer.question,
+        Err(err) => {
+            tracing::debug!(error = %err.message, "no low-disk check");
+            None
+        }
+    }
+}
+
 /// The `allow_roles` hint of config validation (spec: messaging-gateway,
 /// Role-based access grants): a role name is looked up by the home's
 /// running daemon, whose connected adapter may know its id. Never asked

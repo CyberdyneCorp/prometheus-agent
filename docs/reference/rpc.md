@@ -47,6 +47,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | Name | Owner | Since | Params | Result |
 |---|---|---|---|---|
 | `approval.respond` | `tool-system` | 1.0 | [`ApprovalRespondParams`](#approvalrespondparams) | [`Ack`](#ack) |
+| `autoprune.offer` | `session-storage` | 1.0 | [`AutopruneOfferParams`](#autopruneofferparams) | [`AutopruneOffer`](#autopruneoffer) |
 | `bot.chat.ensure` | `bot-mode` | 1.0 | not served yet | |
 | `bot.create` | `bot-mode` | 1.0 | not served yet | |
 | `bot.meta.get` | `bot-mode` | 1.0 | not served yet | |
@@ -90,6 +91,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `harness.rollback` | `harness-evolution` | 1.0 | not served yet | |
 | `journey.list` | `memory` | 1.0 | not served yet | |
 | `lsp.status` | `lsp-diagnostics` | 1.0 | [`LspStatusParams`](#lspstatusparams) | [`LspStatus`](#lspstatus) |
+| `memory.summary` | `memory` | 1.0 | [`SessionRef`](#sessionref) | [`MemorySummary`](#memorysummary) |
 | `moa.presets.delete` | `mixture-of-agents` | 1.0 | not served yet | |
 | `moa.presets.list` | `mixture-of-agents` | 1.0 | not served yet | |
 | `moa.presets.put` | `mixture-of-agents` | 1.0 | not served yet | |
@@ -288,6 +290,22 @@ One kind of a session's automation.
 | `row` | string or null | no | The live row as the CLI shows it (absent once removed). |
 | `session_id` | string | yes | The session. |
 | `status` | string | yes | `active`, `paused`, `done`, `parked`, or `none` once removed. |
+
+### `AutopruneOffer`
+
+`autoprune.offer` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `question` | string or null | no | The question to ask (`on`, `off` or `later`, answered with `/autoprune <answer>`), when it is due; `null` otherwise. A non-null answer counts as today's check. |
+
+### `AutopruneOfferParams`
+
+`autoprune.offer` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
 
 ### `BannerInfo`
 
@@ -769,6 +787,14 @@ One MCP server of a session.
 | `name` | string | yes | Its configured name. |
 | `state` | string | yes | `ready`, `starting`, `failed` or `disabled`. |
 | `tools` | integer | yes | The tools it contributes. |
+
+### `MemorySummary`
+
+`memory.summary` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `line` | string or null | no | `Memory: +<added> ~<patched> -<removed> (review with /memory review)` when the agent changed memory in the session and `memory.review_mode` is not `off`; `null` otherwise. |
 
 ### `ModelOption`
 

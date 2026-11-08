@@ -145,7 +145,8 @@ impl Tui<'_> {
     fn submit_line(&mut self) {
         let line = self.app.composer.text().to_owned();
         let answered = if self.asking.is_empty() {
-            self.setup.is_some() && self.answer_setup(&line)
+            (self.setup.is_some() && self.answer_setup(&line))
+                || (self.prune && self.answer_prune(&line))
         } else {
             self.answer(line.trim())
         };
@@ -173,7 +174,7 @@ impl Tui<'_> {
         }
     }
 
-    fn dispatch(&self, name: String, args: String) {
+    pub(super) fn dispatch(&self, name: String, args: String) {
         let params = DispatchParams {
             session_id: self.link.session.clone(),
             name,

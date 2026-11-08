@@ -217,6 +217,7 @@ impl Tui<'_> {
     /// when it was the shown one.
     pub(super) async fn closed(&mut self, id: &str) {
         let was_shown = self.link.session == id;
+        let summary = crate::daemon_client::memory_summary(&self.link.client, id).await;
         self.link.close(id).await;
         self.pending.remove(id);
         self.shown_changed();
@@ -224,6 +225,9 @@ impl Tui<'_> {
             self.reload().await;
         }
         self.notice(format!("closed session {id}"));
+        if let Some(line) = summary {
+            self.notice(line);
+        }
     }
 
     /// Starts a new session (with `model` for it alone) and shows it,

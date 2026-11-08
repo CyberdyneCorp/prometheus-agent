@@ -188,6 +188,30 @@ pub trait Host: Send + Sync + 'static {
         ))
     }
 
+    /// The one-line summary of the agent's memory changes in a session
+    /// (`memory.summary`), when there is one to show. Hosts without a
+    /// memory journal have none.
+    ///
+    /// # Errors
+    ///
+    /// Profile and store errors.
+    fn memory_summary(&self, profile: &str, session_id: &str) -> Result<Option<String>, Error> {
+        let _ = (profile, session_id);
+        Ok(None)
+    }
+
+    /// The low-disk prune question for an interactive client's startup
+    /// (`autoprune.offer`), when it is due; asking counts as the day's
+    /// check. Hosts without a store on disk never ask.
+    ///
+    /// # Errors
+    ///
+    /// Profile and store errors.
+    fn autoprune_offer(&self, profile: &str) -> Result<Option<String>, Error> {
+        let _ = profile;
+        Ok(None)
+    }
+
     /// The automation blueprints of `profile` (`cron.blueprints.list`).
     ///
     /// # Errors

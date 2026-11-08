@@ -394,6 +394,36 @@
       ],
       "type": "object"
     },
+    "AutopruneOffer": {
+      "additionalProperties": false,
+      "description": "`autoprune.offer` result.",
+      "properties": {
+        "question": {
+          "default": null,
+          "description": "The question to ask (`on`, `off` or `later`, answered with\n`/autoprune <answer>`), when it is due; `null` otherwise. A\nnon-null answer counts as today's check.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "AutopruneOfferParams": {
+      "additionalProperties": false,
+      "description": "`autoprune.offer` params.",
+      "properties": {
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "BannerInfo": {
       "additionalProperties": false,
       "description": "`session.banner` result: what the TUI's startup banner lists.",
@@ -1823,6 +1853,21 @@
         "state",
         "tools"
       ],
+      "type": "object"
+    },
+    "MemorySummary": {
+      "additionalProperties": false,
+      "description": "`memory.summary` result.",
+      "properties": {
+        "line": {
+          "default": null,
+          "description": "`Memory: +<added> ~<patched> -<removed> (review with /memory\nreview)` when the agent changed memory in the session and\n`memory.review_mode` is not `off`; `null` otherwise.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "ModelOption": {
@@ -3650,6 +3695,16 @@
       },
       "since": "1.0"
     },
+    "autoprune.offer": {
+      "owner": "session-storage",
+      "params": {
+        "$ref": "#/$defs/AutopruneOfferParams"
+      },
+      "result": {
+        "$ref": "#/$defs/AutopruneOffer"
+      },
+      "since": "1.0"
+    },
     "bot.chat.ensure": {
       "declared": false,
       "owner": "bot-mode",
@@ -3920,6 +3975,16 @@
       },
       "result": {
         "$ref": "#/$defs/LspStatus"
+      },
+      "since": "1.0"
+    },
+    "memory.summary": {
+      "owner": "memory",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/MemorySummary"
       },
       "since": "1.0"
     },

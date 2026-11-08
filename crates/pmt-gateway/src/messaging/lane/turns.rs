@@ -186,6 +186,7 @@ impl Lane {
             tracing::warn!("the replaced session did not end: {err}");
             return;
         }
+        self.say_memory_summary(old);
         let payload = json!({
             "session_id": old,
             "platform": routing.platform,

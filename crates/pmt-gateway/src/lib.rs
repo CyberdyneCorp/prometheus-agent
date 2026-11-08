@@ -30,6 +30,7 @@ pub mod router;
 pub mod server;
 pub mod slots;
 pub mod tickets;
+pub mod upkeep;
 pub mod vault;
 pub mod worktree;
 

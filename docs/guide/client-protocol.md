@@ -113,6 +113,13 @@ parent is unchanged), `session.tree` lists a session's descendants (forks,
 compression continuations, delegates) with their relation and
 `session.siblings` the other children of its parent, and
 `session.interrupt` stops the running turn.
+`memory.summary` answers a session's memory review line (`null` when the
+agent changed nothing to review), which a client shows as it leaves or
+resumes the session, and `autoprune.offer` answers the low-disk prune
+question at most once a day for an interactive client's startup (answered
+with `/autoprune on|off|later` through `command.dispatch`). The daemon
+cannot push either: a resumed session's events start after the client
+attaches, and an ending one has no client left.
 Creating or resuming with `exclusive: true` makes the connection the
 session's interactive owner: until it detaches or disconnects, another
 exclusive resume fails with `-32004` `session <id> is open in another

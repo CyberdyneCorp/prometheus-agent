@@ -3112,7 +3112,7 @@ capabilities = [
 
 # Group 44.8: memory revision journal, per-session review, semantic recall.
 [memory."Memory revision journal (upgrade)"]
-"Revert an agent mistake" = ["crates/pmt-memory/tests/memory/journal.rs::reverting_an_agent_patch_restores_the_entry_as_a_new_user_revision", "crates/prometheus/tests/memory_journal.rs::an_agent_mistake_is_summarized_at_session_end_and_reverted_by_the_user"]
+"Revert an agent mistake" = ["crates/pmt-memory/tests/memory/journal.rs::reverting_an_agent_patch_restores_the_entry_as_a_new_user_revision", "crates/prometheus/tests/memory_journal.rs::an_agent_mistake_is_summarized_at_session_end_and_reverted_by_the_user", "crates/prometheus/tests/tui_upkeep.rs::the_tui_shows_the_memory_summary_when_a_session_ends_and_when_it_is_resumed", "crates/prometheus/tests/memory_review_daemon.rs::an_attached_one_shot_chat_prints_the_summary_as_its_session_ends", "crates/prometheus/tests/memory_review_daemon.rs::a_messaging_chat_is_told_the_summary_at_new_and_at_resume"]
 
 [memory."Reviewable memory changes per session (upgrade)"]
 "Session end shows a summary" = ["crates/pmt-memory/tests/memory/journal.rs::a_session_that_changed_memory_gets_a_one_line_summary", "crates/prometheus/tests/memory_journal.rs::an_agent_mistake_is_summarized_at_session_end_and_reverted_by_the_user"]
@@ -3137,7 +3137,7 @@ capabilities = [
 "User titles kept" = ["crates/prometheus/tests/session_maintenance.rs::retitle_keeps_user_titles_and_renames_automatic_ones"]
 
 [session-storage."Low-disk prune prompt"]
-"Later postpones a week" = ["crates/prometheus/tests/session_maintenance.rs::the_low_disk_prompt_answered_later_waits_a_week"]
+"Later postpones a week" = ["crates/prometheus/tests/session_maintenance.rs::the_low_disk_prompt_answered_later_waits_a_week", "crates/prometheus/tests/tui_upkeep.rs::the_tui_offers_auto_prune_at_startup_when_disk_space_is_low"]
 
 [session-storage."Attachment storage location"]
 "Workspace copy" = ["crates/prometheus/tests/session_maintenance.rs::a_workspace_attachment_is_copied_beside_the_blob", "crates/prometheus/tests/session_maintenance.rs::a_file_received_by_the_daemon_is_kept_in_the_blob_store_and_the_workspace"]

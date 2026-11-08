@@ -50,6 +50,13 @@ pub(super) async fn run(attached: &mut Attached, start: &Start<'_>) -> Result<u8
     let Some(finished) = outcome.finished else {
         return Ok(outcome.signal.unwrap_or(1));
     };
+    // The session ends with the run (spec: memory, Reviewable memory
+    // changes per session).
+    if let Some(line) =
+        crate::daemon_client::memory_summary(&attached.client, &attached.session).await
+    {
+        eprintln!("{line}");
+    }
     if json {
         let report = Report {
             session_id: &attached.session,
