@@ -237,6 +237,7 @@ async fn submit(
         session_id: session.to_owned(),
         text: prompt,
         images: Vec::new(),
+        files: Vec::new(),
         run_budget_secs: None,
         input_id: None,
         author: None,

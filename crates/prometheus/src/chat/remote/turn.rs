@@ -86,6 +86,7 @@ pub(super) async fn run(
         session_id: attached.session.clone(),
         text: prompt.text,
         images: prompt.images,
+        files: Vec::new(),
         run_budget_secs: attached.run_budget,
         input_id: None,
         author: None,

@@ -135,7 +135,10 @@ flags of a chat (`model`, `provider`, `set` overrides, `skills`, `yolo`,
 ...), applied when the session loads (resuming a loaded, idle session with
 another setup reloads it). `prompt.submit` takes `images` (`{"path":
 "/abs/file.png"}` read by the daemon, or `{"blob": "blob:sha256:..."}` of
-an image the session already holds) and `run_budget_secs`.
+an image the session already holds), `files` (absolute paths of other
+received files the daemon keeps in the session's blob store and, with
+`attachments.storage = "workspace"`, copies into the workspace) and
+`run_budget_secs`.
 
 `command.dispatch {session_id, name, args}` runs a slash command on the
 session with the same implementation as the line interface, following the

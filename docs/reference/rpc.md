@@ -1051,6 +1051,7 @@ One delegated child of a session.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `author` | any | no | Never accepted: the gateway stamps every input's author from the connection, so a client-supplied one is refused with `-32002 rpc.forged_author`. |
+| `files` | array of string | no | Other files received with it (absolute paths on the daemon's machine): kept in the session's blob store and, with `attachments.storage = "workspace"`, copied into the workspace. |
 | `images` | array of [`PromptImage`](#promptimage) | no | Images that go with it. |
 | `input_id` | string or null | no | The client's id of this input: a resend with the same id returns the original admission instead of running a second turn. |
 | `run_budget_secs` | integer or null | no | Wall-clock budget of this turn in seconds (`--run-budget`). |

@@ -80,15 +80,38 @@ pub fn workspace_dir(cwd: &Path, session: &str) -> PathBuf {
     cwd.join(".prometheus").join("attachments").join(session)
 }
 
-/// Copies `image` into the session's workspace attachment directory (the
-/// blob store stays the canonical reference); a name already taken gets a
-/// numbered prefix.
-fn workspace_copy(cwd: &Path, session: &str, image: &Image) -> Result<PathBuf, Error> {
+/// Keeps a received non-image file (a messaging attachment) for `live`:
+/// stored in the blob store under the session, and copied into the
+/// workspace with `attachments.storage = "workspace"` (the copy's path is
+/// returned).
+///
+/// # Errors
+///
+/// `chat.image` when the file cannot be read or copied; store errors.
+pub fn keep_file(factory: &Factory, live: &Live, path: &Path) -> Result<Option<PathBuf>, Error> {
+    let bytes = std::fs::read(path).map_err(|e| Error::io(&codes::CHAT_IMAGE, path, &e))?;
+    let blob = factory.store.put_blob(&bytes)?;
+    factory
+        .store
+        .reference_blob(&blob, OWNER, &live.id.to_string())?;
+    if factory.scope.config().attachments.storage != AttachmentStorage::Workspace {
+        return Ok(None);
+    }
+    let name = path.file_name().map_or_else(
+        || "attachment".to_owned(),
+        |n| n.to_string_lossy().into_owned(),
+    );
+    workspace_copy(&live.cwd(), &live.id.to_string(), &name, &bytes).map(Some)
+}
+
+/// Copies `bytes` as `name` into the session's workspace attachment
+/// directory (the blob store stays the canonical reference); a name
+/// already taken gets a numbered prefix.
+fn workspace_copy(cwd: &Path, session: &str, name: &str, bytes: &[u8]) -> Result<PathBuf, Error> {
     let dir = workspace_dir(cwd, session);
     let fail = |e: std::io::Error| Error::io(&codes::CHAT_IMAGE, &dir, &e);
     std::fs::create_dir_all(&dir).map_err(fail)?;
-    let safe: String = image
-        .name
+    let safe: String = name
         .chars()
         .map(|c| if std::path::is_separator(c) { '_' } else { c })
         .collect();
@@ -98,7 +121,7 @@ fn workspace_copy(cwd: &Path, session: &str, image: &Image) -> Result<PathBuf, E
         n += 1;
         path = dir.join(format!("{n}-{safe}"));
     }
-    std::fs::write(&path, &image.data.bytes).map_err(fail)?;
+    std::fs::write(&path, bytes).map_err(fail)?;
     Ok(path)
 }
 
@@ -147,7 +170,12 @@ pub async fn prepare(
             .store
             .reference_blob(&blob, OWNER, &live.id.to_string())?;
         if config.attachments.storage == AttachmentStorage::Workspace {
-            workspace_copy(&live.cwd(), &live.id.to_string(), image)?;
+            workspace_copy(
+                &live.cwd(),
+                &live.id.to_string(),
+                &image.name,
+                &image.data.bytes,
+            )?;
         }
         let description = match (&describer, delivery) {
             (_, Delivery::Native) => None,

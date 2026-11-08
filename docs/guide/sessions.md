@@ -254,7 +254,8 @@ any size.
   recorded in the store and applied on every open, over
   `storage.journal_mode`. It also needs the store closed.
 
-Attachments are stored in the profile's blob store. With
+Attachments (images you attach, and files received on messaging
+platforms) are stored in the profile's blob store. With
 `attachments.storage = "workspace"` a copy of each attached file is also
 written to `<cwd>/.prometheus/attachments/<session_id>/`, so tools can
 read it by path; the blob store stays the reference.

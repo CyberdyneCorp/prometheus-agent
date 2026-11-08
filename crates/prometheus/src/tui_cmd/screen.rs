@@ -407,6 +407,7 @@ impl<'a> Tui<'a> {
             session_id: session.clone(),
             text,
             images,
+            files: Vec::new(),
             run_budget_secs: self.open.launch.run_budget,
             input_id: Some(ulid::Ulid::generate().to_string()),
             author: None,

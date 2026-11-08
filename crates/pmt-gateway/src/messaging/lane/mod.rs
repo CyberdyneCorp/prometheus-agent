@@ -191,6 +191,8 @@ struct Pending {
     origin: Origin,
     text: String,
     images: Vec<String>,
+    /// Other received files (cached paths), kept by the session.
+    files: Vec<String>,
     routing: Routing,
     reply_to: Option<String>,
     /// The user spoke (the reply may be spoken back).
@@ -599,6 +601,7 @@ impl Lane {
             origin: Origin::Queued,
             text,
             images: Vec::new(),
+            files: Vec::new(),
             routing: self.routing.clone(),
             reply_to: None,
             voice: false,
@@ -616,6 +619,7 @@ impl Lane {
                 origin: Origin::Internal,
                 text: event.text,
                 images: Vec::new(),
+                files: Vec::new(),
                 routing: self.routing.clone(),
                 reply_to: None,
                 voice: false,

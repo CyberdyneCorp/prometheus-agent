@@ -195,9 +195,16 @@ pub(super) async fn input(
         }
     }
     held.extend(attach::prepare(factory, live, &files).await?);
+    let mut text = params.text.clone();
+    for path in &params.files {
+        if let Some(copy) = attach::keep_file(factory, live, Path::new(path))? {
+            // The note names the workspace copy tools should read.
+            text = text.replace(path.as_str(), &copy.to_string_lossy());
+        }
+    }
     Ok(TurnInput {
         images: held,
-        ..TurnInput::text(params.text.clone())
+        ..TurnInput::text(text)
     })
 }
 

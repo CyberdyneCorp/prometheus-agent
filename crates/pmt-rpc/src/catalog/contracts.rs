@@ -667,6 +667,11 @@ pub struct SubmitParams {
     /// Images that go with it.
     #[serde(default)]
     pub images: Vec<PromptImage>,
+    /// Other files received with it (absolute paths on the daemon's
+    /// machine): kept in the session's blob store and, with
+    /// `attachments.storage = "workspace"`, copied into the workspace.
+    #[serde(default)]
+    pub files: Vec<String>,
     /// Wall-clock budget of this turn in seconds (`--run-budget`).
     #[serde(default)]
     pub run_budget_secs: Option<u64>,

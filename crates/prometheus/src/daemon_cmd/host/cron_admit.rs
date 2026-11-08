@@ -69,6 +69,7 @@ impl DaemonHost {
             session_id: session.clone(),
             text: delivery.text.to_owned(),
             images: Vec::new(),
+            files: Vec::new(),
             run_budget_secs: None,
             input_id: None,
             author: None,

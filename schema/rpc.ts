@@ -901,6 +901,8 @@ export interface SubagentSummary {
 export interface SubmitParams {
   /** Never accepted: the gateway stamps every input's author from the connection, so a client-supplied one is refused with `-32002 rpc.forged_author`. */
   author?: unknown;
+  /** Other files received with it (absolute paths on the daemon's machine): kept in the session's blob store and, with `attachments.storage = "workspace"`, copied into the workspace. */
+  files?: Array<string>;
   /** Images that go with it. */
   images?: Array<PromptImage>;
   /** The client's id of this input: a resend with the same id returns the original admission instead of running a second turn. */

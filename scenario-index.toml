@@ -3140,4 +3140,4 @@ capabilities = [
 "Later postpones a week" = ["crates/prometheus/tests/session_maintenance.rs::the_low_disk_prompt_answered_later_waits_a_week"]
 
 [session-storage."Attachment storage location"]
-"Workspace copy" = ["crates/prometheus/tests/session_maintenance.rs::a_workspace_attachment_is_copied_beside_the_blob"]
+"Workspace copy" = ["crates/prometheus/tests/session_maintenance.rs::a_workspace_attachment_is_copied_beside_the_blob", "crates/prometheus/tests/session_maintenance.rs::a_file_received_by_the_daemon_is_kept_in_the_blob_store_and_the_workspace"]

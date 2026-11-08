@@ -2628,6 +2628,14 @@
           "default": null,
           "description": "Never accepted: the gateway stamps every input's author from the\nconnection, so a client-supplied one is refused with `-32002\nrpc.forged_author`."
         },
+        "files": {
+          "default": [],
+          "description": "Other files received with it (absolute paths on the daemon's\nmachine): kept in the session's blob store and, with\n`attachments.storage = \"workspace\"`, copied into the workspace.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "images": {
           "default": [],
           "description": "Images that go with it.",

@@ -234,3 +234,61 @@ fn a_workspace_attachment_is_copied_beside_the_blob() {
     assert_eq!(blobs.len(), 1, "the blob store stays canonical");
     assert_eq!(store.get_blob(&blobs[0]).unwrap(), PNG);
 }
+
+#[cfg(feature = "gateway")]
+#[test]
+fn a_file_received_by_the_daemon_is_kept_in_the_blob_store_and_the_workspace() {
+    // Scenario: Workspace copy, for a document (messaging attachments
+    // reach the daemon as `prompt.submit` files).
+    let home = mock_home();
+    append_config(home.path(), "\n[attachments]\nstorage = \"workspace\"\n");
+    let repo = home.path().join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    let cached = home.path().join("report.pdf");
+    std::fs::write(&cached, b"%PDF-1.7 quarterly report").unwrap();
+    let daemon = common::daemon::start(home.path(), &[]);
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let id = runtime.block_on(async {
+        let (client, mut inbox) = common::daemon::connect(home.path(), "default").await;
+        let created = client
+            .call("session.create", serde_json::json!({"cwd": repo.to_str().unwrap()}))
+            .await
+            .unwrap();
+        let id = created["session_id"].as_str().unwrap().to_owned();
+        let note = format!("[attachment: Document {}]", cached.display());
+        client
+            .call(
+                "prompt.submit",
+                serde_json::json!({"session_id": id, "text": note, "files": [cached.to_str().unwrap()]}),
+            )
+            .await
+            .unwrap();
+        while let Some(event) = inbox.events.recv().await {
+            if event.event == "turn.finished" {
+                break;
+            }
+        }
+        id
+    });
+    drop(daemon);
+    let copy = repo
+        .join(".prometheus/attachments")
+        .join(&id)
+        .join("report.pdf");
+    assert_eq!(std::fs::read(&copy).unwrap(), b"%PDF-1.7 quarterly report");
+    let store = Store::open(&scope(home.path())).unwrap();
+    let blobs = store.session_blob_refs(id.parse().unwrap()).unwrap();
+    assert_eq!(
+        store.get_blob(&blobs[0]).unwrap(),
+        b"%PDF-1.7 quarterly report"
+    );
+    let user = common::session_messages(home.path(), &id)
+        .into_iter()
+        .find(|m| m["role"] == "user")
+        .unwrap();
+    let text = user["content"].as_str().unwrap();
+    assert!(
+        text.contains(".prometheus/attachments"),
+        "the note names the copy: {text}"
+    );
+}
