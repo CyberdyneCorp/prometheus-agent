@@ -13,6 +13,8 @@ wasmtime::component::bindgen!({
         "../../wit/provider",
         "../../wit/terminal-backend",
         "../../wit/delegation-router",
+        "../../wit/memory-provider",
+        "../../wit/context-engine",
     ],
     inline: "
         package prometheus:runtime;
@@ -22,6 +24,8 @@ wasmtime::component::bindgen!({
             include prometheus:provider/provider@1.1.0;
             include prometheus:terminal-backend/terminal-backend@1.1.0;
             include prometheus:delegation-router/delegation-router@1.0.0;
+            include prometheus:memory-provider/memory-provider@1.0.0;
+            include prometheus:context-engine/context-engine@1.0.0;
         }
     ",
     world: "prometheus:runtime/plugin-host",

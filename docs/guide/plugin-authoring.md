@@ -286,6 +286,14 @@ each `[[automation_blueprints]]` table (`key`, `title`, `description`,
 `ctx.register_automation_blueprint(key, title=..., schedule=..., prompt=...,
 slots=[...])` instead.
 
+A `memory-provider` plugin exports `plugin` (`name`, `is-available`,
+`initialize`, `tool-schemas`) and optionally `hooks` (`prefetch`,
+`sync-turn`, `on-memory-write`, `on-pre-compress`, `config-schema` and the
+rest; without `hooks` each is a no-op). The host bounds, isolates, redacts
+and queues every call; see the Memory guide. A `context-engine` plugin
+exports `initialize`, `compact`, `select`, `tool-schemas` and
+`handle-tool-call`.
+
 ## Limits worth designing for
 
 - Each call has `plugins.wasm.call_timeout_ms` (default 30 s) of CPU time;

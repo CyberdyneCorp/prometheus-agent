@@ -98,8 +98,9 @@ pub use plugins::{
 };
 pub use python_bridge::{PYTHON_VERSIONS, PythonBridgeConfig, PythonVersion};
 pub use state::{
-    AttachmentStorage, AttachmentsConfig, JournalMode, MemoryConfig, MemoryReviewMode,
-    RecallConfig, SessionsConfig, SkillsConfig, SnapshotsConfig, StorageConfig,
+    AttachmentStorage, AttachmentsConfig, JournalMode, MemoryConfig, MemoryNotifications,
+    MemoryReviewConfig, MemoryReviewMode, RecallConfig, ReviewDefer, SessionsConfig, SkillsConfig,
+    SnapshotsConfig, StorageConfig,
 };
 pub use tools::{
     ApprovalMode, ApprovalsConfig, BrowserConfig, ContainerConfig, DegradedMode, DialogPolicy,

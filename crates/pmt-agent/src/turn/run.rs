@@ -196,6 +196,8 @@ pub(super) struct Turn<'a> {
     pub(super) last_role: Option<Role>,
     /// This turn's user row (its images are always sent).
     pub(super) user_row: Option<MessageId>,
+    /// This turn's user text (what an external memory provider syncs).
+    pub(super) user_text: String,
     pub(super) notices: Vec<String>,
     pub(super) guard: LoopGuard,
     /// Empty replies retried in the current streak.
@@ -215,6 +217,8 @@ pub(super) struct Turn<'a> {
     /// The last row a server-side compaction item of the latest request
     /// would cover.
     pub(super) covers: Option<MessageId>,
+    /// The rows a context engine chose for the next request (`None`: all).
+    pub(super) selected: Option<std::collections::HashSet<MessageId>>,
     /// This turn's recall block (wire only).
     pub(super) ephemeral: Option<super::recall::Ephemeral>,
     /// The delta sink the plugin hooks watch (`None` without hooks).
@@ -258,6 +262,7 @@ impl<'a> Turn<'a> {
             appended: Vec::new(),
             last_role: None,
             user_row: None,
+            user_text: String::new(),
             notices: Vec::new(),
             guard: LoopGuard::new(&config.tool_loop_guardrails, agent.setup.interactive),
             empty_streak: 0,
@@ -268,6 +273,7 @@ impl<'a> Turn<'a> {
             compression_attempts: 0,
             request_rows: 0,
             covers: None,
+            selected: None,
             ephemeral: None,
             stream: None,
             held: false,
@@ -312,6 +318,7 @@ impl<'a> Turn<'a> {
         crate::vision::mark_attached(&setup.session.to_string(), &input.images);
         let message_id = row.id;
         self.user_row = Some(message_id);
+        self.user_text.clone_from(&text);
         let wire = row.content.clone().unwrap_or_default();
         let last_activity = self.last_activity()?;
         self.append(&row)?;
@@ -372,6 +379,7 @@ impl<'a> Turn<'a> {
                 return Ok(Ending::new(ExitReason::IterationLimit));
             }
             let route = self.agent.setup.model.route().await;
+            self.select_context(&route).await?;
             let estimate = self.request(frozen, &route, true)?.estimated_tokens();
             self.preflight(frozen, &route, estimate).await?;
             let request = self.request(frozen, &route, true)?;
@@ -517,8 +525,12 @@ impl<'a> Turn<'a> {
         with_tools: bool,
     ) -> Result<Request, Error> {
         let setup = &self.agent.setup;
-        let rows = setup.store.messages(setup.session, Visibility::Active)?;
+        let mut rows = setup.store.messages(setup.session, Visibility::Active)?;
         self.request_rows = rows.len();
+        if let Some(keep) = &self.selected {
+            let current = self.user_row;
+            rows.retain(|r| keep.contains(&r.id) || Some(r.id) == current);
+        }
         let vision = &self.config.vision;
         let replay = super::replay::Replay::of(
             &rows,

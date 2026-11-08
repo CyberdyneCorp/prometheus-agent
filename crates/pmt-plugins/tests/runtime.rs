@@ -326,9 +326,12 @@ async fn every_sample_plugin_compiles_and_imports_only_the_host_interfaces() {
             exported.iter().map(ToString::to_string).collect::<Vec<_>>(),
             vec![format!("{world}@1.{minor}.0")]
         );
+        // A world's own record-only `types` interface (memory-provider)
+        // offers no functions; everything else comes from the host.
+        let types = format!("prometheus:{world}/types@");
         for import in runtime.imports(&component) {
             assert!(
-                import.starts_with("prometheus:host/"),
+                import.starts_with("prometheus:host/") || import.starts_with(&types),
                 "{world} imports {import}"
             );
         }

@@ -112,6 +112,8 @@ impl Agent {
             engine: self.setup.context_engine.as_deref(),
             events: &*self.setup.events,
             turn,
+            memory: self.setup.memory.as_deref(),
+            require_checkpoint: config.memory.require_checkpoint,
         }
     }
 

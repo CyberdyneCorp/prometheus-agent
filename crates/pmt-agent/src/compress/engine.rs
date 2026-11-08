@@ -35,6 +35,19 @@ pub enum Output {
 pub trait ContextEngine: Send + Sync {
     /// Compacts `rows` (the active transcript, in order).
     fn compact<'a>(&'a self, rows: &'a [Row]) -> BoxFuture<'a, Result<Vec<Output>, String>>;
+
+    /// The rows the next request sends, chosen from `rows` within
+    /// `budget` tokens; `None` sends them all. The choice replaces only the
+    /// outgoing request, never the stored transcript (spec: memory,
+    /// Context engine selection).
+    fn select<'a>(
+        &'a self,
+        rows: &'a [Row],
+        budget: u64,
+    ) -> BoxFuture<'a, Result<Option<Vec<MessageId>>, String>> {
+        let _ = (rows, budget);
+        Box::pin(async { Ok(None) })
+    }
 }
 
 /// `output` over `rows`; a kept id that is not an active row is refused.

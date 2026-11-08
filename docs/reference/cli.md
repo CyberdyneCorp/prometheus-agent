@@ -3219,6 +3219,8 @@ Commands:
   diff     Show memory changes as a unified diff per entry
   revert   Undo a revision (recorded as a new revision with origin user)
   search   Rank archival entries for a query as recall would
+  setup    Set up an external memory provider: its settings go to config.toml, its secrets to the secrets store; takes effect from the next session
+  off      Use built-in memory only (memory.provider = "builtin")
   reset    Delete every entry of a store
   help     Print this message or the help of the given subcommand(s)
 
@@ -4081,6 +4083,88 @@ Options:
           Print help
 ```
 
+## `prometheus memory setup`
+
+```text
+Set up an external memory provider: its settings go to config.toml, its secrets to the secrets store; takes effect from the next session
+
+Usage: prometheus memory setup [OPTIONS] [PROVIDER]
+
+Arguments:
+  [PROVIDER]
+          The provider plugin (default: memory.provider)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus memory off`
+
+```text
+Use built-in memory only (memory.provider = "builtin")
+
+Usage: prometheus memory off [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus memory reset`
 
 ```text
@@ -4158,6 +4242,8 @@ Commands:
   diff     Show memory changes as a unified diff per entry
   revert   Undo a revision (recorded as a new revision with origin user)
   search   Rank archival entries for a query as recall would
+  setup    Set up an external memory provider: its settings go to config.toml, its secrets to the secrets store; takes effect from the next session
+  off      Use built-in memory only (memory.provider = "builtin")
   reset    Delete every entry of a store
   help     Print this message or the help of the given subcommand(s)
 ```
@@ -4296,6 +4382,22 @@ Usage: prometheus memory help revert
 Rank archival entries for a query as recall would
 
 Usage: prometheus memory help search
+```
+
+## `prometheus memory help setup`
+
+```text
+Set up an external memory provider: its settings go to config.toml, its secrets to the secrets store; takes effect from the next session
+
+Usage: prometheus memory help setup
+```
+
+## `prometheus memory help off`
+
+```text
+Use built-in memory only (memory.provider = "builtin")
+
+Usage: prometheus memory help off
 ```
 
 ## `prometheus memory help reset`
@@ -20029,6 +20131,8 @@ Commands:
   diff     Show memory changes as a unified diff per entry
   revert   Undo a revision (recorded as a new revision with origin user)
   search   Rank archival entries for a query as recall would
+  setup    Set up an external memory provider: its settings go to config.toml, its secrets to the secrets store; takes effect from the next session
+  off      Use built-in memory only (memory.provider = "builtin")
   reset    Delete every entry of a store
 ```
 
@@ -20166,6 +20270,22 @@ Usage: prometheus help memory revert
 Rank archival entries for a query as recall would
 
 Usage: prometheus help memory search
+```
+
+## `prometheus help memory setup`
+
+```text
+Set up an external memory provider: its settings go to config.toml, its secrets to the secrets store; takes effect from the next session
+
+Usage: prometheus help memory setup
+```
+
+## `prometheus help memory off`
+
+```text
+Use built-in memory only (memory.provider = "builtin")
+
+Usage: prometheus help memory off
 ```
 
 ## `prometheus help memory reset`

@@ -4228,12 +4228,49 @@
           "description": "The agent memory store.",
           "type": "boolean"
         },
+        "notifications": {
+          "$ref": "#/$defs/MemoryNotifications",
+          "default": "on",
+          "description": "Notices after a memory change commits: `off`, `on` or `verbose`."
+        },
         "nudge_interval": {
           "default": 10,
           "description": "User turns without a memory call before a background review; `0`\ndisables.",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
+        },
+        "provider": {
+          "default": "builtin",
+          "description": "The external memory provider: `builtin` (none) or the id of an\ninstalled `memory-provider` plugin.",
+          "type": "string"
+        },
+        "provider_prefetch_timeout_ms": {
+          "default": 8000,
+          "description": "Time a provider's `prefetch` may take before the turn goes on\nwithout its recall.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "provider_recall_max_chars": {
+          "default": 100000,
+          "description": "Character bound of a provider's recall per turn.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "provider_recall_spill": {
+          "default": false,
+          "description": "Spill oversized provider recall to a file under `cache/` (a\npreview and the path stay in the fence) instead of truncating it.",
+          "type": "boolean"
+        },
+        "providers": {
+          "additionalProperties": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "description": "Each provider's own non-secret settings (`memory.providers.<id>.*`;\nits secrets live in the profile's secrets store).",
+          "type": "object"
         },
         "recall": {
           "$ref": "#/$defs/RecallConfig",
@@ -4244,6 +4281,21 @@
             "top_k": 5
           },
           "description": "Per-turn recall."
+        },
+        "require_checkpoint": {
+          "default": false,
+          "description": "Abort a compaction when no provider confirms its pre-compress\ncheckpoint.",
+          "type": "boolean"
+        },
+        "review": {
+          "$ref": "#/$defs/MemoryReviewConfig",
+          "default": {
+            "defer": "auto",
+            "defer_max_age_secs": 1800,
+            "enabled": true,
+            "extra_tools": []
+          },
+          "description": "The background memory review."
         },
         "review_mode": {
           "$ref": "#/$defs/MemoryReviewMode",
@@ -4270,6 +4322,66 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "MemoryNotifications": {
+      "description": "`memory.notifications`.",
+      "oneOf": [
+        {
+          "const": "off",
+          "description": "No notice.",
+          "type": "string"
+        },
+        {
+          "const": "on",
+          "description": "A generic line (`Memory updated`).",
+          "type": "string"
+        },
+        {
+          "const": "verbose",
+          "description": "The line plus a compact preview of the change.",
+          "type": "string"
+        }
+      ]
+    },
+    "MemoryReviewConfig": {
+      "additionalProperties": false,
+      "description": "The `[memory.review]` section.",
+      "properties": {
+        "defer": {
+          "$ref": "#/$defs/ReviewDefer",
+          "default": "auto",
+          "description": "`auto` queues reviews on a managed local model until the machine\nis idle; `never` runs them at once."
+        },
+        "defer_max_age_secs": {
+          "default": 1800,
+          "description": "A deferred review older than this runs anyway.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Run automatic post-turn reviews (`/refine` works either way).",
+          "type": "boolean"
+        },
+        "extra_tools": {
+          "default": [],
+          "description": "Tools added to the review's allow-list when the parent session has\nthem.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "max_input_tokens": {
+          "description": "Replayed input tokens one review may send in total; unset is 75%\nof the review model's window (at most 600000, 120000 when the\nwindow is unknown); 0 or negative is unlimited.",
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
     },
     "MemoryReviewMode": {
       "description": "Memory review modes.",
@@ -5028,6 +5140,17 @@
             "integer",
             "null"
           ]
+        },
+        "memory_notifications": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MemoryNotifications"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Memory change notices on this platform (overrides\n`memory.notifications`)."
         },
         "options": {
           "additionalProperties": true,
@@ -6400,6 +6523,21 @@
         }
       },
       "type": "object"
+    },
+    "ReviewDefer": {
+      "description": "When a background review whose route is a managed local model runs.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Queue it until the machine is idle.",
+          "type": "string"
+        },
+        {
+          "const": "never",
+          "description": "Run it at once.",
+          "type": "string"
+        }
+      ]
     },
     "RoutingConfig": {
       "additionalProperties": false,
@@ -9147,12 +9285,24 @@
         "archival_max_entries": 10000,
         "memory_char_limit": 2200,
         "memory_enabled": true,
+        "notifications": "on",
         "nudge_interval": 10,
+        "provider": "builtin",
+        "provider_prefetch_timeout_ms": 8000,
+        "provider_recall_max_chars": 100000,
+        "provider_recall_spill": false,
         "recall": {
           "embedding_model": null,
           "max_chars": 1500,
           "min_score": 0.35,
           "top_k": 5
+        },
+        "require_checkpoint": false,
+        "review": {
+          "defer": "auto",
+          "defer_max_age_secs": 1800,
+          "enabled": true,
+          "extra_tools": []
         },
         "review_mode": "summary",
         "user_char_limit": 1375,

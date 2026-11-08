@@ -156,6 +156,11 @@ pub struct Compactor<'a> {
     pub events: &'a dyn EventSink,
     /// The running turn, when inside one.
     pub turn: Option<&'a str>,
+    /// The session's memory (its external provider's pre-compress
+    /// checkpoint).
+    pub memory: Option<&'a dyn crate::tools::MemoryPort>,
+    /// `memory.require_checkpoint`: no confirmed checkpoint, no compaction.
+    pub require_checkpoint: bool,
 }
 
 /// What the read phase found.
@@ -270,12 +275,23 @@ impl Compactor<'_> {
             if let Some(prepared) = prepared {
                 prepared.discard();
             }
+            if let Some(refused) = self.checkpoint(&plan, &plan.rows).await {
+                return Ok(refused);
+            }
             return self.engine_run(engine, run, lock, &plan, started).await;
         }
         let prepared = prepared.and_then(|p| p.adopt(&mut plan));
         if !plan.split.has_work(&plan.rows) {
             self.back_off(run.trigger)?;
             return Ok(Outcome::of(Status::NothingToDo, plan.before));
+        }
+        if let Some(refused) = self
+            .checkpoint(&plan, &plan.rows[plan.split.middle.clone()])
+            .await
+        {
+            // A prepared summary is left to finish; nothing adopts it.
+            drop(prepared);
+            return Ok(refused);
         }
         let pruned = prune(&plan.rows, plan.split.middle.clone());
         let written = match self.written(run, &plan, &pruned, prepared).await? {
@@ -568,6 +584,42 @@ impl Compactor<'_> {
         let mut state = self.store.compression_state(self.session)?;
         decision::back_off(&mut state, Timestamp::now());
         self.store.save_compression_state(self.session, &state)
+    }
+
+    /// The memory provider's pre-compress checkpoint over `rows` (spec:
+    /// memory, Pre-compress checkpoint); with `memory.require_checkpoint`,
+    /// a checkpoint nobody confirmed fails the attempt and nothing changes.
+    async fn checkpoint(&self, plan: &Plan, rows: &[Row]) -> Option<Outcome> {
+        let messages: Vec<serde_json::Value> = rows
+            .iter()
+            .map(|r| {
+                serde_json::json!({
+                    "id": r.id.to_string(),
+                    "role": r.role.as_str(),
+                    "content": r.content,
+                })
+            })
+            .collect();
+        let confirmed = match self.memory {
+            Some(memory) => {
+                memory
+                    .checkpoint(&serde_json::Value::Array(messages).to_string())
+                    .await
+            }
+            None => None,
+        };
+        if !self.require_checkpoint || confirmed == Some(true) {
+            return None;
+        }
+        let failure = SummaryFailure::new(
+            FailureKind::CheckpointFailed,
+            "the memory provider did not confirm its pre-compress checkpoint; the transcript stays uncompressed",
+        );
+        self.failed(failure.kind.as_str(), &failure.message).await;
+        Some(Outcome {
+            failure: Some(failure),
+            ..Outcome::of(Status::Failed, plan.before)
+        })
     }
 
     /// `compression.started` for summary attempt `attempt`.

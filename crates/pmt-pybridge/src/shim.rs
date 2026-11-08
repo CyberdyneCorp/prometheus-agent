@@ -109,6 +109,10 @@ pub const FILES: &[(&str, &str)] = &[
         include_str!("../python/prometheus_bridge/imports.py"),
     ),
     (
+        "prometheus_bridge/memory.py",
+        include_str!("../python/prometheus_bridge/memory.py"),
+    ),
+    (
         "prometheus_bridge/sidecar.py",
         include_str!("../python/prometheus_bridge/sidecar.py"),
     ),

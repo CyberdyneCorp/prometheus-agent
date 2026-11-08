@@ -202,6 +202,13 @@ pub enum MemoryCommand {
         #[arg(long)]
         explain: bool,
     },
+    /// Set up an external memory provider: its settings go to config.toml, its secrets to the secrets store; takes effect from the next session.
+    Setup {
+        /// The provider plugin (default: memory.provider).
+        provider: Option<String>,
+    },
+    /// Use built-in memory only (memory.provider = "builtin").
+    Off,
     /// Delete every entry of a store.
     Reset {
         /// Which store.

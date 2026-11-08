@@ -314,6 +314,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.platforms.<name>.human_delay_ms` | array | unset | any | `next_session` | A uniformly random delay `[min, max]` in milliseconds before each outbound part. Unset: none. |
 | `gateway.platforms.<name>.max_body_bytes` | integer | unset | 1024 to 16777216 | `next_session` | Largest request body a webhook route reads (`webhook` only), in bytes; larger requests are answered 413 unread. Unset: 1048576. |
 | `gateway.platforms.<name>.max_message_length` | integer | unset | ≥ 16 | `next_session` | Lowers the adapter's message length limit (in its own unit); it can never raise it. |
+| `gateway.platforms.<name>.memory_notifications` | one of "off", "on", "verbose" | unset | `"off"`, `"on"`, `"verbose"` | `next_session` | Memory change notices on this platform (overrides `memory.notifications`). |
 | `gateway.platforms.<name>.options` | table | unset | any | `next_session` | The adapter's own settings, validated against the schema it publishes (`prometheus gateway platforms` lists the adapters). |
 | `gateway.platforms.<name>.proxy_url` | string | unset | any | `next_session` | The proxy this adapter's outbound HTTP and WebSocket traffic uses (`http://`, `https://` or `socks5://`, without a password; a URL with credentials goes in a secret named by `proxy_url_secret`). Unset: `gateway.proxy_url`. |
 | `gateway.platforms.<name>.proxy_url_secret` | string | unset | a secret name | `next_session` | The secret holding this adapter's proxy URL when it carries credentials. |
@@ -461,11 +462,23 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `memory.archival_max_entries` | integer | `10000` | ≥ 0 | `next_session` | Archival entries kept per target. |
 | `memory.memory_char_limit` | integer | `2200` | ≥ 0 | `next_session` | Character budget of core memory entries. |
 | `memory.memory_enabled` | boolean | `true` | any | `next_session` | The agent memory store. |
+| `memory.notifications` | one of "off", "on", "verbose" | `"on"` | `"off"`, `"on"`, `"verbose"` | `next_session` | Notices after a memory change commits: `off`, `on` or `verbose`. |
 | `memory.nudge_interval` | integer | `10` | ≥ 0 | `next_session` | User turns without a memory call before a background review; `0` disables. |
+| `memory.provider` | string | `"builtin"` | any | `next_session` | The external memory provider: `builtin` (none) or the id of an installed `memory-provider` plugin. |
+| `memory.provider_prefetch_timeout_ms` | integer | `8000` | ≥ 1 | `next_session` | Time a provider's `prefetch` may take before the turn goes on without its recall. |
+| `memory.provider_recall_max_chars` | integer | `100000` | ≥ 0 | `next_session` | Character bound of a provider's recall per turn. |
+| `memory.provider_recall_spill` | boolean | `false` | any | `next_session` | Spill oversized provider recall to a file under `cache/` (a preview and the path stay in the fence) instead of truncating it. |
+| `memory.providers` | table | unset | any | `next_session` | Each provider's own non-secret settings (`memory.providers.<id>.*`; its secrets live in the profile's secrets store). |
 | `memory.recall.embedding_model` | string | unset | any | `next_session` | Embedding model (`provider/model` or a model on the main route's provider) for hybrid semantic recall; unset ranks lexically (BM25). |
 | `memory.recall.max_chars` | integer | `1500` | ≥ 0 | `next_session` | Character cap of recalled content per turn. |
 | `memory.recall.min_score` | number | `0.35` | 0.0 to 1.0 | `next_session` | Hybrid recall drops entries scoring below this. |
 | `memory.recall.top_k` | integer | `5` | ≥ 0 | `next_session` | Archival entries recalled per turn. |
+| `memory.require_checkpoint` | boolean | `false` | any | `next_session` | Abort a compaction when no provider confirms its pre-compress checkpoint. |
+| `memory.review.defer` | one of "auto", "never" | `"auto"` | `"auto"`, `"never"` | `next_session` | `auto` queues reviews on a managed local model until the machine is idle; `never` runs them at once. |
+| `memory.review.defer_max_age_secs` | integer | `1800` | ≥ 0 | `next_session` | A deferred review older than this runs anyway. |
+| `memory.review.enabled` | boolean | `true` | any | `next_session` | Run automatic post-turn reviews (`/refine` works either way). |
+| `memory.review.extra_tools` | array of string | `[]` | any | `next_session` | Tools added to the review's allow-list when the parent session has them. |
+| `memory.review.max_input_tokens` | integer | unset | any | `next_session` | Replayed input tokens one review may send in total; unset is 75% of the review model's window (at most 600000, 120000 when the window is unknown); 0 or negative is unlimited. |
 | `memory.review_mode` | one of "summary", "off", "require" | `"summary"` | `"summary"`, `"off"`, `"require"` | `next_session` | How agent memory changes are reviewed. |
 | `memory.user_char_limit` | integer | `1375` | ≥ 0 | `next_session` | Character budget of core user-profile entries. |
 | `memory.user_profile_enabled` | boolean | `true` | any | `next_session` | The user profile store. |

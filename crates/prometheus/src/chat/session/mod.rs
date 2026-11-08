@@ -20,6 +20,7 @@ pub mod judge;
 mod lifecycle;
 mod lsp;
 mod mcp;
+mod memory;
 pub mod modal;
 pub mod model;
 mod opening;
@@ -55,7 +56,7 @@ use pmt_core::error::Error;
 use pmt_core::human::Surface;
 use pmt_core::id::SessionId;
 use pmt_core::secret::Redactor;
-use pmt_memory::session::{Approver, MemorySession, MemorySetup};
+use pmt_memory::session::{Approver, MemorySession};
 use pmt_obs::trajectory::events::Event;
 use pmt_obs::trajectory::payload::{SessionEnd, SessionStart};
 use pmt_obs::trajectory::writer::{Emit, TrajectoryWriter};
@@ -282,11 +283,12 @@ impl Factory {
         // Settings only a session acts on fail here, before any turn
         // (spec: execution-environments, Typed backend registry and
         // selection; memory, Context engine selection).
-        pmt_agent::compress::engine::select(&config.context, &[])?;
         let user_home = launch.user_home().map(PathBuf::as_path);
         let plugins = crate::plugins_host::for_session(&scope, &options.cwd);
+        crate::context_engine::select(&config.context, &plugins)?;
         backend::registry(&plugins, &pmt_plugins::host::CallInfo::default())
             .select(&config.terminal.backend)?;
+        crate::memory_provider::check_plugins(&config.memory, &plugins)?;
         let models = Models::open(&scope, &store, user_home, flags, ad_hoc)?.with_plugins(
             &scope,
             &plugins,
@@ -559,7 +561,7 @@ impl Factory {
         let at = place::At { vision, ..at };
         let environment =
             self.environment(&session, target, &capabilities, &current, &skills, &at)?;
-        let memory = Arc::new(MemorySession::new(self.memory_setup(id, &model)?));
+        let memory = self.memory_for(id, &model).await?;
         let summarizer = self.models.summarizer(&model, id);
         let cards = shows_cards(self.options.interactive, &session_surface);
         let delegation = self.delegation_for(
@@ -1021,30 +1023,6 @@ impl Factory {
         setup
     }
 
-    fn memory_setup(
-        &self,
-        id: SessionId,
-        model: &Arc<SwitchableModel>,
-    ) -> Result<MemorySetup, Error> {
-        let mut setup = MemorySetup::new(
-            self.scope.clone(),
-            Arc::clone(&self.store),
-            Some(id),
-            Source::Cli,
-        );
-        setup.redactor = self.redactor.clone();
-        setup.approver.clone_from(&self.approver);
-        setup.embedder = self.models.embedder(Some(model));
-        let prior = self
-            .store
-            .messages(id, pmt_store::Visibility::Active)?
-            .iter()
-            .filter(|m| m.role == pmt_store::Role::User)
-            .count();
-        setup.prior_user_turns = u32::try_from(prior).unwrap_or(u32::MAX);
-        Ok(setup)
-    }
-
     /// The session's tools, built from `registry` and `selection` for the
     /// route `model` is on, and the state that rebuilds them.
     ///
@@ -1393,6 +1371,7 @@ impl Live {
     /// is written to the session's own profile store at every call, so
     /// nothing is left to flush.
     pub async fn unload(self) {
+        crate::memory_provider::forget(&self.id.to_string());
         if let Some(browser) = &self.place.browser() {
             browser.close_session(&self.id.to_string()).await;
         }
@@ -1416,6 +1395,7 @@ impl Live {
             delegation.close();
         }
         pmt_tools::code_exec::kernel::close_session(&self.id.to_string());
+        crate::memory_provider::close(&self.id.to_string()).await;
         self.emit(Event::SessionEnd(SessionEnd {
             reason: reason.as_str().to_owned(),
         }))

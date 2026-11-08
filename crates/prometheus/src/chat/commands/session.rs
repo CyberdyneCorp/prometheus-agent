@@ -77,11 +77,15 @@ pub(super) async fn compress(ctx: &Ctx<'_>, args: &str) -> Result<String, Error>
     let manual = pmt_agent::compress::manual::parse(args)?;
     let live = ctx.live;
     let outcome = live.agent.compress(&live.config.get(), &manual).await?;
-    Ok(format!(
+    let mut said = format!(
         "compress: {:?}, context {} -> {} tokens",
         outcome.status, outcome.tokens_before, outcome.tokens_after
     )
-    .to_lowercase())
+    .to_lowercase();
+    if let Some(failure) = &outcome.failure {
+        let _ = write!(said, " ({}: {})", failure.kind.as_str(), failure.message);
+    }
+    Ok(said)
 }
 
 /// `/pin [<message-id>|last]`: keeps a message's text in every later

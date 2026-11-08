@@ -25,15 +25,18 @@ use wasmtime::component::{Component, HasSelf, InstancePre, Linker};
 use wasmtime::{Store, StoreLimitsBuilder, Trap};
 
 mod backend;
+mod engine;
+mod memory;
 mod meter;
 mod router;
 mod surfaces;
 
+pub use memory::MemoryWrite;
 pub(crate) use meter::Meter;
 
 use super::bindings::PluginHost;
 use super::bindings::exports::prometheus::{
-    delegation_router, hook, provider, terminal_backend, tool,
+    context_engine, delegation_router, hook, memory_provider, provider, terminal_backend, tool,
 };
 use super::imports::{CallInfo, Context, HostState};
 use super::{Limits, Runtime};
@@ -61,6 +64,9 @@ pub struct Instance {
     models: Option<provider::models::GuestIndices>,
     backend: Option<terminal_backend::plugin::GuestIndices>,
     router: Option<delegation_router::plugin::GuestIndices>,
+    memory: Option<memory_provider::plugin::GuestIndices>,
+    memory_hooks: Option<memory_provider::hooks::GuestIndices>,
+    engine: Option<context_engine::plugin::GuestIndices>,
     /// `tool.tools()`, read once: a session starting while the instance
     /// is busy (a plugin call waiting on a subagent it launched) must not
     /// wait for it.
@@ -123,6 +129,9 @@ impl Instance {
             models: provider::models::GuestIndices::new(&pre).ok(),
             backend: terminal_backend::plugin::GuestIndices::new(&pre).ok(),
             router: delegation_router::plugin::GuestIndices::new(&pre).ok(),
+            memory: memory_provider::plugin::GuestIndices::new(&pre).ok(),
+            memory_hooks: memory_provider::hooks::GuestIndices::new(&pre).ok(),
+            engine: context_engine::plugin::GuestIndices::new(&pre).ok(),
             tool_specs: Mutex::new(None),
             id,
             pre,

@@ -213,9 +213,12 @@ fn validate(ctx: &Context<'_>) -> Result<u8, Error> {
         })?;
     }
     pmt_providers::reasoning::check(&scope.config().agent)?;
-    // Context engines are a registry too: plugin engines arrive with the
-    // plugin host (M2), so M1 knows the built-in engine only.
-    pmt_agent::compress::engine::select(&scope.config().context, &[])?;
+    // Context engines are a registry too: built-in plus the loaded
+    // plugins' engines.
+    let plugins =
+        crate::plugins_host::for_session(&scope, &std::env::current_dir().unwrap_or_default());
+    crate::memory_provider::check_plugins(&scope.config().memory, &plugins)?;
+    crate::context_engine::select(&scope.config().context, &plugins)?;
     if !ctx.json {
         eprintln!("{} is valid", file.path().display());
     }

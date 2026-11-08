@@ -32,6 +32,13 @@ impl Turn<'_> {
         if let (true, Some(frozen)) = (ending.handoff, frozen) {
             ending.final_response = self.handoff(frozen).await?;
         }
+        if let (ExitReason::Completed, Some(reply), Some(memory)) = (
+            ending.reason,
+            ending.final_response.as_deref(),
+            self.agent.setup.memory.as_deref(),
+        ) {
+            memory.turn_completed(&self.user_text, reply);
+        }
         if frozen.is_some() {
             self.close_failed(&ending)?;
             self.journal(

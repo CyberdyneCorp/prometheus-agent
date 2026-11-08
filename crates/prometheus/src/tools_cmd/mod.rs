@@ -130,6 +130,9 @@ pub fn extended_registry(
         .current()
         .register_tools(&mut registry, &calls(""), calls);
     toolsets.extend(mcp.register(&mut registry));
+    // The memory provider's tools join the `memory` toolset itself.
+    crate::memory_provider::tools::register(scope, plugins, &mut registry);
+    crate::context_engine::register_tools(scope, plugins, &mut registry);
     Ok((registry, toolsets))
 }
 

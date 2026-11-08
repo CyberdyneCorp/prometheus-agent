@@ -487,12 +487,11 @@ async fn profile_loop(host: Arc<DaemonHost>, profile: Arc<Profile>) {
                 continue;
             };
             if at <= automation::now_ms() {
-                host.fire(&profile, id)
-                    .instrument(super::session_span(
-                        profile.scope().name().as_str(),
-                        &id.to_string(),
-                    ))
-                    .await;
+                Box::pin(host.fire(&profile, id).instrument(super::session_span(
+                    profile.scope().name().as_str(),
+                    &id.to_string(),
+                )))
+                .await;
                 earliest = Some(earliest.map_or(at, |e| e.min(at)));
                 continue;
             }

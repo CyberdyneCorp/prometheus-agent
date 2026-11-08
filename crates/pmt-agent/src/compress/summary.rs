@@ -69,6 +69,9 @@ pub enum FailureKind {
     /// The host refused the compacted transcript (an engine broke an
     /// invariant): it is discarded, nothing changes.
     InvalidEngineOutput,
+    /// `memory.require_checkpoint` and no memory provider confirmed its
+    /// pre-compress checkpoint: nothing changes.
+    CheckpointFailed,
 }
 
 impl FailureKind {
@@ -89,6 +92,7 @@ impl FailureKind {
             Self::Auth => "summary_auth",
             Self::Quota => "summary_quota",
             Self::InvalidEngineOutput => "invalid_engine_output",
+            Self::CheckpointFailed => "checkpoint_failed",
         }
     }
 }

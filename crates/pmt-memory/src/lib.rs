@@ -24,6 +24,7 @@ pub mod journal;
 pub mod manage;
 pub mod markdown;
 pub mod ops;
+pub mod provider;
 pub mod rank;
 pub mod recall;
 pub mod review;

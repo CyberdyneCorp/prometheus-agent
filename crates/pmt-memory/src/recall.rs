@@ -145,6 +145,26 @@ pub async fn recall(
     }))
 }
 
+/// One fence holding the built-in recall and the external provider's
+/// (already bounded) recall, the provider's last.
+#[must_use]
+pub fn merge(builtin: Option<Recalled>, external: Option<String>) -> Option<Recalled> {
+    let Some(external) = external else {
+        return builtin;
+    };
+    Some(match builtin {
+        Some(mut recalled) => {
+            let at = recalled.text.rfind(CLOSE).unwrap_or(recalled.text.len());
+            recalled.text.insert_str(at, &format!("{external}\n"));
+            recalled
+        }
+        None => Recalled {
+            text: format!("{NOTE}\n{OPEN}\n{external}\n{CLOSE}"),
+            entry_ids: Vec::new(),
+        },
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

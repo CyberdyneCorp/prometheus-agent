@@ -10,7 +10,7 @@ import sys
 import threading
 import traceback
 
-from . import PROTOCOL_VERSION, cli, context, hooks, imports, state, typed
+from . import PROTOCOL_VERSION, cli, context, hooks, imports, memory, state, typed
 from .wire import FrameTooLarge, Wire
 
 # pmt_pybridge::limits::MEMORY_EXIT
@@ -320,6 +320,11 @@ def _provider(_, params):
     args = params.get("args") or {}
     if kind == "model":
         return _model_hook(state.REGISTRY["providers"][name], method, args)
+    if kind == "memory":
+        target = state.REGISTRY["memory_providers"].get(name)
+        if target is None:
+            raise Failure(PLUGIN_ERROR, f"memory provider '{name}' is not registered by plugin '{state.PLUGIN_ID}'")
+        return memory.call(target, method, args)
     target = state.REGISTRY["provider_objects"].get(kind, {}).get(name)
     if target is None:
         raise Failure(PLUGIN_ERROR, f"{kind} provider '{name}' is not registered by plugin '{state.PLUGIN_ID}'")

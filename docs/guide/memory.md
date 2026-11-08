@@ -203,5 +203,49 @@ A Hermes file is split on its `§` separator lines. Its target comes from
 that match the threat scan are kept as `blocked`. Entries holding
 credentials are skipped.
 
-External memory providers (`memory setup`, `off`) and consolidation
-arrive in later milestones.
+## External memory providers
+
+Next to the built-in store a profile can run one external provider: a
+`memory-provider` WASM plugin, or a Hermes `MemoryProvider` hosted by the
+Python bridge. `memory.provider` names it (`builtin`, the default, means
+none); a name that is not an installed plugin fails validation (exit 78)
+and suggests `prometheus plugins install <name>`.
+
+- `prometheus memory setup [provider]` asks for the provider's settings:
+  secret fields go only to the profile's secrets store (as
+  `<PROVIDER>_<KEY>`), every other field only to
+  `memory.providers.<id>.<key>` in `config.toml`; then `memory.provider` is
+  set. `prometheus memory off` goes back to built-in memory. Both apply from
+  the next session.
+- Each turn the provider's recall (bounded by
+  `memory.provider_prefetch_timeout_ms`, 8000 by default: a slow provider is
+  cut off and the turn goes on) joins the built-in recall inside the
+  `<memory-context>` fence, up to `memory.provider_recall_max_chars`
+  (100000), cut beyond it, or with `memory.provider_recall_spill = true`
+  replaced by a preview and the path of a file under `cache/` holding all
+  of it.
+- Completed turns, committed (never staged) memory changes and delegated
+  tasks reach the provider on a background queue, never inline; closing a
+  session drains it for at most 5 seconds. Everything sent is redacted
+  first and skill-invocation text is stripped.
+- The provider's system-prompt block follows the built-in memory blocks
+  and freezes with the prompt. Its tools join the `memory` toolset; one
+  named like a core or another registered tool is refused, and
+  `prometheus memory status` reports the collision.
+- Before a compaction the provider gets the messages about to be
+  summarized. With `memory.require_checkpoint = true`, a compaction no
+  provider confirms is not committed and a warning says so.
+- A provider instance serves only the profile it was started for.
+- A disabled, unavailable or failing provider leaves the session on
+  built-in memory with one warning (per profile, provider and reason).
+
+## Context engines
+
+`context.engine` can name a loaded `context-engine` plugin (by its id)
+instead of `builtin`. The engine compacts through the host, which validates
+its output before committing it, and may choose which stored messages each
+request sends: the choice shapes only the outgoing request, never the
+stored transcript. Its tools join the `context_engine` toolset. An engine
+that fails to start leaves the session on the built-in engine.
+
+Consolidation arrives in a later milestone.

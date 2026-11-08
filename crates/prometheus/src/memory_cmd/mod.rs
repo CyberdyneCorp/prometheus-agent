@@ -80,6 +80,18 @@ pub fn run(command: &MemoryCommand, ctx: &Context<'_>) -> Result<u8, Error> {
         MemoryCommand::Approve { id } => reply(&env, &format!("approve {id}")),
         MemoryCommand::Reject { id } => reply(&env, &format!("reject {id}")),
         MemoryCommand::Reset { target, yes } => reset(&env, *target, *yes),
+        MemoryCommand::Setup { provider } => {
+            let plugins = crate::plugins_host::for_session(
+                &env.scope,
+                &std::env::current_dir().unwrap_or_default(),
+            );
+            Ok(said(&crate::memory_provider::setup::setup(
+                &env.scope,
+                &plugins,
+                provider.as_deref(),
+            )?))
+        }
+        MemoryCommand::Off => Ok(said(&crate::memory_provider::setup::off(&env.scope)?)),
         MemoryCommand::Log { since, origin } => journal::log(&env, since.as_deref(), *origin),
         MemoryCommand::Diff { since, session } => {
             journal::diff(&env, since.as_deref(), session.as_deref())
@@ -143,8 +155,23 @@ pub(crate) fn entry_json(e: &MemoryEntry) -> Value {
     })
 }
 
+/// Prints a confirmation line on stderr.
+fn said(line: &str) -> u8 {
+    eprintln!("{line}");
+    0
+}
+
 fn status(env: &Env) -> Result<u8, Error> {
-    let status = pmt_memory::status::status(&env.store, env.config())?;
+    let mut status = pmt_memory::status::status(&env.store, env.config())?;
+    if status.provider != crate::memory_provider::BUILTIN {
+        let plugins = crate::plugins_host::for_session(
+            &env.scope,
+            &std::env::current_dir().unwrap_or_default(),
+        );
+        let mut registry = crate::tools_cmd::base_registry(&env.scope)?;
+        crate::memory_provider::tools::register(&env.scope, &plugins, &mut registry);
+        status.collisions = crate::memory_provider::tools::collisions(&env.scope, &registry);
+    }
     if env.json {
         return json(&status);
     }

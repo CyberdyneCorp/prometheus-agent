@@ -35,6 +35,7 @@ mod replay;
 mod resume;
 mod round;
 mod run;
+mod selection;
 mod server_compaction;
 mod steer;
 mod system;

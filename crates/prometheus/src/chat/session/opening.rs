@@ -225,6 +225,12 @@ impl Factory {
             setup.memory = None;
         }
         setup.compaction_boundary = Some(Arc::clone(inputs.tool_state) as _);
+        setup.context_engine = crate::context_engine::for_session(
+            &self.scope,
+            &self.plugins,
+            id,
+            &self.plugin_call(id),
+        );
         self.surface_setup(&mut setup, id);
         Ok((Agent::new(setup)?, progress, mcp))
     }

@@ -2280,7 +2280,7 @@ capabilities = [
 
 # Group 33 (python bridge)
 [python-bridge."Scope of hosted code"]
-"Memory provider runs in a sidecar" = { deferred = "needs the memory.provider contract (44.9)" }
+"Memory provider runs in a sidecar" = ["crates/prometheus/tests/python_bridge.rs::a_hermes_memory_provider_runs_in_a_sidecar"]
 
 [plugin-system."Python plugins route through the bridge"]
 "Hermes plugin is hosted out-of-process" = ["crates/prometheus/tests/python_bridge.rs::a_hermes_tool_plugin_works_unchanged"]
@@ -3135,6 +3135,34 @@ capabilities = [
 
 [memory."Semantic recall (upgrade)"]
 "Paraphrase is recalled with embeddings" = ["crates/pmt-memory/tests/memory/journal.rs::a_paraphrase_is_recalled_with_embeddings", "crates/prometheus/tests/memory_journal.rs::memory_search_ranks_a_paraphrase_with_the_configured_embedding_model"]
+
+# Group 44.9: external memory provider contract and context-engine plugins.
+[memory."External memory provider contract"]
+"Unknown provider is a config error" = ["crates/prometheus/tests/memory_provider.rs::an_unknown_provider_fails_validation_naming_the_key"]
+
+[memory."One external provider, isolated and bounded"]
+"Slow provider does not stall the turn" = ["crates/prometheus/tests/memory_provider.rs::a_slow_prefetch_is_cut_at_its_bound_and_the_turn_goes_on"]
+
+[memory."Provider tools and prompt block gating"]
+"Provider cannot shadow a core tool" = ["crates/prometheus/tests/memory_provider.rs::a_provider_tool_named_like_a_core_tool_is_refused_and_reported", "crates/prometheus/tests/memory_provider.rs::provider_recall_and_prompt_block_reach_the_model"]
+
+[memory."Provider egress redaction and write mirroring"]
+"API key in a turn is redacted for the provider" = ["crates/prometheus/tests/memory_provider.rs::a_synced_turn_reaches_the_provider_redacted_and_the_transcript_keeps_it", "crates/pmt-memory/src/provider/egress.rs::credentials_are_redacted_and_scaffolding_dropped"]
+
+[memory."Profile-bound providers"]
+"Multi-profile gateway keeps providers apart" = ["crates/prometheus/tests/memory_provider.rs::only_the_writing_profiles_provider_hears_the_write"]
+
+[memory."Pre-compress checkpoint"]
+"Required checkpoint failure keeps history" = ["crates/prometheus/tests/memory_provider.rs::a_failed_required_checkpoint_keeps_the_transcript_and_warns"]
+
+[memory."Unavailable or disabled provider degrades loudly once"]
+"Disabled provider warns once" = ["crates/prometheus/tests/memory_provider.rs::a_disabled_provider_warns_once_and_sessions_use_built_in_memory"]
+
+[memory."Provider setup writes secrets and settings to the right stores"]
+"Non-secret field never lands in secrets" = ["crates/prometheus/tests/memory_provider.rs::setup_writes_the_secret_to_the_store_and_the_setting_to_config"]
+
+[memory."Context engine selection"]
+"Engine selection never rewrites stored history" = ["crates/prometheus/tests/memory_provider.rs::a_plugin_engines_selection_shapes_only_the_request"]
 
 # Group 44.11: session forking API, portable export and import.
 [session-storage."Session forking API (upgrade)"]

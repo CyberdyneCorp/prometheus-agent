@@ -794,3 +794,32 @@ fn a_sidecar_restart_does_not_mutate_a_live_sessions_tools_or_prompt() {
         bodies[2]
     );
 }
+
+/// Scenario: Memory provider runs in a sidecar (spec: python-bridge, Scope
+/// of hosted code): a Hermes `MemoryProvider` named by `memory.provider`
+/// runs in its plugin's sidecar, and its recall reaches the turn.
+#[test]
+fn a_hermes_memory_provider_runs_in_a_sidecar() {
+    let home = mock_home();
+    pmt_pybridge::testkit::seed(home.path());
+    install(home.path(), "mempy", "mempy", "all");
+    ok(&run(
+        home.path(),
+        &["config", "set", "memory.provider", "mempy"],
+    ));
+    let out = chat(
+        home.path(),
+        r#"
+[[rule]]
+user_regex = 'py-recalled: go'
+text = "recall from python"
+
+[[rule]]
+repeat = true
+text = "no recall"
+"#,
+    );
+    assert_eq!(stdout(&out), "recall from python\n", "{}", stderr(&out));
+    let status = ok(&run(home.path(), &["memory", "status"]));
+    assert!(status.contains("provider: mempy"), "{status}");
+}

@@ -101,6 +101,7 @@ impl Default for SnapshotsConfig {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 #[schemars(extend("x-apply" = "next_session"))]
+#[allow(clippy::struct_excessive_bools)] // independent user switches
 pub struct MemoryConfig {
     /// The agent memory store.
     pub memory_enabled: bool,
@@ -121,6 +122,86 @@ pub struct MemoryConfig {
     pub nudge_interval: u32,
     /// Per-turn recall.
     pub recall: RecallConfig,
+    /// The external memory provider: `builtin` (none) or the id of an
+    /// installed `memory-provider` plugin.
+    pub provider: String,
+    /// Time a provider's `prefetch` may take before the turn goes on
+    /// without its recall.
+    #[schemars(range(min = 1))]
+    pub provider_prefetch_timeout_ms: u64,
+    /// Abort a compaction when no provider confirms its pre-compress
+    /// checkpoint.
+    pub require_checkpoint: bool,
+    /// Character bound of a provider's recall per turn.
+    pub provider_recall_max_chars: u64,
+    /// Spill oversized provider recall to a file under `cache/` (a
+    /// preview and the path stay in the fence) instead of truncating it.
+    pub provider_recall_spill: bool,
+    /// Notices after a memory change commits: `off`, `on` or `verbose`.
+    pub notifications: MemoryNotifications,
+    /// The background memory review.
+    pub review: MemoryReviewConfig,
+    /// Each provider's own non-secret settings (`memory.providers.<id>.*`;
+    /// its secrets live in the profile's secrets store).
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub providers: BTreeMap<String, BTreeMap<String, serde_json::Value>>,
+}
+
+/// `memory.notifications`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryNotifications {
+    /// No notice.
+    Off,
+    /// A generic line (`Memory updated`).
+    #[default]
+    On,
+    /// The line plus a compact preview of the change.
+    Verbose,
+}
+
+/// When a background review whose route is a managed local model runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ReviewDefer {
+    /// Queue it until the machine is idle.
+    #[default]
+    Auto,
+    /// Run it at once.
+    Never,
+}
+
+/// The `[memory.review]` section.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct MemoryReviewConfig {
+    /// Run automatic post-turn reviews (`/refine` works either way).
+    pub enabled: bool,
+    /// Replayed input tokens one review may send in total; unset is 75%
+    /// of the review model's window (at most 600000, 120000 when the
+    /// window is unknown); 0 or negative is unlimited.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_input_tokens: Option<i64>,
+    /// Tools added to the review's allow-list when the parent session has
+    /// them.
+    pub extra_tools: Vec<String>,
+    /// `auto` queues reviews on a managed local model until the machine
+    /// is idle; `never` runs them at once.
+    pub defer: ReviewDefer,
+    /// A deferred review older than this runs anyway.
+    pub defer_max_age_secs: u64,
+}
+
+impl Default for MemoryReviewConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_input_tokens: None,
+            extra_tools: Vec::new(),
+            defer: ReviewDefer::Auto,
+            defer_max_age_secs: 1800,
+        }
+    }
 }
 
 impl Default for MemoryConfig {
@@ -135,6 +216,14 @@ impl Default for MemoryConfig {
             review_mode: MemoryReviewMode::Summary,
             nudge_interval: 10,
             recall: RecallConfig::default(),
+            provider: "builtin".to_owned(),
+            provider_prefetch_timeout_ms: 8000,
+            require_checkpoint: false,
+            provider_recall_max_chars: 100_000,
+            provider_recall_spill: false,
+            notifications: MemoryNotifications::On,
+            review: MemoryReviewConfig::default(),
+            providers: BTreeMap::new(),
         }
     }
 }

@@ -18,6 +18,7 @@ use pmt_tools::ToolResult;
 use serde_json::{Value, json};
 
 use crate::ops::{self, Action, Call, Op};
+use crate::provider::{Mirrored, ProviderSession};
 use crate::rank::Embedder;
 use crate::review::Nudge;
 use crate::write::{self, Written};
@@ -59,6 +60,8 @@ pub struct MemorySetup {
     pub prior_user_turns: u32,
     /// Embeddings for hybrid recall (`memory.recall.embedding_model`).
     pub embedder: Option<Arc<dyn Embedder>>,
+    /// The profile's external memory provider, started for this session.
+    pub provider: Option<Arc<ProviderSession>>,
 }
 
 impl MemorySetup {
@@ -80,6 +83,7 @@ impl MemorySetup {
             redactor: Redactor::default(),
             prior_user_turns: 0,
             embedder: None,
+            provider: None,
         }
     }
 }
@@ -135,10 +139,18 @@ impl MemorySession {
     /// start). A store error is logged and leaves the section out.
     #[must_use]
     pub fn snapshot(&self) -> Option<String> {
-        snapshot::render(&self.setup.store, self.config()).unwrap_or_else(|err| {
+        let builtin = snapshot::render(&self.setup.store, self.config()).unwrap_or_else(|err| {
             tracing::warn!("memory snapshot skipped: {err}");
             None
-        })
+        });
+        // The provider's block follows the built-in blocks, read once at
+        // the provider's start so it freezes with the prompt.
+        let block = self.setup.provider.as_ref().and_then(|p| p.prompt_block());
+        match (builtin, block) {
+            (Some(builtin), Some(block)) => Some(format!("{builtin}\n\n{block}")),
+            (None, Some(block)) => Some(block.to_owned()),
+            (builtin, None) => builtin,
+        }
     }
 
     /// Re-reads the snapshot into `prompt` (the session's `refresh_prompt`
@@ -192,9 +204,48 @@ impl MemorySession {
             self.origin(),
             self.setup.session.map(|s| s.to_string()),
         );
+        let last = self.last_revision();
         let written = write::write(&self.setup.store, &ctx, &commit, &stage)
             .map_err(|e| e.message().to_owned())?;
+        self.committed(last);
         Ok(reply(call.target.as_str(), &written))
+    }
+
+    /// This session's newest memory revision.
+    fn last_revision(&self) -> Option<i64> {
+        let session = self.setup.session?.to_string();
+        let filter = pmt_store::RevisionFilter {
+            session: Some(session),
+            ..pmt_store::RevisionFilter::default()
+        };
+        self.setup
+            .store
+            .memory_revisions(&filter)
+            .ok()?
+            .last()
+            .map(|r| r.rev)
+    }
+
+    /// After a write: the revisions it committed (after `last`) reach the
+    /// external provider (staged changes are not revisions yet).
+    fn committed(&self, last: Option<i64>) {
+        let (Some(provider), Some(session)) = (&self.setup.provider, self.setup.session) else {
+            return;
+        };
+        let filter = pmt_store::RevisionFilter {
+            session: Some(session.to_string()),
+            after_rev: Some(last.unwrap_or(0)),
+            ..pmt_store::RevisionFilter::default()
+        };
+        let revisions = match self.setup.store.memory_revisions(&filter) {
+            Ok(revisions) => revisions,
+            Err(err) => {
+                tracing::warn!("memory writes not mirrored to the provider: {err}");
+                return;
+            }
+        };
+        let writes = revisions.iter().map(mirrored).collect();
+        provider.mirror(self.setup.scope.name().as_str(), writes);
     }
 
     /// Which operations commit now and which are staged for approval.
@@ -220,6 +271,21 @@ impl MemorySession {
             Some(false) => Err("the user declined this memory change; do not retry it".to_owned()),
             None => Ok((Vec::new(), call.ops.clone())),
         }
+    }
+}
+
+/// The provider's view of a committed revision.
+fn mirrored(revision: &pmt_store::Revision) -> Mirrored {
+    Mirrored {
+        action: revision.operation.as_str().to_owned(),
+        target: revision.target.as_str().to_owned(),
+        entry_id: revision.entry_id.clone(),
+        content: revision
+            .after
+            .as_ref()
+            .map(|e| e.content.clone())
+            .unwrap_or_default(),
+        previous: revision.before.as_ref().map(|e| e.content.clone()),
     }
 }
 
@@ -270,18 +336,47 @@ impl MemoryPort for MemorySession {
         *self.lock_turn() = TurnState::default();
         Box::pin(async move {
             let setup = &self.setup;
-            recall::recall(
-                &setup.store,
-                self.config(),
-                setup.embedder.as_deref(),
-                &setup.redactor,
-                text,
+            let builtin = async {
+                recall::recall(
+                    &setup.store,
+                    self.config(),
+                    setup.embedder.as_deref(),
+                    &setup.redactor,
+                    text,
+                )
+                .await
+                .unwrap_or_else(|err| {
+                    tracing::warn!("memory recall skipped: {err}");
+                    None
+                })
+            };
+            let external = async {
+                match &setup.provider {
+                    Some(provider) if !recall::is_trivial(text) => {
+                        provider.prefetch(setup.scope.name().as_str(), text).await
+                    }
+                    _ => None,
+                }
+            };
+            let (builtin, external) = tokio::join!(builtin, external);
+            recall::merge(builtin, external)
+        })
+    }
+
+    fn turn_completed(&self, text: &str, reply: &str) {
+        if let Some(provider) = &self.setup.provider {
+            provider.sync_turn(self.setup.scope.name().as_str(), text, reply);
+        }
+    }
+
+    fn checkpoint<'a>(&'a self, messages: &'a str) -> BoxFuture<'a, Option<bool>> {
+        Box::pin(async move {
+            let provider = self.setup.provider.as_ref()?;
+            Some(
+                provider
+                    .pre_compress(self.setup.scope.name().as_str(), messages)
+                    .await,
             )
-            .await
-            .unwrap_or_else(|err| {
-                tracing::warn!("memory recall skipped: {err}");
-                None
-            })
         })
     }
 

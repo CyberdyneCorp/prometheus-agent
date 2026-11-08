@@ -226,7 +226,7 @@ Everything sent to an external provider (prefetch query, synced turns, transcrip
 #### Scenario: API key in a turn is redacted for the provider
 - **GIVEN** a user message containing `sk-live-abc123...`
 - **WHEN** the turn is synced to the provider
-- **THEN** the provider SHALL receive the redaction placeholder and the stored transcript SHALL keep the original
+- **THEN** the provider SHALL receive the redaction placeholder and the egress pass SHALL leave the stored transcript as the store recorded it (the store applies its own known-secret redaction, `security-boundaries` › Known-secret redaction everywhere)
 
 ### Requirement: Profile-bound providers
 Each external provider instance SHALL be bound to exactly one ProfileScope at `initialize` and SHALL receive calls only for that profile; its storage, secrets and background work SHALL use that scope explicitly, and a call arriving without a scope or for another profile SHALL be refused with `Memory provider '<name>' refused: profile scope mismatch` and logged.
