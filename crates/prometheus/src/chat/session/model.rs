@@ -30,7 +30,7 @@ use pmt_providers::resolve::{
     AdHoc, Layer, Resolver, Route, Selection, Target, TcpProbe, Trace, requested,
 };
 use pmt_providers::switch::SessionModel;
-use pmt_providers::transport::Conversation;
+use pmt_providers::transport::{Binding, Conversations};
 use pmt_store::Store;
 
 /// The exact message of a profile with nothing to talk to.
@@ -48,9 +48,10 @@ pub struct Models {
     pii: Option<Arc<pmt_core::pii::Pii>>,
     /// The HTTP client of model calls (embeddings).
     client: reqwest::Client,
-    /// The conversation every call of the session belongs to (provider
-    /// session-affinity headers).
-    conversation: Conversation,
+    /// The conversation of each open session (provider session-affinity
+    /// headers); per session because a daemon shares one `Models` between
+    /// all the sessions of a profile and working directory.
+    conversations: Conversations,
 }
 
 /// The shareable parts of a [`ProviderSetup`].
@@ -161,9 +162,9 @@ impl Models {
         let recorder = Arc::new(UsageRecorder::new(Arc::clone(store), prices));
         let health =
             Arc::new(StoreHealth::new(Arc::clone(store), config).with_pool(Arc::clone(store) as _));
-        let conversation = Conversation::default();
+        let conversations = Conversations::default();
         let aux = AuxCaller::new(client.clone())
-            .with_conversation(conversation.clone())
+            .with_conversations(conversations.clone())
             .with_limits(pmt_providers::auxiliary::limits::AuxLimits::for_profile(
                 scope.dir(),
                 config.auxiliary.max_concurrency,
@@ -172,7 +173,7 @@ impl Models {
             .with_recorder(Arc::clone(&recorder))
             .with_credentials(Arc::clone(&accounts) as _);
         let caller = ModelCaller::new(client.clone())
-            .with_conversation(conversation.clone())
+            .with_conversations(conversations.clone())
             .with_mock(mock)
             .with_recorder(recorder)
             .with_credentials(Arc::clone(&accounts) as _)
@@ -202,26 +203,28 @@ impl Models {
             aux: Arc::new(aux),
             pii,
             client,
-            conversation,
+            conversations,
         })
     }
 
-    /// Later calls belong to `session`'s conversation (spec:
-    /// model-providers, Session affinity headers and per-model wire
-    /// routing): its kanban task for a kanban worker (`kanban:<task>`
-    /// source tag), else its root session, which compression
-    /// continuations and resumes keep.
-    pub fn bind_conversation(&self, session: &pmt_store::Session) {
+    /// `session`'s calls belong to its conversation while the returned
+    /// binding lives (spec: model-providers, Session affinity headers and
+    /// per-model wire routing): its kanban task for a kanban worker
+    /// (`kanban:<task>` source tag), else its root session, which
+    /// compression continuations and resumes keep.
+    #[must_use]
+    pub fn bind_conversation(&self, session: &pmt_store::Session) -> Binding {
         let task = session
             .source_tag
             .as_deref()
             .and_then(|tag| tag.strip_prefix(super::KANBAN_SOURCE_TAG))
             .and_then(|rest| rest.strip_prefix(':'))
             .filter(|task| !task.is_empty());
-        match task {
-            Some(task) => self.conversation.set(&format!("kanban:{task}")),
-            None => self.conversation.set(&session.root_session_id.to_string()),
-        }
+        let conversation = match task {
+            Some(task) => format!("kanban:{task}"),
+            None => session.root_session_id.to_string(),
+        };
+        self.conversations.bind(session.id, &conversation)
     }
 
     /// Asks `confirm` before a fallback moves a session from a
@@ -345,7 +348,7 @@ impl Models {
             aux: Arc::clone(&self.aux),
             pii: self.pii.clone(),
             client: self.client.clone(),
-            conversation: self.conversation.clone(),
+            conversations: self.conversations.clone(),
         };
         Ok((reloaded, changed))
     }

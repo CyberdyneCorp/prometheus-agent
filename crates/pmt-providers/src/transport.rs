@@ -4,12 +4,13 @@
 //! model-providers, Error classification; request and stream idle
 //! timeouts).
 
-use std::collections::VecDeque;
-use std::sync::Arc;
+use std::collections::{HashMap, VecDeque};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use jiff::Timestamp;
 use pmt_config::schema::WireFormat;
+use pmt_core::id::SessionId;
 use reqwest::header::{CONTENT_TYPE, HeaderValue};
 use tokio::time::{Instant, timeout_at};
 
@@ -79,45 +80,87 @@ pub fn body(route: &Route, request: &Request) -> serde_json::Value {
     body
 }
 
-/// The conversation a session's calls belong to (spec: model-providers,
-/// Session affinity headers and per-model wire routing): the root session
-/// id, or the kanban task id of a kanban worker. Shared by a session's
-/// main and auxiliary callers; set once the session is known.
+/// The conversations of a profile's sessions (spec: model-providers,
+/// Session affinity headers and per-model wire routing). Each open session
+/// is bound to its conversation id (its root session id, or the kanban
+/// task id of a kanban worker), and a call carries the affinity of the
+/// session its [`CallContext`](crate::cost::CallContext) names. Keyed per session rather than held
+/// per caller because one daemon process shares a profile's callers
+/// between all of its concurrent sessions.
 #[derive(Debug, Clone, Default)]
-pub struct Conversation(Arc<std::sync::RwLock<Option<String>>>);
+pub struct Conversations(Arc<Mutex<HashMap<SessionId, Bound>>>);
 
-impl Conversation {
-    /// Calls from now on belong to `id`.
-    pub fn set(&self, id: &str) {
-        let mut slot = self
-            .0
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        *slot = Some(id.to_owned());
+/// A session's conversation id and how many open handles bound it.
+#[derive(Debug)]
+struct Bound {
+    conversation: String,
+    handles: usize,
+}
+
+impl Conversations {
+    /// Calls of `session` belong to `conversation` while the returned
+    /// [`Binding`] lives.
+    #[must_use]
+    pub fn bind(&self, session: SessionId, conversation: &str) -> Binding {
+        let mut map = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        let bound = map.entry(session).or_insert_with(|| Bound {
+            conversation: String::new(),
+            handles: 0,
+        });
+        conversation.clone_into(&mut bound.conversation);
+        bound.handles += 1;
+        Binding {
+            conversations: self.clone(),
+            session,
+        }
     }
 
-    /// The opaque affinity value: a stable hash of the conversation id.
+    /// The opaque affinity value of `session`'s calls: a stable hash of
+    /// its conversation id; `None` for a session that is not bound.
     #[must_use]
-    pub fn affinity(&self) -> Option<String> {
+    pub fn affinity(&self, session: SessionId) -> Option<String> {
         use sha2::{Digest, Sha256};
-        let slot = self
-            .0
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let digest = Sha256::digest(slot.as_deref()?.as_bytes());
+        let map = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        let digest = Sha256::digest(map.get(&session)?.conversation.as_bytes());
         Some(crate::request::hex(&digest[..16]))
     }
 }
 
+/// Keeps a session bound to its conversation; dropping the last binding
+/// of a session forgets it, so a long-lived daemon does not accumulate
+/// closed sessions.
+#[derive(Debug)]
+pub struct Binding {
+    conversations: Conversations,
+    session: SessionId,
+}
+
+impl Drop for Binding {
+    fn drop(&mut self) {
+        let mut map = self
+            .conversations
+            .0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if let Some(bound) = map.get_mut(&self.session) {
+            bound.handles -= 1;
+            if bound.handles == 0 {
+                map.remove(&self.session);
+            }
+        }
+    }
+}
+
 /// The headers a request on `route` carries besides its credential: the
-/// conversation's affinity header, and the beta flags its body needs.
+/// `affinity` header when the route's provider routes by one, and the
+/// beta flags its body needs.
 pub fn route_headers(
     route: &Route,
     request: &Request,
-    conversation: &Conversation,
+    affinity: Option<String>,
 ) -> Vec<(String, String)> {
     let mut headers = Vec::new();
-    if let (Some(name), Some(value)) = (&route.affinity_header, conversation.affinity()) {
+    if let (Some(name), Some(value)) = (&route.affinity_header, affinity) {
         headers.push((name.clone(), value));
     }
     let beta = request
@@ -159,7 +202,7 @@ pub(crate) struct Sender {
     mock: Arc<Mock>,
     hooks: Option<Arc<dyn RequestHooks>>,
     pii: Option<Arc<pmt_core::pii::Pii>>,
-    conversation: Conversation,
+    conversations: Conversations,
 }
 
 impl std::fmt::Debug for Sender {
@@ -176,13 +219,14 @@ impl Sender {
             mock: Arc::new(Mock::echo()),
             hooks: None,
             pii: None,
-            conversation: Conversation::default(),
+            conversations: Conversations::default(),
         }
     }
 
-    /// Tags every request with `conversation`'s affinity header.
-    pub(crate) fn with_conversation(mut self, conversation: Conversation) -> Self {
-        self.conversation = conversation;
+    /// Tags every request of a bound session with its conversation's
+    /// affinity header.
+    pub(crate) fn with_conversations(mut self, conversations: Conversations) -> Self {
+        self.conversations = conversations;
         self
     }
 
@@ -204,7 +248,8 @@ impl Sender {
         self
     }
 
-    /// Sends one attempt and waits for its first normalised event.
+    /// Sends one attempt of `session`'s call and waits for its first
+    /// normalised event.
     ///
     /// # Errors
     ///
@@ -214,6 +259,7 @@ impl Sender {
         &self,
         route: &Route,
         request: &Request,
+        session: Option<SessionId>,
     ) -> Result<ModelStream, ProviderError> {
         let redacted = self.pii.as_deref().map(|pii| request.redacted(pii));
         let request = redacted.as_ref().unwrap_or(request);
@@ -227,7 +273,8 @@ impl Sender {
             return ModelStream::start(Source::Acp(Box::new(feed)), limits).await;
         }
         let hooks = self.hooks.as_deref().filter(|h| h.handles(&route.provider));
-        let extra = route_headers(route, request, &self.conversation);
+        let affinity = session.and_then(|s| self.conversations.affinity(s));
+        let extra = route_headers(route, request, affinity);
         send_http(&self.client, hooks, route, request, extra).await
     }
 }

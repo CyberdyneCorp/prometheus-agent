@@ -122,11 +122,12 @@ impl AuxCaller {
         self
     }
 
-    /// Tags every request with `conversation`'s affinity header on routes
-    /// whose provider routes by one.
+    /// Tags every request of a session bound in `conversations` with its
+    /// conversation's affinity header on routes whose provider routes by
+    /// one.
     #[must_use]
-    pub fn with_conversation(mut self, conversation: crate::transport::Conversation) -> Self {
-        self.sender = self.sender.with_conversation(conversation);
+    pub fn with_conversations(mut self, conversations: crate::transport::Conversations) -> Self {
+        self.sender = self.sender.with_conversations(conversations);
         self
     }
 
@@ -225,10 +226,16 @@ impl AuxCaller {
         call_id: &str,
     ) -> Attempt {
         let run = async {
-            let (mut stream, route) =
-                send_once(&self.sender, self.hooks.as_deref(), &aux.route, request)
-                    .await
-                    .map_err(|e| (e, None))?;
+            let session = Some(ctx.session_id);
+            let (mut stream, route) = send_once(
+                &self.sender,
+                self.hooks.as_deref(),
+                &aux.route,
+                request,
+                session,
+            )
+            .await
+            .map_err(|e| (e, None))?;
             if let Some(recorder) = &self.recorder {
                 let pending = Pending::new(recorder.clone(), &route, request, ctx);
                 stream.record_with(pending.with_call_id(call_id));

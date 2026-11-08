@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use jiff::Timestamp;
 use pmt_core::error::Error;
+use pmt_core::id::SessionId;
 use pmt_obs::usage::UsageRecorder;
 
 use crate::capability;
@@ -122,14 +123,15 @@ pub(crate) async fn send_once(
     hooks: Option<&dyn CredentialHooks>,
     route: &Route,
     request: &Request,
+    session: Option<SessionId>,
 ) -> Result<(ModelStream, Route), ProviderError> {
     let Some(hooks) = hooks else {
-        return Ok((sender.send(route, request).await?, route.clone()));
+        return Ok((sender.send(route, request, session).await?, route.clone()));
     };
     let mut may_recover = true;
     loop {
         let prepared = hooks.prepare(route).await?;
-        let error = match sender.send(&prepared, request).await {
+        let error = match sender.send(&prepared, request, session).await {
             Ok(stream) => return Ok((stream, prepared)),
             Err(error) => error,
         };
@@ -330,11 +332,12 @@ impl ModelCaller {
         self
     }
 
-    /// Tags every request with `conversation`'s affinity header on routes
-    /// whose provider routes by one.
+    /// Tags every request of a session bound in `conversations` with its
+    /// conversation's affinity header on routes whose provider routes by
+    /// one.
     #[must_use]
-    pub fn with_conversation(mut self, conversation: crate::transport::Conversation) -> Self {
-        self.sender = self.sender.with_conversation(conversation);
+    pub fn with_conversations(mut self, conversations: crate::transport::Conversations) -> Self {
+        self.sender = self.sender.with_conversations(conversations);
         self
     }
 
@@ -407,7 +410,9 @@ impl ModelCaller {
         let mut retry = 0;
         loop {
             let sent = std::time::Instant::now();
-            let error = match send_once(&self.sender, self.hooks.as_deref(), route, request).await {
+            let session = ctx.map(|c| c.session_id);
+            let sent_once = send_once(&self.sender, self.hooks.as_deref(), route, request, session);
+            let error = match sent_once.await {
                 Ok((mut stream, prepared)) => {
                     if let (Some(recorder), Some(ctx)) = (&self.recorder, ctx) {
                         stream.record_with(Pending::new(recorder.clone(), &prepared, request, ctx));

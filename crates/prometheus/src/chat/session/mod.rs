@@ -245,6 +245,8 @@ pub struct Live {
     /// The session's subagent delegation (`/stop all`, close, `/agents`).
     pub delegation: Option<Arc<pmt_delegation::host::Delegator>>,
     _skills: pmt_skills::session::Attachment,
+    /// Binds the session's provider affinity value while it is open.
+    _conversation: pmt_providers::transport::Binding,
 }
 
 impl Factory {
@@ -549,6 +551,7 @@ impl Factory {
         let model = self.model_for(target, child).await?;
         self.maintain();
         let session = self.session_row(id, target)?;
+        let conversation = self.models.bind_conversation(&session);
         self.discover_mcp().await;
         let (registry, selection, session_surface) = self.selection_for(&session, child)?;
         let inline_shell = Arc::new(skills::DeferredShell::default());
@@ -582,7 +585,6 @@ impl Factory {
         let tool_port = tool_state.tools();
         delegation.parent_is(&tool_port, &capabilities, &gate.gate);
         let trajectory = self.trajectory(&session)?;
-        self.models.bind_conversation(&session);
         let mut notices = Vec::new();
         let (prompt, plugin_sections) = self
             .prompt_for(id, (&skills, &memory), &mut notices, child)
@@ -638,6 +640,7 @@ impl Factory {
             downgrades,
             delegation: delegation.delegator(),
             _skills: attached,
+            _conversation: conversation,
         };
         live.emit_start(&session, target).await;
         Ok(live)

@@ -3216,7 +3216,7 @@ capabilities = [
 "Failed probes are not repeated immediately" = ["crates/pmt-providers/tests/providers/request_controls.rs::a_rejected_key_is_probed_once_within_the_ttl_and_uses_the_default", "crates/pmt-providers/src/detect.rs::a_failure_is_remembered_for_its_ttl_only"]
 
 [model-providers."Session affinity headers and per-model wire routing"]
-"Affinity header stable within a conversation" = ["crates/pmt-providers/tests/providers/request_controls.rs::main_and_auxiliary_calls_of_a_conversation_share_one_affinity_value"]
+"Affinity header stable within a conversation" = ["crates/pmt-providers/tests/providers/request_controls.rs::main_and_auxiliary_calls_of_a_conversation_share_one_affinity_value", "crates/prometheus/tests/provider_affinity_daemon.rs::daemon_sessions_sharing_a_factory_keep_their_own_affinity_value"]
 "Per-model wire format on resume" = ["crates/pmt-providers/tests/providers/request_controls.rs::opencode_go_serves_minimax_over_anthropic_messages_on_every_resolution"]
 
 [model-providers."OpenRouter provider routing preferences"]

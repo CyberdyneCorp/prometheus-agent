@@ -6,13 +6,14 @@
 use std::time::Duration;
 
 use pmt_config::schema::WireFormat;
+use pmt_core::id::SessionId;
 use pmt_providers::auxiliary::{AuxCaller, AuxRoute, AuxSource, AuxTask};
 use pmt_providers::cost::CallContext;
 use pmt_providers::detect::{Detector, ZAI_ENDPOINTS};
 use pmt_providers::fast::Speed;
 use pmt_providers::pool::{MemoryState, PoolState};
 use pmt_providers::resolve::{CredentialExtras, Resolver, Target, TcpProbe, Trace};
-use pmt_providers::transport::{self, Conversation};
+use pmt_providers::transport::{self, Conversations};
 use pmt_providers::upstream::PARETO_MODEL;
 use serde_json::json;
 use wiremock::matchers::{method, path};
@@ -195,36 +196,41 @@ async fn main_and_auxiliary_calls_of_a_conversation_share_one_affinity_value() {
     );
     let route = env.route("opencode-zen", "glm-5").await;
     let client = pmt_net::client(&pmt_net::OutboundPolicy::default()).unwrap();
-    let send = |conversation: &Conversation| {
-        let main = caller().with_conversation(conversation.clone());
-        let aux = AuxCaller::new(client.clone()).with_conversation(conversation.clone());
-        let route = route.clone();
+    // One caller pair serves every session of the profile, as in the daemon.
+    let conversations = Conversations::default();
+    let main = caller().with_conversations(conversations.clone());
+    let aux = AuxCaller::new(client.clone()).with_conversations(conversations.clone());
+    let send = |session: SessionId| {
+        let (main, aux, route) = (&main, &aux, route.clone());
         async move {
-            main.send(&route, &request("hi"), None)
+            let ctx = CallContext::new(session, "main");
+            main.send(&route, &request("hi"), Some(&ctx))
                 .await
                 .unwrap()
                 .collect()
                 .await;
-            let ctx = CallContext::new(pmt_core::id::SessionId::new(), "main");
             aux.call(&aux_route(&route), &request("title?"), &ctx)
                 .await
                 .unwrap();
         }
     };
-    let one = Conversation::default();
-    one.set("ses_root_one");
-    send(&one).await;
-    let other = Conversation::default();
-    other.set("ses_root_two");
-    send(&other).await;
+    let (one, two) = (SessionId::new(), SessionId::new());
+    let _one = conversations.bind(one, "ses_root_one");
+    let _two = conversations.bind(two, "ses_root_two");
+    send(one).await;
+    send(two).await;
+    // The first session keeps its value after the second one opened.
+    send(one).await;
 
     let received = server.received_requests().await.unwrap();
     let values: Vec<Option<String>> = received.iter().map(affinity).collect();
-    assert_eq!(values.len(), 4);
+    assert_eq!(values.len(), 6);
     assert!(values[0].is_some());
     assert_eq!(values[0], values[1], "main and title call share the value");
     assert_eq!(values[2], values[3]);
     assert_ne!(values[0], values[2], "another conversation, another value");
+    assert_eq!(values[4], values[0], "a session's value never changes");
+    assert_eq!(values[5], values[0]);
     assert!(!values[0].as_deref().unwrap().contains("ses_root"));
 
     // Providers without the header never get it.
@@ -342,7 +348,7 @@ async fn a_fast_request_asks_the_priority_tier_only_where_the_route_has_one() {
     );
     let anthropic = env.route("anthropic", "claude-opus-4-6").await;
     assert_eq!(transport::body(&anthropic, &fast)["speed"], "fast");
-    let headers = transport::route_headers(&anthropic, &fast, &Conversation::default());
+    let headers = transport::route_headers(&anthropic, &fast, None);
     assert!(
         headers
             .iter()
