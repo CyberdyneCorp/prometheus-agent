@@ -164,10 +164,9 @@ every session, message and usage row a new id instead, keeping forks and
 continuations linked to their parents inside the file. An imported title
 that is already taken gets the next free `#<n>`.
 
-```console
-$ prometheus sessions export ses_01JC3W8Q5ZK7Y2V4N6B8D0F1H3 --with-blobs -o atlas.jsonl
-$ prometheus --profile work sessions import atlas.jsonl
-```
+For example, to move a session to the `work` profile, export it by id or
+title (`sessions export <ref> --with-blobs -o atlas.jsonl`) and run
+`prometheus --profile work sessions import atlas.jsonl`.
 
 Inside a session, `/save [json|md|html] [file] [redact]` writes the current
 session to `file`, or to `<cwd>/<title>-<YYYYMMDD-HHMM>.<ext>`, redacted
