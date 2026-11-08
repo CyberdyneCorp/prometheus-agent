@@ -428,3 +428,39 @@ fn a_plugin_engines_selection_shapes_only_the_request() {
         assert!(stored.iter().any(|t| t == text), "{text} kept: {stored:?}");
     }
 }
+
+/// Scenario: Spill to file (External provider recall budget and spill).
+#[test]
+fn oversized_provider_recall_spills_to_a_file_under_cache() {
+    let home = provider_home("provider_recall_spill = true\n");
+    let (url, bodies) = server();
+    served(home.path(), &url);
+    ok(&run(home.path(), &["-z", "a big question"]));
+    let sent = bodies.try_iter().next().expect("one request").to_string();
+    assert!(
+        sent.len() < 100_000,
+        "the fence holds a preview, not 250000 characters"
+    );
+    let marker = "the full text is in ";
+    let at = sent.find(marker).expect("the spill path") + marker.len();
+    let path: String = sent[at..].chars().take_while(|c| *c != ' ').collect();
+    assert!(path.contains("cache"), "{path}");
+    let full = std::fs::read_to_string(&path).unwrap();
+    assert_eq!(full.len(), 250_000);
+}
+
+/// Without spill, recall past `memory.provider_recall_max_chars` is cut
+/// with a marker.
+#[test]
+fn oversized_provider_recall_is_cut_at_its_bound() {
+    let home = provider_home("provider_recall_max_chars = 1000\n");
+    let (url, bodies) = server();
+    served(home.path(), &url);
+    ok(&run(home.path(), &["-z", "a big question"]));
+    let sent = bodies.try_iter().next().expect("one request").to_string();
+    assert!(
+        sent.contains("provider recall truncated: 249000 more characters"),
+        "{}",
+        &sent[..2000.min(sent.len())]
+    );
+}

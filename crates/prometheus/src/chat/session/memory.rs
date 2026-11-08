@@ -40,6 +40,35 @@ impl Factory {
         Ok(Arc::new(MemorySession::new(setup)))
     }
 
+    /// The model of a background memory review (spec: memory, Background
+    /// review controls): auxiliary task `memory` when `[auxiliary.memory]`
+    /// names a provider or model (the review then gets a digest of the
+    /// conversation, `true`), else the session's own model (the whole
+    /// transcript, `false`).
+    pub async fn review_model(
+        &self,
+        main: &Arc<SwitchableModel>,
+    ) -> (Arc<dyn pmt_agent::turn::model::ModelPort>, bool) {
+        let aux = self.scope.config().auxiliary.memory.as_ref();
+        let Some(aux) = aux.filter(|a| a.provider.is_some() || a.model.is_some()) else {
+            return (Arc::clone(main) as _, false);
+        };
+        let mut target = main.target();
+        if let Some(provider) = &aux.provider {
+            target.provider.clone_from(provider);
+        }
+        target.model.clone_from(&aux.model);
+        match self.models.port(&target).await {
+            Ok(port) => (port as _, true),
+            Err(err) => {
+                tracing::warn!(
+                    "auxiliary memory route unavailable ({err}); the review uses the session's model"
+                );
+                (Arc::clone(main) as _, false)
+            }
+        }
+    }
+
     fn memory_setup(
         &self,
         id: SessionId,

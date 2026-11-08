@@ -221,6 +221,7 @@ impl ModelPort for Failing {
                 wire_format: WireFormat::ChatCompletions,
                 billing_source: "keyless:fake".into(),
                 server_compaction: false,
+                local: false,
             }
         })
     }

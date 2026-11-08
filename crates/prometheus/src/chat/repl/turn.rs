@@ -361,7 +361,7 @@ impl Repl {
             self.error(err);
         }
         if live.memory.end_turn() {
-            self.spawn_memory_review(live);
+            self.spawn_memory_review(live).await;
         }
         self.skill_nudge(live, &result).await;
         if self.factory.scope.config().display.bell_on_complete {
@@ -369,8 +369,19 @@ impl Repl {
         }
     }
 
-    /// Runs the background memory review the session is due for.
-    fn spawn_memory_review(&self, live: &Live) {
+    /// Runs the background memory review the session is due for (spec:
+    /// memory, Background review controls): not with
+    /// `memory.review.enabled = false`, one per session at a time, after
+    /// the machine is idle when the review model is local and `defer =
+    /// auto`.
+    async fn spawn_memory_review(&self, live: &Live) {
+        let controls = self.factory.scope.config().memory.review.clone();
+        if !controls.enabled {
+            return;
+        }
+        let Some(slot) = pmt_memory::review_controls::Slot::take(&live.id.to_string()) else {
+            return;
+        };
         let store = Arc::clone(&self.factory.store);
         let child = match pmt_agent::review::child_session(&store, live.id) {
             Ok(child) => child,
@@ -379,18 +390,24 @@ impl Repl {
                 return;
             }
         };
+        let (model, digest) = self.factory.review_model(&live.model).await;
         let review = pmt_memory::review::ReviewRun {
             parent: Arc::clone(&live.memory),
             session: live.id,
             child,
-            model: Arc::clone(&live.model) as _,
+            model,
             focus: None,
             suggestions: Some(crate::cron_host::inbox(
                 &self.factory.scope,
                 Arc::clone(&self.factory.store),
             )),
+            parent_tools: Some(Arc::clone(&live.tools) as _),
+            digest,
         };
         tokio::spawn(async move {
+            let _slot = slot;
+            let route = review.model.route().await;
+            pmt_memory::review_controls::wait_for_turn(&controls, &route).await;
             if let Err(err) = pmt_memory::review::run(review).await {
                 tracing::warn!(error = %err, "memory review failed");
             }

@@ -28,6 +28,7 @@ pub mod provider;
 pub mod rank;
 pub mod recall;
 pub mod review;
+pub mod review_controls;
 pub mod scan;
 pub mod session;
 pub mod slash;

@@ -203,6 +203,23 @@ A Hermes file is split on its `§` separator lines. Its target comes from
 that match the threat scan are kept as `blocked`. Entries holding
 credentials are skipped.
 
+## Background review controls
+
+`[memory.review]` tunes the automatic review that runs after
+`memory.nudge_interval` turns without a memory call: `enabled = false` skips
+it (`/refine` still works); `max_input_tokens` bounds the input one review
+replays over all its model calls (unset: 75% of the review model's window,
+at most 600000, or 120000 when the window is unknown; 0 or negative is
+unlimited), and the review stops before the call that would pass it;
+`extra_tools` lists tools the review may use when the session itself has
+them; `defer = "auto"` holds a review whose model runs on a local
+inference server until the machine is idle, at most `defer_max_age_secs`
+(1800). A second review of a session while one waits or runs is dropped.
+The review runs on `[auxiliary.memory]` when it names a provider or model
+(with a digest of the recent conversation), else on the session's own model
+with the whole transcript; its calls are recorded with purpose
+`background_review`.
+
 ## External memory providers
 
 Next to the built-in store a profile can run one external provider: a

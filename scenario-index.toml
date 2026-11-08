@@ -3164,6 +3164,14 @@ capabilities = [
 [memory."Context engine selection"]
 "Engine selection never rewrites stored history" = ["crates/prometheus/tests/memory_provider.rs::a_plugin_engines_selection_shapes_only_the_request"]
 
+# Group 44.10 (partial): provider recall budget, background review controls.
+[memory."External provider recall budget and spill"]
+"Spill to file" = ["crates/prometheus/tests/memory_provider.rs::oversized_provider_recall_spills_to_a_file_under_cache", "crates/pmt-memory/src/provider/spill.rs::small_recall_passes_whole_and_large_recall_is_cut"]
+
+[memory."Background review controls"]
+"Input budget stops the review" = ["crates/pmt-memory/tests/memory/review_controls.rs::the_review_stops_before_the_call_that_would_pass_its_input_budget", "crates/pmt-memory/src/review_controls.rs::the_budget_follows_the_window_and_zero_is_unlimited"]
+"Extra tool must exist on the parent" = ["crates/pmt-memory/tests/memory/review_controls.rs::an_extra_tool_the_parent_lacks_is_not_offered"]
+
 # Group 44.11: session forking API, portable export and import.
 [session-storage."Session forking API (upgrade)"]
 "Fork from an earlier message" = ["crates/prometheus/tests/session_portable.rs::a_fork_keeps_the_messages_up_to_the_chosen_one_and_the_tree_lists_it", "crates/prometheus/tests/session_portable.rs::the_daemon_serves_tree_and_siblings_over_rpc"]

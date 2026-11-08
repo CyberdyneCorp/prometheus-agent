@@ -56,6 +56,9 @@ pub struct RouteInfo {
     /// The route compacts context server-side (spec: context-compression,
     /// Server-side Responses compaction).
     pub server_compaction: bool,
+    /// A local inference server (memory reviews may wait for an idle
+    /// machine).
+    pub local: bool,
 }
 
 /// One tool call the model asked for.
@@ -360,6 +363,7 @@ impl ProviderModel {
             wire_format: route.wire_format,
             billing_source: route.billing_source(),
             server_compaction: route.supports_server_compaction,
+            local: route.local,
         }
     }
 

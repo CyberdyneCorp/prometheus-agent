@@ -26,6 +26,7 @@ use pmt_providers::request::Tool;
 use pmt_store::{Source, Store};
 use pmt_tools::ToolResult;
 
+use crate::review_controls::{self, ReviewModel};
 use crate::session::{MemorySession, MemorySetup};
 use crate::tool;
 
@@ -135,6 +136,9 @@ struct ReviewTools {
     memory: Arc<MemorySession>,
     definition: Tool,
     suggestions: Option<Arc<dyn AutomationSuggestions>>,
+    /// Tools borrowed from the parent session, run by it.
+    extra: Vec<Tool>,
+    parent: Option<Arc<dyn ToolPort>>,
 }
 
 impl ReviewTools {
@@ -170,6 +174,7 @@ impl ToolPort for ReviewTools {
         if self.suggestions.is_some() {
             tools.push(suggest_definition());
         }
+        tools.extend(self.extra.iter().cloned());
         tools
     }
 
@@ -189,6 +194,16 @@ impl ToolPort for ReviewTools {
                     }
                 } else if call.name == SUGGEST_TOOL {
                     self.suggest(&call.arguments)
+                } else if let (true, Some(parent)) =
+                    (self.extra.iter().any(|t| t.name == call.name), &self.parent)
+                {
+                    let batch = parent
+                        .run(std::slice::from_ref(call), "review", &CancelToken::new())
+                        .await;
+                    batch.outcomes.into_iter().next().map_or_else(
+                        || ToolResult::error("the parent session ran nothing"),
+                        |o| o.result,
+                    )
                 } else {
                     ToolResult::error(format!(
                         "unknown tool '{}': only memory is available",
@@ -222,6 +237,12 @@ pub struct ReviewRun {
     pub focus: Option<String>,
     /// The suggested automations inbox, when the host keeps one.
     pub suggestions: Option<Arc<dyn AutomationSuggestions>>,
+    /// The reviewed session's tools (`memory.review.extra_tools` borrows
+    /// from them).
+    pub parent_tools: Option<Arc<dyn ToolPort>>,
+    /// The review runs on another model than the session's: it gets a
+    /// digest (recent turns verbatim) instead of the whole transcript.
+    pub digest: bool,
 }
 
 /// The review's user message: [`REVIEW_PROMPT`], the focus, the
@@ -345,23 +366,39 @@ pub async fn run(review: ReviewRun) -> Result<TurnResult, Error> {
     setup.redactor = parent.redactor.clone();
     let memory = Arc::new(MemorySession::new(setup));
     let suggests = review.suggestions.is_some();
+    let controls = &scope.config().memory.review;
+    let extra = review.parent_tools.as_ref().map_or_else(Vec::new, |p| {
+        review_controls::extra_tools(controls, &p.definitions())
+    });
     let tools = Arc::new(ReviewTools {
         memory: Arc::clone(&memory),
         definition: tool::definition(scope.config()),
         suggestions: review.suggestions,
+        extra,
+        parent: review.parent_tools,
     });
+    let window = review.model.route().await.context_window;
+    let model = Arc::new(ReviewModel::new(
+        review.model,
+        review_controls::input_budget(controls, window),
+    ));
     let mut agent_setup = AgentSetup::new(
         scope.clone(),
         Arc::clone(&store),
         review.child,
-        review.model,
+        model,
         tools,
         PromptSetup::new("review", None),
     );
     agent_setup.unattended = true;
     agent_setup.interactive = false;
     let agent = Agent::new(agent_setup)?;
-    let mut text = instruction(review.focus.as_deref(), &excerpt(&store, review.session)?);
+    let conversation = if review.digest {
+        excerpt(&store, review.session)?
+    } else {
+        pmt_agent::review::transcript(&store, review.session)?
+    };
+    let mut text = instruction(review.focus.as_deref(), &conversation);
     if suggests {
         text = format!("{SUGGEST_PROMPT}\n\n{text}");
     }
