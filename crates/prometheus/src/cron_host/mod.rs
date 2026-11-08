@@ -7,6 +7,7 @@
 mod agent;
 pub mod blueprint_rpc;
 pub mod blueprints;
+pub mod caller;
 mod fetch;
 mod inbox;
 pub mod notepad;

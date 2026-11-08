@@ -480,6 +480,7 @@ fn the_tool_pins_a_timezone() {
         &pmt_core::env::LaunchEnv::default(),
         &store,
         true,
+        prometheus::cron_host::caller::Caller::default(),
     );
     let reply = tool_call(
         &port,
@@ -513,6 +514,7 @@ fn a_tool_run_starts_in_the_background_and_reports_back() {
         &pmt_core::env::LaunchEnv::default(),
         &store,
         true,
+        prometheus::cron_host::caller::Caller::default(),
     );
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let reply = runtime.block_on(async {
@@ -644,6 +646,7 @@ fn a_tool_workdir_outside_the_sessions_workspace_is_refused() {
         &pmt_core::env::LaunchEnv::default(),
         &store,
         true,
+        prometheus::cron_host::caller::Caller::default(),
     );
     let create = |workdir: &Path, token: Option<&str>| {
         let mut args = json!({"action": "create", "schedule": "every 1d", "prompt": "x",

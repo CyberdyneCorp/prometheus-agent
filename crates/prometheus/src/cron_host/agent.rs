@@ -82,13 +82,8 @@ fn factory(
     notepad: Option<&std::path::Path>,
 ) -> Result<Factory, Error> {
     let config = &scope.config().cron;
-    let workspace = super::script::cwd(scope, job);
-    std::fs::create_dir_all(&workspace).map_err(|e| {
-        Error::new(
-            &pmt_core::error::codes::OUTPUT_IO,
-            format!("cannot create {}: {e}", workspace.display()),
-        )
-    })?;
+    let workspace = super::script::cwd(scope, job)
+        .map_err(|message| Error::new(&pmt_core::error::codes::CRON_INVALID_WORKDIR, message))?;
     let options = Options {
         interactive: false,
         cwd: workspace,

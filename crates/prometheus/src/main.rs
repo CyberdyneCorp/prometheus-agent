@@ -300,7 +300,9 @@ fn plugin_commands_help() -> Option<String> {
 }
 
 /// `unknown command 'sesions' (did you mean 'sessions'?)` for a mistyped
-/// subcommand (spec: cli, Unknown subcommand).
+/// subcommand (spec: cli, Unknown subcommand). Under a nested command
+/// (`prometheus cron statu`) the suggestions are that command's
+/// subcommands and its usage follows (spec: scheduled-jobs, CLI surface).
 fn unknown_command(err: &clap::Error) -> Option<Error> {
     use clap::error::{ContextKind, ContextValue};
     if err.kind() != ClapErrorKind::InvalidSubcommand {
@@ -309,19 +311,49 @@ fn unknown_command(err: &clap::Error) -> Option<Error> {
     let Some(ContextValue::String(name)) = err.get(ContextKind::InvalidSubcommand) else {
         return None;
     };
-    let command = Cli::command();
-    let names = command
+    let usage = match err.get(ContextKind::Usage) {
+        Some(ContextValue::StyledStr(usage)) => usage.to_string(),
+        _ => String::new(),
+    };
+    let path = command_path(&usage);
+    let root = Cli::command();
+    let parent = path
+        .iter()
+        .try_fold(&root, |command, word| command.find_subcommand(word))
+        .unwrap_or(&root);
+    let names = parent
         .get_subcommands()
         .filter(|c| !c.is_hide_set())
         .map(clap::Command::get_name);
-    let message = match pmt_core::registry::closest(name, names).as_slice() {
+    let mut message = match pmt_core::registry::closest(name, names).as_slice() {
         [] => format!("unknown command '{name}'"),
         found => format!(
             "unknown command '{name}' (did you mean {}?)",
             pmt_core::registry::or_list(found)
         ),
     };
-    Some(Error::new(&codes::CLI_USAGE, message).with_hint("run: prometheus help"))
+    if path.is_empty() {
+        return Some(Error::new(&codes::CLI_USAGE, message).with_hint("run: prometheus help"));
+    }
+    message = format!("{message}\n\n{}", usage.trim_end());
+    let hint = format!("run: prometheus {} --help", path.join(" "));
+    Some(Error::new(&codes::CLI_USAGE, message).with_hint(hint))
+}
+
+/// The subcommands of a clap usage line (`Usage: prometheus cron
+/// <COMMAND>` -> `["cron"]`): the words between the binary name and the
+/// first placeholder.
+fn command_path(usage: &str) -> Vec<String> {
+    usage
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .trim_start_matches("Usage:")
+        .split_whitespace()
+        .skip(1)
+        .take_while(|word| !word.starts_with(['[', '<']))
+        .map(str::to_owned)
+        .collect()
 }
 
 /// Whether `--json` appears before any `--` separator. Used only when the

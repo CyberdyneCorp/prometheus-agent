@@ -99,6 +99,19 @@ fn set(field: &mut Option<String>, value: Option<&String>) {
     }
 }
 
+/// An existing absolute directory as the path it resolves to (runs refuse
+/// a workdir that stops resolving to itself, so a link repointed after
+/// the save cannot move them); anything else is left to validation.
+fn resolved(dir: &String) -> String {
+    let path = std::path::Path::new(dir);
+    if !path.is_absolute() || !path.is_dir() {
+        return dir.clone();
+    }
+    pmt_core::capability::canonical(path)
+        .to_string_lossy()
+        .into_owned()
+}
+
 /// A list where a single empty entry (or none) clears the field.
 fn list(value: &[String]) -> Vec<String> {
     value.iter().filter(|v| !v.is_empty()).cloned().collect()
@@ -189,7 +202,10 @@ impl Fields {
             None => {}
         }
         set(&mut spec.reasoning_effort, self.reasoning_effort.as_ref());
-        set(&mut spec.workdir, self.workdir.as_ref());
+        set(
+            &mut spec.workdir,
+            self.workdir.as_ref().map(resolved).as_ref(),
+        );
         if let Some(secrets) = &self.script_secrets {
             spec.script_secrets = list(secrets);
         }

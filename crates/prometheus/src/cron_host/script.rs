@@ -74,12 +74,32 @@ fn program(scope: &ProfileScope, job: &Job, script: &Path) -> Result<(PathBuf, b
 }
 
 /// The working directory of the job's runs: its `workdir`, else the
-/// cron workspace.
-pub(super) fn cwd(scope: &ProfileScope, job: &Job) -> PathBuf {
-    job.spec
-        .workdir
-        .as_ref()
-        .map_or_else(|| super::workspace(scope), PathBuf::from)
+/// cron workspace (created when missing).
+///
+/// A workdir is saved as the path it resolves to; one that resolves
+/// elsewhere now (a link along it was repointed after the save) or no
+/// longer exists is refused rather than followed, since the run's
+/// sandbox writes there.
+pub(super) fn cwd(scope: &ProfileScope, job: &Job) -> Result<PathBuf, String> {
+    let Some(workdir) = &job.spec.workdir else {
+        let dir = super::workspace(scope);
+        std::fs::create_dir_all(&dir)
+            .map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
+        return Ok(dir);
+    };
+    let dir = PathBuf::from(workdir);
+    if !dir.is_dir() {
+        return Err(format!("workdir {workdir} no longer exists"));
+    }
+    let resolved = pmt_core::capability::canonical(&dir);
+    if resolved != dir {
+        return Err(format!(
+            "workdir {workdir} now resolves to {}; the job was not run (edit it with \
+             `prometheus cron edit --workdir`)",
+            resolved.display()
+        ));
+    }
+    Ok(dir)
 }
 
 fn run_blocking(
@@ -88,10 +108,10 @@ fn run_blocking(
     script: &Path,
     timeout: Duration,
 ) -> ScriptOutcome {
-    let dir = cwd(scope, job);
-    if let Err(e) = std::fs::create_dir_all(&dir) {
-        return failed(format!("cannot create {}: {e}", dir.display()));
-    }
+    let dir = match cwd(scope, job) {
+        Ok(dir) => dir,
+        Err(message) => return failed(message),
+    };
     let (program, as_argument) = match program(scope, job, script) {
         Ok(found) => found,
         Err(message) => return failed(message),

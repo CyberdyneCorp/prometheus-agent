@@ -201,7 +201,13 @@ fn a_job_the_agent_creates_from_a_chat_needs_confirmation_and_delivers_back_ther
     };
     let session = store.create_session(&chat).unwrap().id;
     let launch = pmt_core::env::LaunchEnv::default();
-    let port = prometheus::cron_host::tool::port(&scope, &launch, &store, true);
+    let port = prometheus::cron_host::tool::port(
+        &scope,
+        &launch,
+        &store,
+        true,
+        prometheus::cron_host::caller::Caller::default(),
+    );
     let args =
         json!({"action": "create", "schedule": "every 1h", "prompt": "status", "name": "status"});
     let runtime = tokio::runtime::Runtime::new().unwrap();

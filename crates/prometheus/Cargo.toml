@@ -149,6 +149,9 @@ minisign.workspace = true
 tar.workspace = true
 rusqlite.workspace = true
 tempfile.workspace = true
+# Paused-clock unit tests (delegation timeouts); without it `cargo test -p
+# prometheus` builds only when another crate unifies the feature in.
+tokio = { workspace = true, features = ["test-util"] }
 tracing-subscriber.workspace = true
 url.workspace = true
 zstd.workspace = true

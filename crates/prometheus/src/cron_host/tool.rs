@@ -28,22 +28,26 @@ use pmt_store::{Origin, Store};
 use pmt_tools::ToolResult;
 use serde_json::{Value, json};
 
+use super::caller::Caller;
 use super::{HostCatalog, HostRunner, profile_zone, scripts_dir};
 
 /// The outcome excerpt a finished tool run reports at most.
 const EXCERPT_CHARS: usize = 2000;
 
-/// The port of a session of `scope`; `detached` sessions (someone reads
-/// the transcript later) get tool runs in the background, the others
-/// (`chat -q`, cron runs, workers) run them synchronously.
+/// The port of a session of `scope` whose reach is `caller`; `detached`
+/// sessions (someone reads the transcript later) get tool runs in the
+/// background, the others (`chat -q`, cron runs, workers) run them
+/// synchronously.
 #[must_use]
 pub fn port(
     scope: &ProfileScope,
     launch: &LaunchEnv,
     store: &Arc<Store>,
     detached: bool,
+    caller: Caller,
 ) -> Arc<dyn CronPort> {
     Arc::new(ToolPort {
+        caller,
         scope: scope.clone(),
         launch: launch.clone(),
         catalog: HostCatalog::new(scope, launch),
@@ -53,6 +57,7 @@ pub fn port(
 }
 
 struct ToolPort {
+    caller: Caller,
     scope: ProfileScope,
     launch: LaunchEnv,
     catalog: HostCatalog,
@@ -255,11 +260,16 @@ impl ToolPort {
     /// wider directory is a person's call (`prometheus cron add/edit
     /// --workdir`). An empty one (clears it) and one that is not an
     /// existing absolute directory are left to the shared validation.
-    fn check_workdir(&self, session: SessionId, workdir: Option<&str>) -> Result<(), Error> {
-        let Some(target) = workdir
+    /// The resolved path is what gets saved: a link inside the workspace
+    /// could be repointed after the check (runs refuse a workdir that no
+    /// longer resolves to itself).
+    fn check_workdir(&self, session: SessionId, fields: &mut Fields) -> Result<(), Error> {
+        let Some(target) = fields
+            .workdir
+            .as_deref()
             .map(Path::new)
-            .filter(|dir| dir.is_absolute())
-            .and_then(|dir| dir.canonicalize().ok())
+            .filter(|dir| dir.is_absolute() && dir.is_dir())
+            .map(pmt_core::capability::canonical)
         else {
             return Ok(());
         };
@@ -267,8 +277,9 @@ impl ToolPort {
             .store
             .session(session)?
             .cwd
-            .and_then(|cwd| Path::new(&cwd).canonicalize().ok());
+            .map(|cwd| pmt_core::capability::canonical(Path::new(&cwd)));
         if workspace.is_some_and(|w| target.starts_with(w)) {
+            fields.workdir = Some(target.to_string_lossy().into_owned());
             return Ok(());
         }
         Err(Error::new(
@@ -279,6 +290,14 @@ impl ToolPort {
                 target.display()
             ),
         ))
+    }
+
+    /// The call's job fields, refused when they reach past the session.
+    fn model_fields(&self, session: SessionId, arguments: &Value) -> Result<Fields, Error> {
+        let mut fields = fields(arguments, &self.scope)?;
+        self.check_workdir(session, &mut fields)?;
+        self.caller.check(&fields)?;
+        Ok(fields)
     }
 
     fn origin(&self, session: SessionId) -> Option<JobOrigin> {
@@ -305,8 +324,7 @@ impl ToolPort {
     ) -> Result<Value, Error> {
         let scripts = scripts_dir(&self.scope);
         let profile = self.profile(&scripts)?;
-        let fields = fields(arguments, &self.scope)?;
-        self.check_workdir(session, fields.workdir.as_deref())?;
+        let fields = self.model_fields(session, arguments)?;
         let mut spec = fields.new_spec(now, &profile.zone)?;
         let origin = self.origin(session);
         if spec.deliver.is_empty() {
@@ -348,8 +366,7 @@ impl ToolPort {
     ) -> Result<Value, Error> {
         let scripts = scripts_dir(&self.scope);
         let profile = self.profile(&scripts)?;
-        let fields = fields(arguments, &self.scope)?;
-        self.check_workdir(session, fields.workdir.as_deref())?;
+        let fields = self.model_fields(session, arguments)?;
         let name = text(arguments, "name");
         if fields.reschedules() {
             let current = ops::find(&self.store, key)?;
