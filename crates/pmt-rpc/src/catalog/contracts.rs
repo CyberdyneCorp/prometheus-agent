@@ -79,6 +79,7 @@ macro_rules! event {
 mod automation;
 mod cron;
 mod files;
+mod journey;
 mod lsp;
 mod messaging;
 mod security;
@@ -89,6 +90,7 @@ mod worktree;
 pub use automation::*;
 pub use cron::*;
 pub use files::*;
+pub use journey::*;
 pub use lsp::*;
 pub use messaging::*;
 pub use security::*;

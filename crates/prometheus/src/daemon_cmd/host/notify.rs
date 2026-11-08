@@ -14,6 +14,7 @@ use std::time::Duration;
 
 use pmt_gateway::Link;
 use pmt_gateway::messaging::{Admission, Background, BackgroundKind};
+use pmt_memory::notices::NoticeSink;
 use pmt_rpc::contracts::{PROCESS_NOTICE, SessionEvent};
 use pmt_tools::terminal::process::Notice;
 use serde_json::json;
@@ -63,6 +64,48 @@ pub(super) fn to_clients(link: Link) -> mpsc::UnboundedSender<Notice> {
         .in_current_span(),
     );
     tx
+}
+
+/// Where a daemon session's memory notices go (spec: memory, Per-turn
+/// memory notifications): a messaging conversation's chat (said there,
+/// like an automation status line), else the session's clients as
+/// `command.notice`.
+pub(super) fn memory_sink(
+    chat: Option<GatewayCell>,
+    profile: String,
+    session: String,
+    link: Link,
+) -> std::sync::Arc<dyn NoticeSink> {
+    match chat {
+        Some(gateway) => std::sync::Arc::new(ToChat {
+            gateway,
+            profile,
+            session,
+        }),
+        None => std::sync::Arc::new(ToLink(link)),
+    }
+}
+
+struct ToChat {
+    gateway: GatewayCell,
+    profile: String,
+    session: String,
+}
+
+impl NoticeSink for ToChat {
+    fn show(&self, text: String) {
+        if let Some(gateway) = self.gateway.get() {
+            gateway.say_in_session(&self.profile, &self.session, &text);
+        }
+    }
+}
+
+struct ToLink(Link);
+
+impl NoticeSink for ToLink {
+    fn show(&self, text: String) {
+        super::automation::notice(&self.0, &text);
+    }
 }
 
 /// The `session.event` of a background process notice.

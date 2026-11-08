@@ -212,6 +212,25 @@ pub trait Host: Send + Sync + 'static {
         Ok(None)
     }
 
+    /// The learning journey of `profile` (`journey.list`), nodes created
+    /// at or after `since` when given.
+    ///
+    /// # Errors
+    ///
+    /// `rpc.not_served` on hosts without a store; `cli.usage` for a
+    /// `since` that does not read; profile and store errors.
+    fn journey(
+        &self,
+        profile: &str,
+        since: Option<&str>,
+    ) -> Result<pmt_rpc::contracts::JourneyList, Error> {
+        let _ = (profile, since);
+        Err(Error::new(
+            &pmt_core::error::codes::RPC_NOT_SERVED,
+            "this host keeps no learning journey",
+        ))
+    }
+
     /// The automation blueprints of `profile` (`cron.blueprints.list`).
     ///
     /// # Errors

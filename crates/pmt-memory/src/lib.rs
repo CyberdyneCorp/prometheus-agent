@@ -23,6 +23,7 @@ pub mod id;
 pub mod journal;
 pub mod manage;
 pub mod markdown;
+pub mod notices;
 pub mod ops;
 pub mod provider;
 pub mod rank;

@@ -144,6 +144,7 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Verify(args)) => prometheus::verify_cmd::run(args, &ctx),
         Some(Command::Skills { command }) => skills_cmd::run(command, &ctx),
         Some(Command::Memory { command }) => memory_cmd::run(command, &ctx),
+        Some(Command::Journey(args)) => prometheus::journey_cmd::run(args, &ctx, cli.no_color),
         Some(Command::Profile { command }) => profile_cmd::run(command, &ctx),
         Some(Command::Backup { command }) => backup_cmd::backup(command, &ctx),
         Some(Command::Snapshots { command }) => backup_cmd::snapshots(command, &ctx),

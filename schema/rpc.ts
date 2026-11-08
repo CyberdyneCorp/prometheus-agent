@@ -584,6 +584,36 @@ export interface HelloResult {
   server_version: string;
 }
 
+/** `journey.list` result. */
+export interface JourneyList {
+  /** The nodes, oldest first. */
+  nodes: Array<JourneyNode>;
+}
+
+/** `journey.list` params. */
+export interface JourneyListParams {
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+  /** Only nodes created at or after this: a duration back from now (`2h`, `3d`, `1w`), a date (`2026-11-01`) or a timestamp. */
+  since?: string | null;
+}
+
+/** One learned skill or memory entry. */
+export interface JourneyNode {
+  /** When it was learned (RFC 3339). */
+  created_at: string;
+  /** `skill:<name>` for a skill, the entry id (`m_...`) for memory. */
+  id: string;
+  /** `skill` or `memory`. */
+  kind: string;
+  /** Who created it: a skill's `user`, `agent`, `hub` or `bundled` (a used bundled skill); an entry's `user`, `agent`, `background_review`, `provider`, `consolidation` or `import`. */
+  origin: string;
+  /** The skill's name or the entry's text (one line, shortened). */
+  title: string;
+  /** When it last changed (RFC 3339). */
+  updated_at: string;
+}
+
 /** `session.tree` / `session.siblings` result. */
 export interface Lineage {
   /** The related sessions, by depth then age. */
@@ -1252,6 +1282,7 @@ export interface Methods {
   "egress.set": { params: EgressSetParams; result: EgressState };
   "files.rollback": { params: FilesRollbackParams; result: FilesRolledBack };
   "files.undo": { params: FilesUndoParams; result: FilesUndone };
+  "journey.list": { params: JourneyListParams; result: JourneyList };
   "lsp.status": { params: LspStatusParams; result: LspStatus };
   "memory.summary": { params: SessionRef; result: MemorySummary };
   "model.options": { params: SessionRef; result: ModelOptions };
@@ -1334,7 +1365,6 @@ export const UNDECLARED = [
   "harness.diff",
   "harness.log",
   "harness.rollback",
-  "journey.list",
   "moa.presets.delete",
   "moa.presets.list",
   "moa.presets.put",

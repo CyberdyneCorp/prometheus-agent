@@ -328,6 +328,12 @@ impl DaemonHost {
             sudo,
         };
         let mut live = factory.open_with(id, &target, Some(clients)).await?;
+        live.memory.setup().notices.bind(notify::memory_sink(
+            chat.clone(),
+            profile.scope().name().to_string(),
+            id.to_string(),
+            link.clone(),
+        ));
         if let Some(effective) = self.effective(profile, &setup, &live.scope) {
             live.config.replace(effective);
         }
@@ -728,6 +734,16 @@ impl Host for DaemonHost {
         let served = self.profile(profile)?;
         let mode = served.scope().config().memory.review_mode;
         pmt_memory::journal::summary(&served.store, mode, session)
+    }
+
+    fn journey(
+        &self,
+        profile: &str,
+        since: Option<&str>,
+    ) -> Result<pmt_rpc::contracts::JourneyList, Error> {
+        let served = self.profile(profile)?;
+        let home = self.launch.user_home().map(std::path::PathBuf::as_path);
+        crate::journey_cmd::listing(&served.scope(), &served.store, home, since)
     }
 
     fn autoprune_offer(&self, profile: &str) -> Result<Option<String>, Error> {

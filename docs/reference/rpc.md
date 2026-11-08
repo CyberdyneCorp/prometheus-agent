@@ -89,7 +89,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `harness.diff` | `harness-evolution` | 1.0 | not served yet | |
 | `harness.log` | `harness-evolution` | 1.0 | not served yet | |
 | `harness.rollback` | `harness-evolution` | 1.0 | not served yet | |
-| `journey.list` | `memory` | 1.0 | not served yet | |
+| `journey.list` | `memory` | 1.0 | [`JourneyListParams`](#journeylistparams) | [`JourneyList`](#journeylist) |
 | `lsp.status` | `lsp-diagnostics` | 1.0 | [`LspStatusParams`](#lspstatusparams) | [`LspStatus`](#lspstatus) |
 | `memory.summary` | `memory` | 1.0 | [`SessionRef`](#sessionref) | [`MemorySummary`](#memorysummary) |
 | `moa.presets.delete` | `mixture-of-agents` | 1.0 | not served yet | |
@@ -727,6 +727,36 @@ The system prompt a session froze on its first turn.
 | `profiles` | array of string | yes | The profiles the connection's ticket grants. |
 | `protocol` | [`Version`](#version) | yes | The protocol the daemon speaks. |
 | `server_version` | string | yes | The daemon's semantic version. |
+
+### `JourneyList`
+
+`journey.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `nodes` | array of [`JourneyNode`](#journeynode) | yes | The nodes, oldest first. |
+
+### `JourneyListParams`
+
+`journey.list` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
+| `since` | string or null | no | Only nodes created at or after this: a duration back from now (`2h`, `3d`, `1w`), a date (`2026-11-01`) or a timestamp. |
+
+### `JourneyNode`
+
+One learned skill or memory entry.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `created_at` | string | yes | When it was learned (RFC 3339). |
+| `id` | string | yes | `skill:<name>` for a skill, the entry id (`m_...`) for memory. |
+| `kind` | string | yes | `skill` or `memory`. |
+| `origin` | string | yes | Who created it: a skill's `user`, `agent`, `hub` or `bundled` (a used bundled skill); an entry's `user`, `agent`, `background_review`, `provider`, `consolidation` or `import`. |
+| `title` | string | yes | The skill's name or the entry's text (one line, shortened). |
+| `updated_at` | string | yes | When it last changed (RFC 3339). |
 
 ### `Lineage`
 

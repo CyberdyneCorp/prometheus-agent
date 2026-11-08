@@ -502,6 +502,9 @@ async fn run_one(
         None => agent.run_turn(Some(&scope), id, job.input, options).await,
     };
     session.interrupt.lock().expect("interrupt poisoned").take();
+    if let Ok(result) = &outcome {
+        crate::chat::reviews::after_turn(&session.factory, &session.live, result).await;
+    }
     let end = super::automation::TurnEnd {
         origin,
         reply: outcome

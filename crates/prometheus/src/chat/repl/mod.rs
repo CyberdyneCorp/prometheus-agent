@@ -19,7 +19,6 @@ mod progress;
 mod prompts;
 pub mod queue;
 mod quick;
-mod refine;
 mod sessions;
 pub mod shell;
 mod turn;
@@ -404,6 +403,12 @@ impl Repl {
         self.approvals = live.approvals.take();
         self.clarify = live.clarify.take();
         self.progress = live.progress.take();
+        // Memory notices come between turns too (a background review):
+        // the idle loop shows what is posted.
+        live.memory
+            .setup()
+            .notices
+            .bind(Arc::new(Posted(self.posted.clone())));
         for notice in std::mem::take(&mut live.notices) {
             self.notice(&notice);
         }
@@ -542,5 +547,14 @@ impl Repl {
     fn error(&self, err: &Error) {
         let text = crate::output::render_error(err, false);
         self.say(Role::Error, text.trim_end());
+    }
+}
+
+/// Memory notices of the line interface's session, shown by its loop.
+struct Posted(mpsc::UnboundedSender<String>);
+
+impl pmt_memory::notices::NoticeSink for Posted {
+    fn show(&self, text: String) {
+        let _ = self.0.send(text);
     }
 }

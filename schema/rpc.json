@@ -1693,6 +1693,85 @@
       ],
       "type": "object"
     },
+    "JourneyList": {
+      "additionalProperties": false,
+      "description": "`journey.list` result.",
+      "properties": {
+        "nodes": {
+          "description": "The nodes, oldest first.",
+          "items": {
+            "$ref": "#/$defs/JourneyNode"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "nodes"
+      ],
+      "type": "object"
+    },
+    "JourneyListParams": {
+      "additionalProperties": false,
+      "description": "`journey.list` params.",
+      "properties": {
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "since": {
+          "default": null,
+          "description": "Only nodes created at or after this: a duration back from now\n(`2h`, `3d`, `1w`), a date (`2026-11-01`) or a timestamp.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "JourneyNode": {
+      "additionalProperties": false,
+      "description": "One learned skill or memory entry.",
+      "properties": {
+        "created_at": {
+          "description": "When it was learned (RFC 3339).",
+          "type": "string"
+        },
+        "id": {
+          "description": "`skill:<name>` for a skill, the entry id (`m_...`) for memory.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "`skill` or `memory`.",
+          "type": "string"
+        },
+        "origin": {
+          "description": "Who created it: a skill's `user`, `agent`, `hub` or `bundled` (a\nused bundled skill); an entry's `user`, `agent`,\n`background_review`, `provider`, `consolidation` or `import`.",
+          "type": "string"
+        },
+        "title": {
+          "description": "The skill's name or the entry's text (one line, shortened).",
+          "type": "string"
+        },
+        "updated_at": {
+          "description": "When it last changed (RFC 3339).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "title",
+        "created_at",
+        "updated_at",
+        "origin"
+      ],
+      "type": "object"
+    },
     "Lineage": {
       "additionalProperties": false,
       "description": "`session.tree` / `session.siblings` result.",
@@ -3964,8 +4043,13 @@
       "since": "1.0"
     },
     "journey.list": {
-      "declared": false,
       "owner": "memory",
+      "params": {
+        "$ref": "#/$defs/JourneyListParams"
+      },
+      "result": {
+        "$ref": "#/$defs/JourneyList"
+      },
       "since": "1.0"
     },
     "lsp.status": {

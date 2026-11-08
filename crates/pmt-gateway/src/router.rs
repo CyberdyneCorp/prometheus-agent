@@ -136,10 +136,10 @@ mod tests {
     }
 
     /// Indexed, but its capability declared no contract yet.
-    struct JourneyList;
+    struct EvolveList;
 
-    impl Method for JourneyList {
-        const NAME: &'static str = "journey.list";
+    impl Method for EvolveList {
+        const NAME: &'static str = "evolve.list";
         type Params = Empty;
         type Result = Ack;
     }
@@ -154,7 +154,7 @@ mod tests {
         assert_eq!(err, "unregistered method name: session.frobnicate");
         assert!(
             router
-                .register::<JourneyList, _, _>(catalog, |_, _| async { Ok(Ack::YES) })
+                .register::<EvolveList, _, _>(catalog, |_, _| async { Ok(Ack::YES) })
                 .is_err(),
             "a method without a declared contract cannot be served"
         );

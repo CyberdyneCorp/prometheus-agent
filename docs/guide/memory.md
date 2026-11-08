@@ -203,6 +203,61 @@ A Hermes file is split on its `§` separator lines. Its target comes from
 that match the threat scan are kept as `blocked`. Entries holding
 credentials are skipped.
 
+## Memory notifications
+
+After the agent or a background review commits a memory change, or the
+agent creates, edits or deletes a skill, the session shows one line, set by
+`memory.notifications`:
+
+- `on` (the default): `Memory updated`, or `Skill 'deploy-checklist'
+  created` (`patched`, `deleted`).
+- `verbose`: a preview of each changed entry, such as `Memory + User
+  prefers terse replies` (`~` for a change, `-` for a removal).
+- `off`: nothing. The setting never changes whether a review runs or
+  writes.
+
+A messaging platform can choose its own with
+`gateway.platforms.<platform>.memory_notifications`. Only committed changes
+are announced: a proposal staged for approval and a batch that was refused
+say nothing. The line interface, the TUI and attached chats show the line
+as a notice (between turns too, when a background review finishes), a
+one-shot run on stderr, and a messaging chat as a message. Background
+reviews run in every session that has the memory tool: the line interface,
+TUI and attached sessions and messaging conversations.
+
+## Learning journey
+
+`prometheus journey` (also `learning` and `memory-graph`) shows what the
+agent learned, oldest first: skills that you (`/learn`) or the agent
+created, and skills used at least once, as `◆`; memory entries as `●`.
+A constellation of the nodes, laid out by when they were learned, sits
+above the timeline.
+
+```text
+prometheus journey [--since 3d|2026-11-01] [--width 100] [--height 12]
+prometheus journey --play [--fps 8]     # watch it build up, one node per frame
+prometheus journey --json               # [{id, kind, title, created_at, updated_at, origin}]
+prometheus journey list
+prometheus journey delete <node> [--yes]
+prometheus journey edit <node>
+```
+
+A node is `skill:<name>` or a memory entry id (`m_...`). Deleting a skill
+archives it under `skills/.archive/` (move it back to restore it); deleting
+an entry removes it as a revision with `origin = user`, which
+`prometheus memory revert <rev>` undoes. Deleting asks first; without a
+terminal it needs `--yes` and exits 4 otherwise. `edit` opens the skill's
+`SKILL.md` or the entry's text in `$EDITOR` and applies it through the same
+validation and threat scan as any other write. Bundled skills and the
+essential skill are read-only here.
+
+In a chat, `/journey` (also `/learning`, `/memory-graph`) shows the
+timeline, `/journey list` the nodes, `/journey delete <node>` says what it
+would do and `/journey delete <node> --yes` does it, and
+`/journey edit <node> <new text>` replaces the text (without text it shows
+the current one). Daemon clients read the same nodes with the RPC method
+`journey.list`.
+
 ## Background review controls
 
 `[memory.review]` tunes the automatic review that runs after
@@ -263,6 +318,7 @@ instead of `builtin`. The engine compacts through the host, which validates
 its output before committing it, and may choose which stored messages each
 request sends: the choice shapes only the outgoing request, never the
 stored transcript. Its tools join the `context_engine` toolset. An engine
-that fails to start leaves the session on the built-in engine.
+that fails to start leaves the session on the built-in engine, with one
+warning in the log.
 
 Consolidation arrives in a later milestone.

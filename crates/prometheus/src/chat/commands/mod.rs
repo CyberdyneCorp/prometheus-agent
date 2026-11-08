@@ -170,6 +170,15 @@ fn state_command(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<String,
             }
             reply.text
         }),
+        "journey" => crate::journey_cmd::slash::run(
+            ctx.scope,
+            &ctx.factory.store,
+            ctx.factory
+                .launch()
+                .user_home()
+                .map(std::path::PathBuf::as_path),
+            args,
+        ),
         "personality" => crate::slash_handlers::personality(ctx.scope, args).map(|(text, now)| {
             if let Some(name) = now {
                 live.agent.apply_personality_now(&name);

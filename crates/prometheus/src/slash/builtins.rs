@@ -591,6 +591,16 @@ pub static BUILTINS: &[Command] = &[
         Effect::NextSession,
     ),
     command(
+        "journey",
+        &["learning", "memory-graph"],
+        Tools,
+        "The skills and memories the agent learned: /journey [list | delete <node> [--yes] | edit <node> <text>]",
+        &[text("action")],
+        CHATS,
+        BusyPolicy::Reject,
+        Effect::NextSession,
+    ),
+    command(
         "approvals",
         &[],
         Tools,

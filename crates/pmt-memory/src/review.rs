@@ -364,6 +364,8 @@ pub async fn run(review: ReviewRun) -> Result<TurnResult, Error> {
     );
     setup.review = true;
     setup.redactor = parent.redactor.clone();
+    // The review's commits are announced where the reviewed session's are.
+    setup.notices = parent.notices.clone();
     let memory = Arc::new(MemorySession::new(setup));
     let suggests = review.suggestions.is_some();
     let controls = &scope.config().memory.review;

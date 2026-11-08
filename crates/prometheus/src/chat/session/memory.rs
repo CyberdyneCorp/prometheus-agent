@@ -4,14 +4,36 @@
 
 use std::sync::Arc;
 
+use pmt_config::ProfileScope;
+use pmt_config::schema::MemoryNotifications;
 use pmt_core::error::Error;
 use pmt_core::id::SessionId;
+use pmt_memory::notices::Notices;
 use pmt_memory::session::{MemorySession, MemorySetup};
 use pmt_store::Source;
 
 use super::Factory;
 use super::model::SwitchableModel;
 use super::plugins::stored_surface;
+
+/// The memory notifier of `session` (spec: memory, Per-turn memory
+/// notifications): `memory.notifications`, or a messaging conversation's
+/// `gateway.platforms.<platform>.memory_notifications` when set. The
+/// surface binds where the notices go.
+#[must_use]
+pub(super) fn notices_for(scope: &ProfileScope, session: &pmt_store::Session) -> Notices {
+    let config = scope.config();
+    let platform = match &session.origin {
+        pmt_store::Origin::Gateway { platform, .. } => config
+            .gateway
+            .platforms
+            .get(platform)
+            .and_then(|p| p.memory_notifications),
+        _ => None,
+    };
+    let mode: MemoryNotifications = platform.unwrap_or(config.memory.notifications);
+    Notices::new(mode)
+}
 
 impl Factory {
     /// The memory of session `id`, with the profile's external provider
@@ -25,8 +47,10 @@ impl Factory {
         &self,
         id: SessionId,
         model: &Arc<SwitchableModel>,
+        notices: Notices,
     ) -> Result<Arc<MemorySession>, Error> {
         let mut setup = self.memory_setup(id, model)?;
+        setup.notices = notices;
         let surface = stored_surface(&self.store, id);
         let started = crate::memory_provider::start(
             &self.scope,

@@ -69,13 +69,16 @@ impl Factory {
         &self,
         id: SessionId,
         selection: &pmt_tools::Selection,
-        inline_shell: &Arc<super::skills::DeferredShell>,
+        shell_and_notices: (
+            &Arc<super::skills::DeferredShell>,
+            &pmt_memory::notices::Notices,
+        ),
         clients: Option<&super::Clients>,
     ) -> Arc<SkillsSession> {
         Arc::new(SkillsSession::new(self.skills_setup(
             id,
             selection,
-            inline_shell,
+            shell_and_notices,
             clients,
         )))
     }
@@ -199,11 +202,17 @@ impl Factory {
             Arc::clone(inputs.tools) as _,
             inputs.prompt,
         );
+        let in_process = inputs.clients.is_none() && child.is_none();
         let events = events_to(inputs.trajectory.cloned(), inputs.clients);
         let _ = inputs.environment.denials.set(Arc::downgrade(&events));
         let events = self.with_lifecycle_hooks(id, inputs.session, events);
         let (tee, progress) = progress::Tee::new(events, self.options.interactive);
         self.observe_model(inputs.model, id, tee.notices());
+        // An in-process session announces memory changes with its other
+        // notices; a daemon binds its clients or chat after opening.
+        if in_process {
+            inputs.memory.setup().notices.bind(Arc::new(tee.notices()));
+        }
         let mcp = self.mcp_session(
             id,
             inputs.target,

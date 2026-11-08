@@ -120,6 +120,9 @@ pub enum Command {
         #[command(subcommand)]
         command: SkillsCommand,
     },
+    /// The skills and memories the agent learned, as a timeline; list, delete, edit.
+    #[command(visible_aliases = ["learning", "memory-graph"])]
+    Journey(crate::journey_cmd::JourneyArgs),
     /// Inspect, edit, export and import what the agent remembers (built-in memory).
     Memory {
         /// The memory subcommand.

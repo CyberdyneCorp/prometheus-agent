@@ -3162,9 +3162,20 @@ capabilities = [
 "Non-secret field never lands in secrets" = ["crates/prometheus/tests/memory_provider.rs::setup_writes_the_secret_to_the_store_and_the_setting_to_config"]
 
 [memory."Context engine selection"]
-"Engine selection never rewrites stored history" = ["crates/prometheus/tests/memory_provider.rs::a_plugin_engines_selection_shapes_only_the_request"]
+"Engine selection never rewrites stored history" = { tests = ["crates/prometheus/tests/memory_provider.rs::a_plugin_engines_selection_shapes_only_the_request", "crates/prometheus/tests/memory_provider.rs::an_engine_that_fails_to_start_leaves_the_session_on_the_built_in_engine"], note = "the second test covers the requirement's initialize-failure clause: the session falls back to the built-in engine (the whole history is sent) with one WARN" }
 
-# Group 44.10 (partial): provider recall budget, background review controls.
+# Group 44.10: learning journey, per-turn memory notifications, provider
+# recall budget, background review controls.
+[memory."Learning journey timeline"]
+"JSON nodes" = ["crates/prometheus/tests/journey.rs::json_nodes_hold_the_learned_skill_and_both_entries", "crates/prometheus/tests/journey.rs::a_chat_and_a_daemon_client_see_the_same_journey"]
+
+[memory."Journey pruning and editing"]
+"Delete a memory node" = ["crates/prometheus/tests/journey.rs::deleting_a_memory_node_is_a_revertible_user_revision", "crates/prometheus/tests/journey.rs::deleting_without_yes_off_a_terminal_exits_4"]
+
+[memory."Per-turn memory notifications"]
+"Verbose preview" = ["crates/prometheus/tests/memory_notices.rs::a_chat_receives_the_preview_of_a_background_reviews_change", "crates/prometheus/tests/memory_notices.rs::each_mode_announces_what_it_promises"]
+"Staged change not announced" = ["crates/prometheus/tests/memory_notices.rs::a_staged_review_proposal_is_not_announced"]
+
 [memory."External provider recall budget and spill"]
 "Spill to file" = ["crates/prometheus/tests/memory_provider.rs::oversized_provider_recall_spills_to_a_file_under_cache", "crates/pmt-memory/src/provider/spill.rs::small_recall_passes_whole_and_large_recall_is_cut"]
 

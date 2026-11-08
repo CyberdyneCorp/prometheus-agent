@@ -19,6 +19,7 @@ pub mod recap;
 pub mod remote;
 pub mod repl;
 pub mod resume;
+pub mod reviews;
 pub mod session;
 pub(crate) mod signals;
 pub mod status_bar;

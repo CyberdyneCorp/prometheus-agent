@@ -35,6 +35,7 @@ pub mod fallback_cmd;
 pub mod files_cmd;
 pub mod grants_cmd;
 pub mod hooks_host;
+pub mod journey_cmd;
 pub mod logs_cmd;
 pub mod lsp_cmd;
 #[cfg(feature = "mcp")]

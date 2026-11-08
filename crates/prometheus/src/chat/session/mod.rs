@@ -552,7 +552,9 @@ impl Factory {
         self.discover_mcp().await;
         let (registry, selection, session_surface) = self.selection_for(&session, child)?;
         let inline_shell = Arc::new(skills::DeferredShell::default());
-        let skills = self.session_skills(id, &selection, &inline_shell, clients.as_ref());
+        let announce = memory::notices_for(&self.scope, &session);
+        let skills =
+            self.session_skills(id, &selection, (&inline_shell, &announce), clients.as_ref());
         let attached = SkillSessions::process().attach(&id.to_string(), Arc::clone(&skills));
         let capabilities = self.capabilities_for(id, &skills, child)?;
         let current = SharedScope::new(self.scope_for(child));
@@ -561,7 +563,7 @@ impl Factory {
         let at = place::At { vision, ..at };
         let environment =
             self.environment(&session, target, &capabilities, &current, &skills, &at)?;
-        let memory = self.memory_for(id, &model).await?;
+        let memory = self.memory_for(id, &model, announce).await?;
         let summarizer = self.models.summarizer(&model, id);
         let cards = shows_cards(self.options.interactive, &session_surface);
         let delegation = self.delegation_for(
@@ -999,7 +1001,7 @@ impl Factory {
         &self,
         id: SessionId,
         selection: &Selection,
-        inline_shell: &Arc<skills::DeferredShell>,
+        (inline_shell, announce): (&Arc<skills::DeferredShell>, &pmt_memory::notices::Notices),
         clients: Option<&Clients>,
     ) -> SessionSetup {
         let mut setup =
@@ -1009,7 +1011,9 @@ impl Factory {
         setup.view = skills::view(selection);
         setup.plugins = self.plugins.current().skill_dirs();
         let (plugins, call) = (self.plugins.clone(), self.plugin_call(id));
+        let announce = announce.clone();
         setup.lifecycle = Some(Arc::new(move |skill: &str, action: &str| {
+            announce.skill(skill, action);
             plugins.observe(
                 call.clone(),
                 "on_skill_lifecycle",

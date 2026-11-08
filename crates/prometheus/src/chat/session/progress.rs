@@ -60,6 +60,12 @@ impl Notices {
     }
 }
 
+impl pmt_memory::notices::NoticeSink for Notices {
+    fn show(&self, text: String) {
+        Notices::show(self, text);
+    }
+}
+
 /// The notice of a provider fallback.
 #[must_use]
 pub fn fallback_notice(fallback: &pmt_obs::trajectory::payload::ProviderFallback) -> String {

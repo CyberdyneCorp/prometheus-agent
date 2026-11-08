@@ -17,6 +17,7 @@ use pmt_store::{MemoryOrigin, Source, Store};
 use pmt_tools::ToolResult;
 use serde_json::{Value, json};
 
+use crate::notices::Notices;
 use crate::ops::{self, Action, Call, Op};
 use crate::provider::{Mirrored, ProviderSession};
 use crate::rank::Embedder;
@@ -62,6 +63,8 @@ pub struct MemorySetup {
     pub embedder: Option<Arc<dyn Embedder>>,
     /// The profile's external memory provider, started for this session.
     pub provider: Option<Arc<ProviderSession>>,
+    /// Where committed changes are announced (`memory.notifications`).
+    pub notices: Notices,
 }
 
 impl MemorySetup {
@@ -74,6 +77,7 @@ impl MemorySetup {
         source: Source,
     ) -> Self {
         Self {
+            notices: Notices::new(scope.config().memory.notifications),
             scope,
             store,
             session,
@@ -226,26 +230,31 @@ impl MemorySession {
             .map(|r| r.rev)
     }
 
-    /// After a write: the revisions it committed (after `last`) reach the
-    /// external provider (staged changes are not revisions yet).
+    /// After a write: the revisions it committed (after `last`, by this
+    /// session's writer) are announced and reach the external provider.
+    /// Staged changes are not revisions yet, so neither sees them.
     fn committed(&self, last: Option<i64>) {
-        let (Some(provider), Some(session)) = (&self.setup.provider, self.setup.session) else {
+        let Some(session) = self.setup.session else {
             return;
         };
         let filter = pmt_store::RevisionFilter {
             session: Some(session.to_string()),
             after_rev: Some(last.unwrap_or(0)),
+            origin: Some(self.origin()),
             ..pmt_store::RevisionFilter::default()
         };
         let revisions = match self.setup.store.memory_revisions(&filter) {
             Ok(revisions) => revisions,
             Err(err) => {
-                tracing::warn!("memory writes not mirrored to the provider: {err}");
+                tracing::warn!("committed memory writes not read back: {err}");
                 return;
             }
         };
-        let writes = revisions.iter().map(mirrored).collect();
-        provider.mirror(self.setup.scope.name().as_str(), writes);
+        self.setup.notices.memory(&revisions);
+        if let Some(provider) = &self.setup.provider {
+            let writes = revisions.iter().map(mirrored).collect();
+            provider.mirror(self.setup.scope.name().as_str(), writes);
+        }
     }
 
     /// Which operations commit now and which are staged for approval.

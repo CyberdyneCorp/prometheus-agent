@@ -1,6 +1,7 @@
 //! Test plugin: a context engine whose per-request selection keeps only
 //! the last two messages, and whose compaction keeps the last message
-//! after a one-line summary.
+//! after a one-line summary. It refuses to start in a profile named
+//! `engine-fails`, so a test can watch the host fall back.
 
 wit_bindgen::generate!({
     path: ["../../../wit/host", "../../../wit/context-engine"],
@@ -11,6 +12,9 @@ wit_bindgen::generate!({
 use exports::prometheus::context_engine::plugin::{Guest, ToolSpec};
 
 struct Engine;
+
+/// The profile in which `initialize` fails.
+const FAILING_PROFILE: &str = "engine-fails";
 
 /// The ids of a JSON message list, in order (test messages hold no
 /// escaped quotes).
@@ -24,7 +28,10 @@ fn ids(messages: &str) -> Vec<String> {
 }
 
 impl Guest for Engine {
-    fn initialize(_session: String, _profile: String) -> Result<(), String> {
+    fn initialize(_session: String, profile: String) -> Result<(), String> {
+        if profile == FAILING_PROFILE {
+            return Err("the test engine refuses this profile".to_owned());
+        }
         Ok(())
     }
 

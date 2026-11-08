@@ -18,6 +18,7 @@ Commands:
   config       Read, change, validate and explain the profile's config.toml
   secrets      Store, list and remove the profile's secrets (values never on the command line)
   skills       List, inspect, enable, lint and maintain the profile's skills and skill bundles
+  journey      The skills and memories the agent learned, as a timeline; list, delete, edit [aliases: learning, memory-graph]
   memory       Inspect, edit, export and import what the agent remembers (built-in memory)
   grants       List and revoke the profile's permanent capability grants and approvals
   browser      Browser sessions: status, and closing the real browser whose profile real-profile browsing copies
@@ -3192,6 +3193,251 @@ Usage: prometheus skills help repair-official
 Print this message or the help of the given subcommand(s)
 
 Usage: prometheus skills help help
+```
+
+## `prometheus journey`
+
+```text
+The skills and memories the agent learned, as a timeline; list, delete, edit
+
+Usage: prometheus journey [OPTIONS] [COMMAND]
+
+Commands:
+  list    The nodes, one per line: id, kind, origin, created, title
+  delete  Remove a node: a skill is archived (restorable), a memory entry is removed as a revertible `user` revision
+  edit    Edit a node in `$EDITOR`: a skill's `SKILL.md` or an entry's text, applied through the usual validation and scan
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --since <DURATION|DATE>
+          Only what was learned since: a duration (`2h`, `3d`, `1w`) or a date (`2026-11-01`)
+
+      --play
+          Animate the build-up, one node per frame
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --fps <N>
+          Frames a second of `--play`
+
+          [default: 8]
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --width <W>
+          Columns of the view
+
+      --height <H>
+          Rows of the constellation above the timeline (0 for none)
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus journey list`
+
+```text
+The nodes, one per line: id, kind, origin, created, title
+
+Usage: prometheus journey list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --since <DURATION|DATE>
+          Only what was learned since: a duration (`2h`, `3d`, `1w`) or a date (`2026-11-01`)
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus journey delete`
+
+```text
+Remove a node: a skill is archived (restorable), a memory entry is removed as a revertible `user` revision
+
+Usage: prometheus journey delete [OPTIONS] <NODE>
+
+Arguments:
+  <NODE>
+          `skill:<name>` or a memory entry id (`m_...`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --yes
+          Do not ask (required without a terminal)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --since <DURATION|DATE>
+          Only what was learned since: a duration (`2h`, `3d`, `1w`) or a date (`2026-11-01`)
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus journey edit`
+
+```text
+Edit a node in `$EDITOR`: a skill's `SKILL.md` or an entry's text, applied through the usual validation and scan
+
+Usage: prometheus journey edit [OPTIONS] <NODE>
+
+Arguments:
+  <NODE>
+          `skill:<name>` or a memory entry id (`m_...`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --since <DURATION|DATE>
+          Only what was learned since: a duration (`2h`, `3d`, `1w`) or a date (`2026-11-01`)
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus journey help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus journey help [COMMAND]
+
+Commands:
+  list    The nodes, one per line: id, kind, origin, created, title
+  delete  Remove a node: a skill is archived (restorable), a memory entry is removed as a revertible `user` revision
+  edit    Edit a node in `$EDITOR`: a skill's `SKILL.md` or an entry's text, applied through the usual validation and scan
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus journey help list`
+
+```text
+The nodes, one per line: id, kind, origin, created, title
+
+Usage: prometheus journey help list
+```
+
+## `prometheus journey help delete`
+
+```text
+Remove a node: a skill is archived (restorable), a memory entry is removed as a revertible `user` revision
+
+Usage: prometheus journey help delete
+```
+
+## `prometheus journey help edit`
+
+```text
+Edit a node in `$EDITOR`: a skill's `SKILL.md` or an entry's text, applied through the usual validation and scan
+
+Usage: prometheus journey help edit
+```
+
+## `prometheus journey help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus journey help help
 ```
 
 ## `prometheus memory`
@@ -19591,6 +19837,7 @@ Commands:
   config       Read, change, validate and explain the profile's config.toml
   secrets      Store, list and remove the profile's secrets (values never on the command line)
   skills       List, inspect, enable, lint and maintain the profile's skills and skill bundles
+  journey      The skills and memories the agent learned, as a timeline; list, delete, edit
   memory       Inspect, edit, export and import what the agent remembers (built-in memory)
   grants       List and revoke the profile's permanent capability grants and approvals
   browser      Browser sessions: status, and closing the real browser whose profile real-profile browsing copies
@@ -20104,6 +20351,43 @@ Usage: prometheus help skills list-modified
 Re-record the provenance of official catalog installs that match the embedded copy
 
 Usage: prometheus help skills repair-official
+```
+
+## `prometheus help journey`
+
+```text
+The skills and memories the agent learned, as a timeline; list, delete, edit
+
+Usage: prometheus help journey [COMMAND]
+
+Commands:
+  list    The nodes, one per line: id, kind, origin, created, title
+  delete  Remove a node: a skill is archived (restorable), a memory entry is removed as a revertible `user` revision
+  edit    Edit a node in `$EDITOR`: a skill's `SKILL.md` or an entry's text, applied through the usual validation and scan
+```
+
+## `prometheus help journey list`
+
+```text
+The nodes, one per line: id, kind, origin, created, title
+
+Usage: prometheus help journey list
+```
+
+## `prometheus help journey delete`
+
+```text
+Remove a node: a skill is archived (restorable), a memory entry is removed as a revertible `user` revision
+
+Usage: prometheus help journey delete
+```
+
+## `prometheus help journey edit`
+
+```text
+Edit a node in `$EDITOR`: a skill's `SKILL.md` or an entry's text, applied through the usual validation and scan
+
+Usage: prometheus help journey edit
 ```
 
 ## `prometheus help memory`

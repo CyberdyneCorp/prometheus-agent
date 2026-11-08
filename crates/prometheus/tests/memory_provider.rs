@@ -80,9 +80,13 @@ fn state(home: &Path, profile: &str, key: &str) -> String {
         .unwrap_or_default()
 }
 
+/// How often `needle` appears in the logs of the home and of every profile.
 fn logs_mentioning(home: &Path, needle: &str) -> usize {
-    [home.join("logs"), home.join("profiles/default/logs")]
-        .iter()
+    let profiles = std::fs::read_dir(home.join("profiles"))
+        .into_iter()
+        .flat_map(|entries| entries.flatten().map(|e| e.path().join("logs")));
+    std::iter::once(home.join("logs"))
+        .chain(profiles)
         .filter_map(|dir| std::fs::read_dir(dir).ok())
         .flat_map(|entries| entries.flatten().map(|e| e.path()))
         .filter_map(|path| std::fs::read_to_string(path).ok())
@@ -427,6 +431,56 @@ fn a_plugin_engines_selection_shapes_only_the_request() {
     for text in ["first", "second", "third"] {
         assert!(stored.iter().any(|t| t == text), "{text} kept: {stored:?}");
     }
+}
+
+/// An engine whose `initialize` fails leaves the session on the built-in
+/// engine (no per-request selection) with one WARN.
+#[test]
+fn an_engine_that_fails_to_start_leaves_the_session_on_the_built_in_engine() {
+    const PROFILE: &str = "engine-fails";
+    let home = mock_home();
+    let home = home.path();
+    ok(&run(home, &["profile", "create", PROFILE]));
+    install(
+        home,
+        PROFILE,
+        "engine",
+        "testing-engine",
+        "context-engine@1.0",
+    );
+    let (url, bodies) = server();
+    let config = home.join("profiles").join(PROFILE).join("config.toml");
+    let text = std::fs::read_to_string(&config).unwrap_or_default();
+    let text = text
+        + &format!(
+            "\n[model]\nprovider = \"acme\"\ndefault = \"r1\"\n\n\
+         [providers.acme]\nbase_url = \"{url}\"\nwire_format = \"chat_completions\"\nauth = \"none\"\n\n\
+         [budgets]\nallow_unpriced = true\n"
+        );
+    std::fs::write(&config, text).unwrap();
+    let chat = |args: &[&str]| ok(&run(home, &[&["-p", PROFILE][..], args].concat()));
+    chat(&["-z", "first"]);
+    let listed: serde_json::Value =
+        serde_json::from_str(&chat(&["--json", "sessions", "list", "--all"])).unwrap();
+    let session = listed["sessions"][0]["id"].as_str().unwrap().to_owned();
+    chat(&["-z", "second", "--resume", &session]);
+    chat(&["config", "set", "context.engine", "engine"]);
+    chat(&["-z", "third", "--resume", &session]);
+    let sent: Vec<String> = bodies
+        .try_iter()
+        .map(|b| b["messages"].to_string())
+        .collect();
+    assert_eq!(sent.len(), 3);
+    assert!(
+        sent[2].contains("first") && sent[2].contains("third"),
+        "the built-in engine sends the whole history: {}",
+        sent[2]
+    );
+    assert_eq!(
+        logs_mentioning(home, "context engine failed to start"),
+        1,
+        "one WARN"
+    );
 }
 
 /// Scenario: Spill to file (External provider recall budget and spill).
