@@ -236,6 +236,18 @@ fn blobs(
             "sha256": sha,
         }))?;
     }
+    for blob in store.session_blob_refs(session.id)? {
+        let sha = blob.sha256().to_owned();
+        if written.insert(sha.clone()) {
+            let data = base64::engine::general_purpose::STANDARD.encode(store.get_blob(&blob)?);
+            sink.line(&json!({"type": "blob", "sha256": sha, "data": data}))?;
+        }
+        sink.line(&json!({
+            "type": "blob_ref",
+            "session_id": session.id.to_string(),
+            "sha256": sha,
+        }))?;
+    }
     Ok(())
 }
 

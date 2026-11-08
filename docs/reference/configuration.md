@@ -35,6 +35,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `approvals.single_query_mode` | one of "deny", "approve" | `"deny"` | `"deny"`, `"approve"` | `live` | Decision for approvals in single-query (`-q`) runs. |
 | `approvals.timeout_secs` | integer | `300` | ≥ 0 | `live` | Unanswered approvals are denied after this long. |
 | `approvals.unattended_mode` | one of "deny", "approve" | `"deny"` | `"deny"`, `"approve"` | `live` | Decision for approvals in other unattended sessions. |
+| `attachments.storage` | one of "blobs", "workspace" | `"blobs"` | `"blobs"`, `"workspace"` | `next_session` | Where received attachments are kept. |
 | `auth.adopt_external_logins` | boolean | `true` | any | `next_session` | Use an existing Claude Code or Codex CLI sign-in when the profile holds no credential of its own. |
 | `auxiliary.approval.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
 | `auxiliary.approval.model` | string | unset | any | `next_session` | Model id. |
@@ -578,6 +579,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `security.sandbox.allow_degraded` | array of one of "landlock", "landlock_net", "seccomp", "seatbelt", "appcontainer", "no_new_privileges", "read_only_rootfs", "cap_drop", "chromium_sandbox", "web_security", "all" | `[]` | any | `next_session` | Hardening features that may be missing; anything else missing refuses to run. |
 | `security.sandbox.mode` | one of "enforce", "off" | `"enforce"` | `"enforce"`, `"off"` | `next_session` | Sandbox mode; `off` needs `allow_degraded` to name `all`. |
 | `sessions.auto_archive_secs` | integer | `604800` | ≥ 0 | `live` | Archive lineage tips idle for this long. |
+| `sessions.low_disk_bytes` | integer | `1073741824` | ≥ 0 | `live` | Below this many free bytes on the store's volume an interactive start offers to turn on auto-prune (when `retention_secs = 0`). |
 | `sessions.max_export_messages` | integer | `20000` | ≥ 0 | `live` | Refuse in-memory exports with more messages. |
 | `sessions.max_resume_messages` | integer | `20000` | ≥ 0 | `live` | Refuse to resume a lineage with more messages; `0` disables. |
 | `sessions.retention_secs` | integer | `0` | ≥ 0 | `live` | Prune ended sessions inactive for longer than this; `0` never prunes. |

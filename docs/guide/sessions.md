@@ -218,11 +218,47 @@ $ prometheus config get sessions.retention_secs
 7776000
 ```
 
+When the disk holding `state.db` runs low (less than
+`sessions.low_disk_bytes` free, 1 GiB by default) and pruning is off, an
+interactive start offers auto-prune once a day at most: `on` sets
+`sessions.retention_secs` to 90 days, `off` never asks again and `later`
+asks again after a week. `/autoprune [on|off|later|status]` does the same
+from any chat; `status` prints the retention, the store's size and the
+free space.
+
 Resuming is refused for lineages with more than
 `sessions.max_resume_messages` active messages (default 20000; compact with
 `/compress` or fork instead), and exports held in memory (dashboard, RPC)
 stop at `sessions.max_export_messages`; `sessions export -o FILE` streams
 any size.
+
+## Maintenance
+
+- `sessions refresh-prompts [<ref>...|--all]` marks sessions so their next
+  turn rebuilds the stored system prompt from the profile as it is now
+  (identity, skills index, tools, memory snapshot). The transcript is
+  kept, and the turn records one `prompt.rebuilt` event with reason
+  `refresh-prompts`.
+- `sessions retitle [<ref>...|--all|--auto-only]` asks the `title`
+  auxiliary route (default: the main model) for new titles. A title you
+  set is never changed; `--auto-only` limits it to sessions that already
+  have an automatic title.
+- `sessions recover [-o FILE] [--yes]` copies every readable row of
+  `state.db` into a new clean store, `state.recovered-<time>.db` beside it,
+  rebuilds the search indexes and reports rows recovered and lost per
+  table. It replaces `state.db` after you confirm (or with `--yes`),
+  keeping the original as `state.db.pre-recover`; with `-o` it only writes
+  the copy. It needs the store closed and exits 75 naming the process
+  that holds it (a daemon or a chat).
+- `sessions journal-mode <wal|delete>` switches the store's journal mode
+  offline, for filesystems without shared-memory support. The choice is
+  recorded in the store and applied on every open, over
+  `storage.journal_mode`. It also needs the store closed.
+
+Attachments are stored in the profile's blob store. With
+`attachments.storage = "workspace"` a copy of each attached file is also
+written to `<cwd>/.prometheus/attachments/<session_id>/`, so tools can
+read it by path; the blob store stays the reference.
 
 ## Safety nets
 

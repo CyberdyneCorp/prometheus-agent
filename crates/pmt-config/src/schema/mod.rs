@@ -98,8 +98,8 @@ pub use plugins::{
 };
 pub use python_bridge::{PYTHON_VERSIONS, PythonBridgeConfig, PythonVersion};
 pub use state::{
-    JournalMode, MemoryConfig, MemoryReviewMode, RecallConfig, SessionsConfig, SkillsConfig,
-    SnapshotsConfig, StorageConfig,
+    AttachmentStorage, AttachmentsConfig, JournalMode, MemoryConfig, MemoryReviewMode,
+    RecallConfig, SessionsConfig, SkillsConfig, SnapshotsConfig, StorageConfig,
 };
 pub use tools::{
     ApprovalMode, ApprovalsConfig, BrowserConfig, ContainerConfig, DegradedMode, DialogPolicy,
@@ -128,6 +128,8 @@ pub struct Config {
     pub agent: AgentConfig,
     /// Approval modes for dangerous tool calls.
     pub approvals: ApprovalsConfig,
+    /// Where received attachments are kept.
+    pub attachments: AttachmentsConfig,
     /// Sign-in behaviour.
     pub auth: AuthConfig,
     /// Side-model (auxiliary) task routing.
@@ -248,6 +250,7 @@ impl Default for Config {
             schema_version: SCHEMA_VERSION,
             agent: AgentConfig::default(),
             approvals: ApprovalsConfig::default(),
+            attachments: AttachmentsConfig::default(),
             auth: AuthConfig::default(),
             auxiliary: AuxiliaryConfig::default(),
             browser: BrowserConfig::default(),

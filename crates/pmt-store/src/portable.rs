@@ -18,6 +18,9 @@ use crate::sessions::{self, Session};
 use crate::store::Store;
 use crate::usage::UsageEvent;
 
+/// The blob owner kind of a session's attachments.
+pub const SESSION_ATTACHMENT: &str = "session_attachment";
+
 /// One session to import, with its rows (ids already final).
 #[derive(Debug, Clone)]
 pub struct Portable {
@@ -27,9 +30,10 @@ pub struct Portable {
     pub messages: Vec<Message>,
     /// Its usage ledger rows.
     pub usage: Vec<UsageEvent>,
-    /// Blobs its messages reference beyond their own payloads
-    /// (attachments).
+    /// Blobs its messages reference beyond their own payloads.
     pub blob_refs: Vec<(MessageId, BlobRef)>,
+    /// Blobs the session itself references (its attachments).
+    pub session_blobs: Vec<BlobRef>,
 }
 
 /// Ids an import would collide with.
@@ -223,6 +227,34 @@ impl Store {
         })
     }
 
+    /// The blobs `session` itself references (attachments).
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`.
+    pub fn session_blob_refs(&self, session: SessionId) -> Result<Vec<BlobRef>, Error> {
+        self.read(|conn| {
+            let mut stmt = conn
+                .prepare_cached(
+                    "SELECT sha256 FROM blob_refs WHERE owner_kind = ?1 AND owner_id = ?2 \
+                     ORDER BY sha256",
+                )
+                .map_err(sql)?;
+            let rows = stmt
+                .query_map([SESSION_ATTACHMENT, &session.to_string()], |row| {
+                    row.get::<_, String>(0)
+                })
+                .map_err(sql)?;
+            let mut out = Vec::new();
+            for sha in rows {
+                if let Some(blob) = BlobRef::parse(&format!("blob:sha256:{}", sha.map_err(sql)?)) {
+                    out.push(blob);
+                }
+            }
+            Ok(out)
+        })
+    }
+
     /// Writes `sessions` (parents before children) in one transaction.
     /// Blob bytes must already be in the blob store
     /// ([`Store::put_blob`]). A title already in use gets the next free
@@ -294,6 +326,13 @@ fn write_one(
     .map_err(sql)?;
     for event in &portable.usage {
         crate::usage::insert(tx, profile, event)?;
+    }
+    for blob in &portable.session_blobs {
+        tx.execute(
+            "INSERT OR IGNORE INTO blob_refs (sha256, owner_kind, owner_id) VALUES (?1, ?2, ?3)",
+            params![blob.sha256(), SESSION_ATTACHMENT, session.id.to_string()],
+        )
+        .map_err(sql)?;
     }
     for (message, blob) in &portable.blob_refs {
         tx.execute(

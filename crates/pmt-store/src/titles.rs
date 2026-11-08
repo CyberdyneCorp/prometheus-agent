@@ -205,6 +205,36 @@ impl Store {
         })
     }
 
+    /// Replaces an automatic title with `title` from the title model
+    /// (`sessions retitle`): a session titled by the user is never touched,
+    /// and a title another session holds gets the next free `#<n>`.
+    ///
+    /// # Errors
+    ///
+    /// `store.title_too_long`, `session.not_found`, `store.sqlite`.
+    pub fn retitle(&self, id: SessionId, title: &str) -> Result<TitleWrite, Error> {
+        let Some(title) = sanitize(title)? else {
+            return Ok(TitleWrite::Kept);
+        };
+        self.write(|tx| {
+            let current = sessions::load(tx, id)?.ok_or_else(|| sessions::not_found(id))?;
+            if current.title_source == Some(TitleSource::User) {
+                return Ok(TitleWrite::Kept);
+            }
+            let title = if ensure_unused(tx, &title, Some(id)).is_err() {
+                next_numbered(tx, &title)?
+            } else {
+                title.clone()
+            };
+            tx.execute(
+                "UPDATE sessions SET title = ?2, title_source = 'llm' WHERE id = ?1",
+                params![id.to_string(), title],
+            )
+            .map_err(sql)?;
+            Ok(TitleWrite::Written)
+        })
+    }
+
     /// Resolves a session reference: a full id, then a title (a bare base
     /// title picks the highest-numbered `#n` of its family), then an id
     /// prefix of at least [`MIN_PREFIX_CHARS`] characters (`ses_` optional).

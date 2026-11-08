@@ -3127,3 +3127,17 @@ capabilities = [
 
 [session-storage."Portable export and import"]
 "Collision without remap" = ["crates/prometheus/tests/session_portable.rs::an_export_round_trips_between_two_homes_with_its_blobs"]
+
+# Group 44.12: offline recovery, journal mode, prompt refresh, retitling,
+# low-disk prompt, attachment storage.
+[session-storage."Offline recovery and journal mode"]
+"Recover refused while open" = ["crates/prometheus/tests/session_maintenance.rs::recover_is_refused_while_a_daemon_serves_the_profile"]
+
+[session-storage."Prompt refresh and retitling"]
+"User titles kept" = ["crates/prometheus/tests/session_maintenance.rs::retitle_keeps_user_titles_and_renames_automatic_ones"]
+
+[session-storage."Low-disk prune prompt"]
+"Later postpones a week" = ["crates/prometheus/tests/session_maintenance.rs::the_low_disk_prompt_answered_later_waits_a_week"]
+
+[session-storage."Attachment storage location"]
+"Workspace copy" = ["crates/prometheus/tests/session_maintenance.rs::a_workspace_attachment_is_copied_beside_the_blob"]

@@ -312,6 +312,20 @@ impl Repl {
                 let _ = reply.send(value);
             }
             Pending::Confirm { .. } | Pending::Resume(_) => {}
+            Pending::Autoprune => {
+                let answer = super::super::autoprune::Answer::parse(line)
+                    .unwrap_or(super::super::autoprune::Answer::Later);
+                let store = &self.factory.store;
+                match super::super::autoprune::apply(
+                    &self.factory.scope,
+                    store,
+                    answer,
+                    jiff::Timestamp::now(),
+                ) {
+                    Ok(text) => self.notice(&text),
+                    Err(err) => self.error(&err),
+                }
+            }
         }
     }
 
@@ -446,6 +460,27 @@ impl Repl {
             ResumeOnCrash::Auto => self.run_work(Work::Resume(unfinished, true)).await,
             ResumeOnCrash::Never => self.run_work(Work::Resume(unfinished, false)).await,
             ResumeOnCrash::Ask => self.ask(Pending::Resume(unfinished)),
+        }
+    }
+
+    /// The low-disk prune prompt, when it is due (spec: session-storage,
+    /// Low-disk prune prompt).
+    pub(super) fn offer_autoprune(&mut self) {
+        if self.pending.is_some() {
+            return;
+        }
+        let due = super::super::autoprune::due(
+            &self.factory.scope,
+            &self.factory.store,
+            jiff::Timestamp::now(),
+        );
+        match due {
+            Ok(true) => {
+                self.notice(super::super::autoprune::QUESTION);
+                self.ask(Pending::Autoprune);
+            }
+            Ok(false) => {}
+            Err(err) => tracing::warn!(error = %err, "low-disk check skipped"),
         }
     }
 }

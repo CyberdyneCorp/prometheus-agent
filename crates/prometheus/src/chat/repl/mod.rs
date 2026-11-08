@@ -242,6 +242,7 @@ pub async fn run(
         repl.memory_summary(repl.live().id);
         Box::pin(repl.offer_resume()).await;
     }
+    repl.offer_autoprune();
     repl.spacer();
     let status = Box::pin(repl.main_loop()).await;
     notices.abort();

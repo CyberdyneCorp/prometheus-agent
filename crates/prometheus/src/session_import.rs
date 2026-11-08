@@ -229,6 +229,7 @@ fn record(parsed: &mut Parsed, line: usize, v: &Value) -> Result<(), Error> {
                 messages: Vec::new(),
                 usage: Vec::new(),
                 blob_refs: Vec::new(),
+                session_blobs: Vec::new(),
             });
         }
         Some("message") => {
@@ -254,15 +255,16 @@ fn record(parsed: &mut Parsed, line: usize, v: &Value) -> Result<(), Error> {
             parsed.blobs.insert(sha, bytes);
         }
         Some("blob_ref") => {
-            let message: MessageId = parse(v, "message_id").map_err(bad)?;
+            let message: Option<MessageId> = opt_parse(v, "message_id").map_err(bad)?;
             let sha = text(v, "sha256").unwrap_or_default();
             let reference = BlobRef::parse(&format!("blob:sha256:{sha}"))
                 .ok_or_else(|| bad("bad sha256".into()))?;
             let session = text(v, "session_id").unwrap_or_default();
-            parsed
-                .current(line, &session)?
-                .blob_refs
-                .push((message, reference));
+            let current = parsed.current(line, &session)?;
+            match message {
+                Some(message) => current.blob_refs.push((message, reference)),
+                None => current.session_blobs.push(reference),
+            }
         }
         Some("lineage") => {}
         other => return Err(bad(format!("unknown record type {other:?}"))),
@@ -307,7 +309,7 @@ fn read(path: &Path) -> Result<Parsed, Error> {
 /// Every referenced blob must be in the file or already in the store.
 fn check_blobs(store: &Store, parsed: &Parsed) -> Result<(), Error> {
     for p in &parsed.sessions {
-        for (_, blob) in &p.blob_refs {
+        for blob in p.blob_refs.iter().map(|(_, b)| b).chain(&p.session_blobs) {
             if !parsed.blobs.contains_key(blob.sha256()) && store.get_blob(blob).is_err() {
                 return Err(Error::new(
                     &codes::IMPORT_INVALID,

@@ -521,6 +521,16 @@ pub static BUILTINS: &[Command] = &[
         Effect::Immediate,
     ),
     command(
+        "autoprune",
+        &[],
+        Config,
+        "Auto-prune old sessions: /autoprune [on|off|later|status]",
+        &[text("answer")],
+        CHATS,
+        Immediate,
+        Effect::None,
+    ),
+    command(
         "btw",
         &[],
         Session,

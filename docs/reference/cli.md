@@ -9244,28 +9244,32 @@ List, search, export and manage the profile's sessions
 Usage: prometheus sessions [OPTIONS] <COMMAND>
 
 Commands:
-  browse     Pick a session interactively (status tags, search) and resume it
-  resume     Resume a session (id, id prefix or title) in a chat; a turn the process stopped during is resumed, closed or offered by `agent.resume_on_crash`
-  list       List sessions, most recently active first
-  show       Show a session (id, id prefix or title)
-  search     Full-text search over the profile's messages
-  rename     Set a session's title
-  pin        Pin a session (pinned sessions are never pruned)
-  unpin      Unpin a session
-  archive    Archive a session (hidden from the default listing)
-  unarchive  Unarchive a session
-  tree       Show a session's lineage tree (forks, continuations, delegates)
-  fork       Fork a session: a new session with its active messages up to --at
-  siblings   List the other children of a session's parent (forks, continuations)
-  import     Import a JSONL export (all-or-none; ids must be new unless --remap-ids)
-  stats      Show a session's and its lineage's message and token totals
-  export     Export sessions (jsonl, md, html, prompts or trace)
-  delete     Delete a session (asks for confirmation unless --yes)
-  prune      Delete ended, unpinned sessions inactive for longer than --older-than days
-  rewind     Rewind a session to a user message (soft delete; --restore undoes it)
-  repair     Rebuild the derived search indexes from the stored messages
-  vacuum     Compact state.db and truncate its write-ahead log
-  help       Print this message or the help of the given subcommand(s)
+  browse           Pick a session interactively (status tags, search) and resume it
+  resume           Resume a session (id, id prefix or title) in a chat; a turn the process stopped during is resumed, closed or offered by `agent.resume_on_crash`
+  list             List sessions, most recently active first
+  show             Show a session (id, id prefix or title)
+  search           Full-text search over the profile's messages
+  rename           Set a session's title
+  pin              Pin a session (pinned sessions are never pruned)
+  unpin            Unpin a session
+  archive          Archive a session (hidden from the default listing)
+  unarchive        Unarchive a session
+  tree             Show a session's lineage tree (forks, continuations, delegates)
+  fork             Fork a session: a new session with its active messages up to --at
+  siblings         List the other children of a session's parent (forks, continuations)
+  import           Import a JSONL export (all-or-none; ids must be new unless --remap-ids)
+  recover          Copy every readable row of state.db into a new clean store (needs the store closed)
+  journal-mode     Switch state.db's journal mode offline (delete for filesystems without shared memory)
+  refresh-prompts  Rebuild the stored system prompt of sessions at their next turn
+  retitle          Regenerate automatic titles with the title model (user titles are kept)
+  stats            Show a session's and its lineage's message and token totals
+  export           Export sessions (jsonl, md, html, prompts or trace)
+  delete           Delete a session (asks for confirmation unless --yes)
+  prune            Delete ended, unpinned sessions inactive for longer than --older-than days
+  rewind           Rewind a session to a user message (soft delete; --restore undoes it)
+  repair           Rebuild the derived search indexes from the stored messages
+  vacuum           Compact state.db and truncate its write-ahead log
+  help             Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -9970,6 +9974,193 @@ Options:
           Print help
 ```
 
+## `prometheus sessions recover`
+
+```text
+Copy every readable row of state.db into a new clean store (needs the store closed)
+
+Usage: prometheus sessions recover [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -o, --output <FILE>
+          Write the recovered store here instead of next to state.db (no swap)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --yes
+          Swap the recovered store in without asking
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions journal-mode`
+
+```text
+Switch state.db's journal mode offline (delete for filesystems without shared memory)
+
+Usage: prometheus sessions journal-mode [OPTIONS] <MODE>
+
+Arguments:
+  <MODE>
+          The journal mode
+
+          Possible values:
+          - wal:    Write-ahead log (default)
+          - delete: Rollback journal (filesystems without shared-memory support)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus sessions refresh-prompts`
+
+```text
+Rebuild the stored system prompt of sessions at their next turn
+
+Usage: prometheus sessions refresh-prompts [OPTIONS] [SESSIONS]...
+
+Arguments:
+  [SESSIONS]...
+          Sessions (id, id prefix or title)
+
+Options:
+      --all
+          Every resumable session
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions retitle`
+
+```text
+Regenerate automatic titles with the title model (user titles are kept)
+
+Usage: prometheus sessions retitle [OPTIONS] [SESSIONS]...
+
+Arguments:
+  [SESSIONS]...
+          Sessions (id, id prefix or title)
+
+Options:
+      --all
+          Every session not titled by the user (untitled ones too)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --auto-only
+          Only sessions that already have an automatic title
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus sessions stats`
 
 ```text
@@ -10318,28 +10509,32 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus sessions help [COMMAND]
 
 Commands:
-  browse     Pick a session interactively (status tags, search) and resume it
-  resume     Resume a session (id, id prefix or title) in a chat; a turn the process stopped during is resumed, closed or offered by `agent.resume_on_crash`
-  list       List sessions, most recently active first
-  show       Show a session (id, id prefix or title)
-  search     Full-text search over the profile's messages
-  rename     Set a session's title
-  pin        Pin a session (pinned sessions are never pruned)
-  unpin      Unpin a session
-  archive    Archive a session (hidden from the default listing)
-  unarchive  Unarchive a session
-  tree       Show a session's lineage tree (forks, continuations, delegates)
-  fork       Fork a session: a new session with its active messages up to --at
-  siblings   List the other children of a session's parent (forks, continuations)
-  import     Import a JSONL export (all-or-none; ids must be new unless --remap-ids)
-  stats      Show a session's and its lineage's message and token totals
-  export     Export sessions (jsonl, md, html, prompts or trace)
-  delete     Delete a session (asks for confirmation unless --yes)
-  prune      Delete ended, unpinned sessions inactive for longer than --older-than days
-  rewind     Rewind a session to a user message (soft delete; --restore undoes it)
-  repair     Rebuild the derived search indexes from the stored messages
-  vacuum     Compact state.db and truncate its write-ahead log
-  help       Print this message or the help of the given subcommand(s)
+  browse           Pick a session interactively (status tags, search) and resume it
+  resume           Resume a session (id, id prefix or title) in a chat; a turn the process stopped during is resumed, closed or offered by `agent.resume_on_crash`
+  list             List sessions, most recently active first
+  show             Show a session (id, id prefix or title)
+  search           Full-text search over the profile's messages
+  rename           Set a session's title
+  pin              Pin a session (pinned sessions are never pruned)
+  unpin            Unpin a session
+  archive          Archive a session (hidden from the default listing)
+  unarchive        Unarchive a session
+  tree             Show a session's lineage tree (forks, continuations, delegates)
+  fork             Fork a session: a new session with its active messages up to --at
+  siblings         List the other children of a session's parent (forks, continuations)
+  import           Import a JSONL export (all-or-none; ids must be new unless --remap-ids)
+  recover          Copy every readable row of state.db into a new clean store (needs the store closed)
+  journal-mode     Switch state.db's journal mode offline (delete for filesystems without shared memory)
+  refresh-prompts  Rebuild the stored system prompt of sessions at their next turn
+  retitle          Regenerate automatic titles with the title model (user titles are kept)
+  stats            Show a session's and its lineage's message and token totals
+  export           Export sessions (jsonl, md, html, prompts or trace)
+  delete           Delete a session (asks for confirmation unless --yes)
+  prune            Delete ended, unpinned sessions inactive for longer than --older-than days
+  rewind           Rewind a session to a user message (soft delete; --restore undoes it)
+  repair           Rebuild the derived search indexes from the stored messages
+  vacuum           Compact state.db and truncate its write-ahead log
+  help             Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus sessions help browse`
@@ -10452,6 +10647,38 @@ Usage: prometheus sessions help siblings
 Import a JSONL export (all-or-none; ids must be new unless --remap-ids)
 
 Usage: prometheus sessions help import
+```
+
+## `prometheus sessions help recover`
+
+```text
+Copy every readable row of state.db into a new clean store (needs the store closed)
+
+Usage: prometheus sessions help recover
+```
+
+## `prometheus sessions help journal-mode`
+
+```text
+Switch state.db's journal mode offline (delete for filesystems without shared memory)
+
+Usage: prometheus sessions help journal-mode
+```
+
+## `prometheus sessions help refresh-prompts`
+
+```text
+Rebuild the stored system prompt of sessions at their next turn
+
+Usage: prometheus sessions help refresh-prompts
+```
+
+## `prometheus sessions help retitle`
+
+```text
+Regenerate automatic titles with the title model (user titles are kept)
+
+Usage: prometheus sessions help retitle
 ```
 
 ## `prometheus sessions help stats`
@@ -20699,27 +20926,31 @@ List, search, export and manage the profile's sessions
 Usage: prometheus help sessions [COMMAND]
 
 Commands:
-  browse     Pick a session interactively (status tags, search) and resume it
-  resume     Resume a session (id, id prefix or title) in a chat; a turn the process stopped during is resumed, closed or offered by `agent.resume_on_crash`
-  list       List sessions, most recently active first
-  show       Show a session (id, id prefix or title)
-  search     Full-text search over the profile's messages
-  rename     Set a session's title
-  pin        Pin a session (pinned sessions are never pruned)
-  unpin      Unpin a session
-  archive    Archive a session (hidden from the default listing)
-  unarchive  Unarchive a session
-  tree       Show a session's lineage tree (forks, continuations, delegates)
-  fork       Fork a session: a new session with its active messages up to --at
-  siblings   List the other children of a session's parent (forks, continuations)
-  import     Import a JSONL export (all-or-none; ids must be new unless --remap-ids)
-  stats      Show a session's and its lineage's message and token totals
-  export     Export sessions (jsonl, md, html, prompts or trace)
-  delete     Delete a session (asks for confirmation unless --yes)
-  prune      Delete ended, unpinned sessions inactive for longer than --older-than days
-  rewind     Rewind a session to a user message (soft delete; --restore undoes it)
-  repair     Rebuild the derived search indexes from the stored messages
-  vacuum     Compact state.db and truncate its write-ahead log
+  browse           Pick a session interactively (status tags, search) and resume it
+  resume           Resume a session (id, id prefix or title) in a chat; a turn the process stopped during is resumed, closed or offered by `agent.resume_on_crash`
+  list             List sessions, most recently active first
+  show             Show a session (id, id prefix or title)
+  search           Full-text search over the profile's messages
+  rename           Set a session's title
+  pin              Pin a session (pinned sessions are never pruned)
+  unpin            Unpin a session
+  archive          Archive a session (hidden from the default listing)
+  unarchive        Unarchive a session
+  tree             Show a session's lineage tree (forks, continuations, delegates)
+  fork             Fork a session: a new session with its active messages up to --at
+  siblings         List the other children of a session's parent (forks, continuations)
+  import           Import a JSONL export (all-or-none; ids must be new unless --remap-ids)
+  recover          Copy every readable row of state.db into a new clean store (needs the store closed)
+  journal-mode     Switch state.db's journal mode offline (delete for filesystems without shared memory)
+  refresh-prompts  Rebuild the stored system prompt of sessions at their next turn
+  retitle          Regenerate automatic titles with the title model (user titles are kept)
+  stats            Show a session's and its lineage's message and token totals
+  export           Export sessions (jsonl, md, html, prompts or trace)
+  delete           Delete a session (asks for confirmation unless --yes)
+  prune            Delete ended, unpinned sessions inactive for longer than --older-than days
+  rewind           Rewind a session to a user message (soft delete; --restore undoes it)
+  repair           Rebuild the derived search indexes from the stored messages
+  vacuum           Compact state.db and truncate its write-ahead log
 ```
 
 ## `prometheus help sessions browse`
@@ -20832,6 +21063,38 @@ Usage: prometheus help sessions siblings
 Import a JSONL export (all-or-none; ids must be new unless --remap-ids)
 
 Usage: prometheus help sessions import
+```
+
+## `prometheus help sessions recover`
+
+```text
+Copy every readable row of state.db into a new clean store (needs the store closed)
+
+Usage: prometheus help sessions recover
+```
+
+## `prometheus help sessions journal-mode`
+
+```text
+Switch state.db's journal mode offline (delete for filesystems without shared memory)
+
+Usage: prometheus help sessions journal-mode
+```
+
+## `prometheus help sessions refresh-prompts`
+
+```text
+Rebuild the stored system prompt of sessions at their next turn
+
+Usage: prometheus help sessions refresh-prompts
+```
+
+## `prometheus help sessions retitle`
+
+```text
+Regenerate automatic titles with the title model (user titles are kept)
+
+Usage: prometheus help sessions retitle
 ```
 
 ## `prometheus help sessions stats`

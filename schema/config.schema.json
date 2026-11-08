@@ -306,6 +306,34 @@
       "type": "object",
       "x-apply": "live"
     },
+    "AttachmentStorage": {
+      "description": "Attachment storage locations.",
+      "oneOf": [
+        {
+          "const": "blobs",
+          "description": "The profile blob store only.",
+          "type": "string"
+        },
+        {
+          "const": "workspace",
+          "description": "The blob store plus a copy under\n`<cwd>/.prometheus/attachments/<session_id>/` for tools to read by\npath.",
+          "type": "string"
+        }
+      ]
+    },
+    "AttachmentsConfig": {
+      "additionalProperties": false,
+      "description": "The `[attachments]` section.",
+      "properties": {
+        "storage": {
+          "$ref": "#/$defs/AttachmentStorage",
+          "default": "blobs",
+          "description": "Where received attachments are kept."
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
     "AuthConfig": {
       "additionalProperties": false,
       "description": "The `[auth]` section.",
@@ -6590,6 +6618,13 @@
           "minimum": 0,
           "type": "integer"
         },
+        "low_disk_bytes": {
+          "default": 1073741824,
+          "description": "Below this many free bytes on the store's volume an interactive\nstart offers to turn on auto-prune (when `retention_secs = 0`).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
         "max_export_messages": {
           "default": 20000,
           "description": "Refuse in-memory exports with more messages.",
@@ -8669,6 +8704,13 @@
       },
       "description": "Approval modes for dangerous tool calls."
     },
+    "attachments": {
+      "$ref": "#/$defs/AttachmentsConfig",
+      "default": {
+        "storage": "blobs"
+      },
+      "description": "Where received attachments are kept."
+    },
     "auth": {
       "$ref": "#/$defs/AuthConfig",
       "default": {
@@ -9268,6 +9310,7 @@
       "$ref": "#/$defs/SessionsConfig",
       "default": {
         "auto_archive_secs": 604800,
+        "low_disk_bytes": 1073741824,
         "max_export_messages": 20000,
         "max_resume_messages": 20000,
         "retention_secs": 0,

@@ -60,6 +60,8 @@ eval = []
 
 [dependencies]
 clap.workspace = true
+# Free space on the store's volume (low-disk prune prompt).
+sysinfo = { workspace = true, features = ["disk"] }
 jiff.workspace = true
 pmt-agent.workspace = true
 pmt-backup.workspace = true

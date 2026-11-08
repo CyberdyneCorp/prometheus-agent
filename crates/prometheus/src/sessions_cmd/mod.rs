@@ -4,6 +4,7 @@
 
 pub mod args;
 mod lineage;
+mod maintain;
 
 use std::fmt::Write as _;
 use std::io::Write as _;
@@ -31,6 +32,14 @@ use crate::session_export::{self, ExportOptions, session_json};
 /// The command's failure; the caller prints it and exits with its code.
 pub fn run(command: &SessionsCommand, ctx: &Context<'_>, ui: crate::chat::Ui) -> Result<u8, Error> {
     let scope = ctx.scope()?;
+    // Offline commands run with the store closed.
+    match command {
+        SessionsCommand::Recover { output, yes } => {
+            return maintain::recover(ctx, &scope, output.as_deref(), *yes);
+        }
+        SessionsCommand::JournalMode { mode } => return maintain::journal_mode(ctx, &scope, *mode),
+        _ => {}
+    }
     let store = Store::open(&scope)?;
     let session = |reference: &str| store.resolve_session(reference);
     match command {
@@ -84,15 +93,13 @@ pub fn run(command: &SessionsCommand, ctx: &Context<'_>, ui: crate::chat::Ui) ->
         ),
         SessionsCommand::Tree { session: r } => tree(ctx, &store, session(r)?),
         SessionsCommand::Stats { session: r } => stats(ctx, &store, session(r)?),
-        SessionsCommand::Fork {
-            session: r,
-            at,
-            title,
-        } => lineage::fork(ctx, &store, session(r)?, at.as_deref(), title.as_deref()),
-        SessionsCommand::Siblings { session: r } => lineage::siblings(ctx, &store, session(r)?),
-        SessionsCommand::Import { file, remap_ids } => {
-            lineage::import(ctx, &store, file, *remap_ids)
-        }
+        SessionsCommand::Fork { .. }
+        | SessionsCommand::Siblings { .. }
+        | SessionsCommand::Import { .. }
+        | SessionsCommand::RefreshPrompts { .. }
+        | SessionsCommand::Retitle { .. }
+        | SessionsCommand::Recover { .. }
+        | SessionsCommand::JournalMode { .. } => lineage_or_upkeep(command, ctx, &scope, &store),
         SessionsCommand::Export(args) => export(ctx, &scope, &store, args),
         SessionsCommand::Delete {
             session: r,
@@ -115,6 +122,39 @@ pub fn run(command: &SessionsCommand, ctx: &Context<'_>, ui: crate::chat::Ui) ->
             eprintln!("vacuumed {}", store.location().database().display());
             Ok(0)
         }
+    }
+}
+
+/// `fork`, `siblings`, `import`, `refresh-prompts` and `retitle`.
+fn lineage_or_upkeep(
+    command: &SessionsCommand,
+    ctx: &Context<'_>,
+    scope: &ProfileScope,
+    store: &Store,
+) -> Result<u8, Error> {
+    let session = |reference: &str| store.resolve_session(reference);
+    match command {
+        SessionsCommand::Fork {
+            session: r,
+            at,
+            title,
+        } => lineage::fork(ctx, store, session(r)?, at.as_deref(), title.as_deref()),
+        SessionsCommand::Siblings { session: r } => lineage::siblings(ctx, store, session(r)?),
+        SessionsCommand::Import { file, remap_ids } => {
+            lineage::import(ctx, store, file, *remap_ids)
+        }
+        SessionsCommand::RefreshPrompts { sessions, all } => {
+            maintain::refresh_prompts(ctx, store, sessions, *all)
+        }
+        SessionsCommand::Retitle {
+            sessions,
+            all,
+            auto_only,
+        } => maintain::retitle(ctx, scope, store, sessions, (*all, *auto_only)),
+        SessionsCommand::Recover { .. } | SessionsCommand::JournalMode { .. } => {
+            unreachable!("handled before the store opens")
+        }
+        _ => unreachable!("only lineage and upkeep commands reach here"),
     }
 }
 

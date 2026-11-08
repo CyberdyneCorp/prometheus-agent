@@ -102,6 +102,41 @@ pub enum SessionsCommand {
         #[arg(long)]
         remap_ids: bool,
     },
+    /// Copy every readable row of state.db into a new clean store (needs the store closed).
+    Recover {
+        /// Write the recovered store here instead of next to state.db (no swap).
+        #[arg(short, long, value_name = "FILE")]
+        output: Option<PathBuf>,
+        /// Swap the recovered store in without asking.
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Switch state.db's journal mode offline (delete for filesystems without shared memory).
+    JournalMode {
+        /// The journal mode.
+        mode: JournalModeArg,
+    },
+    /// Rebuild the stored system prompt of sessions at their next turn.
+    RefreshPrompts {
+        /// Sessions (id, id prefix or title).
+        #[arg(required_unless_present = "all", conflicts_with = "all")]
+        sessions: Vec<String>,
+        /// Every resumable session.
+        #[arg(long)]
+        all: bool,
+    },
+    /// Regenerate automatic titles with the title model (user titles are kept).
+    Retitle {
+        /// Sessions (id, id prefix or title).
+        #[arg(conflicts_with_all = ["all", "auto_only"])]
+        sessions: Vec<String>,
+        /// Every session not titled by the user (untitled ones too).
+        #[arg(long)]
+        all: bool,
+        /// Only sessions that already have an automatic title.
+        #[arg(long)]
+        auto_only: bool,
+    },
     /// Show a session's and its lineage's message and token totals.
     Stats {
         /// Session id, id prefix or title.
@@ -221,6 +256,15 @@ pub struct ExportArgs {
     /// Write to this file instead of stdout.
     #[arg(short, long, value_name = "FILE")]
     pub output: Option<PathBuf>,
+}
+
+/// SQLite journal modes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum JournalModeArg {
+    /// Write-ahead log (default).
+    Wal,
+    /// Rollback journal (filesystems without shared-memory support).
+    Delete,
 }
 
 /// Search result order on the command line.

@@ -21,6 +21,9 @@ pub struct SessionsConfig {
     pub max_resume_messages: u64,
     /// Refuse in-memory exports with more messages.
     pub max_export_messages: u64,
+    /// Below this many free bytes on the store's volume an interactive
+    /// start offers to turn on auto-prune (when `retention_secs = 0`).
+    pub low_disk_bytes: u64,
 }
 
 impl Default for SessionsConfig {
@@ -31,8 +34,31 @@ impl Default for SessionsConfig {
             auto_archive_secs: 604_800,
             max_resume_messages: 20_000,
             max_export_messages: 20_000,
+            low_disk_bytes: 1_073_741_824,
         }
     }
+}
+
+/// The `[attachments]` section.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+#[schemars(extend("x-apply" = "next_session"))]
+pub struct AttachmentsConfig {
+    /// Where received attachments are kept.
+    pub storage: AttachmentStorage,
+}
+
+/// Attachment storage locations.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AttachmentStorage {
+    /// The profile blob store only.
+    #[default]
+    Blobs,
+    /// The blob store plus a copy under
+    /// `<cwd>/.prometheus/attachments/<session_id>/` for tools to read by
+    /// path.
+    Workspace,
 }
 
 /// The `[storage]` section.

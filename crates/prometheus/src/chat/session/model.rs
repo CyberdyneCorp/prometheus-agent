@@ -472,6 +472,64 @@ impl Models {
         )))
     }
 
+    /// A title for `conversation` from the `title` auxiliary route (default:
+    /// the profile's main route); `None` when no route answers.
+    ///
+    /// # Errors
+    ///
+    /// The resolution error of a pinned route; the call's failure.
+    pub async fn ask_title(
+        &self,
+        session: pmt_core::id::SessionId,
+        conversation: &str,
+    ) -> Result<Option<String>, Error> {
+        const SYSTEM: &str = "Write a short title (at most 6 words) for the conversation \
+            below. Answer with the title only, no quotes or punctuation at the end.";
+        let main_target = self.primary(&RouteFlags::default()).await?;
+        let resolver = self.resolver();
+        let main = resolver
+            .resolve_target(&main_target, &mut Trace::default())
+            .await
+            .ok();
+        let ctx = AuxContext {
+            resolver: &resolver,
+            main: main.as_ref(),
+            health: &*self.setup.health,
+        };
+        let Some(route) = auxiliary::resolve(AuxTask::Title, &AuxArgs::default(), &ctx).await?
+        else {
+            return Ok(None);
+        };
+        let request = Request {
+            system: vec![pmt_providers::request::SystemBlock {
+                text: SYSTEM.to_owned(),
+                cache_breakpoint: false,
+            }],
+            messages: vec![pmt_providers::request::Message::text(
+                pmt_providers::request::Role::User,
+                conversation,
+            )],
+            max_output_tokens: Some(40),
+            ..Request::default()
+        };
+        let context = CallContext::new(session, &AuxTask::Title.purpose());
+        let reply = tokio::time::timeout(route.timeout, self.aux.call(&route, &request, &context))
+            .await
+            .map_err(|_| {
+                Error::new(
+                    &pmt_core::error::codes::PROVIDER_CALL_FAILED,
+                    "the title model did not answer in time",
+                )
+            })??;
+        let title = reply
+            .text
+            .lines()
+            .map(|l| l.trim().trim_matches(['"', '\'', '.']).trim())
+            .find(|l| !l.is_empty())
+            .map(str::to_owned);
+        Ok(title)
+    }
+
     /// The session's approval guardian on its `approval` auxiliary route.
     pub(crate) fn guardian(
         &self,

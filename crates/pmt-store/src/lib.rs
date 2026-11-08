@@ -55,10 +55,12 @@ pub mod onboarding;
 pub mod pins;
 pub mod portable;
 pub mod prefill;
+pub mod prefs;
 pub mod process_receipts;
 pub mod prompts;
 pub mod provider_state;
 pub mod rebind;
+pub mod recover;
 pub mod retention;
 pub mod rewind;
 pub mod search;
@@ -112,7 +114,7 @@ pub use usage_query::UsageFilter;
 /// The newest `state.db` schema version this build reads and writes
 /// (`store_meta.schema_version`); every embedded migration bumps it, and a
 /// newer store opens read-only. Reported by `prometheus version --json`.
-pub const SCHEMA_VERSION: u32 = 32;
+pub const SCHEMA_VERSION: u32 = 33;
 
 #[cfg(test)]
 mod tests {

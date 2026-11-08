@@ -93,13 +93,32 @@ impl Store {
     }
 
     pub(crate) fn open_with(scope: &ProfileScope, migrations: &[Migration]) -> Result<Self, Error> {
+        Self::open_location(scope, StoreLocation::of(scope), migrations)
+    }
+
+    /// A new store of `scope`'s profile at `database` (offline recovery).
+    ///
+    /// # Errors
+    ///
+    /// As [`Store::open`].
+    pub(crate) fn open_at(scope: &ProfileScope, database: &Path) -> Result<Self, Error> {
+        let location = StoreLocation::of(scope).with_database(database);
+        Self::open_location(scope, location, migrate::MIGRATIONS)
+    }
+
+    fn open_location(
+        scope: &ProfileScope,
+        location: StoreLocation,
+        migrations: &[Migration],
+    ) -> Result<Self, Error> {
         let profile = scope.profile().clone();
         profile.ensure_live()?;
         let profile_id = profile.id()?;
-        let location = StoreLocation::of(scope);
         let database = location.database().to_path_buf();
         files::private_dir(location.blobs())?;
-        let journal = scope.config().storage.journal_mode;
+        // `sessions journal-mode` recorded in the store wins over config.
+        let journal = crate::recover::recorded_journal_mode(&database)
+            .unwrap_or(scope.config().storage.journal_mode);
         if journal == JournalMode::Wal {
             files::check_wal_supported(scope.dir())?;
         }

@@ -9,6 +9,7 @@
 
 pub mod args;
 pub mod attach;
+pub mod autoprune;
 pub mod commands;
 pub mod display;
 pub mod handoff;
