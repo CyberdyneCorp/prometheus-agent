@@ -107,15 +107,27 @@ async fn a_coding_plan_key_lands_on_the_coding_endpoint_and_is_not_probed_again(
     let route = zai_route(&env, &extras).await;
     let coding = format!("{}/intl-coding/v4", server.uri());
     assert_eq!(route.base_url, coding);
-    assert_eq!(probes(&server).await, 4, "one probe per endpoint");
-    let sent = &server.received_requests().await.unwrap()[0];
-    let body: serde_json::Value = serde_json::from_slice(&sent.body).unwrap();
+    // The decision waits for every higher-priority probe; the lowest one may
+    // be aborted before it is sent once the winner is known.
+    let first_set = server.received_requests().await.unwrap_or_default();
+    let probed: Vec<&str> = first_set.iter().map(|r| r.url.path()).collect();
+    for prefix in ["intl", "cn", "intl-coding"] {
+        let endpoint = format!("/{prefix}/v4/chat/completions");
+        assert!(
+            probed.contains(&endpoint.as_str()),
+            "{endpoint} not probed: {probed:?}"
+        );
+    }
+    assert!(first_set.len() <= 4, "one probe per endpoint: {probed:?}");
+    let body: serde_json::Value = serde_json::from_slice(&first_set[0].body).unwrap();
     assert_eq!(body["max_tokens"], 1);
 
     // The next session start reuses the remembered endpoint.
     let again = zai_route(&env, &extras).await;
     assert_eq!(again.base_url, coding);
-    assert_eq!(probes(&server).await, 4, "no second probe set");
+    // A second probe set would add at least three more requests (an aborted
+    // fourth probe may still land late, so the count is bounded, not exact).
+    assert!(probes(&server).await <= 4, "no second probe set");
 }
 
 /// Scenario: Failed probes are not repeated immediately.
