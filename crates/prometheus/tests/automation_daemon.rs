@@ -248,9 +248,19 @@ fn a_client_sessions_loop_keeps_firing_with_no_client_attached() {
     wait("three wakeups ran", Duration::from_mins(1), || {
         automated(home.path(), "default", "loop") >= 3
     });
-    let messages = common::session_messages(home.path(), &id);
-    let replies = messages.iter().filter(|m| m["role"] == "assistant").count();
-    assert!(replies >= 3, "{messages:?}");
+    // The third wakeup's prompt is stored before its reply: wait for the
+    // replies too, so a slow runner cannot catch the turn mid-flight.
+    let replies = || {
+        common::session_messages(home.path(), &id)
+            .iter()
+            .filter(|m| m["role"] == "assistant")
+            .count()
+    };
+    wait(
+        "three wakeups were answered",
+        Duration::from_mins(1),
+        || replies() >= 3,
+    );
 }
 
 /// Goal judge loop on a conversation's session when the turn comes from
