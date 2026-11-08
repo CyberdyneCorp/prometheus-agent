@@ -213,3 +213,99 @@ async fn a_provider_plugin_claims_its_404_and_the_turn_falls_back() {
     assert!(out.status.success(), "{}", stderr(&out));
     assert_eq!(stdout(&out), "mock: hi\n");
 }
+
+/// Scenario: Plugin cannot read the PKCE verifier (spec: model-providers,
+/// Plugin OAuth and external-process providers). The plugin declares a
+/// PKCE sign-in; the host runs it against a mock identity provider and
+/// signs requests itself, and the plugin's `prepare-request` (which copies
+/// what it was given into `plugin_saw`) sees only the opaque credential
+/// handle: no verifier, `state`, access or refresh token.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_plugin_sign_in_runs_in_the_host_and_the_plugin_gets_only_a_handle() {
+    const ACCESS: &str = "plugin-access-token-0123456789";
+    const REFRESH: &str = "plugin-refresh-token-0123456789";
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "access_token": ACCESS, "refresh_token": REFRESH, "expires_in": 3600
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .and(header("authorization", format!("Bearer {ACCESS}").as_str()))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_string(STREAM),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    let home = mock_home();
+    place(home.path(), "providers = [\"acme\"]");
+    append_config(
+        home.path(),
+        &format!(
+            "\n[plugins.entries.llms]\nmodel_ids = \"acme\"\nbase_url = \"{0}/v1\"\noauth_issuer = \"{0}\"\n",
+            server.uri()
+        ),
+    );
+    ok(&run(
+        home.path(),
+        &["config", "set", "budgets.allow_unpriced", "true"],
+    ));
+    let mut add = common::command(home.path());
+    add.args(["auth", "add", "acme", "--type", "oauth"]);
+    let (code, text) = tokio::task::spawn_blocking(move || common::browser_sign_in(&mut add))
+        .await
+        .unwrap();
+    assert_eq!(code, Some(0), "{text}");
+    let exchange = &server.received_requests().await.unwrap()[0];
+    let form: std::collections::BTreeMap<String, String> =
+        url::form_urlencoded::parse(&exchange.body)
+            .into_owned()
+            .collect();
+    assert_eq!(form["client_id"], "testing-plugin");
+    let verifier = form["code_verifier"].clone();
+    let state = text
+        .split("state=")
+        .nth(1)
+        .and_then(|rest| rest.split(['&', '\n']).next())
+        .expect("the authorize URL's state")
+        .to_owned();
+    let home_path = home.path().to_path_buf();
+    let out = tokio::task::spawn_blocking(move || {
+        run(
+            &home_path,
+            &["-z", "hi", "--provider", "acme", "--model", "plugin-model"],
+        )
+    })
+    .await
+    .unwrap();
+    assert!(out.status.success(), "{}", stderr(&out));
+    assert!(stdout(&out).contains("from the plugin provider"));
+    let requests = server.received_requests().await.unwrap();
+    let call = requests
+        .iter()
+        .find(|r| r.url.path() == "/v1/chat/completions")
+        .expect("the model call");
+    let sent: serde_json::Value = serde_json::from_slice(&call.body).unwrap();
+    assert!(sent.get("prometheus_credential").is_none(), "{sent}");
+    let saw = sent["plugin_saw"].as_str().expect("the plugin's copy");
+    assert!(
+        saw.contains(r#""prometheus_credential":"subscription:acme/"#),
+        "{saw}"
+    );
+    for secret in [
+        verifier.as_str(),
+        state.as_str(),
+        ACCESS,
+        REFRESH,
+        "browser-code",
+    ] {
+        assert!(!saw.contains(secret), "the plugin saw {secret}: {saw}");
+    }
+}

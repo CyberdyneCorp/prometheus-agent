@@ -377,6 +377,23 @@ fn a_profile_naming_a_missing_bridged_provider_fails_closed() {
     );
 }
 
+/// A Hermes model-provider plugin declaring its sign-in through the
+/// documented `hermes_cli.auth_oauth_pkce_plugin` (spec: model-providers,
+/// Plugin OAuth and external-process providers): the declaration becomes
+/// the host's browser PKCE sign-in, and a broker that would receive the
+/// verifier (Solstice's shape) is refused at load.
+#[test]
+fn a_declared_pkce_sign_in_becomes_the_hosts_and_a_broker_is_refused() {
+    let home = mock_home();
+    pmt_pybridge::testkit::seed(home.path());
+    install(home.path(), "pkce", "pkce", "all");
+    let out = run(home.path(), &["--json", "auth", "status", "example-pkce"]);
+    let doc: serde_json::Value = serde_json::from_str(&ok(&out)).unwrap();
+    assert_eq!(doc["login_flows"], serde_json::json!(["browser"]), "{doc}");
+    let out = run(home.path(), &["auth", "status", "brokered"]);
+    assert!(!out.status.success(), "{}", stdout(&out));
+}
+
 #[test]
 fn a_skill_script_gets_its_environment_and_no_plugin_environment() {
     let home = mock_home();

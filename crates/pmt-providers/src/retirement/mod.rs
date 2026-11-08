@@ -18,7 +18,7 @@ use pmt_config::schema::ModelEntry;
 use pmt_core::error::{Error, codes};
 use serde::Serialize;
 
-pub use scan::{Finding, Rewrite, scan};
+pub use scan::{Finding, PinFinding, Rewrite, scan, scan_pin};
 
 /// Whether a model still answers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

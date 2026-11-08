@@ -3,7 +3,7 @@
 
 #![allow(dead_code, unreachable_pub)]
 
-use std::io::Write as _;
+use std::io::{BufRead as _, Read as _, Write as _};
 use std::path::Path;
 use std::process::{Command, Output, Stdio};
 
@@ -276,4 +276,49 @@ pub fn turns_started(home: &Path) -> usize {
         .filter_map(|entry| std::fs::read_to_string(entry.path()).ok())
         .map(|text| text.matches("\"turn.start\"").count())
         .sum()
+}
+
+/// Runs a browser sign-in: reads stderr until the authorization URL,
+/// answers its callback like the browser would, and returns stderr.
+pub fn browser_sign_in(cmd: &mut std::process::Command) -> (Option<i32>, String) {
+    let mut child = cmd
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut lines = std::io::BufReader::new(child.stderr.take().unwrap()).lines();
+    let mut seen = String::new();
+    let mut url = None;
+    for line in lines.by_ref() {
+        let line = line.unwrap();
+        seen.push_str(&line);
+        seen.push('\n');
+        if seen.contains("Open this URL") && line.starts_with("  http") {
+            url = Some(line.trim().to_owned());
+        }
+        if line.starts_with("Waiting for the callback") {
+            break;
+        }
+    }
+    let url = url::Url::parse(&url.unwrap_or_else(|| panic!("no URL in:\n{seen}"))).unwrap();
+    let query: std::collections::BTreeMap<String, String> =
+        url.query_pairs().into_owned().collect();
+    let redirect = url::Url::parse(&query["redirect_uri"]).unwrap();
+    let mut stream = std::net::TcpStream::connect(("127.0.0.1", redirect.port().unwrap())).unwrap();
+    write!(
+        stream,
+        "GET {}?code=browser-code&state={} HTTP/1.1\r\nhost: localhost\r\n\r\n",
+        redirect.path(),
+        query["state"]
+    )
+    .unwrap();
+    let mut answer = String::new();
+    stream.read_to_string(&mut answer).unwrap();
+    assert!(answer.starts_with("HTTP/1.1 200"), "{answer}");
+    for line in lines {
+        seen.push_str(&line.unwrap());
+        seen.push('\n');
+    }
+    (child.wait().unwrap().code(), seen)
 }

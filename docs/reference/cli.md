@@ -630,7 +630,7 @@ Commands:
   edit        Edit config.toml in $VISUAL / $EDITOR; the result is validated before it is saved
   validate    Validate config.toml (exit 0 when valid, 78 when not)
   explain     Explain a key: type, default, effective value, source, apply class
-  fix-models  List config keys naming a deprecated or retired model with their replacements; nothing changes without --apply
+  fix-models  List config keys and cron job pins naming a deprecated or retired model with their replacements; nothing changes without --apply
   schema      Print the config.toml JSON Schema (draft 2020-12)
   docs        Print the configuration reference (Markdown)
   help        Print this message or the help of the given subcommand(s)
@@ -1007,13 +1007,13 @@ Options:
 ## `prometheus config fix-models`
 
 ```text
-List config keys naming a deprecated or retired model with their replacements; nothing changes without --apply
+List config keys and cron job pins naming a deprecated or retired model with their replacements; nothing changes without --apply
 
 Usage: prometheus config fix-models [OPTIONS]
 
 Options:
       --apply
-          Rewrite the keys (config.toml is first copied to config.toml.bak-<timestamp>)
+          Rewrite the keys (config.toml is first copied to config.toml.bak-<timestamp>) and the job pins
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
@@ -1143,7 +1143,7 @@ Commands:
   edit        Edit config.toml in $VISUAL / $EDITOR; the result is validated before it is saved
   validate    Validate config.toml (exit 0 when valid, 78 when not)
   explain     Explain a key: type, default, effective value, source, apply class
-  fix-models  List config keys naming a deprecated or retired model with their replacements; nothing changes without --apply
+  fix-models  List config keys and cron job pins naming a deprecated or retired model with their replacements; nothing changes without --apply
   schema      Print the config.toml JSON Schema (draft 2020-12)
   docs        Print the configuration reference (Markdown)
   help        Print this message or the help of the given subcommand(s)
@@ -1216,7 +1216,7 @@ Usage: prometheus config help explain
 ## `prometheus config help fix-models`
 
 ```text
-List config keys naming a deprecated or retired model with their replacements; nothing changes without --apply
+List config keys and cron job pins naming a deprecated or retired model with their replacements; nothing changes without --apply
 
 Usage: prometheus config help fix-models
 ```
@@ -19948,7 +19948,7 @@ Commands:
   edit        Edit config.toml in $VISUAL / $EDITOR; the result is validated before it is saved
   validate    Validate config.toml (exit 0 when valid, 78 when not)
   explain     Explain a key: type, default, effective value, source, apply class
-  fix-models  List config keys naming a deprecated or retired model with their replacements; nothing changes without --apply
+  fix-models  List config keys and cron job pins naming a deprecated or retired model with their replacements; nothing changes without --apply
   schema      Print the config.toml JSON Schema (draft 2020-12)
   docs        Print the configuration reference (Markdown)
 ```
@@ -20020,7 +20020,7 @@ Usage: prometheus help config explain
 ## `prometheus help config fix-models`
 
 ```text
-List config keys naming a deprecated or retired model with their replacements; nothing changes without --apply
+List config keys and cron job pins naming a deprecated or retired model with their replacements; nothing changes without --apply
 
 Usage: prometheus help config fix-models
 ```

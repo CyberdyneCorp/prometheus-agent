@@ -138,7 +138,50 @@ fn slots<'a>(config: &'a Config, main: Option<&'a str>) -> Vec<Slot<'a>> {
             provider: delegation.review.provider.as_deref().or(main),
         });
     }
+    if let Some(value) = config.cron.model.as_deref() {
+        slots.push(Slot {
+            key: "cron.model".to_owned(),
+            value,
+            provider_key: Some("cron.model_provider".to_owned()),
+            provider: config.cron.model_provider.as_deref().or(main),
+        });
+    }
     slots
+}
+
+/// A model pinned outside `config.toml` (a cron job's `model` and
+/// `provider`) naming a deprecated or retired id.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PinFinding {
+    /// The finding, under the caller's `key`.
+    pub finding: Finding,
+    /// The pin's new `(model, provider)`; the provider is `Some` only when
+    /// it changes. `None`: no replacement is known.
+    pub rewrite: Option<(String, Option<String>)>,
+}
+
+/// Checks a pinned `model` (with its own `provider`, else the profile's
+/// main provider for a bare id), reported under `key`; written back in the
+/// same form as config keys are.
+#[must_use]
+pub fn scan_pin(
+    config: &Config,
+    registry: &ProviderRegistry,
+    key: String,
+    model: &str,
+    provider: Option<&str>,
+) -> Option<PinFinding> {
+    let slot = Slot {
+        key,
+        value: model,
+        provider_key: Some("provider".to_owned()),
+        provider: provider.or(config.model.provider.as_deref()),
+    };
+    let (entry, placed) = examine(config, registry, &slot)?;
+    Some(PinFinding {
+        finding: finding(&slot, &entry, placed.as_ref()),
+        rewrite: placed.map(|p| (p.value, p.provider)),
+    })
 }
 
 /// `auxiliary.<task>.model`, read through the typed section's fields.
@@ -305,6 +348,32 @@ mod tests {
         );
         assert_eq!(rewrite.findings[1].status, Status::Deprecated);
         assert_eq!(rewrite.chain.as_ref().unwrap()[0].model, "grok-4");
+    }
+
+    #[test]
+    fn the_cron_default_model_is_scanned_with_its_provider_key() {
+        let rewrite = scanned(
+            "[model]\nprovider = \"anthropic\"\ndefault = \"claude-sonnet-4-5\"\n\
+             [cron]\nmodel_provider = \"xai\"\nmodel = \"grok-2\"\n",
+        );
+        assert_eq!(
+            rewrite.sets,
+            [("cron.model".to_owned(), "grok-4".to_owned())]
+        );
+        assert_eq!(rewrite.findings[0].key, "cron.model");
+    }
+
+    #[test]
+    fn a_pinned_model_is_rewritten_in_its_own_form() {
+        let config: Config =
+            toml::from_str("[model]\nprovider = \"xai\"\ndefault = \"grok-4\"\n").unwrap();
+        let registry = ProviderRegistry::for_profile(&config, Vec::new()).unwrap();
+        let bare = scan_pin(&config, &registry, "job".into(), "grok-2", None).unwrap();
+        assert_eq!(bare.rewrite, Some(("grok-4".to_owned(), None)));
+        assert_eq!(bare.finding.key, "job");
+        let prefixed = scan_pin(&config, &registry, "job".into(), "xai/grok-2", None).unwrap();
+        assert_eq!(prefixed.rewrite, Some(("xai/grok-4".to_owned(), None)));
+        assert!(scan_pin(&config, &registry, "job".into(), "grok-4", Some("xai")).is_none());
     }
 
     #[test]

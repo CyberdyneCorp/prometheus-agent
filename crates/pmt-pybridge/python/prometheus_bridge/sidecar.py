@@ -253,7 +253,30 @@ def _profile(profile):
                     if getattr(type(profile), h, None) is not getattr(ProviderProfile, h, None)]
     if getattr(profile, "classify_api_error", None):
         out["hooks"].append("classify_api_error")
+    if getattr(profile, "process_command", ""):
+        out["process_command"] = profile.process_command
+    out.update(_oauth(profile))
     return out
+
+
+def _oauth(profile):
+    """The PKCE sign-in a profile declares through ``hermes_cli.auth_oauth_pkce_plugin``, as the
+    descriptor's public ``oauth`` metadata; the host runs the flow."""
+    from hermes_cli.auth_oauth_pkce_plugin import CONFIG_ATTR
+
+    cfg = getattr(profile.auth_handler, CONFIG_ATTR, None) or getattr(profile.refresh_credential, CONFIG_ATTR, None)
+    if cfg is None:
+        return {}
+    if cfg.token_request is not None:
+        return {"oauth_refused": f"provider '{profile.name}': a token_request broker would receive the PKCE "
+                                 "verifier; the Prometheus host runs the token exchange itself"}
+    params = dict(cfg.extra_authorize_params)
+    if cfg.audience:
+        params.setdefault("audience", cfg.audience)
+    return {"oauth": {"client_id": cfg.client_id, "authorize_url": cfg.authorize_url, "token_url": cfg.token_url,
+                      "scopes": list(cfg.scopes), "allowed_hosts": list(cfg.allowed_hosts),
+                      "redirect_port": int(cfg.redirect_port), "redirect_path": cfg.redirect_path,
+                      "authorize_params": params}}
 
 
 def _tool(_, params):

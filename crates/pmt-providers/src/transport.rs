@@ -152,10 +152,22 @@ impl Sender {
             let feed = self.mock.reply(route, request)?;
             return ModelStream::start(Source::Mock(feed), Limits::of(route)).await;
         }
+        if let Some(launch) = crate::external::launch(route) {
+            let limits = Limits::of(route);
+            let feed = crate::external::AcpFeed::start(launch, request, limits).await?;
+            return ModelStream::start(Source::Acp(Box::new(feed)), limits).await;
+        }
         let hooks = self.hooks.as_deref().filter(|h| h.handles(&route.provider));
         send_http(&self.client, hooks, route, request).await
     }
 }
+
+/// The body field carrying the route's opaque credential handle to the
+/// plugin's `prepare-request` (spec: model-providers, Plugin OAuth and
+/// external-process providers): it names the credential
+/// (`subscription:<provider>/<label>`) and never holds a token, verifier
+/// or `state`; it is removed before the request is sent.
+pub const CREDENTIAL_HANDLE: &str = "prometheus_credential";
 
 /// The body and extra headers of a request, through the plugin's hooks.
 /// A hook that fails (a crashed or stalled plugin) fails the call without
@@ -186,10 +198,20 @@ async fn hooked(
             message: None,
         })),
     };
-    let body = hooks
+    let mut body = body;
+    if let Some(fields) = body.as_object_mut() {
+        fields.insert(
+            CREDENTIAL_HANDLE.to_owned(),
+            route.credential.describe().into(),
+        );
+    }
+    let mut body = hooks
         .prepare(&route.provider, body)
         .await
         .map_err(|why| failed("prepare the request", why))?;
+    if let Some(fields) = body.as_object_mut() {
+        fields.remove(CREDENTIAL_HANDLE);
+    }
     let headers = hooks
         .headers(&route.provider)
         .await
@@ -346,6 +368,7 @@ impl Limits {
 enum Source {
     Http(HttpBody),
     Mock(Feed),
+    Acp(Box<crate::external::AcpFeed>),
 }
 
 /// An HTTP response body decoded from its wire format's SSE events.
@@ -518,6 +541,7 @@ impl ModelStream {
             match &mut self.source {
                 Source::Http(body) => body.step(&mut self.normalizer, self.limits).await?,
                 Source::Mock(feed) => feed.step(&mut self.normalizer, self.limits).await?,
+                Source::Acp(feed) => feed.step(&mut self.normalizer, self.limits).await?,
             }
             self.pending.extend(self.normalizer.drain());
         }

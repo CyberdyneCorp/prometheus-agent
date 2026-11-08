@@ -2863,7 +2863,7 @@ capabilities = [
 "Laptop wakes before Wi-Fi" = ["crates/pmt-cron/tests/failures.rs::an_unreachable_model_is_re_run_without_a_failure_notice", "crates/prometheus/tests/cron_upgrades.rs::an_unreachable_provider_schedules_a_re_run", "crates/prometheus/src/cron_host/agent.rs::failures_before_the_model_are_classified"]
 
 [scheduled-jobs."Hold through a closed provider usage window"]
-"Sub-hourly job does not alert every tick" = { tests = ["crates/pmt-cron/tests/failures.rs::a_closed_usage_window_holds_the_job_with_one_notice", "crates/prometheus/tests/cron_upgrades.rs::a_benched_provider_holds_a_sub_hourly_job"], note = "the provider's signal is `auth.credentials_benched` (every credential benched until a reset instant, carried as the error's typed `BenchEnd` source) raised before any request with no fallback chain; the scripted test drives the 5-hour schedule" }
+"Sub-hourly job does not alert every tick" = { tests = ["crates/pmt-cron/tests/failures.rs::a_closed_usage_window_holds_the_job_with_one_notice", "crates/prometheus/tests/cron_upgrades.rs::a_benched_provider_holds_a_sub_hourly_job", "crates/prometheus/tests/cron_upgrades.rs::a_pinned_job_is_held_despite_the_profile_fallback_chain"], note = "the provider's signal is `auth.credentials_benched` (every credential benched until a reset instant, carried as the error's typed `BenchEnd` source) raised before any request with no usable fallback chain (none configured, or the job is pinned so the profile chain is not its own); the scripted test drives the 5-hour schedule" }
 
 [scheduled-jobs."Failure incidents with alert-once and acknowledge"]
 "Same error alerts once" = ["crates/pmt-cron/tests/failures.rs::the_same_error_alerts_once"]
@@ -2994,7 +2994,11 @@ capabilities = [
 
 # Group 45 (subscription providers and routing).
 [configuration-and-profiles."Retired model rewrite"]
-"Dry run by default" = ["crates/prometheus/tests/model_retirement.rs::fix_models_is_a_dry_run_by_default", "crates/prometheus/tests/model_retirement.rs::fix_models_apply_rewrites_every_slot_after_a_backup"]
+"Dry run by default" = ["crates/prometheus/tests/model_retirement.rs::fix_models_is_a_dry_run_by_default", "crates/prometheus/tests/model_retirement.rs::fix_models_apply_rewrites_every_slot_after_a_backup", "crates/prometheus/tests/model_retirement.rs::fix_models_covers_the_cron_default_and_pinned_jobs"]
+
+[model-providers."Plugin OAuth and external-process providers"]
+"Missing external CLI" = ["crates/prometheus/tests/provider_routing_cli.rs::a_session_on_a_missing_agent_cli_names_it", "crates/pmt-providers/tests/providers/external.rs::a_missing_agent_cli_fails_the_route_naming_it", "crates/pmt-providers/tests/providers/external.rs::an_agent_cli_answers_over_acp_with_its_own_sign_in"]
+"Plugin cannot read the PKCE verifier" = { tests = ["crates/prometheus/tests/plugins_providers.rs::a_plugin_sign_in_runs_in_the_host_and_the_plugin_gets_only_a_handle", "crates/prometheus/tests/python_bridge.rs::a_declared_pkce_sign_in_becomes_the_hosts_and_a_broker_is_refused"], note = "the sample WASM provider plugin declares the sign-in; its prepare-request copies everything it receives into the sent body, which holds the opaque `prometheus_credential` handle and none of the verifier, state, code or tokens" }
 
 [model-providers."Model retirement table"]
 "Retired default model" = ["crates/prometheus/tests/model_retirement.rs::a_retired_default_model_refuses_a_chat_naming_its_replacement", "crates/pmt-providers/src/retirement/mod.rs::retired_ids_are_refused_naming_the_replacement_and_the_rewrite"]
@@ -3028,7 +3032,7 @@ capabilities = [
 "Ledger distinguishes subscription calls" = ["crates/prometheus/tests/provider_routing_cli.rs::ledger_distinguishes_subscription_calls"]
 
 [model-providers."Scoped fallback chains for pinned owners"]
-"Pinned cron job" = { tests = ["crates/pmt-providers/tests/providers/routing.rs::pinned_cron_job_gets_no_inherited_chain"], note = "fallback::scoped_chain gives a pinned owner no inherited chain and the call fails on its own route; the cron runner (scheduled-jobs, not yet built) reports that failure on the job run" }
+"Pinned cron job" = ["crates/prometheus/tests/cron_upgrades.rs::a_pinned_job_does_not_inherit_the_profile_fallback_chain", "crates/pmt-providers/tests/providers/routing.rs::pinned_cron_job_gets_no_inherited_chain"]
 
 [model-providers."Provider health scoring (upgrade)"]
 "Repeated overloads lower the score" = ["crates/prometheus/tests/provider_routing_cli.rs::repeated_overloads_lower_the_score", "crates/pmt-providers/tests/providers/routing.rs::repeated_overloads_lower_the_score"]

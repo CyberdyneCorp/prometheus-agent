@@ -25,6 +25,9 @@ pub struct CronRun {
     pub memory_write: bool,
     /// `cron.allow_agent_scheduling`.
     pub allow_scheduling: bool,
+    /// The job pins its own model or provider: the run gets no fallback
+    /// chain (the job declares none) and fails on its own route.
+    pub pinned: bool,
     /// The run's notepad channel directory
     /// ([`crate::cron_host::notepad`]): writable by its terminal, whose
     /// `PATH` starts with the channel's `bin/`.

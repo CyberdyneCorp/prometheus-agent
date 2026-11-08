@@ -189,3 +189,31 @@ fn repeated_overloads_lower_the_score() {
     let text = ok(&run(home.path(), &["providers", "health"]));
     assert!(text.contains("overloaded 10"), "{text}");
 }
+
+/// Scenario: Missing external CLI (spec: model-providers, Plugin OAuth and
+/// external-process providers): `claude` is on neither `PATH` nor the
+/// user-local bin directories, so the session does not start.
+#[test]
+fn a_session_on_a_missing_agent_cli_names_it() {
+    let home = temp_home();
+    write_config(
+        home.path(),
+        "[model]\nprovider = \"agent-cli\"\ndefault = \"default\"\n\n\
+         [providers.agent-cli]\nauth = \"external_process\"\ncommand = \"claude\"\n",
+    );
+    let empty = home.path().join("empty");
+    std::fs::create_dir_all(&empty).unwrap();
+    let out = common::command(home.path())
+        .env("PATH", &empty)
+        .env("HOME", &empty)
+        .env("USERPROFILE", &empty)
+        .args(["-z", "hi"])
+        .output()
+        .unwrap();
+    let err = common::stderr(&out);
+    assert_eq!(out.status.code(), Some(69), "{err}");
+    assert!(
+        err.contains("agent CLI 'claude', which is not installed"),
+        "{err}"
+    );
+}

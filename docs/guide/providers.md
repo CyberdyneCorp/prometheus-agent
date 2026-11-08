@@ -181,3 +181,26 @@ $ prometheus config set auth.adopt_external_logins false
 $ prometheus config get auth.adopt_external_logins
 false
 ```
+
+## Agent CLIs over ACP
+
+A provider with `auth = "external_process"` drives an installed agent CLI
+over the Agent Client Protocol, with that CLI's own sign-in; no token
+passes through Prometheus and the ledger records the calls as
+`subscription:<id>/external`:
+
+```toml
+[providers.agent-cli]
+auth = "external_process"
+command = "claude-code-acp"   # found on PATH, then ~/.local/bin, ~/bin, npm, bun, cargo bins
+args = []
+```
+
+Each model call starts the CLI in the Prometheus process's working directory, opens one ACP
+session and sends the conversation as one prompt; the CLI's message and
+thought chunks stream back as the answer and its reasoning. The CLI runs
+its own tools: every permission it asks for is answered `cancelled` and
+no file system or terminal access is offered, so it acts only within its
+own configuration. A CLI found nowhere fails the session with
+`provider.external_cli_missing` naming the command.
+

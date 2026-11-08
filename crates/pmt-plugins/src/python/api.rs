@@ -108,6 +108,7 @@ pub const SHIM_MODULES: &[&str] = &[
     "providers",
     "providers.base",
     "hermes_cli.version_info",
+    "hermes_cli.auth_oauth_pkce_plugin",
 ];
 
 /// Top-level Hermes packages whose other modules are refused.

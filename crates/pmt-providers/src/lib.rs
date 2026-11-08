@@ -19,6 +19,7 @@ pub mod cost;
 pub mod descriptor;
 pub mod embeddings;
 pub mod event;
+pub mod external;
 pub mod fallback;
 pub mod health;
 pub mod local;

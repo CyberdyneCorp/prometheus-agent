@@ -445,17 +445,22 @@ pub(super) async fn providers(inputs: &Inputs<'_>) -> Result<Vec<Check>, Error> 
     Ok(checks)
 }
 
-/// Config keys naming a deprecated or retired model (spec:
-/// configuration-and-profiles, Retired model rewrite): `warn` with the
-/// rewrite command as remedy.
+/// Config keys and cron job pins naming a deprecated or retired model
+/// (spec: configuration-and-profiles, Retired model rewrite): `warn` with
+/// the rewrite command as remedy.
 fn retired_models(inputs: &Inputs<'_>) -> Vec<Check> {
     let config = inputs.scope.config();
     let Ok(registry) = pmt_providers::ProviderRegistry::for_profile(config, Vec::new()) else {
         return Vec::new();
     };
+    // The store group reports a store that does not open.
+    let jobs = pmt_store::Store::open(inputs.scope)
+        .and_then(|store| crate::cron_host::retired::scan(config, &registry, &store))
+        .unwrap_or_default();
     pmt_providers::retirement::scan(config, &registry)
         .findings
         .into_iter()
+        .chain(jobs.into_iter().map(|j| j.pin.finding))
         .map(|f| {
             let to = f.to.unwrap_or_else(|| "<no replacement known>".to_owned());
             Check::new(

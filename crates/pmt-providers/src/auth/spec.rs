@@ -11,7 +11,7 @@ use pmt_config::provider_urls::{host_of, is_local_host};
 use pmt_config::schema::OAuthEndpoints;
 use pmt_core::error::{Error, codes};
 
-use crate::descriptor::host_matches;
+use crate::descriptor::{PluginOAuth, host_matches};
 use crate::registry::Provider;
 
 /// How a device-code sign-in talks to the identity provider.
@@ -95,6 +95,13 @@ pub fn for_provider(provider: &Provider) -> Result<OAuthSpec, Error> {
     let id = provider.id();
     let overrides = provider.settings().oauth.as_ref();
     let mut spec = builtin(id)
+        .or_else(|| {
+            provider
+                .descriptor()
+                .oauth
+                .as_ref()
+                .map(|o| declared(id, o))
+        })
         .or_else(|| overrides.map(|_| custom(id)))
         .ok_or_else(|| unavailable(id))?;
     if let Some(o) = overrides {
@@ -265,6 +272,37 @@ fn portal(id: &str) -> Option<OAuthSpec> {
             ..custom(id)
         }),
         _ => None,
+    }
+}
+
+/// The sign-in a provider plugin declares (spec: model-providers, Plugin
+/// OAuth and external-process providers), run by the host's browser PKCE
+/// flow. Without declared hosts, the endpoints may be on the authorize
+/// URL's host and its subdomains.
+fn declared(id: &str, oauth: &PluginOAuth) -> OAuthSpec {
+    let mut allowed_hosts = oauth.allowed_hosts.clone();
+    if let Some(host) = host_of(&oauth.authorize_url) {
+        if allowed_hosts.is_empty() {
+            allowed_hosts.push(format!("*.{host}"));
+        }
+        allowed_hosts.push(host);
+    }
+    OAuthSpec {
+        client_id: oauth.client_id.clone(),
+        authorize_url: Some(oauth.authorize_url.clone()),
+        token_url: oauth.token_url.clone(),
+        scopes: oauth.scopes.clone(),
+        redirect: Redirect {
+            uri_host: "127.0.0.1".to_owned(),
+            port: oauth.redirect_port,
+            path: oauth
+                .redirect_path
+                .clone()
+                .unwrap_or_else(|| "/callback".to_owned()),
+        },
+        authorize_params: oauth.authorize_params.clone(),
+        allowed_hosts,
+        ..custom(id)
     }
 }
 

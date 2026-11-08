@@ -580,7 +580,7 @@ error_codes! {
         "The resolved model's context window is below `model.min_context_window`; if the window is larger, set `[models.\"<provider>/<model>\"] context_window`.");
     /// The model is retired.
     MODEL_RETIRED = ("model.retired", Config,
-        "The model is marked `retired` in the model catalog's retirement table, so no new session may start on it; the message names its replacement. `prometheus config fix-models --apply` rewrites every config key that names it.");
+        "The model is marked `retired` in the model catalog's retirement table, so no new session may start on it; the message names its replacement. `prometheus config fix-models --apply` rewrites every config key and cron job pin that names it.");
     /// A provider's spend cap is reached.
     PROVIDER_BUDGET_EXHAUSTED = ("provider.budget_exhausted", BudgetExceeded,
         "The provider's `providers.<id>.daily_budget_usd` or `monthly_budget_usd` is used up in the profile's usage ledger, so no request was sent to it; the fallback chain applies, and the cap frees at the start of the next day or month.");

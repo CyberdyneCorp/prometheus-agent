@@ -236,7 +236,9 @@ impl Accounts {
                 self.refuse_dead_key(provider, &route.credential)?;
                 Ok(route.credential.clone())
             }
-            CredentialSource::Flag | CredentialSource::None => Ok(route.credential.clone()),
+            CredentialSource::Flag | CredentialSource::External { .. } | CredentialSource::None => {
+                Ok(route.credential.clone())
+            }
         }
     }
 

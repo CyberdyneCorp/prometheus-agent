@@ -107,6 +107,7 @@ fn factory(
                 .or_else(|| config.default_toolsets.clone()),
             memory_write: job.spec.memory == MemoryMode::ReadWrite,
             allow_scheduling: config.allow_agent_scheduling,
+            pinned: job.spec.pinned(),
             notepad: notepad.map(std::path::Path::to_path_buf),
         }),
         ..Options::default()
@@ -205,10 +206,11 @@ pub(super) async fn run(
     match Box::pin(session(scope, launch, &store, &request, &mut outcome)).await {
         Ok(end) => outcome.end = end,
         Err(err) => {
-            // With a fallback chain configured, the job is not held: a
-            // fallback may answer the next run.
+            // With a fallback chain the run may use, the job is not held:
+            // a fallback may answer the next run. A pinned job has none.
+            let chained = !request.job.spec.pinned() && !scope.config().fallback.chain.is_empty();
             closed = pmt_providers::resolve::bench_end(&err)
-                .filter(|_| scope.config().fallback.chain.is_empty())
+                .filter(|_| !chained)
                 .map(jiff::Timestamp::as_millisecond);
             outcome.end = AgentEnd::Failed(err.message().to_owned());
         }

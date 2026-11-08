@@ -124,16 +124,21 @@ impl Factory {
         (prompt, sections)
     }
 
-    /// The session's model port: a child that pinned its model gets no
-    /// fallback chain.
+    /// The session's model port (spec: model-providers, Scoped fallback
+    /// chains for pinned owners): a child that pinned its model, and a
+    /// scheduled run of a pinned job, get no fallback chain. Neither
+    /// declares a chain of its own, so the profile's is not inherited; a
+    /// child of a pinned run inherits the run's (none).
     pub(super) async fn model_for(
         &self,
         target: &pmt_providers::resolve::Target,
         child: Option<&ChildSpec>,
     ) -> Result<Arc<SwitchableModel>, Error> {
-        let port = match child {
-            Some(spec) if spec.pinned => self.models.port_pinned(target).await?,
-            _ => self.models.port(target).await?,
+        let pinned_run = self.options.cron.as_ref().is_some_and(|run| run.pinned);
+        let port = if pinned_run || child.is_some_and(|spec| spec.pinned) {
+            self.models.port_pinned(target).await?
+        } else {
+            self.models.port(target).await?
         };
         if let Some(spec) = child {
             port.set_body_overrides(spec.body_overrides.clone());

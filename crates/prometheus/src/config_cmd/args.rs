@@ -47,11 +47,11 @@ pub enum ConfigCommand {
         #[arg(long, conflicts_with = "key")]
         changed: bool,
     },
-    /// List config keys naming a deprecated or retired model with their
-    /// replacements; nothing changes without --apply.
+    /// List config keys and cron job pins naming a deprecated or retired
+    /// model with their replacements; nothing changes without --apply.
     FixModels {
         /// Rewrite the keys (config.toml is first copied to
-        /// config.toml.bak-<timestamp>).
+        /// config.toml.bak-<timestamp>) and the job pins.
         #[arg(long)]
         apply: bool,
         /// With --apply, skip the config.toml.bak-<timestamp> copy.

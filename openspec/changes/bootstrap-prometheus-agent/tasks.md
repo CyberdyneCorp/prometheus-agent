@@ -440,11 +440,11 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 45. M2 Additional subscription providers and routing
 
-- [ ] 45.1 Implement the model retirement table and `prometheus config` retired-model rewrite (dry run by default); verify that a retired default model is rewritten only with confirmation (spec: model-providers, spec: configuration-and-profiles)
+- [x] 45.1 Implement the model retirement table and `prometheus config` retired-model rewrite (dry run by default); verify that a retired default model is rewritten only with confirmation (spec: model-providers, spec: configuration-and-profiles)
 - [x] 45.2 Implement provider registry changes at session boundaries, minted short-lived credentials, and OpenRouter OAuth key minting; verify with mock OAuth servers (spec: model-providers)
 - [x] 45.3 Implement xAI SuperGrok, Nous Portal, Qwen Portal and MiniMax portal sign-ins; verify each with mock IdP fixtures (spec: model-providers)
-- [ ] 45.4 Implement plugin OAuth (host-run PKCE, opaque credential handle) and `external_process` providers; verify with a sample provider plugin (spec: model-providers, spec: plugin-system)
-- [ ] 45.5 Implement plan and quota visibility, billing-source transparency, scoped fallback chains for pinned owners, provider health scoring (`providers health`) and provider spend caps; verify with tests (spec: model-providers)
+- [x] 45.4 Implement plugin OAuth (host-run PKCE, opaque credential handle) and `external_process` providers; verify with a sample provider plugin (spec: model-providers, spec: plugin-system)
+- [x] 45.5 Implement plan and quota visibility, billing-source transparency, scoped fallback chains for pinned owners, provider health scoring (`providers health`) and provider spend caps; verify with tests (spec: model-providers)
 
 ## 46. M2 Provider adapters, plans and request controls
 

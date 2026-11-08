@@ -413,6 +413,9 @@ impl Resolver<'_> {
         if let Some(err) = wire::virtual_unavailable(provider) {
             return trace.check("endpoint", Err(err));
         }
+        if provider.auth() == pmt_config::schema::ProviderAuth::ExternalProcess {
+            return crate::external::route(provider, target, trace);
+        }
         let base_url = trace.check(
             "endpoint",
             self.endpoint(provider, target.base_url.as_deref()).await,

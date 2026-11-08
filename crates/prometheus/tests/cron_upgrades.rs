@@ -730,3 +730,110 @@ fn a_benched_provider_holds_a_sub_hourly_job() {
     let runs = json(home.path(), &["cron", "runs", &id])["runs"].clone();
     assert_eq!(runs.as_array().unwrap().len(), 1, "held: {runs}");
 }
+
+/// The mock route `cheap-model` is overloaded (529); the chain's `backup`
+/// answers anything.
+const OVERLOADED_CHEAP: &str = "[[rule]]\nmodel = \"cheap-model\"\nfault = \"server_error\"\n\
+     status = 529\nrepeat = true\n\n\
+     [[rule]]\nmodel = \"backup\"\nrepeat = true\ntext = \"BACKUP ANSWERED\"\n";
+
+/// Scenario: Pinned cron job (spec: model-providers, Scoped fallback
+/// chains for pinned owners). The profile declares a fallback chain; the
+/// job pinned to the overloaded route fails on it and the failure is the
+/// run's, while an unpinned job on the same route falls back.
+#[test]
+fn a_pinned_job_does_not_inherit_the_profile_fallback_chain() {
+    let home = cron_home(OVERLOADED_CHEAP);
+    common::append_config(
+        home.path(),
+        "\n[agent]\napi_max_retries = 1\nauto_recovery_cycles = 0\n\n\
+         [[fallback.chain]]\nprovider = \"mock\"\nmodel = \"backup\"\n",
+    );
+    ok(&run(
+        home.path(),
+        &["config", "set", "model.default", "cheap-model"],
+    ));
+    let pinned = add(
+        home.path(),
+        &[
+            "every 1d",
+            "--prompt",
+            "report",
+            "--provider",
+            "mock",
+            "--model",
+            "cheap-model",
+        ],
+    );
+    let unpinned = add(home.path(), &["every 1d", "--prompt", "report"]);
+    let failed = run_job(home.path(), &pinned);
+    assert_eq!(failed["status"], "failed", "{failed}");
+    assert_ne!(failed["output"], "BACKUP ANSWERED", "{failed}");
+    assert!(
+        failed["error"]
+            .as_str()
+            .is_some_and(|e| e.contains("overloaded")),
+        "{failed}"
+    );
+    let fell_back = run_job(home.path(), &unpinned);
+    assert_eq!(
+        (&fell_back["status"], &fell_back["output"]),
+        (&json!("ok"), &json!("BACKUP ANSWERED")),
+        "{fell_back}"
+    );
+}
+
+/// Scenario: Sub-hourly job does not alert every tick, for a pinned job
+/// in a profile with a fallback chain: the chain is not the job's, so a
+/// benched pinned provider still holds it.
+#[test]
+fn a_pinned_job_is_held_despite_the_profile_fallback_chain() {
+    let home = common::temp_home();
+    ok(&run(home.path(), &["config", "path"]));
+    std::fs::write(
+        home.path().join("profiles/default/config.toml"),
+        "[model]\nprovider = \"mock\"\ndefault = \"mock\"\n\n\
+         [budgets]\nallow_unpriced = true\n\n[cron]\ntimezone = \"UTC\"\n\n\
+         [[fallback.chain]]\nprovider = \"mock\"\nmodel = \"mock\"\n",
+    )
+    .unwrap();
+    ok(&common::run_with_stdin(
+        home.path(),
+        &["auth", "add", "openrouter"],
+        "sk-or-v1-0123456789abcdef",
+    ));
+    let id = add(
+        home.path(),
+        &[
+            "every 15m",
+            "--prompt",
+            "brief",
+            "--provider",
+            "openrouter",
+            "--model",
+            "x/y",
+        ],
+    );
+    let store = pmt_store::Store::open(&scope(home.path())).unwrap();
+    let until =
+        jiff::Timestamp::from_second(jiff::Timestamp::now().as_second() + 5 * 3600).unwrap();
+    store
+        .bench_credential(
+            "openrouter",
+            "secret:OPENROUTER_API_KEY",
+            Some(until),
+            Some("rate_limit"),
+        )
+        .unwrap();
+    store
+        .cron_modify_job(&id, |row| {
+            row.next_run_at = Some(jiff::Timestamp::now().as_millisecond() - 1_000);
+            Ok(())
+        })
+        .unwrap();
+    ok(&run(home.path(), &["cron", "tick"]));
+    let runs = json(home.path(), &["cron", "runs", &id])["runs"].clone();
+    assert_eq!(runs[0]["status"], "failed", "{runs}");
+    let row = store.cron_job(&id).unwrap().unwrap();
+    assert_eq!(row.quota_hold_until, Some(until.as_millisecond()), "{runs}");
+}

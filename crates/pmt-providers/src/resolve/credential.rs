@@ -178,6 +178,12 @@ pub enum CredentialSource {
         /// Provider id.
         provider: String,
     },
+    /// An `external_process` provider's agent CLI, signed in on its own
+    /// (no token passes through Prometheus).
+    External {
+        /// Provider id.
+        provider: String,
+    },
     /// No credential (`auth = "none"`).
     None,
 }
@@ -273,7 +279,9 @@ impl Credential {
             CredentialSource::Subscription { label, .. } => Some(pool::subscription_id(label)),
             CredentialSource::Borrowed { cli, .. } => Some(pool::borrowed_id(cli)),
             CredentialSource::Minted { .. } => Some("minted".to_owned()),
-            CredentialSource::Flag | CredentialSource::None => None,
+            CredentialSource::Flag | CredentialSource::External { .. } | CredentialSource::None => {
+                None
+            }
         }
     }
 
@@ -295,6 +303,7 @@ impl Credential {
             }
             CredentialSource::Secret { name } => format!("secret:{name}"),
             CredentialSource::Minted { provider } => format!("minted:{provider}"),
+            CredentialSource::External { provider } => format!("external:{provider}"),
             CredentialSource::None => "none".to_owned(),
         }
     }
@@ -321,6 +330,8 @@ impl Credential {
                 format!("api_key:{provider}")
             }
             CredentialSource::Minted { .. } => format!("api_key:{provider}/minted"),
+            // The agent CLI bills its own sign-in.
+            CredentialSource::External { .. } => format!("subscription:{provider}/external"),
             CredentialSource::None if local => "local".to_owned(),
             CredentialSource::None => format!("keyless:{provider}"),
         }

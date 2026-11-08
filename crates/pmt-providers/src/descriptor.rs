@@ -148,6 +148,37 @@ pub struct Descriptor {
     /// No credential is needed when the configured endpoint is loopback
     /// (a hosted service with a local daemon).
     pub keyless_on_loopback: bool,
+    /// The OAuth PKCE sign-in a provider plugin declares (spec:
+    /// model-providers, Plugin OAuth and external-process providers): the
+    /// host runs it, so the plugin never sees the verifier or `state`.
+    pub oauth: Option<PluginOAuth>,
+    /// The agent CLI an `external_process` provider suggests. It is only
+    /// named in the hint: the host launches nothing a plugin chose, only
+    /// the `providers.<id>.command` the user configured.
+    pub command: Option<String>,
+}
+
+/// A plugin's OAuth PKCE sign-in: a public client, its endpoints and the
+/// loopback redirect.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PluginOAuth {
+    /// The public client id (no secret: PKCE is the proof).
+    pub client_id: String,
+    /// Browser authorization endpoint.
+    pub authorize_url: String,
+    /// Token endpoint.
+    pub token_url: String,
+    /// Requested scopes.
+    pub scopes: Vec<String>,
+    /// Hosts the endpoints may be on; empty means the authorize URL's
+    /// host and its subdomains.
+    pub allowed_hosts: Vec<String>,
+    /// Fixed redirect port, or 0 for an OS-assigned one.
+    pub redirect_port: u16,
+    /// Redirect path (`/callback` when unset).
+    pub redirect_path: Option<String>,
+    /// Extra authorization request parameters.
+    pub authorize_params: Vec<(String, String)>,
 }
 
 impl Descriptor {
@@ -180,6 +211,8 @@ impl Descriptor {
             wire_need: WireNeed::Native,
             endpoint_note: None,
             keyless_on_loopback: false,
+            oauth: None,
+            command: None,
         }
     }
 

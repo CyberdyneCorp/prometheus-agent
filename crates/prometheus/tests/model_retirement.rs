@@ -105,3 +105,66 @@ fn no_backup_skips_the_copy_and_the_doctor_warns_before_the_rewrite() {
     assert!(written.contains("xai/grok-4"), "{written}");
     assert!(backups(home.path()).is_empty());
 }
+
+/// The cron fleet default and a job's pinned model are model-holding keys
+/// too: listed by the dry run and the doctor, rewritten by `--apply` (the
+/// job through the job edit path).
+#[test]
+fn fix_models_covers_the_cron_default_and_pinned_jobs() {
+    let home = temp_home();
+    write_config(
+        home.path(),
+        "[model]\nprovider = \"xai\"\ndefault = \"grok-4\"\n\
+         [cron]\ntimezone = \"UTC\"\nmodel_provider = \"xai\"\nmodel = \"grok-2\"\n",
+    );
+    ok(&run(
+        home.path(),
+        &[
+            "cron",
+            "add",
+            "every 1d",
+            "--prompt",
+            "report",
+            "--name",
+            "nightly",
+            "--provider",
+            "xai",
+            "--model",
+            "grok-beta",
+            "--yes",
+        ],
+    ));
+    let dry = ok(&run(home.path(), &["config", "fix-models"]));
+    assert!(dry.contains("cron.model: grok-2 -> grok-4"), "{dry}");
+    assert!(dry.contains("cron job nightly ("), "{dry}");
+    assert!(dry.contains(").model: grok-beta -> grok-4"), "{dry}");
+    assert!(
+        ok(&run(home.path(), &["cron", "list"])).contains("pinned: grok-beta"),
+        "the dry run changes no job"
+    );
+    let doctor = run(home.path(), &["--json", "doctor", "providers"]);
+    let report: serde_json::Value = serde_json::from_str(&stdout(&doctor)).unwrap();
+    let warned: Vec<&str> = report["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|c| c["name"] == "retired_model")
+        .filter_map(|c| c["message"].as_str())
+        .collect();
+    assert!(
+        warned.iter().any(|m| m.starts_with("cron.model: grok-2"))
+            && warned.iter().any(|m| m.starts_with("cron job nightly")),
+        "{warned:?}"
+    );
+    ok(&run(home.path(), &["config", "fix-models", "--apply"]));
+    let written = std::fs::read_to_string(config_path(home.path())).unwrap();
+    let config: toml::Value = toml::from_str(&written).unwrap();
+    assert_eq!(config["cron"]["model"].as_str(), Some("grok-4"));
+    let listed = ok(&run(home.path(), &["cron", "list"]));
+    assert!(listed.contains("pinned: grok-4"), "{listed}");
+    let again = ok(&run(home.path(), &["config", "fix-models"]));
+    assert!(
+        again.contains("no deprecated or retired model ids"),
+        "{again}"
+    );
+}

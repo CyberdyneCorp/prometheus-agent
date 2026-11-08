@@ -370,6 +370,18 @@ fn invalid(message: String) -> Error {
 
 /// The descriptor of a custom `[providers.<id>]` block.
 fn custom_descriptor(id: &str, settings: &ProviderConfig) -> Result<Descriptor, Error> {
+    if settings.auth == Some(ProviderAuth::ExternalProcess) {
+        // An agent CLI, not an HTTP endpoint: `command` replaces `base_url`.
+        let mut d = Descriptor::new(
+            id,
+            settings.wire_format.unwrap_or(WireFormat::ChatCompletions),
+            settings.base_url.as_deref(),
+        );
+        d.aliases.clone_from(&settings.aliases);
+        d.auth = ProviderAuth::ExternalProcess;
+        d.supports_model_listing = false;
+        return Ok(d);
+    }
     let base_url = settings.base_url.as_deref().ok_or_else(|| {
         invalid(format!(
             "providers.{id}.base_url is required for a custom provider ('{id}' is not a built-in provider)"

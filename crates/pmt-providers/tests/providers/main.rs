@@ -7,6 +7,7 @@ mod auth;
 mod auxiliary;
 mod borrowed;
 mod caching;
+mod external;
 mod faults;
 mod idp;
 mod local;

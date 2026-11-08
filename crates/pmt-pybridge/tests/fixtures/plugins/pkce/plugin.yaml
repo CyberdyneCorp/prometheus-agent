@@ -1,0 +1,5 @@
+name: pkce-provider
+kind: model-provider
+version: 1.0.0
+description: The documented declarative PKCE sign-in example, plus a brokered one
+author: Prometheus tests
