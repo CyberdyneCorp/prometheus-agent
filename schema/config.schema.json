@@ -4657,6 +4657,13 @@
       "additionalProperties": false,
       "description": "A `[models.<name>]` table.",
       "properties": {
+        "accept_data_use": {
+          "description": "Accept the data-use terms of a model that trains on prompts and\noutputs (Meta AI contributor-tier models); without it such a model\nis never selected without a confirmation.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "base_url": {
           "description": "Base URL override.",
           "type": [

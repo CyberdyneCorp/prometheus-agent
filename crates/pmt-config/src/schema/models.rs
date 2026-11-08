@@ -416,6 +416,11 @@ pub struct ModelRoute {
     /// model, over the built-in retirement table's.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub replacement: Option<String>,
+    /// Accept the data-use terms of a model that trains on prompts and
+    /// outputs (Meta AI contributor-tier models); without it such a model
+    /// is never selected without a confirmation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accept_data_use: Option<bool>,
 }
 
 /// Per-million-token prices in USD.

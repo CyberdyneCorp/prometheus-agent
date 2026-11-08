@@ -449,10 +449,15 @@ impl Resolver<'_> {
             wire::available(provider, wire_source).map_or(Ok(()), Err),
         )?;
         if let Some(model) = &model {
-            // A retired model refuses the route whatever its credential.
+            // A retired model refuses the route whatever its credential, and
+            // so does one whose data-use terms were not accepted.
             trace.check(
                 "model",
                 crate::retirement::check(self.config, provider.id(), model),
+            )?;
+            trace.check(
+                "model",
+                crate::datause::check(self.config, provider.id(), model),
             )?;
         }
         let credential =

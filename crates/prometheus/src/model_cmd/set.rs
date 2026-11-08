@@ -44,7 +44,14 @@ pub(super) fn run(
         base_url,
         user_home,
     };
-    let view = block_on(set(&scope, config, &request))??;
+    let view = match block_on(set(&scope, config, &request))? {
+        // A refused data-use confirmation is a missing approval (exit 4).
+        Err(err) if err.code() == &pmt_core::error::codes::MODEL_DATA_USE_UNCONFIRMED => {
+            crate::output::print_error(&err, ctx.json);
+            return Ok(pmt_core::exit::APPROVAL_REQUIRED);
+        }
+        other => other?,
+    };
     if ctx.json {
         return document("model set", &view);
     }
@@ -55,6 +62,44 @@ pub(super) fn run(
         view.context_window,
         view.written.join(", ")
     ))
+}
+
+/// Asks a terminal to accept the data-use terms of a training-flagged
+/// `provider`/`model` (spec: model-providers, Data-use confirmation for
+/// training-flagged models); on yes `proposed` accepts them and the
+/// `[models]` key to write is returned. Without a terminal nothing is
+/// asked: resolution then refuses the model (exit 4) and nothing is
+/// written.
+fn confirm_data_use(
+    proposed: &mut Config,
+    provider: &str,
+    model: Option<&str>,
+) -> Result<Option<String>, Error> {
+    use pmt_providers::datause;
+    let Some(model) = model else {
+        return Ok(None);
+    };
+    if !datause::trains_on_data(provider, model)
+        || datause::accepted(proposed, provider, model)
+        || !crate::prompt::stdin_is_tty()
+    {
+        return Ok(None);
+    }
+    let question = format!(
+        "{provider}/{model} trains on your data ({}). Accept these data-use terms?",
+        datause::TERMS
+    );
+    if !crate::prompt::confirm(&question)? {
+        return Err(datause::unconfirmed(provider, model));
+    }
+    let key = format!("{provider}/{model}");
+    let entry = proposed.models.entry(key.clone()).or_insert_with(|| {
+        pmt_config::schema::ModelEntry::Route(pmt_config::schema::ModelRoute::default())
+    });
+    if let pmt_config::schema::ModelEntry::Route(route) = entry {
+        route.accept_data_use = Some(true);
+    }
+    Ok(Some(key))
 }
 
 /// What `model set` was asked.
@@ -116,8 +161,12 @@ async fn set(
     {
         local::discover(&client(config)?, &models.catalog, candidate, model).await;
     }
+    let accepted = confirm_data_use(&mut proposed, &id, target.model.as_deref())?;
     let resolver = models.resolver(&proposed, None);
     let (route, meta) = validate(&resolver, &models.catalog, &target).await?;
+    if let Some(key) = &accepted {
+        scope.profile().config_file().accept_data_use(key)?;
+    }
     // An alias stays an alias in config, so its endpoint and secret apply.
     let default = if target::alias(&config.model, reference).is_some() {
         reference.to_owned()

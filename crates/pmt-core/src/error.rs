@@ -578,6 +578,10 @@ error_codes! {
     /// The model's context window is below `model.min_context_window`.
     MODEL_CONTEXT_TOO_SMALL = ("model.context_too_small", Config,
         "The resolved model's context window is below `model.min_context_window`; if the window is larger, set `[models.\"<provider>/<model>\"] context_window`.");
+    /// A model that trains on prompts was selected without accepting its
+    /// data-use terms.
+    MODEL_DATA_USE_UNCONFIRMED = ("model.data_use_unconfirmed", PermissionDenied,
+        "The model trains on the prompts and outputs sent to it (Meta AI contributor-tier models) and its data-use terms were not accepted: confirm on a terminal, or set `[models.\"<provider>/<model>\"] accept_data_use = true`; nothing was selected or written (`prometheus model set` exits 4).");
     /// The model is retired.
     MODEL_RETIRED = ("model.retired", Config,
         "The model is marked `retired` in the model catalog's retirement table, so no new session may start on it; the message names its replacement. `prometheus config fix-models --apply` rewrites every config key and cron job pin that names it.");

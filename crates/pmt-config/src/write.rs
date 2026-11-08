@@ -159,6 +159,38 @@ impl ConfigFile {
         })
     }
 
+    /// Sets `[models."<model_key>"] accept_data_use = true` (a model key
+    /// holds dots and slashes, so it is not a dotted `set` key).
+    ///
+    /// # Errors
+    ///
+    /// The file's own errors and validation of the result.
+    pub fn accept_data_use(&self, model_key: &str) -> Result<(), Error> {
+        crate::managed::check_writable("models")?;
+        self.modify(|doc| {
+            let models = doc
+                .entry("models")
+                .or_insert_with(|| toml_edit::Item::Table(toml_edit::Table::new()));
+            let Some(models) = models.as_table_like_mut() else {
+                return Err(Error::new(
+                    &codes::CONFIG_INVALID,
+                    "[models] is not a table",
+                ));
+            };
+            let entry = models
+                .entry(model_key)
+                .or_insert(toml_edit::Item::Table(toml_edit::Table::new()));
+            let Some(route) = entry.as_table_like_mut() else {
+                return Err(Error::new(
+                    &codes::CONFIG_INVALID,
+                    format!("[models.\"{model_key}\"] is an alias string, not a table"),
+                ));
+            };
+            route.insert("accept_data_use", toml_edit::value(true));
+            Ok(())
+        })
+    }
+
     /// `config unset`: removes `key` so its default applies; returns
     /// whether it was set.
     ///

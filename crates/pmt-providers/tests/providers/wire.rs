@@ -265,6 +265,7 @@ async fn requests_carry_the_clamped_reasoning_effort_per_wire_format() {
         toml::from_str("[agent.reasoning_overrides]\n\"gpt-5.5\" = \"high\"\n").unwrap();
     let meta = ModelMetadata {
         supports_reasoning: true,
+        trains_on_data: false,
         max_reasoning_effort: Some(ReasoningLevel::Xhigh),
         ..ModelMetadata::default()
     };

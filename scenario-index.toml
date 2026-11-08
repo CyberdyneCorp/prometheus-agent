@@ -3259,3 +3259,7 @@ capabilities = [
 [model-providers."Subscription tool gateway routing"]
 "Stored selection wins over a present key" = ["crates/pmt-providers/tests/providers/tool_gateway.rs::a_stored_nous_selection_goes_through_the_gateway_despite_a_vendor_key"]
 "Selected vendor without key" = ["crates/pmt-providers/tests/providers/tool_gateway.rs::a_selected_vendor_without_its_key_fails_naming_the_selection", "crates/prometheus/tests/account_cli.rs::portal_tools_routes_categories_through_the_gateway"]
+
+# Group 46.2 (partial): data-use confirmation for training-flagged models.
+[model-providers."Data-use confirmation for training-flagged models"]
+"Non-interactive selection refused" = ["crates/prometheus/tests/data_use_cli.rs::a_training_flagged_model_is_refused_without_a_terminal_and_config_is_untouched", "crates/pmt-providers/src/datause.rs::contributor_models_need_accepted_terms"]

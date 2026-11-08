@@ -171,6 +171,7 @@ fn metadata(e: &Entry) -> ModelMetadata {
         supports_vision: e.vision,
         supports_video: false,
         supports_reasoning: e.reasoning,
+        trains_on_data: false,
         max_reasoning_effort: e.reasoning.then(|| max_effort(e.provider)),
         context_source: super::ContextSource::Builtin,
         price: Some(Price {

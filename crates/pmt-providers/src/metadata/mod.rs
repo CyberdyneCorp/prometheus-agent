@@ -52,6 +52,9 @@ pub struct ModelMetadata {
     pub supports_video: bool,
     /// Reasons (thinking tokens).
     pub supports_reasoning: bool,
+    /// Trains on the prompts and outputs sent to it (selection needs the
+    /// data-use terms accepted).
+    pub trains_on_data: bool,
     /// Highest reasoning effort accepted, when known.
     pub max_reasoning_effort: Option<ReasoningLevel>,
     /// Where the context window came from.
@@ -70,6 +73,7 @@ impl Default for ModelMetadata {
             supports_vision: false,
             supports_video: false,
             supports_reasoning: false,
+            trains_on_data: false,
             max_reasoning_effort: None,
             context_source: ContextSource::Default,
             price: None,
@@ -196,6 +200,7 @@ impl Catalog {
         if model.to_ascii_lowercase().ends_with("-vision") {
             meta.supports_vision = true;
         }
+        meta.trains_on_data = crate::datause::trains_on_data(provider, model);
         let route = self.overrides.get(&format!("{provider}/{model}"));
         if let Some(route) = route {
             apply_override(&mut meta, route);

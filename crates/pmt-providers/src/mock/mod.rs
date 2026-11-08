@@ -58,6 +58,7 @@ pub fn metadata() -> ModelMetadata {
     ModelMetadata {
         supports_vision: true,
         supports_reasoning: true,
+        trains_on_data: false,
         context_source: ContextSource::Builtin,
         price: Some(Price::default()),
         context_window: DEFAULT_CONTEXT_WINDOW,

@@ -17,6 +17,7 @@ pub mod caller;
 pub mod capability;
 pub mod classify;
 pub mod cost;
+pub mod datause;
 pub mod descriptor;
 pub mod detect;
 pub mod embeddings;

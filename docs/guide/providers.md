@@ -378,6 +378,17 @@ endpoint does not answer there, `prometheus doctor` warns
 networking (`networkingMode=mirrored` in `.wslconfig`) or pointing the
 provider at the Windows host address from the default route.
 
+## Models that train on your data
+
+Meta AI's contributor-tier models (`meta-ai/muse-spark-*-contributor`)
+train on the prompts, files and outputs sent to them. Such a model is never
+selected until its data-use terms are accepted: `prometheus model set` asks
+on a terminal (yes writes `[models."<provider>/<model>"] accept_data_use =
+true`); without a terminal it exits 4 naming the terms and writes nothing.
+Every other way to reach the model (`/model`, the picker, a fallback,
+auxiliary or mixture slot) is refused with `model.data_use_unconfirmed`
+until the terms are accepted.
+
 ## Outbound IPv6 and IPv4
 
 Every outbound connection to a dual-stack host tries IPv6 first and IPv4
