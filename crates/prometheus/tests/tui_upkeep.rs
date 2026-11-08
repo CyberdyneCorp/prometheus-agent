@@ -111,3 +111,48 @@ fn the_tui_offers_auto_prune_at_startup_when_disk_space_is_low() {
     assert_eq!(code, Some(0));
     assert!(!text.contains("Disk space is low"), "asked once: {text:?}");
 }
+
+/// Scenario: Later postpones a week (answered on the TUI card): the
+/// daemon records `later`, so the question is not due the next day but is
+/// due again after a week.
+#[test]
+fn the_tui_prune_question_answered_later_asks_again_after_a_week() {
+    use jiff::{SignedDuration, Timestamp};
+    use pmt_config::{Home, Launch, Overrides, ProfileName, ProfileScope};
+    use prometheus::chat::autoprune;
+
+    let home = mock_home();
+    common::append_config(
+        home.path(),
+        "\n[sessions]\nlow_disk_bytes = 9223372036854775807\n",
+    );
+    let daemon = daemon::start(home.path(), &[]);
+    let mut p = tui(home.path(), &["chat"], &[]);
+    opened(&mut p);
+    see(&mut p, "Disk space is low.");
+    see_repainted(&mut p, "type on, off (never ask again) or later");
+    enter(&mut p, "later");
+    see_repainted(&mut p, "Asking again in a week.");
+    enter(&mut p, "/quit");
+    assert_eq!(finish(p).1, Some(0));
+    drop(daemon);
+
+    let config = std::fs::read_to_string(home.path().join("profiles/default/config.toml")).unwrap();
+    assert!(!config.contains("retention_secs"), "{config}");
+    let profile = Home::open(home.path())
+        .unwrap()
+        .profile(&ProfileName::default_profile())
+        .unwrap();
+    let scope = ProfileScope::open(
+        profile,
+        &Overrides::parse::<&str>(&[]).unwrap(),
+        Launch::Other,
+    )
+    .unwrap();
+    let store = pmt_store::Store::open(&scope).unwrap();
+    let now = Timestamp::now();
+    let tomorrow = now + SignedDuration::from_hours(25);
+    assert!(!autoprune::due(&scope, &store, tomorrow).unwrap());
+    let next_week = now + SignedDuration::from_hours(24 * 8);
+    assert!(autoprune::due(&scope, &store, next_week).unwrap());
+}
