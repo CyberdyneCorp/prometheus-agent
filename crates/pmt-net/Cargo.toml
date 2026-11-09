@@ -12,7 +12,9 @@ pmt-core.workspace = true
 # The one HTTP client every outbound caller builds on, with rustls; the
 # crypto provider (ring) and verifier are supplied by `tls`.
 # `socks`: adapters may reach their platform through a SOCKS5 proxy.
-reqwest = { workspace = true, features = ["rustls-no-provider", "socks"] }
+# `http2`: offered through ALPN; gRPC APIs (the modal backend plugin's
+# direct mode) only answer over HTTP/2.
+reqwest = { workspace = true, features = ["rustls-no-provider", "socks", "http2"] }
 rustls.workspace = true
 rustls-platform-verifier.workspace = true
 rustls-native-certs.workspace = true

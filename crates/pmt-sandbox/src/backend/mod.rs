@@ -3,7 +3,7 @@
 //! Built-in backend names are reserved; Backend isolation descriptor;
 //! Backend readiness checks; Terminal configuration defaults).
 //!
-//! `local`, `container` and `ssh` are built in; `terminal-backend` plugins
+//! `local`, `container`, `ssh` and `singularity` are built in; `terminal-backend` plugins
 //! register through [`BackendRegistry::register_plugin`] with a validated
 //! [`Descriptor`]. A built-in name can be reserved for a later milestone
 //! ([`BackendRegistry::reserve`]). Selection never falls back to another
@@ -24,8 +24,16 @@ pub use descriptor::{Descriptor, Isolation};
 pub use remote::{ExecOutput, ExecRequest, RemoteBackend};
 
 /// Lower-cased names no plugin may register: the built-ins and the
-/// runtimes the container backend stands for.
-pub const RESERVED_NAMES: &[&str] = &["local", "container", "docker", "podman", "ssh"];
+/// runtimes the container and singularity backends stand for.
+pub const RESERVED_NAMES: &[&str] = &[
+    "local",
+    "container",
+    "docker",
+    "podman",
+    "ssh",
+    "singularity",
+    "apptainer",
+];
 
 /// What a registry entry is.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,6 +44,8 @@ pub enum Kind {
     Container,
     /// A host reached over SSH.
     Ssh,
+    /// An Apptainer/Singularity instance of the profile.
+    Singularity,
     /// A built-in name not available in this build, with the milestone it
     /// ships in.
     Reserved(String),
@@ -65,6 +75,7 @@ impl Backend {
                 config.container.persistent,
             ),
             (Kind::Ssh, _) => Descriptor::ssh(),
+            (Kind::Singularity, _) => Descriptor::singularity(),
             (Kind::Plugin, Some(plugin)) => plugin.descriptor().clone(),
             _ => Descriptor::local(),
         }
@@ -84,7 +95,7 @@ impl Default for BackendRegistry {
 }
 
 impl BackendRegistry {
-    /// `local`, `container` and `ssh`.
+    /// `local`, `container`, `ssh` and `singularity`.
     #[must_use]
     pub fn builtin() -> Self {
         let entry = |name: &str, kind| Backend {
@@ -97,6 +108,7 @@ impl BackendRegistry {
                 entry("local", Kind::Local),
                 entry("container", Kind::Container),
                 entry("ssh", Kind::Ssh),
+                entry("singularity", Kind::Singularity),
             ],
         }
     }
@@ -192,6 +204,7 @@ impl BackendRegistry {
                 Kind::Local => local_check(sandbox),
                 Kind::Container => container_check(config, security),
                 Kind::Ssh => ssh_check(config),
+                Kind::Singularity => singularity_check(config),
                 Kind::Plugin => plugin_check(backend),
                 Kind::Reserved(_) => fail("reserved backend".to_owned()),
             },
@@ -243,6 +256,27 @@ fn ssh_check(config: &TerminalConfig) -> Check {
         Status::Ok,
         format!("ssh backend configured: {target}"),
     )
+}
+
+fn singularity_check(config: &TerminalConfig) -> Check {
+    if config.singularity.image.is_empty() {
+        return fail(
+            "singularity backend requires terminal.singularity.image (a SIF path or docker:// reference)",
+        );
+    }
+    match crate::singularity::Runtime::detect() {
+        Ok(runtime) => Check::new(
+            "terminal",
+            "backend",
+            Status::Ok,
+            format!(
+                "singularity backend ready; runtime: {}, image: {}",
+                runtime.name(),
+                config.singularity.image
+            ),
+        ),
+        Err(err) => fail(err.message().to_owned()),
+    }
 }
 
 fn plugin_check(backend: &Backend) -> Check {

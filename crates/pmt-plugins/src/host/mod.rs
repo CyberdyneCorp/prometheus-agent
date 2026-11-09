@@ -12,6 +12,7 @@
 
 #[allow(missing_docs, clippy::all, clippy::pedantic)]
 mod bindings;
+mod credentials;
 pub mod imports;
 mod instance;
 pub mod ports;

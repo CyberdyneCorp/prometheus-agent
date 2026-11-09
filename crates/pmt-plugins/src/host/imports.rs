@@ -18,7 +18,7 @@ use super::bindings::prometheus::host::{
 };
 use super::bindings::prometheus::messaging::{conversation, inject, platform};
 use super::ports::{
-    HttpRequest, InjectTarget, LlmCall, PlatformAction, Ports, PostFailure, Posted,
+    HttpRequest, HttpResponse, InjectTarget, LlmCall, PlatformAction, Ports, PostFailure, Posted,
 };
 use super::state::{StateDir, StateError};
 use crate::grants::PluginGrants;
@@ -181,10 +181,19 @@ impl state::Host for HostState {
     }
 }
 
-impl http::Host for HostState {
-    fn send(&mut self, request: http::Request) -> Result<http::Response, HostError> {
-        let (host, port) = destination(&request.url)
-            .ok_or_else(|| HostError::Invalid(format!("invalid URL '{}'", request.url)))?;
+impl HostState {
+    /// Sends one outbound request after the `network` grant check (the
+    /// host's own name for the URL's host in the refusal), through the
+    /// HTTP port and its egress policy.
+    pub(super) fn send_http(
+        &self,
+        method: String,
+        url: String,
+        headers: Vec<(String, String)>,
+        body: Option<Vec<u8>>,
+    ) -> Result<HttpResponse, HostError> {
+        let (host, port) =
+            destination(&url).ok_or_else(|| HostError::Invalid(format!("invalid URL '{url}'")))?;
         let wanted = Capability::NetConnect {
             host: host.clone(),
             port: Some(port),
@@ -208,16 +217,23 @@ impl http::Host for HostState {
             })
             .collect();
         let port_request = HttpRequest {
-            method: request.method,
-            url: request.url,
-            headers: request.headers,
-            body: request.body,
+            method,
+            url,
+            headers,
+            body,
             plugin: self.ctx.plugin.clone(),
             session_id: self.call.session_id.clone(),
             granted_hosts,
         };
         let http = Arc::clone(&self.ports().http);
-        let response = block_on(http.send(port_request))?.map_err(HostError::Failed)?;
+        block_on(http.send(port_request))?.map_err(HostError::Failed)
+    }
+}
+
+impl http::Host for HostState {
+    fn send(&mut self, request: http::Request) -> Result<http::Response, HostError> {
+        let response =
+            self.send_http(request.method, request.url, request.headers, request.body)?;
         Ok(http::Response {
             status: response.status,
             headers: response.headers,
@@ -228,7 +244,7 @@ impl http::Host for HostState {
 
 /// The lower-cased host and the port of an `http(s)` URL; `None` for
 /// anything else (other schemes, user info, no host).
-fn destination(url: &str) -> Option<(String, u16)> {
+pub(super) fn destination(url: &str) -> Option<(String, u16)> {
     let (scheme, rest) = url.split_once("://")?;
     let default_port = match scheme.to_ascii_lowercase().as_str() {
         "http" => 80,

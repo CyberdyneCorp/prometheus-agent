@@ -19,6 +19,8 @@ mod preview;
 #[cfg(unix)]
 mod processes;
 #[cfg(unix)]
+mod singularity;
+#[cfg(unix)]
 mod ssh;
 #[cfg(unix)]
 mod startup;

@@ -253,6 +253,7 @@ impl Daytona {
                 .into_iter()
                 .collect(),
             settings: Mutex::default(),
+            credentials: Mutex::default(),
         });
         Self {
             api: Arc::new(DaytonaApi::default()),

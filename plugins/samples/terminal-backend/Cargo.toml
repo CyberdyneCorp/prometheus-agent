@@ -19,3 +19,4 @@ world = "terminal-backend"
 
 [package.metadata.component.target.dependencies]
 "prometheus:host" = { path = "../../../wit/host" }
+"prometheus:credentials" = { path = "../../../wit/credentials" }

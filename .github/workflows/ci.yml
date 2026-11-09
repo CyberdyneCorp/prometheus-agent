@@ -56,6 +56,9 @@ jobs:
       # x86_64 gnu job a missing runtime fails them instead of skipping.
       PMT_TEST_CONTAINER_RUNTIME: ${{ startsWith(matrix.os, 'ubuntu') && 'docker' || 'auto' }}
       PMT_TEST_CONTAINERS: ${{ matrix.target == 'x86_64-unknown-linux-gnu' && 'require' || '' }}
+      # The singularity backend's real-instance test runs the pinned
+      # Apptainer installed below on the x86_64 gnu job; elsewhere it skips.
+      PMT_TEST_APPTAINER: ${{ matrix.target == 'x86_64-unknown-linux-gnu' && 'require' || '' }}
       # The read_file document test installs the pinned doc-converter
       # runtime (a download per job) and converts real files with it.
       PMT_TEST_DOC_CONVERTER: require
@@ -113,6 +116,17 @@ jobs:
       - name: Allow user namespaces for Chromium's sandbox
         if: runner.os == 'Linux'
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      # Apptainer runs unprivileged in a user namespace (allowed above).
+      - name: Install Apptainer for the singularity backend test
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: |
+          deb="$RUNNER_TEMP/apptainer_1.4.2_amd64.deb"
+          curl -fsSL -o "$deb" https://github.com/apptainer/apptainer/releases/download/v1.4.2/apptainer_1.4.2_amd64.deb
+          echo "c4729da28ea832b8b7d7e4f882da607498f0462011801c15ea049a5643fda3b2  $deb" | sha256sum -c -
+          sudo apt-get update
+          sudo apt-get install -y "$deb"
+          apptainer --version
 
       # The python-bridge tests run real sidecars: the pinned uv and the
       # CPython it provisions, installed before the tests so none downloads.

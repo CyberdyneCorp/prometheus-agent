@@ -1,0 +1,18 @@
+# First-party terminal backend: Modal sandboxes (spec: execution-environments,
+# First-party backend plugins). Select it with `terminal.backend = "modal"`
+# and `prometheus plugins enable modal`. It authenticates through the host
+# credential handle `modal` (terminal.modal.mode: the MODAL_TOKEN_ID and
+# MODAL_TOKEN_SECRET secrets, or the Nous subscription sign-in) and never
+# sees the secret itself.
+manifest_version = 1
+id = "modal"
+version = "1.0.0"
+kind = "wasm"
+description = "Runs terminal commands in a Modal sandbox, one per session."
+license = "MIT"
+requires_prometheus = ">=0.1"
+worlds = ["terminal-backend@1.2"]
+
+[capabilities]
+network = ["api.modal.com", "modal-gateway.nousresearch.com"]
+credentials = ["modal"]

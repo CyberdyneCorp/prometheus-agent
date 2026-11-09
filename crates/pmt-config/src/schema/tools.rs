@@ -409,7 +409,7 @@ pub struct TerminalConfig {
     pub sync_back_max_bytes: u64,
     /// The first-party `modal` backend plugin.
     pub modal: ModalConfig,
-    /// The first-party `singularity` backend plugin.
+    /// The built-in `singularity` backend.
     pub singularity: SingularityConfig,
     /// Two `process` `poll`/`wait` calls in a row that find a running
     /// process silent switch on its completion notification (where the

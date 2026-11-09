@@ -29,6 +29,7 @@ pub mod policy;
 pub mod relay;
 pub mod report;
 mod sandbox;
+pub mod singularity;
 pub mod ssh;
 
 #[cfg(target_os = "linux")]

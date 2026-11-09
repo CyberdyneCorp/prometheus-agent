@@ -114,7 +114,8 @@ that turn off Chromium's sandbox or web security (`chromium_sandbox`,
 
 `terminal.backend` selects where commands run: `local` (the sandboxed
 host), `container` (a hardened rootless container), `ssh` (another host),
-or a backend registered by an enabled `terminal-backend` plugin. Any other
+`singularity` (an Apptainer/Singularity instance) or a backend registered
+by an enabled `terminal-backend` plugin. Any other
 name fails validation (exit 78) and lists the available backends.
 `prometheus chat` (and every session start) checks the setting before the
 first turn, with the same exits; Prometheus never falls back to another
@@ -204,16 +205,25 @@ skill brings its whole skill directory (the one holding `SKILL.md`);
 unchanged files are not sent again, executable bits are kept, and one
 command uploads at most 512 MiB (a notice lists what was left out).
 
+### Singularity backend
+
+`terminal.backend = "singularity"` runs commands in one Apptainer instance
+per profile (`apptainer` on `PATH`, else SingularityCE's `singularity`),
+started from `terminal.singularity.image` (a SIF path or a `docker://`
+reference; required) with `--containall` and the profile's persistent
+overlay directory `<profile>/terminal/singularity-overlay`. The profile's
+sessions share the instance; the last one to end stops it and the overlay
+stays for the next. Commands start in the contained home (`~`, empty on
+every start: `--containall` mounts no host directory); what persists is
+what the overlay holds. Variables reach a command as `APPTAINERENV_<NAME>`
+on the client process (`SINGULARITYENV_` for SingularityCE) with `exec
+--cleanenv`, so a secret never appears on a command line and nothing else
+of the host environment leaks in. The instance shares the host's network.
+`prometheus doctor terminal` fails naming an unset image or a missing CLI.
+
 ### Plugin backends
 
-`terminal.backend = "modal"` authenticates by `terminal.modal.mode`:
-`direct` (the `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET` secrets),
-`managed` (the Nous subscription sign-in, billed as
-`subscription:nous`) or `auto` (default: direct when both secrets are
-stored, else managed when signed in). `prometheus doctor terminal` shows
-the chosen mode, or fails naming both missing options.
-
-The first-party `daytona` and `vercel` plugins live in
+The first-party `modal`, `daytona` and `vercel` plugins live in
 `plugins/first-party/` (their `plugin.toml` lists the hosts and secrets
 they are granted). Each session gets its own sandbox, created on its first
 command and released at session end; a backend without its credentials is
@@ -224,14 +234,32 @@ setting.
 | --- | --- | --- | --- |
 | `daytona` | `DAYTONA_API_KEY` | `snapshot`, `organization_id`, `persistent` (false), `api_url` | deletes the sandbox, or stops it when `persistent` (the next session starts it again) |
 | `vercel` | `VERCEL_TOKEN` | `team_id` and `project_id` (required), `runtime` (`node22`), `vcpus` (2), `timeout_ms` (45 minutes), `api_url` | stops the sandbox; one Vercel ended at its timeout is replaced on the next command |
+| `modal` | none (host credential `modal`) | `image` (`python:3.12-slim`), `app_name` (`prometheus`, direct), `environment` (direct), `timeout_secs` (3600), `idle_timeout_secs` (900) | terminates the sandbox; one Modal ended at a timeout is replaced on the next command |
 
-Daytona merges a command's stderr into its stdout; Vercel keeps them
-apart. The `singularity` and `modal` plugins are not built yet, and none of
-the four is published as a signed package yet.
+Daytona merges a command's stderr into its stdout, and so does Modal's
+managed gateway; Vercel and Modal's direct mode keep them apart.
 
-A `terminal-backend` plugin (world 1.1) provides `name`, `descriptor`,
+The `modal` plugin holds no secret: it sends every request through the host
+credential handle `modal`, and the host attaches the credential that
+`terminal.modal.mode` selects, only to that mode's own host. `direct` sends
+the `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET` secrets as Modal's token
+headers to Modal's gRPC API (`api.modal.com`); `managed` sends the Nous
+subscription sign-in to the subscription's Modal gateway
+(`modal-gateway.nousresearch.com`), billed as `subscription:nous`; `auto`
+(default) is direct when both secrets are stored, else managed when signed
+in. `prometheus doctor terminal` shows the chosen mode, or fails naming
+both missing options.
+
+None of the three is published as a signed package yet: build one from
+`plugins/first-party/` (the plugin workspace, `wasm32-unknown-unknown`),
+copy its directory with `plugin.wasm` into `<profile>/plugins/` and run
+`prometheus plugins adopt <dir>`; signing them with the release key is a
+known gap.
+
+A `terminal-backend` plugin (world 1.1 or later) provides `name`, `descriptor`,
 `check`, `execute`, `upload`, `download`, `cancel` and `teardown`. Its name
-may not be `local`, `container`, `docker`, `podman` or `ssh` (any case), and
+may not be `local`, `container`, `docker`, `podman`, `ssh`, `singularity` or
+`apptainer` (any case), and
 a descriptor with a missing field or an invalid value (a relative
 `default_cwd`) rejects the backend at load. An `execute` reply without an
 exit code is a contract violation (an error result, never exit 0).
