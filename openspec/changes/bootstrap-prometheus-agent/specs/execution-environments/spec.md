@@ -6,13 +6,13 @@ Execution environments run model-authored shell commands, background processes, 
 ## ADDED Requirements
 
 ### Requirement: Typed backend registry and selection
-The system SHALL select the terminal backend from `terminal.backend` (default `local`) among the built-ins `local`, `container` and `ssh` and the backends registered by enabled `terminal-backend` plugins; an unknown name SHALL fail config validation with exit code 78 and `unknown terminal backend '<name>'; available: <list>`, and SHALL never fall back to another backend. In M1 the names `container` and `ssh` SHALL already be reserved registry entries whose selection fails with exit code 69 and `terminal backend '<name>' is available in M2` (their implementation requirements are M2).
+The system SHALL select the terminal backend from `terminal.backend` (default `local`) among the built-ins `local`, `container`, `ssh` and (M2) `singularity` and the backends registered by enabled `terminal-backend` plugins; an unknown name SHALL fail config validation with exit code 78 and `unknown terminal backend '<name>'; available: <list>`, and SHALL never fall back to another backend. In M1 the names `container` and `ssh` SHALL already be reserved registry entries whose selection fails with exit code 69 and `terminal backend '<name>' is available in M2` (their implementation requirements are M2).
 **Milestone:** M1
 
 #### Scenario: Unknown backend
 - **GIVEN** `terminal.backend = "acmebox"` and no plugin providing `acmebox`
 - **WHEN** `prometheus chat` starts
-- **THEN** the system SHALL exit with code 78 and list `local`, `container`, `ssh` and every plugin backend
+- **THEN** the system SHALL exit with code 78 and list the built-in backends (`local`, `container`, `ssh`, and `singularity` from M2) and every plugin backend
 
 #### Scenario: Reserved backend selected before it ships
 - **GIVEN** an M1 build and `terminal.backend = "container"`
@@ -20,7 +20,7 @@ The system SHALL select the terminal backend from `terminal.backend` (default `l
 - **THEN** the system SHALL exit with code 69 and print `terminal backend 'container' is available in M2`
 
 ### Requirement: Built-in backend names are reserved
-The system MUST reject a plugin backend registration whose lower-cased name is `local`, `container`, `docker`, `podman` or `ssh` with `terminal backend name '<name>' is reserved`, and SHALL keep the built-in backend.
+The system MUST reject a plugin backend registration whose lower-cased name is `local`, `container`, `docker`, `podman`, `ssh`, `singularity` or `apptainer` with `terminal backend name '<name>' is reserved`, and SHALL keep the built-in backend.
 **Milestone:** M2
 
 #### Scenario: Plugin shadows container
@@ -500,6 +500,20 @@ The `container` backend SHALL accept `terminal.container.image` (default the pub
 - **WHEN** the container is created
 - **THEN** creation SHALL fail naming `--privileged`
 
+### Requirement: Singularity backend
+The built-in `singularity` backend SHALL run commands in one Apptainer (or SingularityCE) instance per profile, found as `apptainer` then `singularity` on `PATH`, started from `terminal.singularity.image` (a SIF path or a `docker://` reference) with `--containall` and the profile's persistent overlay directory `<profile>/terminal/singularity-overlay`; the profile's sessions in one process SHALL share the instance, the last of them to end SHALL stop it, and the overlay SHALL outlive it. Command variables SHALL reach the instance only through the client process environment (`APPTAINERENV_<NAME>`, `SINGULARITYENV_<NAME>` for SingularityCE) with `exec --cleanenv`, never on a command line. Its descriptor SHALL declare `container` isolation, `uses_host_filesystem = false`, `default_cwd = "~"` and `persistent = true`; its readiness check SHALL fail naming an unset `terminal.singularity.image` or a missing CLI.
+**Milestone:** M2
+
+#### Scenario: Singularity sessions share the profile instance
+- **GIVEN** `terminal.backend = "singularity"`, an image and two sessions of one profile, the first granted a secret
+- **WHEN** both run commands and then end
+- **THEN** the instance SHALL be started once with `--containall --overlay <profile>/terminal/singularity-overlay`, the secret SHALL reach the first session's command without appearing on any command line, and the instance SHALL be stopped once, after the second session ends, keeping the overlay
+
+#### Scenario: Singularity without an image
+- **GIVEN** `terminal.backend = "singularity"` and `terminal.singularity.image` unset
+- **WHEN** `prometheus doctor terminal` runs
+- **THEN** it SHALL report the backend unavailable naming `terminal.singularity.image` and exit 1
+
 ### Requirement: Remote file sync and sync-back
 For backends whose descriptor has `uses_host_filesystem = false`, the system SHALL upload granted host inputs (attached files, skill scripts, `read_file`/`write_file` payloads) on demand, and when `terminal.sync_back = true` (default true for `ssh`, false otherwise) SHALL copy files changed under the remote workspace back to the host workspace at session end and on `/sync`, skipping files larger than `terminal.sync_back_max_bytes` (default 2147483648 in total per sync) with a notice listing what was skipped, and never overwriting a host file modified after the last sync without reporting a conflict.
 **Milestone:** M2
@@ -510,13 +524,18 @@ For backends whose descriptor has `uses_host_filesystem = false`, the system SHA
 - **THEN** sync-back SHALL stop at the 2 GiB budget and list the skipped files
 
 ### Requirement: First-party backend plugins
-The project SHALL publish signed first-party `terminal-backend` plugins `singularity` (Singularity/Apptainer, config `terminal.singularity.image` as a SIF path or `docker://` reference, persistent overlay per profile, `--containall`), `modal`, `daytona` and `vercel`; the `modal` plugin SHALL accept `terminal.modal.mode` `direct` (the user's `MODAL_TOKEN_ID`/`MODAL_TOKEN_SECRET` secrets), `managed` (a subscription gateway credential, recorded as `billing_source = subscription:<provider>`) or `auto` (default: `direct` when Modal secrets exist, else `managed` when a subscription is signed in, else unavailable with the reason), and the chosen mode SHALL be shown by `prometheus doctor terminal`.
+The project SHALL publish signed first-party `terminal-backend` plugins `modal`, `daytona` and `vercel` (Singularity/Apptainer is the built-in `singularity` backend instead); until the release pipeline signs and embeds them, a recorded M2 gap (design.md, Known gaps), they SHALL be built from `plugins/first-party/` and installed from there unsigned. The `modal` plugin SHALL authenticate only through the host credential handle `modal` (plugin-system, Host credential handles), holding no secret grant, and SHALL accept `terminal.modal.mode` `direct` (the user's `MODAL_TOKEN_ID`/`MODAL_TOKEN_SECRET` secrets, sent as Modal's token headers to Modal's API only), `managed` (a subscription gateway credential sent to the subscription's Modal gateway only, recorded as `billing_source = subscription:<provider>`) or `auto` (default: `direct` when Modal secrets exist, else `managed` when a subscription is signed in, else unavailable with the reason), and the chosen mode SHALL be shown by `prometheus doctor terminal`.
 **Milestone:** M2
 
 #### Scenario: Modal auto without credentials
 - **GIVEN** `terminal.backend = "modal"`, `terminal.modal.mode = "auto"`, no Modal secrets and no subscription
 - **WHEN** `prometheus doctor terminal` runs
 - **THEN** it SHALL report the backend unavailable naming both missing options and exit 1
+
+#### Scenario: Modal direct mode through the credential handle
+- **GIVEN** the `modal` plugin enabled with no secret grant, `terminal.modal.mode = "direct"` and both Modal secrets stored
+- **WHEN** a session runs a command on `terminal.backend = "modal"`
+- **THEN** the plugin's requests to Modal's API SHALL carry the token headers added by the host, and the command's exit code, stdout, stderr and final directory SHALL come back
 
 ### Requirement: Windows local shell
 On Windows the `local` backend SHALL run commands through the shell chosen by `terminal.windows_shell` (`auto` default, `git-bash`, `pwsh`, `powershell`): `auto` SHALL use Git Bash resolved from `terminal.windows_bash_path`, then the Git for Windows install location, then `bash.exe` on `PATH` excluding the WSL launcher (`System32\bash.exe`) and `WindowsApps` aliases, and otherwise fall back to `pwsh`, then Windows PowerShell, with a one-time notice that POSIX shell syntax is unavailable; an explicitly selected shell that is absent SHALL make the terminal tool unavailable with `<shell> not found` and the install hint; while the OS sandbox confines commands (an AppContainer), `auto` SHALL skip Git Bash, whose MSYS2 runtime cannot start inside an AppContainer, and use `pwsh`, then Windows PowerShell, with a one-time notice that Git Bash cannot run inside the Windows sandbox, and an explicit `git-bash` SHALL make the terminal tool unavailable with `git-bash cannot run inside the Windows sandbox (AppContainer)` rather than run unconfined; confined PowerShell SHALL run each command from the session's working directory or fail with exit code 126, and the sandbox SHALL let the container list and read the attributes of the directories above its granted roots (names and attributes only, never contents) so PowerShell can enter them; the CLI SHALL switch its console and child consoles to UTF-8 (code page 65001) and restore the original code pages on exit; `prometheus doctor terminal` SHALL report the chosen shell and which POSIX-only features (persistent shell, `pty`, signals) are degraded.

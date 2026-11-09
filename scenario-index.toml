@@ -2034,6 +2034,12 @@ capabilities = [
 [plugin-system."Host interfaces offered to plugins"]
 "Secret outside the grant is not readable" = ["crates/pmt-plugins/tests/runtime.rs::a_secret_outside_the_grant_is_not_readable_and_revocation_is_immediate"]
 
+[plugin-system."Host credential handles"]
+"Credential handle hides the secret" = ["crates/pmt-plugins/tests/first_party_modal.rs::direct_mode_runs_a_session_in_one_sandbox_over_grpc", "crates/prometheus/src/chat/session/modal.rs::the_modal_handle_carries_the_direct_tokens_only_to_modal"]
+"Unknown credential handle" = ["crates/pmt-plugins/tests/first_party_modal.rs::an_unknown_handle_is_refused"]
+"Credential sent outside its hosts" = ["crates/pmt-plugins/tests/first_party_modal.rs::a_credential_is_never_sent_outside_its_hosts", "crates/pmt-plugins/src/host/credentials.rs::a_credential_goes_only_to_its_own_hosts_over_https"]
+"Ungranted credential handle" = ["crates/pmt-plugins/tests/first_party_modal.rs::a_plugin_without_the_credentials_grant_is_denied"]
+
 [plugin-system."Plugin state and profile scope"]
 "Two profiles get two instances" = ["crates/pmt-plugins/tests/runtime.rs::two_profiles_get_two_instances"]
 
@@ -2467,8 +2473,13 @@ capabilities = [
 [execution-environments."Remote file sync and sync-back"]
 "Sync-back cap" = ["crates/pmt-tools/tests/terminal/ssh.rs::sync_back_cap"]
 
+[execution-environments."Singularity backend"]
+"Singularity sessions share the profile instance" = ["crates/pmt-tools/tests/terminal/singularity.rs::singularity_commands_run_in_the_profile_instance", "crates/pmt-tools/tests/terminal/singularity.rs::real_apptainer_runs_the_image"]
+"Singularity without an image" = ["crates/pmt-sandbox/tests/sandbox/backend.rs::singularity_needs_an_image"]
+
 [execution-environments."First-party backend plugins"]
 "Modal auto without credentials" = ["crates/prometheus/tests/doctor_cli.rs::modal_auto_without_credentials", "crates/prometheus/src/chat/session/modal.rs::auto_prefers_direct_then_managed_and_names_both_when_neither"]
+"Modal direct mode through the credential handle" = ["crates/pmt-plugins/tests/first_party_modal.rs::direct_mode_runs_a_session_in_one_sandbox_over_grpc", "crates/prometheus/src/chat/session/modal.rs::the_modal_handle_carries_the_direct_tokens_only_to_modal"]
 
 [execution-environments."Sudo password handling"]
 "Interactive sudo" = ["crates/pmt-tools/tests/terminal/sudo.rs::interactive_sudo", "crates/prometheus/tests/daemon_sudo.rs::an_interactive_daemon_session_asks_its_clients_once"]

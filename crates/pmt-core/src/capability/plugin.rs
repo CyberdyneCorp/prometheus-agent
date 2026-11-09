@@ -39,6 +39,9 @@ pub enum PluginRight {
     /// `plugin.subagents`: launch and control subagents through the
     /// `subagents` host interface.
     Subagents,
+    /// `plugin.credential:<handle>`: send requests with a credential the
+    /// host holds (the `credentials` host interface), never seeing it.
+    Credential,
 }
 
 /// Every right with its name and whether it takes a target.
@@ -59,6 +62,7 @@ const RIGHTS: &[(PluginRight, &str, bool)] = &[
         false,
     ),
     (PluginRight::Subagents, "subagents", false),
+    (PluginRight::Credential, "credential", true),
 ];
 
 /// The verbs `plugin.platform_action` accepts.

@@ -38,7 +38,7 @@ The system SHALL instantiate a non-embedded plugin only when its id is in `plugi
 - **THEN** the plugin SHALL NOT be instantiated and `prometheus plugins list` SHALL show it as `disabled`
 
 ### Requirement: Capability declarations
-A plugin SHALL declare every authority it needs in `[capabilities]` using only these keys: `network` (list of `host[:port]` patterns, `*.` prefix allowed, no bare `*`), `fs_read` and `fs_write` (lists of paths under `$plugin_data`, `$workspace` or absolute paths), `secrets` (list of secret names), `llm` (table: `enabled`, `allow_model_override`, `allow_provider_override`, `allowed_models`), `tools_call` (list of tool names it may dispatch), `tools_override` (list of core tool names it may replace), `hooks` (list of hook names), `prompt_section` (max chars, at most 4000), `commands` (list of slash command names), `cli_commands` (list of `prometheus plugins run <id>` command names), `providers` (list of model-provider ids it may register), `providers_override` (list of built-in provider ids it may replace), `approval_transport` (bool), `inject_messages` (bool), `platform_actions` (list of verbs from `add_reaction`, `set_thread_title`), `subprocess` (bool), `ui` (bool) and `subagents` (bool, the `subagents` host interface of subagent-delegation); the host SHALL deny any operation not covered by a granted capability with the error `capability_denied: <capability> <detail>` returned to the plugin and logged.
+A plugin SHALL declare every authority it needs in `[capabilities]` using only these keys: `network` (list of `host[:port]` patterns, `*.` prefix allowed, no bare `*`), `fs_read` and `fs_write` (lists of paths under `$plugin_data`, `$workspace` or absolute paths), `secrets` (list of secret names), `llm` (table: `enabled`, `allow_model_override`, `allow_provider_override`, `allowed_models`), `tools_call` (list of tool names it may dispatch), `tools_override` (list of core tool names it may replace), `hooks` (list of hook names), `prompt_section` (max chars, at most 4000), `commands` (list of slash command names), `cli_commands` (list of `prometheus plugins run <id>` command names), `providers` (list of model-provider ids it may register), `providers_override` (list of built-in provider ids it may replace), `approval_transport` (bool), `inject_messages` (bool), `platform_actions` (list of verbs from `add_reaction`, `set_thread_title`), `subprocess` (bool), `ui` (bool), `subagents` (bool, the `subagents` host interface of subagent-delegation) and `credentials` (list of host credential handles, see Host credential handles); the host SHALL deny any operation not covered by a granted capability with the error `capability_denied: <capability> <detail>` returned to the plugin and logged.
 **Milestone:** M2
 
 #### Scenario: Undeclared host is blocked
@@ -65,13 +65,37 @@ The host SHALL run each WASM plugin instance with linear memory capped at `plugi
 - **THEN** the call SHALL fail within 30 s plus scheduling slack with `plugin '<id>' exceeded call timeout` and the turn SHALL continue
 
 ### Requirement: Host interfaces offered to plugins
-The host SHALL offer plugins only these imports, each gated by the matching capability: `log` (always), `state` (key-value and files under `<profile_home>/plugin-data/<id>/`), `http` (`network`), `secrets.get` (`secrets`, returning only granted names), `llm.complete` and `llm.complete-structured` (`llm`), `tools.dispatch` (`tools_call`), `events.emit` and `events.subscribe` (always, namespaced), `config.get` and `config.set` (scoped to `plugins.entries.<id>.*`) and `session.info` (read-only session id, profile name, surface, cwd); plugins SHALL NOT be able to read process environment variables.
+The host SHALL offer plugins only these imports, each gated by the matching capability: `log` (always), `state` (key-value and files under `<profile_home>/plugin-data/<id>/`), `http` (`network`), `secrets.get` (`secrets`, returning only granted names), `llm.complete` and `llm.complete-structured` (`llm`), `tools.dispatch` (`tools_call`), `events.emit` and `events.subscribe` (always, namespaced), `config.get` and `config.set` (scoped to `plugins.entries.<id>.*`), `session.info` (read-only session id, profile name, surface, cwd) and, for `terminal-backend` plugins (world 1.2), `credentials.describe` and `credentials.send` (`credentials`); plugins SHALL NOT be able to read process environment variables.
 **Milestone:** M2
 
 #### Scenario: Secret outside the grant is not readable
 - **GIVEN** a plugin granted `secrets = ["NOTION_API_KEY"]`
 - **WHEN** it calls `secrets.get("OPENAI_API_KEY")`
 - **THEN** the call SHALL return `capability_denied: secrets OPENAI_API_KEY`
+
+### Requirement: Host credential handles
+A plugin SHALL refer to a credential the host holds (the `modal` handle: Modal tokens or the subscription sign-in) only by an opaque handle listed in its `credentials` capability: `credentials.describe(handle)` SHALL answer the credential's kind, origin and billing source and never its secret, and `credentials.send(handle, request)` SHALL attach the credential's headers on the host side (replacing headers of the same name) before the request goes through the `network` grant and the egress policy like any `http.send`. The host SHALL fail closed without sending anything: an ungranted handle with `capability_denied: credentials <handle>`, an unknown handle with `no host credential named '<handle>'`, an unavailable credential with its reason, and a URL that is not `https` or whose host is not among the credential's own allowed hosts with `the credential may not be sent to <url>`.
+**Milestone:** M2
+
+#### Scenario: Credential handle hides the secret
+- **GIVEN** a plugin granted `credentials = ["modal"]` and `network = ["api.modal.com"]` and no secret, and Modal secrets stored
+- **WHEN** it sends a request to `https://api.modal.com` with `credentials.send("modal", ...)`
+- **THEN** the request SHALL arrive with the Modal token headers the host added, and no host call SHALL return their values to the plugin
+
+#### Scenario: Unknown credential handle
+- **GIVEN** a plugin granted `credentials = ["modal"]` on a host that holds no credential named `modal`
+- **WHEN** it calls `credentials.describe("modal")` or `credentials.send("modal", ...)`
+- **THEN** the call SHALL fail with `no host credential named 'modal'` and no request SHALL be sent
+
+#### Scenario: Credential sent outside its hosts
+- **GIVEN** the `modal` credential allowed only for `api.modal.com`
+- **WHEN** a plugin sends it to `https://evil.example/` or `http://api.modal.com/`
+- **THEN** the call SHALL fail with `the credential may not be sent to <url>` and no request SHALL be sent
+
+#### Scenario: Ungranted credential handle
+- **GIVEN** a plugin without `credentials = ["modal"]` in its grant
+- **WHEN** it calls `credentials.describe("modal")`
+- **THEN** the call SHALL fail with `capability_denied: credentials modal`
 
 ### Requirement: Plugin state and profile scope
 Plugin persistent data SHALL live under `<profile_home>/plugin-data/<id>/` resolved from the ProfileScope of the instance; the host SHALL create one plugin instance per profile, SHALL never share instance state between profiles, and SHALL bind hook and lifecycle calls made outside a turn (startup, timers, reloads) to the owning profile explicitly.

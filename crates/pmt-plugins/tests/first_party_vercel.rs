@@ -254,6 +254,7 @@ impl Vercel {
                 .into_iter()
                 .collect(),
             settings: Mutex::default(),
+            credentials: Mutex::default(),
         });
         fake.set("vercel", "team_id", "\"team_1\"");
         fake.set("vercel", "project_id", "\"prj_1\"");

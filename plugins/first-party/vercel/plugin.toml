@@ -10,7 +10,7 @@ kind = "wasm"
 description = "Runs terminal commands in a Vercel Sandbox microVM, one per session."
 license = "MIT"
 requires_prometheus = ">=0.1"
-worlds = ["terminal-backend@1.1"]
+worlds = ["terminal-backend@1.2"]
 
 [capabilities]
 network = ["api.vercel.com"]

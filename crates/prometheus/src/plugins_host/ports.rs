@@ -13,7 +13,8 @@ use pmt_config::write::ConfigFile;
 use pmt_net::destination::PrivateGrant;
 use pmt_net::{Fetcher, OutboundPolicy};
 use pmt_plugins::host::ports::{
-    ConfigPort, HttpPort, HttpRequest, HttpResponse, PortFuture, Ports, SecretsPort,
+    ConfigPort, CredentialLookup, CredentialsPort, HttpPort, HttpRequest, HttpResponse, PortFuture,
+    Ports, SecretsPort,
 };
 
 /// The ports of `scope`'s plugin instances.
@@ -24,6 +25,7 @@ pub(super) fn ports(scope: &ProfileScope) -> Ports {
     ports.http = Arc::new(Http::new(scope));
     ports.llm = Arc::new(super::llm::SessionsLlm);
     ports.subagents = Arc::new(super::subagents::SessionsSubagents);
+    ports.credentials = Arc::new(HostCredentials(scope.clone()));
     ports.config = Arc::new(Settings {
         file: scope.profile().config_file(),
         entries: scope.config().plugins.entries.clone(),
@@ -35,6 +37,21 @@ pub(super) fn ports(scope: &ProfileScope) -> Ports {
         });
     }
     ports
+}
+
+/// The credentials the host holds for plugins, by handle: only `modal`
+/// (the first-party Modal backend; spec: plugin-system, Host credential
+/// handles). Resolved per call, so a secret stored or a sign-in made
+/// later is picked up without reloading the plugin.
+struct HostCredentials(ProfileScope);
+
+impl CredentialsPort for HostCredentials {
+    fn resolve(&self, _plugin: &str, handle: &str) -> CredentialLookup {
+        match handle {
+            crate::chat::session::modal::HANDLE => crate::chat::session::modal::credential(&self.0),
+            _ => CredentialLookup::Unknown,
+        }
+    }
 }
 
 struct Secrets(pmt_config::secrets::SecretsHandle);

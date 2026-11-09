@@ -54,6 +54,51 @@ pub trait SecretsPort: Send + Sync {
     fn get(&self, name: &str) -> Option<String>;
 }
 
+/// A credential the host attaches to a plugin's requests (the
+/// `credentials` host interface); the plugin never sees `headers`.
+#[derive(Clone)]
+pub struct Credential {
+    /// Which kind it resolved to (`direct`, `managed`).
+    pub kind: String,
+    /// The base URL requests with it go to.
+    pub origin: String,
+    /// Who is billed, when not the user's own account.
+    pub billing_source: Option<String>,
+    /// The hosts it may be sent to (`host` or `host:port`, lower case).
+    pub hosts: Vec<String>,
+    /// The headers it adds, replacing any of the same name.
+    pub headers: Vec<(String, pmt_core::secret::SecretString)>,
+}
+
+impl std::fmt::Debug for Credential {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Credential")
+            .field("kind", &self.kind)
+            .field("origin", &self.origin)
+            .field("billing_source", &self.billing_source)
+            .field("hosts", &self.hosts)
+            .finish_non_exhaustive()
+    }
+}
+
+/// What a credential handle resolves to.
+#[derive(Debug, Clone)]
+pub enum CredentialLookup {
+    /// The host knows no credential by that handle.
+    Unknown,
+    /// It exists but cannot be used now, with the reason.
+    Unavailable(String),
+    /// Ready to attach.
+    Ready(Credential),
+}
+
+/// Credentials held for plugins, by handle (the host already checked the
+/// `credentials` grant).
+pub trait CredentialsPort: Send + Sync {
+    /// The credential `handle` names for `plugin`.
+    fn resolve(&self, plugin: &str, handle: &str) -> CredentialLookup;
+}
+
 /// One model call (the host already checked the `llm` grant and any
 /// model or provider override).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -289,6 +334,8 @@ pub struct Ports {
     pub messaging: Arc<dyn MessagingPort>,
     /// Subagents of the calling session.
     pub subagents: Arc<dyn SubagentsPort>,
+    /// Credentials attached to plugin requests.
+    pub credentials: Arc<dyn CredentialsPort>,
 }
 
 impl Default for Ports {
@@ -303,7 +350,8 @@ impl Default for Ports {
             events: none.clone(),
             config: none.clone(),
             messaging: none.clone(),
-            subagents: none,
+            subagents: none.clone(),
+            credentials: none,
         }
     }
 }
@@ -402,5 +450,11 @@ impl SubagentsPort for Unavailable {
                 "delegation.session_closed: subagents are {UNAVAILABLE}"
             )))
         })
+    }
+}
+
+impl CredentialsPort for Unavailable {
+    fn resolve(&self, _: &str, _: &str) -> CredentialLookup {
+        CredentialLookup::Unknown
     }
 }

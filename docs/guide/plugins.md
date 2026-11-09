@@ -179,7 +179,8 @@ Prometheus reads and a `requires_prometheus` range that excludes it. The
 capability keys are `network`, `fs_read`, `fs_write`, `secrets`, `llm`,
 `tools_call`, `tools_override`, `hooks`, `prompt_section`, `commands`,
 `cli_commands`, `providers`, `providers_override`, `approval_transport`,
-`inject_messages`, `platform_actions`, `subprocess`, `ui` and `subagents`.
+`inject_messages`, `platform_actions`, `subprocess`, `ui`, `subagents` and
+`credentials`.
 
 ## The WIT worlds
 

@@ -86,6 +86,19 @@ impl Descriptor {
         }
     }
 
+    /// The `singularity` backend: the profile's instance, whose overlay
+    /// outlives sessions; commands start in the contained home.
+    #[must_use]
+    pub fn singularity() -> Self {
+        Self {
+            isolation: Isolation::Container,
+            uses_host_filesystem: false,
+            default_cwd: "~".to_owned(),
+            session_isolated_when_ephemeral: false,
+            persistent: true,
+        }
+    }
+
     /// A plugin's descriptor from its JSON (`describe`).
     ///
     /// # Errors

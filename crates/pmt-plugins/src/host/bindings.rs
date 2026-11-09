@@ -8,6 +8,7 @@ wasmtime::component::bindgen!({
         "../../wit/host",
         "../../wit/messaging",
         "../../wit/subagents",
+        "../../wit/credentials",
         "../../wit/tool",
         "../../wit/hook",
         "../../wit/provider",
@@ -22,7 +23,7 @@ wasmtime::component::bindgen!({
             include prometheus:tool/tool@1.2.0;
             include prometheus:hook/hook@1.3.0;
             include prometheus:provider/provider@1.1.0;
-            include prometheus:terminal-backend/terminal-backend@1.1.0;
+            include prometheus:terminal-backend/terminal-backend@1.2.0;
             include prometheus:delegation-router/delegation-router@1.0.0;
             include prometheus:memory-provider/memory-provider@1.0.0;
             include prometheus:context-engine/context-engine@1.0.0;

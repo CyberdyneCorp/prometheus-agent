@@ -5,7 +5,8 @@
 //!
 //! Everything is read from the session's own `ProfileScope`, so two profiles
 //! served by one gateway each get their own backend. `local` keeps the OS
-//! sandbox target; `container` and `ssh` get a [`RemoteTarget`] and file
+//! sandbox target; `container`, `ssh` and `singularity` get a
+//! [`RemoteTarget`] and file
 //! tools that act inside that environment; a plugin backend gets a
 //! [`PluginTarget`].
 
@@ -22,6 +23,7 @@ use pmt_tools::files::{FileBackend, RemoteFiles};
 use pmt_tools::terminal::cwd::{Place, StartCwd, resolve};
 use pmt_tools::terminal::remote::container::ContainerTransport;
 use pmt_tools::terminal::remote::exec::PluginExec;
+use pmt_tools::terminal::remote::singularity::SingularityTransport;
 use pmt_tools::terminal::remote::ssh::SshTransport;
 use pmt_tools::terminal::remote::{RemoteExec, RemoteTarget, Transport};
 use pmt_tools::terminal::target::{PluginTarget, Target, Unavailable};
@@ -160,6 +162,13 @@ fn try_select(
             let target = SshTarget::from_config(&terminal.ssh, Some(&control))?;
             (Place::Ssh, Some(Arc::new(SshTransport::new(target))))
         }
+        Kind::Singularity => {
+            let place = Place::Container {
+                workspace_mounted: false,
+                default_cwd: descriptor.default_cwd.clone(),
+            };
+            (place, Some(singularity(scope)?))
+        }
         Kind::Plugin => (
             Place::Remote {
                 default_cwd: descriptor.default_cwd.clone(),
@@ -183,18 +192,19 @@ fn try_select(
     };
     let remote = match (transport, &backend.plugin) {
         (Some(transport), _) => {
-            let state = if held.is_some() {
-                pmt_tools::terminal::remote::CONTAINER_STATE
-            } else {
+            let ssh = backend.kind == Kind::Ssh;
+            let state = if ssh {
                 pmt_tools::terminal::remote::SSH_STATE
+            } else {
+                pmt_tools::terminal::remote::CONTAINER_STATE
             };
             let mut remote = over_transport(&transport, descriptor, session_id, &name, state);
             // The marker lives outside the workspace; `~` is the remote
             // login directory for SSH (relative paths start there).
-            let marker = if held.is_some() {
-                format!("{state}/{session_id}-sync-marker")
-            } else {
+            let marker = if ssh {
                 format!(".cache/prometheus-terminal/{session_id}-sync-marker")
+            } else {
+                format!("{state}/{session_id}-sync-marker")
             };
             remote.sync = sync_root.map(|root| (root, marker));
             remote
@@ -281,6 +291,25 @@ fn container(
     Ok(Arc::new(ContainerTransport::new(
         Pool::process().container(spec),
     )))
+}
+
+/// The profile's singularity instance (shared by its sessions).
+fn singularity(scope: &ProfileScope) -> Result<Arc<dyn Transport>, Error> {
+    let image = scope.config().terminal.singularity.image.clone();
+    if image.is_empty() {
+        return Err(Error::new(
+            &pmt_core::error::codes::TERMINAL_BACKEND_UNAVAILABLE,
+            "singularity backend requires terminal.singularity.image (a SIF path or docker:// reference)",
+        ));
+    }
+    let runtime = pmt_sandbox::singularity::Runtime::detect()?;
+    let spec = pmt_sandbox::singularity::InstanceSpec {
+        profile: scope.name().to_string(),
+        image,
+        overlay: pmt_sandbox::singularity::overlay_dir(scope.dir()),
+    };
+    let instance = pmt_sandbox::singularity::Instance::shared(runtime, spec);
+    Ok(Arc::new(SingularityTransport::new(instance)))
 }
 
 #[cfg(unix)]

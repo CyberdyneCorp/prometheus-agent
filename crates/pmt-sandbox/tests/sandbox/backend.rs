@@ -56,7 +56,7 @@ fn unknown_backend_exits_78_with_the_available_list() {
     assert_eq!(err.exit_code(), 78);
     assert_eq!(
         err.message(),
-        "unknown terminal backend 'acmebox'; available: local, container, ssh"
+        "unknown terminal backend 'acmebox'; available: local, container, ssh, singularity"
     );
 
     let mut registry = BackendRegistry::builtin();
@@ -64,7 +64,7 @@ fn unknown_backend_exits_78_with_the_available_list() {
     let err = registry.select("acmebox").unwrap_err();
     assert!(
         err.message()
-            .ends_with("available: local, container, ssh, modal")
+            .ends_with("available: local, container, ssh, singularity, modal")
     );
 }
 
@@ -96,7 +96,15 @@ fn names_never_fall_back() {
 #[test]
 fn plugin_shadows_container() {
     let mut registry = BackendRegistry::builtin();
-    for name in ["Docker", "PODMAN", "container", "Ssh", "local"] {
+    for name in [
+        "Docker",
+        "PODMAN",
+        "container",
+        "Ssh",
+        "local",
+        "Singularity",
+        "apptainer",
+    ] {
         let err = registry.register_plugin(plugin(name)).unwrap_err();
         assert_eq!(
             err.message(),
@@ -104,7 +112,36 @@ fn plugin_shadows_container() {
         );
     }
     assert_eq!(registry.select("container").unwrap().kind, Kind::Container);
-    assert_eq!(registry.names(), ["local", "container", "ssh"]);
+    assert_eq!(
+        registry.names(),
+        ["local", "container", "ssh", "singularity"]
+    );
+}
+
+#[test]
+fn singularity_needs_an_image() {
+    let fixture = Fixture::new();
+    let config = TerminalConfig {
+        backend: "singularity".to_owned(),
+        ..TerminalConfig::default()
+    };
+    let registry = BackendRegistry::builtin();
+    assert_eq!(
+        registry.select("singularity").unwrap().descriptor(&config),
+        Descriptor::singularity()
+    );
+    let readiness = registry.readiness(
+        &config,
+        &sandbox_with(&fixture, full()),
+        &SandboxConfig::default(),
+    );
+    assert_eq!(readiness.exit_code(), 1);
+    assert_eq!(
+        readiness.reason(),
+        Some(
+            "singularity backend requires terminal.singularity.image (a SIF path or docker:// reference)"
+        )
+    );
 }
 
 #[test]

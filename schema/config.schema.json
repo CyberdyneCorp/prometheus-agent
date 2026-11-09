@@ -7922,7 +7922,7 @@
           "default": {
             "image": ""
           },
-          "description": "The first-party `singularity` backend plugin."
+          "description": "The built-in `singularity` backend."
         },
         "ssh": {
           "$ref": "#/$defs/SshConfig",

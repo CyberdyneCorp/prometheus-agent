@@ -8,7 +8,7 @@
 //! (it gives up after 60 s of polling).
 
 wit_bindgen::generate!({
-    path: ["../../../wit/host", "../../../wit/terminal-backend"],
+    path: ["../../../wit/host", "../../../wit/credentials", "../../../wit/terminal-backend"],
     world: "prometheus:terminal-backend/terminal-backend",
     generate_all,
 });

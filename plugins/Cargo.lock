@@ -81,6 +81,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "first-party-modal"
+version = "0.1.0"
+dependencies = [
+ "remote-kit",
+ "serde_json",
+ "wit-bindgen",
+]
+
+[[package]]
 name = "first-party-vercel"
 version = "0.1.0"
 dependencies = [

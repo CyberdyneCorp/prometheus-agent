@@ -29,8 +29,8 @@ pub struct World {
 }
 
 /// Every world, in the spec's order, with no previous major yet. `hook`
-/// is at 1.3 (`console`), `tool` at 1.2 (`subagents`), `provider` and
-/// `terminal-backend` at 1.1; the others are at 1.0.
+/// is at 1.3 (`console`), `tool` at 1.2 (`subagents`), `terminal-backend`
+/// at 1.2 (`credentials`), `provider` at 1.1; the others are at 1.0.
 pub const WORLDS: &[World] = &[
     World {
         minor: 2,
@@ -48,7 +48,7 @@ pub const WORLDS: &[World] = &[
     world("memory-provider"),
     world("context-engine"),
     World {
-        minor: 1,
+        minor: 2,
         ..world("terminal-backend")
     },
     world("ui-panel"),

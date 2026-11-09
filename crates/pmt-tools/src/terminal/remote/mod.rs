@@ -28,6 +28,7 @@ use super::target::Target;
 
 pub mod container;
 pub mod exec;
+pub mod singularity;
 pub mod ssh;
 
 pub use exec::{ExecResult, RemoteExec};

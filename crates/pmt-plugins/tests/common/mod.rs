@@ -12,9 +12,10 @@ use pmt_config::schema::PluginsConfig;
 use pmt_core::capability::CapabilitySet;
 use pmt_plugins::grants::{Identity, approve};
 use pmt_plugins::host::ports::{
-    ActionError, ConfigPort, EventsPort, HttpPort, HttpRequest, HttpResponse, InjectTarget,
-    LlmCall, LlmPort, MessagingPort, PlatformAction, PortFuture, Ports, PostFailure, Posted,
-    SecretsPort, SubagentAnswer, SubagentFailure, SubagentRequest, SubagentsPort, ToolsPort,
+    ActionError, ConfigPort, CredentialLookup, CredentialsPort, EventsPort, HttpPort, HttpRequest,
+    HttpResponse, InjectTarget, LlmCall, LlmPort, MessagingPort, PlatformAction, PortFuture, Ports,
+    PostFailure, Posted, SecretsPort, SubagentAnswer, SubagentFailure, SubagentRequest,
+    SubagentsPort, ToolsPort,
 };
 use pmt_plugins::host::{CallInfo, Instance, Runtime};
 use pmt_plugins::load::{LoadInputs, Loaded, load};
@@ -39,6 +40,8 @@ pub(crate) struct Fake {
     pub seen: Arc<Seen>,
     pub secrets: BTreeMap<String, String>,
     pub settings: Mutex<BTreeMap<(String, String), serde_json::Value>>,
+    /// Host credentials by handle (others are unknown).
+    pub credentials: Mutex<BTreeMap<String, CredentialLookup>>,
 }
 
 impl Fake {
@@ -50,6 +53,7 @@ impl Fake {
                 .map(|(k, v)| (k.to_owned(), v.to_owned()))
                 .collect(),
             settings: Mutex::new(BTreeMap::new()),
+            credentials: Mutex::new(BTreeMap::new()),
         })
     }
 
@@ -70,7 +74,19 @@ impl Fake {
             config: self.clone(),
             messaging: self.clone(),
             subagents: self.clone(),
+            credentials: self.clone(),
         }
+    }
+}
+
+impl CredentialsPort for Fake {
+    fn resolve(&self, _: &str, handle: &str) -> CredentialLookup {
+        self.credentials
+            .lock()
+            .unwrap()
+            .get(handle)
+            .cloned()
+            .unwrap_or(CredentialLookup::Unknown)
     }
 }
 

@@ -253,6 +253,16 @@ it. A handle works only for the conversation it was issued in; a forged,
 foreign or expired one answers `unknown-handle`. Results stay readable for
 an hour after the child ends.
 
+Terminal-backend plugins (world 1.2) also import
+`prometheus:credentials/handles`, with the `credentials` capability
+(`credentials = ["modal"]`): `describe(handle)` answers the kind, origin
+and billing source of a credential the host holds, and `send(handle,
+request)` sends an HTTP request with that credential attached by the host,
+so the plugin never sees the secret. An ungranted or unknown handle, an
+unavailable credential, and a URL that is not `https` on one of the
+credential's own hosts are refused before anything is sent; the request
+also needs the `network` grant like any `http.send`.
+
 A `delegation-router` plugin routes [`delegate_task`](../reference/tools.md#delegate_task) tasks when
 `delegation.router` names it. `route(task)` receives the task as JSON and
 answers `{"model": ..., "profile": ..., "backend": ...}` (every field
