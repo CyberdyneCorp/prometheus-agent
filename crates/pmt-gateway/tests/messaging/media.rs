@@ -105,7 +105,7 @@ async fn a_failed_transcription_hands_the_agent_the_voice_note() {
         .collect();
     let note = names
         .iter()
-        .find(|n| n.len() == 64 + 4 && n.ends_with(".ogg"))
+        .find(|n| n.len() == 64 + 4 && n[..64].chars().all(|c| c.is_ascii_hexdigit()))
         .unwrap_or_else(|| panic!("no cached voice note in {names:?}"));
     assert!(text.contains(note.as_str()), "{text}");
 }
