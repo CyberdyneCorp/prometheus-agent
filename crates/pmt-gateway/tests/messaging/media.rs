@@ -95,11 +95,19 @@ async fn a_failed_transcription_hands_the_agent_the_voice_note() {
         text.starts_with("[The user sent a voice message: ") && text.ends_with("(duration: 7s)]"),
         "{text}"
     );
-    let cached = std::fs::read_dir(&dir).unwrap().flatten().next().unwrap();
-    assert!(
-        text.contains(&*cached.file_name().to_string_lossy()),
-        "{text}"
-    );
+    // The cache also holds the spoken copy of the reply (`speech-N.ogg`,
+    // the reply mode speaks to voice messages): the voice note is the
+    // file named by its content hash.
+    let names: Vec<String> = std::fs::read_dir(&dir)
+        .unwrap()
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    let note = names
+        .iter()
+        .find(|n| n.len() == 64 + 4 && n.ends_with(".ogg"))
+        .unwrap_or_else(|| panic!("no cached voice note in {names:?}"));
+    assert!(text.contains(note.as_str()), "{text}");
 }
 
 #[tokio::test]
