@@ -32,6 +32,7 @@ use super::turn::{SecretsToClients, SudoToClients, ToClients, approvals, clarify
 
 mod automation;
 mod commands;
+mod crash;
 mod cron;
 mod cron_admit;
 mod cron_continue;
@@ -80,6 +81,9 @@ struct Loaded {
     /// What the last turn's automation boundary left for the lane: status
     /// lines and a goal continuation.
     after: Mutex<pmt_gateway::messaging::automation::AfterTurn>,
+    /// The message a `/retry` of a crashed turn sent back: submitting it
+    /// resumes that turn instead of running it as new input.
+    retry: Mutex<Option<String>>,
 }
 
 impl Loaded {
@@ -358,6 +362,7 @@ impl DaemonHost {
             oneshot,
             chat,
             after: Mutex::default(),
+            retry: Mutex::default(),
         });
         loaded.insert(id, Arc::clone(&session));
         if let Some(inbox) = &inbox {

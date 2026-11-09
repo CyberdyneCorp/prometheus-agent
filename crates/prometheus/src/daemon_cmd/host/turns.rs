@@ -29,6 +29,7 @@ use pmt_store::EndReason;
 use tracing::Instrument as _;
 
 use super::automation::Follow;
+use super::crash::AfterCrash;
 use super::{DaemonHost, Loaded, Profile, finished, session_id, setup};
 
 /// An input waiting for its turn.
@@ -40,9 +41,9 @@ pub(super) struct Queued {
     /// A messaging conversation's lane submitted it: the lane takes the
     /// turn's automation boundary once it delivered the answer.
     pub(super) from_lane: bool,
-    /// Instead of `input`: a turn a crash left unfinished, resumed
-    /// (`true`) or closed.
-    pub(super) resume: Option<(pmt_agent::turn::Unfinished, bool)>,
+    /// Instead of `input`: a turn a crash left unfinished, resumed or
+    /// closed (`Ask`: as the session's clients answer).
+    pub(super) resume: Option<(pmt_agent::turn::Unfinished, AfterCrash)>,
 }
 
 impl DaemonHost {
@@ -70,6 +71,9 @@ impl DaemonHost {
                 admission: Admission::Handled,
                 notice: Some(Self::confirm_cron(profile, &session, &link, confirmation)),
             });
+        }
+        if let Some(resumed) = self.resume_on_retry(profile, (id, &session), &params.text, &link) {
+            return resumed;
         }
         let mut input = setup::input(&session.factory, &session.live, &params).await?;
         input.prefix.clone_from(&author.prefix);
@@ -148,7 +152,7 @@ impl DaemonHost {
     /// Runs `job`, then every input queued behind it, on a task of its
     /// own; the session is idle again once the queue is empty (and a
     /// one-shot session ended).
-    fn start(
+    pub(super) fn start(
         &self,
         profile: Arc<Profile>,
         id: SessionId,
@@ -357,67 +361,6 @@ fn waiting(link: &Link, ahead: usize) {
     }
 }
 
-impl DaemonHost {
-    /// A loaded session whose last turn a crash left unfinished: resumed
-    /// or closed as its first job, or (`ask`) its clients are told and
-    /// the next message closes it (spec: agent-turn-loop, Crash resume
-    /// mid-tool-batch).
-    pub(super) fn after_crash(
-        &self,
-        profile: Arc<Profile>,
-        id: SessionId,
-        session: &Arc<Loaded>,
-        link: &Link,
-    ) {
-        use pmt_config::schema::ResumeOnCrash;
-        let unfinished = match session.live.agent.unfinished_turn() {
-            Ok(Some(unfinished)) => unfinished,
-            Ok(None) => return,
-            Err(err) => return tracing::warn!(error = %err, "turn journal unreadable"),
-        };
-        let resume = match profile.scope().config().agent.resume_on_crash {
-            ResumeOnCrash::Auto => true,
-            ResumeOnCrash::Never => false,
-            ResumeOnCrash::Ask => {
-                let tools = unfinished.interrupted_tools().join(", ");
-                super::automation::notice(
-                    link,
-                    &format!(
-                        "The last turn of this session stopped when the process ended{}. \
-                         Set agent.resume_on_crash = \"auto\" to continue such turns; \
-                         your next message closes it.",
-                        if tools.is_empty() {
-                            String::new()
-                        } else {
-                            format!(" while {tools} ran")
-                        }
-                    ),
-                );
-                return;
-            }
-        };
-        let job = Queued {
-            input: TurnInput::default(),
-            turn_id: unfinished.turn_id.clone(),
-            run_budget: None,
-            link: link.clone(),
-            from_lane: false,
-            resume: Some((unfinished, resume)),
-        };
-        if session.busy.swap(true, Ordering::AcqRel) {
-            session
-                .queue
-                .lock()
-                .expect("queue poisoned")
-                .push_front(job);
-            return;
-        }
-        if let Err(err) = self.start(profile, id, Arc::clone(session), job) {
-            tracing::warn!(error = %err, "crashed turn not resumed");
-        }
-    }
-}
-
 /// How long a stopping daemon waits for an interrupted turn to end.
 const STOP_WAIT: Duration = Duration::from_secs(5);
 
@@ -494,7 +437,8 @@ async fn run_one(
         tracing::warn!(session = %id, error = %err, "gateway session hygiene failed");
     }
     let outcome = match job.resume {
-        Some((unfinished, resume)) => {
+        Some((unfinished, choice)) => {
+            let resume = super::crash::decide(&job.link, &unfinished, choice).await;
             agent
                 .resume_turn(Some(&scope), unfinished, resume, options)
                 .await

@@ -490,7 +490,10 @@ and its source, for example "steer (platform override)".
 - **`/retry`, `/discard` after a restart.** A turn a crash interrupted is
   `resume_pending`: new messages wait behind it, in order, until `/retry`
   runs it again (then the waiting messages) or `/discard` drops it (its
-  partial transcript stays) and runs them now. After
+  partial transcript stays) and runs them now. With the default
+  `agent.resume_on_crash = "ask"`, `/retry` resumes the turn from its
+  journal: finished tool results are reused and a call cut short gets an
+  "outcome unknown" result instead of running again. After
   `gateway.sessions.resume_pending_ttl_secs` (default 86400) it is dropped
   automatically.
 - **Stall watchdog.** A turn with no model output, tool progress or tool

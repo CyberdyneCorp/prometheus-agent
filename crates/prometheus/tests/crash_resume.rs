@@ -13,6 +13,8 @@ use std::time::{Duration, Instant};
 
 use expectrl::session::OsSession;
 use expectrl::{Eof, Expect};
+#[cfg(feature = "gateway")]
+use serde_json::{Value, json};
 
 const SCRIPT: &str = r#"
 [[rule]]
@@ -213,4 +215,89 @@ fn the_daemon_resumes_a_crashed_turn_when_the_session_loads() {
         at("checked the deploy") < at("anything else?"),
         "resumed first: {texts:#?}"
     );
+}
+
+/// Attaches a client that answers server requests to the crashed
+/// `session` (the default `agent.resume_on_crash = "ask"`), answers the
+/// resume question with `choice`; returns the question and the
+/// `turn.finished` of the crashed turn.
+#[cfg(feature = "gateway")]
+fn answer_the_resume_question(home: &Path, session: &str, choice: &str) -> (String, Value) {
+    use pmt_rpc::client::Client;
+    use pmt_rpc::control::Purpose;
+    let _daemon = common::daemon::start(home, &[]);
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(async {
+        let (client, mut inbox) = Client::connect(
+            &common::daemon::record(home).endpoint,
+            Purpose::Interactive,
+            vec!["default".into()],
+            &common::daemon::hello(true),
+        )
+        .await
+        .unwrap();
+        client
+            .call("session.resume", json!({"session_id": session}))
+            .await
+            .unwrap();
+        let mut question = String::new();
+        let wait = async {
+            loop {
+                tokio::select! {
+                    Some(call) = inbox.requests.recv() => {
+                        assert_eq!(call.method, "clarify.request", "{call:?}");
+                        call.params["questions"][0]["question"]
+                            .as_str()
+                            .unwrap_or_default()
+                            .clone_into(&mut question);
+                        let answer = json!({"answers": [{"status": "answered", "choices": [choice]}]});
+                        client.respond(&call.id, Ok(answer));
+                    }
+                    Some(event) = inbox.events.recv() => {
+                        if event.event == "turn.finished" {
+                            return event.data;
+                        }
+                    }
+                }
+            }
+        };
+        let finished = tokio::time::timeout(Duration::from_mins(1), wait)
+            .await
+            .expect("the crashed turn finished");
+        (question, finished)
+    })
+}
+
+/// Under the default `ask`, the daemon asks the attached client; a
+/// `Resume` answer continues the turn from its journal.
+#[cfg(feature = "gateway")]
+#[test]
+fn the_daemon_asks_and_resumes_a_crashed_turn_on_yes() {
+    let home = home();
+    crash(home.path());
+    let session = common::newest_session(home.path());
+    let (question, finished) = answer_the_resume_question(home.path(), &session, "Resume");
+    assert!(question.contains("while terminal ran"), "{question}");
+    assert_eq!(finished["exit_reason"], "completed", "{finished}");
+    assert_eq!(
+        finished["final_response"], "checked the deploy",
+        "{finished}"
+    );
+    let all = serde_json::to_string(&common::session_messages(home.path(), &session)).unwrap();
+    assert!(all.contains("outcome unknown"), "{all}");
+}
+
+/// A `Close` answer ends the turn as crashed with its boundary row; no
+/// model request follows.
+#[cfg(feature = "gateway")]
+#[test]
+fn the_daemon_closes_a_crashed_turn_when_the_user_declines() {
+    let home = home();
+    crash(home.path());
+    let session = common::newest_session(home.path());
+    let (_, finished) = answer_the_resume_question(home.path(), &session, "Close");
+    assert_eq!(finished["exit_reason"], "crashed", "{finished}");
+    let all = serde_json::to_string(&common::session_messages(home.path(), &session)).unwrap();
+    assert!(!all.contains("checked the deploy"), "{all}");
+    assert!(all.contains("The turn ended (crashed)"), "{all}");
 }

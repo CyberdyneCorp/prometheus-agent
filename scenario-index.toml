@@ -3063,11 +3063,11 @@ capabilities = [
 "Journal order" = ["crates/pmt-agent/tests/turn/journal.rs::a_turn_with_one_tool_call_journals_every_step_in_order", "crates/pmt-store/tests/store/journal.rs::only_the_newest_turn_is_kept_and_an_unfinished_one_is_reported"]
 
 [agent-turn-loop."Crash resume mid-tool-batch (upgrade)"]
-"Crash during a terminal command" = ["crates/prometheus/tests/crash_resume.rs::a_crash_during_a_terminal_command_resumes_with_the_read_reused_and_the_command_unknown", "crates/prometheus/tests/crash_resume.rs::the_daemon_resumes_a_crashed_turn_when_the_session_loads", "crates/pmt-agent/tests/turn/journal.rs::declining_closes_the_turn_as_crashed_with_a_boundary_row", "crates/pmt-agent/tests/turn/journal.rs::a_new_message_closes_a_crashed_turn_first"]
+"Crash during a terminal command" = ["crates/prometheus/tests/crash_resume.rs::a_crash_during_a_terminal_command_resumes_with_the_read_reused_and_the_command_unknown", "crates/prometheus/tests/crash_resume.rs::the_daemon_resumes_a_crashed_turn_when_the_session_loads", "crates/prometheus/tests/crash_resume.rs::the_daemon_asks_and_resumes_a_crashed_turn_on_yes", "crates/prometheus/tests/crash_resume.rs::the_daemon_closes_a_crashed_turn_when_the_user_declines", "crates/prometheus/tests/crash_resume_gateway.rs::retry_after_a_restart_resumes_the_turn_from_its_journal", "crates/pmt-agent/tests/turn/journal.rs::declining_closes_the_turn_as_crashed_with_a_boundary_row", "crates/pmt-agent/tests/turn/journal.rs::a_new_message_closes_a_crashed_turn_first"]
 "Idempotent call re-run" = ["crates/pmt-agent/tests/turn/journal.rs::resuming_reuses_finished_results_reruns_safe_calls_and_marks_the_rest_unknown"]
 
 [agent-turn-loop."Side questions with /btw"]
-"Busy session" = ["crates/prometheus/tests/side_questions.rs::a_side_question_is_answered_while_the_turn_runs_and_never_stored"]
+"Busy session" = ["crates/prometheus/tests/side_questions.rs::a_side_question_is_answered_while_the_turn_runs_and_never_stored", "crates/prometheus/tests/side_questions_gateway.rs::a_side_answer_reaches_the_chat_while_the_turn_runs_and_is_never_stored"]
 
 [agent-turn-loop."Project instructions bootstrap with /init"]
 "Existing file preserved" = ["crates/pmt-agent/tests/turn/init.rs::an_existing_agents_file_keeps_the_users_sections"]

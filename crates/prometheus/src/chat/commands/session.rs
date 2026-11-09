@@ -321,7 +321,10 @@ fn authored(message: &pmt_store::Message) -> bool {
 }
 
 /// The last user message as it was sent: its text and images.
-fn last_user_input(factory: &Factory, id: SessionId) -> Result<Option<TurnInput>, Error> {
+pub(crate) fn last_user_input(
+    factory: &Factory,
+    id: SessionId,
+) -> Result<Option<TurnInput>, Error> {
     let Some((message_id, text)) = user_messages(factory, id)?.pop() else {
         return Ok(None);
     };

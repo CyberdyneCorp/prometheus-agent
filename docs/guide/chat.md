@@ -209,7 +209,10 @@ On messaging surfaces `/sessions all` is reserved for admins.
 `/retry` sends the last message again with its attachments; the answer
 and everything after the message leave the active transcript (a soft
 delete, so `sessions rewind` can bring them back). While a turn runs it
-stops the turn first; with no message it prints `nothing to retry`.
+stops the turn first; with no message it prints `nothing to retry`. On
+a daemon session whose last turn a crash left unfinished, `/retry`
+resumes that turn from its journal instead (see
+[crash resume](turns.md#crash-resume)).
 `/queue <prompt>` (alias `/q`) runs a prompt after the current turn (at
 once when idle); `/queue list`, `/queue edit <n> <text>`, `/queue rm
 <n>`, `/queue move <a> <b>`, `/queue clear` and `/queue add <text>`
