@@ -415,7 +415,7 @@ first rule not used up whose matchers all hold:
 | `step` | the number of assistant messages already in the request (0 for the first call) equals it |
 | `model` | the route's model equals it (`mock/primary`, `mock/secondary`...) |
 | `user`, `user_regex` | the last user message contains the text or matches the regex |
-| `tool_result`, `tool_result_regex` | the last tool result contains the text or matches the regex |
+| `tool_result`, `tool_result_regex` | a result of the latest tool-call batch contains the text or matches the regex; with a list (`tool_result = ["a", "b"]`), each entry holds for some result of the batch |
 | `tools`, `tools_regex` | the tool array offered to the model, as JSON, contains the text or matches the regex |
 
 A rule answers with `reasoning`, `text` and `tool_calls` (streamed in that

@@ -9,8 +9,12 @@
 //! `interrupt_after_turn_start`, and `requires`: a harness capability a
 //! platform may lack, which skips and lists the task there).
 //!
-//! `cargo xtask smoke` runs it on every CI target; M3's `prometheus eval
-//! run smoke` scores the same files.
+//! The binary runs it itself (`prometheus smoke-suite`, [`runner`]), so
+//! every CI target can, including Termux where there is no cargo:
+//! `cargo xtask smoke` on the Tier 1 targets, the offline smoke run on the
+//! Tier 2 ones. M3's `prometheus eval run smoke` scores the same files.
+
+pub mod runner;
 
 /// One bundled file: its path inside the suite and its text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,7 +29,7 @@ macro_rules! file {
     ($path:literal) => {
         File {
             path: $path,
-            text: include_str!(concat!("../evals/smoke/", $path)),
+            text: include_str!(concat!("../../evals/smoke/", $path)),
         }
     };
 }

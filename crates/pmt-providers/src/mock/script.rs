@@ -7,7 +7,9 @@
 //! latency_ms = 0                 # default delay before every chunk
 //!
 //! [[rule]]
-//! user = "summarise"             # or user_regex; tool_result(_regex);
+//! user = "summarise"             # or user_regex; tool_result(_regex):
+//!                                # a text or a list, each found in some
+//!                                # result of the latest tool-call batch;
 //!                                # tools(_regex): the offered tool array as JSON
 //! [[rule.tool_calls]]
 //! name = "read_file"
@@ -61,7 +63,8 @@ pub(crate) struct Matcher {
     pub step: Option<usize>,
     pub model: Option<String>,
     pub user: Option<TextMatch>,
-    pub tool_result: Option<TextMatch>,
+    /// Each must hold for some result of the latest tool-call batch.
+    pub tool_result: Vec<TextMatch>,
     pub tools: Option<TextMatch>,
 }
 
@@ -141,8 +144,8 @@ struct RawRule {
     model: Option<String>,
     user: Option<String>,
     user_regex: Option<String>,
-    tool_result: Option<String>,
-    tool_result_regex: Option<String>,
+    tool_result: Option<OneOrMany>,
+    tool_result_regex: Option<OneOrMany>,
     tools: Option<String>,
     tools_regex: Option<String>,
     text: Option<String>,
@@ -156,6 +159,23 @@ struct RawRule {
     #[serde(default)]
     repeat: bool,
     latency_ms: Option<u64>,
+}
+
+/// A text, or a list of texts that must all hold.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+enum OneOrMany {
+    One(String),
+    Many(Vec<String>),
+}
+
+impl OneOrMany {
+    fn into_vec(self) -> Vec<String> {
+        match self {
+            Self::One(text) => vec![text],
+            Self::Many(texts) => texts,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -256,13 +276,34 @@ fn matcher(raw: &RawRule) -> Result<Matcher, String> {
         step: raw.step,
         model: raw.model.clone(),
         user: text_match("user", raw.user.as_deref(), raw.user_regex.as_deref())?,
-        tool_result: text_match(
-            "tool_result",
-            raw.tool_result.as_deref(),
-            raw.tool_result_regex.as_deref(),
-        )?,
+        tool_result: tool_result_matches(raw.tool_result.clone(), raw.tool_result_regex.clone())?,
         tools: text_match("tools", raw.tools.as_deref(), raw.tools_regex.as_deref())?,
     })
+}
+
+/// `tool_result` or `tool_result_regex`: one text or a list.
+fn tool_result_matches(
+    contains: Option<OneOrMany>,
+    regex: Option<OneOrMany>,
+) -> Result<Vec<TextMatch>, String> {
+    match (contains, regex) {
+        (Some(_), Some(_)) => Err("tool_result and tool_result_regex are exclusive".into()),
+        (Some(needles), None) => Ok(needles
+            .into_vec()
+            .into_iter()
+            .map(TextMatch::Contains)
+            .collect()),
+        (None, Some(patterns)) => patterns
+            .into_vec()
+            .iter()
+            .map(|p| {
+                Regex::new(p)
+                    .map(TextMatch::Regex)
+                    .map_err(|e| format!("tool_result_regex: {e}"))
+            })
+            .collect(),
+        (None, None) => Ok(Vec::new()),
+    }
 }
 
 fn text_match(

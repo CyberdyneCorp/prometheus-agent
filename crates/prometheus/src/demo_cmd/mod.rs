@@ -75,7 +75,8 @@ pub fn run(args: &DemoArgs, launch: &LaunchEnv) -> Result<u8, Error> {
 
 /// Whether this platform has an OS sandbox backend (pmt-sandbox: Linux,
 /// macOS, Windows).
-const HAS_OS_SANDBOX: bool = cfg!(any(target_os = "linux", target_os = "macos", windows));
+pub(crate) const HAS_OS_SANDBOX: bool =
+    cfg!(any(target_os = "linux", target_os = "macos", windows));
 
 /// On a platform without an OS sandbox (Android/Termux), commands only run
 /// with `security.sandbox.allow_degraded = ["all"]`. The demo's own

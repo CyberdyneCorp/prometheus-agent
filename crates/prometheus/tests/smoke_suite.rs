@@ -86,9 +86,10 @@ fn parallel_tools(missing: Option<&str>) -> String {
 }
 
 /// Scenario: Regression in tool dispatch: the parallel-dispatch task
-/// passes its exact grade, and when one call of the batch does not bring
-/// its result back (here its file is gone, standing in for a dispatch
-/// regression) the task misses its grade, so the suite scores below 100%.
+/// passes its exact grade, and when either call of the batch does not
+/// bring its result back (here its file is gone, standing in for a
+/// dispatch regression) the task misses its grade, so the suite scores
+/// below 100%.
 #[test]
 fn a_broken_parallel_dispatch_misses_the_smoke_grade() {
     let expect: toml::Value =
@@ -96,5 +97,35 @@ fn a_broken_parallel_dispatch_misses_the_smoke_grade() {
             .unwrap();
     let expect = expect["expect"].as_str().unwrap();
     assert_eq!(parallel_tools(None), expect);
-    assert_ne!(parallel_tools(Some("OWNERS.md")), expect);
+    assert_ne!(parallel_tools(Some("README.md")), expect, "first call lost");
+    assert_ne!(
+        parallel_tools(Some("OWNERS.md")),
+        expect,
+        "second call lost"
+    );
+}
+
+/// The binary runs its own suite (`prometheus smoke-suite`, what the Tier
+/// 2 offline smoke run uses where there is no cargo): every task passes
+/// or is skipped and listed, and it exits 0.
+#[test]
+fn the_binary_runs_its_bundled_suite_and_every_task_passes() {
+    let home = temp_home();
+    let out = command(home.path())
+        .args(["smoke-suite", "--output"])
+        .arg(home.path().join("smoke"))
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "{stdout}");
+    let ran = smoke_suite::task_ids().len() - stdout.matches("skipped: ").count();
+    assert!(
+        stdout.contains(&format!("smoke: {ran} of {ran} tasks passed")),
+        "{stdout}"
+    );
+    assert!(
+        !home.path().join("smoke").join("tool_call").exists(),
+        "cleaned up"
+    );
 }

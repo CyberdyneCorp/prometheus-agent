@@ -21175,6 +21175,51 @@ Options:
           Print help
 ```
 
+## `prometheus smoke-suite`
+
+```text
+Run the bundled `smoke` eval suite with this binary on the mock provider, offline, in a scratch directory of its own; exit 1 when a task misses its grade. CI's per-target smoke run; `prometheus eval run smoke` scores the same suite from M3
+
+Usage: prometheus smoke-suite [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --output <DIR>
+          Run in DIR, which must be empty or missing (default: a fresh temporary directory)
+
+      --keep
+          Keep every task's home and workspace afterwards
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus runtimes`
 
 ```text
@@ -25204,6 +25249,14 @@ Usage: prometheus help __complete
 Check this build against the home before an update installs it (run by `prometheus update` on the staged binary)
 
 Usage: prometheus help self-test
+```
+
+## `prometheus help smoke-suite`
+
+```text
+Run the bundled `smoke` eval suite with this binary on the mock provider, offline, in a scratch directory of its own; exit 1 when a task misses its grade. CI's per-target smoke run; `prometheus eval run smoke` scores the same suite from M3
+
+Usage: prometheus help smoke-suite
 ```
 
 ## `prometheus help runtimes`

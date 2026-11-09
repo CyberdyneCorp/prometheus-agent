@@ -194,7 +194,7 @@ fn a_rule_can_match_the_offered_tools() {
         step: 0,
         model: "m",
         user: None,
-        tool_result: None,
+        tool_results: Vec::new(),
         tools: tools.to_owned(),
     };
     let [v4a, none] = script.rules.as_slice() else {
@@ -205,6 +205,68 @@ fn a_rule_can_match_the_offered_tools() {
     assert!(call("[]").matches(none) && !call("[{}]").matches(none));
     assert!(
         invalid("[[rule]]\ntools = \"a\"\ntools_regex = \"b\"\ntext = \"c\"\n")
+            .contains("exclusive")
+    );
+}
+
+/// `tool_result` sees every result of the latest tool-call batch: a list
+/// requires each text somewhere in the batch, so a rule waiting on a
+/// parallel batch misses when one of its calls fails or is lost; earlier
+/// batches no longer count.
+#[test]
+fn a_rule_can_require_every_result_of_the_latest_batch() {
+    let script =
+        parse("[[rule]]\ntool_result = [\"Total: 85.15\", \"Owner: finance\"]\ntext = \"both\"\n");
+    let [both] = script.rules.as_slice() else {
+        panic!("one rule")
+    };
+    let result = |content: &str| Message {
+        role: Role::Tool,
+        parts: vec![Part::ToolResult {
+            call_id: "c".into(),
+            content: content.into(),
+            is_error: false,
+        }],
+        cache_breakpoint: false,
+    };
+    let assistant = Message::text(Role::Assistant, "");
+    let holds = |messages: &[Message]| {
+        Call {
+            step: 1,
+            model: "m",
+            user: None,
+            tool_results: latest_batch(messages),
+            tools: String::new(),
+        }
+        .matches(both)
+    };
+    let batch = [
+        assistant.clone(),
+        result("Total: 85.15"),
+        result("Owner: finance"),
+    ];
+    assert!(holds(&batch));
+    let lost_first = [
+        assistant.clone(),
+        result("error: not found"),
+        result("Owner: finance"),
+    ];
+    assert!(!holds(&lost_first));
+    let lost_last = [
+        assistant.clone(),
+        result("Total: 85.15"),
+        result("error: not found"),
+    ];
+    assert!(!holds(&lost_last));
+    let earlier = [
+        assistant.clone(),
+        result("Total: 85.15"),
+        assistant,
+        result("Owner: finance"),
+    ];
+    assert!(!holds(&earlier));
+    assert!(
+        invalid("[[rule]]\ntool_result = [\"a\"]\ntool_result_regex = \"b\"\ntext = \"c\"\n")
             .contains("exclusive")
     );
 }

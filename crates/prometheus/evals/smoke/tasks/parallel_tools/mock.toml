@@ -7,10 +7,11 @@ arguments = { path = "README.md" }
 name = "read_file"
 arguments = { path = "OWNERS.md" }
 
-# The mock sees the batch's last result: the second call's.
+# Both results of the batch must come back: a dispatch that loses or
+# fails either call falls through to "unexpected".
 [[rule]]
 step = 1
-tool_result = "Owner: finance team"
+tool_result = ["Total: 85.15", "Owner: finance team"]
 text = "finance team, 85.15"
 
 [[rule]]

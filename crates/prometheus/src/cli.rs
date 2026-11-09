@@ -413,6 +413,12 @@ pub enum Command {
     /// (run by `prometheus update` on the staged binary).
     #[command(hide = true)]
     SelfTest,
+    /// Run the bundled `smoke` eval suite with this binary on the mock
+    /// provider, offline, in a scratch directory of its own; exit 1 when a
+    /// task misses its grade. CI's per-target smoke run; `prometheus eval
+    /// run smoke` scores the same suite from M3.
+    #[command(name = "smoke-suite", hide = true)]
+    SmokeSuite(SmokeSuiteArgs),
     /// List, install, verify and collect the managed runtimes (Node,
     /// CPython, uv, Chromium) shared by every profile.
     Runtimes {
@@ -468,6 +474,20 @@ pub struct DemoArgs {
     pub output: Option<PathBuf>,
     /// Keep the directory afterwards.
     #[arg(long, help = "Keep the demo's home and repository afterwards")]
+    pub keep: bool,
+}
+
+/// `prometheus smoke-suite` flags.
+#[derive(Debug, Clone, Args)]
+pub struct SmokeSuiteArgs {
+    /// Directory to run in (created when missing; must be empty).
+    #[arg(long, value_name = "DIR")]
+    #[arg(
+        help = "Run in DIR, which must be empty or missing (default: a fresh temporary directory)"
+    )]
+    pub output: Option<PathBuf>,
+    /// Keep the directory afterwards.
+    #[arg(long, help = "Keep every task's home and workspace afterwards")]
     pub keep: bool,
 }
 

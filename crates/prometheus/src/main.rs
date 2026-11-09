@@ -70,8 +70,8 @@ fn main() -> ExitCode {
         };
     }
     // Commands that need the home report the resolution error themselves.
-    // `demo` runs in a temporary home of its own and never touches the
-    // user's: it writes no log files and keeps no crash reports there.
+    // `demo` (and `smoke-suite`) runs in a temporary home of its own and
+    // never touches the user's: it writes no log files and keeps no crash reports there.
     // The administrator's managed layer is machine-wide: loaded once, for
     // every profile this process touches.
     let (managed_dir, owner) = match launch.test_managed_dir() {
@@ -93,7 +93,7 @@ fn main() -> ExitCode {
     pmt_config::gateway_check::register_roles(prometheus::daemon_client::role_resolver());
     let home = pmt_config::home::resolve(cli.home.as_deref(), &launch)
         .ok()
-        .filter(|_| !matches!(cli.command, Some(Command::Demo(_))));
+        .filter(|_| !matches!(cli.command, Some(Command::Demo(_) | Command::SmokeSuite(_))));
     let home = home.as_ref();
     startup::install_logging(home, &launch);
     // `profile` is recorded once a command selects one (startup::bind_profile).
@@ -184,6 +184,7 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Connectors { command }) => prometheus::connectors_cmd::run(command, &ctx),
         Some(Command::Bridge { command }) => prometheus::bridge_cmd::run(command, &ctx),
         Some(Command::SelfTest) => Ok(self_test_cmd::run(&ctx)),
+        Some(Command::SmokeSuite(args)) => prometheus::smoke_suite::runner::run(args),
         Some(Command::Completions { shell }) => prometheus::completions::script(*shell),
         Some(Command::Complete { .. }) => Ok(0),
         Some(Command::Runtimes { command }) => runtimes_cmd::run(command, &ctx),
