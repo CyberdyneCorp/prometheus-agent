@@ -464,7 +464,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 - [x] 48.1 Implement local runtime configuration (`[local_runtime]` in `daemon.toml`, detection-only default), hash-pinned llama.cpp engine installation (corrupt archives rejected, unsupported backends refused) and backend auto-selection by hardware; verify with installer fixtures (spec: local-models)
 - [x] 48.2 Implement the hardware-priced model catalog, resumable verifiable downloads (an interrupted download is unusable until verified) and the machine-wide model library (linked files never deleted); verify with a range-request fixture server (spec: local-models)
-- [x] 48.3 Implement the managed server lifecycle (shared across processes, idle unload), external llama-server detection (a user-run server preferred), typed local runtime errors (never silently falling back to a remote key) and the rule that local inference stays local; verify offline with a stub server (spec: local-models)
+- [ ] 48.3 Implement the managed server lifecycle (shared across processes, idle unload), external llama-server detection (a user-run server preferred), typed local runtime errors (never silently falling back to a remote key) and the rule that local inference stays local; verify offline with a stub server (spec: local-models)
 - [x] 48.4 Implement `prometheus local status|install|update|catalog|pull|pause|resume|jobs|search|add|rm|use` (Ctrl-C pauses a pull) and document local models; verify with CLI tests (spec: local-models)
 
 ## 49. M2 Web and media tools
