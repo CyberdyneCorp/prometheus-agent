@@ -396,12 +396,17 @@ Notifications for background processes and subagents SHALL follow `gateway.notif
 - **THEN** the system SHALL NOT notify the chat
 
 ### Requirement: Crash recovery and clean shutdown marker
-A graceful stop whose drain completes within `gateway.shutdown.drain_timeout_secs` (default 30) SHALL write `<home>/run/clean_shutdown`; on start the daemon SHALL delete the marker and skip recovery when it exists, and otherwise SHALL mark every turn that was running at crash time `resume_pending` with `resume_reason = "restart_interrupted"`, notify each affected chat once with "The agent restarted while working on your last message. Reply /retry to run it again.", and resume the outbox; a failure to delete the marker SHALL abort startup with exit 1.
+A graceful stop whose drain completes within `gateway.shutdown.drain_timeout_secs` (default 30) SHALL write `<home>/run/clean_shutdown`; on start the daemon SHALL delete the marker and skip recovery when it exists, and otherwise SHALL mark every turn that was running at crash time `resume_pending` with `resume_reason = "restart_interrupted"`, notify each affected chat once with "The agent restarted while working on your last message. Reply /retry to run it again.", and resume the outbox; a failure to delete the marker SHALL abort startup with exit 1. When the session's profile sets `agent.resume_on_crash = "auto"`, its session is not suspended and its turn journal holds an unfinished turn (agent-turn-loop, Crash resume mid-tool-batch), the gateway SHALL instead resume that turn at startup as a turn of the chat, without the hold or the `/retry` notice, and deliver its answer to the chat once; the restart still counts toward stuck-loop suspension.
 **Milestone:** M2
 
 #### Scenario: Timed-out drain
 - **WHEN** a stop's drain exceeds 30 seconds
 - **THEN** the system SHALL NOT write `clean_shutdown` and the next start SHALL run recovery
+
+#### Scenario: Automatic crash resume in a chat
+- **GIVEN** `agent.resume_on_crash = "auto"` and a chat whose turn was running a terminal command when the daemon was killed
+- **WHEN** the daemon starts again
+- **THEN** the turn SHALL resume from its journal, the command SHALL get the outcome-unknown result instead of running again, and the chat SHALL receive the answer once and no `/retry` notice
 
 ### Requirement: Stuck-loop suspension
 The gateway SHALL count, per session, consecutive daemon restarts during which that session's turn was active, persisting the counter in `state.db`, and SHALL suspend a session whose counter reaches `gateway.sessions.stuck_loop_threshold` (default 3) so its next message starts a new session; a turn that completes SHALL reset the counter, and suspension SHALL be the only automatic transition to `suspended`.

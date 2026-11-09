@@ -1691,6 +1691,7 @@ capabilities = [
 
 [messaging-gateway."Crash recovery and clean shutdown marker"]
 "Timed-out drain" = ["crates/pmt-gateway/tests/messaging/recovery.rs::a_clean_stop_skips_recovery_and_a_timed_out_drain_does_not", "crates/prometheus/tests/gateway_daemon.rs::a_daemon_killed_mid_turn_recovers_the_conversation"]
+"Automatic crash resume in a chat" = ["crates/prometheus/tests/crash_resume_gateway.rs::under_auto_a_restart_resumes_the_turn_and_the_chat_gets_its_answer_once"]
 
 [messaging-gateway."Stuck-loop suspension"]
 "Third restart suspends" = ["crates/pmt-gateway/tests/messaging/recovery.rs::the_third_restart_during_a_turn_suspends_the_session", "crates/pmt-store/tests/store/gateway.rs::the_third_restart_during_a_turn_suspends_the_session"]
@@ -3063,7 +3064,7 @@ capabilities = [
 "Journal order" = ["crates/pmt-agent/tests/turn/journal.rs::a_turn_with_one_tool_call_journals_every_step_in_order", "crates/pmt-store/tests/store/journal.rs::only_the_newest_turn_is_kept_and_an_unfinished_one_is_reported"]
 
 [agent-turn-loop."Crash resume mid-tool-batch (upgrade)"]
-"Crash during a terminal command" = ["crates/prometheus/tests/crash_resume.rs::a_crash_during_a_terminal_command_resumes_with_the_read_reused_and_the_command_unknown", "crates/prometheus/tests/crash_resume.rs::the_daemon_resumes_a_crashed_turn_when_the_session_loads", "crates/prometheus/tests/crash_resume.rs::the_daemon_asks_and_resumes_a_crashed_turn_on_yes", "crates/prometheus/tests/crash_resume.rs::the_daemon_closes_a_crashed_turn_when_the_user_declines", "crates/prometheus/tests/crash_resume_gateway.rs::retry_after_a_restart_resumes_the_turn_from_its_journal", "crates/pmt-agent/tests/turn/journal.rs::declining_closes_the_turn_as_crashed_with_a_boundary_row", "crates/pmt-agent/tests/turn/journal.rs::a_new_message_closes_a_crashed_turn_first"]
+"Crash during a terminal command" = ["crates/prometheus/tests/crash_resume.rs::a_crash_during_a_terminal_command_resumes_with_the_read_reused_and_the_command_unknown", "crates/prometheus/tests/crash_resume.rs::the_daemon_resumes_a_crashed_turn_when_the_session_loads", "crates/prometheus/tests/crash_resume.rs::the_daemon_asks_and_resumes_a_crashed_turn_on_yes", "crates/prometheus/tests/crash_resume.rs::the_daemon_closes_a_crashed_turn_when_the_user_declines", "crates/prometheus/tests/crash_resume_gateway.rs::retry_after_a_restart_resumes_the_turn_from_its_journal", "crates/prometheus/tests/crash_resume_gateway.rs::under_auto_a_restart_resumes_the_turn_and_the_chat_gets_its_answer_once", "crates/pmt-agent/tests/turn/journal.rs::declining_closes_the_turn_as_crashed_with_a_boundary_row", "crates/pmt-agent/tests/turn/journal.rs::a_new_message_closes_a_crashed_turn_first"]
 "Idempotent call re-run" = ["crates/pmt-agent/tests/turn/journal.rs::resuming_reuses_finished_results_reruns_safe_calls_and_marks_the_rest_unknown"]
 
 [agent-turn-loop."Side questions with /btw"]

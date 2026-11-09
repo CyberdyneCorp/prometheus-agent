@@ -7,13 +7,16 @@
 //! message that loaded it waits behind the answer instead of closing the
 //! turn.
 //!
-//! A messaging conversation is asked by the gateway's own restart recovery
-//! instead (spec: messaging-gateway, Crash recovery and clean shutdown
-//! marker; Discarding a restart-interrupted turn): its chat is told to
-//! reply `/retry`, and its input waits until the user chooses. `/retry`
-//! resumes the journaled turn here (finished results reused, unknown
-//! outcomes reported rather than repeated); `/discard`, or the hold's
-//! expiry, declines, and the next turn closes it as crashed.
+//! A messaging conversation's unfinished turn belongs to the gateway's
+//! restart recovery instead (spec: messaging-gateway, Crash recovery and
+//! clean shutdown marker; Discarding a restart-interrupted turn), so its
+//! answer reaches the chat through the conversation's lane. Under `ask`
+//! the chat is told to reply `/retry`, and its input waits until the user
+//! chooses: `/retry` resumes the journaled turn here (finished results
+//! reused, unknown outcomes reported rather than repeated); `/discard`,
+//! or the hold's expiry, declines, and the next turn closes it as
+//! crashed. Under `auto` the lane submits a turn of origin
+//! [`RESUME_ORIGIN`] at startup, which resumes it here.
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -22,7 +25,8 @@ use pmt_agent::turn::{TurnInput, Unfinished};
 use pmt_config::schema::ResumeOnCrash;
 use pmt_core::error::Error;
 use pmt_core::id::SessionId;
-use pmt_gateway::Link;
+use pmt_gateway::messaging::RESUME_ORIGIN;
+use pmt_gateway::{Author, Link};
 use pmt_rpc::contracts::{Admission, ClarifyAsk, ClarifyRequestParams, Dispatched, Submitted};
 use serde_json::{Value, json};
 
@@ -69,31 +73,34 @@ impl DaemonHost {
             Err(err) => return tracing::warn!(error = %err, "turn journal unreadable"),
         };
         let choice = AfterCrash::from(profile.scope().config().agent.resume_on_crash);
-        if choice == AfterCrash::Ask && session.chat.is_some() {
-            // The gateway's restart recovery asks in the chat (`/retry`).
+        if choice != AfterCrash::Close && session.chat.is_some() {
+            // The gateway's restart recovery asks in the chat (`/retry`) or
+            // resumes the turn as its lane's, which delivers the answer.
             return;
         }
-        if let Err(err) = self.run_crashed(profile, id, session, (unfinished, choice), link) {
+        let job = (unfinished, choice);
+        if let Err(err) = self.run_crashed(profile, (id, session), job, (link, false)) {
             tracing::warn!(error = %err, "crashed turn not resumed");
         }
     }
 
     /// Runs the crashed turn as the session's next job: at once when it
     /// is idle, else first in its queue.
+    /// `from_lane`: a conversation's lane submitted it and delivers its
+    /// answer.
     fn run_crashed(
         &self,
         profile: Arc<Profile>,
-        id: SessionId,
-        session: &Arc<Loaded>,
+        (id, session): (SessionId, &Arc<Loaded>),
         (unfinished, choice): (Unfinished, AfterCrash),
-        link: &Link,
+        (link, from_lane): (&Link, bool),
     ) -> Result<Submitted, Error> {
         let job = Queued {
             input: TurnInput::default(),
             turn_id: unfinished.turn_id.clone(),
             run_budget: None,
             link: link.clone(),
-            from_lane: false,
+            from_lane,
             resume: Some((unfinished, choice)),
         };
         let turn_id = job.turn_id.clone();
@@ -116,22 +123,46 @@ impl DaemonHost {
     }
 
     /// Submitting the message a `/retry` of a crashed turn sent back
-    /// resumes that turn; `None` for any other input.
-    pub(super) fn resume_on_retry(
+    /// resumes that turn, and so does a lane's turn of origin
+    /// [`RESUME_ORIGIN`]; `None` for any other input.
+    pub(super) fn resume_submitted(
         &self,
         profile: &Arc<Profile>,
         (id, session): (SessionId, &Arc<Loaded>),
-        text: &str,
+        (text, author): (&str, &Author),
         link: &Link,
     ) -> Option<Result<Submitted, Error>> {
+        let from_lane = author.client_kind == "gateway";
+        if author.origin.as_deref() == Some(RESUME_ORIGIN) {
+            let unfinished = match session.live.agent.unfinished_turn() {
+                Ok(Some(unfinished)) => unfinished,
+                Ok(None) => return Some(Err(nothing_to_resume())),
+                Err(err) => return Some(Err(err)),
+            };
+            let job = (unfinished, AfterCrash::Resume);
+            return Some(self.run_crashed(
+                Arc::clone(profile),
+                (id, session),
+                job,
+                (link, from_lane),
+            ));
+        }
         let retried = session.retry.lock().expect("retry poisoned").take()?;
         if retried != text.trim() {
             return None;
         }
         let unfinished = session.live.agent.unfinished_turn().ok().flatten()?;
-        let resume = (unfinished, AfterCrash::Resume);
-        Some(self.run_crashed(Arc::clone(profile), id, session, resume, link))
+        let job = (unfinished, AfterCrash::Resume);
+        Some(self.run_crashed(Arc::clone(profile), (id, session), job, (link, from_lane)))
     }
+}
+
+/// A resume whose turn already ended (closed by a turn that ran first).
+fn nothing_to_resume() -> Error {
+    Error::new(
+        &pmt_core::error::codes::CHAT_NOTHING_TO_CONTINUE,
+        "The interrupted turn already ended; nothing to resume.",
+    )
 }
 
 /// `/retry` of a session whose last turn a crash left unfinished: sends

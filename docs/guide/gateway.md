@@ -495,7 +495,10 @@ and its source, for example "steer (platform override)".
   journal: finished tool results are reused and a call cut short gets an
   "outcome unknown" result instead of running again. After
   `gateway.sessions.resume_pending_ttl_secs` (default 86400) it is dropped
-  automatically.
+  automatically. With `agent.resume_on_crash = "auto"` there is no hold:
+  the gateway resumes the journaled turn at startup ("resuming where it
+  stopped"), messages wait behind it, and its answer reaches the chat; the
+  restart still counts toward stuck-loop suspension.
 - **Stall watchdog.** A turn with no model output, tool progress or tool
   result for `gateway.session_stall_timeout_secs` (default 900; `0` turns
   it off) gets one `No progress for <n> min; send /stop to cancel` notice;

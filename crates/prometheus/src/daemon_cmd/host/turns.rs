@@ -72,7 +72,8 @@ impl DaemonHost {
                 notice: Some(Self::confirm_cron(profile, &session, &link, confirmation)),
             });
         }
-        if let Some(resumed) = self.resume_on_retry(profile, (id, &session), &params.text, &link) {
+        let submitted = (params.text.as_str(), &author);
+        if let Some(resumed) = self.resume_submitted(profile, (id, &session), submitted, &link) {
             return resumed;
         }
         let mut input = setup::input(&session.factory, &session.live, &params).await?;

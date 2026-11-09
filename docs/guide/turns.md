@@ -94,7 +94,7 @@ it), `agent.resume_on_crash` decides:
 | Value | What happens |
 |---|---|
 | `ask` (default) | The line interface asks `resume the interrupted turn? [y/N]`. The daemon asks the attached TUI or desktop app the same question (`Resume` or `Close`); a message you send meanwhile waits behind the answer, and a question nobody answers closes the turn. In a messaging chat, the gateway's restart notice asks: `/retry` resumes the turn, `/discard` (or the hold expiring) closes it. |
-| `auto` | The turn is resumed. |
+| `auto` | The turn is resumed. In a messaging chat the gateway resumes it when the daemon starts again (the chat is told it is resuming, no `/retry` needed) and sends the answer to the chat; a session the restart suspended is not resumed. |
 | `never` | The turn is closed. |
 
 Resuming reuses every finished tool result, runs calls that never

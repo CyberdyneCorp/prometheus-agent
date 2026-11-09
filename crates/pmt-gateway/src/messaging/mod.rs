@@ -107,7 +107,7 @@ pub use hooks::{Hook, HookBridge, Hooks, PreCommand};
 pub use http::HttpOptions;
 pub use key::{ChatType, Isolation, KeyParts, Routing, SessionKey};
 pub use lane::{Background, BackgroundKind};
-pub use recovery::{CLEAN_SHUTDOWN, RESTARTED};
+pub use recovery::{CLEAN_SHUTDOWN, RESTARTED, RESUME_ORIGIN, RESUMING};
 pub use relay::{RelayOptions, RelaySource};
 pub use send::{KnownTarget, SendRequest, known_targets};
 pub use voice::Speech;
@@ -372,13 +372,28 @@ impl Gateway {
         });
         tokio::spawn(peer::read(Arc::clone(&shared), rx).in_current_span());
         let profiles = server.profiles();
-        if !clean {
-            for profile in &profiles {
-                recovery::recover(&shared, profile);
-            }
-        }
+        let resumes: Vec<_> = if clean {
+            Vec::new()
+        } else {
+            profiles
+                .iter()
+                .flat_map(|p| {
+                    recovery::recover(&shared, p)
+                        .into_iter()
+                        .map(move |s| (p, s))
+                })
+                .collect()
+        };
         for profile in &profiles {
             outbox::spawn(&shared, profile);
+        }
+        // Before the adapters connect: a chat's new message then waits
+        // behind its resumed turn instead of closing it as crashed.
+        let gateway = Self {
+            shared: Arc::clone(&shared),
+        };
+        for (profile, session) in resumes {
+            gateway.resume_interrupted(profile, &session.to_string());
         }
         profile_routes::lend_configured(&shared);
         restart::announce(&shared);
