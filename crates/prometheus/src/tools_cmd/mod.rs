@@ -175,11 +175,23 @@ pub fn media_categories(
     registry: &ToolRegistry,
 ) -> Option<Vec<pmt_media::explain::CategoryView>> {
     let launcher = crate::chat::session::media::launcher(scope);
-    let setup = pmt_media::explain::inspection_setup(
+    let mut setup = pmt_media::explain::inspection_setup(
         crate::chat::session::media::credentials(scope),
         scope.dir(),
         Some(launcher),
     )?;
+    let cwd = std::env::current_dir().unwrap_or_default();
+    setup.plugins = crate::chat::session::media_plugins::PluginMedia::shared(
+        crate::plugins_host::for_session(scope, &cwd)
+            .current()
+            .providers
+            .clone(),
+        pmt_plugins::host::CallInfo {
+            session_id: None,
+            surface: "cli".to_owned(),
+            cwd: Some(cwd.display().to_string()),
+        },
+    );
     let presence = registry.secret_presence();
     Some(pmt_media::explain::categories(setup, presence.as_ref()))
 }

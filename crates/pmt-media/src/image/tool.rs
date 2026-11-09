@@ -182,6 +182,9 @@ impl MediaSession {
             Err(why) => return ToolResult::error(format!("image_generate: {why}")),
         };
         let setup = self.setup();
+        if let Some(selected) = crate::plugin::selected(setup, crate::plugin::Kind::ImageGen) {
+            return self.plugin_image(&selected, &request).await;
+        }
         let plan = match plan(&setup.credentials, &|id, default| {
             setup.endpoint(id, default)
         }) {
@@ -211,6 +214,23 @@ impl MediaSession {
             Ok(generated) => self.image_result(&plan, &request, generated),
             Err(why) => {
                 ToolResult::error(format!("image_generate failed ({}): {why}", plan.provider))
+            }
+        }
+    }
+
+    /// A call to the provider an enabled plugin registered.
+    async fn plugin_image(
+        &self,
+        selected: &crate::plugin::Selected,
+        request: &Request,
+    ) -> ToolResult {
+        let Ok(_slot) = self.image_slots.acquire().await else {
+            return ToolResult::error("image_generate: the session is closing");
+        };
+        match crate::plugin::generate_image(self.setup(), selected, request).await {
+            Ok((plan, generated)) => self.image_result(&plan, request, generated),
+            Err(why) => {
+                ToolResult::error(format!("image_generate failed ({}): {why}", selected.id))
             }
         }
     }

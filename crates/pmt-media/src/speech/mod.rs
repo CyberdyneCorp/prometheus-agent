@@ -208,10 +208,7 @@ impl MediaSession {
         if parts.is_empty() {
             return Err("nothing to say: the text is empty".to_owned());
         }
-        let mut audio = Vec::with_capacity(parts.len());
-        for part in &parts {
-            audio.push(tts::speak(setup, &self.speech, &voice, part, options).await?);
-        }
+        let (audio, billing_source) = self.speak_parts(&voice, &parts, options).await?;
         let bytes = audio::join(audio)?;
         let to_blob = output.is_none() && !INTERACTIVE.contains(&setup.surface.as_str());
         let path = output.unwrap_or_else(|| {
@@ -229,7 +226,7 @@ impl MediaSession {
             path,
             provider: voice.provider.clone(),
             model: voice.model.clone(),
-            billing_source: voice.access.billing_source.clone(),
+            billing_source,
             chunks: parts.len(),
         };
         if !spoken.voice_compatible
@@ -252,6 +249,32 @@ impl MediaSession {
             spoken.path = stored;
         }
         Ok(spoken)
+    }
+
+    /// The audio of each part, and how the calls billed (a plugin
+    /// provider reports it with its answers).
+    async fn speak_parts(
+        &self,
+        voice: &Voice,
+        parts: &[String],
+        options: &Speak,
+    ) -> Result<(Vec<Vec<u8>>, String), String> {
+        let setup = self.setup();
+        let mut billing = voice.access.billing_source.clone();
+        let mut audio = Vec::with_capacity(parts.len());
+        for part in parts {
+            let bytes = match &voice.plugin {
+                Some(plugin) => {
+                    let (bytes, billed) =
+                        crate::plugin::speak(setup, voice, plugin, part, options).await?;
+                    billing = billed;
+                    bytes
+                }
+                None => tts::speak(setup, &self.speech, voice, part, options).await?,
+            };
+            audio.push(bytes);
+        }
+        Ok((audio, billing))
     }
 
     /// The session's speech state.

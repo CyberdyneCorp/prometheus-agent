@@ -632,6 +632,136 @@ fn an_unregistered_web_search_provider_fails_closed_in_a_session() {
     );
 }
 
+/// A one-shot session on `toolset` whose model calls `tool` with
+/// `arguments` (inline TOML) and answers once the result contains
+/// `expected`.
+fn media_session(
+    home: &Path,
+    toolset: &str,
+    tool: &str,
+    arguments: &str,
+    expected: &str,
+) -> std::process::Output {
+    let script = home.join("media.toml");
+    std::fs::write(
+        &script,
+        format!(
+            r#"
+[[rule]]
+user = "go"
+[[rule.tool_calls]]
+name = "{tool}"
+arguments = {arguments}
+
+[[rule]]
+tool_result = "{expected}"
+text = "made"
+"#
+        ),
+    )
+    .unwrap();
+    command(home)
+        .args(["-z", "go", "-t", toolset, "--mock-script"])
+        .arg(&script)
+        .stdin(Stdio::null())
+        .output()
+        .unwrap()
+}
+
+/// plugin-system, Provider-object plugins fail closed when unregistered:
+/// `image_gen.provider` and `tts.provider` naming a bridged plugin's
+/// providers reach them, billed as the plugin reports.
+#[test]
+fn bridged_image_and_speech_providers_serve_their_tools_in_a_session() {
+    let home = mock_home();
+    pmt_pybridge::testkit::seed(home.path());
+    install(home.path(), "studio", "studio", "all");
+    common::append_config(
+        home.path(),
+        "\n[image_gen]\nprovider = \"studio-pics\"\n\n[tts]\nprovider = \"studio-voice\"\n",
+    );
+    let out = media_session(
+        home.path(),
+        "image_gen",
+        "image_generate",
+        r#"{ prompt = "a fox", aspect_ratio = "square" }"#,
+        "studio-pics",
+    );
+    assert_eq!(stdout(&out), "made\n", "{}", stderr(&out));
+    let results = tool_results(home.path());
+    let image = results
+        .iter()
+        .find(|r| r.contains("studio-pics"))
+        .unwrap_or_else(|| panic!("{results:?}"));
+    assert!(image.starts_with("MEDIA:"), "{image}");
+    assert!(image.contains("\"model\":\"pics-1\""), "{image}");
+    assert!(image.contains("\"size\":\"1x1\""), "{image}");
+    let out = media_session(
+        home.path(),
+        "tts",
+        "text_to_speech",
+        r#"{ text = "Hello there." }"#,
+        "studio-voice",
+    );
+    assert_eq!(stdout(&out), "made\n", "{}", stderr(&out));
+    let results = tool_results(home.path());
+    let speech = results
+        .iter()
+        .find(|r| r.contains("studio-voice"))
+        .unwrap_or_else(|| panic!("{results:?}"));
+    let path = speech
+        .lines()
+        .next()
+        .unwrap()
+        .strip_prefix("MEDIA:")
+        .unwrap();
+    assert_eq!(std::fs::read(path).unwrap(), b"ID3Hello there.");
+}
+
+/// `stt.provider` naming a bridged plugin's transcription provider is the
+/// one voice input uses.
+#[test]
+fn a_bridged_transcription_provider_transcribes_voice_input() {
+    let home = mock_home();
+    pmt_pybridge::testkit::seed(home.path());
+    install(home.path(), "studio", "studio", "all");
+    common::append_config(home.path(), "\n[stt]\nprovider = \"studio-ears\"\n");
+    let root = pmt_config::Home::open(home.path()).unwrap();
+    let dir = root
+        .profile(&pmt_config::ProfileName::parse("default").unwrap())
+        .unwrap();
+    let scope = pmt_config::ProfileScope::open(
+        dir,
+        &pmt_config::Overrides::default(),
+        pmt_config::Launch::Other,
+    )
+    .unwrap();
+    let plugins = prometheus::plugins_host::for_session(&scope, home.path());
+    let mut setup = pmt_media::explain::inspection_setup(
+        prometheus::chat::session::media::credentials(&scope),
+        scope.dir(),
+        None,
+    )
+    .unwrap();
+    setup.plugins = prometheus::chat::session::media_plugins::PluginMedia::shared(
+        plugins.current().providers.clone(),
+        pmt_plugins::host::CallInfo {
+            session_id: None,
+            surface: "gateway".to_owned(),
+            cwd: None,
+        },
+    );
+    let clip = home.path().join("note.ogg");
+    std::fs::write(&clip, b"OggS0123456789").unwrap();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let transcript = runtime
+        .block_on(pmt_media::MediaSession::new(setup).transcribe(&clip))
+        .unwrap();
+    assert_eq!(transcript.text, "heard 14 bytes in en");
+    assert_eq!(transcript.provider, "studio-ears");
+    prometheus::plugins_host::bridge::shutdown_all();
+}
+
 /// The sandbox bounds each sidecar process's data segment: one allocation
 /// past `max_memory_bytes` is refused by the kernel at once, before any
 /// sample could see it (its pages are never touched).

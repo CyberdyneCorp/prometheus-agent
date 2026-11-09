@@ -146,6 +146,29 @@ fn wav_parts(bytes: &[u8]) -> Option<(&[u8], &[u8])> {
     Some((fmt?, data?))
 }
 
+/// The length of a WAV file in seconds, from its header.
+#[must_use]
+pub fn wav_seconds(bytes: &[u8]) -> Option<f64> {
+    if Format::sniff(bytes) != Format::Wav {
+        return None;
+    }
+    let (fmt, data) = wav_parts(bytes)?;
+    let byte_rate = u32::from_le_bytes(fmt.get(8..12)?.try_into().ok()?);
+    #[allow(clippy::cast_precision_loss)]
+    (byte_rate > 0).then(|| data.len() as f64 / f64::from(byte_rate))
+}
+
+/// The `Duration: HH:MM:SS.ss` ffmpeg prints for an input, in seconds.
+#[must_use]
+pub fn parse_duration(stderr: &str) -> Option<f64> {
+    let stamp = stderr.split("Duration: ").nth(1)?.split(',').next()?;
+    let mut parts = stamp.trim().split(':');
+    let hours: f64 = parts.next()?.parse().ok()?;
+    let minutes: f64 = parts.next()?.parse().ok()?;
+    let seconds: f64 = parts.next()?.parse().ok()?;
+    Some(hours * 3_600.0 + minutes * 60.0 + seconds)
+}
+
 /// One file of the chunks of a synthesis, in order: MP3 frames and Ogg
 /// streams concatenate as they are (a chained Ogg file); WAV chunks are
 /// merged under the first one's header.
@@ -303,6 +326,25 @@ impl Ffmpeg {
         }
     }
 
+    /// The length of the audio at `input` in seconds, when ffmpeg can
+    /// tell.
+    pub async fn duration(&self, input: &Path) -> Option<f64> {
+        let exe = self.exe().await?;
+        let mut command = tokio::process::Command::new(exe);
+        // Without an output ffmpeg describes the input and exits non-zero.
+        command
+            .arg("-hide_banner")
+            .arg("-i")
+            .arg(input)
+            .stdin(std::process::Stdio::null())
+            .kill_on_drop(true);
+        let output = tokio::time::timeout(Duration::from_secs(30), command.output())
+            .await
+            .ok()?
+            .ok()?;
+        parse_duration(&String::from_utf8_lossy(&output.stderr))
+    }
+
     /// `input` as Opus in Ogg at `output` (a voice note).
     ///
     /// # Errors
@@ -447,6 +489,18 @@ mod tests {
         let mp3 = join(vec![b"ID3a".to_vec(), b"ID3b".to_vec()]).unwrap();
         assert_eq!(mp3, b"ID3aID3b");
         assert!(join(vec![b"ID3a".to_vec(), b"OggS".to_vec()]).is_err());
+    }
+
+    #[test]
+    fn durations_come_from_the_wav_header_or_ffmpegs_description() {
+        // 16-bit mono at 8 kHz: 16,000 bytes a second.
+        let wav = wav_from_pcm(&vec![0; 40_000], 8_000);
+        assert_eq!(wav_seconds(&wav), Some(2.5));
+        assert_eq!(wav_seconds(b"ID3 not a wav"), None);
+        let described =
+            "Input #0, ogg, from 'a.ogg':\n  Duration: 01:02:03.50, start: 0.0, bitrate: 32 kb/s";
+        assert_eq!(parse_duration(described), Some(3_723.5));
+        assert_eq!(parse_duration("no duration here"), None);
     }
 
     #[cfg(unix)]

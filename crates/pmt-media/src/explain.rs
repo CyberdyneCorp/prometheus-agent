@@ -103,6 +103,7 @@ pub fn inspection_setup(
         video: None,
         runner: Arc::new(crate::speech::command::PlainShell),
         local,
+        plugins: Arc::new(crate::plugin::NoPlugins),
     })
 }
 
@@ -130,12 +131,7 @@ pub fn categories(
                 .xai_key_first()
                 .map(|a| ("xai".to_owned(), a.billing_source)),
         ),
-        CategoryView::of(
-            "image_generation",
-            &["image_generate"],
-            crate::image::plan(&credentials, &|id, default| setup.endpoint(id, default))
-                .map(|p| (format!("{} ({})", p.provider, p.model.id), p.access.billing_source)),
-        ),
+        CategoryView::of("image_generation", &["image_generate"], image(&setup)),
         CategoryView {
             category: "video_analysis",
             tools: &["video_analyze"],
@@ -145,6 +141,12 @@ pub fn categories(
         },
     ];
     let tts = crate::speech::tts::resolve(&setup).and_then(|voice| {
+        if let Some(plugin) = &voice.plugin {
+            return Ok(plugin_view(&crate::plugin::Selected {
+                id: voice.provider,
+                plugin: plugin.clone(),
+            }));
+        }
         let local = crate::speech::tts::LOCAL.contains(&voice.provider.as_str());
         if local
             && !setup
@@ -167,6 +169,29 @@ pub fn categories(
         session.stt_choice().map(|t| (t.provider, t.billing_source)),
     ));
     views
+}
+
+/// The image provider and its billing: a plugin's, else the plan's.
+fn image(setup: &MediaSetup) -> Result<(String, String), String> {
+    if let Some(selected) = crate::plugin::selected(setup, crate::plugin::Kind::ImageGen) {
+        return Ok(plugin_view(&selected));
+    }
+    crate::image::plan(&setup.credentials, &|id, default| {
+        setup.endpoint(id, default)
+    })
+    .map(|p| {
+        (
+            format!("{} ({})", p.provider, p.model.id),
+            p.access.billing_source,
+        )
+    })
+}
+
+fn plugin_view(selected: &crate::plugin::Selected) -> (String, String) {
+    (
+        format!("{} (plugin {})", selected.id, selected.plugin),
+        format!("reported by plugin '{}'", selected.plugin),
+    )
 }
 
 /// The category view of `tool`, if it is a web or media tool.

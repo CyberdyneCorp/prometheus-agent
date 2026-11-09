@@ -14,6 +14,7 @@ pub mod access;
 pub mod explain;
 pub mod http;
 pub mod image;
+pub mod plugin;
 pub mod probe;
 pub mod speech;
 pub mod video;
@@ -84,6 +85,8 @@ pub struct MediaSetup {
     pub runner: Arc<dyn speech::command::CommandRunner>,
     /// Starts the local speech engines (`None`: not installed).
     pub local: Option<Arc<dyn speech::local::Launcher>>,
+    /// Image, speech and transcription providers of enabled plugins.
+    pub plugins: Arc<dyn plugin::MediaPlugins>,
 }
 
 impl MediaSetup {

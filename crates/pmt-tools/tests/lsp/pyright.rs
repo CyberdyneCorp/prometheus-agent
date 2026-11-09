@@ -2,14 +2,23 @@
 //! edit): installed with npm into the fixture's `runtimes/lsp/` on first
 //! use, run sandboxed, it reports an undefined name a patch introduced.
 //! CI sets `PMT_TEST_LSP=require`; elsewhere the test skips unless npm is
-//! installed and `PMT_TEST_LSP=require` (it downloads pyright).
+//! installed and `PMT_TEST_LSP=require` (it downloads pyright). The
+//! download is the network's pace, not the product's: the test waits up
+//! to [`INSTALL_BOUND`] for it, and nextest retries it (`.config/
+//! nextest.toml`) when the registry fails.
 
 use std::fs;
+use std::time::{Duration, Instant};
 
 use pmt_tools::lsp::{LspSetup, SessionDiagnostics, Toolchain};
 
 use crate::sandbox::sandboxed;
 use crate::support::{Fixture, findings, patch, read, write};
+
+/// How long the first edit may take to install and warm pyright: one
+/// `wait_timeout_ms` (60 s) was too short for an npm install on a slow
+/// CI runner (Intel macOS).
+const INSTALL_BOUND: Duration = Duration::from_mins(10);
 
 #[tokio::test(flavor = "multi_thread")]
 async fn pyright_reports_an_undefined_name_after_a_patch() {
@@ -60,9 +69,16 @@ async fn pyright_reports_an_undefined_name_after_a_patch() {
     .unwrap();
     let files = fx.files(&fx.app, Some(lsp.clone()));
     let app = fx.app.join("app.py");
-    // The first edit installs pyright and warms it.
+    // The first edit installs pyright and warms it; each settle waits one
+    // `wait_timeout_ms` for the check, so wait again while it still runs.
     write(&files, &app, "import os\n\nprint(os.name)\n").await;
-    let _ = lsp.settle().await;
+    let deadline = Instant::now() + INSTALL_BOUND;
+    loop {
+        let _ = lsp.settle().await;
+        if !lsp.has_pending() || Instant::now() > deadline {
+            break;
+        }
+    }
     assert!(
         fx.prometheus
             .join("runtimes/lsp/pyright/node_modules/.bin/pyright-langserver")

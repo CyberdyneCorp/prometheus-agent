@@ -46,6 +46,18 @@ pub(super) fn of_profile(scope: &ProfileScope) -> Option<Arc<dyn Speech>> {
     )?;
     "gateway".clone_into(&mut setup.surface);
     setup.runner = Arc::new(ProfileRunner(scope.clone()));
+    let cwd = scope.dir().join("workspace");
+    setup.plugins = crate::chat::session::media_plugins::PluginMedia::shared(
+        crate::plugins_host::for_session(scope, &cwd)
+            .current()
+            .providers
+            .clone(),
+        pmt_plugins::host::CallInfo {
+            session_id: None,
+            surface: "gateway".to_owned(),
+            cwd: Some(cwd.display().to_string()),
+        },
+    );
     let session = MediaSession::new(setup).with_ffmpeg(crate::chat::session::media::ffmpeg(scope));
     Some(Arc::new(ProfileSpeech(session)))
 }

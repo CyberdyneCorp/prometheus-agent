@@ -3,10 +3,13 @@
 //!
 //! A set `stt.provider` is used strictly: when it cannot run, or fails,
 //! the caller gets `stt is configured to use <provider>, but <reason>` and
-//! no other provider is tried. Unset, the first available of the
-//! [`AUTO_ORDER`] (on-device first) is used and named in the transcript.
-//! Cloud uploads are silence-trimmed first (raw audio when trimming
-//! fails) and checked against the provider's upload limit.
+//! no other provider is tried; a name that is neither built in nor a
+//! declared command may be a provider an enabled plugin registered
+//! ([`crate::plugin`]). Unset, the first available of the [`AUTO_ORDER`]
+//! (on-device first) is used and named in the transcript. Cloud uploads
+//! are silence-trimmed first (raw audio when trimming fails) and checked
+//! against the provider's declared upload limits (bytes and duration);
+//! splitting a recording over them is voice-mode's (task 50.2).
 
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
@@ -92,15 +95,26 @@ fn secret(provider: &str) -> Option<&'static str> {
     })
 }
 
-/// The upload limit of a cloud provider.
+/// A cloud provider's per-request upload limits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UploadLimit {
+    /// Most bytes.
+    pub bytes: u64,
+    /// Longest recording, in seconds (`None`: only the size counts).
+    pub seconds: Option<u64>,
+}
+
+/// The upload limits a cloud provider declares.
 #[must_use]
-pub fn upload_limit(provider: &str) -> Option<u64> {
-    match provider {
-        "openai" | "groq" => Some(25 * MIB),
-        "mistral" | "xai" => Some(500 * MIB),
-        "elevenlabs" => Some(5 * 1024 * MIB - 1),
-        _ => None,
-    }
+pub fn upload_limit(provider: &str) -> Option<UploadLimit> {
+    let (bytes, seconds) = match provider {
+        "openai" | "groq" => (25 * MIB, None),
+        "mistral" => (500 * MIB, Some(3_600)),
+        "xai" => (500 * MIB, None),
+        "elevenlabs" => (5 * 1024 * MIB - 1, None),
+        _ => return None,
+    };
+    Some(UploadLimit { bytes, seconds })
 }
 
 fn default_model(provider: &str) -> &'static str {
@@ -236,14 +250,21 @@ impl MediaSession {
                 .ok_or_else(|| NONE_AVAILABLE.to_owned());
         };
         if !BUILTIN.contains(&provider.as_str()) {
-            return match stt.providers.get(&provider) {
-                Some(command) => Ok(Transcript {
+            let plugin = crate::plugin::selected(setup, crate::plugin::Kind::Stt);
+            return match (stt.providers.get(&provider), plugin) {
+                (Some(command), _) => Ok(Transcript {
                     text: String::new(),
                     provider,
                     model: command.model.clone().unwrap_or_default(),
                     billing_source: "local".to_owned(),
                 }),
-                None => Err(format!(
+                (None, Some(selected)) => Ok(Transcript {
+                    text: String::new(),
+                    provider,
+                    model: String::new(),
+                    billing_source: format!("reported by plugin '{}'", selected.plugin),
+                }),
+                (None, None) => Err(format!(
                     "stt is configured to use {provider}, but stt provider '{provider}' is not installed or not enabled"
                 )),
             };
@@ -275,6 +296,11 @@ impl MediaSession {
             && let Some(command) = stt.providers.get(&provider)
         {
             return command_stt(setup, &self.speech, &provider, command, path)
+                .await
+                .map_err(strict);
+        }
+        if let Some(selected) = crate::plugin::selected(setup, crate::plugin::Kind::Stt) {
+            return crate::plugin::transcribe(setup, &selected, path)
                 .await
                 .map_err(strict);
         }
@@ -327,21 +353,48 @@ impl MediaSession {
             let _ = tokio::fs::remove_dir_all(dir).await;
         }
         let bytes = bytes?;
-        if let Some(limit) = upload_limit(&listener.provider)
-            && bytes.len() as u64 > limit
-        {
-            return Err(format!(
-                "the audio is {} MiB, over {}'s {} MiB upload limit",
-                bytes.len() as u64 / MIB,
-                listener.provider,
-                limit / MIB
-            ));
+        if let Some(limit) = upload_limit(&listener.provider) {
+            self.within(limit, &listener.provider, &upload, &bytes)
+                .await?;
         }
         let name = upload
             .file_name()
             .and_then(OsStr::to_str)
             .unwrap_or("audio.ogg");
         upload_audio(setup, listener, &bytes, name).await
+    }
+
+    /// Refuses audio over `provider`'s declared limits; a duration that
+    /// cannot be measured (no WAV header, no ffmpeg) is left to the
+    /// provider.
+    async fn within(
+        &self,
+        limit: UploadLimit,
+        provider: &str,
+        path: &Path,
+        bytes: &[u8],
+    ) -> Result<(), String> {
+        if bytes.len() as u64 > limit.bytes {
+            return Err(format!(
+                "the audio is {} MiB, over {provider}'s {} MiB upload limit",
+                bytes.len() as u64 / MIB,
+                limit.bytes / MIB
+            ));
+        }
+        let Some(most) = limit.seconds else {
+            return Ok(());
+        };
+        let seconds = match super::audio::wav_seconds(bytes) {
+            Some(seconds) => Some(seconds),
+            None => self.speech.ffmpeg.duration(path).await,
+        };
+        #[allow(clippy::cast_precision_loss)]
+        match seconds {
+            Some(seconds) if seconds > most as f64 => Err(format!(
+                "the audio is {seconds:.0} s long, over {provider}'s {most} s upload limit"
+            )),
+            _ => Ok(()),
+        }
     }
 
     /// The audio with long pauses shortened, or the original when
@@ -586,7 +639,18 @@ mod tests {
             transcript_text(r#"{"text": "json"}"#, TranscriptFormat::Json),
             "json"
         );
-        assert_eq!(upload_limit("openai"), Some(25 << 20));
         assert_eq!(upload_limit("local"), None);
+    }
+
+    #[test]
+    fn cloud_providers_declare_byte_and_duration_limits() {
+        let limit = |p| upload_limit(p).map(|l| (l.bytes, l.seconds));
+        assert_eq!(limit("openai"), Some((25 << 20, None)));
+        assert_eq!(limit("groq"), Some((25 << 20, None)));
+        assert_eq!(limit("mistral"), Some((500 << 20, Some(3_600))));
+        assert_eq!(limit("xai"), Some((500 << 20, None)));
+        assert_eq!(limit("elevenlabs"), Some(((5 << 30) - 1, None)));
+        assert_eq!(limit("local"), None);
+        assert_eq!(limit("whisper-cpp"), None);
     }
 }

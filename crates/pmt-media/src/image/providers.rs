@@ -36,6 +36,16 @@ impl Aspect {
         }
     }
 
+    /// The argument's spelling of `self`.
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Landscape => "landscape",
+            Self::Square => "square",
+            Self::Portrait => "portrait",
+        }
+    }
+
     fn fal(self) -> &'static str {
         match self {
             Self::Landscape => "landscape_16_9",

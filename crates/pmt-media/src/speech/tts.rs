@@ -60,6 +60,8 @@ pub struct Voice {
     pub base_url: String,
     /// The command of a command provider.
     pub command: Option<CommandTtsConfig>,
+    /// The plugin that registered a plugin provider.
+    pub plugin: Option<String>,
 }
 
 /// Per-call options.
@@ -175,7 +177,8 @@ pub fn secret(provider: &str) -> Option<&'static str> {
     })
 }
 
-/// The session's speech provider.
+/// The session's speech provider: a built-in one, else a declared command
+/// provider, else one an enabled plugin registered.
 ///
 /// # Errors
 ///
@@ -187,10 +190,9 @@ pub fn resolve(setup: &MediaSetup) -> Result<Voice, String> {
         .choose(Category::Tts, tts.provider.as_deref(), DEFAULT);
     let provider = choice.provider;
     if !BUILTIN.contains(&provider.as_str()) {
-        let command = tts
-            .providers
-            .get(&provider)
-            .ok_or_else(|| format!("tts provider '{provider}' is not installed or not enabled"))?;
+        let Some(command) = tts.providers.get(&provider) else {
+            return plugin_voice(setup, provider);
+        };
         return Ok(Voice {
             model: command.model.clone().unwrap_or_default(),
             voice: command.voice.clone().unwrap_or_default(),
@@ -198,6 +200,7 @@ pub fn resolve(setup: &MediaSetup) -> Result<Voice, String> {
             access: Access::local(),
             base_url: String::new(),
             command: Some(command.clone()),
+            plugin: None,
             provider,
         });
     }
@@ -223,6 +226,27 @@ pub fn resolve(setup: &MediaSetup) -> Result<Voice, String> {
         access,
         base_url,
         command: None,
+        plugin: None,
+    })
+}
+
+/// The provider `provider` an enabled plugin registered; how it bills is
+/// known from its answers.
+fn plugin_voice(setup: &MediaSetup, provider: String) -> Result<Voice, String> {
+    let kind = crate::plugin::Kind::Tts;
+    let plugin = setup
+        .plugins
+        .plugin_of(kind, &provider)
+        .ok_or_else(|| crate::plugin::not_installed(kind, &provider))?;
+    Ok(Voice {
+        model: String::new(),
+        voice: String::new(),
+        cap: default_cap(&provider, ""),
+        access: Access::local(),
+        base_url: String::new(),
+        command: None,
+        plugin: Some(plugin),
+        provider,
     })
 }
 

@@ -9,11 +9,11 @@
 //! `elevenlabs` the tool also takes a `voice` and lists the account's
 //! voices.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use pmt_config::Config;
-use pmt_core::capability::Capability as Cap;
+use pmt_core::capability::{Capability as Cap, canonical};
 use pmt_tools::descriptor::{
     CallContext, Effect, HandlerFuture, Owner, RegisteredTool, ResourceClaims, ToolDescriptor,
     ToolHandler,
@@ -111,21 +111,6 @@ impl ToolHandler for Handler {
     }
 }
 
-/// `path` lexically resolved against `base` (no `..` escapes).
-fn lexical(base: &Path, path: &str) -> PathBuf {
-    let mut out = PathBuf::new();
-    for part in base.join(path).components() {
-        match part {
-            std::path::Component::ParentDir => {
-                out.pop();
-            }
-            std::path::Component::CurDir => {}
-            other => out.push(other),
-        }
-    }
-    out
-}
-
 impl MediaSession {
     /// Runs one `text_to_speech` call.
     pub async fn text_to_speech(&self, arguments: &Value) -> ToolResult {
@@ -182,12 +167,21 @@ impl MediaSession {
         result
     }
 
-    /// `output_path` inside the workspace or the profile's audio cache.
+    /// `output_path` inside the workspace or the profile's audio cache,
+    /// as the OS will resolve it: every existing prefix with its symlinks
+    /// followed (also the file itself), so a link inside the workspace
+    /// cannot carry the write outside both; a link still there after that
+    /// is dangling (its target may be anywhere) and refused. The host
+    /// writes the file, so this check is the only guard it gets.
     fn output_path(&self, requested: &str) -> Result<PathBuf, String> {
         let setup = self.setup();
-        let path = lexical(&setup.workspace, requested);
-        let cache = audio_dir(&setup.profile_dir);
-        if path.starts_with(&setup.workspace) || path.starts_with(&cache) {
+        let path = canonical(&setup.workspace.join(requested));
+        let cache = canonical(&audio_dir(&setup.profile_dir));
+        let dangling = path
+            .ancestors()
+            .any(|p| p.symlink_metadata().is_ok_and(|m| m.is_symlink()));
+        let inside = path.starts_with(canonical(&setup.workspace)) || path.starts_with(&cache);
+        if inside && !dangling {
             Ok(path)
         } else {
             Err(format!(

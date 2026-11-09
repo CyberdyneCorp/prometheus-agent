@@ -176,6 +176,33 @@ async fn output_paths_outside_the_workspace_are_refused() {
     assert!(result.text_content().contains("outside the workspace"));
 }
 
+/// A link inside the workspace does not carry the write outside it.
+#[cfg(unix)]
+#[tokio::test]
+async fn an_output_path_escaping_through_a_symlink_is_refused() {
+    let rig = Rig::new(Config::default());
+    let outside = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    std::os::unix::fs::symlink(outside.path(), rig.workspace().join("link")).unwrap();
+    std::os::unix::fs::symlink(
+        outside.path().join("speech.mp3"),
+        rig.workspace().join("speech.mp3"),
+    )
+    .unwrap();
+    let session = rig.session();
+    for requested in ["link/speech.mp3", "link/new/dir/speech.mp3", "speech.mp3"] {
+        let result = session
+            .text_to_speech(&json!({"text": "x", "output_path": requested}))
+            .await;
+        assert_eq!(result.status, Status::Error, "{requested}");
+        assert!(
+            result.text_content().contains("outside the workspace"),
+            "{requested}: {}",
+            result.text_content()
+        );
+    }
+    assert_eq!(std::fs::read_dir(outside.path()).unwrap().count(), 0);
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn a_command_provider_receives_paths_with_spaces_as_one_argument() {
@@ -278,6 +305,35 @@ async fn an_unset_stt_provider_picks_local_whisper_first() {
     .unwrap();
     assert_eq!(request["model"], "base");
     assert_eq!(request["language"], "en");
+}
+
+/// Mistral declares 3,600 s besides 500 MiB: a longer recording is
+/// refused before any upload (splitting it is voice-mode's).
+#[tokio::test]
+async fn a_recording_over_the_providers_duration_limit_is_not_uploaded() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"text": "x"})))
+        .expect(0)
+        .mount(&server)
+        .await;
+    let mut config = Config::default();
+    config.stt.provider = Some("mistral".into());
+    let rig = Rig::new(config)
+        .secret("MISTRAL_API_KEY")
+        .at("mistral", &server.uri());
+    // A WAV header at 2 bytes a second over 8,000 bytes: 4,000 s.
+    let clip = rig.workspace().join("long.wav");
+    std::fs::write(
+        &clip,
+        pmt_media::speech::audio::wav_from_pcm(&vec![0; 8_000], 1),
+    )
+    .unwrap();
+    let session = rig.session().with_ffmpeg(Ffmpeg::none());
+    assert_eq!(
+        session.transcribe(&clip).await.unwrap_err(),
+        "stt is configured to use mistral, but the audio is 4000 s long, over mistral's 3600 s upload limit"
+    );
 }
 
 #[tokio::test]

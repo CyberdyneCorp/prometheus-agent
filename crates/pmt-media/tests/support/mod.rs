@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 use pmt_config::Config;
 use pmt_core::error::Error;
 use pmt_core::secret::SecretString;
+use pmt_media::plugin::{MediaPlugins, NoPlugins};
 use pmt_media::speech::command::PlainShell;
 use pmt_media::speech::local::Launcher;
 use pmt_media::{Credentials, DirHost, MediaSession, MediaSetup};
@@ -62,6 +63,7 @@ pub(crate) struct Rig {
     pub(crate) local: Option<Arc<dyn Launcher>>,
     pub(crate) video: Option<Arc<dyn pmt_media::video::VideoDescriber>>,
     pub(crate) usage: Arc<Mutex<Vec<ToolUsage>>>,
+    pub(crate) plugins: Arc<dyn MediaPlugins>,
 }
 
 impl Rig {
@@ -78,6 +80,7 @@ impl Rig {
             local: None,
             video: None,
             usage: Arc::default(),
+            plugins: Arc::new(NoPlugins),
         }
     }
 
@@ -127,6 +130,7 @@ impl Rig {
             video: self.video.clone(),
             runner: Arc::new(PlainShell),
             local: self.local.clone(),
+            plugins: Arc::clone(&self.plugins),
         })
     }
 }

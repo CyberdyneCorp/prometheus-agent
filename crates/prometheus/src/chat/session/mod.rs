@@ -21,6 +21,7 @@ mod lifecycle;
 mod lsp;
 mod mcp;
 pub mod media;
+pub mod media_plugins;
 mod memory;
 pub mod modal;
 pub mod model;

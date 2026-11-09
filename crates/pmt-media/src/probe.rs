@@ -3,7 +3,11 @@
 //! tool credentials and billing are explicit): a tool whose configured
 //! provider has no credential is left out of the surface with the reason,
 //! never offered to fail at every call. Probes see only the profile's
-//! config and which credentials exist (`signin:<provider>` for sign-ins).
+//! config and which credentials exist (`signin:<provider>` for sign-ins):
+//! a name that is not built in may be a provider an enabled plugin
+//! registered, which only the session knows, so the tool is offered and a
+//! call fails closed (`<category> provider '<name>' is not installed or
+//! not enabled`) when nothing provides it, as the web tools do.
 
 use pmt_config::Config;
 use pmt_config::image_models::image_provider;
@@ -19,9 +23,9 @@ fn needs(has: Presence<'_>, names: &[String], what: &str) -> Result<(), String> 
     }
 }
 
-/// `image_generate`: the selected provider's credential, or, unset, any
-/// detectable one (`FAL_KEY`, `OPENAI_API_KEY`, `XAI_API_KEY`, a Nous
-/// sign-in).
+/// `image_generate`: the selected built-in provider's credential, or,
+/// unset, any detectable one (`FAL_KEY`, `OPENAI_API_KEY`, `XAI_API_KEY`,
+/// a Nous sign-in).
 ///
 /// # Errors
 ///
@@ -61,34 +65,25 @@ pub fn image(context: ProbeContext<'_>) -> Result<(), String> {
         ),
         Some(other) => match image_provider(other).and_then(|p| p.secret) {
             Some(secret) => needs(has, &[secret.to_owned()], secret),
-            None => Err(format!(
-                "image_gen provider '{other}' is not installed or not enabled"
-            )),
+            None => Ok(()),
         },
     }
 }
 
-/// `text_to_speech`: the keyless default, local engines and command
-/// providers are always offered; a selected cloud provider needs its key
-/// (or the Nous sign-in).
+/// `text_to_speech`: the keyless default, local engines, command and
+/// plugin providers are always offered; a selected cloud provider needs
+/// its key (or the Nous sign-in).
 ///
 /// # Errors
 ///
-/// The missing credential or an unknown provider.
+/// The missing credential.
 pub fn speech(context: ProbeContext<'_>) -> Result<(), String> {
     let tts = &context.config.tts;
     let Some(provider) = tts.provider.as_deref() else {
         return Ok(());
     };
-    let builtin = crate::speech::tts::BUILTIN.contains(&provider);
-    if !builtin {
-        return if tts.providers.contains_key(provider) {
-            Ok(())
-        } else {
-            Err(format!(
-                "tts provider '{provider}' is not installed or not enabled"
-            ))
-        };
+    if !crate::speech::tts::BUILTIN.contains(&provider) {
+        return Ok(());
     }
     if provider == "nous" {
         return needs(
@@ -133,12 +128,9 @@ mod tests {
         );
         config.image_gen.openai.base_url = Some("http://localhost:18081/v1".into());
         assert!(check(&config, &[], image).is_ok());
+        // Maybe a plugin's: the call fails closed when nothing provides it.
         config.image_gen.provider = Some("midjourney".into());
-        assert!(
-            check(&config, &[], image)
-                .unwrap_err()
-                .contains("not installed")
-        );
+        assert!(check(&config, &[], image).is_ok());
     }
 
     #[test]
@@ -153,6 +145,6 @@ mod tests {
         config.tts.provider = Some("piper".into());
         assert!(check(&config, &[], speech).is_ok());
         config.tts.provider = Some("mine".into());
-        assert!(check(&config, &[], speech).is_err());
+        assert!(check(&config, &[], speech).is_ok());
     }
 }

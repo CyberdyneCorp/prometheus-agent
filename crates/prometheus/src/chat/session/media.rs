@@ -244,6 +244,8 @@ pub struct MediaInputs<'a> {
     pub fetcher: Option<Arc<pmt_net::fetch::Fetcher>>,
     /// The video-capable `vision` route, when there is one.
     pub video: Option<Arc<dyn VideoDescriber>>,
+    /// Image, speech and transcription providers of enabled plugins.
+    pub plugins: Arc<dyn pmt_media::plugin::MediaPlugins>,
 }
 
 /// Attaches the session's media tools; `None` when the profile cannot
@@ -278,6 +280,7 @@ pub fn attach(inputs: MediaInputs<'_>) -> Option<pmt_media::Attachment> {
         video: inputs.video,
         runner,
         local: Some(launcher(scope)),
+        plugins: inputs.plugins,
     })
     .with_ffmpeg(ffmpeg(scope));
     Some(MediaSessions::process().attach(&inputs.session.to_string(), Arc::new(session)))
