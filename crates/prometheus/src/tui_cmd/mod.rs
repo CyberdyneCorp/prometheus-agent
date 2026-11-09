@@ -23,6 +23,7 @@ mod session;
 mod signals;
 mod terminal_setup;
 mod upkeep;
+mod voice;
 
 use std::io::IsTerminal as _;
 use std::path::PathBuf;

@@ -43,6 +43,8 @@ pub(super) enum Typed {
     Eof,
     /// Ctrl+X Ctrl+E with the buffer so far.
     Compose(String),
+    /// The voice record key (voice mode on).
+    Record,
 }
 
 /// The line editor and what waits to run.
@@ -64,6 +66,7 @@ impl Lines {
             cwd: start.cwd.to_path_buf(),
             redactor: scope.secrets().redactor().unwrap_or_default(),
             vim_mode: scope.config().display.vim_mode,
+            record_key: crate::chat::repl::input::editor_key(&scope.config().voice.record_key.0),
         })?;
         Ok(Self {
             editor,
@@ -86,6 +89,7 @@ impl Lines {
                 }
                 Event::Compose(buffer) => Typed::Compose(buffer),
                 Event::SuspendRefused => continue,
+                Event::Record => Typed::Record,
             };
         }
     }
@@ -104,6 +108,16 @@ impl Lines {
     pub(super) fn redraw(&self) {
         self.editor.redraw();
     }
+
+    /// Arms the voice record key.
+    pub(super) fn set_voice(&self, on: bool) {
+        self.editor.set_voice(on);
+    }
+
+    /// Redraws the bottom status line at once (the voice level meter).
+    pub(super) fn status_line(&self) -> crate::chat::repl::input::StatusLine {
+        self.editor.status_line()
+    }
 }
 
 /// The attached interface's output: painted with the profile's theme,
@@ -116,7 +130,7 @@ pub(super) struct Screen {
 }
 
 impl Screen {
-    fn say(&self, role: Role, text: &str) {
+    pub(super) fn say(&self, role: Role, text: &str) {
         self.printer.print(&self.display.paint(role, text));
     }
 
@@ -179,6 +193,11 @@ pub(super) struct Chat<'a, 'b> {
     pub(super) daemon_turn: bool,
     /// The low-disk prune question waits for `on`, `off` or `later`.
     prune: bool,
+    /// `/voice` and the voice conversations of this terminal.
+    pub(super) voice: crate::chat::voice::VoiceClient,
+    /// Speaks the answer of the turn being run (a voice turn with spoken
+    /// replies on).
+    pub(super) mouth: Option<std::sync::Arc<pmt_voice::speaker::Mouth>>,
 }
 
 /// What the loop does after a line.
@@ -217,6 +236,8 @@ pub(super) async fn run(attached: &mut Attached, start: &Start<'_>) -> Result<u8
         model: None,
         daemon_turn: false,
         prune: false,
+        voice: crate::chat::voice::VoiceClient::new(start.scope, start.launch, start.cwd, "cli"),
+        mouth: None,
     };
     chat.refresh_model().await;
     chat.screen.say(
@@ -262,6 +283,13 @@ impl Chat<'_, '_> {
                 Typed::Line(line) => line,
                 Typed::Compose(buffer) => format!("/prompt {buffer}"),
                 Typed::Eof => return Ok(0),
+                Typed::Record if self.voice.mode.on => {
+                    if let Flow::Exit = self.talk().await? {
+                        return Ok(0);
+                    }
+                    continue;
+                }
+                Typed::Record => continue,
                 Typed::Interrupt if self.daemon_turn => {
                     // A wakeup or continuation runs: stop it (a loop
                     // pauses), never arm the exit.
@@ -284,7 +312,7 @@ impl Chat<'_, '_> {
         }
     }
 
-    async fn line(&mut self, line: String) -> Result<Flow, Error> {
+    pub(super) async fn line(&mut self, line: String) -> Result<Flow, Error> {
         if std::mem::take(&mut self.prune)
             && let Some(answer) = crate::chat::autoprune::Answer::parse(&line)
         {
@@ -336,6 +364,11 @@ impl Chat<'_, '_> {
             Ok(outcome) => {
                 if let Some(finished) = &outcome.finished {
                     render::finished(&self.screen, finished);
+                    // The daemon sends whole messages: the answer is
+                    // spoken once it is complete.
+                    if let (Some(mouth), Some(answer)) = (&self.mouth, &finished.final_response) {
+                        mouth.text(answer);
+                    }
                     if finished.exit_reason == "interrupted_by_user" {
                         self.screen.notice("(interrupted)");
                     }

@@ -3422,3 +3422,34 @@ capabilities = [
 
 [web-and-media-tools."Media tool credentials and billing are explicit"]
 "Subscription-billed image" = ["crates/pmt-media/tests/media.rs::a_subscription_billed_image_records_its_billing_source"]
+
+# Group 50 (voice mode)
+
+[voice-mode."Voice mode toggle and commands"]
+"Enable without a microphone" = ["crates/pmt-voice/src/mode.rs::enabling_without_a_microphone_is_refused", "crates/prometheus/tests/voice_line.rs::voice_mode_needs_a_microphone_and_its_status_names_the_providers"]
+"Status lists providers" = ["crates/pmt-voice/src/mode.rs::status_lists_the_providers", "crates/prometheus/tests/voice_line.rs::voice_mode_needs_a_microphone_and_its_status_names_the_providers"]
+
+[voice-mode."Push-to-talk recording and continuous loop"]
+"Continuous conversation" = ["crates/pmt-voice/tests/voice.rs::the_conversation_continues_without_a_key_press", "crates/prometheus/tests/voice_line.rs::a_spoken_question_is_answered_aloud_and_listening_resumes_until_silence", "crates/prometheus/tests/voice_line.rs::an_attached_line_interface_holds_the_same_conversation", "crates/prometheus/tests/voice_line.rs::the_tui_holds_the_same_conversation"]
+"Silence ends the loop" = ["crates/pmt-voice/tests/voice.rs::three_quiet_recordings_end_the_loop", "crates/prometheus/tests/voice_line.rs::a_spoken_question_is_answered_aloud_and_listening_resumes_until_silence"]
+
+[voice-mode."Two-stage silence detection"]
+"Pause between syllables" = ["crates/pmt-voice/tests/voice.rs::a_pause_between_words_keeps_the_recording_going", "crates/pmt-voice/src/vad.rs::dips_under_200_ms_do_not_break_confirmation"]
+"Nobody speaks" = ["crates/pmt-voice/tests/voice.rs::nobody_speaking_ends_the_recording_and_submits_nothing"]
+
+[voice-mode."Spoken and typed stop phrases"]
+"Partial match is a request" = ["crates/pmt-voice/tests/voice.rs::a_request_starting_with_a_stop_word_is_sent_and_a_stop_phrase_ends", "crates/pmt-voice/src/filter.rs::only_a_whole_utterance_is_a_stop_phrase"]
+"Typed stop outside voice" = ["crates/prometheus/tests/voice_line.rs::a_spoken_question_is_answered_aloud_and_listening_resumes_until_silence", "crates/pmt-voice/tests/voice.rs::a_typed_stop_phrase_ends_an_active_conversation_and_other_lines_are_typed_input"]
+
+[voice-mode."Transcription hallucination filter"]
+"Phantom outro dropped" = ["crates/pmt-voice/tests/voice.rs::a_phantom_outro_counts_as_no_speech", "crates/pmt-voice/src/filter.rs::phantom_outros_and_repetitions_are_hallucinations"]
+
+[voice-mode."Sentence-streamed spoken replies"]
+"First sentence plays early" = ["crates/pmt-voice/tests/voice.rs::the_first_sentence_plays_before_the_rest_is_generated", "crates/pmt-media/tests/voice_mode.rs::openai_speech_streams_raw_pcm"]
+"Code is not read aloud" = ["crates/pmt-voice/tests/voice.rs::a_fenced_code_block_is_not_read_aloud", "crates/pmt-voice/src/speakable.rs::markdown_and_emoji_are_not_spoken"]
+
+[voice-mode."Long recordings and provider upload limits"]
+"Long voice note split" = { tests = ["crates/pmt-media/tests/voice_mode.rs::a_long_voice_note_is_split_at_pauses_and_transcribed_as_one", "crates/pmt-media/src/speech/fit.rs::cuts_land_in_the_pauses"], note = "scaled down: a two-hour note at 100 samples a second against Mistral's 3,600 s limit stands for the 90-minute 60 MB note against a 25 MB limit; gateway voice notes reach the same MediaSession::transcribe" }
+
+[voice-mode."Gateway per-chat voice reply command"]
+"Persisted chat voice mode" = ["crates/pmt-gateway/tests/messaging/media.rs::a_chats_voice_choice_survives_a_restart"]

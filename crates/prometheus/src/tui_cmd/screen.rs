@@ -85,6 +85,8 @@ pub(super) enum Done {
     Close(String),
     /// `/handoff` answered: the line to print as the TUI leaves.
     HandedOff(Result<String, Error>),
+    /// Voice mode needs the screen (spec: voice-mode).
+    Voice(super::voice::Ask),
 }
 
 /// The TUI's state.
@@ -130,6 +132,8 @@ pub(super) struct Tui<'a> {
     lost: Option<Lost>,
     /// The live subagent tree's lines (spawned, progress, finished).
     pub(super) subagents: pmt_core::subagent_tree::TreeLines,
+    /// `/voice` and the voice conversation of this terminal.
+    pub(super) voice: super::voice::Voice,
 }
 
 /// A server request on screen or waiting for it.
@@ -276,6 +280,12 @@ impl<'a> Tui<'a> {
             panic_on_draw: open.panic_on_draw,
             lost: None,
             subagents: pmt_core::subagent_tree::TreeLines::default(),
+            voice: super::voice::Voice::new(crate::chat::voice::VoiceClient::new(
+                open.scope,
+                &open.env,
+                &open.launch.cwd,
+                "tui",
+            )),
         };
         tui.shown_changed();
         tui

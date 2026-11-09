@@ -1,0 +1,20 @@
+[package]
+name = "pmt-voice"
+description = "Prometheus voice mode: microphone capture, two-stage silence detection, the continuous push-to-talk loop, transcript filters and sentence-streamed spoken replies"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+pmt-config.workspace = true
+tokio = { workspace = true, features = ["process", "io-util", "fs"] }
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+[lints]
+workspace = true

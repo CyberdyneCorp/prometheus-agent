@@ -44,6 +44,7 @@ pmt-store = { path = "crates/pmt-store" }
 pmt-tools = { path = "crates/pmt-tools" }
 pmt-tui = { path = "crates/pmt-tui" }
 pmt-update = { path = "crates/pmt-update" }
+pmt-voice = { path = "crates/pmt-voice" }
 pmt-local = { path = "crates/pmt-local" }
 prometheus = { path = "crates/prometheus" }
 schemars = "1.2"

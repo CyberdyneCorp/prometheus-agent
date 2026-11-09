@@ -301,12 +301,13 @@ impl Lane {
         }
     }
 
-    /// A spoken copy of the reply as one voice file, when the reply mode
-    /// asks for one and the platform sends voice.
+    /// A spoken copy of the reply as one voice file, when the chat's reply
+    /// mode asks for one: a voice bubble where the platform sends them,
+    /// else an audio attachment.
     async fn speak(&self, answer: &Answer<'_>, text: &str, descriptor: &Descriptor) {
         let Some(scope) = self.config() else { return };
-        let mode = scope.config().gateway.voice.reply_mode;
-        if !voice::speaks(mode, answer.voice) || !descriptor.sends(MediaKind::Voice) {
+        let (mode, _) = self.chat_voice(&self.routing);
+        if !voice::speaks(mode, answer.voice) {
             return;
         }
         let Some(speech) = self.shared.agents.speech(&self.profile) else {
@@ -317,7 +318,9 @@ impl Lane {
         match speech.synthesize(text, &dir).await {
             Ok(path) => {
                 let mut file = OutboundAttachment::new(&path.to_string_lossy());
-                file.as_voice = true;
+                // A voice bubble where the platform sends them, else the
+                // audio as a file.
+                file.as_voice = descriptor.sends(MediaKind::Voice);
                 voice::voice_notes(Some(speech.as_ref()), std::slice::from_mut(&mut file)).await;
                 let new = NewOutbound {
                     idempotency_key: format!(
@@ -344,9 +347,7 @@ impl Lane {
     /// Whether this turn's reply streams as audio: the reply mode speaks
     /// to this user and the adapter plays streamed audio.
     pub(super) fn streams_audio(&self, voice_input: bool) -> bool {
-        let speaks = self
-            .config()
-            .is_some_and(|s| voice::speaks(s.config().gateway.voice.reply_mode, voice_input));
+        let speaks = voice::speaks(self.chat_voice(&self.routing).0, voice_input);
         speaks
             && self.shared.agents.speech(&self.profile).is_some()
             && self

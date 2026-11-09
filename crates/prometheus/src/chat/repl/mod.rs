@@ -22,6 +22,7 @@ mod quick;
 mod sessions;
 pub mod shell;
 mod turn;
+mod voice;
 
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -107,6 +108,11 @@ struct Repl {
     /// The automated turn the next idle boundary runs (a goal
     /// continuation or a reserved timer wakeup).
     wakeup: Option<crate::automation::boundary::Reserved>,
+    /// `/voice` and the voice conversations of this terminal.
+    voice: crate::chat::voice::VoiceClient,
+    /// Speaks the reply of the turn being run (a voice turn with spoken
+    /// replies on).
+    mouth: Option<Arc<pmt_voice::speaker::Mouth>>,
 }
 
 /// The memory approver of an interactive session and the REPL's end of
@@ -200,8 +206,12 @@ pub async fn run(
         cwd: factory.options.cwd.clone(),
         redactor: factory.redactor().clone(),
         vim_mode: config.display.vim_mode,
+        record_key: input::editor_key(&config.voice.record_key.0),
     })?;
     let (posted, to_post) = mpsc::unbounded_channel();
+    let factory_scope = factory.scope.clone();
+    let factory_cwd = factory.options.cwd.clone();
+    let launch = factory.launch().clone();
     let mut repl = Repl {
         factory,
         live: None,
@@ -228,6 +238,8 @@ pub async fn run(
         running: false,
         status_bar,
         wakeup: None,
+        voice: crate::chat::voice::VoiceClient::new(&factory_scope, &launch, &factory_cwd, "cli"),
+        mouth: None,
     };
     repl.attach(live);
     let notices = print_notices(asks.notices, repl.input.printer());
@@ -312,7 +324,11 @@ impl Repl {
                 self.last_interrupt = None;
                 self.compose(&buffer).await
             }
-            Event::SuspendRefused => Flow::Continue,
+            Event::Record if self.voice.mode.on => {
+                self.last_interrupt = None;
+                Box::pin(self.talk()).await
+            }
+            Event::SuspendRefused | Event::Record => Flow::Continue,
         }
     }
 

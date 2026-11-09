@@ -7,9 +7,12 @@
 //!   the next inbound message and survives restarts; `status` names the
 //!   effective mode and where it comes from;
 //! - `/platform list|pause <name>|resume <name>` (admin tier; `list` is
-//!   `/platforms`).
+//!   `/platforms`);
+//! - `/voice [on|tts|off|status]` (spec: voice-mode, Gateway per-chat
+//!   voice reply command): the chat's spoken-reply mode, stored with the
+//!   chat so it survives restarts and overrides `gateway.voice.reply_mode`.
 
-use pmt_config::schema::BusyInputMode;
+use pmt_config::schema::{BusyInputMode, VoiceReplyMode};
 
 use super::Lane;
 use crate::messaging::key::Routing;
@@ -21,6 +24,33 @@ fn mode_name(mode: BusyInputMode) -> &'static str {
         BusyInputMode::Queue => "queue",
         BusyInputMode::Steer => "steer",
         BusyInputMode::Interrupt => "interrupt",
+    }
+}
+
+/// How a chat's `/voice` choice is stored.
+fn voice_key(mode: VoiceReplyMode) -> &'static str {
+    match mode {
+        VoiceReplyMode::Off => "off",
+        VoiceReplyMode::Mirror => "mirror",
+        VoiceReplyMode::Always => "always",
+    }
+}
+
+fn voice_mode(key: &str) -> Option<VoiceReplyMode> {
+    match key {
+        "off" => Some(VoiceReplyMode::Off),
+        "mirror" => Some(VoiceReplyMode::Mirror),
+        "always" => Some(VoiceReplyMode::Always),
+        _ => None,
+    }
+}
+
+/// What `/voice status` calls a mode.
+fn voice_label(mode: VoiceReplyMode) -> &'static str {
+    match mode {
+        VoiceReplyMode::Off => "off (text only)",
+        VoiceReplyMode::Mirror => "on (spoken to voice messages)",
+        VoiceReplyMode::Always => "tts (every reply spoken)",
     }
 }
 
@@ -89,6 +119,54 @@ impl Lane {
                 if chosen == Some(true) { "on" } else { "off" }
             )),
             Err(err) => self.say(err.message()),
+        }
+    }
+
+    /// `/voice [on|tts|off|status]`: `on` speaks replies to voice
+    /// messages, `tts` speaks every reply, `off` keeps replies text.
+    pub(super) fn voice_command(&self, routing: &Routing, args: &str) {
+        let Some(store) = self.shared.store(&self.profile) else {
+            return;
+        };
+        let chosen = match args.trim() {
+            "on" => VoiceReplyMode::Mirror,
+            "tts" => VoiceReplyMode::Always,
+            "off" => VoiceReplyMode::Off,
+            "" | "status" => {
+                let (mode, source) = self.chat_voice(routing);
+                self.say(&format!("Voice replies: {} ({source})", voice_label(mode)));
+                return;
+            }
+            _ => {
+                self.say("Usage: /voice [on | tts | off | status]");
+                return;
+            }
+        };
+        match store.set_chat_voice(&routing.platform, &routing.chat_id, Some(voice_key(chosen))) {
+            Ok(()) => self.say(&format!(
+                "Voice replies: {} for this chat.",
+                voice_label(chosen)
+            )),
+            Err(err) => self.say(err.message()),
+        }
+    }
+
+    /// The chat's spoken-reply mode and where it comes from.
+    pub(super) fn chat_voice(&self, routing: &Routing) -> (VoiceReplyMode, &'static str) {
+        let stored = self
+            .shared
+            .store(&self.profile)
+            .and_then(|store| store.chat_prefs(&routing.platform, &routing.chat_id).ok())
+            .and_then(|prefs| prefs.voice)
+            .and_then(|key| voice_mode(&key));
+        match stored {
+            Some(mode) => (mode, "this chat"),
+            None => (
+                self.config().map_or(VoiceReplyMode::Mirror, |s| {
+                    s.config().gateway.voice.reply_mode
+                }),
+                "gateway.voice.reply_mode",
+            ),
         }
     }
 

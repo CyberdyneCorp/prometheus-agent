@@ -477,8 +477,8 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 50. M2 Voice mode
 
-- [ ] 50.1 Implement voice mode toggle and commands (refused without a microphone, status lists providers), push-to-talk recording with the continuous loop, two-stage silence detection and spoken and typed stop phrases; verify with recorded audio fixtures and a mock STT provider (spec: voice-mode)
-- [ ] 50.2 Implement the transcription hallucination filter, long recordings split under provider upload limits, sentence-streamed spoken replies (code not read aloud) and the gateway per-chat voice reply command; verify with mock STT/TTS providers and the fake adapter (spec: voice-mode)
+- [x] 50.1 Implement voice mode toggle and commands (refused without a microphone, status lists providers), push-to-talk recording with the continuous loop, two-stage silence detection and spoken and typed stop phrases; verify with recorded audio fixtures and a mock STT provider (spec: voice-mode)
+- [x] 50.2 Implement the transcription hallucination filter, long recordings split under provider upload limits, sentence-streamed spoken replies (code not read aloud) and the gateway per-chat voice reply command; verify with mock STT/TTS providers and the fake adapter (spec: voice-mode)
 
 ## 51. M2 Replay and model-call cache
 

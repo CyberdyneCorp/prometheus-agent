@@ -7,9 +7,9 @@
 //! declared command may be a provider an enabled plugin registered
 //! ([`crate::plugin`]). Unset, the first available of the [`AUTO_ORDER`]
 //! (on-device first) is used and named in the transcript. Cloud uploads
-//! are silence-trimmed first (raw audio when trimming fails) and checked
-//! against the provider's declared upload limits (bytes and duration);
-//! splitting a recording over them is voice-mode's (task 50.2).
+//! are silence-trimmed first (raw audio when trimming fails) and fitted to
+//! the provider's declared upload limits (bytes and duration): re-encoded,
+//! else split at pauses ([`super::fit`]).
 
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
@@ -337,7 +337,9 @@ impl MediaSession {
         Ok(answer["text"].as_str().unwrap_or_default().to_owned())
     }
 
-    /// A cloud upload: trimmed when configured, within the upload limit.
+    /// A cloud upload: trimmed when configured, then fitted to the
+    /// provider's upload limits ([`super::fit`]): one upload, or pieces
+    /// transcribed in order and joined.
     async fn cloud(&self, listener: &Listener, path: &Path) -> Result<String, String> {
         let setup = self.setup();
         let stt = &setup.config().stt;
@@ -346,55 +348,39 @@ impl MediaSession {
         } else {
             (path.to_path_buf(), None)
         };
-        let bytes = tokio::fs::read(&upload)
-            .await
-            .map_err(|e| format!("{}: {e}", path.display()));
+        let result = self.upload(listener, path, &upload).await;
         if let Some(dir) = scratch {
             let _ = tokio::fs::remove_dir_all(dir).await;
         }
-        let bytes = bytes?;
-        if let Some(limit) = upload_limit(&listener.provider) {
-            self.within(limit, &listener.provider, &upload, &bytes)
-                .await?;
-        }
-        let name = upload
-            .file_name()
-            .and_then(OsStr::to_str)
-            .unwrap_or("audio.ogg");
-        upload_audio(setup, listener, &bytes, name).await
+        result
     }
 
-    /// Refuses audio over `provider`'s declared limits; a duration that
-    /// cannot be measured (no WAV header, no ffmpeg) is left to the
-    /// provider.
-    async fn within(
+    async fn upload(
         &self,
-        limit: UploadLimit,
-        provider: &str,
-        path: &Path,
-        bytes: &[u8],
-    ) -> Result<(), String> {
-        if bytes.len() as u64 > limit.bytes {
-            return Err(format!(
-                "the audio is {} MiB, over {provider}'s {} MiB upload limit",
-                bytes.len() as u64 / MIB,
-                limit.bytes / MIB
-            ));
-        }
-        let Some(most) = limit.seconds else {
-            return Ok(());
+        listener: &Listener,
+        original: &Path,
+        upload: &Path,
+    ) -> Result<String, String> {
+        let setup = self.setup();
+        let bytes = tokio::fs::read(upload)
+            .await
+            .map_err(|e| format!("{}: {e}", original.display()))?;
+        let Some(limit) = upload_limit(&listener.provider) else {
+            let name = upload
+                .file_name()
+                .and_then(OsStr::to_str)
+                .unwrap_or("audio.ogg");
+            return upload_audio(setup, listener, &bytes, name).await;
         };
-        let seconds = match super::audio::wav_seconds(bytes) {
-            Some(seconds) => Some(seconds),
-            None => self.speech.ffmpeg.duration(path).await,
-        };
-        #[allow(clippy::cast_precision_loss)]
-        match seconds {
-            Some(seconds) if seconds > most as f64 => Err(format!(
-                "the audio is {seconds:.0} s long, over {provider}'s {most} s upload limit"
-            )),
-            _ => Ok(()),
+        let pieces = self.fit(limit, &listener.provider, upload, bytes).await?;
+        let mut texts = Vec::with_capacity(pieces.len());
+        for piece in &pieces {
+            let text = upload_audio(setup, listener, &piece.bytes, &piece.name).await?;
+            if !text.is_empty() {
+                texts.push(text);
+            }
         }
+        Ok(texts.join(" "))
     }
 
     /// The audio with long pauses shortened, or the original when

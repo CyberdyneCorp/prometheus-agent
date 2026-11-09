@@ -434,35 +434,6 @@ async fn an_unset_stt_provider_picks_local_whisper_first() {
     assert_eq!(request["language"], "en");
 }
 
-/// Mistral declares 3,600 s besides 500 MiB: a longer recording is
-/// refused before any upload (splitting it is voice-mode's).
-#[tokio::test]
-async fn a_recording_over_the_providers_duration_limit_is_not_uploaded() {
-    let server = MockServer::start().await;
-    Mock::given(method("POST"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"text": "x"})))
-        .expect(0)
-        .mount(&server)
-        .await;
-    let mut config = Config::default();
-    config.stt.provider = Some("mistral".into());
-    let rig = Rig::new(config)
-        .secret("MISTRAL_API_KEY")
-        .at("mistral", &server.uri());
-    // A WAV header at 2 bytes a second over 8,000 bytes: 4,000 s.
-    let clip = rig.workspace().join("long.wav");
-    std::fs::write(
-        &clip,
-        pmt_media::speech::audio::wav_from_pcm(&vec![0; 8_000], 1),
-    )
-    .unwrap();
-    let session = rig.session().with_ffmpeg(Ffmpeg::none());
-    assert_eq!(
-        session.transcribe(&clip).await.unwrap_err(),
-        "stt is configured to use mistral, but the audio is 4000 s long, over mistral's 3600 s upload limit"
-    );
-}
-
 #[tokio::test]
 async fn nothing_available_is_reported_and_a_cloud_provider_is_chosen_by_key() {
     let rig = Rig::new(Config::default());

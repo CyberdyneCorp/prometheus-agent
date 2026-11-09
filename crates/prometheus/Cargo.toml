@@ -84,6 +84,7 @@ pmt-adapters-whatsapp = { workspace = true, optional = true }
 pmt-local.workspace = true
 pmt-mcp.workspace = true
 pmt-media.workspace = true
+pmt-voice.workspace = true
 pmt-memory.workspace = true
 pmt-net.workspace = true
 pmt-plugins.workspace = true

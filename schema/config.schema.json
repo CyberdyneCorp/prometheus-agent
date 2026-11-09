@@ -9601,6 +9601,85 @@
       },
       "type": "object"
     },
+    "VoiceModeConfig": {
+      "additionalProperties": false,
+      "description": "The `[voice]` section.",
+      "properties": {
+        "auto_tts": {
+          "default": false,
+          "description": "Turn spoken replies on whenever voice mode starts.",
+          "type": "boolean"
+        },
+        "beep_enabled": {
+          "default": true,
+          "description": "Play a start beep (880 Hz) and an end double beep (660 Hz) around\neach recording.",
+          "type": "boolean"
+        },
+        "hallucination_filter": {
+          "default": true,
+          "description": "Drop transcripts that are known silence hallucinations (\"thanks\nfor watching\", one phrase repeated).",
+          "type": "boolean"
+        },
+        "max_recording_secs": {
+          "default": 120,
+          "description": "The longest recording; it stops there.",
+          "format": "uint64",
+          "maximum": 600,
+          "minimum": 5,
+          "type": "integer"
+        },
+        "no_speech_timeout_secs": {
+          "default": 15,
+          "description": "A recording with no confirmed speech by then ends without being\ntranscribed.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "record_key": {
+          "$ref": "#/$defs/KeyChord",
+          "default": "ctrl+b",
+          "description": "The key that starts a recording in voice mode, and stops the\ncontinuous loop when pressed during one."
+        },
+        "silence_duration_ms": {
+          "default": 3000,
+          "description": "Continuous quiet after confirmed speech that ends the recording.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "silence_threshold": {
+          "default": 200,
+          "description": "Input level (RMS, 0-32767) above which audio counts as speech.",
+          "format": "uint32",
+          "maximum": 32767,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "speech_confirm_ms": {
+          "default": 300,
+          "description": "How long the level must stay above the threshold before speech is\nconfirmed (dips shorter than 200 ms are tolerated).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stop_phrases": {
+          "default": [
+            "stop",
+            "never mind",
+            "goodbye",
+            "cancel",
+            "that's all"
+          ],
+          "description": "Whole utterances that end the voice conversation instead of being\nsent (case and surrounding punctuation ignored); `[]` disables.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
     "VoiceModelConfig": {
       "additionalProperties": false,
       "description": "A speech provider's model and voice (unset: the provider's defaults).",
@@ -11312,6 +11391,28 @@
         "replay_recent_images": 3
       },
       "description": "Image input routing."
+    },
+    "voice": {
+      "$ref": "#/$defs/VoiceModeConfig",
+      "default": {
+        "auto_tts": false,
+        "beep_enabled": true,
+        "hallucination_filter": true,
+        "max_recording_secs": 120,
+        "no_speech_timeout_secs": 15,
+        "record_key": "ctrl+b",
+        "silence_duration_ms": 3000,
+        "silence_threshold": 200,
+        "speech_confirm_ms": 300,
+        "stop_phrases": [
+          "stop",
+          "never mind",
+          "goodbye",
+          "cancel",
+          "that's all"
+        ]
+      },
+      "description": "Voice conversations on the CLI, TUI and desktop."
     },
     "web": {
       "$ref": "#/$defs/WebConfig",

@@ -43,6 +43,11 @@ impl Tui<'_> {
             self.paste_clipboard(true);
             return;
         }
+        // In voice mode the record key talks, whatever else it is bound to.
+        if self.voice.on && self.is_record_key(key) {
+            self.record_key();
+            return;
+        }
         if let Some(action) = self.open.bindings.action(key) {
             self.on_action(action);
             return;
@@ -167,11 +172,29 @@ impl Tui<'_> {
             self.submit(line, images);
             return;
         }
+        // A voice conversation listens: it hears a stop phrase, and hands
+        // anything else back to run as typed.
+        if !self.voice_line(&line) {
+            self.run_line(&line);
+        }
+    }
+
+    /// A typed line: a client-local command, a command for the daemon, or
+    /// a prompt.
+    pub(super) fn run_line(&mut self, line: &str) {
         match classify(line.trim_end(), |name| self.link.registered(name)) {
             Input::Local(command, args) => self.local(command, &args),
             Input::Dispatch { name, args } => self.dispatch(name, args),
             Input::Prompt(text) => self.submit(text, Vec::new()),
         }
+    }
+
+    /// Whether `key` is `voice.record_key`.
+    fn is_record_key(&self, key: &KeyEvent) -> bool {
+        let configured = &self.open.scope.config().voice.record_key.0;
+        pmt_tui::keys::chord_of(key).is_some_and(|chord| {
+            pmt_config::keys::Chord::parse(configured).is_ok_and(|record| record == chord)
+        }) && key.kind != crossterm::event::KeyEventKind::Release
     }
 
     pub(super) fn dispatch(&self, name: String, args: String) {
@@ -220,6 +243,7 @@ impl Tui<'_> {
             }
             Local::New | Local::Resume | Local::Fork => self.switch(command, args),
             Local::Handoff => self.handoff(args),
+            Local::Voice => self.voice_command(args),
         }
     }
 

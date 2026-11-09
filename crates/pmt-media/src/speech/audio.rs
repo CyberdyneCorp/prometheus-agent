@@ -146,6 +146,33 @@ fn wav_parts(bytes: &[u8]) -> Option<(&[u8], &[u8])> {
     Some((fmt?, data?))
 }
 
+/// The sample rate and samples of a 16-bit PCM WAV file, mixed down to
+/// mono; `None` for anything else.
+#[must_use]
+pub fn wav_samples(bytes: &[u8]) -> Option<(u32, Vec<i16>)> {
+    if Format::sniff(bytes) != Format::Wav {
+        return None;
+    }
+    let (fmt, data) = wav_parts(bytes)?;
+    let tag = u16::from_le_bytes(fmt.get(0..2)?.try_into().ok()?);
+    let channels = usize::from(u16::from_le_bytes(fmt.get(2..4)?.try_into().ok()?));
+    let rate = u32::from_le_bytes(fmt.get(4..8)?.try_into().ok()?);
+    let bits = u16::from_le_bytes(fmt.get(14..16)?.try_into().ok()?);
+    if tag != 1 || bits != 16 || channels == 0 {
+        return None;
+    }
+    let samples: Vec<i32> = data
+        .chunks_exact(2)
+        .map(|pair| i32::from(i16::from_le_bytes([pair[0], pair[1]])))
+        .collect();
+    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+    let mono = samples
+        .chunks_exact(channels)
+        .map(|frame| (frame.iter().sum::<i32>() / channels as i32) as i16)
+        .collect();
+    Some((rate, mono))
+}
+
 /// The length of a WAV file in seconds, from its header.
 #[must_use]
 pub fn wav_seconds(bytes: &[u8]) -> Option<f64> {
@@ -307,6 +334,10 @@ impl Ffmpeg {
     }
 
     async fn run(&self, args: &[&OsStr]) -> Result<(), String> {
+        self.run_for(args, Duration::from_mins(2)).await
+    }
+
+    async fn run_for(&self, args: &[&OsStr], limit: Duration) -> Result<(), String> {
         let exe = self.exe().await.ok_or("ffmpeg is not installed")?;
         let mut command = tokio::process::Command::new(exe);
         command
@@ -314,7 +345,7 @@ impl Ffmpeg {
             .args(args)
             .stdin(std::process::Stdio::null())
             .kill_on_drop(true);
-        let output = tokio::time::timeout(Duration::from_mins(2), command.output())
+        let output = tokio::time::timeout(limit, command.output())
             .await
             .map_err(|_| "ffmpeg timed out".to_owned())?
             .map_err(|e| format!("ffmpeg could not start: {e}"))?;
@@ -389,6 +420,57 @@ impl Ffmpeg {
             OsStr::new(&filter),
             output.as_os_str(),
         ])
+        .await
+    }
+
+    /// `input` as 16 kHz mono Opus in Ogg at speech bitrate: the smallest
+    /// upload a transcriber reads well. Long recordings take a while.
+    ///
+    /// # Errors
+    ///
+    /// ffmpeg is missing or failed.
+    pub async fn encode_speech(&self, input: &Path, output: &Path) -> Result<(), String> {
+        self.run_for(
+            &[
+                OsStr::new("-i"),
+                input.as_os_str(),
+                OsStr::new("-vn"),
+                OsStr::new("-ac"),
+                OsStr::new("1"),
+                OsStr::new("-ar"),
+                OsStr::new("16000"),
+                OsStr::new("-c:a"),
+                OsStr::new("libopus"),
+                OsStr::new("-b:a"),
+                OsStr::new("24k"),
+                output.as_os_str(),
+            ],
+            Duration::from_mins(15),
+        )
+        .await
+    }
+
+    /// `input` as 16 kHz mono WAV, for recordings of any length.
+    ///
+    /// # Errors
+    ///
+    /// ffmpeg is missing or failed.
+    pub async fn decode_speech(&self, input: &Path, output: &Path) -> Result<(), String> {
+        self.run_for(
+            &[
+                OsStr::new("-i"),
+                input.as_os_str(),
+                OsStr::new("-vn"),
+                OsStr::new("-ac"),
+                OsStr::new("1"),
+                OsStr::new("-ar"),
+                OsStr::new("16000"),
+                OsStr::new("-c:a"),
+                OsStr::new("pcm_s16le"),
+                output.as_os_str(),
+            ],
+            Duration::from_mins(15),
+        )
         .await
     }
 

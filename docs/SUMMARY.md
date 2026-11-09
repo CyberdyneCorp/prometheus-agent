@@ -22,6 +22,7 @@
 - [OS sandbox and terminal backends](guide/sandbox.md)
 - [The local terminal](guide/terminal.md)
 - [File and web tools](guide/files-and-web.md)
+- [Voice mode](guide/voice.md)
 - [LSP diagnostics](guide/lsp.md)
 - [Undo, checkpoints and verification](guide/snapshots.md)
 - [Browser automation](guide/browser.md)

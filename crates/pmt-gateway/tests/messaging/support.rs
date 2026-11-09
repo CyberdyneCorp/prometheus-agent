@@ -445,6 +445,7 @@ const REGISTRY: &[(&str, &[&str], BusyPolicy)] = &[
     ("update", &[], BusyPolicy::Immediate),
     ("verbose", &[], BusyPolicy::Immediate),
     ("footer", &[], BusyPolicy::Immediate),
+    ("voice", &[], BusyPolicy::Immediate),
     ("sessions", &[], BusyPolicy::Immediate),
     ("resume", &[], BusyPolicy::Reject),
     ("background", &["bg"], BusyPolicy::Immediate),

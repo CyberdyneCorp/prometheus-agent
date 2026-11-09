@@ -243,7 +243,8 @@ const fn shift_enter() -> Chord {
 }
 
 /// The chord a terminal key event stands for.
-fn chord_of(event: &KeyEvent) -> Option<Chord> {
+#[must_use]
+pub fn chord_of(event: &KeyEvent) -> Option<Chord> {
     let mods = event.modifiers;
     let key = match event.code {
         KeyCode::Char(c) => Key::Char(c.to_ascii_lowercase()),

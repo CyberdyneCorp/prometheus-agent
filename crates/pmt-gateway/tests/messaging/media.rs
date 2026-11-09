@@ -365,3 +365,77 @@ async fn mp3_voice_attachments_are_converted_for_voice_bubbles_or_sent_as_audio(
     assert!(!file.as_voice, "{file:?}");
     assert!(file.path.ends_with("speech.mp3"));
 }
+
+/// `/voice tts` is the chat's choice: stored with the chat, it survives a
+/// daemon restart and makes even a typed message get a voice bubble
+/// (spec: voice-mode, Gateway per-chat voice reply command).
+#[tokio::test]
+async fn a_chats_voice_choice_survives_a_restart() {
+    let telegram = || {
+        let mut setup = Setup::new(&open("telegram"));
+        setup.descriptors.push(Descriptor {
+            media_out: [MediaKind::Voice, MediaKind::Audio].into_iter().collect(),
+            ..Descriptor::new("telegram", 4096)
+        });
+        setup
+    };
+    let h = Harness::start(telegram()).await;
+    h.dm("telegram", "1", "/voice status").await;
+    said(
+        &h.adapter("telegram"),
+        "Voice replies: on (spoken to voice messages) (gateway.voice.reply_mode)",
+    )
+    .await;
+    h.dm("telegram", "1", "/voice tts").await;
+    said(
+        &h.adapter("telegram"),
+        "Voice replies: tts (every reply spoken) for this chat.",
+    )
+    .await;
+    let home = h.stop().await;
+    let h = Harness::start_in(home, telegram()).await;
+    let speech = Arc::new(FakeSpeech::default());
+    *h.agents.speech.lock().unwrap() = Some(Arc::clone(&speech) as _);
+    let adapter = h.adapter("telegram");
+    h.dm("telegram", "1", "typed after the restart").await;
+    eventually("a voice bubble", || {
+        adapter
+            .all()
+            .iter()
+            .any(|d| matches!(d, Did::Send(m) if m.attachments.iter().any(|a| a.as_voice)))
+    })
+    .await;
+    assert_eq!(
+        *speech.spoken.lock().unwrap(),
+        ["echo: typed after the restart"]
+    );
+    h.dm("telegram", "1", "/voice off").await;
+    said(&adapter, "Voice replies: off (text only) for this chat.").await;
+    h.dm("telegram", "1", "quiet now").await;
+    said(&adapter, "echo: quiet now").await;
+    assert_eq!(speech.spoken.lock().unwrap().len(), 1);
+}
+
+/// A platform without voice bubbles gets the spoken reply as an audio
+/// file.
+#[tokio::test]
+async fn without_voice_bubbles_a_spoken_reply_is_an_audio_file() {
+    let mut setup = Setup::new(&open("slack"));
+    setup.descriptors.push(Descriptor {
+        media_out: [MediaKind::Audio].into_iter().collect(),
+        ..Descriptor::new("slack", 4000)
+    });
+    let h = Harness::start(setup).await;
+    let speech = Arc::new(FakeSpeech::default());
+    *h.agents.speech.lock().unwrap() = Some(Arc::clone(&speech) as _);
+    let adapter = h.adapter("slack");
+    h.dm("slack", "1", "/voice tts").await;
+    said(&adapter, "for this chat.").await;
+    h.dm("slack", "1", "read this to me").await;
+    eventually("an audio attachment", || {
+        adapter.all().iter().any(|d| {
+            matches!(d, Did::Send(m) if m.attachments.iter().any(|a| !a.as_voice && a.path.contains("speech-")))
+        })
+    })
+    .await;
+}

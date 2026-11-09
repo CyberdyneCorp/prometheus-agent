@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use pmt_config::ProfileScope;
 use pmt_core::id::SessionId;
+use pmt_media::speech::command::{CommandRunner, ShellSyntax};
 use pmt_media::video::{DescribeFuture, VideoDescriber};
 use pmt_media::{Credentials, MediaHost, MediaSession, MediaSessions, MediaSetup};
 use pmt_providers::auxiliary::{AuxCaller, AuxRoute};
@@ -166,6 +167,33 @@ impl pmt_media::speech::command::CommandRunner for SandboxRunner {
             command.args(["-NoProfile", "-Command", line]);
         }
         command.current_dir(cwd);
+        Ok(tokio::process::Command::from(command))
+    }
+}
+
+/// Command speech providers run outside a session (gateway voice notes,
+/// voice mode): in a sandbox of the profile with `process.spawn`.
+pub struct ProfileRunner(pub ProfileScope);
+
+impl CommandRunner for ProfileRunner {
+    fn syntax(&self) -> ShellSyntax {
+        if cfg!(windows) {
+            ShellSyntax::Cmd
+        } else {
+            ShellSyntax::Posix
+        }
+    }
+
+    fn command(&self, line: &str, cwd: &Path) -> Result<tokio::process::Command, String> {
+        let (shell, flag) = if cfg!(windows) {
+            ("cmd", "/C")
+        } else {
+            ("sh", "-c")
+        };
+        let cwd = cwd.to_string_lossy();
+        let mut command = crate::hooks_host::sandboxed(&self.0, Path::new(shell), &[], Some(&cwd))
+            .map_err(|e| e.message().to_owned())?;
+        command.args([flag, line]);
         Ok(tokio::process::Command::from(command))
     }
 }

@@ -41,6 +41,7 @@ mod python_bridge;
 mod state;
 mod tool_gateway;
 mod tools;
+mod voice;
 mod webhook;
 
 use schemars::JsonSchema;
@@ -128,6 +129,7 @@ pub use tools::{
     ToolSearchMode, ToolsConfig, ToolsetsConfig, UnattendedApproval, WebConfig, WebXaiConfig,
     WindowsShell,
 };
+pub use voice::VoiceModeConfig;
 pub use webhook::{
     FilterFile, FilterPath, FilterPattern, FilterValue, FilterValues, WebhookFilter, WebhookFilters,
 };
@@ -270,6 +272,8 @@ pub struct Config {
     pub ui: UiConfig,
     /// The credential vault.
     pub vault: VaultConfig,
+    /// Voice conversations on the CLI, TUI and desktop.
+    pub voice: VoiceModeConfig,
     /// Video generation's provider selection.
     pub video_gen: ToolProviderConfig,
     /// Image input routing.
@@ -347,6 +351,7 @@ impl Default for Config {
             tts: TtsConfig::default(),
             ui: UiConfig::default(),
             vault: VaultConfig::default(),
+            voice: VoiceModeConfig::default(),
             video_gen: ToolProviderConfig::default(),
             vision: VisionConfig::default(),
             web: WebConfig::default(),

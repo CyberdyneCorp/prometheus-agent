@@ -889,6 +889,16 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `vision.image_input_mode` | one of "auto", "native", "text" | `"auto"` | `"auto"`, `"native"`, `"text"` | `next_session` | How images reach the model. |
 | `vision.max_calls_per_image` | integer | unset | ≥ 0 | `next_session` | Times one image may be embedded by `vision_analyze` per session; unset is 3 in delegated children and unlimited for the main agent, `0` is unlimited. |
 | `vision.replay_recent_images` | integer | `3` | ≥ 0 | `next_session` | Newest user images re-sent when history is rebuilt from storage; `0` disables. |
+| `voice.auto_tts` | boolean | `false` | any | `live` | Turn spoken replies on whenever voice mode starts. |
+| `voice.beep_enabled` | boolean | `true` | any | `live` | Play a start beep (880 Hz) and an end double beep (660 Hz) around each recording. |
+| `voice.hallucination_filter` | boolean | `true` | any | `live` | Drop transcripts that are known silence hallucinations ("thanks for watching", one phrase repeated). |
+| `voice.max_recording_secs` | integer | `120` | 5 to 600 | `live` | The longest recording; it stops there. |
+| `voice.no_speech_timeout_secs` | integer | `15` | ≥ 0 | `live` | A recording with no confirmed speech by then ends without being transcribed. |
+| `voice.record_key` | string | `"ctrl+b"` | any | `live` | The key that starts a recording in voice mode, and stops the continuous loop when pressed during one. |
+| `voice.silence_duration_ms` | integer | `3000` | ≥ 0 | `live` | Continuous quiet after confirmed speech that ends the recording. |
+| `voice.silence_threshold` | integer | `200` | 1 to 32767 | `live` | Input level (RMS, 0-32767) above which audio counts as speech. |
+| `voice.speech_confirm_ms` | integer | `300` | ≥ 0 | `live` | How long the level must stay above the threshold before speech is confirmed (dips shorter than 200 ms are tolerated). |
+| `voice.stop_phrases` | array of string | `["stop","never mind","goodbye","cancel","that's all"]` | any | `live` | Whole utterances that end the voice conversation instead of being sent (case and surrounding punctuation ignored); `[]` disables. |
 | `web.backend` | string | `"auto"` | any | `next_session` | Shared backend for web search and extract (`auto` picks the first with credentials). |
 | `web.cache_enabled` | boolean | `true` | any | `next_session` | Serve repeat searches and extractions from a cache. |
 | `web.cache_exempt_hosts` | array of string | `[]` | any | `next_session` | Hosts never cached (exact, `*.` wildcard or domain suffix), beside local, private and single-label hosts which never are. |

@@ -341,8 +341,12 @@ What the gateway does for every adapter:
   workspace, the media cache or the blob store; anything else is withheld
   with a note.
 - Voice notes are transcribed with the profile's speech provider
-  (`gateway.voice`); replies are spoken back to voice notes by default
-  (`reply_mode = "mirror"`).
+  (`gateway.voice`; a note over the provider's upload limit is
+  re-encoded, else split at pauses); replies are spoken back to voice
+  notes by default (`reply_mode = "mirror"`). `/voice on|tts|off|status`
+  sets this per chat and is kept across restarts (see
+  [Voice mode](voice.md)); a platform without voice bubbles gets the
+  spoken reply as an audio file.
 - Approval cards show the tool, the exact action, the session's working
   directory, the risk reasons and when the request expires (unanswered,
   it is denied). They use buttons where the platform has them (signed

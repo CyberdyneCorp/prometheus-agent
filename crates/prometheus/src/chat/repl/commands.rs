@@ -120,6 +120,10 @@ impl Repl {
             "resume" => self.resume(args).await,
             "prompt" => return self.compose(args).await,
             "snapshot" => self.snapshot(args).await,
+            "voice" => {
+                self.voice_command(args).await;
+                return Flow::Continue;
+            }
             "retry" | "learn" | "tools" | "model" | "moa" => {
                 return self.session_reply(name, args).await;
             }

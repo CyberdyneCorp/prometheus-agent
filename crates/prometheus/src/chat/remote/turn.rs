@@ -266,6 +266,8 @@ fn on_line(
             lines.queue.push_back(format!("/prompt {buffer}"));
             return asking;
         }
+        // Voice records between turns only.
+        Typed::Record => return asking,
         Typed::Interrupt | Typed::Eof => {
             lines.closed = true;
             if let Some(open) = asking {

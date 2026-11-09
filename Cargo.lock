@@ -3522,6 +3522,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pmt-voice"
+version = "0.1.0"
+dependencies = [
+ "pmt-config",
+ "tempfile",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "pmt-web"
 version = "0.1.0"
 
@@ -3670,6 +3680,7 @@ dependencies = [
  "pmt-tui",
  "pmt-update",
  "pmt-vault",
+ "pmt-voice",
  "pmt-worktrees",
  "pulldown-cmark",
  "qrcode",

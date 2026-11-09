@@ -11,35 +11,7 @@ use std::sync::Arc;
 use pmt_config::ProfileScope;
 use pmt_gateway::messaging::adapter::AdapterFuture;
 use pmt_gateway::messaging::voice::Speech;
-use pmt_media::speech::command::{CommandRunner, ShellSyntax};
 use pmt_media::{MediaSession, MediaSetup};
-
-/// Command speech providers run in a sandbox of the profile with
-/// `process.spawn`.
-struct ProfileRunner(ProfileScope);
-
-impl CommandRunner for ProfileRunner {
-    fn syntax(&self) -> ShellSyntax {
-        if cfg!(windows) {
-            ShellSyntax::Cmd
-        } else {
-            ShellSyntax::Posix
-        }
-    }
-
-    fn command(&self, line: &str, cwd: &Path) -> Result<tokio::process::Command, String> {
-        let (shell, flag) = if cfg!(windows) {
-            ("cmd", "/C")
-        } else {
-            ("sh", "-c")
-        };
-        let cwd = cwd.to_string_lossy();
-        let mut command = crate::hooks_host::sandboxed(&self.0, Path::new(shell), &[], Some(&cwd))
-            .map_err(|e| e.message().to_owned())?;
-        command.args([flag, line]);
-        Ok(tokio::process::Command::from(command))
-    }
-}
 
 struct ProfileSpeech(MediaSession);
 
@@ -53,7 +25,7 @@ pub(super) fn of_profile(scope: &ProfileScope) -> Option<Arc<dyn Speech>> {
         Some(crate::chat::session::media::launcher(scope)),
     )?;
     "gateway".clone_into(&mut setup.surface);
-    setup.runner = Arc::new(ProfileRunner(scope.clone()));
+    setup.runner = Arc::new(crate::chat::session::media::ProfileRunner(scope.clone()));
     let cwd = scope.dir().join("workspace");
     setup.plugins = crate::chat::session::media_plugins::PluginMedia::shared(
         crate::plugins_host::for_session(scope, &cwd)

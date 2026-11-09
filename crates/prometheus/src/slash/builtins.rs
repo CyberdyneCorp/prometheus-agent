@@ -30,6 +30,14 @@ const TERMINALS_AND_CHATS: &[Surface] = &[
     Surface::Desktop,
     Surface::Gateway,
 ];
+/// `/voice`: voice mode on the interactive surfaces, the per-chat reply
+/// mode in chats (spec: voice-mode).
+const VOICE: &[Surface] = &[
+    Surface::Cli,
+    Surface::Tui,
+    Surface::Desktop,
+    Surface::Gateway,
+];
 const CHATS: &[Surface] = &[
     Surface::Cli,
     Surface::Tui,
@@ -621,6 +629,16 @@ pub static BUILTINS: &[Command] = &[
         "Ask a side question without adding it to the conversation: /btw <question>",
         &[text("question")],
         EVERYWHERE,
+        Immediate,
+        Effect::None,
+    ),
+    command(
+        "voice",
+        &[],
+        Config,
+        "Voice: /voice [on|off|tts|status] (in chats: speak replies on, tts, off)",
+        &[arg("mode", ArgKind::Word, false)],
+        VOICE,
         Immediate,
         Effect::None,
     ),

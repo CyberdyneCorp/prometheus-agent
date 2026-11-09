@@ -160,6 +160,7 @@ impl Lane {
             "restart" => self.restart_command(&call.routing),
             "verbose" => self.verbose_command(),
             "footer" => self.footer_command(&call.routing, &call.args),
+            "voice" => self.voice_command(&call.routing, &call.args),
             "model" => self.model_command(&call.routing, &call.args).await,
             "sessions" => self.sessions_command(&call.routing, &call.args),
             "resume" => self.resume_command(&call.routing, &call.args),

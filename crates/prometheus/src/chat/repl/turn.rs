@@ -5,6 +5,8 @@
 //! plain text follows `busy.input_mode`; prompts are answered from the
 //! next line.
 
+use std::sync::Arc;
+
 use pmt_agent::turn::{ExitReason, Interrupt, Issuer, TurnInput, TurnOptions, TurnResult};
 use pmt_config::schema::BusyInputMode;
 use pmt_core::cancel::CancelToken;
@@ -74,6 +76,9 @@ impl Repl {
         live.record.turn();
         let mut options = TurnOptions::new(&CancelToken::new());
         options.run_budget = self.start.run_budget;
+        if let Some(mouth) = &self.mouth {
+            options.deltas = Arc::new(super::voice::Spoken(Arc::clone(mouth)));
+        }
         let interrupt = options.interrupt.clone();
         let prompt = self.prompt();
         self.input.request(&prompt);
@@ -203,6 +208,8 @@ impl Repl {
                 }
             }
             Event::SuspendRefused => self.notice("cannot suspend while the agent is working"),
+            // Voice records between turns only.
+            Event::Record => {}
             Event::Compose(_) => {
                 self.notice("/prompt is unavailable while the agent is working; use /stop first");
             }

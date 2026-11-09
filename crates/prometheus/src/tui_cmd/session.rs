@@ -150,6 +150,7 @@ impl Tui<'_> {
             ));
             return;
         }
+        self.voice_turn_finished(finished);
         if let Some(answer) = &finished.final_response
             && self.app.transcript.last_answer() != Some(answer.as_str())
         {
@@ -253,11 +254,18 @@ impl Tui<'_> {
                 if let Some(notice) = submitted.notice {
                     self.notice(notice);
                 }
+                self.voice_admitted(matches!(
+                    submitted.admission,
+                    Admission::Started | Admission::Queued
+                ));
                 self.admitted(&session, &submitted.turn_id, submitted.admission);
             }
-            Done::Submitted(Err(err))
-            | Done::Dispatched(Err(err))
-            | Done::Switched(Err(err), _) => {
+            Done::Submitted(Err(err)) => {
+                self.voice_admitted(false);
+                self.error(&err);
+            }
+            Done::Voice(ask) => self.on_voice(ask),
+            Done::Dispatched(Err(err)) | Done::Switched(Err(err), _) => {
                 self.error(&err);
             }
             Done::Dispatched(Ok(dispatched)) => self.dispatched(dispatched),
