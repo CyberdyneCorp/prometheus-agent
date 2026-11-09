@@ -57,7 +57,12 @@ fn a_provider_result_keeps_its_declared_dataclass_fields() {
 
 #[test]
 fn an_oversized_tool_result_fails_with_frame_too_large() {
-    let rig = rig("echo", quick());
+    // Building and encoding a 20 MiB result can keep a slow runner's
+    // sidecar from answering 200 ms pings for longer than the 3-miss
+    // limit; this test is about the frame cap, not the heartbeat.
+    let mut settings = quick();
+    settings.ping_every = Duration::from_secs(5);
+    let rig = rig("echo", settings);
     let err = rig
         .supervisor
         .tool("big", &json!({}), &json!({}))
