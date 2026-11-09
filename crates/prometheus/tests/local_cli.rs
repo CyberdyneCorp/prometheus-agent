@@ -382,31 +382,43 @@ fn an_offline_turn_on_llamacpp_completes_and_is_billed_local_at_zero() {
     let home = local_home();
     let h = home.path();
     daemon_toml(h, "[local_runtime]\nenabled = true\n");
-    // No network: every request but loopback goes to a dead proxy.
-    let out = common::command(h)
-        .args(["chat", "-z", "hello"])
-        .env("HTTP_PROXY", "http://127.0.0.1:9")
-        .env("HTTPS_PROXY", "http://127.0.0.1:9")
-        .env("ALL_PROXY", "http://127.0.0.1:9")
-        .env("NO_PROXY", "127.0.0.1,localhost")
-        .stdin(Stdio::null())
-        .output()
-        .unwrap();
-    assert_eq!(code(&out), 0, "{}", stderr(&out));
-    assert!(
-        stdout(&out).contains("stub answer from qwen-x"),
-        "{}",
-        stdout(&out)
-    );
+    // No network: the proxy variables name a dead proxy with no
+    // exemption, and the model requests to the loopback server never use
+    // it; then the same with `network.proxy`, which replaces them.
+    let offline_turn = |h: &Path| {
+        let out = common::command(h)
+            .args(["chat", "-z", "hello"])
+            .env("HTTP_PROXY", "http://127.0.0.1:9")
+            .env("HTTPS_PROXY", "http://127.0.0.1:9")
+            .env("ALL_PROXY", "http://127.0.0.1:9")
+            .env_remove("NO_PROXY")
+            .env_remove("no_proxy")
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        assert_eq!(code(&out), 0, "{}", stderr(&out));
+        assert!(
+            stdout(&out).contains("stub answer from qwen-x"),
+            "{}",
+            stdout(&out)
+        );
+    };
+    let stopped = |h: &Path| {
+        // The server stops with the process that supervised it.
+        wait_for("the managed server to stop", || {
+            pmt_local::server::record::live(h).is_none()
+        });
+    };
+    offline_turn(h);
+    stopped(h);
+    common::append_config(h, "[network]\nproxy = \"http://127.0.0.1:9\"\n");
+    offline_turn(h);
+    stopped(h);
     let rows = ledger(h);
     let main = rows.iter().find(|r| r.purpose == "main").unwrap();
     assert_eq!(main.billing_source, "local");
     assert_eq!(main.cost_status.as_str(), "exact");
     assert_eq!(main.cost_usd, Some(0.0));
-    // The server stops with the process that supervised it.
-    wait_for("the managed server to stop", || {
-        pmt_local::server::record::live(h).is_none()
-    });
 }
 
 #[test]

@@ -31,6 +31,9 @@ pub mod tls;
 
 pub use destination::{DestinationPolicy, PrivateGrant};
 pub use fetch::Fetcher;
-pub use http::{OutboundPolicy, client, client_builder, client_with_identity, clients_built};
+pub use http::{
+    OutboundPolicy, client, client_builder, client_builder_loopback_direct, client_with_identity,
+    clients_built,
+};
 pub use identity::ClientIdentity;
 pub use lazy::LazyClient;

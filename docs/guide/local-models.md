@@ -60,15 +60,19 @@ of this.
 The managed server binds `127.0.0.1` in llama.cpp's router mode: every
 library model is listed in `run/llamacpp-models.ini` with its window, at
 most `models_max` are resident, and a model idle for `idle_unload_secs` is
-unloaded and reloaded by its next request. The gateway daemon supervises
-it when the daemon started it (`prometheus local start` hands it to a
-running daemon); otherwise the process that started it does, through a
-small helper that stops the server when that process exits. A crashed
+unloaded and reloaded by its next request. When the gateway daemon runs,
+it supervises the server: a command or session that needs it, and
+`prometheus local start`, hand the start to the daemon, so the server
+outlives that process. Without a daemon the process that started it
+supervises it, through a small helper that stops the server when that
+process exits. A crashed
 server is restarted after 1, 2, 4, 8 and 16 seconds, then given up. Its
 output goes to `logs/llamacpp.log`.
 
 Nothing is downloaded when a session starts: the engine, the weights and the
-catalog are read from disk, so a local model works offline. Downloads,
+catalog are read from disk, so a local model works offline. Requests to
+the server on `127.0.0.1` never go through `network.proxy`, so a prompt
+for a local model does not leave the machine. Downloads,
 catalog changes and Hugging Face searches happen only through the commands
 below.
 
@@ -110,13 +114,6 @@ Downloads land in `cache/partials/` and become usable only once their size
 and SHA-256 are verified: an interrupted download is listed as `partial`
 and resumes where it stopped. Models live in `<PROMETHEUS_HOME>/models/`,
 the engine in `<PROMETHEUS_HOME>/runtimes/llamacpp/<version>-<backend>/`.
-
-## Known limits
-
-`network.proxy` applies to every outbound request of a profile, loopback
-included, so with a proxy set the model requests to `127.0.0.1` go through
-it too; a proxy that cannot reach your machine's loopback breaks local
-models (as it does other local servers).
 
 ## Not yet
 

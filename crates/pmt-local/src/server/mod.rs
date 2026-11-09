@@ -9,10 +9,11 @@
 //!    `local_runtime.detect_ports`;
 //! 2. the managed server another process of this home recorded in
 //!    `run/llamacpp.json`;
-//! 3. with `local_runtime.enabled`, a managed server started now: a helper
-//!    process (`prometheus local supervise`) supervises it and stops it
-//!    when this process exits (it watches its stdin, which only this
-//!    process holds open);
+//! 3. with `local_runtime.enabled`, a managed server started now: by the
+//!    gateway daemon when one runs (the [`Delegate`] asks it), else by a
+//!    helper process (`prometheus local supervise`) that supervises it and
+//!    stops it when this process exits (it watches its stdin, which only
+//!    this process holds open);
 //!
 //! and otherwise fails with `provider.local_runtime_down`. Nothing here
 //! downloads: the engine and models must already be installed.
@@ -22,8 +23,10 @@ pub mod launch;
 pub mod record;
 pub mod supervise;
 
+use std::future::Future;
 use std::io::BufRead as _;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 
@@ -45,6 +48,11 @@ pub const DOWN: &str = "the local model server isn't running";
 /// Builds the helper command that runs [`serve`] in its own process.
 pub type HelperCommand = Arc<dyn Fn() -> Command + Send + Sync>;
 
+/// Asks the gateway daemon of the home to start and supervise the managed
+/// server; resolves to `true` once it runs under the daemon, `false` when
+/// no daemon (other than this process) can take it.
+pub type Delegate = Arc<dyn Fn() -> Pin<Box<dyn Future<Output = bool> + Send>> + Send + Sync>;
+
 /// Helpers this process started; their stdin stays open for the life of
 /// the process, so they stop their server once it exits.
 static HELPERS: Mutex<Vec<Child>> = Mutex::new(Vec::new());
@@ -63,6 +71,7 @@ pub struct Endpoint {
 pub struct Runtime {
     home: PathBuf,
     helper: Option<HelperCommand>,
+    delegate: Option<Delegate>,
     client: Arc<pmt_net::LazyClient>,
 }
 
@@ -82,8 +91,18 @@ impl Runtime {
         Self {
             home: home.to_owned(),
             helper,
+            delegate: None,
             client: Arc::new(detect::lazy_loopback_client()),
         }
+    }
+
+    /// Hands a server this runtime would start to the daemon first (spec:
+    /// the gateway daemon supervises it when it runs); the helper only
+    /// starts one when the delegate declines.
+    #[must_use]
+    pub fn with_delegate(mut self, delegate: Delegate) -> Self {
+        self.delegate = Some(delegate);
+        self
     }
 
     /// The endpoint of the local model server (see the module doc).
@@ -139,6 +158,15 @@ impl Runtime {
         let Some(engine) = pick_engine(&self.home, config) else {
             return Err(down(config, "the llama.cpp engine is not installed"));
         };
+        if let Some(delegate) = &self.delegate
+            && delegate().await
+            && let Some(found) = recorded(&self.home)
+        {
+            return Ok(Endpoint {
+                base_url: found.base_url(),
+                source: "managed",
+            });
+        }
         let Some(helper) = self.helper.clone() else {
             return Err(down(config, "this process cannot start the managed server"));
         };

@@ -1,23 +1,69 @@
 //! The local-models runtime of this process: what a `llamacpp` route
 //! without a `base_url` resolves through (spec: local-models, Managed
 //! server lifecycle), and the hidden `local supervise` helper that
-//! supervises a managed server for the process that started it.
+//! supervises a managed server for the process that started it. When the
+//! home's gateway daemon runs, a server this process would start is handed
+//! to the daemon (`local.start`) instead, so it outlives this process.
 
 use std::io::{Read as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use pmt_core::error::Error;
-use pmt_local::server::{self, HelperCommand, Runtime, Stop};
+use pmt_local::server::{self, Delegate, HelperCommand, Runtime, Stop};
 use pmt_providers::local_runtime::LocalRuntime;
 use pmt_providers::resolve::BoxFuture;
+use pmt_rpc::discovery::Discovery;
 
 use crate::context::Context;
 
-/// The runtime of `home`: detects, reuses or starts the llama-server.
+/// The runtime of `home` for a session of `profile`: detects, reuses or
+/// starts the llama-server.
 #[must_use]
-pub fn for_home(home: &Path) -> Arc<dyn LocalRuntime> {
-    Arc::new(HostRuntime(Runtime::new(home, Some(helper(home)))))
+pub fn for_home(home: &Path, profile: &str) -> Arc<dyn LocalRuntime> {
+    let runtime = Runtime::new(home, Some(helper(home))).with_delegate(daemon(home, profile));
+    Arc::new(HostRuntime(runtime))
+}
+
+/// Asks the home's daemon to start the server; declines (so the helper
+/// starts it) when no daemon runs, when this process is the daemon, or
+/// when the daemon cannot be asked.
+fn daemon(home: &Path, profile: &str) -> Delegate {
+    let (home, profile) = (home.to_path_buf(), profile.to_owned());
+    Arc::new(move || {
+        let (home, profile) = (home.clone(), profile.clone());
+        Box::pin(async move {
+            let Ok(Discovery::Running(record)) = pmt_rpc::discovery::discover(&home) else {
+                return false;
+            };
+            if record.process.pid == std::process::id() {
+                return false;
+            }
+            match start_with(&record, &profile).await {
+                Ok(_) => true,
+                Err(err) => {
+                    tracing::warn!(
+                        error = %err.message(),
+                        "the daemon did not start the local model server; this process supervises it"
+                    );
+                    false
+                }
+            }
+        })
+    })
+}
+
+/// `local.start` on `record`'s daemon as a client of `profile`.
+async fn start_with(
+    record: &pmt_rpc::discovery::DaemonRecord,
+    profile: &str,
+) -> Result<pmt_rpc::contracts::LocalReply, Error> {
+    let hello = crate::daemon_client::hello(pmt_rpc::contracts::ClientKind::Cli, false);
+    let (client, _inbox) = crate::daemon_client::connect_cli(record, profile, &hello).await?;
+    let answer = client.call("local.start", serde_json::json!({})).await;
+    client.close();
+    serde_json::from_value(answer.map_err(|e| pmt_rpc::client::error_of(&e))?)
+        .map_err(|e| Error::new(&pmt_core::error::codes::RPC_CONNECTION, e.to_string()))
 }
 
 struct HostRuntime(Runtime);
@@ -84,14 +130,7 @@ pub(super) fn start_in_daemon(ctx: &Context<'_>) -> Result<Option<String>, Error
     };
     let profile = home.select_profile(ctx.profile)?;
     crate::model_cmd::block_on(async move {
-        let hello = crate::daemon_client::hello(pmt_rpc::contracts::ClientKind::Cli, false);
-        let (client, _inbox) =
-            crate::daemon_client::connect_cli(&record, profile.as_str(), &hello).await?;
-        let answer = client.call("local.start", serde_json::json!({})).await;
-        client.close();
-        let reply: pmt_rpc::contracts::LocalReply =
-            serde_json::from_value(answer.map_err(|e| pmt_rpc::client::error_of(&e))?)
-                .map_err(|e| Error::new(&pmt_core::error::codes::RPC_CONNECTION, e.to_string()))?;
+        let reply = start_with(&record, profile.as_str()).await?;
         Ok(Some(format!(
             "{} (supervised by the daemon)",
             reply.message

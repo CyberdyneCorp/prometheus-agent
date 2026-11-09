@@ -169,7 +169,8 @@ pub(crate) fn client(config: &Config) -> Result<reqwest::Client, Error> {
         extra_ca_file: config.network.extra_ca_file.as_ref().map(Into::into),
         proxy: config.network.proxy.clone(),
     };
-    pmt_net::client_builder(&policy)?
+    // Model servers on this machine are never reached through the proxy.
+    pmt_net::client_builder_loopback_direct(&policy)?
         .timeout(Duration::from_secs(15))
         .build()
         .map_err(|e| {

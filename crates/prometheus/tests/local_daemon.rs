@@ -129,3 +129,35 @@ fn local_start_hands_the_server_to_the_daemon_and_local_methods_serve_it() {
     }
     drop(guard);
 }
+
+#[test]
+fn a_session_hands_the_server_it_needs_to_the_running_daemon() {
+    let home = local_home();
+    let h = home.path();
+    std::fs::write(h.join("daemon.toml"), "[local_runtime]\nenabled = true\n").unwrap();
+    let guard = daemon::start(h, &[]);
+
+    // A CLI process resolves the llamacpp route first (validating the
+    // model starts the server) while the daemon runs.
+    let set = common::run(h, &["model", "set", "llamacpp/qwen-x"]);
+    assert_eq!(set.status.code(), Some(0), "{}", stderr(&set));
+    // The CLI has exited; the daemon still supervises the server.
+    let record = pmt_local::server::recorded(h).expect("the server outlives the CLI");
+    let out = common::run(h, &["chat", "-z", "hello"]);
+    assert_eq!(out.status.code(), Some(0), "{}", stderr(&out));
+    assert!(
+        stdout(&out).contains("stub answer from qwen-x"),
+        "{}",
+        stdout(&out)
+    );
+    assert_eq!(stub_starts(h), 1, "the session reused the server");
+    assert_eq!(pmt_local::server::recorded(h), Some(record.clone()));
+
+    // It stops with its supervisor, the daemon.
+    drop(guard);
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while record.alive() {
+        assert!(Instant::now() < deadline, "the server outlived the daemon");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
