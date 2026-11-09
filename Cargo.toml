@@ -253,6 +253,27 @@ opt-level = 3
 [profile.dev.package.libsqlite3-sys]
 opt-level = 3
 
+# The update tests archive, sign, download, verify and unpack a copy of the
+# ~250 MiB dev binary several times each; unoptimized gzip, CRC, SHA-256
+# and BLAKE2b (minisign's own) made each of them take minutes on Intel
+# macOS runners (job timeout).
+[profile.dev.package.minisign]
+opt-level = 3
+[profile.dev.package.minisign-verify]
+opt-level = 3
+[profile.dev.package.miniz_oxide]
+opt-level = 3
+[profile.dev.package.flate2]
+opt-level = 3
+[profile.dev.package.crc32fast]
+opt-level = 3
+[profile.dev.package.adler2]
+opt-level = 3
+[profile.dev.package.sha2]
+opt-level = 3
+[profile.dev.package.tar]
+opt-level = 3
+
 [profile.release]
 # Fat LTO: one optimization unit across every crate drops what thin LTO
 # keeps per crate (duplicate generic instantiations, unused paths); the
