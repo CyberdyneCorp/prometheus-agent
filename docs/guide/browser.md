@@ -32,7 +32,7 @@ sandbox, with these helpers pre-imported:
 | `fill_input(selector, text)` | types into the element matching a CSS selector |
 | `click_at_xy(x, y)` | clicks at a viewport position |
 | `capture_screenshot(path=None)` | saves a PNG in the workspace and returns its path |
-| `cdp(method, params=None)` | sends a raw DevTools command |
+| `cdp(method, params=None)` | sends a raw DevTools command (page domains `Page`, `Runtime`, `DOM`, `DOMStorage`, `Emulation`, `Input`, `Network` go to the current tab, the rest to the browser) |
 | `ensure_real_tab()` | makes sure a page tab is current |
 
 A failing helper raises `BrowserError`. The result carries what the code

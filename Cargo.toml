@@ -48,7 +48,7 @@ schemars = "1.2"
 # MCP client and server (design D7): stdio and streamable HTTP transports,
 # no macros, OAuth or child-process wrapper (stdio servers are spawned
 # through the execution sandbox and handed over as pipes).
-rmcp = { version = "3.8.0", default-features = false }
+rmcp = { version = "3.9.0", default-features = false }
 # WASM plugin host (design D7): the Component Model on Cranelift, with no
 # WASI (plugins get only the WIT host interfaces) and no on-disk code cache.
 wasmtime = { version = "48.0.8", default-features = false, features = ["runtime", "cranelift", "component-model", "std", "call-hook"] }

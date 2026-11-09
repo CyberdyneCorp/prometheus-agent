@@ -19,8 +19,11 @@ use super::launch::Launched;
 
 /// How long a killed browser may take to exit before its files go anyway.
 const EXIT_WAIT: Duration = Duration::from_secs(5);
-/// How long a browser asked to close may take to write its profile.
-const CLOSE_WAIT: Duration = Duration::from_secs(5);
+/// How long a browser asked to close may take to write its profile and
+/// exit (and, after that, its helpers). Generous because a loaded machine
+/// slows the close down, and a kill before it finishes loses data; a
+/// healthy browser ends the wait as soon as it exits.
+const CLOSE_WAIT: Duration = Duration::from_secs(30);
 
 /// A local browser process this session owns.
 pub(super) struct LocalBrowser {
@@ -79,29 +82,39 @@ impl LocalBrowser {
         dirs
     }
 
-    /// Ends the browser: one whose profile is kept is first asked to close
-    /// over `cdp` (a killed browser loses what it had not written yet, such
-    /// as `localStorage`); then it and its helpers are killed, waited for,
-    /// and its files removed.
+    /// Ends the browser: one whose profile is kept is asked to close over
+    /// `cdp` and waited for, helpers included (a killed browser loses what
+    /// it had not written yet, such as `localStorage`); any other, or one
+    /// that does not close, is killed with its helpers and waited for.
+    /// Then its files are removed.
     pub(super) async fn terminate(&self, cdp: &super::cdp::Cdp) {
-        if self.keep_profile && self.is_running() {
-            let _ = cdp
-                .call_within("Browser.close", serde_json::json!({}), None, CLOSE_WAIT)
-                .await;
-            let deadline = tokio::time::Instant::now() + CLOSE_WAIT;
-            while self.is_running() && tokio::time::Instant::now() < deadline {
-                tokio::time::sleep(Duration::from_millis(50)).await;
-            }
-        }
-        if let Some(mut child) = self.take_child() {
-            cleanup::kill_group(self.pid);
-            let _ = child.start_kill();
-            let _ = tokio::time::timeout(EXIT_WAIT, child.wait()).await;
+        if let Some(child) = self.take_child() {
+            self.end(child, cdp).await;
         }
         let _ = std::fs::remove_file(&self.record);
         for dir in self.owned_dirs() {
             cleanup::remove_dir_async(&dir).await;
         }
+    }
+}
+
+impl LocalBrowser {
+    /// Ends the process: a kept profile is closed gracefully when it can
+    /// be (the wait is on the exit itself, not a fixed delay), anything
+    /// else is killed with its group.
+    async fn end(&self, mut child: Child, cdp: &super::cdp::Cdp) {
+        if self.keep_profile && matches!(child.try_wait(), Ok(None)) {
+            let _ = cdp
+                .call_within("Browser.close", serde_json::json!({}), None, CLOSE_WAIT)
+                .await;
+            if tokio::time::timeout(CLOSE_WAIT, child.wait()).await.is_ok() {
+                cleanup::drain_group(self.pid, CLOSE_WAIT).await;
+                return;
+            }
+        }
+        cleanup::kill_group(self.pid);
+        let _ = child.start_kill();
+        let _ = tokio::time::timeout(EXIT_WAIT, child.wait()).await;
     }
 }
 

@@ -43,7 +43,7 @@ pub fn new_group(command: &mut std::process::Command) {
 pub fn kill_group(pid: u32) {
     #[cfg(unix)]
     {
-        use nix::sys::signal::{Signal, kill, killpg};
+        use nix::sys::signal::{Signal, kill};
         use nix::unistd::{Pid, getpgid};
         let Ok(raw) = i32::try_from(pid) else {
             return;
@@ -58,20 +58,55 @@ pub fn kill_group(pid: u32) {
             // few more rounds reach it. A group ID is not reused while any
             // member exists and the rounds stop at the first ESRCH, so they
             // reach only the browser's processes.
-            for round in 0..KILL_ROUNDS {
-                if round > 0 {
-                    std::thread::sleep(KILL_PAUSE);
-                }
-                if killpg(pid, Signal::SIGKILL).is_err() {
-                    break;
-                }
-            }
+            kill_rounds(pid);
         } else {
             let _ = kill(pid, Signal::SIGKILL);
         }
     }
     #[cfg(not(unix))]
     let _ = pid;
+}
+
+/// SIGKILLs the group `pid` a few times (see [`kill_group`]), stopping at
+/// the first ESRCH.
+#[cfg(unix)]
+fn kill_rounds(pid: nix::unistd::Pid) {
+    use nix::sys::signal::{Signal, killpg};
+    for round in 0..KILL_ROUNDS {
+        if round > 0 {
+            std::thread::sleep(KILL_PAUSE);
+        }
+        if killpg(pid, Signal::SIGKILL).is_err() {
+            break;
+        }
+    }
+}
+
+/// After the browser that led group `pid` exited on its own (and was
+/// reaped): waits up to `limit` for its helpers to exit too, since they may
+/// still be writing the profile, then kills whatever is left. A group ID
+/// is not reused while any member exists, so the kill reaches only the
+/// browser's helpers. Elsewhere this is a no-op.
+pub async fn drain_group(pid: u32, limit: Duration) {
+    #[cfg(unix)]
+    {
+        use nix::sys::signal::killpg;
+        let Ok(raw) = i32::try_from(pid) else {
+            return;
+        };
+        let pid = nix::unistd::Pid::from_raw(raw);
+        let deadline = Instant::now() + limit;
+        // Signal 0 probes the group: ESRCH once every member is gone.
+        while killpg(pid, None).is_ok() {
+            if Instant::now() >= deadline {
+                kill_rounds(pid);
+                return;
+            }
+            tokio::time::sleep(REMOVE_PAUSE).await;
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = (pid, limit);
 }
 
 /// Removes `dir` and everything below it, retrying while files reappear,
