@@ -46,5 +46,6 @@ pub fn open(
         user_home.map(Path::to_path_buf),
     ))
     .with_detector(Detector::new(client.clone()))
+    .with_local_runtime(crate::local_cmd::runtime::for_home(scope.home()))
     .with_quota(QuotaTracker::new(client, store)))
 }

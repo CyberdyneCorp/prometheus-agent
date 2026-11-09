@@ -204,6 +204,22 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "moa list",
     },
     JsonShape {
+        schema: "prometheus.local_status.v1",
+        command: "local status",
+    },
+    JsonShape {
+        schema: "prometheus.local_catalog.v1",
+        command: "local catalog",
+    },
+    JsonShape {
+        schema: "prometheus.local_jobs.v1",
+        command: "local jobs",
+    },
+    JsonShape {
+        schema: "prometheus.local_search.v1",
+        command: "local search",
+    },
+    JsonShape {
         schema: "prometheus.auth.v1",
         command: "auth list",
     },

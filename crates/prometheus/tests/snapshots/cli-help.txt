@@ -34,6 +34,7 @@ Commands:
   model        Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
   providers    Provider routing state: per-route health scores
   moa          List, create, update and delete Mixture of Agents presets (`[moa.presets.<name>]`)
+  local        Local models: the llama.cpp engine, the hardware-priced catalog, downloads, the model library and the managed llama-server
   fallback     List and edit the profile's fallback chain (`[[fallback.chain]]`)
   auth         Add, list and remove provider API keys and subscription sign-ins (an interactive manager without a subcommand on a terminal)
   tools        List the profile's tools and explain one (exposure, capabilities, approvals)

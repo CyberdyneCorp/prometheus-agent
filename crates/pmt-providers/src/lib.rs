@@ -30,6 +30,7 @@ pub mod fallback;
 pub mod fast;
 pub mod health;
 pub mod local;
+pub mod local_runtime;
 pub mod metadata;
 pub mod moa;
 pub mod mock;

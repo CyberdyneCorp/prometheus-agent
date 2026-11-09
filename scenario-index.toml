@@ -3279,6 +3279,43 @@ capabilities = [
 "Claude deployment uses Anthropic wire" = ["crates/pmt-providers/tests/providers/azure.rs::claude_deployment_uses_anthropic_wire", "crates/pmt-providers/src/azure.rs::claude_deployments_use_anthropic_messages"]
 
 # Group 47: Mixture of Agents.
+[local-models."Local runtime configuration"]
+"Invalid backend" = ["crates/pmt-config/src/daemon_local.rs::an_invalid_backend_lists_the_accepted_ones_and_exits_78", "crates/prometheus/tests/local_cli.rs::an_invalid_backend_is_refused_listing_the_accepted_ones_with_exit_78"]
+"Detection-only default" = ["crates/pmt-local/tests/local/server.rs::the_default_config_only_detects_and_fails_with_local_runtime_down", "crates/prometheus/tests/local_cli.rs::a_down_server_fails_with_local_runtime_down_and_never_reaches_openrouter"]
+
+[local-models."Hash-pinned engine installation"]
+"Corrupted archive rejected" = ["crates/pmt-local/tests/local/engine.rs::a_corrupted_archive_is_deleted_nothing_is_installed_and_it_exits_74"]
+"HIP on macOS refused" = ["crates/pmt-local/tests/local/engine.rs::hip_on_macos_is_refused_with_69_before_any_request", "crates/prometheus/tests/local_cli.rs::hip_on_macos_is_refused_with_69_before_any_network_request"]
+
+[local-models."Backend auto-selection"]
+"AMD GPU on Linux" = ["crates/pmt-local/src/backend.rs::an_amd_gpu_on_linux_selects_vulkan", "crates/prometheus/tests/local_cli.rs::an_amd_gpu_on_linux_installs_the_vulkan_build"]
+
+[local-models."Hardware-priced model catalog"]
+"Catalog on an 8 GB GPU" = ["crates/prometheus/tests/local_cli.rs::the_catalog_on_an_8_gb_gpu_prices_every_entry_and_offers_nothing_below_4_bits", "crates/pmt-local/src/catalog/price.rs::an_8_gb_gpu_spills_or_refuses_a_35b_model_and_never_goes_below_4_bits"]
+
+[local-models."Resumable, verifiable downloads"]
+"Resume after interruption" = ["crates/pmt-local/tests/local/downloads.rs::a_resumed_download_requests_only_the_missing_bytes_and_starts_at_60_percent"]
+"Interrupted download not usable" = ["crates/pmt-local/tests/local/downloads.rs::an_interrupted_download_is_partial_and_not_usable"]
+
+[local-models."Model library"]
+"Linked file not deleted" = ["crates/pmt-local/tests/local/library.rs::removing_a_linked_model_leaves_the_users_file_in_place", "crates/prometheus/tests/local_cli.rs::a_linked_file_survives_removing_its_library_entry"]
+
+[local-models."Managed server lifecycle"]
+"Second process reuses the server" = ["crates/prometheus/tests/local_cli.rs::a_second_process_reuses_the_recorded_server", "crates/pmt-local/tests/local/server.rs::a_second_client_reuses_the_recorded_server"]
+"Idle model unloaded" = ["crates/pmt-local/tests/local/server.rs::an_idle_model_is_unloaded_and_reloaded_by_the_next_request"]
+
+[local-models."External llama-server detection"]
+"User-run server preferred" = ["crates/pmt-local/tests/local/server.rs::a_user_run_server_on_a_detect_port_is_preferred_over_starting_one"]
+
+[local-models."Local runtime errors"]
+"Server down with a remote key present" = ["crates/prometheus/tests/local_cli.rs::a_down_server_fails_with_local_runtime_down_and_never_reaches_openrouter"]
+
+[local-models."Local models command"]
+"Ctrl+C pauses a pull" = ["crates/prometheus/tests/local_cli.rs::ctrl_c_pauses_a_pull_and_jobs_lists_it_as_paused"]
+
+[local-models."Local inference stays local"]
+"Offline chat" = ["crates/prometheus/tests/local_cli.rs::an_offline_turn_on_llamacpp_completes_and_is_billed_local_at_zero"]
+
 [mixture-of-agents."MoA virtual provider and presets"]
 "Preset selectable as a model" = ["crates/pmt-providers/src/switch/tests.rs::a_preset_is_selectable_as_a_model_of_the_moa_provider"]
 "Bare preset name" = ["crates/pmt-providers/src/switch/tests.rs::a_bare_preset_name_selects_the_preset"]

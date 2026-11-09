@@ -81,6 +81,7 @@ pmt-adapters-signal = { workspace = true, optional = true }
 pmt-adapters-slack = { workspace = true, optional = true }
 pmt-adapters-webhook = { workspace = true, optional = true }
 pmt-adapters-whatsapp = { workspace = true, optional = true }
+pmt-local.workspace = true
 pmt-mcp.workspace = true
 pmt-memory.workspace = true
 pmt-net.workspace = true
@@ -138,6 +139,7 @@ sha2.workspace = true
 flate2.workspace = true
 # Large test images for the vision embed budget.
 image.workspace = true
+pmt-local = { workspace = true, features = ["testkit"] }
 pmt-mcp = { workspace = true, features = ["testkit"] }
 # The reference MCP client of the `mcp serve` conformance tests.
 rmcp = { workspace = true, features = ["client", "transport-async-rw", "transport-streamable-http-client-reqwest"] }

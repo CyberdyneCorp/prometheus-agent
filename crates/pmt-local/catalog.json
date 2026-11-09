@@ -1,0 +1,289 @@
+{
+  "schema": "prometheus.local-catalog.v1",
+  "hub": "https://huggingface.co",
+  "models": [
+    {
+      "id": "gemma-4-e4b",
+      "name": "Gemma 4 E4B",
+      "repo": "ggml-org/gemma-4-E4B-it-GGUF",
+      "revision": "27cd6836f8e2a6e5e6b57ea0e77fa72490706985",
+      "params_b": 7.5,
+      "active_params_b": 4.0,
+      "context_max": 131072,
+      "kv_bytes_per_token": 28672,
+      "quality": 55,
+      "quants": [
+        {
+          "quant": "Q8_0",
+          "bits": 8.5,
+          "files": [
+            {
+              "path": "gemma-4-E4B-it-Q8_0.gguf",
+              "size": 8031237344,
+              "sha256": "49008e7cc7edadf154c8748904a89ee86eb6905d220aac568f6b7b92ca6aa0c6"
+            }
+          ]
+        },
+        {
+          "quant": "Q4_0",
+          "bits": 4.5,
+          "files": [
+            {
+              "path": "gemma-4-E4B-it-Q4_0.gguf",
+              "size": 4590807392,
+              "sha256": "a555b900214b477d8880e7832e0b8925e139b0159640036b09fe472b6f2097f2"
+            }
+          ]
+        }
+      ],
+      "projector": {
+        "path": "mmproj-gemma-4-E4B-it-Q8_0.gguf",
+        "size": 559874848,
+        "sha256": "9257f21a0f5358204b4a612cff83fad2e56412f4f607f0049331ce60c0cf9d34"
+      }
+    },
+    {
+      "id": "gemma-4-12b",
+      "name": "Gemma 4 12B",
+      "repo": "ggml-org/gemma-4-12B-it-GGUF",
+      "revision": "790d826c6ec7dc8aa0ab23af33e5b8313140a231",
+      "params_b": 11.9,
+      "active_params_b": 11.9,
+      "context_max": 262144,
+      "kv_bytes_per_token": 16384,
+      "quality": 68,
+      "quants": [
+        {
+          "quant": "Q8_0",
+          "bits": 8.5,
+          "files": [
+            {
+              "path": "gemma-4-12B-it-Q8_0.gguf",
+              "size": 12669641920,
+              "sha256": "3730903965b3e57bcad0a387110322ce66409559c356a1ae1b61701024e5ce60"
+            }
+          ]
+        },
+        {
+          "quant": "Q4_0",
+          "bits": 4.5,
+          "files": [
+            {
+              "path": "gemma-4-12B-it-Q4_0.gguf",
+              "size": 7219673216,
+              "sha256": "3712b9bd32cae83a22f67ee7a4466d8d7a4f21646ac8a07d19bf9418e8767a70"
+            }
+          ]
+        }
+      ],
+      "projector": {
+        "path": "mmproj-gemma-4-12B-it-Q8_0.gguf",
+        "size": 158987648,
+        "sha256": "6b1088334bda27d7f293dcf426c0efaf1f1f20b65415ea354b695dbed9a0d65d"
+      }
+    },
+    {
+      "id": "gpt-oss-20b",
+      "name": "gpt-oss 20B",
+      "repo": "ggml-org/gpt-oss-20b-GGUF",
+      "revision": "15dcfc7e7c608c6161507211ed43c5b590801b4b",
+      "params_b": 20.9,
+      "active_params_b": 3.6,
+      "context_max": 131072,
+      "kv_bytes_per_token": 24576,
+      "quality": 70,
+      "quants": [
+        {
+          "quant": "MXFP4",
+          "bits": 4.25,
+          "files": [
+            {
+              "path": "gpt-oss-20b-MXFP4.gguf",
+              "size": 12109566624,
+              "sha256": "27cd6c432c7672cb812a92f611cf3ba7bbc35928262bb1e1253ff4ee6ae35901"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gemma-4-26b-a4b",
+      "name": "Gemma 4 26B A4B",
+      "repo": "ggml-org/gemma-4-26B-A4B-it-GGUF",
+      "revision": "9cf8c8db0f83fb4582f15381f8fb1a7c1b0b9ca2",
+      "params_b": 25.2,
+      "active_params_b": 4.0,
+      "context_max": 262144,
+      "kv_bytes_per_token": 20480,
+      "quality": 78,
+      "quants": [
+        {
+          "quant": "Q8_0",
+          "bits": 8.5,
+          "files": [
+            {
+              "path": "gemma-4-26B-A4B-it-Q8_0.gguf",
+              "size": 26859860992,
+              "sha256": "b5108fd13147d1c866bb595295bc9d56f5fe744d7209f18421031d0cc47009c6"
+            }
+          ]
+        },
+        {
+          "quant": "Q4_0",
+          "bits": 4.5,
+          "files": [
+            {
+              "path": "gemma-4-26B-A4B-it-Q4_0.gguf",
+              "size": 14618145824,
+              "sha256": "d208665ab1cd3a69f7a9a4bc59430e8448c8093d9b06334f566ac59d6d504a03"
+            }
+          ]
+        }
+      ],
+      "projector": {
+        "path": "mmproj-gemma-4-26B-A4B-it-Q8_0.gguf",
+        "size": 806408320,
+        "sha256": "cc4e855736da450bf1e162d8cccfe0ad685727d0c9e04ef7dd8d884f3121039b"
+      }
+    },
+    {
+      "id": "qwen3-coder-30b-a3b",
+      "name": "Qwen3 Coder 30B A3B",
+      "repo": "ggml-org/Qwen3-Coder-30B-A3B-Instruct-GGUF",
+      "revision": "0ca51122012fe4a20dc82988ee58780b008ce4e3",
+      "params_b": 30.5,
+      "active_params_b": 3.3,
+      "context_max": 262144,
+      "kv_bytes_per_token": 98304,
+      "quality": 76,
+      "quants": [
+        {
+          "quant": "Q8_0",
+          "bits": 8.5,
+          "files": [
+            {
+              "path": "Qwen3-Coder-30B-A3B-Instruct-Q8_0.gguf",
+              "size": 32483934176,
+              "sha256": "3963e7f49d7ed2b18e3486574582552d6431cf30122e78b14c28fcb593451f42"
+            }
+          ]
+        },
+        {
+          "quant": "Q4_K_M",
+          "bits": 4.85,
+          "files": [
+            {
+              "path": "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
+              "size": 17988419552,
+              "sha256": "f6050b4da22869aa3fb9d94bb3314e9fc5a027d4741c1f97761c387d6b2b2335"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "qwen3.6-27b",
+      "name": "Qwen3.6 27B",
+      "repo": "ggml-org/Qwen3.6-27B-GGUF",
+      "revision": "ce573e705fbf0d2cd70a24799c065ef72b50337c",
+      "params_b": 26.9,
+      "active_params_b": 26.9,
+      "context_max": 262144,
+      "kv_bytes_per_token": 65536,
+      "quality": 86,
+      "quants": [
+        {
+          "quant": "Q8_0",
+          "bits": 8.5,
+          "files": [
+            {
+              "path": "Qwen3.6-27B-Q8_0.gguf",
+              "size": 28595762752,
+              "sha256": "7cdc25ae00036f204a5748a63456f81ea11eec1225c2336064db157adc6f1c7c"
+            }
+          ]
+        },
+        {
+          "quant": "Q4_K_M",
+          "bits": 4.85,
+          "files": [
+            {
+              "path": "Qwen3.6-27B-Q4_K_M.gguf",
+              "size": 19403683392,
+              "sha256": "f3ab00cc923590947877bad882e09ada67789f747f5d3cb3c178fdf91b9aaab9"
+            }
+          ]
+        }
+      ],
+      "projector": {
+        "path": "mmproj-Qwen3.6-27B-Q8_0.gguf",
+        "size": 629247104,
+        "sha256": "dd184a692287f0d7e8fa56c8744df20c46667818efc04e6d48996d18d9521a4e"
+      }
+    },
+    {
+      "id": "qwen3.6-35b-a3b",
+      "name": "Qwen3.6 35B A3B",
+      "repo": "ggml-org/Qwen3.6-35B-A3B-GGUF",
+      "revision": "eb0b3cc97fecddab7eee6e6ffdbe92d2a00afcea",
+      "params_b": 34.7,
+      "active_params_b": 3.0,
+      "context_max": 262144,
+      "kv_bytes_per_token": 20480,
+      "quality": 84,
+      "quants": [
+        {
+          "quant": "Q8_0",
+          "bits": 8.5,
+          "files": [
+            {
+              "path": "Qwen3.6-35B-A3B-Q8_0.gguf",
+              "size": 36903139616,
+              "sha256": "f189cedbe18dc524dd74014b23431081262bc9fcc57c18fec7a7a25149246570"
+            }
+          ]
+        },
+        {
+          "quant": "Q4_K_M",
+          "bits": 4.85,
+          "files": [
+            {
+              "path": "Qwen3.6-35B-A3B-Q4_K_M.gguf",
+              "size": 20542732576,
+              "sha256": "f4ffe03c9139e6a905a5d346f77d9fabdd179367c3280dfd005d1e75ca5ed8c8"
+            }
+          ]
+        }
+      ],
+      "projector": {
+        "path": "mmproj-Qwen3.6-35B-A3B-Q8_0.gguf",
+        "size": 614194304,
+        "sha256": "904cbf8c8e876220066ab3bf676c7efa40f3da372276fdaf8b01d2fb2a37a51d"
+      }
+    },
+    {
+      "id": "gpt-oss-120b",
+      "name": "gpt-oss 120B",
+      "repo": "ggml-org/gpt-oss-120b-GGUF",
+      "revision": "7200b74bea78b0a2964ef9f3897eefa401e890ff",
+      "params_b": 116.8,
+      "active_params_b": 5.1,
+      "context_max": 131072,
+      "kv_bytes_per_token": 36864,
+      "quality": 90,
+      "quants": [
+        {
+          "quant": "MXFP4",
+          "bits": 4.25,
+          "files": [
+            {
+              "path": "gpt-oss-120b-MXFP4.gguf",
+              "size": 63387346208,
+              "sha256": "582bd40f6886200101f4c4ed9f25f3fe80cc14c86e9e2b37746cd8904a0c622d"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

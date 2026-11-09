@@ -554,6 +554,9 @@ error_codes! {
     /// A local-server provider has no endpoint.
     PROVIDER_MISSING_BASE_URL = ("provider.missing_base_url", Config,
         "A provider that needs an endpoint (local servers, `custom`) has no `providers.<id>.base_url` and its default loopback endpoint, if any, does not answer; the request is never sent to another provider.");
+    /// A `llamacpp` route found no reachable local model server.
+    PROVIDER_LOCAL_RUNTIME_DOWN = ("provider.local_runtime_down", Unavailable,
+        "A `llamacpp` route without `base_url` found no llama-server (none detected, none recorded, and the managed runtime is off or not installed); the request is never sent to another provider.");
     /// No credential may be sent to the provider's host.
     PROVIDER_MISSING_CREDENTIAL = ("provider.missing_credential", Auth,
         "The provider needs a credential but none is stored whose bound hosts (`key_hosts`) include the request's host; store one with `prometheus secrets set <NAME>`.");
@@ -678,6 +681,15 @@ error_codes! {
     /// A local inference server answered unexpectedly.
     LOCAL_SERVER_PROBE = ("local.server_probe", Unavailable,
         "A local inference server (LM Studio, Ollama, llama.cpp, vLLM, SGLang) did not serve a model listing at the given root or at `<root>/v1`.");
+    /// A local model or download job does not exist.
+    LOCAL_NOT_FOUND = ("local.not_found", NotFound,
+        "No model of the local library, catalog entry or download job has this name; `prometheus local catalog` and `prometheus local jobs` list them.");
+    /// Another process is running this local-models download job.
+    LOCAL_BUSY = ("local.busy", Conflict,
+        "Another Prometheus process is downloading this job; wait for it, or pause it there.");
+    /// A local-models download does not match its pinned size or SHA-256.
+    LOCAL_DIGEST_MISMATCH = ("local.digest_mismatch", Io,
+        "An engine archive or model file differs from its pinned size or SHA-256; the file was deleted and nothing was installed.");
     /// The mock provider's script cannot be read.
     MOCK_SCRIPT_MISSING = ("mock.script_missing", NotFound,
         "The script of the built-in `mock` provider (`--mock-script` or `providers.mock.script`) does not exist or cannot be read.");

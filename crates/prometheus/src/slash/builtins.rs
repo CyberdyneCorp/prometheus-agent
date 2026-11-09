@@ -442,6 +442,20 @@ pub static BUILTINS: &[Command] = &[
         Effect::None,
     ),
     command(
+        "local",
+        &[],
+        Model,
+        "Local models: /local use <model> switches this session to llamacpp/<model> (--global also saves it); /local status shows the engine and server",
+        &[
+            arg("action", ArgKind::Choice(&["use", "status"]), true),
+            text("model"),
+            arg("global", ArgKind::Flag, false),
+        ],
+        CHATS,
+        BusyPolicy::Reject,
+        Effect::Immediate,
+    ),
+    command(
         "provider",
         &[],
         Model,

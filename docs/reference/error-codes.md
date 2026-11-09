@@ -183,6 +183,7 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `provider.disabled` | `config` | 78 | The requested or fallback provider has `providers.<id>.enabled = false`; nothing else was resolved. |
 | `provider.not_configured` | `config` | 78 | No provider is configured, no provider secret is stored, no sign-in exists and no configured local endpoint answers. Run `prometheus model` or `prometheus auth add <provider>`. |
 | `provider.missing_base_url` | `config` | 78 | A provider that needs an endpoint (local servers, `custom`) has no `providers.<id>.base_url` and its default loopback endpoint, if any, does not answer; the request is never sent to another provider. |
+| `provider.local_runtime_down` | `unavailable` | 69 | A `llamacpp` route without `base_url` found no llama-server (none detected, none recorded, and the managed runtime is off or not installed); the request is never sent to another provider. |
 | `provider.missing_credential` | `auth` | 78 | The provider needs a credential but none is stored whose bound hosts (`key_hosts`) include the request's host; store one with `prometheus secrets set <NAME>`. |
 | `provider.invalid_descriptor` | `config` | 78 | A provider descriptor (a `[providers.<id>]` block or a plugin's) misses a required field or holds an invalid value. |
 | `provider.auth_failed` | `auth` | 78 | The provider rejected the credential (`auth`) or the account's plan is not entitled to the API (`entitlement`). |
@@ -224,6 +225,9 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `fallback.not_found` | `not_found` | 66 | `prometheus fallback remove` named an index or `<provider>/<model>` that is not in the chain. |
 | `reasoning.invalid` | `config` | 78 | An `[agent.reasoning_overrides]` value or `[agent.reasoning_tiers]` target is neither a reasoning level (none, minimal, low, medium, high, xhigh, max, ultra) nor a tier name of `[agent.reasoning_tiers]`. |
 | `local.server_probe` | `unavailable` | 69 | A local inference server (LM Studio, Ollama, llama.cpp, vLLM, SGLang) did not serve a model listing at the given root or at `<root>/v1`. |
+| `local.not_found` | `not_found` | 66 | No model of the local library, catalog entry or download job has this name; `prometheus local catalog` and `prometheus local jobs` list them. |
+| `local.busy` | `conflict` | 75 | Another Prometheus process is downloading this job; wait for it, or pause it there. |
+| `local.digest_mismatch` | `io` | 74 | An engine archive or model file differs from its pinned size or SHA-256; the file was deleted and nothing was installed. |
 | `mock.script_missing` | `not_found` | 66 | The script of the built-in `mock` provider (`--mock-script` or `providers.mock.script`) does not exist or cannot be read. |
 | `mock.script_invalid` | `config` | 78 | The script of the built-in `mock` provider is not valid TOML or holds an invalid rule (an unknown field, a bad regex, a fault combined with fields it does not take); the message names the file and the rule. |
 | `auth.key_on_argv` | `usage` | 2 | `prometheus auth add` received an extra argument; API keys are read only from the hidden prompt or stdin, so they never appear in shell history or process listings. |

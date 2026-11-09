@@ -532,6 +532,20 @@ impl Prices for Catalog {
         override_price
             .or_else(|| self.listed(provider, model).and_then(|l| l.price()))
             .or_else(|| builtin::lookup(provider, model).and_then(|m| m.price))
+            .or_else(|| (provider == crate::local_runtime::PROVIDER_ID).then(free))
+    }
+}
+
+/// The price of a model of the local-models runtime: inference on this
+/// machine costs nothing (spec: local-models, Local inference stays
+/// local), so cost budgets never refuse it as unpriced.
+fn free() -> Price {
+    Price {
+        input: 0.0,
+        output: 0.0,
+        cache_read: 0.0,
+        cache_write: 0.0,
+        reasoning: None,
     }
 }
 

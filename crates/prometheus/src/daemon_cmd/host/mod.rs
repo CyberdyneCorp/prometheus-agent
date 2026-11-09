@@ -773,6 +773,17 @@ impl Host for DaemonHost {
         crate::cron_host::blueprint_rpc::fill(&served.scope(), &self.launch, store, params)
     }
 
+    fn local<'a>(
+        &'a self,
+        profile: &'a str,
+        request: pmt_gateway::local::LocalRequest,
+    ) -> HostFuture<'a, pmt_rpc::contracts::LocalReply> {
+        Box::pin(async move {
+            let profile = self.profile(profile)?;
+            crate::local_cmd::rpc::handle(&profile.scope(), request).await
+        })
+    }
+
     fn moa_presets<'a>(
         &'a self,
         profile: &'a str,

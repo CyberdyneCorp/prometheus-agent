@@ -125,6 +125,92 @@
       },
       "type": "object"
     },
+    "LocalBackend": {
+      "description": "`local_runtime.backend`: the llama.cpp build to install and run.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Chosen from the probed hardware.",
+          "type": "string"
+        },
+        {
+          "const": "cuda",
+          "description": "NVIDIA GPUs.",
+          "type": "string"
+        },
+        {
+          "const": "metal",
+          "description": "Apple GPUs (macOS).",
+          "type": "string"
+        },
+        {
+          "const": "vulkan",
+          "description": "AMD and Intel GPUs.",
+          "type": "string"
+        },
+        {
+          "const": "hip",
+          "description": "AMD GPUs through ROCm (only when configured, `x86_64` only).",
+          "type": "string"
+        },
+        {
+          "const": "cpu",
+          "description": "No GPU.",
+          "type": "string"
+        }
+      ]
+    },
+    "LocalRuntimeConfig": {
+      "additionalProperties": false,
+      "description": "`[local_runtime]`.",
+      "properties": {
+        "backend": {
+          "$ref": "#/$defs/LocalBackend",
+          "default": "auto",
+          "description": "The engine build: `auto` picks one from the probed hardware."
+        },
+        "detect_ports": {
+          "default": [],
+          "description": "Ports probed for a user-run llama-server besides 8080.",
+          "items": {
+            "format": "uint16",
+            "maximum": 65535,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Let Prometheus start and supervise a `llama-server` when a session\nneeds one. `false` (the default) only detects a running server.",
+          "type": "boolean"
+        },
+        "idle_unload_secs": {
+          "default": 900,
+          "description": "Seconds without a request after which a resident model is unloaded\n(it is reloaded by the next request).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "models_max": {
+          "default": 4,
+          "description": "Models kept resident at once.",
+          "format": "uint32",
+          "maximum": 16,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "port": {
+          "default": 0,
+          "description": "Loopback port of the managed server; `0` picks a free one at start.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "PreUpdateBackup": {
       "description": "`update.pre_update_backup`: what `prometheus update` saves before the\nswap.",
       "oneOf": [
@@ -393,6 +479,18 @@
         }
       },
       "description": "Daemon-wide messaging gateway settings (spec: messaging-gateway,\nProfiles served by one daemon)."
+    },
+    "local_runtime": {
+      "$ref": "#/$defs/LocalRuntimeConfig",
+      "default": {
+        "backend": "auto",
+        "detect_ports": [],
+        "enabled": false,
+        "idle_unload_secs": 900,
+        "models_max": 4,
+        "port": 0
+      },
+      "description": "The machine-wide llama.cpp runtime of local models (`prometheus\nlocal`)."
     },
     "process": {
       "$ref": "#/$defs/ProcessConfig",

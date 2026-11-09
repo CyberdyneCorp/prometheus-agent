@@ -136,6 +136,12 @@ pub trait CredentialExtras: Send + Sync {
         None
     }
 
+    /// The local-models runtime `llamacpp` routes without a `base_url`
+    /// use; `None`: such routes fail with `provider.local_runtime_down`.
+    fn local_runtime(&self) -> Option<&dyn crate::local_runtime::LocalRuntime> {
+        None
+    }
+
     /// The current minted token of `provider` (resolution needs it before
     /// any request to read an Azure AI Foundry deployment's metadata);
     /// `None` when nothing here mints.

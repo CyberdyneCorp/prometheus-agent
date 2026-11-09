@@ -16,6 +16,7 @@ mod delegation;
 mod fast;
 pub mod files;
 pub mod info;
+mod local;
 mod mcp;
 mod moa;
 pub(crate) mod plugins;
@@ -137,6 +138,7 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "provider" => provider::provider(ctx, args).await,
         "reasoning" => session::reasoning(ctx, args).await,
         "fast" => fast::fast(ctx, args).await,
+        "local" => local::local(ctx, args).await,
         "tools" => session::tools(ctx, args).await,
         "plugins" => plugins::plugins(ctx, args).await,
         "mcp" => mcp::mcp(ctx, args).await,

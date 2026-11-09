@@ -248,6 +248,13 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::moa_cmd::MoaCommand,
     },
+    /// Local models: the llama.cpp engine, the hardware-priced catalog,
+    /// downloads, the model library and the managed llama-server.
+    Local {
+        /// The local subcommand.
+        #[command(subcommand)]
+        command: crate::local_cmd::LocalCommand,
+    },
     /// List and edit the profile's fallback chain (`[[fallback.chain]]`).
     Fallback {
         /// The fallback subcommand.

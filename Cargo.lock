@@ -3094,6 +3094,29 @@ name = "pmt-kanban"
 version = "0.1.0"
 
 [[package]]
+name = "pmt-local"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "jiff",
+ "percent-encoding",
+ "pmt-config",
+ "pmt-core",
+ "pmt-net",
+ "pmt-update",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sysinfo",
+ "tar",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "ulid",
+ "wiremock",
+]
+
+[[package]]
 name = "pmt-mcp"
 version = "0.1.0"
 dependencies = [
@@ -3601,6 +3624,7 @@ dependencies = [
  "pmt-cron",
  "pmt-delegation",
  "pmt-gateway",
+ "pmt-local",
  "pmt-mcp",
  "pmt-memory",
  "pmt-net",

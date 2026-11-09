@@ -42,6 +42,7 @@ pub struct Accounts {
     quota: Option<QuotaTracker>,
     minter: Option<Minter>,
     detector: Option<crate::detect::Detector>,
+    local_runtime: Option<Arc<dyn crate::local_runtime::LocalRuntime>>,
 }
 
 impl std::fmt::Debug for Accounts {
@@ -73,7 +74,18 @@ impl Accounts {
             quota: None,
             minter: None,
             detector: None,
+            local_runtime: None,
         }
+    }
+
+    /// Serves `llamacpp` routes without a `base_url` from `runtime`.
+    #[must_use]
+    pub fn with_local_runtime(
+        mut self,
+        runtime: Arc<dyn crate::local_runtime::LocalRuntime>,
+    ) -> Self {
+        self.local_runtime = Some(runtime);
+        self
     }
 
     /// Probes multi-region endpoints (`zai`) with `detector`.
@@ -503,6 +515,10 @@ impl CredentialExtras for Accounts {
 
     fn detector(&self) -> Option<&crate::detect::Detector> {
         self.detector.as_ref()
+    }
+
+    fn local_runtime(&self) -> Option<&dyn crate::local_runtime::LocalRuntime> {
+        self.local_runtime.as_deref()
     }
 
     fn mint<'a>(

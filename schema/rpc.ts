@@ -634,6 +634,28 @@ export interface LineageNode {
   title?: string | null;
 }
 
+/** Params of every `local.*` method; each uses the fields its command takes (`model` for pull, rm and use; `job` for pause and resume; `query` for search; `path` for add). */
+export interface LocalParams {
+  /** A download job id. */
+  job?: string | null;
+  /** Catalog or library id, or `owner/repo[:quant]` for `local.pull`. */
+  model?: string | null;
+  /** A `.gguf` file on the daemon's machine. */
+  path?: string | null;
+  /** The profile (the connection's only one when omitted); `local.use` sets its model. */
+  profile?: string | null;
+  /** Search words. */
+  query?: string | null;
+}
+
+/** Result of every `local.*` method. */
+export interface LocalReply {
+  /** The command's `--json` document (without `schema`), or `null`. */
+  data?: unknown;
+  /** What happened, in one line. */
+  message: string;
+}
+
 /** One running language server. */
 export interface LspServerStatus {
   /** The server id (`pyright`, `rust-analyzer`...). */
@@ -1365,6 +1387,20 @@ export interface Methods {
   "files.rollback": { params: FilesRollbackParams; result: FilesRolledBack };
   "files.undo": { params: FilesUndoParams; result: FilesUndone };
   "journey.list": { params: JourneyListParams; result: JourneyList };
+  "local.add": { params: LocalParams; result: LocalReply };
+  "local.catalog": { params: LocalParams; result: LocalReply };
+  "local.install": { params: LocalParams; result: LocalReply };
+  "local.jobs": { params: LocalParams; result: LocalReply };
+  "local.pause": { params: LocalParams; result: LocalReply };
+  "local.pull": { params: LocalParams; result: LocalReply };
+  "local.resume": { params: LocalParams; result: LocalReply };
+  "local.rm": { params: LocalParams; result: LocalReply };
+  "local.search": { params: LocalParams; result: LocalReply };
+  "local.start": { params: LocalParams; result: LocalReply };
+  "local.status": { params: LocalParams; result: LocalReply };
+  "local.stop": { params: LocalParams; result: LocalReply };
+  "local.update": { params: LocalParams; result: LocalReply };
+  "local.use": { params: LocalParams; result: LocalReply };
   "lsp.status": { params: LspStatusParams; result: LspStatus };
   "memory.summary": { params: SessionRef; result: MemorySummary };
   "moa.presets.delete": { params: MoaPresetsDeleteParams; result: MoaPresetList };

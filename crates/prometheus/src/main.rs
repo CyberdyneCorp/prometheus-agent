@@ -157,6 +157,7 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Model { command }) => model_cmd::run(command.as_ref(), &ctx),
         Some(Command::Fallback { command }) => fallback_cmd::run(command, &ctx),
         Some(Command::Moa { command }) => prometheus::moa_cmd::run(command, &ctx),
+        Some(Command::Local { command }) => prometheus::local_cmd::run(command, &ctx),
         Some(Command::Providers { command }) => prometheus::providers_cmd::run(command, &ctx),
         Some(Command::Auth { command }) => auth_cmd::run(command.as_ref(), &ctx),
         Some(Command::Tools { command }) => tools_cmd::run(command, &ctx),

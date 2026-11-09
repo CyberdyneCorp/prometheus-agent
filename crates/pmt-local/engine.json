@@ -1,0 +1,236 @@
+{
+  "schema": "prometheus.llamacpp-engine.v1",
+  "version": "b11752",
+  "builds": {
+    "darwin-arm64/cpu": {
+      "files": [
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11752/llama-b11752-bin-macos-arm64.tar.gz",
+          "size": 16103530,
+          "sha256": "455a3aeb42d8cc0fcbd851e65ba0261ebba67a7813a911bc1e1facaaac3aa803",
+          "format": "tar.gz"
+        }
+      ],
+      "exe": "llama-b11752/llama-server"
+    },
+    "darwin-arm64/metal": {
+      "files": [
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11752/llama-b11752-bin-macos-arm64.tar.gz",
+          "size": 16103530,
+          "sha256": "455a3aeb42d8cc0fcbd851e65ba0261ebba67a7813a911bc1e1facaaac3aa803",
+          "format": "tar.gz"
+        }
+      ],
+      "exe": "llama-b11752/llama-server"
+    },
+    "darwin-x64/cpu": {
+      "files": [
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11752/llama-b11752-bin-macos-x64.tar.gz",
+          "size": 11809518,
+          "sha256": "c5dce823fa3353d0eb79d74070af44cd73549ee8adbe39b070fe63a2519ce014",
+          "format": "tar.gz"
+        }
+      ],
+      "exe": "llama-b11752/llama-server"
+    },
+    "darwin-x64/metal": {
+      "files": [
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11752/llama-b11752-bin-macos-x64.tar.gz",
+          "size": 11809518,
+          "sha256": "c5dce823fa3353d0eb79d74070af44cd73549ee8adbe39b070fe63a2519ce014",
+          "format": "tar.gz"
+        }
+      ],
+      "exe": "llama-b11752/llama-server"
+    },
+    "linux-arm64/cpu": {
+      "files": [
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11752/llama-b11752-bin-ubuntu-arm64.tar.gz",
+          "size": 18032774,
+          "sha256": "84bde952c2e833d620df0325045b1a0bb477ed6a462ffb36093da2c2a8daf01e",
+          "format": "tar.gz"
+        }
+      ],
+      "exe": "llama-b11752/llama-server"
+    },
+    "linux-arm64/cuda": {
+      "files": [
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11752/llama-b11752-bin-ubuntu-cuda-13.4-arm64.tar.gz",
+          "size": 153758933,
+          "sha256": "4a7cd54cb7a2a55084cb8cdf46bc92bb33d4cb9606511d1c9dbc107d8d2d6637",
+          "format": "tar.gz"
+        },
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11752/cudart-llama-b11752-bin-ubuntu-cuda-13.4-arm64.tar.gz",
+          "size": 552523784,
+          "sha256": "3820c6f907e5d315cb91ca74b1d1feaac810763cacb45a6c78eac92ffbc2cd54",
+          "format": "tar.gz"
+        }
+      ],
+      "exe": "llama-b11752/llama-server",
+      "library_dirs": [
+        "llama-b11752",
+        "cudart-llama-b11752-bin-ubuntu-cuda-13.4-arm64"
+      ]
+    },
+    "linux-arm64/vulkan": {
+      "files": [
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11752/llama-b11752-bin-ubuntu-vulkan-arm64.tar.gz",
+          "size": 28324082,
+          "sha256": "5fde18e6ebc200f53657eb330e3c5308dad03cf2e80b681f49987ab75f23d679",
+          "format": "tar.gz"
+        }
+      ],
+      "exe": "llama-b11752/llama-server"
+    },
+    "linux-x64/cpu": {
+      "files": [
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11752/llama-b11752-bin-ubuntu-x64.tar.gz",
+          "size": 22233230,
+          "sha256": "fae47156b074fffad9287febe11af032042325fa5cf9895e40ce6be3f6bfd251",
+          "format": "tar.gz"
+        }
+      ],
+      "exe": "llama-b11752/llama-server"
+    },
+    "linux-x64/cuda": {
+      "files": [
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11752/llama-b11752-bin-ubuntu-cuda-13.4-x64.tar.gz",
+          "size": 158489415,
+          "sha256": "ae1853dfb6048bb42208fa0af7e8ee60cb918705b9ef4f32d5c5cb9cb7dcc5b1",
+          "format": "tar.gz"
+        },
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11752/cudart-llama-b11752-bin-ubuntu-cuda-13.4-x64.tar.gz",
+          "size": 440236635,
+          "sha256": "cd665b44e327dbab4f53407ecd16165d6082f04ef04e835a8c8f68c495e696ad",
+          "format": "tar.gz"
+        }
+      ],
+      "exe": "llama-b11752/llama-server",
+      "library_dirs": [
+        "llama-b11752",
+        "cudart-llama-b11752-bin-ubuntu-cuda-13.4-x64"
+      ]
+    },
+    "linux-x64/hip": {
+      "files": [
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11752/llama-b11752-bin-ubuntu-rocm-10.0-x64.tar.gz",
+          "size": 249672195,
+          "sha256": "c39b96db23ba8e23632ce0d62a74bc5af635fe5a117c1e76b138d9103c53de40",
+          "format": "tar.gz"
+        }
+      ],
+      "exe": "llama-b11752/llama-server"
+    },
+    "linux-x64/vulkan": {
+      "files": [
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11752/llama-b11752-bin-ubuntu-vulkan-x64.tar.gz",
+          "size": 34882403,
+          "sha256": "e7807059c8907b49d5a74613b7872199322b72f4fe5bd79dc48d505a33d4c665",
+          "format": "tar.gz"
+        }
+      ],
+      "exe": "llama-b11752/llama-server"
+    },
+    "windows-arm64/cpu": {
+      "files": [
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11752/llama-b11752-bin-win-cpu-arm64.zip",
+          "size": 12610001,
+          "sha256": "3679c0bc9ab8a4b9bf147603bdab2d83f7186b573506c5f78a0db7c3823e91cd",
+          "format": "zip"
+        }
+      ],
+      "exe": "llama-server.exe"
+    },
+    "windows-arm64/cuda": {
+      "files": [
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11752/llama-b11752-bin-win-cuda-13.4-arm64.zip",
+          "size": 147395760,
+          "sha256": "3cec84a41f798360d7120ba1d93007232b85ba67c6d6316b5db345f357ec3013",
+          "format": "zip"
+        },
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11752/cudart-llama-bin-win-cuda-13.4-arm64.zip",
+          "size": 153262407,
+          "sha256": "642dcde8805b3e3165ca710a5443b3b4044b27d96bd3ee3132473988c9bcb774",
+          "format": "zip"
+        }
+      ],
+      "exe": "llama-server.exe"
+    },
+    "windows-arm64/vulkan": {
+      "files": [
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11752/llama-b11752-bin-win-vulkan-arm64.zip",
+          "size": 24993596,
+          "sha256": "3a3ace042f3d2a7dff68822b2d1e07d3be34dc929cd5a51d8047df8b67326504",
+          "format": "zip"
+        }
+      ],
+      "exe": "llama-server.exe"
+    },
+    "windows-x64/cpu": {
+      "files": [
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11752/llama-b11752-bin-win-cpu-x64.zip",
+          "size": 23959696,
+          "sha256": "3c555e420daa6aa09f801be645a087e7771b4b11a200b7908e796e193f395faa",
+          "format": "zip"
+        }
+      ],
+      "exe": "llama-server.exe"
+    },
+    "windows-x64/cuda": {
+      "files": [
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11752/llama-b11752-bin-win-cuda-13.4-x64.zip",
+          "size": 159579063,
+          "sha256": "9cfe2a206f51a189185030797e85af7ec3356bbc6c81c586c7843d3b0c4db48d",
+          "format": "zip"
+        },
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11752/cudart-llama-bin-win-cuda-13.4-x64.zip",
+          "size": 423535356,
+          "sha256": "738f8c251ac22b70c3ae6f83a10cf222725df0395246a2cf58f32bdb85fbe668",
+          "format": "zip"
+        }
+      ],
+      "exe": "llama-server.exe"
+    },
+    "windows-x64/hip": {
+      "files": [
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11752/llama-b11752-bin-win-rocm-10.0-x64.zip",
+          "size": 263270514,
+          "sha256": "992c623151ec80a3b4a3b22a09d86bab08e39dc2fb84c5d22085999b85c72a6b",
+          "format": "zip"
+        }
+      ],
+      "exe": "llama-server.exe"
+    },
+    "windows-x64/vulkan": {
+      "files": [
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11752/llama-b11752-bin-win-vulkan-x64.zip",
+          "size": 36751656,
+          "sha256": "58c35990883b3a7356a1d328eb319778dff22873b0caecde34cfb94aa16b3197",
+          "format": "zip"
+        }
+      ],
+      "exe": "llama-server.exe"
+    }
+  }
+}

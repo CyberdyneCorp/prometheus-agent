@@ -24,6 +24,7 @@ pub mod daemon;
 pub mod discovery;
 pub mod host;
 pub mod hub;
+pub mod local;
 pub mod messaging;
 pub mod methods;
 pub mod moa;

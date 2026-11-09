@@ -41,6 +41,7 @@ Commands:
   model        Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
   providers    Provider routing state: per-route health scores
   moa          List, create, update and delete Mixture of Agents presets (`[moa.presets.<name>]`)
+  local        Local models: the llama.cpp engine, the hardware-priced catalog, downloads, the model library and the managed llama-server
   fallback     List and edit the profile's fallback chain (`[[fallback.chain]]`)
   auth         Add, list and remove provider API keys and subscription sign-ins (an interactive manager without a subcommand on a terminal)
   tools        List the profile's tools and explain one (exposure, capabilities, approvals)
@@ -12159,6 +12160,831 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus moa help help
 ```
 
+## `prometheus local`
+
+```text
+Local models: the llama.cpp engine, the hardware-priced catalog, downloads, the model library and the managed llama-server
+
+Usage: prometheus local [OPTIONS] <COMMAND>
+
+Commands:
+  status   Engine version and backend, server state and port, resident models, GPU and RAM use
+  install  Download, verify and install the pinned llama.cpp engine for this machine's backend
+  update   Install this build's engine pin and remove older engine builds
+  catalog  The curated models priced for this machine: memory fit, windows, quantisation, download size, the recommendation
+  pull     Download a catalog model (or a Hugging Face `owner/repo[:quant]`) into the library; Ctrl+C pauses it
+  pause    Pause a download job at its next chunk
+  resume   Resume a paused or interrupted download job; Ctrl+C pauses it again
+  jobs     Download jobs and their progress
+  search   Search Hugging Face for GGUF models, with a fit check per file
+  add      Link an existing GGUF file into the library without copying it
+  rm       Remove a model from the library (a linked file is left in place)
+  use      Make `llamacpp/<model>` the profile's model (`/local use` in a chat switches the session only, unless given `--global`)
+  start    Run the managed llama-server (in the daemon when it runs, else in the foreground until Ctrl+C)
+  stop     Stop the managed llama-server
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus local status`
+
+```text
+Engine version and backend, server state and port, resident models, GPU and RAM use
+
+Usage: prometheus local status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus local install`
+
+```text
+Download, verify and install the pinned llama.cpp engine for this machine's backend
+
+Usage: prometheus local install [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus local update`
+
+```text
+Install this build's engine pin and remove older engine builds
+
+Usage: prometheus local update [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus local catalog`
+
+```text
+The curated models priced for this machine: memory fit, windows, quantisation, download size, the recommendation
+
+Usage: prometheus local catalog [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus local pull`
+
+```text
+Download a catalog model (or a Hugging Face `owner/repo[:quant]`) into the library; Ctrl+C pauses it
+
+Usage: prometheus local pull [OPTIONS] <MODEL>
+
+Arguments:
+  <MODEL>
+          Catalog id or `owner/repo[:quant or file]`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus local pause`
+
+```text
+Pause a download job at its next chunk
+
+Usage: prometheus local pause [OPTIONS] <JOB>
+
+Arguments:
+  <JOB>
+          Job id (`prometheus local jobs`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus local resume`
+
+```text
+Resume a paused or interrupted download job; Ctrl+C pauses it again
+
+Usage: prometheus local resume [OPTIONS] <JOB>
+
+Arguments:
+  <JOB>
+          Job id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus local jobs`
+
+```text
+Download jobs and their progress
+
+Usage: prometheus local jobs [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus local search`
+
+```text
+Search Hugging Face for GGUF models, with a fit check per file
+
+Usage: prometheus local search [OPTIONS] <QUERY>
+
+Arguments:
+  <QUERY>
+          Search words
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus local add`
+
+```text
+Link an existing GGUF file into the library without copying it
+
+Usage: prometheus local add [OPTIONS] <PATH>
+
+Arguments:
+  <PATH>
+          The `.gguf` file
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus local rm`
+
+```text
+Remove a model from the library (a linked file is left in place)
+
+Usage: prometheus local rm [OPTIONS] <MODEL>
+
+Arguments:
+  <MODEL>
+          Library id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus local use`
+
+```text
+Make `llamacpp/<model>` the profile's model (`/local use` in a chat switches the session only, unless given `--global`)
+
+Usage: prometheus local use [OPTIONS] <MODEL>
+
+Arguments:
+  <MODEL>
+          Library id
+
+Options:
+      --global
+          Save it in the profile config; a command-line `use` always does
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus local start`
+
+```text
+Run the managed llama-server (in the daemon when it runs, else in the foreground until Ctrl+C)
+
+Usage: prometheus local start [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus local stop`
+
+```text
+Stop the managed llama-server
+
+Usage: prometheus local stop [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus local supervise`
+
+```text
+Supervise the managed server for a client process (internal: runs until its stdin closes)
+
+Usage: prometheus local supervise [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus local help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus local help [COMMAND]
+
+Commands:
+  status   Engine version and backend, server state and port, resident models, GPU and RAM use
+  install  Download, verify and install the pinned llama.cpp engine for this machine's backend
+  update   Install this build's engine pin and remove older engine builds
+  catalog  The curated models priced for this machine: memory fit, windows, quantisation, download size, the recommendation
+  pull     Download a catalog model (or a Hugging Face `owner/repo[:quant]`) into the library; Ctrl+C pauses it
+  pause    Pause a download job at its next chunk
+  resume   Resume a paused or interrupted download job; Ctrl+C pauses it again
+  jobs     Download jobs and their progress
+  search   Search Hugging Face for GGUF models, with a fit check per file
+  add      Link an existing GGUF file into the library without copying it
+  rm       Remove a model from the library (a linked file is left in place)
+  use      Make `llamacpp/<model>` the profile's model (`/local use` in a chat switches the session only, unless given `--global`)
+  start    Run the managed llama-server (in the daemon when it runs, else in the foreground until Ctrl+C)
+  stop     Stop the managed llama-server
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus local help status`
+
+```text
+Engine version and backend, server state and port, resident models, GPU and RAM use
+
+Usage: prometheus local help status
+```
+
+## `prometheus local help install`
+
+```text
+Download, verify and install the pinned llama.cpp engine for this machine's backend
+
+Usage: prometheus local help install
+```
+
+## `prometheus local help update`
+
+```text
+Install this build's engine pin and remove older engine builds
+
+Usage: prometheus local help update
+```
+
+## `prometheus local help catalog`
+
+```text
+The curated models priced for this machine: memory fit, windows, quantisation, download size, the recommendation
+
+Usage: prometheus local help catalog
+```
+
+## `prometheus local help pull`
+
+```text
+Download a catalog model (or a Hugging Face `owner/repo[:quant]`) into the library; Ctrl+C pauses it
+
+Usage: prometheus local help pull
+```
+
+## `prometheus local help pause`
+
+```text
+Pause a download job at its next chunk
+
+Usage: prometheus local help pause
+```
+
+## `prometheus local help resume`
+
+```text
+Resume a paused or interrupted download job; Ctrl+C pauses it again
+
+Usage: prometheus local help resume
+```
+
+## `prometheus local help jobs`
+
+```text
+Download jobs and their progress
+
+Usage: prometheus local help jobs
+```
+
+## `prometheus local help search`
+
+```text
+Search Hugging Face for GGUF models, with a fit check per file
+
+Usage: prometheus local help search
+```
+
+## `prometheus local help add`
+
+```text
+Link an existing GGUF file into the library without copying it
+
+Usage: prometheus local help add
+```
+
+## `prometheus local help rm`
+
+```text
+Remove a model from the library (a linked file is left in place)
+
+Usage: prometheus local help rm
+```
+
+## `prometheus local help use`
+
+```text
+Make `llamacpp/<model>` the profile's model (`/local use` in a chat switches the session only, unless given `--global`)
+
+Usage: prometheus local help use
+```
+
+## `prometheus local help start`
+
+```text
+Run the managed llama-server (in the daemon when it runs, else in the foreground until Ctrl+C)
+
+Usage: prometheus local help start
+```
+
+## `prometheus local help stop`
+
+```text
+Stop the managed llama-server
+
+Usage: prometheus local help stop
+```
+
+## `prometheus local help supervise`
+
+```text
+Supervise the managed server for a client process (internal: runs until its stdin closes)
+
+Usage: prometheus local help supervise
+```
+
+## `prometheus local help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus local help help
+```
+
 ## `prometheus fallback`
 
 ```text
@@ -20571,6 +21397,7 @@ Commands:
   model        Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
   providers    Provider routing state: per-route health scores
   moa          List, create, update and delete Mixture of Agents presets (`[moa.presets.<name>]`)
+  local        Local models: the llama.cpp engine, the hardware-priced catalog, downloads, the model library and the managed llama-server
   fallback     List and edit the profile's fallback chain (`[[fallback.chain]]`)
   auth         Add, list and remove provider API keys and subscription sign-ins (an interactive manager without a subcommand on a terminal)
   tools        List the profile's tools and explain one (exposure, capabilities, approvals)
@@ -22434,6 +23261,150 @@ Delete a configured preset (never the default one)
 Usage: prometheus help moa delete
 ```
 
+## `prometheus help local`
+
+```text
+Local models: the llama.cpp engine, the hardware-priced catalog, downloads, the model library and the managed llama-server
+
+Usage: prometheus help local [COMMAND]
+
+Commands:
+  status   Engine version and backend, server state and port, resident models, GPU and RAM use
+  install  Download, verify and install the pinned llama.cpp engine for this machine's backend
+  update   Install this build's engine pin and remove older engine builds
+  catalog  The curated models priced for this machine: memory fit, windows, quantisation, download size, the recommendation
+  pull     Download a catalog model (or a Hugging Face `owner/repo[:quant]`) into the library; Ctrl+C pauses it
+  pause    Pause a download job at its next chunk
+  resume   Resume a paused or interrupted download job; Ctrl+C pauses it again
+  jobs     Download jobs and their progress
+  search   Search Hugging Face for GGUF models, with a fit check per file
+  add      Link an existing GGUF file into the library without copying it
+  rm       Remove a model from the library (a linked file is left in place)
+  use      Make `llamacpp/<model>` the profile's model (`/local use` in a chat switches the session only, unless given `--global`)
+  start    Run the managed llama-server (in the daemon when it runs, else in the foreground until Ctrl+C)
+  stop     Stop the managed llama-server
+```
+
+## `prometheus help local status`
+
+```text
+Engine version and backend, server state and port, resident models, GPU and RAM use
+
+Usage: prometheus help local status
+```
+
+## `prometheus help local install`
+
+```text
+Download, verify and install the pinned llama.cpp engine for this machine's backend
+
+Usage: prometheus help local install
+```
+
+## `prometheus help local update`
+
+```text
+Install this build's engine pin and remove older engine builds
+
+Usage: prometheus help local update
+```
+
+## `prometheus help local catalog`
+
+```text
+The curated models priced for this machine: memory fit, windows, quantisation, download size, the recommendation
+
+Usage: prometheus help local catalog
+```
+
+## `prometheus help local pull`
+
+```text
+Download a catalog model (or a Hugging Face `owner/repo[:quant]`) into the library; Ctrl+C pauses it
+
+Usage: prometheus help local pull
+```
+
+## `prometheus help local pause`
+
+```text
+Pause a download job at its next chunk
+
+Usage: prometheus help local pause
+```
+
+## `prometheus help local resume`
+
+```text
+Resume a paused or interrupted download job; Ctrl+C pauses it again
+
+Usage: prometheus help local resume
+```
+
+## `prometheus help local jobs`
+
+```text
+Download jobs and their progress
+
+Usage: prometheus help local jobs
+```
+
+## `prometheus help local search`
+
+```text
+Search Hugging Face for GGUF models, with a fit check per file
+
+Usage: prometheus help local search
+```
+
+## `prometheus help local add`
+
+```text
+Link an existing GGUF file into the library without copying it
+
+Usage: prometheus help local add
+```
+
+## `prometheus help local rm`
+
+```text
+Remove a model from the library (a linked file is left in place)
+
+Usage: prometheus help local rm
+```
+
+## `prometheus help local use`
+
+```text
+Make `llamacpp/<model>` the profile's model (`/local use` in a chat switches the session only, unless given `--global`)
+
+Usage: prometheus help local use
+```
+
+## `prometheus help local start`
+
+```text
+Run the managed llama-server (in the daemon when it runs, else in the foreground until Ctrl+C)
+
+Usage: prometheus help local start
+```
+
+## `prometheus help local stop`
+
+```text
+Stop the managed llama-server
+
+Usage: prometheus help local stop
+```
+
+## `prometheus help local supervise`
+
+```text
+Supervise the managed server for a client process (internal: runs until its stdin closes)
+
+Usage: prometheus help local supervise
+```
+
 ## `prometheus help fallback`
 
 ```text
@@ -23845,6 +24816,10 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.model_set.v1` | `prometheus model set` |
 | `prometheus.fallback.v1` | `prometheus fallback list` |
 | `prometheus.moa_presets.v1` | `prometheus moa list` |
+| `prometheus.local_status.v1` | `prometheus local status` |
+| `prometheus.local_catalog.v1` | `prometheus local catalog` |
+| `prometheus.local_jobs.v1` | `prometheus local jobs` |
+| `prometheus.local_search.v1` | `prometheus local search` |
 | `prometheus.auth.v1` | `prometheus auth list` |
 | `prometheus.auth_status.v1` | `prometheus auth status` |
 | `prometheus.tools.v1` | `prometheus tools list` |

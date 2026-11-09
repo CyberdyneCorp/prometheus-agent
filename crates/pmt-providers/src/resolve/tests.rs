@@ -407,3 +407,45 @@ async fn plugin_wire_formats_fail_typed_and_bundled_ones_route() {
     let moa = Case::new("", &[]).flag("moa").run().await.unwrap_err();
     assert_eq!(moa.code().code, "provider.missing_credential");
 }
+
+/// A local-models runtime answering from a fixed result.
+struct Local(Result<String, &'static str>);
+
+impl CredentialExtras for Local {
+    fn local_runtime(&self) -> Option<&dyn crate::local_runtime::LocalRuntime> {
+        Some(self)
+    }
+}
+
+impl crate::local_runtime::LocalRuntime for Local {
+    fn endpoint(&self) -> BoxFuture<'_, Result<String, Error>> {
+        let result = self
+            .0
+            .clone()
+            .map_err(|why| Error::new(&pmt_core::error::codes::PROVIDER_LOCAL_RUNTIME_DOWN, why));
+        Box::pin(async move { result })
+    }
+}
+
+#[tokio::test]
+async fn a_llamacpp_route_without_base_url_is_resolved_by_the_local_runtime_only() {
+    let mut case = Case::new("", &["OPENROUTER_API_KEY"]).flag("llamacpp");
+    case.selection.flag.model = Some("qwen-x".into());
+    let probe = FakeProbe::default();
+    let (result, trace) = case.run_with(&NoExtras, &probe).await;
+    assert_eq!(code(&result), "provider.local_runtime_down");
+    assert!(!format!("{trace:?}").contains("openrouter.ai"));
+    let down = Local(Err("the local model server isn't running"));
+    let (result, _) = case.run_with(&down, &probe).await;
+    let err = result.unwrap_err();
+    assert_eq!(err.code().code, "provider.local_runtime_down");
+    assert_eq!(err.exit_code(), 69);
+    let up = Local(Ok("http://127.0.0.1:8081/v1".to_owned()));
+    let route = case.run_with(&up, &probe).await.0.unwrap();
+    assert_eq!(route.base_url, "http://127.0.0.1:8081/v1");
+    assert_eq!(route.billing_source(), "local");
+    assert!(
+        probe.asked.lock().unwrap().is_empty(),
+        "no default endpoint is probed"
+    );
+}

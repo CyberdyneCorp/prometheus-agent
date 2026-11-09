@@ -626,6 +626,15 @@ impl Resolver<'_> {
         {
             return Ok(plain(url));
         }
+        if id == crate::local_runtime::PROVIDER_ID {
+            // local-models resolution: never the descriptor default, never
+            // another provider.
+            let runtime = self
+                .extras
+                .local_runtime()
+                .ok_or_else(crate::local_runtime::unavailable)?;
+            return runtime.endpoint().await.map(plain);
+        }
         if let Some(detected) = self.detected(provider).await? {
             return Ok(detected);
         }

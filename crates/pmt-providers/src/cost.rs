@@ -74,6 +74,9 @@ impl CallContext {
 pub(crate) struct Pending {
     recorder: Arc<UsageRecorder>,
     call: Call,
+    /// A call to the local-models runtime: its cost is exactly zero
+    /// (spec: local-models, Local inference stays local).
+    local_model: bool,
 }
 
 impl Pending {
@@ -93,7 +96,13 @@ impl Pending {
             .speed
             .and(route.fast_tier)
             .map(|tier| tier.label().to_owned());
-        Self { recorder, call }
+        let local_model = route.acting().provider == crate::local_runtime::PROVIDER_ID
+            && call.billing_source == "local";
+        Self {
+            recorder,
+            call,
+            local_model,
+        }
     }
 
     /// Uses `call_id` for the row (events emitted before the call ends
@@ -107,7 +116,7 @@ impl Pending {
     pub(crate) fn record(self, usage: &Usage) -> Result<UsageEvent, Error> {
         let mut call = self.call;
         call.tokens = usage.tokens();
-        call.reported_usd = usage.cost_usd;
+        call.reported_usd = usage.cost_usd.or(self.local_model.then_some(0.0));
         self.recorder.record(call)
     }
 }

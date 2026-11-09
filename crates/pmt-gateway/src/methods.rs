@@ -63,6 +63,7 @@ pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
     crate::discovery::register(router, catalog)?;
     crate::vault::register(router, catalog)?;
     crate::moa::register(router, catalog)?;
+    crate::local::register(router, catalog)?;
     crate::upkeep::register(router, catalog)?;
     crate::worktree::register(router, catalog)?;
     crate::messaging::methods::register(router, catalog)?;

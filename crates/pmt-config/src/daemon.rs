@@ -44,6 +44,10 @@ pub struct DaemonConfig {
     /// The managed runtime store (`prometheus runtimes`).
     #[serde(default)]
     pub runtimes: RuntimesConfig,
+    /// The machine-wide llama.cpp runtime of local models (`prometheus
+    /// local`).
+    #[serde(default)]
+    pub local_runtime: crate::daemon_local::LocalRuntimeConfig,
 }
 
 /// `daemon.toml [gateway]`: the messaging gateway keys every served
@@ -434,6 +438,10 @@ impl DaemonConfig {
         config
             .gateway
             .relay
+            .validate()
+            .map_err(|message| parse_error(&message))?;
+        config
+            .local_runtime
             .validate()
             .map_err(|message| parse_error(&message))?;
         config

@@ -1828,6 +1828,71 @@
       ],
       "type": "object"
     },
+    "LocalParams": {
+      "additionalProperties": false,
+      "description": "Params of every `local.*` method; each uses the fields its command\ntakes (`model` for pull, rm and use; `job` for pause and resume;\n`query` for search; `path` for add).",
+      "properties": {
+        "job": {
+          "default": null,
+          "description": "A download job id.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "default": null,
+          "description": "Catalog or library id, or `owner/repo[:quant]` for `local.pull`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "default": null,
+          "description": "A `.gguf` file on the daemon's machine.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted); `local.use`\nsets its model.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "query": {
+          "default": null,
+          "description": "Search words.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "LocalReply": {
+      "additionalProperties": false,
+      "description": "Result of every `local.*` method.",
+      "properties": {
+        "data": {
+          "default": null,
+          "description": "The command's `--json` document (without `schema`), or `null`."
+        },
+        "message": {
+          "description": "What happened, in one line.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "type": "object"
+    },
     "LspServerStatus": {
       "additionalProperties": false,
       "description": "One running language server.",
@@ -4291,6 +4356,146 @@
       },
       "result": {
         "$ref": "#/$defs/JourneyList"
+      },
+      "since": "1.0"
+    },
+    "local.add": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
+      },
+      "since": "1.0"
+    },
+    "local.catalog": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
+      },
+      "since": "1.0"
+    },
+    "local.install": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
+      },
+      "since": "1.0"
+    },
+    "local.jobs": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
+      },
+      "since": "1.0"
+    },
+    "local.pause": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
+      },
+      "since": "1.0"
+    },
+    "local.pull": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
+      },
+      "since": "1.0"
+    },
+    "local.resume": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
+      },
+      "since": "1.0"
+    },
+    "local.rm": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
+      },
+      "since": "1.0"
+    },
+    "local.search": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
+      },
+      "since": "1.0"
+    },
+    "local.start": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
+      },
+      "since": "1.0"
+    },
+    "local.status": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
+      },
+      "since": "1.0"
+    },
+    "local.stop": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
+      },
+      "since": "1.0"
+    },
+    "local.update": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
+      },
+      "since": "1.0"
+    },
+    "local.use": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
       },
       "since": "1.0"
     },

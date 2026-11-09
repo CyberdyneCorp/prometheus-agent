@@ -90,6 +90,20 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `harness.log` | `harness-evolution` | 1.0 | not served yet | |
 | `harness.rollback` | `harness-evolution` | 1.0 | not served yet | |
 | `journey.list` | `memory` | 1.0 | [`JourneyListParams`](#journeylistparams) | [`JourneyList`](#journeylist) |
+| `local.add` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
+| `local.catalog` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
+| `local.install` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
+| `local.jobs` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
+| `local.pause` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
+| `local.pull` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
+| `local.resume` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
+| `local.rm` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
+| `local.search` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
+| `local.start` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
+| `local.status` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
+| `local.stop` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
+| `local.update` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
+| `local.use` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
 | `lsp.status` | `lsp-diagnostics` | 1.0 | [`LspStatusParams`](#lspstatusparams) | [`LspStatus`](#lspstatus) |
 | `memory.summary` | `memory` | 1.0 | [`SessionRef`](#sessionref) | [`MemorySummary`](#memorysummary) |
 | `moa.presets.delete` | `mixture-of-agents` | 1.0 | [`MoaPresetsDeleteParams`](#moapresetsdeleteparams) | [`MoaPresetList`](#moapresetlist) |
@@ -777,6 +791,27 @@ One related session in `session.tree` / `session.siblings`.
 | `parent_session_id` | string | yes | Its parent. |
 | `session_id` | string | yes | The session. |
 | `title` | string or null | no | Its title. |
+
+### `LocalParams`
+
+Params of every `local.*` method; each uses the fields its command takes (`model` for pull, rm and use; `job` for pause and resume; `query` for search; `path` for add).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `job` | string or null | no | A download job id. |
+| `model` | string or null | no | Catalog or library id, or `owner/repo[:quant]` for `local.pull`. |
+| `path` | string or null | no | A `.gguf` file on the daemon's machine. |
+| `profile` | string or null | no | The profile (the connection's only one when omitted); `local.use` sets its model. |
+| `query` | string or null | no | Search words. |
+
+### `LocalReply`
+
+Result of every `local.*` method.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `data` | any | no | The command's `--json` document (without `schema`), or `null`. |
+| `message` | string | yes | What happened, in one line. |
 
 ### `LspServerStatus`
 

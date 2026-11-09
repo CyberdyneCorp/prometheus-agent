@@ -160,6 +160,26 @@ pub trait Host: Send + Sync + 'static {
         })
     }
 
+    /// One `local.*` method for `profile` (spec: local-models, Local
+    /// models command). Hosts without a home on disk do not serve them.
+    ///
+    /// # Errors
+    ///
+    /// `rpc.not_served`; the matching `prometheus local` command's errors.
+    fn local<'a>(
+        &'a self,
+        profile: &'a str,
+        request: crate::local::LocalRequest,
+    ) -> HostFuture<'a, pmt_rpc::contracts::LocalReply> {
+        let _ = (profile, request);
+        Box::pin(async {
+            Err(Error::new(
+                &pmt_core::error::codes::RPC_NOT_SERVED,
+                "this host has no local models runtime",
+            ))
+        })
+    }
+
     /// The Mixture of Agents presets of `profile` after `change` (`None`
     /// only reads): `moa.presets.*`. Hosts without profiles on disk
     /// refuse.

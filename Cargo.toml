@@ -43,6 +43,7 @@ pmt-store = { path = "crates/pmt-store" }
 pmt-tools = { path = "crates/pmt-tools" }
 pmt-tui = { path = "crates/pmt-tui" }
 pmt-update = { path = "crates/pmt-update" }
+pmt-local = { path = "crates/pmt-local" }
 prometheus = { path = "crates/prometheus" }
 schemars = "1.2"
 # MCP client and server (design D7): stdio and streamable HTTP transports,
