@@ -719,6 +719,14 @@ pub const COMMAND_NOTICE: &str = "command.notice";
 /// `payload.text` is the text to show as its own message.
 pub const PROCESS_NOTICE: &str = "process.notice";
 
+/// The `session.event` type of the answer text a running turn streams
+/// (spec: voice-mode, Sentence-streamed spoken replies; tui, Shared live
+/// sessions): `turn_id` is the turn's id as `prompt.submit` and
+/// `turn.finished` carry it, `payload.text` the next piece of the answer.
+/// It is not a trajectory event: the whole answer still arrives as the
+/// turn's `assistant.message` and in `turn.finished`.
+pub const ASSISTANT_DELTA: &str = "assistant.delta";
+
 /// `command.dispatch` params: a slash command the client does not handle
 /// itself (spec: tui, Slash command flow).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

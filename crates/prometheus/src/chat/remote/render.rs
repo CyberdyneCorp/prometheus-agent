@@ -23,6 +23,9 @@ pub(super) trait Out {
     fn ask(&self, text: &str);
     /// The assistant's final answer.
     fn answer(&self, text: &str);
+    /// A piece of the answer while the turn generates it (the whole
+    /// answer still comes through [`Out::answer`]).
+    fn delta(&self, _text: &str) {}
     /// An error.
     fn error(&self, err: &Error);
 }

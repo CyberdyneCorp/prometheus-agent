@@ -160,7 +160,12 @@ interactive session (a `notify_on_complete` or quiet-wait exit, a watched
 line, a heartbeat) arrives as a `session.event` of type `process.notice`
 with `payload.kind` (`result`, `error` or `progress`) and `payload.text`,
 shown as its own message; gateway sessions get theirs in the chat instead,
-and one-shot sessions get none (quiet-wait never switches there).
+and one-shot sessions get none (quiet-wait never switches there). While a
+turn generates its answer, each piece of text arrives as a `session.event`
+of type `assistant.delta` with the turn's `turn_id` (as `prompt.submit`
+answered it) and `payload.text`; it is not a trajectory event, and the
+whole answer still arrives as `assistant.message` and in `turn.finished`
+(voice clients speak the reply from these pieces).
 
 `prompt.submit` never drops an input: while a turn runs it follows
 `busy.input_mode` (queued, steered into the running turn, or run after

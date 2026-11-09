@@ -5,8 +5,8 @@
 //! to submit each transcript, to handle each typed line and to show the
 //! level meter, and the screen hands it the record key and typed lines
 //! while it listens. Recording and speech happen on this machine; the
-//! daemon runs the turns and sends whole messages, so a reply is spoken
-//! once its message arrives.
+//! daemon runs the turns, and the voice turn's reply is spoken while it
+//! generates, from its `assistant.delta` events.
 
 use std::sync::Arc;
 
@@ -14,6 +14,7 @@ use pmt_rpc::contracts::TurnFinished;
 use pmt_voice::converse::{self, Ended, Host, Interjection};
 use pmt_voice::record::Level;
 use pmt_voice::speaker::Mouth;
+use serde_json::Value;
 use tokio::sync::{Mutex, mpsc, oneshot};
 
 use super::screen::{Done, Tui};
@@ -47,11 +48,20 @@ pub(super) enum Ask {
 /// A conversation running beside the screen.
 pub(super) struct Talk {
     interject: mpsc::UnboundedSender<Interjection>,
-    /// The voice turn the screen waits on: its mouth and its answer.
-    turn: Option<(Option<Arc<Mouth>>, oneshot::Sender<()>)>,
-    /// The voice turn was submitted and admitted (its end is the next
-    /// `turn.finished` of the shown session).
-    submitted: bool,
+    /// The voice turn the screen waits on.
+    turn: Option<VoiceTurn>,
+}
+
+/// A submitted voice turn.
+struct VoiceTurn {
+    mouth: Option<Arc<Mouth>>,
+    /// Answered when the turn finished (or will not run).
+    done: oneshot::Sender<()>,
+    /// The turn's id once `prompt.submit` admitted it.
+    id: Option<String>,
+    /// Answer pieces that arrived before the admission did (events and
+    /// the submission's answer travel separately): `(turn id, text)`.
+    early: Vec<(String, String)>,
 }
 
 /// The screen's side of voice mode.
@@ -137,7 +147,6 @@ impl Tui<'_> {
         self.voice.talk = Some(Talk {
             interject,
             turn: None,
-            submitted: false,
         });
         let asks = self.done.clone();
         let client = Arc::clone(&self.voice.client);
@@ -186,8 +195,12 @@ impl Tui<'_> {
             }
             Ask::Turn { text, mouth, done } => {
                 if let Some(talk) = &mut self.voice.talk {
-                    talk.turn = Some((mouth, done));
-                    talk.submitted = false;
+                    talk.turn = Some(VoiceTurn {
+                        mouth,
+                        done,
+                        id: None,
+                        early: Vec::new(),
+                    });
                 }
                 self.submit(text, Vec::new());
             }
@@ -210,33 +223,61 @@ impl Tui<'_> {
         }
     }
 
-    /// The voice turn was admitted (`true`), or will not run.
-    pub(super) fn voice_admitted(&mut self, runs: bool) {
+    /// The voice turn was admitted as turn `id`, or will not run (`None`).
+    pub(super) fn voice_admitted(&mut self, id: Option<&str>) {
         let Some(talk) = &mut self.voice.talk else {
             return;
         };
-        if runs {
-            talk.submitted = true;
-        } else if let Some((_, done)) = talk.turn.take() {
-            let _ = done.send(());
+        let Some(id) = id else {
+            if let Some(turn) = talk.turn.take() {
+                let _ = turn.done.send(());
+            }
+            return;
+        };
+        let Some(turn) = &mut talk.turn else {
+            return;
+        };
+        turn.id = Some(id.to_owned());
+        for (of, text) in std::mem::take(&mut turn.early) {
+            if of == id
+                && let Some(mouth) = &turn.mouth
+            {
+                mouth.text(&text);
+            }
         }
     }
 
-    /// A turn of the shown session finished: the voice turn's answer is
-    /// spoken and the conversation goes on.
+    /// A piece of a turn's answer (an `assistant.delta` of the shown
+    /// session): the voice turn's is spoken as it arrives.
+    pub(super) fn voice_delta(&mut self, data: &Value) {
+        let Some(turn) = self.voice.talk.as_mut().and_then(|t| t.turn.as_mut()) else {
+            return;
+        };
+        let Some(mouth) = &turn.mouth else {
+            return;
+        };
+        let of = data["turn_id"].as_str().unwrap_or_default();
+        let text = data["payload"]["text"].as_str().unwrap_or_default();
+        match &turn.id {
+            Some(id) if id == of => mouth.text(text),
+            Some(_) => {}
+            None => turn.early.push((of.to_owned(), text.to_owned())),
+        }
+    }
+
+    /// A turn of the shown session finished: when it is the voice turn,
+    /// the conversation goes on (the mouth says the rest and waits).
     pub(super) fn voice_turn_finished(&mut self, finished: &TurnFinished) {
         let Some(talk) = &mut self.voice.talk else {
             return;
         };
-        if !talk.submitted {
-            return;
+        if talk
+            .turn
+            .as_ref()
+            .is_some_and(|turn| turn.id.as_deref() == Some(finished.turn_id.as_str()))
+            && let Some(turn) = talk.turn.take()
+        {
+            let _ = turn.done.send(());
         }
-        if let Some((mouth, done)) = talk.turn.take() {
-            if let (Some(mouth), Some(answer)) = (mouth, &finished.final_response) {
-                mouth.text(answer);
-            }
-            let _ = done.send(());
-        }
-        talk.submitted = false;
     }
 }

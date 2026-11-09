@@ -3430,7 +3430,7 @@ capabilities = [
 "Status lists providers" = ["crates/pmt-voice/src/mode.rs::status_lists_the_providers", "crates/prometheus/tests/voice_line.rs::voice_mode_needs_a_microphone_and_its_status_names_the_providers"]
 
 [voice-mode."Push-to-talk recording and continuous loop"]
-"Continuous conversation" = ["crates/pmt-voice/tests/voice.rs::the_conversation_continues_without_a_key_press", "crates/prometheus/tests/voice_line.rs::a_spoken_question_is_answered_aloud_and_listening_resumes_until_silence", "crates/prometheus/tests/voice_line.rs::an_attached_line_interface_holds_the_same_conversation", "crates/prometheus/tests/voice_line.rs::the_tui_holds_the_same_conversation"]
+"Continuous conversation" = ["crates/pmt-voice/tests/voice.rs::the_conversation_continues_without_a_key_press", "crates/prometheus/tests/voice_line.rs::a_spoken_question_is_answered_aloud_and_listening_resumes_until_silence", "crates/prometheus/tests/voice_line.rs::an_attached_line_interface_speaks_the_first_sentence_while_the_reply_generates", "crates/prometheus/tests/voice_line.rs::the_tui_speaks_the_first_sentence_while_the_reply_generates"]
 "Silence ends the loop" = ["crates/pmt-voice/tests/voice.rs::three_quiet_recordings_end_the_loop", "crates/prometheus/tests/voice_line.rs::a_spoken_question_is_answered_aloud_and_listening_resumes_until_silence"]
 
 [voice-mode."Two-stage silence detection"]
@@ -3445,7 +3445,7 @@ capabilities = [
 "Phantom outro dropped" = ["crates/pmt-voice/tests/voice.rs::a_phantom_outro_counts_as_no_speech", "crates/pmt-voice/src/filter.rs::phantom_outros_and_repetitions_are_hallucinations"]
 
 [voice-mode."Sentence-streamed spoken replies"]
-"First sentence plays early" = ["crates/pmt-voice/tests/voice.rs::the_first_sentence_plays_before_the_rest_is_generated", "crates/pmt-media/tests/voice_mode.rs::openai_speech_streams_raw_pcm"]
+"First sentence plays early" = ["crates/pmt-voice/tests/voice.rs::the_first_sentence_plays_before_the_rest_is_generated", "crates/pmt-media/tests/voice_mode.rs::openai_speech_streams_raw_pcm", "crates/prometheus/tests/voice_line.rs::an_attached_line_interface_speaks_the_first_sentence_while_the_reply_generates", "crates/prometheus/tests/voice_line.rs::the_tui_speaks_the_first_sentence_while_the_reply_generates"]
 "Code is not read aloud" = ["crates/pmt-voice/tests/voice.rs::a_fenced_code_block_is_not_read_aloud", "crates/pmt-voice/src/speakable.rs::markdown_and_emoji_are_not_spoken"]
 
 [voice-mode."Long recordings and provider upload limits"]

@@ -7,8 +7,8 @@
 use pmt_rpc::RpcError;
 use pmt_rpc::client::ServerCall;
 use pmt_rpc::contracts::{
-    Admission, COMMAND_NOTICE, Dispatched, Envelope, ModelOptionsList, PROCESS_NOTICE,
-    SessionContextUsage, SessionRef, TurnFinished,
+    ASSISTANT_DELTA, Admission, COMMAND_NOTICE, Dispatched, Envelope, ModelOptionsList,
+    PROCESS_NOTICE, SessionContextUsage, SessionRef, TurnFinished,
 };
 use pmt_tui::app::Card;
 use pmt_tui::transcript::Kind;
@@ -122,6 +122,7 @@ impl Tui<'_> {
                 self.app.transcript.push(Kind::Assistant, text("text"));
             }
             Some("tool.call") => self.app.transcript.push(Kind::Tool, text("tool")),
+            Some(ASSISTANT_DELTA) => self.voice_delta(data),
             Some(COMMAND_NOTICE) => self.notice(text("text")),
             Some(PROCESS_NOTICE) => self.notice(format!("[background] {}", text("text"))),
             Some(kind @ ("subagent.spawned" | "subagent.progress" | "subagent.finished")) => {
@@ -254,14 +255,12 @@ impl Tui<'_> {
                 if let Some(notice) = submitted.notice {
                     self.notice(notice);
                 }
-                self.voice_admitted(matches!(
-                    submitted.admission,
-                    Admission::Started | Admission::Queued
-                ));
+                let runs = matches!(submitted.admission, Admission::Started | Admission::Queued);
+                self.voice_admitted(runs.then_some(submitted.turn_id.as_str()));
                 self.admitted(&session, &submitted.turn_id, submitted.admission);
             }
             Done::Submitted(Err(err)) => {
-                self.voice_admitted(false);
+                self.voice_admitted(None);
                 self.error(&err);
             }
             Done::Voice(ask) => self.on_voice(ask),

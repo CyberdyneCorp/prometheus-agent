@@ -352,23 +352,20 @@ impl Chat<'_, '_> {
 
     pub(super) async fn run_turn(&mut self, prompt: Prompt) -> Result<(), Error> {
         let mut asker = Asker::Line(&mut self.lines);
-        let outcome = turn::run(
-            self.attached,
-            prompt,
-            &mut asker,
-            &self.screen,
-            &mut self.signals,
-        )
-        .await;
+        // A voice turn with spoken replies speaks the answer as it streams.
+        let speaking = self.mouth.as_deref().map(|mouth| super::voice::Speaking {
+            screen: &self.screen,
+            mouth,
+        });
+        let out: &dyn render::Out = match &speaking {
+            Some(speaking) => speaking,
+            None => &self.screen,
+        };
+        let outcome = turn::run(self.attached, prompt, &mut asker, out, &mut self.signals).await;
         match outcome {
             Ok(outcome) => {
                 if let Some(finished) = &outcome.finished {
                     render::finished(&self.screen, finished);
-                    // The daemon sends whole messages: the answer is
-                    // spoken once it is complete.
-                    if let (Some(mouth), Some(answer)) = (&self.mouth, &finished.final_response) {
-                        mouth.text(answer);
-                    }
                     if finished.exit_reason == "interrupted_by_user" {
                         self.screen.notice("(interrupted)");
                     }

@@ -74,9 +74,10 @@ least 20 characters, Markdown, code blocks, emoji and reasoning blocks are
 left out, and sentences play in order without overlapping. `openai` and
 `elevenlabs` stream raw PCM, so a sentence starts playing before its audio
 is complete; other providers synthesize one file per sentence. Attached
-to the daemon (the TUI, or a line interface while the daemon runs) a
-reply is spoken once its message arrives, because the daemon sends whole
-messages.
+to the daemon (the TUI, or a line interface while the daemon runs) the
+reply is spoken from the turn's `assistant.delta` events as the daemon
+streams them, so the first sentence plays while the rest is still being
+written there too.
 
 ## Recordings and long audio
 

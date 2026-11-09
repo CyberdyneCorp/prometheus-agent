@@ -2,8 +2,8 @@
 //! mode toggle and commands; Push-to-talk recording and continuous loop):
 //! the same conversation as the in-process line interface, recording,
 //! transcribing and speaking on this machine while the daemon runs the
-//! turns. The daemon sends whole messages, so a reply is spoken once it
-//! is complete.
+//! turns. The reply is spoken while it generates, from the turn's
+//! `assistant.delta` events.
 
 use std::sync::Arc;
 
@@ -11,8 +11,8 @@ use pmt_core::error::Error;
 use pmt_voice::converse::{self, Host, Interjection};
 use pmt_voice::speaker::Mouth;
 
-use super::line::{Chat, Flow, Typed};
-use super::render::Out as _;
+use super::line::{Chat, Flow, Screen, Typed};
+use super::render::Out;
 use crate::chat::theme::Role;
 
 impl Chat<'_, '_> {
@@ -111,5 +111,38 @@ impl Host for Attached<'_, '_, '_> {
         self.chat
             .screen
             .say(Role::Prompt, &format!("› {transcript}"));
+    }
+}
+
+/// The screen of a voice turn whose reply is spoken: the answer's pieces
+/// go to the mouth as they arrive, everything else to the screen.
+pub(super) struct Speaking<'s> {
+    pub(super) screen: &'s Screen,
+    pub(super) mouth: &'s Mouth,
+}
+
+impl Out for Speaking<'_> {
+    fn tool(&self, text: &str) {
+        self.screen.tool(text);
+    }
+
+    fn notice(&self, text: &str) {
+        self.screen.notice(text);
+    }
+
+    fn ask(&self, text: &str) {
+        self.screen.ask(text);
+    }
+
+    fn answer(&self, text: &str) {
+        self.screen.answer(text);
+    }
+
+    fn delta(&self, text: &str) {
+        self.mouth.text(text);
+    }
+
+    fn error(&self, err: &Error) {
+        self.screen.error(err);
     }
 }

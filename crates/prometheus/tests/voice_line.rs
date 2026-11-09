@@ -11,7 +11,7 @@ mod common;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use common::{ok, run, temp_home};
 use expectrl::session::OsSession;
@@ -165,11 +165,76 @@ fn a_spoken_question_is_answered_aloud_and_listening_resumes_until_silence() {
     assert_eq!(left, 0);
 }
 
+/// The scripted reply of the daemon tests: three sentences streamed a
+/// word every 300 ms (about 6 s), so the first sentence is complete
+/// long before the rest has been generated.
+const SENTENCES: [&str; 3] = [
+    "The kitchen lights are now on.",
+    "The hallway lights stay off as you asked.",
+    "Anything else for the house tonight?",
+];
+
+/// [`voice_home`] whose mock model answers [`SENTENCES`] slowly.
+fn streaming_home(heard: &str) -> tempfile::TempDir {
+    let home = voice_home(heard, "fake");
+    let profile = home.path().join("profiles/default");
+    std::fs::write(
+        profile.join("voice-mock.toml"),
+        format!(
+            "latency_ms = 300\n\n[[rule]]\nuser = \"{heard}\"\nrepeat = true\ntext = \"{}\"\n",
+            SENTENCES.join(" ")
+        ),
+    )
+    .unwrap();
+    let config = profile.join("config.toml");
+    let text = std::fs::read_to_string(&config).unwrap()
+        + "\n[providers.mock]\nscript = \"voice-mock.toml\"\n";
+    std::fs::write(&config, text).unwrap();
+    home
+}
+
+/// Waits until `played.log` names the first sentence and returns when.
+/// Meanwhile what `p` writes is read (and kept for later expects), so a
+/// full terminal never stalls it.
+fn first_sentence_played(p: &mut OsSession, audio: &Path) -> Instant {
+    let deadline = Instant::now() + Duration::from_mins(1);
+    loop {
+        p.check(NEVER).unwrap();
+        let played = std::fs::read_to_string(audio.join("played.log")).unwrap_or_default();
+        if played.contains(SENTENCES[0]) {
+            return Instant::now();
+        }
+        assert!(Instant::now() < deadline, "nothing spoken: {played}");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+/// A needle nothing on a screen matches.
+const NEVER: &str = "\u{0}never shown\u{0}";
+
+/// The reply was spoken sentence by sentence, in order, the first one
+/// at least 2 s before the whole answer reached the screen at
+/// `answered` (the rest takes about 4 s more to generate).
+fn spoken_while_generating(audio: &Path, first: Instant, answered: Instant) {
+    let early = answered.duration_since(first);
+    assert!(
+        early >= Duration::from_secs(2),
+        "the first sentence played only {early:?} before the answer arrived"
+    );
+    let played = std::fs::read_to_string(audio.join("played.log")).unwrap();
+    let spoken: Vec<&str> = played
+        .lines()
+        .filter_map(|l| l.strip_suffix("\tscratch file"))
+        .collect();
+    assert_eq!(spoken, SENTENCES, "{played}");
+}
+
 /// Attached to a running daemon the line interface records, transcribes
-/// and speaks on this machine while the daemon runs the turn.
+/// and speaks on this machine while the daemon runs the turn, and speaks
+/// the reply from the streamed answer text as it generates.
 #[test]
-fn an_attached_line_interface_holds_the_same_conversation() {
-    let home = voice_home("Turn on the kitchen lights", "fake");
+fn an_attached_line_interface_speaks_the_first_sentence_while_the_reply_generates() {
+    let home = streaming_home("Turn on the kitchen lights");
     let audio = audio_dir(home.path(), Some("Desk Microphone"), &["pause.wav"]);
     let _daemon = common::daemon::start(home.path(), &[]);
     let audio_env = audio.to_string_lossy().into_owned();
@@ -185,27 +250,26 @@ fn an_attached_line_interface_holds_the_same_conversation() {
     prompt(&mut p);
     p.send("\x02").unwrap();
     p.expect("› Turn on the kitchen lights").unwrap();
-    p.expect("mock: Turn on the kitchen lights").unwrap();
+    let first = first_sentence_played(&mut p, &audio);
+    // The attached interface prints the answer when the turn finishes.
+    p.expect(SENTENCES[2]).unwrap();
+    let answered = Instant::now();
     p.expect("Listening stopped").unwrap();
     prompt(&mut p);
     p.send_line("/voice off").unwrap();
     p.expect("Voice mode off.").unwrap();
     prompt(&mut p);
     exit(p);
-    let played = std::fs::read_to_string(audio.join("played.log")).unwrap();
-    assert!(
-        played.contains("mock: Turn on the kitchen lights\tscratch file"),
-        "{played}"
-    );
+    spoken_while_generating(&audio, first, answered);
 }
 
 /// The TUI holds the same conversation: in voice mode the record key
-/// (which otherwise focuses the banner) records, and the answer is
-/// spoken.
+/// (which otherwise focuses the banner) records, and the reply is spoken
+/// as it generates.
 #[test]
-fn the_tui_holds_the_same_conversation() {
+fn the_tui_speaks_the_first_sentence_while_the_reply_generates() {
     use common::tui::{enter, finish, opened, see, tui};
-    let home = voice_home("What is on my calendar", "fake");
+    let home = streaming_home("What is on my calendar");
     let audio = audio_dir(home.path(), Some("Desk Microphone"), &["question.wav"]);
     let _daemon = common::daemon::start(home.path(), &[]);
     let audio_env = audio.to_string_lossy().into_owned();
@@ -217,14 +281,13 @@ fn the_tui_holds_the_same_conversation() {
     enter(&mut p, "/voice tts");
     see(&mut p, "spoken replies: on");
     p.send("\x02").unwrap();
-    see(&mut p, "mock: What is on my calendar");
+    let first = first_sentence_played(&mut p, &audio);
+    // The TUI shows the answer once its message is complete.
+    see(&mut p, SENTENCES[2]);
+    let answered = Instant::now();
     see(&mut p, "Listening stopped");
     p.send("\x04").unwrap();
     let (screen, code) = finish(p);
     assert_eq!(code, Some(0), "{screen}");
-    let played = std::fs::read_to_string(audio.join("played.log")).unwrap();
-    assert!(
-        played.contains("mock: What is on my calendar\tscratch file"),
-        "{played}"
-    );
+    spoken_while_generating(&audio, first, answered);
 }

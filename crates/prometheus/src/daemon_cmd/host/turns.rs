@@ -419,9 +419,10 @@ async fn run_one(
     let scope = session.live.config.get();
     let mut options = TurnOptions::new(&CancelToken::new());
     options.run_budget = job.run_budget.map(Duration::from_secs);
-    if job.link.streams() {
-        options.deltas = Arc::new(crate::daemon_cmd::turn::DeltasToLink(job.link.clone()));
-    }
+    options.deltas = Arc::new(crate::daemon_cmd::turn::DeltasToLink {
+        link: job.link.clone(),
+        turn_id: job.turn_id.clone(),
+    });
     *session.interrupt.lock().expect("interrupt poisoned") = Some(options.interrupt.clone());
     let origin = job
         .input
