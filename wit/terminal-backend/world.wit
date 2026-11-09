@@ -1,5 +1,23 @@
-/// A remote terminal backend (spec: execution-environments).
-package prometheus:terminal-backend@1.0.0;
+/// A remote terminal backend (spec: execution-environments, Remote
+/// sandboxes are plugins; Backend isolation descriptor). The plugin gets
+/// only the network hosts and secrets its manifest was granted.
+///
+/// 1.1 adds the typed backend contract the host uses: `name`,
+/// `descriptor`, `check`, `execute`, `upload`, `download`, `cancel` and
+/// `teardown`. A 1.0 component (only `run`) declares no isolation
+/// descriptor, so the host refuses it at load.
+///
+/// 1.2 adds the `credentials` import: a backend sends requests with a
+/// credential the host holds (the `modal` handle) without seeing it.
+///
+/// Backend calls may run at the same time, each on its own instance:
+/// `cancel` arrives while the `execute` it names is still running, so keep
+/// what must outlive one call in `state` or in the remote service, never in
+/// guest memory. Time blocked in host imports (waiting on the remote
+/// service) does not count against `plugins.wasm.call_timeout_ms`, which
+/// bounds only the plugin's own computation; an `execute` is bounded by its
+/// `timeout-ms` instead.
+package prometheus:terminal-backend@1.2.0;
 
 interface plugin {
     record command {
@@ -15,10 +33,54 @@ interface plugin {
         stderr: string,
     }
 
+    /// 1.0's single call; the host no longer uses it.
     run: func(command: command) -> result<output, string>;
+
+    /// One command (1.1).
+    record request {
+        /// The id `cancel` names.
+        id: string,
+        /// The shell command line.
+        line: string,
+        /// The directory it starts in, in the backend's namespace.
+        cwd: string,
+        env: list<tuple<string, string>>,
+        /// When to stop the command; the maximum u64 means no limit (a
+        /// background command without a timeout, stopped by `cancel`).
+        timeout-ms: u64,
+    }
+
+    /// What a command did (1.1). A missing `exit-code` is a contract
+    /// violation the host reports as an error, never as success.
+    record execution {
+        exit-code: option<s32>,
+        stdout: string,
+        stderr: string,
+        /// The directory the command finished in, when tracked.
+        cwd-observed: option<string>,
+    }
+
+    /// The name `terminal.backend` selects (not `local`, `container`,
+    /// `docker`, `podman` or `ssh`).
+    name: func() -> string;
+    /// The isolation descriptor as a JSON object with exactly
+    /// `isolation` (`os_sandbox`, `container`, `remote`),
+    /// `uses_host_filesystem`, `default_cwd` (absolute or `~`),
+    /// `session_isolated_when_ephemeral` and `persistent`.
+    descriptor: func() -> string;
+    /// Readiness: `ok` names what is in use (shown by `prometheus doctor
+    /// terminal`), `err` why the backend is unavailable.
+    check: func() -> result<string, string>;
+    execute: func(request: request) -> result<execution, string>;
+    upload: func(path: string, contents: list<u8>) -> result<_, string>;
+    download: func(path: string) -> result<list<u8>, string>;
+    cancel: func(id: string);
+    /// Releases the environment (session end, idle teardown).
+    teardown: func();
 }
 
 world terminal-backend {
     include prometheus:host/imports@1.0.0;
+    include prometheus:credentials/imports@1.0.0;
     export plugin;
 }

@@ -49,11 +49,17 @@ pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
         .register::<c::SessionContextUsage, _, _>(catalog, context_usage)?
         .register::<c::SessionCompact, _, _>(catalog, compact)?
         .register::<c::EgressSet, _, _>(catalog, egress)?
+        .register::<c::FilesUndo, _, _>(catalog, files_undo)?
+        .register::<c::FilesRollback, _, _>(catalog, files_rollback)?
+        .register::<c::LspStatusCall, _, _>(catalog, lsp_status)?
+        .register::<c::BlueprintsListCall, _, _>(catalog, blueprints_list)?
+        .register::<c::BlueprintsFillCall, _, _>(catalog, blueprints_fill)?
         .register::<c::PromptSubmit, _, _>(catalog, submit)?
         .register::<c::CommandDispatch, _, _>(catalog, dispatch)?
         .register::<c::ApprovalRespond, _, _>(catalog, approval_respond)?;
     crate::discovery::register(router, catalog)?;
     crate::vault::register(router, catalog)?;
+    crate::worktree::register(router, catalog)?;
     crate::messaging::methods::register(router, catalog)?;
     // `rpc.hello` runs in the read loop (it must come first), but it is
     // registered so its contract is checked like every other result.
@@ -355,6 +361,56 @@ async fn egress(call: Call, params: c::EgressSetParams) -> Result<c::EgressState
         .map_err(|e| rpc(&e))
 }
 
+async fn lsp_status(call: Call, params: c::LspStatusParams) -> Result<c::LspStatus, RpcError> {
+    let profile = profile_for(&call, params.profile.as_deref())?;
+    call.server.host().lsp_status(&profile).map_err(|e| rpc(&e))
+}
+
+async fn blueprints_list(
+    call: Call,
+    params: c::BlueprintsListParams,
+) -> Result<c::BlueprintList, RpcError> {
+    let profile = profile_for(&call, params.profile.as_deref())?;
+    call.server
+        .host()
+        .cron_blueprints(&profile)
+        .map_err(|e| rpc(&e))
+}
+
+async fn blueprints_fill(
+    call: Call,
+    params: c::BlueprintFillParams,
+) -> Result<c::BlueprintFilled, RpcError> {
+    let profile = profile_for(&call, params.profile.as_deref())?;
+    call.server
+        .host()
+        .cron_blueprint_fill(&profile, &params)
+        .map_err(|e| rpc(&e))
+}
+
+async fn files_undo(call: Call, params: c::FilesUndoParams) -> Result<c::FilesUndone, RpcError> {
+    let profile = attached_profile(&call, &params.session_id, Need::Driver)?;
+    let link = call.server.link(&params.session_id);
+    call.server
+        .host()
+        .files_undo(&profile, params, link)
+        .await
+        .map_err(|e| rpc(&e))
+}
+
+async fn files_rollback(
+    call: Call,
+    params: c::FilesRollbackParams,
+) -> Result<c::FilesRolledBack, RpcError> {
+    let profile = attached_profile(&call, &params.session_id, Need::Driver)?;
+    let link = call.server.link(&params.session_id);
+    call.server
+        .host()
+        .files_rollback(&profile, params, link)
+        .await
+        .map_err(|e| rpc(&e))
+}
+
 async fn compact(call: Call, params: c::CompactParams) -> Result<c::Compacted, RpcError> {
     let profile = attached_profile(&call, &params.session_id, Need::Driver)?;
     call.server
@@ -383,6 +439,7 @@ async fn submit(call: Call, params: c::SubmitParams) -> Result<c::Submitted, Rpc
         principal: profile.clone(),
         sent_at: None,
         prefix: None,
+        origin: None,
     };
     let Some(input_id) = params.input_id.clone() else {
         return admit(&call, &profile, params, author).await;

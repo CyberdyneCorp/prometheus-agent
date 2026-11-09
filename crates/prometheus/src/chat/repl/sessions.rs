@@ -23,6 +23,7 @@ impl Repl {
             Some(id) => id,
             None => self.factory.create_session(None, &target)?,
         };
+        self.drop_wakeup();
         self.finish(reason).await;
         let live = self.factory.open(id, &target).await?;
         self.attach(live);
@@ -36,6 +37,10 @@ impl Repl {
         _parent: Option<SessionId>,
         _title: Option<&str>,
     ) -> Result<String, Error> {
+        // A reset drops the session's goal, loop and heartbeat (spec:
+        // session-automation, Persisted per-session automation state).
+        crate::automation::clear(&self.factory.store, self.live().id);
+        self.wakeup = None;
         let id = self.switch_to(None, EndReason::NewSession).await?;
         Ok(format!("new session {id}"))
     }

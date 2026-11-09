@@ -109,6 +109,15 @@ impl Toolset {
     }
 }
 
+/// The `browser` toolset.
+const BROWSER: &[&str] = &[
+    "browser_exec",
+    "browser_cdp",
+    "browser_dialog",
+    "browser_vault",
+    "browser_close_profile",
+];
+
 /// The `core` toolset, in its specified order.
 pub const CORE: &[&str] = &[
     "web_search",
@@ -128,6 +137,7 @@ pub const CORE: &[&str] = &[
     "browser_cdp",
     "browser_dialog",
     "browser_vault",
+    "browser_close_profile",
     "text_to_speech",
     "todo",
     "memory",
@@ -231,16 +241,7 @@ pub fn builtin() -> Vec<Toolset> {
             "List, view and manage skills",
             &["skills_list", "skill_view", "skill_manage"],
         ),
-        Toolset::new(
-            "browser",
-            "Browser automation",
-            &[
-                "browser_exec",
-                "browser_cdp",
-                "browser_dialog",
-                "browser_vault",
-            ],
-        ),
+        Toolset::new("browser", "Browser automation", BROWSER),
         Toolset::new("cronjob", "Scheduled jobs", &["cronjob"]),
         Toolset::new("tts", "Text to speech", &["text_to_speech"]),
         Toolset::new("todo", "The session task list", &["todo"]),

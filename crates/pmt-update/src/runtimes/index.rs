@@ -109,7 +109,7 @@ impl RuntimeIndex {
     /// # Errors
     ///
     /// `runtime.unknown` (exit 2) `unknown runtime '<n>' (expected
-    /// node|cpython|uv|chromium)`.
+    /// node|cpython|uv|chromium|doc-converter)`.
     pub fn pin(&self, name: &str) -> Result<&Pin, Error> {
         self.runtimes.get(name).ok_or_else(|| {
             Error::new(
@@ -155,7 +155,7 @@ impl RuntimeIndex {
             .collect()
     }
 
-    /// The pinned names in the spec's order (`node|cpython|uv|chromium`):
+    /// The pinned names in the spec's order (`node|cpython|uv|chromium|doc-converter`):
     /// the order of `pmt_config::daemon::RUNTIME_NAMES`.
     fn expected_names(&self) -> String {
         pmt_config::daemon::RUNTIME_NAMES
@@ -195,7 +195,7 @@ mod tests {
         let err = RuntimeIndex::embedded().pin("java").unwrap_err();
         assert_eq!(
             err.message(),
-            "unknown runtime 'java' (expected node|cpython|uv|chromium)"
+            "unknown runtime 'java' (expected node|cpython|uv|chromium|doc-converter)"
         );
         assert_eq!(err.exit_code(), 2);
     }

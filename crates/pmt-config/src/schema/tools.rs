@@ -302,14 +302,64 @@ impl Default for ToolOutputConfig {
 pub struct FilesConfig {
     /// Formatted characters `read_file` returns per call.
     pub read_max_chars: u64,
+    /// File snapshots, undo and rollback checkpoints.
+    pub snapshot: SnapshotConfig,
 }
 
 impl Default for FilesConfig {
     fn default() -> Self {
         Self {
             read_max_chars: 100_000,
+            snapshot: SnapshotConfig::default(),
         }
     }
+}
+
+/// The `[files.snapshot]` section.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct SnapshotConfig {
+    /// Record file-tool changes (`/undo`) and checkpoints (`/rollback`);
+    /// `chat --checkpoints` / `--no-checkpoints` override it per run.
+    pub enabled: bool,
+    /// Also checkpoint before destructive terminal commands (`rm`, `mv`,
+    /// `sed -i`, `>`, `git reset`...).
+    pub terminal: SnapshotTerminal,
+    /// Larger files are listed as skipped instead of stored.
+    pub max_file_bytes: u64,
+    /// Checkpoints kept per workspace.
+    pub max_checkpoints: u64,
+    /// Snapshots unused this long are pruned.
+    pub retention_secs: u64,
+    /// The profile's snapshot store is pruned, oldest first, above this.
+    pub max_bytes: u64,
+    /// Least time between automatic prunes.
+    pub prune_interval_secs: u64,
+}
+
+impl Default for SnapshotConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            terminal: SnapshotTerminal::Off,
+            max_file_bytes: 10_485_760,
+            max_checkpoints: 20,
+            retention_secs: 604_800,
+            max_bytes: 1_073_741_824,
+            prune_interval_secs: 86_400,
+        }
+    }
+}
+
+/// `files.snapshot.terminal`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SnapshotTerminal {
+    /// Terminal commands never checkpoint.
+    #[default]
+    Off,
+    /// Checkpoint the command's project before a destructive command.
+    Destructive,
 }
 
 /// The `[terminal]` section.
@@ -349,6 +399,22 @@ pub struct TerminalConfig {
     pub container: ContainerConfig,
     /// SSH backend.
     pub ssh: SshConfig,
+    /// Copy files changed in a remote workspace back to the host workspace
+    /// at session end and on `/sync`; unset is `true` for `ssh` and `false`
+    /// for every other backend.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sync_back: Option<bool>,
+    /// Total bytes one sync-back copies; larger files are skipped and
+    /// listed.
+    pub sync_back_max_bytes: u64,
+    /// The first-party `modal` backend plugin.
+    pub modal: ModalConfig,
+    /// The built-in `singularity` backend.
+    pub singularity: SingularityConfig,
+    /// Two `process` `poll`/`wait` calls in a row that find a running
+    /// process silent switch on its completion notification (where the
+    /// session can receive one).
+    pub process_wait_auto_notify: bool,
 }
 
 impl Default for TerminalConfig {
@@ -369,8 +435,51 @@ impl Default for TerminalConfig {
             windows_bash_path: None,
             container: ContainerConfig::default(),
             ssh: SshConfig::default(),
+            sync_back: None,
+            sync_back_max_bytes: 2_147_483_648,
+            modal: ModalConfig::default(),
+            singularity: SingularityConfig::default(),
+            process_wait_auto_notify: true,
         }
     }
+}
+
+impl TerminalConfig {
+    /// Whether sync-back is on for the selected backend.
+    #[must_use]
+    pub fn sync_back_enabled(&self) -> bool {
+        self.sync_back.unwrap_or(self.backend == "ssh")
+    }
+}
+
+/// The `[terminal.modal]` section.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct ModalConfig {
+    /// How the plugin authenticates.
+    pub mode: ModalMode,
+}
+
+/// `terminal.modal.mode`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ModalMode {
+    /// `direct` when Modal secrets exist, else `managed` when a
+    /// subscription is signed in, else unavailable.
+    #[default]
+    Auto,
+    /// The user's `MODAL_TOKEN_ID`/`MODAL_TOKEN_SECRET` secrets.
+    Direct,
+    /// A subscription gateway credential.
+    Managed,
+}
+
+/// The `[terminal.singularity]` section.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct SingularityConfig {
+    /// A SIF path or a `docker://` reference.
+    pub image: String,
 }
 
 /// Backend failure handling.
@@ -400,6 +509,7 @@ pub enum WindowsShell {
 /// The `[terminal.container]` section.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
+#[allow(clippy::struct_excessive_bools)] // independent switches
 pub struct ContainerConfig {
     /// CPU limit.
     #[schemars(range(min = 0.0))]
@@ -408,7 +518,9 @@ pub struct ContainerConfig {
     pub memory_bytes: u64,
     /// Disk limit.
     pub disk_bytes: u64,
-    /// Keep the container between sessions.
+    /// One container per profile and workspace, reused by later sessions
+    /// and stopped (never removed) when idle; `false` gives each session
+    /// its own container.
     pub persistent: bool,
     /// `/dev/shm` size in the runtime's syntax.
     pub shm_size: String,
@@ -416,6 +528,23 @@ pub struct ContainerConfig {
     pub pids_limit: u32,
     /// Literal environment set in the container.
     pub env: BTreeMap<String, String>,
+    /// Runtime: `auto` (rootless Podman, else Docker), `podman`, `docker`
+    /// or the path of either executable.
+    pub runtime: String,
+    /// Image; empty is the release's `prometheus-sandbox` image.
+    pub image: String,
+    /// Extra mounts, `host:container[:ro]`.
+    pub volumes: Vec<String>,
+    /// Mount the session workspace at `/workspace`.
+    pub mount_workspace: bool,
+    /// Give the container a network; `false` runs it with none.
+    pub network: bool,
+    /// Run as the host user's uid and gid.
+    pub run_as_host_user: bool,
+    /// Sessions of the profile with the same key share one container.
+    pub shared_key: String,
+    /// Extra `create` arguments; anything weakening hardening is refused.
+    pub extra_args: Vec<String>,
 }
 
 impl Default for ContainerConfig {
@@ -428,6 +557,14 @@ impl Default for ContainerConfig {
             shm_size: "1g".to_owned(),
             pids_limit: 2048,
             env: BTreeMap::new(),
+            runtime: "auto".to_owned(),
+            image: String::new(),
+            volumes: Vec::new(),
+            mount_workspace: true,
+            network: true,
+            run_as_host_user: false,
+            shared_key: String::new(),
+            extra_args: Vec::new(),
         }
     }
 }
@@ -445,6 +582,12 @@ pub struct SshConfig {
     /// Port.
     #[schemars(range(min = 1, max = 65_535))]
     pub port: u32,
+    /// An `ssh_config` file passed with `-F` (identity, known hosts, jump
+    /// hosts); unset uses the user's.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub config_file: Option<String>,
+    /// The remote workspace synced back to the host.
+    pub workspace: String,
 }
 
 impl Default for SshConfig {
@@ -453,11 +596,14 @@ impl Default for SshConfig {
             host: None,
             user: None,
             port: 22,
+            config_file: None,
+            workspace: "~/prometheus-workspace".to_owned(),
         }
     }
 }
 
 /// The `[browser]` section.
+#[allow(clippy::struct_excessive_bools)] // independent switches
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 #[schemars(extend("x-apply" = "next_session"))]
@@ -474,6 +620,35 @@ pub struct BrowserConfig {
     /// Idle browser sessions are closed after this long.
     #[schemars(extend("x-apply" = "live"))]
     pub inactivity_timeout_secs: u64,
+    /// The local browser executable; empty uses the managed `chromium`
+    /// runtime, then a Chromium-family browser of the host.
+    pub executable_path: String,
+    /// A persistent local profile directory (relative paths resolve under
+    /// the profile); empty launches on a throwaway profile.
+    pub user_data_dir: String,
+    /// Extra local browser arguments; ones that disable the Chromium
+    /// sandbox or web security need the matching
+    /// `security.sandbox.allow_degraded` entry.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub chromium_args: Vec<String>,
+    /// Bound on a local browser start.
+    #[schemars(range(min = 1, max = 600))]
+    pub launch_timeout_secs: u64,
+    /// Open a visible window (headless with a notice without a display);
+    /// kept between turns, idle reaping still applies.
+    pub headed: bool,
+    /// With a cloud provider, private and LAN URLs open in a local sidecar
+    /// browser instead of being refused or sent to the provider.
+    pub auto_local_for_private_urls: bool,
+    /// Browse on a snapshot of the user's real browser profile (needs the
+    /// `browser.real_profile` grant).
+    pub use_real_profile: bool,
+    /// The real profile directory to copy (`Default`, `Profile 2`...);
+    /// empty uses the browser's last used profile.
+    pub real_profile_pin: String,
+    /// The agent may offer `prometheus browser close-profile` (run only
+    /// after approval) when the real browser holds the profile.
+    pub real_profile_autoclose: bool,
 }
 
 impl Default for BrowserConfig {
@@ -484,6 +659,15 @@ impl Default for BrowserConfig {
             dialog_policy: DialogPolicy::MustRespond,
             dialog_timeout_secs: 300,
             inactivity_timeout_secs: 120,
+            executable_path: String::new(),
+            user_data_dir: String::new(),
+            chromium_args: Vec::new(),
+            launch_timeout_secs: 30,
+            headed: false,
+            auto_local_for_private_urls: true,
+            use_real_profile: false,
+            real_profile_pin: String::new(),
+            real_profile_autoclose: false,
         }
     }
 }

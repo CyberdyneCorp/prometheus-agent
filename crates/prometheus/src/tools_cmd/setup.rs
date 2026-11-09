@@ -254,7 +254,7 @@ pub fn post_setup(ctx: &Context<'_>, toolset: &str, consent: &Consent) -> Result
             return Ok(pmt_core::exit::APPROVAL_REQUIRED);
         }
         let config = DaemonConfig::load(ctx.home()?.root())?;
-        let installer = crate::runtimes_cmd::installer(ctx, store.clone(), &config)?;
+        let installer = crate::runtimes_cmd::installer(ctx, store.clone(), &config);
         for line in block_on(install(&installer, &names))?? {
             println!("{line}");
         }

@@ -92,6 +92,8 @@ pub(crate) struct Progress {
     calls: usize,
     /// Tool calls shown as task cards: call id to title.
     cards: std::collections::HashMap<String, String>,
+    /// The live subagent tree of the turn (synchronous children).
+    subagents: pmt_core::subagent_tree::TreeLines,
 }
 
 impl Progress {
@@ -107,6 +109,7 @@ impl Progress {
             working_minutes: 0,
             cards: std::collections::HashMap::new(),
             calls: 0,
+            subagents: pmt_core::subagent_tree::TreeLines::default(),
         }
     }
 
@@ -138,7 +141,7 @@ impl Lane {
 
     /// A tool call, a tool result or model text of the running turn.
     pub(super) async fn show_progress(&mut self, kind: &str, payload: &Value) {
-        if self.running.is_none() {
+        if self.running.as_ref().is_none_or(|r| r.quiet) {
             return;
         }
         let display = self.display();
@@ -157,6 +160,18 @@ impl Lane {
                 }
             }
             "tool.call" => self.tool_called(&display, payload).await,
+            "subagent.spawned" | "subagent.progress" | "subagent.finished"
+                if display.tool_progress != ChatToolProgress::Off
+                    && display.tool_progress != ChatToolProgress::Log =>
+            {
+                let line = self
+                    .running
+                    .as_mut()
+                    .and_then(|r| r.progress.subagents.line(kind, payload));
+                if let Some(line) = line {
+                    self.progress_line(&display, line).await;
+                }
+            }
             "tool.result" if display.tool_progress == ChatToolProgress::Verbose => {
                 let line = if payload.get("error").is_some_and(|e| !e.is_null()) {
                     "  \u{21b3} failed"

@@ -56,6 +56,19 @@ fn main() -> ExitCode {
         let done = prometheus::completions::complete(*shell, current.as_deref(), words, &launch);
         return ExitCode::from(done.unwrap_or(0));
     }
+    // A scheduled run's terminal edits its job's notepad through the run's
+    // channel: its sandbox denies the home, so nothing below may run.
+    if let Some(Command::Cron {
+        command: prometheus::cron_cmd::CronCommand::Notepad { job, action },
+    }) = &cli.command
+        && let Some(channel) = launch.cron_notepad()
+    {
+        return match prometheus::cron_cmd::notepad::in_run(channel, job, action.as_ref(), cli.json)
+        {
+            Ok(code) => ExitCode::from(code),
+            Err(err) => failure(&err, cli.json),
+        };
+    }
     // Commands that need the home report the resolution error themselves.
     // `demo` runs in a temporary home of its own and never touches the
     // user's: it writes no log files and keeps no crash reports there.
@@ -122,7 +135,13 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Secrets { command }) => secrets_cmd::run(command, &ctx),
         Some(Command::Grants { command }) => grants_cmd::run(command, &ctx),
         Some(Command::Security { command }) => prometheus::security_cmd::run(command, &ctx),
+        Some(Command::Browser { command }) => prometheus::browser_cmd::run(command, &ctx),
+        Some(Command::Lsp { command }) => prometheus::lsp_cmd::run(command, &ctx),
+        Some(Command::Cron { command }) => prometheus::cron_cmd::run(command, &ctx),
+        Some(Command::Worktrees { command }) => prometheus::worktrees_cmd::run(command, &ctx),
         Some(Command::Vault { command }) => prometheus::vault_cmd::run(command, &ctx),
+        Some(Command::Files { command }) => prometheus::files_cmd::run(command, &ctx),
+        Some(Command::Verify(args)) => prometheus::verify_cmd::run(args, &ctx),
         Some(Command::Skills { command }) => skills_cmd::run(command, &ctx),
         Some(Command::Memory { command }) => memory_cmd::run(command, &ctx),
         Some(Command::Profile { command }) => profile_cmd::run(command, &ctx),
@@ -154,6 +173,7 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         #[cfg(feature = "mcp")]
         Some(Command::Mcp { command }) => prometheus::mcp_cmd::run(command.as_ref(), &ctx),
         Some(Command::Rpc { command }) => prometheus::rpc_cmd::run(command, &ctx),
+        Some(Command::Schema { command }) => prometheus::schema_cmd::run(command),
         Some(Command::Connectors { command }) => prometheus::connectors_cmd::run(command, &ctx),
         Some(Command::Bridge { command }) => prometheus::bridge_cmd::run(command, &ctx),
         Some(Command::SelfTest) => Ok(self_test_cmd::run(&ctx)),
@@ -277,7 +297,9 @@ fn plugin_commands_help() -> Option<String> {
 }
 
 /// `unknown command 'sesions' (did you mean 'sessions'?)` for a mistyped
-/// subcommand (spec: cli, Unknown subcommand).
+/// subcommand (spec: cli, Unknown subcommand). Under a nested command
+/// (`prometheus cron statu`) the suggestions are that command's
+/// subcommands and its usage follows (spec: scheduled-jobs, CLI surface).
 fn unknown_command(err: &clap::Error) -> Option<Error> {
     use clap::error::{ContextKind, ContextValue};
     if err.kind() != ClapErrorKind::InvalidSubcommand {
@@ -286,19 +308,49 @@ fn unknown_command(err: &clap::Error) -> Option<Error> {
     let Some(ContextValue::String(name)) = err.get(ContextKind::InvalidSubcommand) else {
         return None;
     };
-    let command = Cli::command();
-    let names = command
+    let usage = match err.get(ContextKind::Usage) {
+        Some(ContextValue::StyledStr(usage)) => usage.to_string(),
+        _ => String::new(),
+    };
+    let path = command_path(&usage);
+    let root = Cli::command();
+    let parent = path
+        .iter()
+        .try_fold(&root, |command, word| command.find_subcommand(word))
+        .unwrap_or(&root);
+    let names = parent
         .get_subcommands()
         .filter(|c| !c.is_hide_set())
         .map(clap::Command::get_name);
-    let message = match pmt_core::registry::closest(name, names).as_slice() {
+    let mut message = match pmt_core::registry::closest(name, names).as_slice() {
         [] => format!("unknown command '{name}'"),
         found => format!(
             "unknown command '{name}' (did you mean {}?)",
             pmt_core::registry::or_list(found)
         ),
     };
-    Some(Error::new(&codes::CLI_USAGE, message).with_hint("run: prometheus help"))
+    if path.is_empty() {
+        return Some(Error::new(&codes::CLI_USAGE, message).with_hint("run: prometheus help"));
+    }
+    message = format!("{message}\n\n{}", usage.trim_end());
+    let hint = format!("run: prometheus {} --help", path.join(" "));
+    Some(Error::new(&codes::CLI_USAGE, message).with_hint(hint))
+}
+
+/// The subcommands of a clap usage line (`Usage: prometheus cron
+/// <COMMAND>` -> `["cron"]`): the words between the binary name and the
+/// first placeholder.
+fn command_path(usage: &str) -> Vec<String> {
+    usage
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .trim_start_matches("Usage:")
+        .split_whitespace()
+        .skip(1)
+        .take_while(|word| !word.starts_with(['[', '<']))
+        .map(str::to_owned)
+        .collect()
 }
 
 /// Whether `--json` appears before any `--` separator. Used only when the

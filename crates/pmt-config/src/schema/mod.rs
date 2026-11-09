@@ -17,7 +17,10 @@
 //! the whole file validates in one place.
 
 mod agent;
+mod automation;
 mod connectors;
+mod cron;
+mod delegation;
 mod gateway;
 mod gateway_display;
 mod gateway_groups;
@@ -26,6 +29,7 @@ mod gateway_policy;
 mod gateway_routes;
 mod hooks;
 mod interface;
+mod lsp;
 mod mcp;
 mod models;
 mod operations;
@@ -44,7 +48,13 @@ pub use agent::{
     PromptCacheConfig, PromptCacheTtl, PromptConfig, ReasoningLevel, TailMode, ToolLoopGuardrails,
     VisionConfig,
 };
+pub use automation::{GoalsConfig, HeartbeatConfig, LoopsConfig};
 pub use connectors::{ConnectorsConfig, DEFAULT_CONNECTOR_GATEWAY};
+pub use cron::{ContinuableSurface, CronConfig, CronDeliveryConfig, CronProvider};
+pub use delegation::{
+    BackgroundMode, CODE_EXECUTION_TOOLS, ChildApproval, CodeExecutionConfig, CodeExecutionMode,
+    DelegationConfig, GatewayDelegationMode, ReviewConfig,
+};
 pub use gateway::{
     AgentCacheConfig, AllowBots, BackgroundNotifications, Batching, ChatPolicy, ChatToolProgress,
     DedupConfig, DeliveryConfig, EffectiveBots, EffectiveBusy, EffectiveDisplay, EffectiveGroups,
@@ -63,6 +73,9 @@ pub use interface::{
     Interface, KeyChord, MarkdownMode, QuickCommand, QuickCommandKind, ResumeDisplay, ToolProgress,
     ToolProgressGrouping, TuiConfig, TuiKeys, TuiTheme, UiConfig,
 };
+pub use lsp::{
+    LSP_SERVER_IDS, LspConfig, LspInstallStrategy, LspPackageManager, LspServerConfig, LspWaitMode,
+};
 pub use mcp::{
     McpAuth, McpCapabilities, McpConfig, McpElicitationConfig, McpOAuthConfig, McpOAuthFlow,
     McpRedirectHost, McpSamplingConfig, McpServerConfig, McpServerModeConfig, McpToolFilter,
@@ -74,10 +87,10 @@ pub use models::{
     PoolStrategy, PreferCredential, ProviderAuth, ProviderConfig, WireFormat,
 };
 pub use operations::{
-    BudgetsConfig, CronConfig, DegradedFeature, EgressConfig, EgressMode, GatewayHealthConfig,
-    LogLevel, LoggingConfig, NetworkConfig, ObservabilityConfig, PrivacyConfig, SandboxConfig,
-    SandboxMode, SecretCommandConfig, SecretsBackend, SecretsConfig, SecurityConfig,
-    TelemetryConfig, TrajectoriesConfig, VaultConfig, VaultKeyStorage, VaultSourceConfig,
+    BudgetsConfig, DegradedFeature, EgressConfig, EgressMode, GatewayHealthConfig, LogLevel,
+    LoggingConfig, NetworkConfig, ObservabilityConfig, PrivacyConfig, SandboxConfig, SandboxMode,
+    SecretCommandConfig, SecretsBackend, SecretsConfig, SecurityConfig, TelemetryConfig,
+    TrajectoriesConfig, VaultConfig, VaultKeyStorage, VaultSourceConfig, WorktreesConfig,
 };
 pub use plugins::{
     DEFAULT_CATALOG_URL, GuidanceMode, PluginsConfig, PluginsWasmConfig, SecurityGuidanceConfig,
@@ -90,9 +103,10 @@ pub use state::{
 };
 pub use tools::{
     ApprovalMode, ApprovalsConfig, BrowserConfig, ContainerConfig, DegradedMode, DialogPolicy,
-    FilesConfig, FirecrawlConfig, KeylessConfig, ResultBudget, SearxngConfig, SshConfig,
-    SurfaceToolsets, TerminalConfig, ToolListing, ToolOutputConfig, ToolSearchConfig,
-    ToolSearchMode, ToolsConfig, ToolsetsConfig, UnattendedApproval, WebConfig, WindowsShell,
+    FilesConfig, FirecrawlConfig, KeylessConfig, ModalConfig, ModalMode, ResultBudget,
+    SearxngConfig, SingularityConfig, SnapshotConfig, SnapshotTerminal, SshConfig, SurfaceToolsets,
+    TerminalConfig, ToolListing, ToolOutputConfig, ToolSearchConfig, ToolSearchMode, ToolsConfig,
+    ToolsetsConfig, UnattendedApproval, WebConfig, WindowsShell,
 };
 pub use webhook::{
     FilterFile, FilterPath, FilterPattern, FilterValue, FilterValues, WebhookFilter, WebhookFilters,
@@ -128,12 +142,16 @@ pub struct Config {
     pub cli: CliConfig,
     /// Context compression.
     pub compression: CompressionConfig,
+    /// Programmatic tool calling (`execute_code`).
+    pub code_execution: CodeExecutionConfig,
     /// Hosted app connectors (Gmail, Notion...) through the Nous gateway.
     pub connectors: ConnectorsConfig,
     /// Context engine selection.
     pub context: ContextConfig,
     /// Profile time zone (scheduler keys arrive with M2).
     pub cron: CronConfig,
+    /// Subagent delegation.
+    pub delegation: DelegationConfig,
     /// Display preferences of interactive surfaces.
     pub display: DisplayConfig,
     /// Provider fallback.
@@ -142,10 +160,18 @@ pub struct Config {
     pub files: FilesConfig,
     /// The profile's part in the home's gateway daemon.
     pub gateway: GatewayConfig,
+    /// `/goal`: the judge loop's turn budget, quality gates and waits.
+    pub goals: GoalsConfig,
+    /// `/heartbeat` bounds.
+    pub heartbeat: HeartbeatConfig,
     /// Shell hooks and outbound webhooks.
     pub hooks: HooksConfig,
     /// Structured log files.
     pub logging: LoggingConfig,
+    /// `/loop` cadence bounds.
+    pub loops: LoopsConfig,
+    /// Language server diagnostics after file edits.
+    pub lsp: LspConfig,
     /// External MCP servers.
     pub mcp: McpConfig,
     /// What `prometheus mcp serve` exposes.
@@ -210,6 +236,8 @@ pub struct Config {
     pub vision: VisionConfig,
     /// Web tools.
     pub web: WebConfig,
+    /// Git worktrees: creation, the stale-tree sweep and archives.
+    pub worktrees: WorktreesConfig,
 }
 
 impl Default for Config {
@@ -225,15 +253,21 @@ impl Default for Config {
             busy: BusyConfig::default(),
             cli: CliConfig::default(),
             compression: CompressionConfig::default(),
+            code_execution: CodeExecutionConfig::default(),
             connectors: ConnectorsConfig::default(),
             context: ContextConfig::default(),
             cron: CronConfig::default(),
+            delegation: DelegationConfig::default(),
             display: DisplayConfig::default(),
             fallback: FallbackConfig::default(),
             files: FilesConfig::default(),
             gateway: GatewayConfig::default(),
+            goals: GoalsConfig::default(),
+            heartbeat: HeartbeatConfig::default(),
             hooks: HooksConfig::default(),
             logging: LoggingConfig::default(),
+            loops: LoopsConfig::default(),
+            lsp: LspConfig::default(),
             mcp: McpConfig::default(),
             mcp_server: McpServerModeConfig::default(),
             memory: MemoryConfig::default(),
@@ -264,6 +298,7 @@ impl Default for Config {
             vault: VaultConfig::default(),
             vision: VisionConfig::default(),
             web: WebConfig::default(),
+            worktrees: WorktreesConfig::default(),
         }
     }
 }

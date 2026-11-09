@@ -71,7 +71,8 @@ pub(super) fn start(container: &Sid, proxy_port: u16) -> Result<Running, String>
         container,
         exe.as_os_str(),
         &[OsString::from(RELAY_ARG), name.clone()],
-    )?;
+    )
+    .map_err(|e| format!("egress relay: {e}"))?;
     let port = runtime
         .block_on(async {
             tokio::time::timeout(START_TIMEOUT, handshake(&mut control))

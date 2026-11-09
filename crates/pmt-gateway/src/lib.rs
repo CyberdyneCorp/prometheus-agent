@@ -31,6 +31,7 @@ pub mod server;
 pub mod slots;
 pub mod tickets;
 pub mod vault;
+pub mod worktree;
 
 pub use daemon::{Exit, run};
 pub use host::{Author, Host, HostFuture, Link};

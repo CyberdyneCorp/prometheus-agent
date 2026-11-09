@@ -6,17 +6,31 @@
 //! session row.
 
 pub mod api_hooks;
+pub mod backend;
 pub mod browser;
+pub mod code;
+pub mod cron;
+pub mod delegation;
+pub mod documents;
+pub mod downgrades;
 pub mod env;
 mod guardian;
+pub mod judge;
 mod lifecycle;
+mod lsp;
 mod mcp;
+pub mod modal;
 pub mod model;
+mod opening;
+pub mod place;
 mod plugins;
+pub mod processes;
 pub mod progress;
 pub mod python;
 pub mod serve;
 pub mod skills;
+pub mod snapshots;
+pub mod sudo;
 pub mod summarize;
 mod tool_state;
 pub mod tools;
@@ -83,10 +97,13 @@ pub struct Options {
     pub ignore_rules: bool,
     /// `--egress` and `--allow-host`.
     pub egress: crate::egress::Overrides,
+    /// A scheduled run's session (spec: scheduled-jobs).
+    pub cron: Option<cron::CronRun>,
 }
 
 /// The clients of one daemon session: they see its events and answer its
 /// secret prompts (a factory serves several sessions, each with its own).
+#[derive(Clone)]
 pub struct Clients {
     /// Where the session's trajectory events also go.
     pub events: Arc<dyn EventSink>,
@@ -95,7 +112,13 @@ pub struct Clients {
     /// Where the terminal reports finished `notify_on_complete` background
     /// processes (a gateway session's chat).
     pub completions:
-        Option<tokio::sync::mpsc::UnboundedSender<pmt_tools::terminal::process::Completion>>,
+        Option<tokio::sync::mpsc::UnboundedSender<pmt_tools::terminal::process::Notice>>,
+    /// Asks the session's clients for the sudo password (`sudo.request`);
+    /// `None` where nobody can answer securely.
+    pub sudo: Option<Arc<dyn pmt_tools::terminal::sudo::SudoPrompt>>,
+    /// Where the session's background delegations deliver their
+    /// completions; `None`: its spawns wait for their children.
+    pub delegation: Option<Arc<dyn pmt_delegation::host::Completions>>,
 }
 
 /// What every session of this process shares.
@@ -118,6 +141,9 @@ pub struct Factory {
     pub options: Options,
     approver: Option<Arc<dyn Approver>>,
     secret_prompt: Option<Arc<dyn SecretPrompt>>,
+    /// Where the background processes of an interactive line session
+    /// report (printed as their own messages).
+    notices: Option<tokio::sync::mpsc::UnboundedSender<pmt_tools::terminal::process::Notice>>,
     maintained: std::sync::atomic::AtomicBool,
     install_asks: Option<tokio::sync::mpsc::UnboundedSender<browser::InstallAsk>>,
     /// The browser tools every session shares, set up by the first
@@ -139,6 +165,12 @@ pub struct Factory {
     /// `/plugins reload` can re-read `config.toml` through it (`None`: the
     /// daemon, whose own reloads keep the profile scope current).
     reread: Option<Vec<String>>,
+    /// The route flags the factory was opened with (its delegated children
+    /// open their own factories with them).
+    route_flags: delegation::OwnedFlags,
+    /// Where an in-process interactive chat takes background delegation
+    /// completions (a daemon session gets its sink from its clients).
+    delegation_inbox: Option<Arc<dyn pmt_delegation::host::Completions>>,
 }
 
 /// One running session.
@@ -174,13 +206,18 @@ pub struct Live {
     session_surface: pmt_tools::SessionSurface,
     /// The profile's live plugin set (slash commands, reload).
     pub plugins: crate::plugins_host::ProfilePlugins,
-    /// The session's working directory (plugin `session.info`).
-    cwd: PathBuf,
+    /// Where the session works: its cwd and cwd-bound environment
+    /// (`/worktree new` moves it).
+    pub place: place::Place,
+    /// The daemon clients it was opened with (a moved environment's
+    /// prompts and notices go to them too).
+    clients: Option<Clients>,
     /// The surface that created the session (`cli`, `tui`, `gateway`...).
     surface: &'static str,
     /// The plugin system-prompt sections the session's prompt carries.
     plugin_sections: Arc<Mutex<Vec<String>>>,
-    _plugin_llm: crate::plugins_host::llm::Registration,
+    /// Keeps the session's model and delegation reachable for plugin calls.
+    _plugin: plugins::Registrations,
     /// Notices to show once at start.
     pub notices: Vec<String>,
     /// What this run did (`--usage-file`).
@@ -194,10 +231,12 @@ pub struct Live {
     pub config: SharedScope,
     capabilities: CapabilitySet,
     trajectory: Option<Arc<TrajectoryWriter>>,
-    browser: Option<Arc<pmt_tools::browser::BrowserExec>>,
     /// The session's egress policy (`/egress`, `egress.set`).
     pub egress: crate::egress::Running,
-    _environment: pmt_tools::environments::Attachment,
+    /// Its allowed hardening downgrades (banner marker, `security.downgrade`).
+    pub downgrades: downgrades::Downgrades,
+    /// The session's subagent delegation (`/stop all`, close, `/agents`).
+    pub delegation: Option<Arc<pmt_delegation::host::Delegator>>,
     _skills: pmt_skills::session::Attachment,
 }
 
@@ -214,15 +253,34 @@ impl Factory {
         ad_hoc: Option<pmt_providers::resolve::AdHoc>,
         options: Options,
     ) -> Result<Self, Error> {
+        let store = Arc::new(Store::open(&scope)?);
+        Self::with_store(scope, store, launch, flags, ad_hoc, options)
+    }
+
+    /// Like [`Factory::new`] over an open `store`: a delegated child routed
+    /// to another profile keeps its session record and usage in the
+    /// launching profile's store.
+    ///
+    /// # Errors
+    ///
+    /// As [`Factory::new`].
+    pub fn with_store(
+        scope: ProfileScope,
+        store: Arc<Store>,
+        launch: &LaunchEnv,
+        flags: &RouteFlags<'_>,
+        ad_hoc: Option<pmt_providers::resolve::AdHoc>,
+        options: Options,
+    ) -> Result<Self, Error> {
         let config = scope.config();
         // Settings only a session acts on fail here, before any turn
         // (spec: execution-environments, Typed backend registry and
         // selection; memory, Context engine selection).
-        pmt_sandbox::backend::BackendRegistry::builtin().select(&config.terminal.backend)?;
         pmt_agent::compress::engine::select(&config.context, &[])?;
-        let store = Arc::new(Store::open(&scope)?);
         let user_home = launch.user_home().map(PathBuf::as_path);
         let plugins = crate::plugins_host::for_session(&scope, &options.cwd);
+        backend::registry(&plugins, &pmt_plugins::host::CallInfo::default())
+            .select(&config.terminal.backend)?;
         let models = Models::open(&scope, &store, user_home, flags, ad_hoc)?.with_plugins(
             &scope,
             &plugins,
@@ -260,6 +318,7 @@ impl Factory {
             options,
             approver: None,
             secret_prompt: None,
+            notices: None,
             maintained: std::sync::atomic::AtomicBool::new(false),
             install_asks: None,
             browser: OnceLock::new(),
@@ -267,6 +326,8 @@ impl Factory {
             daemon: None,
             plugins,
             reread: None,
+            route_flags: delegation::OwnedFlags::of(flags),
+            delegation_inbox: None,
         })
     }
 
@@ -291,7 +352,7 @@ impl Factory {
     }
 
     /// The shared browser tools, set up on first use.
-    fn browser(&self) -> Option<&browser::Shared> {
+    pub(crate) fn browser(&self) -> Option<&browser::Shared> {
         self.browser
             .get_or_init(|| {
                 browser::Shared::new(
@@ -307,6 +368,23 @@ impl Factory {
             .as_ref()
     }
 
+    /// `selection` with `browser_cdp` and `browser_dialog` opted in when
+    /// session `id` ran `/browser connect` (spec: execution-environments,
+    /// `browser_cdp` and `browser_dialog` tools): another session's
+    /// connection never offers them. An unset browser has no connection.
+    fn with_browser_opt_ins(&self, id: SessionId, selection: Selection) -> Selection {
+        let connected = self
+            .browser
+            .get()
+            .and_then(Option::as_ref)
+            .is_some_and(|shared| shared.manager().connected(&id.to_string()));
+        if connected {
+            selection.with_session_opt_ins(pmt_tools::browser::cdp_tools::NAMES)
+        } else {
+            selection
+        }
+    }
+
     /// Whether the model of `target` accepts images.
     pub(super) fn image_input(&self, target: &pmt_providers::resolve::Target) -> bool {
         target.model.as_deref().is_some_and(|model| {
@@ -316,6 +394,28 @@ impl Factory {
                 .0
                 .supports_vision
         })
+    }
+
+    /// Sends the background process notices of this factory's sessions
+    /// to `notices` (an interactive line session prints them).
+    #[must_use]
+    pub fn with_notices(
+        mut self,
+        notices: tokio::sync::mpsc::UnboundedSender<pmt_tools::terminal::process::Notice>,
+    ) -> Self {
+        self.notices = Some(notices);
+        self
+    }
+
+    /// Delivers the background delegations of this factory's sessions to
+    /// `inbox` (an in-process line chat runs them as its next input).
+    #[must_use]
+    pub fn with_delegation_inbox(
+        mut self,
+        inbox: Arc<dyn pmt_delegation::host::Completions>,
+    ) -> Self {
+        self.delegation_inbox = Some(inbox);
+        self
     }
 
     /// Asks the person for a skill's missing secrets with `prompt`
@@ -377,9 +477,12 @@ impl Factory {
         parent: Option<SessionId>,
         target: &pmt_providers::resolve::Target,
     ) -> Result<SessionId, Error> {
-        let mut new = match parent {
-            Some(parent) => NewSession::child(Source::Cli, parent, pmt_store::LineageKind::Fork),
-            None => NewSession::new(Source::Cli),
+        let mut new = match (parent, &self.options.cron) {
+            (Some(parent), _) => {
+                NewSession::child(Source::Cli, parent, pmt_store::LineageKind::Fork)
+            }
+            (None, Some(run)) => run.new_session(),
+            (None, None) => NewSession::new(Source::Cli),
         };
         new.provider = Some(target.provider.clone());
         new.model.clone_from(&target.model);
@@ -417,75 +520,88 @@ impl Factory {
         target: &pmt_providers::resolve::Target,
         clients: Option<Clients>,
     ) -> Result<Live, Error> {
-        let scope = &self.scope;
-        let config = scope.config();
-        let interactive = self.options.interactive;
-        let model = Arc::new(SwitchableModel::new(
-            target.clone(),
-            self.models.port(target).await?,
-        ));
+        self.open_inner(id, target, clients, None).await
+    }
+
+    /// Builds session `id`: a top-level session, or a delegated child
+    /// narrowed by `child` (its tools, capabilities, approvals, prompt and
+    /// budgets; spec: subagent-delegation, Child session isolation).
+    async fn open_inner(
+        &self,
+        id: SessionId,
+        target: &pmt_providers::resolve::Target,
+        clients: Option<Clients>,
+        child: Option<&delegation::ChildSpec>,
+    ) -> Result<Live, Error> {
+        let model = self.model_for(target, child).await?;
         self.maintain();
         let session = self.session_row(id, target)?;
         self.discover_mcp().await;
-        let (registry, selection, session_surface) = self.session_selection(&session)?;
+        let (registry, selection, session_surface) = self.selection_for(&session, child)?;
         let inline_shell = Arc::new(skills::DeferredShell::default());
-        let skills = Arc::new(SkillsSession::new(self.skills_setup(
-            id,
-            &selection,
-            &inline_shell,
-            clients.as_ref(),
-        )));
+        let skills = self.session_skills(id, &selection, &inline_shell, clients.as_ref());
         let attached = SkillSessions::process().attach(&id.to_string(), Arc::clone(&skills));
-        let capabilities = self.capabilities(id, &skills)?;
-        let current = SharedScope::new(scope.clone());
+        let capabilities = self.capabilities_for(id, &skills, child)?;
+        let current = SharedScope::new(self.scope_for(child));
         let environment = self.environment(
-            id,
+            &session,
             target,
             &capabilities,
             &current,
             &skills,
-            clients.as_ref(),
+            &place::At::open(&self.options.cwd, clients.as_ref()),
         )?;
         let memory = Arc::new(MemorySession::new(self.memory_setup(id)?));
         let summarizer = self.models.summarizer(&model, id);
-        let cards = shows_cards(interactive, &session_surface);
+        let cards = shows_cards(self.options.interactive, &session_surface);
+        let delegation = self.delegation_for(
+            (&session, &model, &registry),
+            (child, clients.as_ref()),
+            &memory,
+            &environment,
+        );
+        let reach = (&selection, &capabilities);
         let (agent_tools, clarify) =
-            self.agent_tools(id, &memory, &summarizer, &capabilities, cards)?;
-        let gate = self.gate(id, Some(&model), Some(&environment))?;
+            self.agent_tools(id, &memory, &summarizer, reach, cards, &delegation)?;
+        let gate = self.gate_for(id, child, &model, &environment)?;
         skills::bind_shell(&inline_shell, environment.commands.as_ref(), &gate.gate);
         let ports = (&gate.gate, &agent_tools, &model);
         let built = (registry, selection, &capabilities);
         let tool_state = self.tool_state(id, built, ports).await?;
         let tool_port = tool_state.tools();
+        delegation.parent_is(&tool_port, &capabilities, &gate.gate);
         let trajectory = self.trajectory(&session)?;
         let mut notices = Vec::new();
         let (prompt, plugin_sections) = self
-            .session_prompt(id, &skills, &memory, &mut notices)
+            .prompt_for(id, (&skills, &memory), &mut notices, child)
             .await;
-        let mut setup = AgentSetup::new(
-            scope.clone(),
-            Arc::clone(&self.store),
+        let (agent, progress, mcp) = self.agent_of(opening::AgentInputs {
             id,
-            Arc::clone(&model) as _,
-            Arc::clone(&tool_port) as _,
+            target,
+            session: &session,
+            child,
+            clients: clients.as_ref().map(|c| Arc::clone(&c.events)),
+            model: &model,
+            tools: &tool_port,
+            tool_state: &tool_state,
             prompt,
-        );
-        let events = events_to(trajectory.clone(), clients.map(|c| c.events));
-        let _ = environment.denials.set(Arc::downgrade(&events));
-        let events = self.with_lifecycle_hooks(id, &session, events);
-        let (tee, progress) = progress::Tee::new(events, interactive);
-        self.observe_model(&model, id, tee.notices());
-        let mcp = self.mcp_session(id, target, &model, tee.notices(), &agent_tools);
-        setup.events = Arc::new(tee);
-        self.memory_and_refresh(&mut setup, summarizer, &skills, &memory, &plugin_sections);
-        setup.compaction_boundary = Some(Arc::clone(&tool_state) as _);
-        self.surface_setup(&mut setup, id);
-        let agent = Agent::new(setup)?;
+            trajectory: trajectory.as_ref(),
+            environment: &environment,
+            agent_tools: &agent_tools,
+            delegation: &delegation,
+            summarizer,
+            skills: &skills,
+            memory: &memory,
+            plugin_sections: &plugin_sections,
+        })?;
+        let (environment, egress, downgrades) = place::Environment::of(environment);
         let live = Live {
-            scope: scope.clone(),
+            place: place::Place::new(self.options.cwd.clone(), environment, &id.to_string()),
+            clients,
+            scope: self.scope_for(child),
             id,
             agent,
-            _plugin_llm: self.plugin_llm(id, &model),
+            _plugin: self.plugin_registrations(id, &model, delegation.delegator()),
             _mcp: mcp,
             model,
             tools: tool_port,
@@ -494,11 +610,10 @@ impl Factory {
             clarify,
             skills,
             memory,
-            skill_nudge: Mutex::new(Nudge::new(&config.skills, session.source)),
+            skill_nudge: Mutex::new(Nudge::new(&self.scope.config().skills, session.source)),
             tool_state,
             session_surface,
             plugins: self.plugins.clone(),
-            cwd: self.options.cwd.clone(),
             surface: session.source.as_str(),
             plugin_sections,
             notices,
@@ -507,13 +622,20 @@ impl Factory {
             record: Arc::clone(&self.record),
             capabilities,
             trajectory,
-            browser: environment.browser,
-            egress: environment.egress,
-            _environment: environment.attachment,
+            egress,
+            downgrades,
+            delegation: delegation.delegator(),
             _skills: attached,
         };
         live.emit_start(&session, target).await;
         Ok(live)
+    }
+
+    /// The configuration a session runs with: the profile's, or for a
+    /// delegated child the profile's with the child's budget share as its
+    /// session budget (spec: subagent-delegation, Fan-out budget split).
+    fn scope_for(&self, child: Option<&delegation::ChildSpec>) -> ProfileScope {
+        child.map_or_else(|| self.scope.clone(), delegation::ChildSpec::scope)
     }
 
     /// Announces borrowed logins on `notices` and fires the API hooks
@@ -561,6 +683,14 @@ impl Factory {
             &plugin_toolsets,
             &surface,
         )?;
+        let selection = match &self.options.cron {
+            Some(run) => run.selection(
+                &registry,
+                &self.scope.config().tools.disabled_toolsets,
+                selection,
+            )?,
+            None => self.with_browser_opt_ins(session.id, selection),
+        };
         Ok((registry, selection, surface))
     }
 
@@ -607,6 +737,7 @@ impl Factory {
             cwd: &self.options.cwd,
             user_home: self.launch.user_home().map(PathBuf::as_path),
             interactive: self.options.interactive,
+            cron: self.options.cron.is_some(),
             yolo: self.options.yolo,
             hooks: Some(Arc::new(hooks)),
             session_id: id.to_string(),
@@ -622,11 +753,18 @@ impl Factory {
     /// The egress policy of session `id`: the profile's, with the chat
     /// flags; refusals go to the audit log and, once the session's event
     /// sink is set in `events`, to its trajectory and clients.
-    fn egress(&self, id: SessionId, events: &Denials) -> crate::egress::SessionEgress {
-        let hosts = Arc::new(crate::egress::host_policy(
-            &self.scope.config().security.egress,
-            &self.options.egress,
-        ));
+    fn egress(
+        &self,
+        id: SessionId,
+        events: &Denials,
+        hosts: Option<Arc<pmt_net::egress::HostPolicy>>,
+    ) -> crate::egress::SessionEgress {
+        let hosts = hosts.unwrap_or_else(|| {
+            Arc::new(crate::egress::host_policy(
+                &self.scope.config().security.egress,
+                &self.options.egress,
+            ))
+        });
         let events = Arc::clone(events);
         let runtime = tokio::runtime::Handle::current();
         let emit: Arc<dyn Fn(&pmt_net::egress::Denial) + Send + Sync> = Arc::new(move |denial| {
@@ -671,54 +809,64 @@ impl Factory {
     /// finished background processes to the `clients`' sender).
     fn environment(
         &self,
-        id: SessionId,
+        session: &pmt_store::Session,
         target: &pmt_providers::resolve::Target,
         capabilities: &CapabilitySet,
         config: &SharedScope,
         skills: &Arc<SkillsSession>,
-        clients: Option<&Clients>,
+        at: &place::At<'_>,
     ) -> Result<env::Attached, Error> {
-        let denials = env::Denials::default();
+        let id = session.id;
+        let clients = at.clients;
+        let denials = at.denials.clone().unwrap_or_default();
+        let cron = self.options.cron.as_ref();
+        let protected = pmt_sandbox::credential_stores(&pmt_sandbox::Paths {
+            user_home: self.launch.user_home().cloned().unwrap_or_default(),
+            prometheus_home: self.scope.home().to_path_buf(),
+            workspace: at.cwd.to_path_buf(),
+            scratch: Vec::new(),
+        });
+        let capabilities = &place::with_worktree_git(capabilities, at.cwd, &protected)
+            .union(&cron.map(cron::CronRun::sandbox_grants).unwrap_or_default());
+        let processes =
+            processes::Wiring::of(self.scope.config(), &self.store, id, &session.origin);
         let environment = env::attach(&env::EnvInputs {
             scope: &self.scope,
             config,
             session_id: &id.to_string(),
             launch: &self.launch,
-            cwd: &self.options.cwd,
+            cwd: at.cwd,
             capabilities,
             redactor: self.redactor.clone(),
             browser: self.browser(),
             image_input: self.image_input(target),
-            completions: clients.and_then(|c| c.completions.clone()),
+            completions: clients
+                .and_then(|c| c.completions.clone())
+                .or_else(|| self.notices.clone()),
             providers: self.plugins.current().providers.clone(),
             plugin_call: self.plugin_call(id),
             plugins: &self.plugins,
-            egress: &self.egress(id, &denials),
+            egress: &self.egress(id, &denials, at.hosts.clone()),
             denials: &denials,
             vault_prompt: self.vault_prompt(clients),
+            processes: &processes,
+            snapshots: snapshots::opener(&self.scope, &self.store, id),
+            input_roots: input_roots(&self.scope, skills),
+            automatic_trust: automatic_trust(session),
+            cron_notepad: cron.and_then(|c| c.notepad.as_deref()),
         })?;
         // Skills pass their declared secrets to the terminal.
         if let Some(terminal) = &environment.terminal {
             terminal.set_secret_source(skills.secret_source());
             terminal.set_path_source(python::path_source(&self.scope, skills));
+            terminal.set_sudo(Arc::new(sudo::handling(
+                &self.scope,
+                capabilities,
+                &session.origin,
+                self.sudo_prompt(clients),
+            )));
         }
         Ok(environment)
-    }
-
-    /// Where `browser_vault` asks for a password or code: the session's
-    /// clients (a daemon session) or the local terminal (an interactive
-    /// chat); nobody in cron, webhook, API and single-query runs.
-    fn vault_prompt(
-        &self,
-        clients: Option<&Clients>,
-    ) -> Option<Arc<dyn pmt_tools::browser::vault::MaskedPrompt>> {
-        if !self.options.interactive {
-            return None;
-        }
-        let secrets = clients
-            .map(|c| Arc::clone(&c.secrets))
-            .or_else(|| self.secret_prompt.clone())?;
-        Some(Arc::new(env::VaultPrompt(secrets)))
     }
 
     /// The baseline and granted capabilities, plus reads of the session's
@@ -740,8 +888,9 @@ impl Factory {
         id: SessionId,
         memory: &Arc<MemorySession>,
         summarizer: &Arc<summarize::RouteSummarizer>,
-        capabilities: &CapabilitySet,
+        (selection, capabilities): (&Selection, &CapabilitySet),
         cards: bool,
+        delegation: &delegation::Wiring,
     ) -> Result<(Arc<AgentTools>, Option<ClarifyPrompts>), Error> {
         let (clarifier, clarify) = if self.options.interactive {
             let (clarifier, surface) =
@@ -762,11 +911,24 @@ impl Factory {
                 .with_summarizer(Arc::clone(summarizer) as _),
         )?
         .with_memory(Arc::clone(memory) as _)
-        .with_connections(crate::connectors_host::manager(&self.scope, cards));
+        .with_connections(crate::connectors_host::manager(&self.scope, cards))
+        .with_cron(crate::cron_host::tool::port(
+            &self.scope,
+            &self.launch,
+            &self.store,
+            self.options.interactive,
+            cron::caller(
+                selection,
+                capabilities,
+                &self.options.cwd,
+                self.launch.user_home(),
+            ),
+        ));
         let tools = match &self.messaging {
             Some(ports) => tools.with_messaging(ports.port(id, self.read_check(capabilities))),
             None => tools,
         };
+        let tools = delegation.equip(tools);
         Ok((Arc::new(tools), clarify))
     }
 
@@ -788,13 +950,16 @@ impl Factory {
     /// The stored row of session `id`, recorded for `--usage-file` with
     /// the launch flags; a gateway session's platform user id is hashed in
     /// every model request when PII is redacted (spec:
-    /// security-boundaries, Optional PII redaction).
+    /// security-boundaries, Optional PII redaction). A `/bg` task's session
+    /// is opened as the surface that launched it (its toolsets, hooks and
+    /// plugin calls); the stored row keeps `source = background`.
     fn session_row(
         &self,
         id: SessionId,
         target: &pmt_providers::resolve::Target,
     ) -> Result<pmt_store::Session, Error> {
-        let session = self.store.session(id)?;
+        let mut session = self.store.session(id)?;
+        session.source = self.store.running_source(&session);
         if let pmt_store::Origin::Gateway {
             user: Some(user), ..
         } = &session.origin
@@ -1100,6 +1265,20 @@ fn refresher(
 
 /// The `session.info` of a plugin call made for session `id` from
 /// `surface` in `cwd`.
+/// Whether a session's working directory earns language-server trust
+/// automatically: not for scheduled jobs or kanban workers (spec:
+/// lsp-diagnostics, Workspace trust).
+fn automatic_trust(session: &pmt_store::Session) -> bool {
+    session.source != pmt_store::Source::Cron
+        && !session
+            .source_tag
+            .as_deref()
+            .is_some_and(|tag| tag.starts_with(KANBAN_SOURCE_TAG))
+}
+
+/// The source tag kanban worker sessions carry.
+pub const KANBAN_SOURCE_TAG: &str = "kanban";
+
 fn session_call(id: SessionId, surface: &str, cwd: &Path) -> pmt_plugins::host::CallInfo {
     pmt_plugins::host::CallInfo {
         session_id: Some(id.to_string()),
@@ -1113,7 +1292,7 @@ impl Live {
     /// user typed it: `cli`, `tui`, `gateway`...) reports as its session.
     #[must_use]
     pub fn plugin_call(&self, surface: &str) -> pmt_plugins::host::CallInfo {
-        session_call(self.id, surface, &self.cwd)
+        session_call(self.id, surface, &self.place.cwd())
     }
 
     /// The surface that created the session (`cli`, `tui`, `gateway`...).
@@ -1134,7 +1313,8 @@ impl Live {
         self.tool_state.selection()
     }
 
-    /// Records `session.start` for `session` on `target`'s route.
+    /// Records `session.start` for `session` on `target`'s route, then
+    /// one `security.downgrade` per allowed hardening downgrade.
     async fn emit_start(
         &self,
         session: &pmt_store::Session,
@@ -1147,6 +1327,9 @@ impl Live {
             parent_session_id: session.parent_session_id.map(|p| p.to_string()),
         }))
         .await;
+        for event in self.downgrades.events() {
+            self.emit(event).await;
+        }
         // The gateway fires its own sessions' start through its hooks.
         if self.surface() != "gateway" {
             let fields = lifecycle::session_start(&self.id.to_string(), self.surface());
@@ -1184,8 +1367,11 @@ impl Live {
         // Webhooks of the session's last events go out before the process
         // that ran it may exit.
         crate::hooks_host::outbound::flush(crate::hooks_host::outbound::FLUSH).await;
-        let trajectory = self.trajectory;
-        drop(self.agent);
+        // Everything else the session holds (its agent, tools, delegation)
+        // may reach the writer through its event sinks: it is dropped
+        // first so the writer can be finished.
+        let trajectory = self.trajectory.clone();
+        drop(self);
         if let Some(writer) = trajectory.and_then(|t| Arc::try_unwrap(t).ok())
             && let Err(err) = writer.finish()
         {
@@ -1199,11 +1385,14 @@ impl Live {
     /// is written to the session's own profile store at every call, so
     /// nothing is left to flush.
     pub async fn unload(self) {
-        if let Some(browser) = &self.browser {
+        if let Some(browser) = &self.place.browser() {
             browser.close_session(&self.id.to_string()).await;
         }
-        let trajectory = self.trajectory;
-        drop(self.agent);
+        // Everything else the session holds (its agent, tools, delegation)
+        // may reach the writer through its event sinks: it is dropped
+        // first so the writer can be finished.
+        let trajectory = self.trajectory.clone();
+        drop(self);
         if let Some(writer) = trajectory.and_then(|t| Arc::try_unwrap(t).ok())
             && let Err(err) = writer.finish()
         {
@@ -1215,6 +1404,10 @@ impl Live {
     /// leaving the trajectory file open: for a session something else
     /// still holds when the process stops (prefer [`Live::close`]).
     pub async fn end(&self, store: &Store, reason: EndReason) {
+        if let Some(delegation) = &self.delegation {
+            delegation.close();
+        }
+        pmt_tools::code_exec::kernel::close_session(&self.id.to_string());
         self.emit(Event::SessionEnd(SessionEnd {
             reason: reason.as_str().to_owned(),
         }))
@@ -1235,16 +1428,39 @@ impl Live {
                     .await;
             }
         }
-        if let Some(browser) = &self.browser {
+        if let Some(browser) = &self.place.browser() {
             browser.close_session(&self.id.to_string()).await;
         }
+        if let Some(text) = self.sync_back().await {
+            tracing::info!(session = %self.id, "{text}");
+        }
+        self.place.release();
+    }
+
+    /// Copies the remote workspace's changes back to the host (session end
+    /// and `/sync`); `None` without sync-back.
+    pub async fn sync_back(&self) -> Option<String> {
+        let sync = self.place.sync()?;
+        let budget = self.config.get().config().terminal.sync_back_max_bytes;
+        let done = tokio::task::spawn_blocking(move || sync.sync()).await;
+        Some(match done {
+            Ok(Ok(report)) => {
+                let copied = format!("sync-back copied {} files", report.copied.len());
+                match report.notice(budget) {
+                    Some(notice) => format!("{copied}; {notice}"),
+                    None => copied,
+                }
+            }
+            Ok(Err(why)) => format!("sync-back failed: {why}"),
+            Err(err) => format!("sync-back failed: {err}"),
+        })
     }
 }
 
 /// The running background processes of a session's terminal (none when
 /// the session has no local terminal).
 fn own_processes(
-    terminal: Option<&Arc<pmt_tools::terminal::LocalTerminal>>,
+    terminal: Option<&Arc<pmt_tools::terminal::Terminal>>,
 ) -> pmt_tools::approval::OwnProcesses {
     let terminal = terminal.map(Arc::downgrade);
     Arc::new(move || {
@@ -1254,4 +1470,13 @@ fn own_processes(
             .map(|t| t.processes().running_pids())
             .unwrap_or_default()
     })
+}
+
+/// Host directories a remote command may name: the profile's received
+/// attachments (`cache/media/`) and every skill directory on disk.
+fn input_roots(scope: &ProfileScope, skills: &SkillsSession) -> Vec<std::path::PathBuf> {
+    let mut roots = vec![scope.dir().join("cache").join("media"), skills.skills_dir()];
+    roots.extend(skills.disk_roots());
+    roots.dedup();
+    roots
 }

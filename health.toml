@@ -19,6 +19,8 @@ unsafe_modules = [
     # pre_exec hook entering a proxied child's network namespace and
     # passing its listener to the parent (SCM_RIGHTS).
     "crates/pmt-sandbox/src/linux/netns.rs",
+    # pre_exec hook placing a confined browser's DevTools pipe at fds 3/4.
+    "crates/pmt-sandbox/src/fds.rs",
     # AppContainer profiles, file ACLs, CreateProcessW and Job Objects.
     "crates/pmt-sandbox/src/windows/acl.rs",
     "crates/pmt-sandbox/src/windows/container.rs",

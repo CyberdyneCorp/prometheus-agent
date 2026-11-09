@@ -216,7 +216,7 @@ mod tests {
         assert!(ts.contains("\"prompt.submit\": { params: SubmitParams; result: Submitted };"));
         assert!(ts.contains("\"request.cancel\": RequestCancel;"));
         assert!(
-            ts.contains("\"worktree.new\","),
+            ts.contains("\"journey.list\","),
             "undeclared names are listed"
         );
         assert!(ts.contains("export const PROTOCOL = { major: 1, minor: 0 } as const;"));

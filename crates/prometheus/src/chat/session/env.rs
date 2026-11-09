@@ -20,12 +20,12 @@ use pmt_sandbox::{Paths, Policy, Sandbox};
 use pmt_tools::approval::explain::Previewer;
 use pmt_tools::browser::BrowserExec;
 use pmt_tools::environments::{Attachment, Environments, SessionEnv};
-use pmt_tools::files::{ControlPaths, FileSession, FileSetup, Linter, LocalBackend};
+use pmt_tools::files::{ControlPaths, CwdSource, FileSession, FileSetup, Linter, LocalBackend};
 use pmt_tools::terminal::env::{ChildEnv, EnvRequest};
 use pmt_tools::terminal::guard::GuardChain;
-use pmt_tools::terminal::process::Completion;
+use pmt_tools::terminal::process::Notice;
 use pmt_tools::terminal::shell::Shell;
-use pmt_tools::terminal::{LocalSetup, LocalTerminal, spill};
+use pmt_tools::terminal::{Terminal, TerminalSetup, spill};
 use pmt_tools::web::{FullTextStore, WebSession};
 
 use super::browser::Shared;
@@ -52,7 +52,7 @@ pub struct EnvInputs<'a> {
     /// The session's model accepts images (browser screenshots).
     pub image_input: bool,
     /// Where finished `notify_on_complete` background processes go.
-    pub completions: Option<tokio::sync::mpsc::UnboundedSender<Completion>>,
+    pub completions: Option<tokio::sync::mpsc::UnboundedSender<Notice>>,
     /// Provider objects of the profile's plugins (web backends by name).
     pub providers: pmt_plugins::providers::ProviderRegistry,
     /// What the session's plugin calls report through `session.info`.
@@ -65,6 +65,20 @@ pub struct EnvInputs<'a> {
     pub denials: &'a Denials,
     /// Where `browser_vault` asks the person for a hidden value.
     pub vault_prompt: Option<Arc<dyn pmt_tools::browser::vault::MaskedPrompt>>,
+    /// Receipts, quiet-wait and handoff of the background processes.
+    pub processes: &'a super::processes::Wiring,
+    /// Opens the file snapshots (undo and checkpoints), when on.
+    pub snapshots: Option<super::snapshots::Opener<'a>>,
+    /// Host directories whose files a command on a backend without the
+    /// host filesystem may name (attachments, skills): uploaded on demand.
+    pub input_roots: Vec<std::path::PathBuf>,
+    /// The working directory's git root is trusted for language servers
+    /// (not for cron jobs and kanban workers).
+    pub automatic_trust: bool,
+    /// A scheduled run's notepad channel directory: its terminal finds
+    /// `prometheus` in the channel's `bin/` and edits the job's notepad
+    /// through `PMT_CRON_NOTEPAD`.
+    pub cron_notepad: Option<&'a Path>,
 }
 
 /// `browser_vault`'s masked prompt over a skill secret prompt (the CLI's
@@ -101,7 +115,13 @@ pub struct Attached {
     /// The session's `browser_exec` (its browsers close at session end).
     pub browser: Option<Arc<BrowserExec>>,
     /// The session's terminal (skills pass their declared secrets to it).
-    pub terminal: Option<Arc<LocalTerminal>>,
+    pub terminal: Option<Arc<Terminal>>,
+    /// Sync-back of a remote workspace (session end, `/sync`).
+    pub sync: Option<Arc<pmt_tools::terminal::sync::SyncBack>>,
+    /// File snapshots (`/undo`, `/rollback`, `/diff session`).
+    pub snapshots: Option<Arc<pmt_tools::snapshots::SessionSnapshots>>,
+    /// Where `/diff` runs git.
+    pub worktree: pmt_tools::snapshots::worktree::Worktree,
     /// How the session runs a command: its sandbox, child environment and
     /// shell (skills' inline snippets run the same way).
     pub commands: Option<Commands>,
@@ -111,6 +131,8 @@ pub struct Attached {
     pub denials: Denials,
     /// Runs approval `explain` previews (read-only, offline).
     pub previewer: Option<Previewer>,
+    /// The session's allowed hardening downgrades (sandbox, browser).
+    pub downgrades: super::downgrades::Downgrades,
 }
 
 /// The parts a session runs commands with.
@@ -143,18 +165,7 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         )
     })?;
     let user_home = inputs.launch.user_home().cloned();
-    let places = Places {
-        user_home: user_home.clone().unwrap_or_default(),
-        workspace: inputs.cwd.to_path_buf(),
-        scratch: vec![scratch.clone()],
-        toolchain: Vec::new(),
-    };
-    let paths = Paths {
-        user_home: user_home.clone().unwrap_or_default(),
-        prometheus_home: inputs.scope.home().to_path_buf(),
-        workspace: inputs.cwd.to_path_buf(),
-        scratch: vec![scratch.clone()],
-    };
+    let (places, paths) = places(inputs, user_home.as_deref(), &scratch);
     let policy = Arc::new(Policy::from_set(inputs.capabilities, &paths));
     let proxy = crate::egress::child_proxy(
         inputs.scope,
@@ -170,16 +181,11 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
     let process = processes(inputs, &scratch, &child_policy, proxy.as_ref())
         .inspect_err(|err| tracing::warn!(error = %err, "terminal unavailable this session"))
         .ok();
-    let browser = process.as_ref().and_then(|(sandbox, env)| {
-        let shared = inputs.browser?;
-        let exec = shared.exec(
-            Arc::clone(sandbox),
-            env.clone(),
-            &scratch,
-            inputs.image_input,
-        );
-        Some(Arc::new(exec))
-    });
+    let browser = process
+        .as_ref()
+        .and_then(|(sandbox, env)| browser_exec(inputs, sandbox, env, &scratch));
+    let downgrades = downgrades(inputs, process.as_ref(), browser.as_deref());
+    let child_env = process.as_ref().map(|(_, env)| env.clone());
     let commands = process.and_then(|(sandbox, env)| {
         let config = scope.config();
         pmt_tools::terminal::doctor::local_shell(&config.terminal, inputs.launch, &sandbox)
@@ -192,18 +198,44 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
             })
     });
     let previewer = commands.as_ref().and_then(|c| previewer(inputs, &paths, c));
-    let terminal = commands
-        .clone()
-        .and_then(|commands| {
-            terminal(inputs, &scratch, user_home.clone(), commands)
-                .inspect_err(
-                    |err| tracing::warn!(error = %err, "terminal unavailable this session"),
-                )
-                .ok()
-        })
-        .map(Arc::new);
+    let remote = remote(inputs, user_home.as_deref());
+    let snapshots = inputs
+        .snapshots
+        .as_ref()
+        .map(|opener| opener.open(inputs.cwd, remote.as_ref()));
+    let worktree = super::snapshots::worktree(inputs.cwd, remote.as_ref());
+    let terminal = commands.clone().and_then(|commands| {
+        terminal(
+            inputs,
+            &scratch,
+            user_home.clone(),
+            commands,
+            remote.as_ref(),
+            snapshots.as_ref(),
+        )
+        .inspect_err(|err| tracing::warn!(error = %err, "terminal unavailable this session"))
+        .ok()
+        .map(Arc::new)
+    });
+    if let Some(terminal) = &terminal {
+        inputs.processes.bind(terminal);
+    }
+    let (file_backend, sync) = remote
+        .as_ref()
+        .map(|r| remote_parts(inputs, r, terminal.as_ref()))
+        .unwrap_or_default();
+    let lsp = super::lsp::diagnostics(inputs, remote.as_ref(), child_env.as_ref(), proxy.as_ref());
     let env = SessionEnv {
-        files: Some(Arc::new(files(inputs, places, user_home, policy))),
+        files: Some(Arc::new(files(
+            inputs,
+            places,
+            user_home,
+            policy,
+            file_backend,
+            snapshots.as_ref(),
+            lsp.as_ref(),
+        ))),
+        lsp,
         terminal: terminal.clone(),
         web: web(scope, &inputs.providers, &inputs.plugin_call, inputs.egress).map(Arc::new),
         vision: None,
@@ -214,11 +246,45 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         attachment: Environments::process().attach(inputs.session_id, env),
         browser,
         terminal,
+        sync,
+        snapshots,
+        worktree,
         commands,
         egress: crate::egress::Running::new(inputs.session_id, inputs.egress, proxy),
         denials: Arc::clone(inputs.denials),
         previewer,
+        downgrades,
     })
+}
+
+/// The session's allowed hardening downgrades (its sandbox's, its local
+/// browsers'), recorded once in the audit log.
+fn downgrades(
+    inputs: &EnvInputs<'_>,
+    process: Option<&(Arc<Sandbox>, ChildEnv)>,
+    browser: Option<&BrowserExec>,
+) -> super::downgrades::Downgrades {
+    let downgrades = super::downgrades::Downgrades::of(
+        process.map(|(sandbox, _)| sandbox.as_ref()),
+        browser
+            .map(|exec| exec.manager().downgrades())
+            .unwrap_or_default(),
+    );
+    let audit = pmt_core::audit::AuditLog::of(inputs.scope.dir());
+    downgrades.record(&audit, inputs.session_id);
+    downgrades
+}
+
+/// The session's non-local terminal backend (`None`: the local one).
+fn remote(inputs: &EnvInputs<'_>, user_home: Option<&Path>) -> Option<super::backend::Remote> {
+    let registry = super::backend::registry(inputs.plugins, &inputs.plugin_call);
+    super::backend::select(
+        inputs.scope,
+        &registry,
+        inputs.session_id,
+        inputs.cwd,
+        user_home,
+    )
 }
 
 /// `browser_vault` of a session with a browser: the profile's vault (its
@@ -265,24 +331,100 @@ const PREVIEW_CAPABILITIES: &[&str] = &[
     "process.spawn:*",
 ];
 
+/// The session's places (file tools) and sandbox paths.
+fn places(inputs: &EnvInputs<'_>, user_home: Option<&Path>, scratch: &Path) -> (Places, Paths) {
+    let home = user_home.map(Path::to_path_buf).unwrap_or_default();
+    let places = Places {
+        user_home: home.clone(),
+        workspace: inputs.cwd.to_path_buf(),
+        scratch: vec![scratch.to_path_buf()],
+        toolchain: Vec::new(),
+    };
+    let paths = Paths {
+        user_home: home,
+        prometheus_home: inputs.scope.home().to_path_buf(),
+        workspace: inputs.cwd.to_path_buf(),
+        scratch: vec![scratch.to_path_buf()],
+    };
+    (places, paths)
+}
+
+/// Where a remote backend keeps the session's uploaded inputs.
+const INPUTS_BASE: &str = "/tmp/.prometheus-inputs";
+
+/// The file backend of a remote session and where its relative paths
+/// start.
+type RemoteFiles = (Arc<dyn pmt_tools::files::FileBackend>, CwdSource);
+
+/// What a non-local backend adds: its file tools (relative paths follow the
+/// terminal's cwd inside that environment), its sync-back, the upload of
+/// host inputs commands name, and the container's idle reaper watching the
+/// terminal.
+fn remote_parts(
+    inputs: &EnvInputs<'_>,
+    remote: &super::backend::Remote,
+    terminal: Option<&Arc<Terminal>>,
+) -> (
+    Option<RemoteFiles>,
+    Option<Arc<pmt_tools::terminal::sync::SyncBack>>,
+) {
+    if let (Some(terminal), Some(container)) = (terminal, &remote.container) {
+        let activity: Arc<dyn pmt_sandbox::container::Activity> = Arc::clone(terminal) as _;
+        container.attach(Arc::downgrade(&activity));
+    }
+    if let Some(terminal) = terminal
+        && !remote.target.descriptor().uses_host_filesystem
+    {
+        let base = format!("{INPUTS_BASE}/{}", inputs.session_id);
+        terminal.set_inputs(Arc::new(pmt_tools::terminal::inputs::Inputs::new(
+            &inputs.scope.config().terminal.backend,
+            Arc::clone(&remote.exec),
+            &base,
+            &inputs.input_roots,
+        )));
+    }
+    let cwd: CwdSource = if let Some(terminal) = terminal {
+        let terminal = Arc::clone(terminal);
+        Arc::new(move || terminal.cwd())
+    } else {
+        let start = remote.start_cwd.clone();
+        Arc::new(move || start.clone())
+    };
+    let sync = remote.sync_back(&inputs.scope.config().terminal, inputs.cwd);
+    (Some((Arc::clone(&remote.files), cwd)), sync)
+}
+
 fn files(
     inputs: &EnvInputs<'_>,
     places: Places,
     user_home: Option<PathBuf>,
     policy: Arc<Policy>,
+    remote: Option<RemoteFiles>,
+    snapshots: Option<&Arc<pmt_tools::snapshots::SessionSnapshots>>,
+    lsp: Option<&pmt_tools::lsp::SessionDiagnostics>,
 ) -> FileSession {
-    let cwd = inputs.cwd.to_path_buf();
-    let backend = LocalBackend::new(inputs.capabilities.clone(), places).denying_stores(policy);
-    FileSession::new(FileSetup {
-        backend: Arc::new(backend),
-        cwd: Arc::new(move || cwd.clone()),
+    let host_cwd = inputs.cwd.to_path_buf();
+    let (backend, cwd) = remote.unwrap_or_else(|| {
+        let backend: Arc<dyn pmt_tools::files::FileBackend> =
+            Arc::new(LocalBackend::new(inputs.capabilities.clone(), places).denying_stores(policy));
+        (backend, Arc::new(move || host_cwd.clone()))
+    });
+    let files = FileSession::new(FileSetup {
+        backend,
+        cwd,
         user_home,
         control: ControlPaths {
             prometheus_home: inputs.scope.home().to_path_buf(),
         },
         read_max_chars: limit(inputs.config, |c| c.files.read_max_chars),
         linter: Linter::builtin(),
-    })
+        documents: super::documents::converter(inputs.scope, inputs.launch),
+        edits: snapshots.map(|s| Arc::clone(s) as Arc<dyn pmt_tools::files::edits::EditRecorder>),
+    });
+    match lsp {
+        Some(lsp) => files.with_post_write(Arc::new(lsp.clone())),
+        None => files,
+    }
 }
 
 /// The session's OS sandbox and the environment of the processes it
@@ -295,18 +437,6 @@ fn processes(
 ) -> Result<(Arc<Sandbox>, ChildEnv), Error> {
     let config = inputs.scope.config();
     let sandbox = Arc::new(Sandbox::new(policy.clone(), &config.security.sandbox)?);
-    let audit = pmt_core::audit::AuditLog::of(inputs.scope.dir());
-    for gap in sandbox.downgrades() {
-        audit.record(
-            &pmt_core::audit::Event::new(
-                pmt_core::audit::Kind::Downgrade,
-                gap.hardening.as_str(),
-                "allowed",
-            )
-            .in_session(inputs.session_id)
-            .with_detail(gap.reason.clone()),
-        );
-    }
     let mut env = ChildEnv::build(
         inputs.launch,
         EnvRequest {
@@ -315,6 +445,15 @@ fn processes(
         },
     );
     env.set_temp_dir(scratch);
+    // `prometheus verify` run by the session records its evidence here.
+    env.set("PROMETHEUS_SESSION_ID", inputs.session_id);
+    if let Some(dir) = inputs.cron_notepad {
+        env.set(
+            pmt_core::env::CRON_NOTEPAD,
+            crate::cron_host::notepad::file_in(dir).as_os_str(),
+        );
+        env.prepend_path(&[crate::cron_host::notepad::bin_in(dir)]);
+    }
     if let Some(url) = proxy.map(pmt_net::egress::Proxy::url) {
         env.set_proxy(&url);
     }
@@ -331,18 +470,27 @@ fn terminal(
     scratch: &Path,
     user_home: Option<PathBuf>,
     commands: Commands,
-) -> Result<LocalTerminal, Error> {
+    remote: Option<&super::backend::Remote>,
+    snapshots: Option<&Arc<pmt_tools::snapshots::SessionSnapshots>>,
+) -> Result<Terminal, Error> {
     let config = inputs.scope.config();
-    LocalTerminal::new(LocalSetup {
+    let target: Arc<dyn pmt_tools::terminal::target::Target> = match remote {
+        Some(remote) => Arc::clone(&remote.target),
+        None => Arc::new(pmt_tools::terminal::target::LocalTarget::new(
+            commands.sandbox,
+            scratch,
+        )),
+    };
+    Terminal::new(TerminalSetup {
         terminal: config.terminal.clone(),
         max_chars: limit(inputs.config, |c| c.tool_output.max_chars),
         kill_grace: Duration::from_secs(2),
-        sandbox: commands.sandbox,
+        target,
         env: commands.env,
         shell: commands.shell,
         scratch: scratch.to_path_buf(),
         spill_dir: spill::session_dir(inputs.scope.dir(), inputs.session_id),
-        start_cwd: inputs.cwd.to_path_buf(),
+        start_cwd: remote.map_or_else(|| inputs.cwd.to_path_buf(), |r| r.start_cwd.clone()),
         user_home,
         redactor: inputs.redactor.clone(),
         hooks: vec![crate::plugins_host::terminal::output_hook(
@@ -350,8 +498,15 @@ fn terminal(
             inputs.plugin_call.clone(),
         )],
         guards: GuardChain::default(),
-        notices: Vec::new(),
+        notices: remote.and_then(|r| r.notice.clone()).into_iter().collect(),
         notify: inputs.completions.clone(),
+        auto_notify: inputs.processes.auto_notify,
+        receipts: Some(Arc::clone(&inputs.processes.receipts)),
+        before_command: snapshots
+            .cloned()
+            .map(|s| -> pmt_tools::terminal::BeforeCommand {
+                Arc::new(move |command: &str, cwd: &Path| s.before_command(command, cwd))
+            }),
         clock: None,
     })
     .map_err(|e| {
@@ -407,8 +562,43 @@ fn web(
     ))
 }
 
+/// The session's `browser_exec`, when the profile has browser tools.
+fn browser_exec(
+    inputs: &EnvInputs<'_>,
+    sandbox: &Arc<Sandbox>,
+    env: &ChildEnv,
+    scratch: &Path,
+) -> Option<Arc<BrowserExec>> {
+    let exec = inputs.browser?.exec(
+        Arc::clone(sandbox),
+        env.clone(),
+        scratch,
+        inputs.image_input,
+        inputs.capabilities,
+    );
+    Some(Arc::new(exec))
+}
+
 /// A `live` size limit of the session's configuration, read at each use.
 fn limit(config: &SharedScope, key: fn(&pmt_config::Config) -> u64) -> pmt_tools::setting::Limit {
     let config = config.clone();
     Arc::new(move || usize::try_from(key(config.get().config())).unwrap_or(usize::MAX))
+}
+
+impl super::Factory {
+    /// Where `browser_vault` asks for a password or code: the session's
+    /// clients (a daemon session) or the local terminal (an interactive
+    /// chat); nobody in cron, webhook, API and single-query runs.
+    pub(super) fn vault_prompt(
+        &self,
+        clients: Option<&super::Clients>,
+    ) -> Option<Arc<dyn pmt_tools::browser::vault::MaskedPrompt>> {
+        if !self.options.interactive {
+            return None;
+        }
+        let secrets = clients
+            .map(|c| Arc::clone(&c.secrets))
+            .or_else(|| self.secret_prompt.clone())?;
+        Some(Arc::new(VaultPrompt(secrets)))
+    }
 }

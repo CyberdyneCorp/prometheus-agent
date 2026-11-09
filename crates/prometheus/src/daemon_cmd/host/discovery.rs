@@ -230,6 +230,7 @@ impl DaemonHost {
             skills,
             system_prompt,
             mcp_servers: Vec::new(),
+            degraded: live.downgrades.banner_marker(),
         })
     }
 

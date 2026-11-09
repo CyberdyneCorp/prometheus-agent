@@ -16,7 +16,7 @@ use crate::browser::BrowserExec;
 use crate::descriptor::{CallContext, ToolFailure};
 use crate::files::FileSession;
 use crate::spillover;
-use crate::terminal::LocalTerminal;
+use crate::terminal::Terminal;
 use crate::vision::VisionSession;
 use crate::web::{FullTextStore, WebSession};
 
@@ -27,7 +27,7 @@ pub struct SessionEnv {
     /// The file tools' state.
     pub files: Option<Arc<FileSession>>,
     /// The `local` backend shell.
-    pub terminal: Option<Arc<LocalTerminal>>,
+    pub terminal: Option<Arc<Terminal>>,
     /// The web tools' backends and fetcher.
     pub web: Option<Arc<WebSession>>,
     /// `vision_analyze`'s routes.
@@ -36,6 +36,8 @@ pub struct SessionEnv {
     pub browser: Option<Arc<BrowserExec>>,
     /// `browser_vault`'s vault, browser and prompt.
     pub vault: Option<Arc<crate::browser::vault::VaultSession>>,
+    /// Language-server diagnostics after file edits (`None`: off).
+    pub lsp: Option<crate::lsp::SessionDiagnostics>,
 }
 
 /// Read grants for the files the session's own tools point the model at

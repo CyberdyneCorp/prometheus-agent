@@ -1,7 +1,8 @@
 //! A daemon session's way to its clients: its trajectory events as
 //! `session.event`, and its approval and clarify prompts as server-to-client
 //! requests (spec: workspace-architecture, Server-to-client requests), and
-//! a skill's missing secret as `secret.request`. A prompt no capable
+//! a skill's missing secret as `secret.request` and a sudo password as
+//! `sudo.request`. A prompt no capable
 //! client answers resolves unanswered, which the gate treats as a denial
 //! (a secret: reported missing to the model).
 
@@ -16,7 +17,7 @@ use pmt_gateway::Link;
 use pmt_obs::trajectory::writer::Emit;
 use pmt_rpc::contracts::{
     ApprovalAsk, ApprovalFinding, ApprovalRequestParams, ClarifyAsk, ClarifyRequestParams,
-    Decision, SecretAsk, SecretRequestParams, SessionEvent,
+    Decision, SecretAsk, SecretRequestParams, SessionEvent, SudoAsk, SudoRequestParams,
 };
 use pmt_skills::secrets::SecretPrompt;
 use pmt_tools::approval::ApprovalRequest;
@@ -79,6 +80,31 @@ impl SecretPrompt for SecretsToClients {
         answer
             .value
             .filter(|v| !v.is_empty())
+            .map(SecretString::new)
+    }
+}
+
+/// Asks a daemon session's clients for the sudo password
+/// (`sudo.request`; spec: execution-environments, Sudo password handling).
+pub(super) struct SudoToClients {
+    pub(super) link: Link,
+    /// The daemon's runtime (the caller is a blocking-pool thread).
+    pub(super) runtime: tokio::runtime::Handle,
+}
+
+impl pmt_tools::terminal::sudo::SudoPrompt for SudoToClients {
+    fn ask(&self, command: &str) -> Option<SecretString> {
+        let params = SudoRequestParams {
+            session_id: self.link.session_id().to_owned(),
+            command: command.to_owned(),
+            deadline_ms: None,
+        };
+        let answer = self
+            .runtime
+            .block_on(self.link.ask::<SudoAsk>(&params, None))?;
+        answer
+            .password
+            .filter(|p| !p.is_empty())
             .map(SecretString::new)
     }
 }

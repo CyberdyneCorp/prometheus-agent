@@ -112,6 +112,13 @@ impl Capability {
         Self::FsRead(path::subtree_glob(dir))
     }
 
+    /// `fs.write` on `dir` and everything below it, for a directory known
+    /// only at run time (a linked worktree's shared git directories).
+    #[must_use]
+    pub fn write_under(dir: &std::path::Path) -> Self {
+        Self::FsWrite(path::subtree_glob(dir))
+    }
+
     /// Whether holding `self` grants at least `other`.
     #[must_use]
     pub fn covers(&self, other: &Self) -> bool {

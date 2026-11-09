@@ -14,8 +14,12 @@ repository = "https://github.com/CyberdyneCorp/prometheus-agent"
 
 [workspace.dependencies]
 pmt-agent = { path = "crates/pmt-agent" }
+pmt-automation = { path = "crates/pmt-automation" }
 pmt-config = { path = "crates/pmt-config" }
 pmt-core = { path = "crates/pmt-core" }
+pmt-cron = { path = "crates/pmt-cron" }
+pmt-delegation = { path = "crates/pmt-delegation" }
+pmt-worktrees = { path = "crates/pmt-worktrees" }
 pmt-memory = { path = "crates/pmt-memory" }
 pmt-mcp = { path = "crates/pmt-mcp" }
 pmt-net = { path = "crates/pmt-net" }
@@ -47,7 +51,7 @@ schemars = "1.2"
 rmcp = { version = "3.8.0", default-features = false }
 # WASM plugin host (design D7): the Component Model on Cranelift, with no
 # WASI (plugins get only the WIT host interfaces) and no on-disk code cache.
-wasmtime = { version = "48.0.8", default-features = false, features = ["runtime", "cranelift", "component-model", "std"] }
+wasmtime = { version = "48.0.8", default-features = false, features = ["runtime", "cranelift", "component-model", "std", "call-hook"] }
 # Test-only: turns the sample plugins' core modules into components.
 wit-component = "0.254.2"
 # `requires_prometheus` ranges and WIT world versions.
@@ -125,6 +129,8 @@ zstd = { version = "0.14", default-features = false }
 # Runtime archives published only as `.zip` (Chrome for Testing, Windows
 # builds of Node and uv); deflate through the flate2 backend above.
 zip = { version = "9.0", default-features = false, features = ["deflate-flate2"] }
+# read_file document extraction: the XML parts of .docx and .xlsx files.
+roxmltree = "0.21"
 pmt-backup = { path = "crates/pmt-backup" }
 pmt-vault = { path = "crates/pmt-vault" }
 # Property tests (store transaction atomicity).

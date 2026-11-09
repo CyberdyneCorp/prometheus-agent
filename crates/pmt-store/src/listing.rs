@@ -188,6 +188,16 @@ impl Store {
         })
     }
 
+    /// Records the working directory a session moved to (`/worktree new`),
+    /// where a resume reopens it.
+    ///
+    /// # Errors
+    ///
+    /// `session.not_found`, `store.busy`, `store.sqlite`.
+    pub fn set_session_cwd(&self, id: SessionId, cwd: &str) -> Result<Session, Error> {
+        self.update_session(id, "cwd = ?2", &Value::Text(cwd.to_owned()))
+    }
+
     /// Pins or unpins a session (pinned sessions are never pruned).
     ///
     /// # Errors

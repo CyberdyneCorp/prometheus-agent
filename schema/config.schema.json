@@ -487,6 +487,21 @@
       },
       "type": "object"
     },
+    "BackgroundMode": {
+      "description": "When top-level spawns run in the background.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Where the session can receive later completions.",
+          "type": "string"
+        },
+        {
+          "const": "never",
+          "description": "Never: every call waits for its children.",
+          "type": "string"
+        }
+      ]
+    },
     "BackgroundNotifications": {
       "description": "Background notification levels.",
       "oneOf": [
@@ -544,12 +559,24 @@
       "additionalProperties": false,
       "description": "The `[browser]` section.",
       "properties": {
+        "auto_local_for_private_urls": {
+          "default": true,
+          "description": "With a cloud provider, private and LAN URLs open in a local sidecar\nbrowser instead of being refused or sent to the provider.",
+          "type": "boolean"
+        },
         "cdp_url": {
           "description": "Explicit CDP endpoint.",
           "type": [
             "string",
             "null"
           ]
+        },
+        "chromium_args": {
+          "description": "Extra local browser arguments; ones that disable the Chromium\nsandbox or web security need the matching\n`security.sandbox.allow_degraded` entry.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "dialog_policy": {
           "$ref": "#/$defs/DialogPolicy",
@@ -563,6 +590,16 @@
           "minimum": 0,
           "type": "integer"
         },
+        "executable_path": {
+          "default": "",
+          "description": "The local browser executable; empty uses the managed `chromium`\nruntime, then a Chromium-family browser of the host.",
+          "type": "string"
+        },
+        "headed": {
+          "default": false,
+          "description": "Open a visible window (headless with a notice without a display);\nkept between turns, idle reaping still applies.",
+          "type": "boolean"
+        },
         "inactivity_timeout_secs": {
           "default": 120,
           "description": "Idle browser sessions are closed after this long.",
@@ -571,9 +608,37 @@
           "type": "integer",
           "x-apply": "live"
         },
+        "launch_timeout_secs": {
+          "default": 30,
+          "description": "Bound on a local browser start.",
+          "format": "uint64",
+          "maximum": 600,
+          "minimum": 1,
+          "type": "integer"
+        },
         "provider": {
           "default": "local",
           "description": "Browser provider: `local` or a cloud browser plugin.",
+          "type": "string"
+        },
+        "real_profile_autoclose": {
+          "default": false,
+          "description": "The agent may offer `prometheus browser close-profile` (run only\nafter approval) when the real browser holds the profile.",
+          "type": "boolean"
+        },
+        "real_profile_pin": {
+          "default": "",
+          "description": "The real profile directory to copy (`Default`, `Profile 2`...);\nempty uses the browser's last used profile.",
+          "type": "string"
+        },
+        "use_real_profile": {
+          "default": false,
+          "description": "Browse on a snapshot of the user's real browser profile (needs the\n`browser.real_profile` grant).",
+          "type": "boolean"
+        },
+        "user_data_dir": {
+          "default": "",
+          "description": "A persistent local profile directory (relative paths resolve under\nthe profile); empty launches on a throwaway profile.",
           "type": "string"
         }
       },
@@ -876,6 +941,21 @@
         }
       ]
     },
+    "ChildApproval": {
+      "description": "How an approval needed inside a child is resolved; no value approves\ndangerous actions on its own.",
+      "oneOf": [
+        {
+          "const": "deny",
+          "description": "Deny and return the denial to the child.",
+          "type": "string"
+        },
+        {
+          "const": "escalate",
+          "description": "Ask the root session's surface, tagged with the child's id; denied\nwhen nobody answers in time.",
+          "type": "string"
+        }
+      ]
+    },
     "CliConfig": {
       "additionalProperties": false,
       "description": "The `[cli]` section.",
@@ -888,6 +968,82 @@
       },
       "type": "object",
       "x-apply": "live"
+    },
+    "CodeExecutionConfig": {
+      "additionalProperties": false,
+      "description": "The `[code_execution]` section.",
+      "properties": {
+        "allowed_tools": {
+          "default": [
+            "read_file",
+            "write_file",
+            "search_files",
+            "patch",
+            "terminal",
+            "web_search",
+            "web_extract"
+          ],
+          "description": "Tools a script may call through its stubs; a session sees the\nintersection with its own granted tools.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "kernel_idle_timeout_secs": {
+          "default": 1800,
+          "description": "Seconds an unused Python kernel stays alive before it is stopped.",
+          "format": "uint64",
+          "maximum": 604800,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_session_kernels": {
+          "default": 4,
+          "description": "Top-level sessions keeping a Python kernel at once; the least\nrecently used one loses its kernel beyond this (children's kernels\nare not counted).",
+          "format": "uint32",
+          "maximum": 64,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_tool_calls": {
+          "default": 50,
+          "description": "Stub calls one execution may make.",
+          "format": "uint32",
+          "maximum": 10000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "mode": {
+          "$ref": "#/$defs/CodeExecutionMode",
+          "default": "project",
+          "description": "`project` runs scripts in the session's working directory on the\nproject's virtual environment (3.8 or newer) when there is one;\n`strict` runs them in a fresh staging directory on the managed\nPython runtime."
+        },
+        "timeout_secs": {
+          "default": 300,
+          "description": "Seconds one execution may run.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "CodeExecutionMode": {
+      "description": "Where `execute_code` runs a script and on which Python.",
+      "oneOf": [
+        {
+          "const": "project",
+          "description": "The session's working directory and the project's virtual\nenvironment, else the managed runtime.",
+          "type": "string"
+        },
+        {
+          "const": "strict",
+          "description": "A fresh staging directory and the managed runtime.",
+          "type": "string"
+        }
+      ]
     },
     "ComposerConfig": {
       "additionalProperties": false,
@@ -1083,6 +1239,19 @@
           "description": "Literal environment set in the container.",
           "type": "object"
         },
+        "extra_args": {
+          "default": [],
+          "description": "Extra `create` arguments; anything weakening hardening is refused.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "image": {
+          "default": "",
+          "description": "Image; empty is the release's `prometheus-sandbox` image.",
+          "type": "string"
+        },
         "memory_bytes": {
           "default": 5368709120,
           "description": "Memory limit.",
@@ -1090,9 +1259,19 @@
           "minimum": 0,
           "type": "integer"
         },
+        "mount_workspace": {
+          "default": true,
+          "description": "Mount the session workspace at `/workspace`.",
+          "type": "boolean"
+        },
+        "network": {
+          "default": true,
+          "description": "Give the container a network; `false` runs it with none.",
+          "type": "boolean"
+        },
         "persistent": {
           "default": true,
-          "description": "Keep the container between sessions.",
+          "description": "One container per profile and workspace, reused by later sessions\nand stopped (never removed) when idle; `false` gives each session\nits own container.",
           "type": "boolean"
         },
         "pids_limit": {
@@ -1102,10 +1281,33 @@
           "minimum": 0,
           "type": "integer"
         },
+        "run_as_host_user": {
+          "default": false,
+          "description": "Run as the host user's uid and gid.",
+          "type": "boolean"
+        },
+        "runtime": {
+          "default": "auto",
+          "description": "Runtime: `auto` (rootless Podman, else Docker), `podman`, `docker`\nor the path of either executable.",
+          "type": "string"
+        },
+        "shared_key": {
+          "default": "",
+          "description": "Sessions of the profile with the same key share one container.",
+          "type": "string"
+        },
         "shm_size": {
           "default": "1g",
           "description": "`/dev/shm` size in the runtime's syntax.",
           "type": "string"
+        },
+        "volumes": {
+          "default": [],
+          "description": "Extra mounts, `host:container[:ro]`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "type": "object"
@@ -1123,6 +1325,21 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "ContinuableSurface": {
+      "description": "How a continuable delivery opens its conversation.",
+      "oneOf": [
+        {
+          "const": "thread",
+          "description": "A new thread (or topic) per delivery.",
+          "type": "string"
+        },
+        {
+          "const": "in_channel",
+          "description": "Top-level in the channel, seeding the channel's session.",
+          "type": "string"
+        }
+      ]
+    },
     "ContinuationMode": {
       "description": "The named intent-continuation mode.",
       "oneOf": [
@@ -1135,18 +1352,194 @@
     },
     "CronConfig": {
       "additionalProperties": false,
-      "description": "The `[cron]` section. Only the profile time zone exists in M1; it is\nalso the zone daily and monthly budgets and `prometheus usage --by day`\nuse (the scheduler's keys arrive with M2).",
+      "description": "The `[cron]` section: the profile time zone (also the zone of daily\nbudgets and `usage --by day`) and the scheduled-job settings.",
       "properties": {
+        "agent_idle_timeout_secs": {
+          "default": 600,
+          "description": "Seconds an agent run may go without tokens or tool activity before\nit is interrupted (`0` = unlimited); a job's `timeout.idle` wins.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "allow_agent_scheduling": {
+          "default": false,
+          "description": "Offer the `cronjob` tool inside scheduled runs.",
+          "type": "boolean"
+        },
+        "catch_up_missed": {
+          "default": true,
+          "description": "Collapse missed occurrences of a job without an explicit `grace`\ninto one catch-up run (otherwise they are recorded `skipped_late`).",
+          "type": "boolean"
+        },
+        "completed_retention_secs": {
+          "default": 604800,
+          "description": "Seconds completed jobs are kept before deletion (`0` = never\ndeleted).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "continuable": {
+          "default": false,
+          "description": "Deliveries of jobs that do not set `attach_to_session` open a\nconversation a reply continues.",
+          "type": "boolean"
+        },
+        "continuable_surface": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ContinuableSurface"
+          },
+          "default": {},
+          "description": "Per platform: `thread` (a new thread per continuable delivery) or\n`in_channel` (posted top-level, seeding the channel's session) on\nadapters that support it.",
+          "type": "object"
+        },
+        "default_toolsets": {
+          "description": "Toolsets of runs whose job names none; unset uses the cron\nsurface's default (`toolsets.surfaces.cron`, else the enabled\ntoolsets).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "delivery": {
+          "$ref": "#/$defs/CronDeliveryConfig",
+          "default": {
+            "notify": true,
+            "threads": {}
+          },
+          "description": "How scheduled deliveries are sent."
+        },
+        "failure_nudge_threshold": {
+          "default": 3,
+          "description": "Consecutive failures of a recurring job after which its failure\nnotice suggests fixing, pausing or removing it (`0` = never).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failure_repeat_alert_secs": {
+          "default": 21600,
+          "description": "Seconds after which a failure incident still alerted sends one\nreminder (`0` = alert on every failing run).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_parallel_jobs": {
+          "default": 4,
+          "description": "Runs executing at once per profile (1 = serial).",
+          "format": "uint32",
+          "maximum": 64,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_run_secs": {
+          "default": 3600,
+          "description": "Seconds a run may take in all (`0` = unlimited); a job's\n`timeout.wall` wins.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "model": {
+          "description": "The model of unpinned jobs (unset: the profile's main model at fire\ntime).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model_provider": {
+          "description": "The provider of `cron.model`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "preflight": {
+          "default": true,
+          "description": "Check a job's credential, skills and delivery adapters before each\nrun; a failure is recorded `blocked_config` without a model call.",
+          "type": "boolean"
+        },
+        "provider": {
+          "$ref": "#/$defs/CronProvider",
+          "default": "builtin",
+          "description": "The trigger: `builtin` or `managed`."
+        },
+        "retry_unreachable": {
+          "default": true,
+          "description": "Re-run a recurring job 5, 15 and 30 minutes after it failed to\nreach the model (network or DNS), without a failure notice.",
+          "type": "boolean"
+        },
+        "run_retention_secs": {
+          "default": 7776000,
+          "description": "Seconds run records are kept (`0` = forever).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "script_timeout_secs": {
+          "default": 120,
+          "description": "Seconds a job script may run before it is killed.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "tick_interval_secs": {
+          "default": 30,
+          "description": "Seconds between the built-in trigger's evaluations of due jobs (it\nalso wakes at the earliest next run).",
+          "format": "uint64",
+          "maximum": 300,
+          "minimum": 10,
+          "type": "integer"
+        },
         "timezone": {
           "description": "IANA time zone of this profile (`Europe/Lisbon`); unset uses the\nhost's zone.",
           "type": [
             "string",
             "null"
           ]
+        },
+        "wrap_response": {
+          "default": true,
+          "description": "Frame delivered output with the job name and a pause hint.",
+          "type": "boolean"
         }
       },
       "type": "object",
       "x-apply": "live"
+    },
+    "CronDeliveryConfig": {
+      "additionalProperties": false,
+      "description": "The `[cron.delivery]` table.",
+      "properties": {
+        "notify": {
+          "default": true,
+          "description": "Send scheduled output and failure notices as notifying messages,\nnever muted as warnings.",
+          "type": "boolean"
+        },
+        "threads": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Per platform: the thread or topic id home-chat deliveries go to\n(explicit `<adapter>:<chat>:<thread>` targets win).",
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "CronProvider": {
+      "description": "Which trigger signals due occurrences (spec: scheduled-jobs, Pluggable\ntrigger provider).",
+      "oneOf": [
+        {
+          "const": "builtin",
+          "description": "The ticker inside the gateway daemon (or `prometheus cron tick`).",
+          "type": "string"
+        },
+        {
+          "const": "managed",
+          "description": "An external managed scheduler; falls back to `builtin` with a\nwarning while it is unavailable.",
+          "type": "string"
+        }
+      ]
     },
     "DedupConfig": {
       "additionalProperties": false,
@@ -1215,6 +1608,16 @@
           "type": "string"
         },
         {
+          "const": "chromium_sandbox",
+          "description": "Chromium's own sandbox (`browser.chromium_args` `--no-sandbox`...).",
+          "type": "string"
+        },
+        {
+          "const": "web_security",
+          "description": "Chromium's same-origin policy (`--disable-web-security`...).",
+          "type": "string"
+        },
+        {
           "const": "all",
           "description": "Every feature.",
           "type": "string"
@@ -1235,6 +1638,169 @@
           "type": "string"
         }
       ]
+    },
+    "DelegationConfig": {
+      "additionalProperties": false,
+      "description": "The `[delegation]` section.",
+      "properties": {
+        "api_key_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Name of the secret holding the direct endpoint's key."
+        },
+        "background": {
+          "$ref": "#/$defs/BackgroundMode",
+          "default": "auto",
+          "description": "`auto` runs top-level spawns in the background where the session\ncan receive later completions; `never` always waits."
+        },
+        "base_url": {
+          "description": "A direct endpoint children call instead of a provider route\n(`model`, or the parent's model id, names the model there).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "child_approval": {
+          "$ref": "#/$defs/ChildApproval",
+          "default": "deny",
+          "description": "What an approval a child needs does: `deny` it, or `escalate` it to\nthe root session's surface."
+        },
+        "escalation_timeout_secs": {
+          "default": 300,
+          "description": "Seconds an escalated approval waits for an answer before it is\ndenied.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "gateway_mode": {
+          "$ref": "#/$defs/GatewayDelegationMode",
+          "default": "auto",
+          "description": "How messaging sessions run their children: `auto` waits for them\ninside the call when the platform's interim assistant messages are\noff, `inline` always waits, `background` never does."
+        },
+        "inactivity_timeout_secs": {
+          "default": 0,
+          "description": "Seconds without progress after which a child counts as stalled\n(`0` uses the built-in 450 s between iterations and 1200 s inside\none tool call; otherwise at least 30).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "independent_completions": {
+          "default": false,
+          "description": "Deliver each ungrouped task's result (and each `group`'s results)\nas its own completion as soon as it is ready.",
+          "type": "boolean"
+        },
+        "max_concurrent_children": {
+          "default": 8,
+          "description": "Children running at once across the profile, synchronous and\nbackground alike; further spawns queue.",
+          "format": "uint32",
+          "maximum": 64,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_iterations": {
+          "default": 150,
+          "description": "Model calls one child may make.",
+          "format": "uint32",
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_queued": {
+          "default": 32,
+          "description": "Spawns waiting for a free slot before new ones are refused with\n`delegation.at_capacity`.",
+          "format": "uint32",
+          "maximum": 1024,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_spawn_depth": {
+          "default": 1,
+          "description": "How deep children may spawn their own children; a child below this\ndepth keeps the `delegation` toolset (an orchestrator), the others\nare leaves.",
+          "format": "uint32",
+          "maximum": 4,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_summary_chars": {
+          "default": 24000,
+          "description": "Most characters of one child's summary inserted into the parent's\ncontext (`0` disables the cap); the full text stays readable.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_tasks_per_call": {
+          "default": 8,
+          "description": "Tasks one `delegate_task` call may carry.",
+          "format": "uint32",
+          "maximum": 64,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "model": {
+          "description": "The model children run on unless the task or its agent names one\n(`provider/model`); unset: the parent's current route.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "oneshot_max_children": {
+          "default": 2,
+          "description": "Children a finite one-shot run (`chat -z`, cron, eval) may spawn\n(`0` is unlimited); interactive and gateway sessions are never\ncharged.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "progress_events": {
+          "default": true,
+          "description": "Publish `subagent.*` progress events on the root session's stream.",
+          "type": "boolean"
+        },
+        "request_overrides": {
+          "additionalProperties": true,
+          "description": "Request parameters set on every child model call, winning over the\nroute's own; the `extra_body` table is merged one level deep into\nthe request body.",
+          "type": "object"
+        },
+        "review": {
+          "$ref": "#/$defs/ReviewConfig",
+          "default": {},
+          "description": "The model `/review` runs on (unset: the session's route)."
+        },
+        "router": {
+          "default": "default",
+          "description": "The delegation router: `default`, or a router a plugin provides.\nAn unavailable router refuses every spawn.",
+          "type": "string"
+        },
+        "wire_format": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WireFormat"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Wire format of the direct endpoint (default: inferred from its\nURL, as for a custom provider)."
+        },
+        "worktree_branch_prefix": {
+          "default": "prometheus",
+          "description": "Prefix of a child's worktree branch (`<prefix>/subagent-<id>`).",
+          "type": "string"
+        },
+        "worktree_isolation": {
+          "default": false,
+          "description": "Run each child in its own git worktree and branch when the parent\nuses the local terminal backend inside a git repository.",
+          "type": "boolean"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
     },
     "DeliveryConfig": {
       "additionalProperties": false,
@@ -1559,6 +2125,19 @@
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
+        },
+        "snapshot": {
+          "$ref": "#/$defs/SnapshotConfig",
+          "default": {
+            "enabled": true,
+            "max_bytes": 1073741824,
+            "max_checkpoints": 20,
+            "max_file_bytes": 10485760,
+            "prune_interval_secs": 86400,
+            "retention_secs": 604800,
+            "terminal": "off"
+          },
+          "description": "File snapshots, undo and rollback checkpoints."
         }
       },
       "type": "object",
@@ -2023,6 +2602,26 @@
       "type": "object",
       "x-apply": "restart"
     },
+    "GatewayDelegationMode": {
+      "description": "How a messaging session runs its children.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Wait inside the call where interim assistant messages are off.",
+          "type": "string"
+        },
+        {
+          "const": "inline",
+          "description": "Always wait inside the call.",
+          "type": "string"
+        },
+        {
+          "const": "background",
+          "description": "Never wait: children report as later completions.",
+          "type": "string"
+        }
+      ]
+    },
     "GatewayDisplay": {
       "additionalProperties": false,
       "description": "`[gateway.display]`.",
@@ -2292,6 +2891,46 @@
       },
       "type": "object"
     },
+    "GoalsConfig": {
+      "additionalProperties": false,
+      "description": "The `[goals]` section: the `/goal` judge loop's bounds.",
+      "properties": {
+        "gate_max_retries": {
+          "default": 3,
+          "description": "Consecutive failures of a quality gate after which the goal pauses.",
+          "format": "uint32",
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "gate_timeout_secs": {
+          "default": 300,
+          "description": "Seconds one quality gate command may run.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_turns": {
+          "default": 20,
+          "description": "Continuation turns a goal may use before it pauses.",
+          "format": "uint32",
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_wait_secs": {
+          "default": 1800,
+          "description": "Longest wait of a goal parked on a process (seconds).",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
     "GuardrailThresholds": {
       "additionalProperties": false,
       "description": "Repetition thresholds of the tool loop guardrails.",
@@ -2341,6 +2980,22 @@
           "type": "string"
         }
       ]
+    },
+    "HeartbeatConfig": {
+      "additionalProperties": false,
+      "description": "The `[heartbeat]` section.",
+      "properties": {
+        "min_interval_secs": {
+          "default": 60,
+          "description": "Shortest `/heartbeat every` interval (seconds).",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
     },
     "HomeChannel": {
       "additionalProperties": false,
@@ -2559,6 +3214,247 @@
         }
       },
       "type": "object"
+    },
+    "LoopsConfig": {
+      "additionalProperties": false,
+      "description": "The `[loops]` section: `/loop` cadence bounds.",
+      "properties": {
+        "max_ticks": {
+          "default": 100,
+          "description": "Wakeups after which a loop pauses (`0` = unlimited).",
+          "format": "uint32",
+          "maximum": 100000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "min_interval_secs": {
+          "default": 30,
+          "description": "Shortest fixed interval a loop may use (seconds).",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "self_paced_ceiling_secs": {
+          "default": 900,
+          "description": "Longest wait of a self-paced loop (seconds).",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "self_paced_floor_secs": {
+          "default": 60,
+          "description": "First wait of a self-paced loop (seconds).",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
+    "LspConfig": {
+      "additionalProperties": false,
+      "description": "The `[lsp]` section.",
+      "properties": {
+        "broken_retry_secs": {
+          "default": 0,
+          "description": "After a server fails to start or times out, skip it for its\nworkspace this long (`0` = until `prometheus lsp restart` or the\nprocess exits).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Run language servers after `write_file` and `patch`; `false` starts\nno server, watcher or background task.",
+          "type": "boolean"
+        },
+        "exclude_roots": {
+          "default": [],
+          "description": "Git roots where no server runs (globs, `~` expanded; a bare path\nalso matches everything below it).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "idle_timeout_secs": {
+          "default": 600,
+          "description": "Shut down a server idle this long; it restarts on demand (`0` =\nnever).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "install_strategy": {
+          "$ref": "#/$defs/LspInstallStrategy",
+          "default": "auto",
+          "description": "`auto` installs missing `npm`, `go` and `pip` servers on first use;\n`manual` uses only binaries on `PATH`."
+        },
+        "package_manager": {
+          "$ref": "#/$defs/LspPackageManager",
+          "default": "npm",
+          "description": "The package manager of `npm`-method installs; one that is not\ninstalled skips the install (never another manager)."
+        },
+        "servers": {
+          "additionalProperties": {
+            "$ref": "#/$defs/LspServerConfig"
+          },
+          "default": {},
+          "description": "Overrides of built-in servers by id, and custom servers under any\nother key.",
+          "type": "object"
+        },
+        "trusted_workspaces": {
+          "default": [],
+          "description": "Workspaces trusted beyond the one the session was pointed at\n(globs, `~` expanded; a bare path also matches everything below\nit). Servers that execute project code start only in trusted\nworkspaces.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "wait_mode": {
+          "$ref": "#/$defs/LspWaitMode",
+          "default": "document",
+          "description": "`document` checks the edited file; `full` also asks for workspace\ndiagnostics."
+        },
+        "wait_timeout_ms": {
+          "default": 5000,
+          "description": "Longest wait for a verdict before the turn's final answer is\naccepted, and the bound of one check.",
+          "format": "uint64",
+          "maximum": 600000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "warmup_timeout_ms": {
+          "default": 0,
+          "description": "Bound of the first check against a server that is not running yet\n(`0` = `wait_timeout_ms`).",
+          "format": "uint64",
+          "maximum": 600000,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "LspInstallStrategy": {
+      "description": "How missing servers are obtained.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Install on first use into `<PROMETHEUS_HOME>/runtimes/lsp/`.",
+          "type": "string"
+        },
+        {
+          "const": "manual",
+          "description": "Only binaries on `PATH`.",
+          "type": "string"
+        }
+      ]
+    },
+    "LspPackageManager": {
+      "description": "The package manager of `npm`-method installs.",
+      "oneOf": [
+        {
+          "const": "npm",
+          "description": "npm (the managed Node's own when installed).",
+          "type": "string"
+        },
+        {
+          "const": "pnpm",
+          "description": "pnpm.",
+          "type": "string"
+        },
+        {
+          "const": "yarn",
+          "description": "Yarn.",
+          "type": "string"
+        }
+      ]
+    },
+    "LspServerConfig": {
+      "additionalProperties": false,
+      "description": "One `[lsp.servers.<id>]` entry: an override of a built-in server, or\na custom server (`command` and `extensions` required).",
+      "properties": {
+        "command": {
+          "default": null,
+          "description": "The server's argv; bypasses installation.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "description": {
+          "default": null,
+          "description": "Custom servers: what it is, for `prometheus lsp list`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "disabled": {
+          "default": false,
+          "description": "Never start this server.",
+          "type": "boolean"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Extra environment of the server (non-secret values).",
+          "type": "object"
+        },
+        "extensions": {
+          "default": [],
+          "description": "Custom servers: the file extensions it checks (`.ml2`).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "initialization_options": {
+          "additionalProperties": true,
+          "default": {},
+          "description": "Merged into the server's initialization options.",
+          "type": "object"
+        },
+        "language_id": {
+          "default": null,
+          "description": "Custom servers: the LSP language id (default: the extension).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "root_markers": {
+          "default": [],
+          "description": "Custom servers: files whose directory is the server's root.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "LspWaitMode": {
+      "description": "What a check asks the server for.",
+      "oneOf": [
+        {
+          "const": "document",
+          "description": "Diagnostics of the edited file.",
+          "type": "string"
+        },
+        {
+          "const": "full",
+          "description": "The edited file's and the workspace's.",
+          "type": "string"
+        }
+      ]
     },
     "MarkdownMode": {
       "description": "Final response rendering.",
@@ -3277,6 +4173,38 @@
         }
       },
       "type": "object"
+    },
+    "ModalConfig": {
+      "additionalProperties": false,
+      "description": "The `[terminal.modal]` section.",
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/ModalMode",
+          "default": "auto",
+          "description": "How the plugin authenticates."
+        }
+      },
+      "type": "object"
+    },
+    "ModalMode": {
+      "description": "`terminal.modal.mode`.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "`direct` when Modal secrets exist, else `managed` when a\nsubscription is signed in, else unavailable.",
+          "type": "string"
+        },
+        {
+          "const": "direct",
+          "description": "The user's `MODAL_TOKEN_ID`/`MODAL_TOKEN_SECRET` secrets.",
+          "type": "string"
+        },
+        {
+          "const": "managed",
+          "description": "A subscription gateway credential.",
+          "type": "string"
+        }
+      ]
     },
     "ModelAlias": {
       "anyOf": [
@@ -5207,6 +6135,27 @@
         }
       ]
     },
+    "ReviewConfig": {
+      "additionalProperties": false,
+      "description": "`[delegation.review]`.",
+      "properties": {
+        "model": {
+          "description": "The reviewer's model (with `provider`, a model id there; alone,\n`provider/model`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provider": {
+          "description": "Provider of the reviewer's model.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "SandboxConfig": {
       "additionalProperties": false,
       "description": "The `[security.sandbox]` section.",
@@ -5531,6 +6480,18 @@
         }
       ]
     },
+    "SingularityConfig": {
+      "additionalProperties": false,
+      "description": "The `[terminal.singularity]` section.",
+      "properties": {
+        "image": {
+          "default": "",
+          "description": "A SIF path or a `docker://` reference.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "SkillsConfig": {
       "additionalProperties": false,
       "description": "The `[skills]` section.",
@@ -5637,6 +6598,73 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "SnapshotConfig": {
+      "additionalProperties": false,
+      "description": "The `[files.snapshot]` section.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Record file-tool changes (`/undo`) and checkpoints (`/rollback`);\n`chat --checkpoints` / `--no-checkpoints` override it per run.",
+          "type": "boolean"
+        },
+        "max_bytes": {
+          "default": 1073741824,
+          "description": "The profile's snapshot store is pruned, oldest first, above this.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_checkpoints": {
+          "default": 20,
+          "description": "Checkpoints kept per workspace.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_file_bytes": {
+          "default": 10485760,
+          "description": "Larger files are listed as skipped instead of stored.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "prune_interval_secs": {
+          "default": 86400,
+          "description": "Least time between automatic prunes.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "retention_secs": {
+          "default": 604800,
+          "description": "Snapshots unused this long are pruned.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "terminal": {
+          "$ref": "#/$defs/SnapshotTerminal",
+          "default": "off",
+          "description": "Also checkpoint before destructive terminal commands (`rm`, `mv`,\n`sed -i`, `>`, `git reset`...)."
+        }
+      },
+      "type": "object"
+    },
+    "SnapshotTerminal": {
+      "description": "`files.snapshot.terminal`.",
+      "oneOf": [
+        {
+          "const": "off",
+          "description": "Terminal commands never checkpoint.",
+          "type": "string"
+        },
+        {
+          "const": "destructive",
+          "description": "Checkpoint the command's project before a destructive command.",
+          "type": "string"
+        }
+      ]
+    },
     "SnapshotsConfig": {
       "additionalProperties": false,
       "description": "The `[snapshots]` section.",
@@ -5656,6 +6684,13 @@
       "additionalProperties": false,
       "description": "The `[terminal.ssh]` section.",
       "properties": {
+        "config_file": {
+          "description": "An `ssh_config` file passed with `-F` (identity, known hosts, jump\nhosts); unset uses the user's.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "host": {
           "description": "Host name.",
           "type": [
@@ -5677,6 +6712,11 @@
             "string",
             "null"
           ]
+        },
+        "workspace": {
+          "default": "~/prometheus-workspace",
+          "description": "The remote workspace synced back to the host.",
+          "type": "string"
         }
       },
       "type": "object"
@@ -5923,10 +6963,18 @@
             "cpus": 1.0,
             "disk_bytes": 53687091200,
             "env": {},
+            "extra_args": [],
+            "image": "",
             "memory_bytes": 5368709120,
+            "mount_workspace": true,
+            "network": true,
             "persistent": true,
             "pids_limit": 2048,
-            "shm_size": "1g"
+            "run_as_host_user": false,
+            "runtime": "auto",
+            "shared_key": "",
+            "shm_size": "1g",
+            "volumes": []
           },
           "description": "Container backend."
         },
@@ -5964,9 +7012,21 @@
           "minimum": 0,
           "type": "integer"
         },
+        "modal": {
+          "$ref": "#/$defs/ModalConfig",
+          "default": {
+            "mode": "auto"
+          },
+          "description": "The first-party `modal` backend plugin."
+        },
         "persistent_shell": {
           "default": true,
           "description": "Keep one shell per session.",
+          "type": "boolean"
+        },
+        "process_wait_auto_notify": {
+          "default": true,
+          "description": "Two `process` `poll`/`wait` calls in a row that find a running\nprocess silent switch on its completion notification (where the\nsession can receive one).",
           "type": "boolean"
         },
         "shell_init_files": {
@@ -5984,12 +7044,34 @@
           "minimum": 0,
           "type": "integer"
         },
+        "singularity": {
+          "$ref": "#/$defs/SingularityConfig",
+          "default": {
+            "image": ""
+          },
+          "description": "The built-in `singularity` backend."
+        },
         "ssh": {
           "$ref": "#/$defs/SshConfig",
           "default": {
-            "port": 22
+            "port": 22,
+            "workspace": "~/prometheus-workspace"
           },
           "description": "SSH backend."
+        },
+        "sync_back": {
+          "description": "Copy files changed in a remote workspace back to the host workspace\nat session end and on `/sync`; unset is `true` for `ssh` and `false`\nfor every other backend.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "sync_back_max_bytes": {
+          "default": 2147483648,
+          "description": "Total bytes one sync-back copies; larger files are skipped and\nlisted.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
         },
         "timeout_secs": {
           "default": 180,
@@ -7080,6 +8162,13 @@
       "additionalProperties": false,
       "description": "One webhook route.",
       "properties": {
+        "cron_job": {
+          "description": "Fire this scheduled job (its id or name) instead of a turn: the\nrendered prompt becomes the run's `## Run Context`, and the job's\nown delivery, skills and toolsets apply (`deliver` and `skills`\nare ignored). A paused or running job drops the event.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "deliver": {
           "description": "Where the answer goes: `origin` (the HTTP caller's response),\n`log` (recorded under `<profile>/logs/webhook/<route>.jsonl`),\n`github_comment` (a comment on the payload's pull request or issue)\nor a send target `platform[:chat_id[:thread_id]]`. Unset: `origin`.",
           "type": [
@@ -7252,6 +8341,45 @@
           "type": "string"
         }
       ]
+    },
+    "WorktreesConfig": {
+      "additionalProperties": false,
+      "description": "The `[worktrees]` section (spec: git-worktrees).",
+      "properties": {
+        "archive_dirty": {
+          "default": true,
+          "description": "Archive dirty or unpushed trees past their idle tier before\nremoving them; `false` keeps such trees.",
+          "type": "boolean"
+        },
+        "archive_max_file_bytes": {
+          "default": 52428800,
+          "description": "Untracked files larger than this keep a tree from the sweep\n(`keep-large-untracked`) and are left out of archives.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "archive_retention_secs": {
+          "default": 2592000,
+          "description": "Seconds an archive is kept before the sweep deletes it (`0` =\nforever).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_total_bytes": {
+          "default": 0,
+          "description": "Total bytes of trees above which the oldest idle ones past their\ntier are archived and removed first (`0` = off).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sync_remote": {
+          "default": true,
+          "description": "Fetch the default remote before creating a tree (a failed fetch\nfalls back to the local tip).",
+          "type": "boolean"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -7308,10 +8436,18 @@
     "browser": {
       "$ref": "#/$defs/BrowserConfig",
       "default": {
+        "auto_local_for_private_urls": true,
         "dialog_policy": "must_respond",
         "dialog_timeout_secs": 300,
+        "executable_path": "",
+        "headed": false,
         "inactivity_timeout_secs": 120,
-        "provider": "local"
+        "launch_timeout_secs": 30,
+        "provider": "local",
+        "real_profile_autoclose": false,
+        "real_profile_pin": "",
+        "use_real_profile": false,
+        "user_data_dir": ""
       },
       "description": "Browser tool sessions."
     },
@@ -7345,6 +8481,26 @@
         "confirm_destructive": true
       },
       "description": "Line-mode CLI behaviour."
+    },
+    "code_execution": {
+      "$ref": "#/$defs/CodeExecutionConfig",
+      "default": {
+        "allowed_tools": [
+          "read_file",
+          "write_file",
+          "search_files",
+          "patch",
+          "terminal",
+          "web_search",
+          "web_extract"
+        ],
+        "kernel_idle_timeout_secs": 1800,
+        "max_session_kernels": 4,
+        "max_tool_calls": 50,
+        "mode": "project",
+        "timeout_secs": 300
+      },
+      "description": "Programmatic tool calling (`execute_code`)."
     },
     "compression": {
       "$ref": "#/$defs/CompressionConfig",
@@ -7387,8 +8543,54 @@
     },
     "cron": {
       "$ref": "#/$defs/CronConfig",
-      "default": {},
+      "default": {
+        "agent_idle_timeout_secs": 600,
+        "allow_agent_scheduling": false,
+        "catch_up_missed": true,
+        "completed_retention_secs": 604800,
+        "continuable": false,
+        "continuable_surface": {},
+        "delivery": {
+          "notify": true,
+          "threads": {}
+        },
+        "failure_nudge_threshold": 3,
+        "failure_repeat_alert_secs": 21600,
+        "max_parallel_jobs": 4,
+        "max_run_secs": 3600,
+        "preflight": true,
+        "provider": "builtin",
+        "retry_unreachable": true,
+        "run_retention_secs": 7776000,
+        "script_timeout_secs": 120,
+        "tick_interval_secs": 30,
+        "wrap_response": true
+      },
       "description": "Profile time zone (scheduler keys arrive with M2)."
+    },
+    "delegation": {
+      "$ref": "#/$defs/DelegationConfig",
+      "default": {
+        "background": "auto",
+        "child_approval": "deny",
+        "escalation_timeout_secs": 300,
+        "gateway_mode": "auto",
+        "inactivity_timeout_secs": 0,
+        "independent_completions": false,
+        "max_concurrent_children": 8,
+        "max_iterations": 150,
+        "max_queued": 32,
+        "max_spawn_depth": 1,
+        "max_summary_chars": 24000,
+        "max_tasks_per_call": 8,
+        "oneshot_max_children": 2,
+        "progress_events": true,
+        "review": {},
+        "router": "default",
+        "worktree_branch_prefix": "prometheus",
+        "worktree_isolation": false
+      },
+      "description": "Subagent delegation."
     },
     "display": {
       "$ref": "#/$defs/DisplayConfig",
@@ -7429,7 +8631,16 @@
     "files": {
       "$ref": "#/$defs/FilesConfig",
       "default": {
-        "read_max_chars": 100000
+        "read_max_chars": 100000,
+        "snapshot": {
+          "enabled": true,
+          "max_bytes": 1073741824,
+          "max_checkpoints": 20,
+          "max_file_bytes": 10485760,
+          "prune_interval_secs": 86400,
+          "retention_secs": 604800,
+          "terminal": "off"
+        }
       },
       "description": "`read_file` limits."
     },
@@ -7520,6 +8731,23 @@
       },
       "description": "The profile's part in the home's gateway daemon."
     },
+    "goals": {
+      "$ref": "#/$defs/GoalsConfig",
+      "default": {
+        "gate_max_retries": 3,
+        "gate_timeout_secs": 300,
+        "max_turns": 20,
+        "max_wait_secs": 1800
+      },
+      "description": "`/goal`: the judge loop's turn budget, quality gates and waits."
+    },
+    "heartbeat": {
+      "$ref": "#/$defs/HeartbeatConfig",
+      "default": {
+        "min_interval_secs": 60
+      },
+      "description": "`/heartbeat` bounds."
+    },
     "hooks": {
       "$ref": "#/$defs/HooksConfig",
       "default": {
@@ -7534,6 +8762,33 @@
         "level": "info"
       },
       "description": "Structured log files."
+    },
+    "loops": {
+      "$ref": "#/$defs/LoopsConfig",
+      "default": {
+        "max_ticks": 100,
+        "min_interval_secs": 30,
+        "self_paced_ceiling_secs": 900,
+        "self_paced_floor_secs": 60
+      },
+      "description": "`/loop` cadence bounds."
+    },
+    "lsp": {
+      "$ref": "#/$defs/LspConfig",
+      "default": {
+        "broken_retry_secs": 0,
+        "enabled": true,
+        "exclude_roots": [],
+        "idle_timeout_secs": 600,
+        "install_strategy": "auto",
+        "package_manager": "npm",
+        "servers": {},
+        "trusted_workspaces": [],
+        "wait_mode": "document",
+        "wait_timeout_ms": 5000,
+        "warmup_timeout_ms": 0
+      },
+      "description": "Language server diagnostics after file edits."
     },
     "mcp": {
       "$ref": "#/$defs/McpConfig",
@@ -7809,21 +9064,38 @@
           "cpus": 1.0,
           "disk_bytes": 53687091200,
           "env": {},
+          "extra_args": [],
+          "image": "",
           "memory_bytes": 5368709120,
+          "mount_workspace": true,
+          "network": true,
           "persistent": true,
           "pids_limit": 2048,
-          "shm_size": "1g"
+          "run_as_host_user": false,
+          "runtime": "auto",
+          "shared_key": "",
+          "shm_size": "1g",
+          "volumes": []
         },
         "degraded_mode": "degrade",
         "env_passthrough": [],
         "idle_lifetime_secs": 300,
         "max_foreground_secs": 600,
+        "modal": {
+          "mode": "auto"
+        },
         "persistent_shell": true,
+        "process_wait_auto_notify": true,
         "shell_init_files": [],
         "shell_init_timeout_secs": 10,
-        "ssh": {
-          "port": 22
+        "singularity": {
+          "image": ""
         },
+        "ssh": {
+          "port": 22,
+          "workspace": "~/prometheus-workspace"
+        },
+        "sync_back_max_bytes": 2147483648,
         "timeout_secs": 180,
         "windows_shell": "auto"
       },
@@ -7965,6 +9237,17 @@
         "searxng": {}
       },
       "description": "Web tools."
+    },
+    "worktrees": {
+      "$ref": "#/$defs/WorktreesConfig",
+      "default": {
+        "archive_dirty": true,
+        "archive_max_file_bytes": 52428800,
+        "archive_retention_secs": 2592000,
+        "max_total_bytes": 0,
+        "sync_remote": true
+      },
+      "description": "Git worktrees: creation, the stale-tree sweep and archives."
     }
   },
   "title": "Prometheus config.toml",

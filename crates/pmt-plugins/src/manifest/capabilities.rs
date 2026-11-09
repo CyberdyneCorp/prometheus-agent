@@ -31,6 +31,8 @@ const KEYS: &[&str] = &[
     "platform_actions",
     "subprocess",
     "ui",
+    "subagents",
+    "credentials",
 ];
 
 /// The keys of the `llm` table.
@@ -85,6 +87,11 @@ pub struct Declared {
     pub subprocess: bool,
     /// Shows a UI panel.
     pub ui: bool,
+    /// Launches subagents (the `subagents` host interface).
+    pub subagents: bool,
+    /// Host credential handles it sends requests with (the `credentials`
+    /// host interface).
+    pub credentials: Vec<String>,
 }
 
 /// `llm = { enabled, allow_model_override, allow_provider_override, allowed_models }`.
@@ -145,6 +152,8 @@ impl Declared {
             platform_actions: strings(table, "platform_actions")?,
             subprocess: flag(table, "subprocess")?,
             ui: flag(table, "ui")?,
+            subagents: flag(table, "subagents")?,
+            credentials: strings(table, "credentials")?,
         };
         declared.check()?;
         Ok(declared)
@@ -197,13 +206,14 @@ impl Declared {
                 .iter()
                 .map(|t| format!("tools.override:{t}")),
         );
-        let rights: [(&str, &Vec<String>); 6] = [
+        let rights: [(&str, &Vec<String>); 7] = [
             ("hook", &self.hooks),
             ("command", &self.commands),
             ("cli_command", &self.cli_commands),
             ("provider", &self.providers),
             ("provider_override", &self.providers_override),
             ("platform_action", &self.platform_actions),
+            ("credential", &self.credentials),
         ];
         for (right, values) in rights {
             texts.extend(values.iter().map(|v| format!("plugin.{right}:{v}")));
@@ -215,6 +225,7 @@ impl Declared {
             (self.approval_transport, "plugin.approval_transport"),
             (self.inject_messages, "plugin.inject_messages"),
             (self.subprocess, "process.spawn:*"),
+            (self.subagents, "plugin.subagents"),
         ] {
             if on {
                 texts.push(text.to_owned());
@@ -320,6 +331,7 @@ fn label_text(text: &str) -> String {
         "plugin.provider" => "providers",
         "plugin.provider_override" => "providers_override",
         "plugin.platform_action" => "platform_actions",
+        "plugin.credential" => "credentials",
         "plugin.prompt_section" => "prompt_section",
         "plugin.llm_model" => "llm model override",
         "plugin.llm_provider_override" => "llm provider override",
@@ -375,5 +387,9 @@ fn describe_right(right: PluginRight, target: Option<&str>) -> String {
         PluginRight::LlmModel if target == "*" => "choose any model".to_owned(),
         PluginRight::LlmModel => format!("choose the model {target}"),
         PluginRight::LlmProviderOverride => "choose the provider".to_owned(),
+        PluginRight::Subagents => "launch subagents in the calling session".to_owned(),
+        PluginRight::Credential => {
+            format!("send requests with the host's {target} credential (never shown to the plugin)")
+        }
     }
 }

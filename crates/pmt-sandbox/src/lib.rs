@@ -20,12 +20,17 @@ pub mod backend;
 #[cfg(any(target_os = "linux", windows))]
 mod carve;
 pub mod console;
+pub mod container;
+#[cfg(unix)]
+pub mod fds;
 pub mod launcher;
 mod locations;
 pub mod policy;
 pub mod relay;
 pub mod report;
 mod sandbox;
+pub mod singularity;
+pub mod ssh;
 
 #[cfg(target_os = "linux")]
 #[path = "linux/mod.rs"]
@@ -44,6 +49,7 @@ mod platform;
 mod platform;
 
 pub use launcher::LAUNCH_ARG;
+pub use locations::credential_stores;
 pub use policy::{Paths, Policy, Ports, ResourceLimits};
 pub use relay::{Attached, Relay};
 pub use report::{Enforcement, Feature, FeatureReport, Gap, Level, StrengthReport};

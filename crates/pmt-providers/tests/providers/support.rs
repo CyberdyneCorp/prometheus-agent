@@ -117,6 +117,7 @@ pub(crate) fn request(user: &str) -> Request {
         max_output_tokens: Some(1024),
         cache: pmt_providers::request::CacheControl::default(),
         reasoning: None,
+        body_overrides: None,
     }
 }
 

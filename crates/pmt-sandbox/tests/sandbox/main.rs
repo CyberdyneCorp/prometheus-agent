@@ -4,6 +4,8 @@
 
 mod backend;
 mod common;
+#[cfg(unix)]
+mod container;
 mod degrade;
 #[cfg(target_os = "linux")]
 mod linux;

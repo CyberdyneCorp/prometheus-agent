@@ -9,7 +9,12 @@ all-features = true
 # the check; an exception goes in `ignore` with the advisory id and a reason.
 unmaintained = "all"
 yanked = "deny"
-ignore = []
+ignore = [
+    # pin-utils (archived upstream, no fix exists) comes only through
+    # nix 0.26 of expectrl, the test-only PTY driver of the line-interface
+    # tests; nothing shipped links it.
+    { id = "RUSTSEC-2026-0441", reason = "test-only dependency via expectrl; no maintained release exists" },
+]
 
 [licenses]
 allow = [

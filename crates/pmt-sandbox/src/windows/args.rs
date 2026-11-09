@@ -1,19 +1,22 @@
 //! The launcher's argument protocol and Windows command-line quoting.
 //!
-//! `<launcher> __pmt-sandbox-launch <container> <i|n|p<port>> <s|-> <limits|-> -- <program> [args...]`:
+//! `<launcher> __pmt-sandbox-launch <container> <i|n|p<port>> <s|-> <limits|-> <handles|-> -- <program> [args...]`:
 //! the `AppContainer` profile name, the child's network (`i`: the
 //! `internetClient` capability, `n`: none, `p<port>`: only through the
 //! egress proxy on that loopback port, see [`super::relay`]), whether it
-//! may start processes, and the Job Object's resource limits as
-//! `<processes>:<memory bytes>`.
+//! may start processes, the Job Object's resource limits as
+//! `<processes>:<memory bytes>`, and the handle values (decimal, comma
+//! separated, prefixed `h`) the child inherits beside its standard
+//! handles: the launcher inherited them from its caller under the same
+//! values, so the caller can name them on the child's command line (a
+//! confined browser's DevTools pipe, `--remote-debugging-io-pipes`).
 
 use std::ffi::{OsStr, OsString};
 use std::os::windows::ffi::OsStrExt;
 
 use crate::policy::ResourceLimits;
 
-const USAGE: &str =
-    "usage: __pmt-sandbox-launch <container> <i|n|p<port>> <s|-> <limits|-> -- <program> [args...]";
+const USAGE: &str = "usage: __pmt-sandbox-launch <container> <i|n|p<port>> <s|-> <limits|-> <handles|-> -- <program> [args...]";
 
 /// The network a confined child gets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,39 +54,43 @@ pub(crate) struct LaunchSpec {
     pub(crate) net: Net,
     pub(crate) spawn: bool,
     pub(crate) limits: Option<ResourceLimits>,
+    /// Handle values passed on to the child.
+    pub(crate) handles: Vec<usize>,
     pub(crate) program: OsString,
     pub(crate) args: Vec<OsString>,
 }
 
 impl LaunchSpec {
-    /// The launcher arguments up to and including the program.
-    pub(crate) fn head(
-        container: &str,
-        net: Net,
-        spawn: bool,
-        limits: Option<ResourceLimits>,
-        program: &OsStr,
-    ) -> Vec<OsString> {
-        let limits = limits.map_or_else(
+    /// The launcher arguments up to and including the program (`args`
+    /// are added by the caller).
+    pub(crate) fn head(&self) -> Vec<OsString> {
+        let limits = self.limits.map_or_else(
             || "-".to_owned(),
             |l| format!("{}:{}", l.processes, l.memory_bytes),
         );
+        let handles = if self.handles.is_empty() {
+            "-".to_owned()
+        } else {
+            let values: Vec<String> = self.handles.iter().map(ToString::to_string).collect();
+            format!("h{}", values.join(","))
+        };
         vec![
             OsString::from(crate::LAUNCH_ARG),
-            OsString::from(container),
-            OsString::from(net.token()),
-            OsString::from(if spawn { "s" } else { "-" }),
+            OsString::from(&self.container),
+            OsString::from(self.net.token()),
+            OsString::from(if self.spawn { "s" } else { "-" }),
             OsString::from(limits),
+            OsString::from(handles),
             OsString::from("--"),
-            program.to_os_string(),
+            self.program.clone(),
         ]
     }
 
     /// Parses the arguments after the launch marker.
     pub(crate) fn parse(args: &[OsString]) -> Result<Self, String> {
         let text = |i: usize| args.get(i).and_then(|a| a.to_str());
-        let (Some(container), Some(net), Some(spawn), Some(limits), Some("--")) =
-            (text(0), text(1), text(2), text(3), text(4))
+        let (Some(container), Some(net), Some(spawn), Some(limits), Some(handles), Some("--")) =
+            (text(0), text(1), text(2), text(3), text(4), text(5))
         else {
             return Err(USAGE.to_owned());
         };
@@ -94,16 +101,36 @@ impl LaunchSpec {
                 memory_bytes: memory.parse().map_err(|_| USAGE.to_owned())?,
             }),
         };
+        let handles = match handles.strip_prefix('h') {
+            None => Vec::new(),
+            Some(list) => list
+                .split(',')
+                .map(|value| value.parse().map_err(|_| USAGE.to_owned()))
+                .collect::<Result<_, _>>()?,
+        };
         let net = Net::parse(net).ok_or_else(|| USAGE.to_owned())?;
-        let program = args.get(5).ok_or("missing program")?.clone();
+        let program = args.get(6).ok_or("missing program")?.clone();
         Ok(Self {
             container: container.to_owned(),
             net,
             spawn: spawn == "s",
             limits,
+            handles,
             program,
-            args: args[6..].to_vec(),
+            args: args[7..].to_vec(),
         })
+    }
+}
+
+/// `value` with every mention of the proxy's loopback address
+/// (`127.0.0.1:<proxy>` exactly) pointed at the relay's port instead.
+pub(crate) fn to_relay(value: OsString, proxy: u16, relay: u16) -> OsString {
+    let from = format!("127.0.0.1:{proxy}");
+    match value.to_str() {
+        Some(text) if names_address(text, &from) => {
+            OsString::from(text.replace(&from, &format!("127.0.0.1:{relay}")))
+        }
+        _ => value,
     }
 }
 
@@ -116,19 +143,9 @@ pub(crate) fn environment(
     proxy: u16,
     relay: u16,
 ) -> Vec<u16> {
-    let from = format!("127.0.0.1:{proxy}");
-    let to = format!("127.0.0.1:{relay}");
     let mut vars: Vec<(OsString, OsString)> = vars
         .into_iter()
-        .map(|(name, value)| {
-            let value = match value.to_str() {
-                Some(text) if names_address(text, &from) => {
-                    OsString::from(text.replace(&from, &to))
-                }
-                _ => value,
-            };
-            (name, value)
-        })
+        .map(|(name, value)| (name, to_relay(value, proxy, relay)))
         .collect();
     vars.sort_by_key(|(name, _)| name.to_string_lossy().to_uppercase());
     let mut block = Vec::new();
@@ -215,30 +232,51 @@ mod tests {
         assert_eq!(line(&[r"C:\plain\path"]), r"prog C:\plain\path");
     }
 
+    fn spec(net: Net, handles: Vec<usize>) -> LaunchSpec {
+        LaunchSpec {
+            container: "c1".to_owned(),
+            net,
+            spawn: false,
+            limits: Some(ResourceLimits {
+                memory_bytes: 1 << 30,
+                processes: 16,
+            }),
+            handles,
+            program: OsString::from("cmd.exe"),
+            args: Vec::new(),
+        }
+    }
+
     #[test]
     fn spec_round_trips() {
-        let limits = ResourceLimits {
-            memory_bytes: 1 << 30,
-            processes: 16,
-        };
-        let head = LaunchSpec::head(
-            "c1",
-            Net::Internet,
-            false,
-            Some(limits),
-            OsStr::new("cmd.exe"),
-        );
-        let mut args: Vec<OsString> = head[1..].to_vec();
-        args.push(OsString::from("/C"));
-        let spec = LaunchSpec::parse(&args).unwrap();
-        assert!(spec.net == Net::Internet && !spec.spawn);
-        assert_eq!(spec.limits, Some(limits));
-        assert_eq!(spec.program, "cmd.exe");
-        assert_eq!(spec.args, [OsString::from("/C")]);
-        for net in [Net::None, Net::Proxy(8443)] {
-            let head = LaunchSpec::head("c1", net, true, None, OsStr::new("cmd.exe"));
-            assert_eq!(LaunchSpec::parse(&head[1..]).unwrap().net, net);
+        for (net, handles) in [
+            (Net::Internet, vec![]),
+            (Net::None, vec![412]),
+            (Net::Proxy(8443), vec![412, 1060]),
+        ] {
+            let sent = spec(net, handles);
+            let mut args: Vec<OsString> = sent.head()[1..].to_vec();
+            args.push(OsString::from("/C"));
+            let parsed = LaunchSpec::parse(&args).unwrap();
+            assert_eq!(parsed.args, [OsString::from("/C")]);
+            assert_eq!(
+                LaunchSpec {
+                    args: Vec::new(),
+                    ..parsed
+                },
+                sent
+            );
         }
+    }
+
+    #[test]
+    fn arguments_naming_the_proxy_point_at_the_relay() {
+        let arg = |text: &str| to_relay(OsString::from(text), 9000, 4100);
+        assert_eq!(
+            arg("--proxy-server=http://127.0.0.1:9000"),
+            "--proxy-server=http://127.0.0.1:4100"
+        );
+        assert_eq!(arg("http://127.0.0.1:90001"), "http://127.0.0.1:90001");
     }
 
     #[test]

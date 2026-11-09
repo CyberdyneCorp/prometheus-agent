@@ -91,18 +91,26 @@ impl FileSession {
     /// Applies a patch.
     #[must_use]
     pub fn patch(&self, args: &PatchArgs) -> ToolResult {
+        let started = std::time::Instant::now();
         match args {
             PatchArgs::Replace {
                 path,
                 old_string,
                 new_string,
                 replace_all,
-            } => self.replace(path, old_string, new_string, *replace_all),
-            PatchArgs::V4a { patch } => self.v4a(patch),
+            } => self.replace(path, old_string, new_string, *replace_all, started),
+            PatchArgs::V4a { patch } => self.v4a(patch, started),
         }
     }
 
-    fn replace(&self, raw: &str, old: &str, new: &str, replace_all: bool) -> ToolResult {
+    fn replace(
+        &self,
+        raw: &str,
+        old: &str,
+        new: &str,
+        replace_all: bool,
+        started: std::time::Instant,
+    ) -> ToolResult {
         if old.is_empty() {
             return ToolResult::error("old_string must not be empty");
         }
@@ -132,9 +140,15 @@ impl FileSession {
             };
             updated.replace_range(start..end, &replacement);
         }
+        self.before_change(&target.path);
         if let Err(err) = self.backend().write(&target.path, updated.as_bytes()) {
             return io_failure(raw, &err);
         }
+        self.changed(
+            &target.path,
+            Some(content.as_bytes()),
+            Some(updated.as_bytes()),
+        );
         self.note_written(&target.path, &updated);
         let mut body = Map::new();
         body.insert("path".into(), json!(raw));
@@ -146,10 +160,18 @@ impl FileSession {
             "diff".into(),
             json!(diff::unified(raw, Some(&content), Some(&updated))),
         );
-        body.insert(
-            "lint".into(),
-            json!(self.setup.linter.check(&target.path, &updated)),
+        let lint = self.setup.linter.check(&target.path, &updated);
+        let semantic = self.semantic(
+            &target.path,
+            Some(content.as_bytes()),
+            &updated,
+            &lint,
+            started,
         );
+        body.insert("lint".into(), json!(lint));
+        if let Some(found) = semantic {
+            body.insert("lsp_diagnostics".into(), json!(found));
+        }
         json_result(Status::Ok, &Value::Object(body))
     }
 
@@ -175,7 +197,7 @@ impl FileSession {
         Ok((target, text))
     }
 
-    fn v4a(&self, text: &str) -> ToolResult {
+    fn v4a(&self, text: &str, started: std::time::Instant) -> ToolResult {
         // A guard refusal, not a planning error: `denied`, like write_file.
         if let Some(refusal) = v4a::touched_paths(text)
             .iter()
@@ -222,7 +244,19 @@ impl FileSession {
                 (_, None) => "deleted",
                 _ => "updated",
             };
-            files.push(json!({"path": file.shown, "action": action, "lint": lint}));
+            let mut entry = json!({"path": file.shown, "action": action, "lint": lint});
+            if let (Some(new), Some(lint)) = (file.new.as_deref(), &lint)
+                && let Some(found) = self.semantic(
+                    &file.path,
+                    file.old.as_deref().map(str::as_bytes),
+                    new,
+                    lint,
+                    started,
+                )
+            {
+                entry["lsp_diagnostics"] = json!(found);
+            }
+            files.push(entry);
         }
         json_result(Status::Ok, &json!({"files": files, "diff": diffs}))
     }
@@ -276,6 +310,9 @@ impl FileSession {
     /// Writes every planned file; on a failure restores the ones already
     /// written, so the patch lands whole or not at all.
     fn commit(&self, planned: &[Planned]) -> Result<(), String> {
+        for file in planned {
+            self.before_change(&file.path);
+        }
         for (index, file) in planned.iter().enumerate() {
             let outcome = match &file.new {
                 Some(new) => self.backend().write(&file.path, new.as_bytes()),
@@ -291,12 +328,22 @@ impl FileSession {
                 return Err(format!("{}: {err}", file.shown));
             }
         }
+        self.committed(planned);
+        Ok(())
+    }
+
+    /// Records a landed patch: the edit recorder and the read tracker.
+    fn committed(&self, planned: &[Planned]) {
         for file in planned {
+            self.changed(
+                &file.path,
+                file.old.as_deref().map(str::as_bytes),
+                file.new.as_deref().map(str::as_bytes),
+            );
             if let Some(new) = &file.new {
                 self.note_written(&file.path, new);
             }
         }
-        Ok(())
     }
 }
 

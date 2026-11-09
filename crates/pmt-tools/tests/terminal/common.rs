@@ -13,8 +13,8 @@ use pmt_core::secret::{Redactor, SecretString};
 use pmt_sandbox::{Options, Paths, Policy, Sandbox, StrengthReport};
 use pmt_tools::terminal::env::{ChildEnv, EnvRequest};
 use pmt_tools::terminal::guard::GuardChain;
-use pmt_tools::terminal::process::{Clock, Completion};
-use pmt_tools::terminal::{LocalSetup, LocalTerminal, TerminalArgs, TerminalResult, shell, spill};
+use pmt_tools::terminal::process::{Clock, Completion, Notice};
+use pmt_tools::terminal::{Terminal, TerminalArgs, TerminalResult, TerminalSetup, shell, spill};
 use tokio::sync::mpsc;
 
 /// A secret the parent holds; it must never reach a child.
@@ -114,13 +114,16 @@ impl Fixture {
         terminal: TerminalConfig,
         env: ChildEnv,
         sandbox: Arc<Sandbox>,
-    ) -> LocalSetup {
+    ) -> TerminalSetup {
         let path = env.get("PATH").map(ToOwned::to_owned);
-        LocalSetup {
+        TerminalSetup {
             terminal,
             max_chars: pmt_tools::setting::fixed(50_000),
             kill_grace: Duration::from_secs(2),
-            sandbox,
+            target: Arc::new(pmt_tools::terminal::target::LocalTarget::new(
+                sandbox,
+                &self.scratch,
+            )),
             env,
             shell: shell::resolve_unix(path.as_deref()),
             scratch: self.scratch.clone(),
@@ -133,18 +136,21 @@ impl Fixture {
             notices: Vec::new(),
             notify: None,
             clock: None,
+            auto_notify: false,
+            receipts: None,
+            before_command: None,
         }
     }
 
     /// A session with the default terminal settings and the baseline
     /// capabilities.
-    pub(crate) fn session(&self) -> LocalTerminal {
+    pub(crate) fn session(&self) -> Terminal {
         self.session_with(TerminalConfig::default(), &[])
     }
 
-    pub(crate) fn session_with(&self, terminal: TerminalConfig, caps: &[&str]) -> LocalTerminal {
+    pub(crate) fn session_with(&self, terminal: TerminalConfig, caps: &[&str]) -> Terminal {
         let env = self.child_env(&terminal.env_passthrough, &[]);
-        LocalTerminal::new(self.setup(terminal, env, self.sandbox(caps, None))).unwrap()
+        Terminal::new(self.setup(terminal, env, self.sandbox(caps, None))).unwrap()
     }
 
     pub(crate) fn child_env(&self, passthrough: &[String], extra: &[(&str, &str)]) -> ChildEnv {
@@ -164,16 +170,16 @@ impl Fixture {
 pub(crate) fn with_notifications(
     fixture: &Fixture,
     clock: Option<Clock>,
-) -> (LocalTerminal, mpsc::UnboundedReceiver<Completion>) {
+) -> (Terminal, mpsc::UnboundedReceiver<Notice>) {
     let (tx, rx) = mpsc::unbounded_channel();
     let env = fixture.child_env(&[], &[]);
     let mut setup = fixture.setup(TerminalConfig::default(), env, fixture.sandbox(&[], None));
     setup.notify = Some(tx);
     setup.clock = clock;
-    (LocalTerminal::new(setup).unwrap(), rx)
+    (Terminal::new(setup).unwrap(), rx)
 }
 
-pub(crate) async fn run(session: &LocalTerminal, command: &str) -> TerminalResult {
+pub(crate) async fn run(session: &Terminal, command: &str) -> TerminalResult {
     session.run(TerminalArgs::new(command)).await
 }
 
@@ -199,5 +205,13 @@ impl ManualClock {
     pub(crate) fn clock(&self) -> Clock {
         let this = self.clone();
         Arc::new(move || this.base + *this.offset.lock().unwrap())
+    }
+}
+
+/// The completion `notice` carries (a test expecting an exit).
+pub(crate) fn exited(notice: Notice) -> Completion {
+    match notice {
+        Notice::Exited(done) => done,
+        other => panic!("expected an exit, got {other:?}"),
     }
 }

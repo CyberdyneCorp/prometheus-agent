@@ -54,6 +54,51 @@ pub trait SecretsPort: Send + Sync {
     fn get(&self, name: &str) -> Option<String>;
 }
 
+/// A credential the host attaches to a plugin's requests (the
+/// `credentials` host interface); the plugin never sees `headers`.
+#[derive(Clone)]
+pub struct Credential {
+    /// Which kind it resolved to (`direct`, `managed`).
+    pub kind: String,
+    /// The base URL requests with it go to.
+    pub origin: String,
+    /// Who is billed, when not the user's own account.
+    pub billing_source: Option<String>,
+    /// The hosts it may be sent to (`host` or `host:port`, lower case).
+    pub hosts: Vec<String>,
+    /// The headers it adds, replacing any of the same name.
+    pub headers: Vec<(String, pmt_core::secret::SecretString)>,
+}
+
+impl std::fmt::Debug for Credential {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Credential")
+            .field("kind", &self.kind)
+            .field("origin", &self.origin)
+            .field("billing_source", &self.billing_source)
+            .field("hosts", &self.hosts)
+            .finish_non_exhaustive()
+    }
+}
+
+/// What a credential handle resolves to.
+#[derive(Debug, Clone)]
+pub enum CredentialLookup {
+    /// The host knows no credential by that handle.
+    Unknown,
+    /// It exists but cannot be used now, with the reason.
+    Unavailable(String),
+    /// Ready to attach.
+    Ready(Credential),
+}
+
+/// Credentials held for plugins, by handle (the host already checked the
+/// `credentials` grant).
+pub trait CredentialsPort: Send + Sync {
+    /// The credential `handle` names for `plugin`.
+    fn resolve(&self, plugin: &str, handle: &str) -> CredentialLookup;
+}
+
 /// One model call (the host already checked the `llm` grant and any
 /// model or provider override).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -197,6 +242,79 @@ pub trait MessagingPort: Send + Sync {
     fn platform_action(&self, action: &PlatformAction) -> PortFuture<'_, Result<(), ActionError>>;
 }
 
+/// One call of the `subagents` interface (the host checked the grant).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SubagentRequest {
+    /// Start a child; `task` is one `delegate_task` task object as JSON.
+    Launch {
+        /// The task.
+        task: String,
+    },
+    /// Its state.
+    Status {
+        /// The handle `launch` returned.
+        handle: String,
+    },
+    /// Wait for its end.
+    Wait {
+        /// The handle.
+        handle: String,
+        /// How long at most.
+        timeout: std::time::Duration,
+    },
+    /// Queue a message for its next iteration.
+    Steer {
+        /// The handle.
+        handle: String,
+        /// The message.
+        message: String,
+    },
+    /// Ask it to stop.
+    Cancel {
+        /// The handle.
+        handle: String,
+    },
+    /// Its result once ended.
+    Result {
+        /// The handle.
+        handle: String,
+    },
+}
+
+/// What a `subagents` call answered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SubagentAnswer {
+    /// `launch`: the child's handle.
+    Handle(String),
+    /// `status`: `queued`, `running`, `completed`, `failed`, `interrupted`,
+    /// `stalled`, `cancel_requested` or `cancelled`.
+    State(&'static str),
+    /// `wait` / `result`: the `SubagentResult` JSON, `None` while running.
+    Result(Option<String>),
+    /// `steer` / `cancel` done.
+    Done,
+}
+
+/// Why a `subagents` call did nothing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SubagentFailure {
+    /// Forged, altered, foreign or expired handle.
+    UnknownHandle,
+    /// Refused: `<error code>: <message>`.
+    Refused(String),
+}
+
+/// Subagents of the session a plugin call runs for.
+pub trait SubagentsPort: Send + Sync {
+    /// Runs `request` for `plugin` in session `session`.
+    fn call<'a>(
+        &'a self,
+        session: &'a str,
+        plugin: &'a str,
+        request: SubagentRequest,
+    ) -> PortFuture<'a, Result<SubagentAnswer, SubagentFailure>>;
+}
+
 /// Every port an instance uses.
 #[derive(Clone)]
 pub struct Ports {
@@ -214,6 +332,10 @@ pub struct Ports {
     pub config: Arc<dyn ConfigPort>,
     /// Live messages, injection and platform actions.
     pub messaging: Arc<dyn MessagingPort>,
+    /// Subagents of the calling session.
+    pub subagents: Arc<dyn SubagentsPort>,
+    /// Credentials attached to plugin requests.
+    pub credentials: Arc<dyn CredentialsPort>,
 }
 
 impl Default for Ports {
@@ -227,7 +349,9 @@ impl Default for Ports {
             tools: none.clone(),
             events: none.clone(),
             config: none.clone(),
-            messaging: none,
+            messaging: none.clone(),
+            subagents: none.clone(),
+            credentials: none,
         }
     }
 }
@@ -311,5 +435,26 @@ impl MessagingPort for Unavailable {
                 detail: format!("platform actions are {UNAVAILABLE}"),
             })
         })
+    }
+}
+
+impl SubagentsPort for Unavailable {
+    fn call<'a>(
+        &'a self,
+        _: &'a str,
+        _: &'a str,
+        _: SubagentRequest,
+    ) -> PortFuture<'a, Result<SubagentAnswer, SubagentFailure>> {
+        Box::pin(async {
+            Err(SubagentFailure::Refused(format!(
+                "delegation.session_closed: subagents are {UNAVAILABLE}"
+            )))
+        })
+    }
+}
+
+impl CredentialsPort for Unavailable {
+    fn resolve(&self, _: &str, _: &str) -> CredentialLookup {
+        CredentialLookup::Unknown
     }
 }

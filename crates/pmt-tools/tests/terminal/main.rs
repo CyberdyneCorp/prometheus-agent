@@ -5,15 +5,27 @@
 #[cfg(unix)]
 mod common;
 #[cfg(unix)]
+mod container;
+#[cfg(unix)]
 mod environment;
 #[cfg(unix)]
 mod foreground;
+#[cfg(unix)]
+mod notifications;
+#[cfg(unix)]
+mod plugin;
 #[cfg(unix)]
 mod preview;
 #[cfg(unix)]
 mod processes;
 #[cfg(unix)]
+mod singularity;
+#[cfg(unix)]
+mod ssh;
+#[cfg(unix)]
 mod startup;
+#[cfg(unix)]
+mod sudo;
 #[cfg(unix)]
 mod tool;
 #[cfg(windows)]

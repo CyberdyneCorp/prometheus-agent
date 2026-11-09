@@ -132,6 +132,34 @@ pub enum Command {
         #[command(subcommand)]
         command: GrantsCommand,
     },
+    /// Browser sessions: status, and closing the real browser whose profile
+    /// real-profile browsing copies.
+    Browser {
+        /// The browser subcommand.
+        #[command(subcommand)]
+        command: crate::browser_cmd::BrowserCommand,
+    },
+    /// Language servers behind the diagnostics of file edits: status,
+    /// registry, installs, restart.
+    Lsp {
+        /// The lsp subcommand.
+        #[command(subcommand)]
+        command: crate::lsp_cmd::LspCommand,
+    },
+    /// Scheduled jobs: create, list, pause, run now, inspect runs, replay,
+    /// doctor and the headless tick.
+    Cron {
+        /// The cron subcommand.
+        #[command(subcommand)]
+        command: crate::cron_cmd::CronCommand,
+    },
+    /// Git worktrees of sessions and subagents: list, sweep and restore
+    /// archived trees.
+    Worktrees {
+        /// The worktrees subcommand.
+        #[command(subcommand)]
+        command: crate::worktrees_cmd::WorktreesCommand,
+    },
     /// The credential vault: logins, cards and addresses the browser fills
     /// by handle.
     Vault {
@@ -151,6 +179,15 @@ pub enum Command {
         #[command(subcommand)]
         command: BackupCommand,
     },
+    /// Undo a session's file changes, roll a workspace back to a
+    /// checkpoint, and manage the file snapshot store.
+    Files {
+        /// The files subcommand.
+        #[command(subcommand)]
+        command: crate::files_cmd::FilesCommand,
+    },
+    /// Detect a project's build/test/start recipe and run it.
+    Verify(crate::verify_cmd::VerifyArgs),
     /// Snapshot and restore the selected profile's critical state.
     Snapshots {
         /// The snapshots subcommand.
@@ -295,6 +332,12 @@ pub enum Command {
     /// in-process gateway that serves only this TUI.
     #[cfg(feature = "tui")]
     Tui(crate::tui_cmd::TuiArgs),
+    /// Print the JSON Schema of a published contract (`subagent-result`).
+    Schema {
+        /// The contract.
+        #[command(subcommand)]
+        command: crate::schema_cmd::SchemaCommand,
+    },
     /// The daemon's client protocol: `rpc schema` prints the schema this
     /// binary speaks.
     Rpc {

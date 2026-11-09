@@ -356,6 +356,8 @@ fn file_session(profile: &Path, session_id: &str, with_tool_output: bool) -> Fil
         },
         read_max_chars: pmt_tools::setting::fixed(100_000),
         linter: Linter::builtin(),
+        documents: None,
+        edits: None,
     })
 }
 

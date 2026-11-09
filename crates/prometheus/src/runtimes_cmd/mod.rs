@@ -55,15 +55,8 @@ pub fn run(command: &RuntimesCommand, ctx: &Context<'_>) -> Result<u8, Error> {
 
 /// An installer for `store` with the home's sources and network settings;
 /// progress goes to stderr.
-///
-/// # Errors
-///
-/// `net.*` when the HTTP client cannot be built.
-pub fn installer(
-    ctx: &Context<'_>,
-    store: Store,
-    config: &DaemonConfig,
-) -> Result<Installer, Error> {
+#[must_use]
+pub fn installer(ctx: &Context<'_>, store: Store, config: &DaemonConfig) -> Installer {
     let progress: pmt_update::runtimes::install::Progress = Arc::new(|line| eprintln!("{line}"));
     browser::installer(
         store,
@@ -135,7 +128,7 @@ fn install(
             }
         }
     }
-    let installer = installer(ctx, store.clone(), config)?;
+    let installer = installer(ctx, store.clone(), config);
     for name in names {
         if let Some(version) = python_version(name) {
             install_python(&installer, store, version?)?;
@@ -181,7 +174,7 @@ pub fn ensure_python(
         }
     }
     let store = Store::open(root);
-    let installer = installer(ctx, store.clone(), &config)?;
+    let installer = installer(ctx, store.clone(), &config);
     install_python(&installer, &store, version)
 }
 
@@ -348,7 +341,7 @@ fn refresh(ctx: &Context<'_>, store: &Store, config: &DaemonConfig) -> Result<u8
         .map(str::to_owned)
         .collect();
     if !in_use.is_empty() {
-        let installer = installer(ctx, store.clone(), config)?;
+        let installer = installer(ctx, store.clone(), config);
         for name in &in_use {
             block_on(installer.install(name))??;
             eprintln!("refreshed {name}");

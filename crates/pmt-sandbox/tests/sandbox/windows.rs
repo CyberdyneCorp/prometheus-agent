@@ -189,6 +189,58 @@ fn a_proxied_child_reaches_only_the_proxy() {
     );
 }
 
+/// A confined browser gets its DevTools pipe as inherited handles named on
+/// its command line, and its `--proxy-server` argument points at its relay
+/// (spec: execution-environments, Local browser isolation).
+#[test]
+fn a_child_gets_its_passed_handles_and_arguments_pointing_at_the_relay() {
+    use std::io::{Read as _, Write as _};
+    use std::os::windows::io::{AsHandle as _, AsRawHandle as _};
+
+    let fixture = Fixture::new();
+    let proxy = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = proxy.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for stream in proxy.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            let _ = stream.write_all(b"proxy\n");
+        }
+    });
+    let sandbox = confine(
+        fixture
+            .policy(&[])
+            .through_proxy(port, pmt_sandbox::Relay::new(|_| {})),
+    );
+    let (mut reader, writer) = std::io::pipe().unwrap();
+    let handle = writer.as_raw_handle() as usize;
+    let script = format!(
+        "$u = [Uri]'http://127.0.0.1:{port}'; $c = [Net.Sockets.TcpClient]::new(); $c.Connect($u.Host, $u.Port); \
+         $b = [byte[]]::new(6); $n = $c.GetStream().Read($b, 0, 6); \
+         $h = [Microsoft.Win32.SafeHandles.SafeFileHandle]::new([IntPtr]{handle}, $true); \
+         $f = [IO.FileStream]::new($h, [IO.FileAccess]::Write); \
+         $t = [Text.Encoding]::ASCII.GetBytes(\"$($u.Port) $([Text.Encoding]::ASCII.GetString($b, 0, $n).Trim())\"); \
+         $f.Write($t, 0, $t.Length); $f.Close()"
+    );
+    let mut child = sandbox
+        .command_inheriting("powershell.exe", &[writer.as_handle()])
+        .unwrap()
+        .current_dir(&fixture.work)
+        .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+        .spawn()
+        .unwrap();
+    drop(writer);
+    let mut text = String::new();
+    reader.read_to_string(&mut text).unwrap();
+    let status = child.wait().unwrap();
+    let (relay_port, answer) = text.split_once(' ').unwrap_or_default();
+    assert_eq!(answer, "proxy", "{text:?} {status:?}");
+    assert_ne!(
+        relay_port,
+        port.to_string(),
+        "the argument was not rewritten"
+    );
+}
+
 /// Sandboxes that start and end at the same time (concurrent sessions, or
 /// the commands of several daemons) share the directories above their
 /// workspaces, whose DACLs each one rewrites to add and later drop its

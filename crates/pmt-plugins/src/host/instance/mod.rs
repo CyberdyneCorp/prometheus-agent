@@ -6,6 +6,15 @@
 //! call instantiates afresh, while persistent state lives on disk under
 //! `plugin-data/`. Three traps within 60 seconds suspend the instance
 //! until it is reloaded.
+//!
+//! Calls into most worlds share one store and run one at a time under a
+//! wall-clock deadline. Terminal-backend calls are different: an `execute`
+//! may wait minutes on a remote command while `cancel` must reach the
+//! plugin, and other commands keep running. Each backend call therefore
+//! takes a store of its own from a small pool (so calls run side by side;
+//! a backend keeps what must outlive one call in `state` or in its remote
+//! service, never in guest memory) under a CPU [`Meter`]: time blocked in
+//! host imports does not count against the call timeout.
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -15,10 +24,17 @@ use pmt_core::error::{Error, codes};
 use wasmtime::component::{Component, HasSelf, InstancePre, Linker};
 use wasmtime::{Store, StoreLimitsBuilder, Trap};
 
+mod backend;
+mod meter;
+mod router;
 mod surfaces;
 
+pub(crate) use meter::Meter;
+
 use super::bindings::PluginHost;
-use super::bindings::exports::prometheus::{hook, provider, tool};
+use super::bindings::exports::prometheus::{
+    delegation_router, hook, provider, terminal_backend, tool,
+};
 use super::imports::{CallInfo, Context, HostState};
 use super::{Limits, Runtime};
 use crate::worlds::WorldRef;
@@ -26,6 +42,9 @@ use crate::worlds::WorldRef;
 /// Traps within [`TRAP_WINDOW`] that suspend an instance.
 const TRAPS_TO_SUSPEND: usize = 3;
 const TRAP_WINDOW: Duration = Duration::from_mins(1);
+/// Idle backend stores kept for reuse; more concurrent calls instantiate
+/// stores that are dropped afterwards.
+const POOL_IDLE: usize = 4;
 
 /// A linked, instantiable plugin.
 pub struct Instance {
@@ -40,7 +59,15 @@ pub struct Instance {
     provider: Option<provider::plugin::GuestIndices>,
     surfaces: Option<hook::surfaces::GuestIndices>,
     models: Option<provider::models::GuestIndices>,
+    backend: Option<terminal_backend::plugin::GuestIndices>,
+    router: Option<delegation_router::plugin::GuestIndices>,
+    /// `tool.tools()`, read once: a session starting while the instance
+    /// is busy (a plugin call waiting on a subagent it launched) must not
+    /// wait for it.
+    tool_specs: Mutex<Option<Vec<tool::plugin::ToolSpec>>>,
     live: Mutex<Option<Live>>,
+    /// Idle stores for terminal-backend calls.
+    pool: Mutex<Vec<Live>>,
     traps: Mutex<Traps>,
 }
 
@@ -94,12 +121,16 @@ impl Instance {
             provider: provider::plugin::GuestIndices::new(&pre).ok(),
             surfaces: hook::surfaces::GuestIndices::new(&pre).ok(),
             models: provider::models::GuestIndices::new(&pre).ok(),
+            backend: terminal_backend::plugin::GuestIndices::new(&pre).ok(),
+            router: delegation_router::plugin::GuestIndices::new(&pre).ok(),
+            tool_specs: Mutex::new(None),
             id,
             pre,
             ctx,
             limits,
             exported,
             live: Mutex::new(None),
+            pool: Mutex::new(Vec::new()),
             traps: Mutex::new(Traps::default()),
         };
         instance.with_live(&CallInfo::default(), None, |_, _| Ok(()))?;
@@ -141,9 +172,24 @@ impl Instance {
     /// `plugins.call` when the call traps or times out.
     pub fn tools(&self, call: &CallInfo) -> Result<Vec<tool::plugin::ToolSpec>, Error> {
         let indices = self.tool.as_ref().ok_or_else(|| self.missing("tool"))?;
-        self.with_live(call, None, |store, instance| {
+        if let Some(specs) = self.cached_tools() {
+            return Ok(specs);
+        }
+        let specs = self.with_live(call, None, |store, instance| {
             indices.load(&mut *store, instance)?.call_tools(&mut *store)
-        })
+        })?;
+        *self
+            .tool_specs
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(specs.clone());
+        Ok(specs)
+    }
+
+    fn cached_tools(&self) -> Option<Vec<tool::plugin::ToolSpec>> {
+        self.tool_specs
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 
     /// `tool.call(name, arguments)`: the plugin's own `Err` is returned as
@@ -206,6 +252,9 @@ impl Instance {
             "tool" => self.tool.is_some(),
             "hook" => self.hook.is_some(),
             "provider" => self.provider.is_some(),
+            "terminal-backend" => {
+                self.backend.is_some() || self.exported.iter().any(|w| w.name == "terminal-backend")
+            }
             other => self.exported.iter().any(|w| w.name == other),
         }
     }
@@ -364,14 +413,7 @@ impl Instance {
         )
     }
 
-    /// Runs `f` on the live instance under the call bounds, instantiating
-    /// first when needed.
-    fn with_live<R>(
-        &self,
-        call: &CallInfo,
-        bound: Option<Duration>,
-        f: impl FnOnce(&mut Store<HostState>, &wasmtime::component::Instance) -> wasmtime::Result<R>,
-    ) -> Result<R, Error> {
+    fn check_suspended(&self) -> Result<(), Error> {
         if self.suspended() {
             return Err(Error::new(
                 &codes::PLUGINS_CALL,
@@ -382,24 +424,70 @@ impl Instance {
                 ),
             ));
         }
+        Ok(())
+    }
+
+    /// Runs `f` on the shared live instance under the call bounds (`bound`
+    /// caps the call timeout), instantiating first when needed.
+    fn with_live<R>(
+        &self,
+        call: &CallInfo,
+        bound: Option<Duration>,
+        f: impl FnOnce(&mut Store<HostState>, &wasmtime::component::Instance) -> wasmtime::Result<R>,
+    ) -> Result<R, Error> {
+        self.check_suspended()?;
+        let limits = self.limits.bounded(bound);
         let mut guard = self.live.lock().unwrap_or_else(PoisonError::into_inner);
-        match self.run(&mut guard, call, bound, f) {
+        match self.run(&mut guard, call, limits, Meter::wall(), f) {
             Ok(value) => Ok(value),
             Err(err) => {
                 // A trapped or interrupted component cannot be re-entered.
                 *guard = None;
                 drop(guard);
-                self.record_trap();
-                Err(self.call_error(&err))
+                Err(self.trapped(&err))
             }
         }
+    }
+
+    /// Runs `f` on a store of its own (see the module docs) with the call
+    /// timeout as a CPU budget and `wall` as the limit on the whole call.
+    fn with_pooled<R>(
+        &self,
+        call: &CallInfo,
+        wall: Option<Duration>,
+        f: impl FnOnce(&mut Store<HostState>, &wasmtime::component::Instance) -> wasmtime::Result<R>,
+    ) -> Result<R, Error> {
+        self.check_suspended()?;
+        let mut slot = self
+            .pool
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .pop();
+        let meter = Meter::cpu(self.limits.call_timeout, wall);
+        match self.run(&mut slot, call, self.limits, meter, f) {
+            Ok(value) => {
+                let mut pool = self.pool.lock().unwrap_or_else(PoisonError::into_inner);
+                if pool.len() < POOL_IDLE {
+                    pool.extend(slot);
+                }
+                Ok(value)
+            }
+            // The trapped store in `slot` is dropped, never reused.
+            Err(err) => Err(self.trapped(&err)),
+        }
+    }
+
+    fn trapped(&self, err: &wasmtime::Error) -> Error {
+        self.record_trap();
+        self.call_error(err)
     }
 
     fn run<R>(
         &self,
         live: &mut Option<Live>,
         call: &CallInfo,
-        bound: Option<Duration>,
+        limits: Limits,
+        meter: Meter,
         f: impl FnOnce(&mut Store<HostState>, &wasmtime::component::Instance) -> wasmtime::Result<R>,
     ) -> wasmtime::Result<R> {
         if live.is_none() {
@@ -411,7 +499,7 @@ impl Instance {
             return Err(wasmtime::format_err!("instance missing"));
         };
         live.store.data_mut().call = call.clone();
-        self.arm(&mut live.store, bound)?;
+        Self::arm(&mut live.store, limits, meter)?;
         f(&mut live.store, &live.instance)
     }
 
@@ -428,19 +516,24 @@ impl Instance {
                 call: call.clone(),
                 limits,
                 console: None,
+                meter: Meter::wall(),
             },
         );
         store.limiter(|state| &mut state.limits);
-        self.arm(&mut store, None)?;
+        store.call_hook(|mut store, hook| {
+            store.data_mut().meter.transition(hook);
+            Ok(())
+        });
+        store.epoch_deadline_callback(|store| Ok(store.data().meter.on_deadline()));
+        Self::arm(&mut store, self.limits, Meter::wall())?;
         Ok(store)
     }
 
-    /// Fresh fuel and epoch deadline for one call.
-    fn arm(&self, store: &mut Store<HostState>, bound: Option<Duration>) -> wasmtime::Result<()> {
-        let limits = self.limits.bounded(bound);
+    /// Fresh fuel, epoch deadline and meter for one call.
+    fn arm(store: &mut Store<HostState>, limits: Limits, meter: Meter) -> wasmtime::Result<()> {
         store.set_fuel(limits.fuel())?;
         store.set_epoch_deadline(limits.epoch_ticks());
-        store.epoch_deadline_trap();
+        store.data_mut().meter = meter;
         Ok(())
     }
 

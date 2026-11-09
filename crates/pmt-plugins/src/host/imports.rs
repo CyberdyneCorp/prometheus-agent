@@ -18,7 +18,7 @@ use super::bindings::prometheus::host::{
 };
 use super::bindings::prometheus::messaging::{conversation, inject, platform};
 use super::ports::{
-    HttpRequest, InjectTarget, LlmCall, PlatformAction, Ports, PostFailure, Posted,
+    HttpRequest, HttpResponse, InjectTarget, LlmCall, PlatformAction, Ports, PostFailure, Posted,
 };
 use super::state::{StateDir, StateError};
 use crate::grants::PluginGrants;
@@ -68,10 +68,12 @@ pub(crate) struct HostState {
     pub(crate) limits: StoreLimits,
     /// Set only while a `run-cli` call runs.
     pub(crate) console: Option<Arc<dyn Console>>,
+    /// The budget of the call in progress.
+    pub(crate) meter: super::instance::Meter,
 }
 
 impl HostState {
-    fn require(&self, capability: &Capability) -> Result<(), HostError> {
+    pub(super) fn require(&self, capability: &Capability) -> Result<(), HostError> {
         self.require_as(capability, &label(capability))
     }
 
@@ -84,7 +86,7 @@ impl HostState {
         Err(HostError::Denied(message))
     }
 
-    fn ports(&self) -> &Ports {
+    pub(super) fn ports(&self) -> &Ports {
         &self.ctx.ports
     }
 }
@@ -94,7 +96,7 @@ impl HostState {
 /// plugin inside a session start) or outside any runtime, so the future
 /// runs on a short-lived thread of its own on the current runtime, or on a
 /// private one when there is none.
-fn block_on<T: Send>(future: impl Future<Output = T> + Send) -> Result<T, HostError> {
+pub(super) fn block_on<T: Send>(future: impl Future<Output = T> + Send) -> Result<T, HostError> {
     let failed = |e: &dyn std::fmt::Display| HostError::Failed(format!("host call failed: {e}"));
     let handle = tokio::runtime::Handle::try_current().ok();
     std::thread::scope(|scope| {
@@ -179,10 +181,19 @@ impl state::Host for HostState {
     }
 }
 
-impl http::Host for HostState {
-    fn send(&mut self, request: http::Request) -> Result<http::Response, HostError> {
-        let (host, port) = destination(&request.url)
-            .ok_or_else(|| HostError::Invalid(format!("invalid URL '{}'", request.url)))?;
+impl HostState {
+    /// Sends one outbound request after the `network` grant check (the
+    /// host's own name for the URL's host in the refusal), through the
+    /// HTTP port and its egress policy.
+    pub(super) fn send_http(
+        &self,
+        method: String,
+        url: String,
+        headers: Vec<(String, String)>,
+        body: Option<Vec<u8>>,
+    ) -> Result<HttpResponse, HostError> {
+        let (host, port) =
+            destination(&url).ok_or_else(|| HostError::Invalid(format!("invalid URL '{url}'")))?;
         let wanted = Capability::NetConnect {
             host: host.clone(),
             port: Some(port),
@@ -206,16 +217,23 @@ impl http::Host for HostState {
             })
             .collect();
         let port_request = HttpRequest {
-            method: request.method,
-            url: request.url,
-            headers: request.headers,
-            body: request.body,
+            method,
+            url,
+            headers,
+            body,
             plugin: self.ctx.plugin.clone(),
             session_id: self.call.session_id.clone(),
             granted_hosts,
         };
         let http = Arc::clone(&self.ports().http);
-        let response = block_on(http.send(port_request))?.map_err(HostError::Failed)?;
+        block_on(http.send(port_request))?.map_err(HostError::Failed)
+    }
+}
+
+impl http::Host for HostState {
+    fn send(&mut self, request: http::Request) -> Result<http::Response, HostError> {
+        let response =
+            self.send_http(request.method, request.url, request.headers, request.body)?;
         Ok(http::Response {
             status: response.status,
             headers: response.headers,
@@ -226,7 +244,7 @@ impl http::Host for HostState {
 
 /// The lower-cased host and the port of an `http(s)` URL; `None` for
 /// anything else (other schemes, user info, no host).
-fn destination(url: &str) -> Option<(String, u16)> {
+pub(super) fn destination(url: &str) -> Option<(String, u16)> {
     let (scheme, rest) = url.split_once("://")?;
     let default_port = match scheme.to_ascii_lowercase().as_str() {
         "http" => 80,

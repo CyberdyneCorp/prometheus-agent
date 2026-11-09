@@ -204,6 +204,8 @@ pub struct Refusal {
     pub message: String,
     /// The hint.
     pub hint: Option<String>,
+    /// When an `auth.credentials_benched` refusal ends.
+    pub bench_end: Option<Timestamp>,
 }
 
 impl Refusal {
@@ -214,17 +216,21 @@ impl Refusal {
             code: error.code(),
             message: error.message().to_owned(),
             hint: error.hint().map(str::to_owned),
+            bench_end: crate::resolve::bench_end(error),
         }
     }
 
     /// The typed error.
     #[must_use]
     pub fn to_error(&self) -> Error {
-        let error = Error::new(self.code, self.message.clone());
-        match &self.hint {
-            Some(hint) => error.with_hint(hint.clone()),
-            None => error,
+        let mut error = Error::new(self.code, self.message.clone());
+        if let Some(hint) = &self.hint {
+            error = error.with_hint(hint.clone());
         }
+        if let Some(until) = self.bench_end {
+            error = error.with_source(crate::resolve::BenchEnd(until));
+        }
+        error
     }
 }
 

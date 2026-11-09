@@ -332,6 +332,7 @@ impl Host for FakeAgents {
             Ok(Submitted {
                 turn_id: turn,
                 admission: RpcAdmission::Started,
+                notice: None,
             })
         })
     }
@@ -484,6 +485,10 @@ impl Agents for FakeAgents {
     }
 
     fn lookup<'a>(&'a self, _: &'a str, _: &'a str, line: &'a str) -> HostFuture<'a, Lookup> {
+        // Plain text is a turn: this host never waits for an answer.
+        if !line.trim_start().starts_with('/') {
+            return Box::pin(async { Ok(Lookup::Text) });
+        }
         let line = line.trim().trim_start_matches('/');
         let (token, args) = line.split_once(' ').unwrap_or((line, ""));
         let token = token.to_lowercase();
@@ -1354,8 +1359,15 @@ impl Harness {
 }
 
 /// Waits up to ten seconds for `check`.
-pub async fn eventually(what: &str, mut check: impl FnMut() -> bool) {
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+pub async fn eventually(what: &str, check: impl FnMut() -> bool) {
+    eventually_for(what, Duration::from_secs(10), check).await;
+}
+
+/// Waits up to `budget` for `check`: for flows that sit through real
+/// (wall-clock) backoff, where ten seconds leaves no headroom on a loaded
+/// CI runner.
+pub async fn eventually_for(what: &str, budget: Duration, mut check: impl FnMut() -> bool) {
+    let deadline = tokio::time::Instant::now() + budget;
     while !check() {
         assert!(
             tokio::time::Instant::now() < deadline,

@@ -137,7 +137,7 @@ $ prometheus runtimes list
 node <version> pinned
 not installed
 $ prometheus runtimes install java # exits 2
-error: unknown runtime 'java' (expected node|cpython|uv|chromium)
+error: unknown runtime 'java' (expected node|cpython|uv|chromium|doc-converter)
 $ prometheus runtimes verify
 no managed runtimes installed
 $ prometheus runtimes gc

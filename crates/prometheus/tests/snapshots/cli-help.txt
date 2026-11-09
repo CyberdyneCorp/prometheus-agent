@@ -13,9 +13,15 @@ Commands:
   skills       List, inspect, enable, lint and maintain the profile's skills and skill bundles
   memory       Inspect, edit, export and import what the agent remembers (built-in memory)
   grants       List and revoke the profile's permanent capability grants and approvals
+  browser      Browser sessions: status, and closing the real browser whose profile real-profile browsing copies
+  lsp          Language servers behind the diagnostics of file edits: status, registry, installs, restart
+  cron         Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and the headless tick
+  worktrees    Git worktrees of sessions and subagents: list, sweep and restore archived trees
   vault        The credential vault: logins, cards and addresses the browser fills by handle
   security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one
+  files        Undo a session's file changes, roll a workspace back to a checkpoint, and manage the file snapshot store
+  verify       Detect a project's build/test/start recipe and run it
   snapshots    Snapshot and restore the selected profile's critical state
   profile      List, create, select, rename and delete profiles
   sessions     List, search, export and manage the profile's sessions
@@ -40,6 +46,7 @@ Commands:
   mcp          MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
   plugins      Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
   tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
+  schema       Print the JSON Schema of a published contract (`subagent-result`)
   rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
   completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
   runtimes     List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
@@ -127,6 +134,15 @@ Options:
 
       --max-iterations <N>
           Model calls allowed per turn
+
+      --checkpoints
+          Record file snapshots and checkpoints for `/undo` and `/rollback` this run, whatever `files.snapshot.enabled` says
+
+      --no-checkpoints
+          Record no file snapshots or checkpoints this run
+
+  -w, --worktree [<NAME>]
+          Run the session in a new git worktree of the current repository (`.worktrees/NAME` on branch `prometheus/NAME`; a generated name when omitted); with `-r`/`-c` of a session that owns one, reopen it
 
       --cwd <DIR>
           Working directory of the session (also scopes `-c` and `latest`)

@@ -5,6 +5,8 @@
 
 pub mod clarify;
 pub mod connections;
+pub mod cron;
+pub mod delegation;
 pub mod memory;
 pub mod messaging;
 pub mod session_search;
@@ -12,12 +14,15 @@ pub mod todo;
 
 use std::sync::{Arc, Mutex, PoisonError};
 
+use pmt_core::cancel::CancelToken;
 use pmt_core::id::SessionId;
 use pmt_store::Store;
 use pmt_tools::ToolResult;
 use serde_json::Value;
 
 pub use clarify::Clarifier;
+pub use cron::CronPort;
+pub use delegation::{CodePort, DelegationPort};
 pub use memory::{MemoryPort, Recalled};
 pub use messaging::{MessagingPort, MessagingPorts, ReadCheck};
 pub use session_search::SessionSearch;
@@ -33,6 +38,9 @@ pub struct AgentTools {
     memory: Option<Arc<dyn MemoryPort>>,
     messaging: Option<Arc<dyn MessagingPort>>,
     connections: Option<Arc<pmt_tools::connectors::manage::Manager>>,
+    delegation: Option<Arc<dyn DelegationPort>>,
+    code: Option<Arc<dyn CodePort>>,
+    cron: Option<Arc<dyn CronPort>>,
 }
 
 impl AgentTools {
@@ -58,6 +66,9 @@ impl AgentTools {
             memory: None,
             messaging: None,
             connections: None,
+            delegation: None,
+            code: None,
+            cron: None,
         })
     }
 
@@ -93,10 +104,49 @@ impl AgentTools {
         self
     }
 
-    /// Runs `name` when it is an agent-level tool this loop executes;
-    /// `None` for any other tool (the generic dispatcher runs it).
-    pub async fn call(&self, name: &str, arguments: Value) -> Option<ToolResult> {
+    /// Runs `delegate_task` through `port`.
+    #[must_use]
+    pub fn with_delegation(mut self, port: Arc<dyn DelegationPort>) -> Self {
+        self.delegation = Some(port);
+        self
+    }
+
+    /// Runs `cronjob` through `port`.
+    #[must_use]
+    pub fn with_cron(mut self, port: Arc<dyn CronPort>) -> Self {
+        self.cron = Some(port);
+        self
+    }
+
+    /// Runs `execute_code` through `port`.
+    #[must_use]
+    pub fn with_code(mut self, port: Arc<dyn CodePort>) -> Self {
+        self.code = Some(port);
+        self
+    }
+
+    /// Runs `name` when it is an agent-level tool this loop executes, in a
+    /// turn whose hard stop is `cancel`; `None` for any other tool (the
+    /// generic dispatcher runs it).
+    pub async fn call(
+        &self,
+        name: &str,
+        arguments: Value,
+        cancel: &CancelToken,
+    ) -> Option<ToolResult> {
         Some(match name {
+            "delegate_task" => match &self.delegation {
+                Some(port) => port.call(arguments, cancel).await,
+                None => ToolResult::error(delegation::NO_DELEGATION),
+            },
+            "execute_code" => match &self.code {
+                Some(port) => port.call(arguments, cancel).await,
+                None => ToolResult::error(delegation::NO_CODE),
+            },
+            "cronjob" => match &self.cron {
+                Some(port) => port.call(self.session, arguments).await,
+                None => ToolResult::error(cron::NO_CRON),
+            },
             "todo" => self.todo(arguments),
             "clarify" => self.clarify.call(arguments).await,
             "session_search" => self.search.call(arguments).await,

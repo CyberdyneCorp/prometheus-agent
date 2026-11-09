@@ -82,6 +82,15 @@ Options:
       --max-iterations <N>
           Model calls allowed per turn
 
+      --checkpoints
+          Record file snapshots and checkpoints for `/undo` and `/rollback` this run, whatever `files.snapshot.enabled` says
+
+      --no-checkpoints
+          Record no file snapshots or checkpoints this run
+
+  -w, --worktree [<NAME>]
+          Run the session in a new git worktree of the current repository (`.worktrees/NAME` on branch `prometheus/NAME`; a generated name when omitted); with `-r`/`-c` of a session that owns one, reopen it
+
       --cwd <DIR>
           Working directory of the session (also scopes `-c` and `latest`)
 

@@ -51,6 +51,10 @@ steps:
 prometheus --home DIR/home trajectory show <session-id>
 ```
 
+The demo's profile sets `lsp.enabled = false`: even when its directory
+sits inside a git checkout, it starts no [language server](lsp.md) for the
+script it patches and installs none, so it never reaches the network.
+
 On a platform without an OS sandbox backend (Android/Termux), commands
 run only with `security.sandbox.allow_degraded = ["all"]`; the demo sets
 that on its own temporary profile and prints a `note:` line saying its

@@ -76,6 +76,11 @@
           "const": "steered",
           "description": "Handed to the running turn after its current tool step\n(`busy.input_mode = \"steer\"`).",
           "type": "string"
+        },
+        {
+          "const": "handled",
+          "description": "Answered without a turn: the `yes` that saves the job a `/cron`\necho just showed (spec: scheduled-jobs, /cron slash command); the\nresult's `notice` says what happened.",
+          "type": "string"
         }
       ]
     },
@@ -332,10 +337,74 @@
       ],
       "type": "object"
     },
+    "AutomationStatePayload": {
+      "additionalProperties": false,
+      "description": "One kind of a session's automation.",
+      "properties": {
+        "count": {
+          "default": 0,
+          "description": "Turns (goal), wakeups (loop) or fires (heartbeat) so far.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "description": "`goal`, `loop` or `heartbeat`.",
+          "type": "string"
+        },
+        "limit": {
+          "default": null,
+          "description": "A goal's turn budget (`goals.max_turns`).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "next_fire_at": {
+          "default": null,
+          "description": "When it fires next (RFC 3339), for an active loop or heartbeat or a\nparked goal's deadline.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "row": {
+          "default": null,
+          "description": "The live row as the CLI shows it (absent once removed).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        },
+        "status": {
+          "description": "`active`, `paused`, `done`, `parked`, or `none` once removed.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "kind",
+        "status"
+      ],
+      "type": "object"
+    },
     "BannerInfo": {
       "additionalProperties": false,
       "description": "`session.banner` result: what the TUI's startup banner lists.",
       "properties": {
+        "degraded": {
+          "description": "The degraded marker while the session runs below full hardening,\nfor example `sandbox: partial:landlock_net` (spec:\nsecurity-boundaries, Hardening downgrades are never silent).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "mcp_servers": {
           "description": "The session's MCP servers.",
           "items": {
@@ -375,6 +444,225 @@
         "skills",
         "mcp_servers"
       ],
+      "type": "object"
+    },
+    "BlueprintFillParams": {
+      "additionalProperties": false,
+      "description": "`cron.blueprints.fill` params.",
+      "properties": {
+        "create": {
+          "default": false,
+          "description": "Save the job (after the caller showed the echo); otherwise only\ncheck and echo.",
+          "type": "boolean"
+        },
+        "key": {
+          "description": "The blueprint (key, prefix or near spelling).",
+          "type": "string"
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "values": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Slot values by name.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "type": "object"
+    },
+    "BlueprintFilled": {
+      "additionalProperties": false,
+      "description": "`cron.blueprints.fill` result.",
+      "properties": {
+        "echo": {
+          "description": "The schedule echo: the canonical form and the next instants.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "job_id": {
+          "description": "The created job's id.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "key": {
+          "description": "The blueprint's key.",
+          "type": "string"
+        },
+        "missing": {
+          "description": "The slot that needs a value.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "prompt": {
+          "description": "The job's prompt.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "question": {
+          "description": "Its question.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "schedule": {
+          "description": "The canonical schedule (`cron 0 8 * * 1-5`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "description": "`missing` (a slot needs a value), `ready` (echoed, not saved) or\n`created`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "key"
+      ],
+      "type": "object"
+    },
+    "BlueprintInfo": {
+      "additionalProperties": false,
+      "description": "One blueprint.",
+      "properties": {
+        "category": {
+          "description": "Its category.",
+          "type": "string"
+        },
+        "description": {
+          "description": "What it does.",
+          "type": "string"
+        },
+        "key": {
+          "description": "Its key (`<plugin>:<key>`, `skill:<key>` outside the built-ins).",
+          "type": "string"
+        },
+        "slots": {
+          "description": "Its slots, in the order they are asked.",
+          "items": {
+            "$ref": "#/$defs/BlueprintSlot"
+          },
+          "type": "array"
+        },
+        "source": {
+          "description": "`builtin`, `plugin` or `skill`.",
+          "type": "string"
+        },
+        "title": {
+          "description": "Its title.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "title",
+        "description",
+        "category",
+        "source",
+        "slots"
+      ],
+      "type": "object"
+    },
+    "BlueprintList": {
+      "additionalProperties": false,
+      "description": "`cron.blueprints.list` result.",
+      "properties": {
+        "blueprints": {
+          "description": "The profile's catalog.",
+          "items": {
+            "$ref": "#/$defs/BlueprintInfo"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "blueprints"
+      ],
+      "type": "object"
+    },
+    "BlueprintSlot": {
+      "additionalProperties": false,
+      "description": "One slot, as a form field.",
+      "properties": {
+        "default": {
+          "description": "The value used when none is given.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "`time`, `enum`, `text` or `weekdays`.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The field name (`time`, `days`...).",
+          "type": "string"
+        },
+        "options": {
+          "description": "The options of an `enum`; the presets of `weekdays`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "question": {
+          "description": "The question asked for it.",
+          "type": "string"
+        },
+        "required": {
+          "description": "Needs a value (given or default).",
+          "type": "boolean"
+        },
+        "strict": {
+          "description": "An `enum` accepts only its options.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "kind",
+        "question",
+        "options",
+        "strict",
+        "required"
+      ],
+      "type": "object"
+    },
+    "BlueprintsListParams": {
+      "additionalProperties": false,
+      "description": "`cron.blueprints.list` params.",
+      "properties": {
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "ClarifyAnswers": {
@@ -1086,6 +1374,139 @@
       ],
       "type": "object"
     },
+    "FilesRollbackParams": {
+      "additionalProperties": false,
+      "description": "`files.rollback` params: no checkpoint lists them; `diff` previews.",
+      "properties": {
+        "all": {
+          "default": false,
+          "description": "Overwrite hand-edited files too.",
+          "type": "boolean"
+        },
+        "checkpoint": {
+          "default": null,
+          "description": "The checkpoint, 1 for the newest.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "diff": {
+          "default": false,
+          "description": "Show the diff to the current state; change nothing.",
+          "type": "boolean"
+        },
+        "file": {
+          "default": null,
+          "description": "Restore only this file.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_id": {
+          "description": "The session (its workspace).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "FilesRolledBack": {
+      "additionalProperties": false,
+      "description": "`files.rollback` result.",
+      "properties": {
+        "output": {
+          "description": "The listing, the diff or what was restored, as text.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "output"
+      ],
+      "type": "object"
+    },
+    "FilesUndoParams": {
+      "additionalProperties": false,
+      "description": "`files.undo` params.",
+      "properties": {
+        "dry_run": {
+          "default": false,
+          "description": "Report only; change nothing.",
+          "type": "boolean"
+        },
+        "force": {
+          "default": false,
+          "description": "Overwrite files changed since the session wrote them.",
+          "type": "boolean"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        },
+        "turns": {
+          "default": null,
+          "description": "How many of its last turns (default 1).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "FilesUndone": {
+      "additionalProperties": false,
+      "description": "`files.undo` result.",
+      "properties": {
+        "conflicts": {
+          "description": "`conflict: <path> changed since turn <n>; use --force to overwrite`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "removed": {
+          "description": "Files the session had created, removed.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "restored": {
+          "description": "Files given their prior content.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "turns": {
+          "description": "The turns undone.",
+          "items": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "turns",
+        "restored",
+        "removed",
+        "conflicts"
+      ],
+      "type": "object"
+    },
     "ForkParams": {
       "additionalProperties": false,
       "description": "`session.fork` params.",
@@ -1222,6 +1643,86 @@
         "capabilities",
         "platform_support"
       ],
+      "type": "object"
+    },
+    "LspServerStatus": {
+      "additionalProperties": false,
+      "description": "One running language server.",
+      "properties": {
+        "id": {
+          "description": "The server id (`pyright`, `rust-analyzer`...).",
+          "type": "string"
+        },
+        "pid": {
+          "description": "Its process id.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "session_id": {
+          "description": "The session that started it.",
+          "type": "string"
+        },
+        "state": {
+          "description": "`ready`.",
+          "type": "string"
+        },
+        "trusted_only": {
+          "description": "It executes project code, so it starts only in trusted workspaces.",
+          "type": "boolean"
+        },
+        "uptime_secs": {
+          "description": "Seconds since it started.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "workspace": {
+          "description": "Its workspace root.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "workspace",
+        "pid",
+        "uptime_secs",
+        "state",
+        "trusted_only",
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "LspStatus": {
+      "additionalProperties": false,
+      "description": "`lsp.status` result.",
+      "properties": {
+        "servers": {
+          "description": "Every running server of the profile, by id and workspace.",
+          "items": {
+            "$ref": "#/$defs/LspServerStatus"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "servers"
+      ],
+      "type": "object"
+    },
+    "LspStatusParams": {
+      "additionalProperties": false,
+      "description": "`lsp.status` params.",
+      "properties": {
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "McpServerState": {
@@ -1996,6 +2497,13 @@
           "default": "started",
           "description": "How the input was admitted."
         },
+        "notice": {
+          "description": "What a `handled` input did, to show in place of a turn.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "turn_id": {
           "description": "The admission id: the turn that runs the input (for a steered\ninput, the running turn it joined).",
           "type": "string"
@@ -2528,6 +3036,289 @@
         "minor"
       ],
       "type": "object"
+    },
+    "WorktreeArchiveInfo": {
+      "additionalProperties": false,
+      "description": "One archive.",
+      "properties": {
+        "age_secs": {
+          "description": "Seconds since it was archived.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "branch": {
+          "description": "The branch it was on.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "The archived tree's name (`worktrees restore <name>`).",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Why it was archived (`sweep`, `exit`, `subagent`).",
+          "type": "string"
+        },
+        "reference": {
+          "description": "`refs/prometheus/archive/<name>`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "reference",
+        "age_secs",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "WorktreeCreated": {
+      "additionalProperties": false,
+      "description": "`worktree.new` result.",
+      "properties": {
+        "base": {
+          "description": "The ref it was branched from.",
+          "type": "string"
+        },
+        "notices": {
+          "description": "What the user should know (a failed fetch).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "tree": {
+          "$ref": "#/$defs/WorktreeInfo",
+          "description": "The new tree, now the session's working directory."
+        }
+      },
+      "required": [
+        "tree",
+        "base",
+        "notices"
+      ],
+      "type": "object"
+    },
+    "WorktreeDecision": {
+      "additionalProperties": false,
+      "description": "One sweep decision.",
+      "properties": {
+        "action": {
+          "description": "`remove`, `archive` or `keep`.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The tree.",
+          "type": "string"
+        },
+        "outcome": {
+          "description": "What happened (the plan on a dry run).",
+          "type": "string"
+        },
+        "path": {
+          "description": "Its directory.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "The reason a tree is kept (`live-process`, `keep-large-untracked`...).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "action",
+        "outcome"
+      ],
+      "type": "object"
+    },
+    "WorktreeInfo": {
+      "additionalProperties": false,
+      "description": "One Prometheus tree.",
+      "properties": {
+        "age_secs": {
+          "description": "Seconds since it was created.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "branch": {
+          "description": "The branch it is on (`null`: detached).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "`generated`, `named`, `subagent` or `kanban`.",
+          "type": "string"
+        },
+        "last_decision": {
+          "description": "The last sweep decision and its reason.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "Its name (directory under `.worktrees/`).",
+          "type": "string"
+        },
+        "path": {
+          "description": "Its directory.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "kind",
+        "age_secs"
+      ],
+      "type": "object"
+    },
+    "WorktreeListing": {
+      "additionalProperties": false,
+      "description": "`worktree.list` result.",
+      "properties": {
+        "archives": {
+          "description": "Its archives.",
+          "items": {
+            "$ref": "#/$defs/WorktreeArchiveInfo"
+          },
+          "type": "array"
+        },
+        "repo": {
+          "description": "The repository's main checkout.",
+          "type": "string"
+        },
+        "trees": {
+          "description": "Its Prometheus trees.",
+          "items": {
+            "$ref": "#/$defs/WorktreeInfo"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "repo",
+        "trees",
+        "archives"
+      ],
+      "type": "object"
+    },
+    "WorktreeNewParams": {
+      "additionalProperties": false,
+      "description": "`worktree.new` params.",
+      "properties": {
+        "name": {
+          "default": null,
+          "description": "The tree's name (`[A-Za-z0-9._-]{1,64}`); omitted: `prom-<8 hex>`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_id": {
+          "description": "The session to move into the new tree.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "WorktreePruneParams": {
+      "additionalProperties": false,
+      "description": "`worktree.prune` params.",
+      "properties": {
+        "dry_run": {
+          "default": false,
+          "description": "Report the decisions; change nothing.",
+          "type": "boolean"
+        },
+        "session_id": {
+          "description": "The session (its working directory's repository).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "WorktreePruned": {
+      "additionalProperties": false,
+      "description": "`worktree.prune` result.",
+      "properties": {
+        "decisions": {
+          "description": "One decision per tree.",
+          "items": {
+            "$ref": "#/$defs/WorktreeDecision"
+          },
+          "type": "array"
+        },
+        "dry_run": {
+          "description": "Nothing was changed.",
+          "type": "boolean"
+        },
+        "repo": {
+          "description": "The repository's main checkout.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repo",
+        "dry_run",
+        "decisions"
+      ],
+      "type": "object"
+    },
+    "WorktreeSessionParams": {
+      "additionalProperties": false,
+      "description": "Params naming the session (`worktree.status`, `worktree.list`).",
+      "properties": {
+        "session_id": {
+          "description": "The session (its working directory's repository).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "WorktreeStatus": {
+      "additionalProperties": false,
+      "description": "`worktree.status` result.",
+      "properties": {
+        "cwd": {
+          "description": "The session's working directory.",
+          "type": "string"
+        },
+        "tree": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorktreeInfo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The Prometheus tree it is in (`null`: none)."
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "type": "object"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2577,8 +3368,10 @@
       "since": "1.0"
     },
     "automation.state": {
-      "declared": false,
       "owner": "session-automation",
+      "payload": {
+        "$ref": "#/$defs/AutomationStatePayload"
+      },
       "since": "1.0"
     },
     "health.changed": {
@@ -2742,13 +3535,23 @@
       "since": "1.0"
     },
     "cron.blueprints.fill": {
-      "declared": false,
       "owner": "scheduled-jobs",
+      "params": {
+        "$ref": "#/$defs/BlueprintFillParams"
+      },
+      "result": {
+        "$ref": "#/$defs/BlueprintFilled"
+      },
       "since": "1.0"
     },
     "cron.blueprints.list": {
-      "declared": false,
       "owner": "scheduled-jobs",
+      "params": {
+        "$ref": "#/$defs/BlueprintsListParams"
+      },
+      "result": {
+        "$ref": "#/$defs/BlueprintList"
+      },
       "since": "1.0"
     },
     "daemon.update": {
@@ -2838,13 +3641,23 @@
       "since": "1.0"
     },
     "files.rollback": {
-      "declared": false,
       "owner": "execution-environments",
+      "params": {
+        "$ref": "#/$defs/FilesRollbackParams"
+      },
+      "result": {
+        "$ref": "#/$defs/FilesRolledBack"
+      },
       "since": "1.0"
     },
     "files.undo": {
-      "declared": false,
       "owner": "execution-environments",
+      "params": {
+        "$ref": "#/$defs/FilesUndoParams"
+      },
+      "result": {
+        "$ref": "#/$defs/FilesUndone"
+      },
       "since": "1.0"
     },
     "grants.list": {
@@ -2898,8 +3711,13 @@
       "since": "1.0"
     },
     "lsp.status": {
-      "declared": false,
       "owner": "lsp-diagnostics",
+      "params": {
+        "$ref": "#/$defs/LspStatusParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LspStatus"
+      },
       "since": "1.0"
     },
     "moa.presets.delete": {
@@ -3212,23 +4030,43 @@
       "since": "1.0"
     },
     "worktree.list": {
-      "declared": false,
       "owner": "git-worktrees",
+      "params": {
+        "$ref": "#/$defs/WorktreeSessionParams"
+      },
+      "result": {
+        "$ref": "#/$defs/WorktreeListing"
+      },
       "since": "1.0"
     },
     "worktree.new": {
-      "declared": false,
       "owner": "git-worktrees",
+      "params": {
+        "$ref": "#/$defs/WorktreeNewParams"
+      },
+      "result": {
+        "$ref": "#/$defs/WorktreeCreated"
+      },
       "since": "1.0"
     },
     "worktree.prune": {
-      "declared": false,
       "owner": "git-worktrees",
+      "params": {
+        "$ref": "#/$defs/WorktreePruneParams"
+      },
+      "result": {
+        "$ref": "#/$defs/WorktreePruned"
+      },
       "since": "1.0"
     },
     "worktree.status": {
-      "declared": false,
       "owner": "git-worktrees",
+      "params": {
+        "$ref": "#/$defs/WorktreeSessionParams"
+      },
+      "result": {
+        "$ref": "#/$defs/WorktreeStatus"
+      },
       "since": "1.0"
     }
   },

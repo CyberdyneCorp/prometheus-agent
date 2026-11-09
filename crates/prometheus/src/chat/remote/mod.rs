@@ -47,6 +47,9 @@ pub(super) struct Attached {
     pub(super) run_budget: Option<u64>,
     /// What the run did (`--usage-file`).
     pub(super) record: Arc<RunRecord>,
+    /// The session's live goal, loop and heartbeat rows by kind, from its
+    /// `automation.state` events (the line interface's status line).
+    pub(super) automation: std::collections::BTreeMap<String, String>,
 }
 
 /// What the attached chat starts with.
@@ -129,6 +132,9 @@ pub fn setup_of(args: &ChatArgs, set: &[String], cwd: &Path) -> Result<SessionSe
     })
 }
 
+/// How long an exiting client waits for the daemon to take its close.
+const CLOSE_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
+
 /// Runs the chat attached to `record`'s daemon.
 ///
 /// # Errors
@@ -149,6 +155,7 @@ pub fn run(record: &DaemonRecord, scope: &ProfileScope, start: &Start<'_>) -> Re
             daemon_pid: record.process.pid,
             run_budget: start.run_budget,
             record: Arc::clone(&start.record),
+            automation: std::collections::BTreeMap::new(),
         };
         let status = match open_session(&mut attached, start).await? {
             Opened::Session(session) => {
@@ -164,6 +171,10 @@ pub fn run(record: &DaemonRecord, scope: &ProfileScope, start: &Start<'_>) -> Re
             Opened::Followed(status) => Ok(status),
         };
         attached.client.close();
+        // The daemon releases the session's ownership when it sees the
+        // close: a client started right after this one exits (`-r` of the
+        // same session) must not be refused by one that is gone.
+        let _ = tokio::time::timeout(CLOSE_WAIT, attached.client.wait_closed()).await;
         status
     })?
 }

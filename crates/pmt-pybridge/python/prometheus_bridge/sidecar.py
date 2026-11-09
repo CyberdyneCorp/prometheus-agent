@@ -224,6 +224,7 @@ def registrations():
         "transports": sorted(reg["transports"]),
         "subscriptions": [event for event, _ in reg["subscriptions"]],
         "skills": [{"name": n, **s} for n, s in reg["skills"].items()],
+        "blueprints": [typed.to_wire(b) for b in reg["blueprints"]],
         "degraded": list(dict.fromkeys(reg["degraded"])),
     }
 

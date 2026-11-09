@@ -1,0 +1,11 @@
+[package]
+name = "remote-kit"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+# Shared by the first-party remote `terminal-backend` plugins: how a command
+# line is wrapped for a remote shell and its output read back. Plain Rust,
+# no bindings, so it is unit-tested on the host.
+[lib]
+crate-type = ["rlib"]

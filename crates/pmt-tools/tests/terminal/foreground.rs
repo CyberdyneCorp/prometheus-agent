@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use pmt_config::schema::{DegradedMode, TerminalConfig};
 use pmt_tools::terminal::classify::SERVER_REFUSAL;
 use pmt_tools::terminal::process::ProcessArgs;
-use pmt_tools::terminal::{LocalTerminal, Status, TerminalArgs};
+use pmt_tools::terminal::{Status, Terminal, TerminalArgs};
 
 use crate::common::{Fixture, KNOWN_SECRET, run, with_notifications};
 
@@ -38,10 +38,12 @@ async fn a_long_timeout_is_promoted_to_a_tracked_background_process() {
             .contains("promoted_from_foreground")
     );
     let id = result.process_id.unwrap();
-    let completion = tokio::time::timeout(Duration::from_secs(30), done.recv())
-        .await
-        .unwrap()
-        .unwrap();
+    let completion = crate::common::exited(
+        tokio::time::timeout(Duration::from_secs(30), done.recv())
+            .await
+            .unwrap()
+            .unwrap(),
+    );
     assert_eq!(
         (completion.process_id.as_str(), completion.exit_code),
         (id.as_str(), 0)
@@ -247,7 +249,7 @@ async fn a_broken_environment_is_degraded_and_recreated_on_the_next_call() {
     let real_shell = setup.shell.path.clone();
     let shell = fixture.work.join("bin/bash");
     setup.shell.path = shell.clone();
-    let session = LocalTerminal::new(setup).unwrap();
+    let session = Terminal::new(setup).unwrap();
 
     let first = run(&session, "echo hi").await;
     assert_eq!(first.status, Status::Degraded, "{first:?}");
@@ -273,7 +275,7 @@ async fn degraded_mode_fail_returns_an_error() {
     let env = fixture.child_env(&[], &[]);
     let mut setup = fixture.setup(terminal, env, fixture.sandbox(&[], None));
     setup.shell.path = fixture.work.join("missing-shell");
-    let result = LocalTerminal::new(setup)
+    let result = Terminal::new(setup)
         .unwrap()
         .run(TerminalArgs::new("true"))
         .await;

@@ -115,17 +115,17 @@ impl LastInbound {
     }
 }
 
-/// Appends a mirrored message to `session`.
-pub(crate) fn append_mirror(
-    store: &Store,
-    session: pmt_core::id::SessionId,
-    text: &str,
-    from: Option<&str>,
-) {
+/// A message sent to a chat by another session, as its session records it.
+fn mirror_row(text: &str, from: Option<&str>) -> NewMessage {
     let mut message = NewMessage::new(Role::Assistant, text);
     message.metadata = Some(json!({"mirrored": {"via": "send_message", "from_session": from}}));
-    if let Err(err) = store.append_message(session, &message) {
-        tracing::warn!("send_message not mirrored: {err}");
+    message
+}
+
+/// Appends a mirrored message to `session`.
+pub(crate) fn append_row(store: &Store, session: pmt_core::id::SessionId, row: &NewMessage) {
+    if let Err(err) = store.append_message(session, row) {
+        tracing::warn!("message not mirrored: {err}");
     }
 }
 
@@ -231,7 +231,7 @@ impl Gateway {
             &resolved,
             &request.text,
             &request.attachments,
-            kind,
+            (kind, None),
         )
     }
 
@@ -249,16 +249,48 @@ impl Gateway {
         text: &str,
         attachments: &[OutboundAttachment],
     ) -> Result<Outbound, Error> {
-        self.enqueue_as(profile, to, text, attachments, OutboundKind::Notification)
+        self.enqueue_as(
+            profile,
+            to,
+            text,
+            attachments,
+            (OutboundKind::Notification, None),
+        )
     }
 
+    /// As [`enqueue`](Self::enqueue), with how the message notifies:
+    /// `true` sends it as a final, notifying message whatever the
+    /// adapter's quiet notification mode says, `false` silently where the
+    /// platform can (scheduled deliveries, `cron.delivery.notify`).
+    ///
+    /// # Errors
+    ///
+    /// Store errors.
+    pub fn enqueue_notifying(
+        &self,
+        profile: &str,
+        to: &Resolved,
+        text: &str,
+        attachments: &[OutboundAttachment],
+        notify: bool,
+    ) -> Result<Outbound, Error> {
+        self.enqueue_as(
+            profile,
+            to,
+            text,
+            attachments,
+            (OutboundKind::Notification, Some(notify)),
+        )
+    }
+
+    /// Queues `text` with its kind and notification flag.
     pub(crate) fn enqueue_as(
         &self,
         profile: &str,
         to: &Resolved,
         text: &str,
         attachments: &[OutboundAttachment],
-        kind: OutboundKind,
+        (kind, notify): (OutboundKind, Option<bool>),
     ) -> Result<Outbound, Error> {
         let store = self.shared.profile_store(profile)?;
         let key = format!("send:{}", crate::tickets::random_hex(12));
@@ -297,6 +329,7 @@ impl Gateway {
                 kind,
                 body,
                 attachments: attached,
+                notify,
             };
             let (entry, _) = store.enqueue_outbound(&new)?;
             first.get_or_insert(entry);
@@ -365,29 +398,41 @@ impl Gateway {
     /// session or it is the sending session (whose tool call records it),
     /// after the running turn when that session is busy.
     pub fn mirror(&self, profile: &str, to: &Resolved, text: &str, from_session: Option<&str>) {
-        let Ok(store) = self.shared.profile_store(profile) else {
-            return;
-        };
-        let session = match store.chat_session(&to.platform, &to.chat_id, to.thread_id.as_deref()) {
-            Ok(Some(session)) => session,
-            Ok(None) => return,
-            Err(err) => {
-                tracing::warn!("send_message not mirrored: {err}");
-                return;
-            }
+        let row = mirror_row(text, from_session);
+        if let Err(err) = self.append_to_chat(profile, to, row, from_session) {
+            tracing::warn!("send_message not mirrored: {err}");
+        }
+    }
+
+    /// Appends `row` to the session chat `to` routes to (after the running
+    /// turn when that session is busy); `false` when the chat has no
+    /// session, or it is `except` (the sending session).
+    ///
+    /// # Errors
+    ///
+    /// `profile.not_found`, store errors.
+    pub fn append_to_chat(
+        &self,
+        profile: &str,
+        to: &Resolved,
+        row: NewMessage,
+        except: Option<&str>,
+    ) -> Result<bool, Error> {
+        let store = self.shared.profile_store(profile)?;
+        let Some(session) =
+            store.chat_session(&to.platform, &to.chat_id, to.thread_id.as_deref())?
+        else {
+            return Ok(false);
         };
         let id = session.to_string();
-        if from_session == Some(id.as_str()) {
-            return;
+        if except == Some(id.as_str()) {
+            return Ok(false);
         }
-        let lane = self.shared.lane_of_session(&id);
-        match lane {
-            Some(lane) => lane.send(super::lane::Msg::Mirror {
-                text: text.to_owned(),
-                from_session: from_session.map(str::to_owned),
-            }),
-            None => append_mirror(&store, session, text, from_session),
+        match self.shared.lane_of_session(&id) {
+            Some(lane) => lane.send(super::lane::Msg::Mirror(row)),
+            None => append_row(&store, session, &row),
         }
+        Ok(true)
     }
 
     /// Adds or removes a reaction in `to` on `message_id` (default: the

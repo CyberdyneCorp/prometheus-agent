@@ -76,6 +76,7 @@ mod tests {
     fn an_unknown_zone_is_a_configuration_error() {
         let zone = |name: &str| CronConfig {
             timezone: Some(name.to_owned()),
+            ..CronConfig::default()
         };
         assert!(profile_zone(&zone("Europe/Lisbon")).is_ok());
         assert!(profile_zone(&CronConfig::default()).is_ok());

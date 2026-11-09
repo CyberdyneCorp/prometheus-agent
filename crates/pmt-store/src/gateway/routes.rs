@@ -180,6 +180,7 @@ impl Store {
     pub fn bind_route(&self, route: &NewRoute, reset: Option<ResetReason>) -> Result<(), Error> {
         let now = millis(Timestamp::now());
         self.write(|tx| {
+            hand_over_automation(tx, route, reset)?;
             tx.execute(
                 "INSERT INTO gateway_routes (key, session_id, platform, chat_id, thread_id, \
                  created_at, last_activity_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6) \
@@ -493,4 +494,28 @@ fn routed_from_row(row: &Row<'_>) -> Result<RoutedSession, Error> {
         resume_pending: row.get::<_, i64>(6).map_err(sql)? != 0,
         resume_at: row.get::<_, Option<i64>>(7).map_err(sql)?.map(timestamp),
     })
+}
+
+/// What a conversation's automation does when its key moves to another
+/// session (spec: session-automation, Persisted per-session automation
+/// state): a reset (`/new`, `/reset`), a suspension or a switch
+/// (`/resume`, `/branch`) drops the old session's goal, loop and
+/// heartbeat, so resuming that archived conversation later does not bring
+/// them back; a route found stale (its session ended with a daemon
+/// restart) or a policy change continues the same conversation, so its
+/// automation moves to the new session.
+fn hand_over_automation(
+    tx: &rusqlite::Transaction<'_>,
+    route: &NewRoute,
+    reset: Option<ResetReason>,
+) -> Result<(), Error> {
+    let previous = "SELECT session_id FROM gateway_routes WHERE key = ?1 AND session_id <> ?2";
+    let statement = if matches!(reset, Some(ResetReason::StaleRoute | ResetReason::Policy)) {
+        format!("UPDATE OR REPLACE automation SET session_id = ?2 WHERE session_id IN ({previous})")
+    } else {
+        format!("DELETE FROM automation WHERE session_id IN ({previous})")
+    };
+    tx.execute(&statement, params![route.key, route.session_id.to_string()])
+        .map_err(sql)?;
+    Ok(())
 }

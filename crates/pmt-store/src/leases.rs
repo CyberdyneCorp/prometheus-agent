@@ -78,7 +78,8 @@ impl Holder {
     }
 
     /// Whether the holder is a process on this host that no longer runs.
-    fn is_dead_local(&self, this_host: &str) -> bool {
+    #[must_use]
+    pub fn is_dead_local(&self, this_host: &str) -> bool {
         !this_host.is_empty()
             && self.host_id == this_host
             && runtime::process_start_time(self.pid) != Some(self.process_start)

@@ -1,8 +1,9 @@
 //! The execution environment behind the `terminal` and `process` tools
 //! (spec: execution-environments).
 //!
-//! - [`LocalTerminal`] runs one session's commands on the `local` backend
-//!   under the session's OS sandbox ([`pmt_sandbox::Sandbox`]).
+//! - [`Terminal`] runs one session's commands on its backend's
+//!   [`target::Target`]: the `local` host under the session's OS sandbox,
+//!   or a container or SSH host ([`remote`]).
 //! - [`env::ChildEnv`] builds every child environment from an allowlist.
 //! - [`process::ProcessRegistry`] tracks background processes and reaps
 //!   them when the session ends.
@@ -19,16 +20,22 @@ pub mod cwd;
 pub mod doctor;
 pub mod env;
 pub mod guard;
-mod local;
+pub mod inputs;
+mod plugin;
 pub mod process;
+pub mod remote;
 pub mod result;
+mod session;
 pub mod shape;
 pub mod shell;
 pub mod spawn;
 pub mod spill;
+pub mod sudo;
+pub mod sync;
+pub mod target;
 pub mod tool;
 pub mod windows_shell;
 
 pub use args::TerminalArgs;
-pub use local::{LocalSetup, LocalTerminal, PathSource, SecretSource};
 pub use result::{Status, TerminalResult};
+pub use session::{BeforeCommand, PathSource, SecretSource, Terminal, TerminalSetup};

@@ -76,7 +76,20 @@ fn a_gpl_dependency_is_outside_the_license_allowlist() {
 fn an_unwaived_advisory_fails_the_release_before_anything_is_published() {
     let deny = deny();
     let advisories = deny["advisories"].as_table().unwrap();
-    assert!(strings(&advisories["ignore"]).is_empty(), "no waivers");
+    // A waiver names the advisory and why it does not reach a shipped
+    // artifact; anything not waived fails `cargo deny`.
+    for waiver in advisories["ignore"].as_array().unwrap() {
+        let id = waiver.get("id").and_then(toml::Value::as_str).unwrap_or("");
+        let reason = waiver
+            .get("reason")
+            .and_then(toml::Value::as_str)
+            .unwrap_or("");
+        assert!(
+            id.starts_with("RUSTSEC-"),
+            "waiver without an advisory id: {waiver}"
+        );
+        assert!(!reason.trim().is_empty(), "waiver {id} has no reason");
+    }
     assert_eq!(advisories["yanked"].as_str(), Some("deny"));
 
     let gates = read("scripts/ci/release-dependency-gates");

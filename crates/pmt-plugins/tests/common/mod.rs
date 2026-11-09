@@ -12,9 +12,10 @@ use pmt_config::schema::PluginsConfig;
 use pmt_core::capability::CapabilitySet;
 use pmt_plugins::grants::{Identity, approve};
 use pmt_plugins::host::ports::{
-    ActionError, ConfigPort, EventsPort, HttpPort, HttpRequest, HttpResponse, InjectTarget,
-    LlmCall, LlmPort, MessagingPort, PlatformAction, PortFuture, Ports, PostFailure, Posted,
-    SecretsPort, ToolsPort,
+    ActionError, ConfigPort, CredentialLookup, CredentialsPort, EventsPort, HttpPort, HttpRequest,
+    HttpResponse, InjectTarget, LlmCall, LlmPort, MessagingPort, PlatformAction, PortFuture, Ports,
+    PostFailure, Posted, SecretsPort, SubagentAnswer, SubagentFailure, SubagentRequest,
+    SubagentsPort, ToolsPort,
 };
 use pmt_plugins::host::{CallInfo, Instance, Runtime};
 use pmt_plugins::load::{LoadInputs, Loaded, load};
@@ -30,6 +31,8 @@ pub(crate) struct Seen {
     pub events: Mutex<Vec<String>>,
     /// `post <session> <text>`, `edit ...`, `inject ...`, `action <verb> ...`.
     pub messaging: Mutex<Vec<String>>,
+    /// The `subagents` requests, with their session.
+    pub subagents: Mutex<Vec<(String, SubagentRequest)>>,
 }
 
 /// Ports backed by memory.
@@ -37,6 +40,8 @@ pub(crate) struct Fake {
     pub seen: Arc<Seen>,
     pub secrets: BTreeMap<String, String>,
     pub settings: Mutex<BTreeMap<(String, String), serde_json::Value>>,
+    /// Host credentials by handle (others are unknown).
+    pub credentials: Mutex<BTreeMap<String, CredentialLookup>>,
 }
 
 impl Fake {
@@ -48,6 +53,7 @@ impl Fake {
                 .map(|(k, v)| (k.to_owned(), v.to_owned()))
                 .collect(),
             settings: Mutex::new(BTreeMap::new()),
+            credentials: Mutex::new(BTreeMap::new()),
         })
     }
 
@@ -67,7 +73,53 @@ impl Fake {
             events: self.clone(),
             config: self.clone(),
             messaging: self.clone(),
+            subagents: self.clone(),
+            credentials: self.clone(),
         }
+    }
+}
+
+impl CredentialsPort for Fake {
+    fn resolve(&self, _: &str, handle: &str) -> CredentialLookup {
+        self.credentials
+            .lock()
+            .unwrap()
+            .get(handle)
+            .cloned()
+            .unwrap_or(CredentialLookup::Unknown)
+    }
+}
+
+/// Launches answer the handle `h-<session>`; only that handle is known.
+impl SubagentsPort for Fake {
+    fn call<'a>(
+        &'a self,
+        session: &'a str,
+        _: &'a str,
+        request: SubagentRequest,
+    ) -> PortFuture<'a, Result<SubagentAnswer, SubagentFailure>> {
+        self.seen
+            .subagents
+            .lock()
+            .unwrap()
+            .push((session.to_owned(), request.clone()));
+        let known = |handle: &str| handle == format!("h-{session}");
+        let answer = match request {
+            SubagentRequest::Launch { .. } => Ok(SubagentAnswer::Handle(format!("h-{session}"))),
+            SubagentRequest::Status { handle } if known(&handle) => {
+                Ok(SubagentAnswer::State("running"))
+            }
+            SubagentRequest::Wait { handle, .. } if known(&handle) => Ok(SubagentAnswer::Result(
+                Some(r#"{"status":"completed"}"#.to_owned()),
+            )),
+            SubagentRequest::Steer { handle, .. } | SubagentRequest::Cancel { handle }
+                if known(&handle) =>
+            {
+                Ok(SubagentAnswer::Done)
+            }
+            _ => Err(SubagentFailure::UnknownHandle),
+        };
+        Box::pin(async move { answer })
     }
 }
 
@@ -251,6 +303,33 @@ impl Profile {
             .unwrap();
         approve(&self.grants(), &identity, &requested, "test").unwrap();
         identity
+    }
+
+    /// Installs crate `component` with the `plugin.toml` it ships with
+    /// (`plugins/<group>/<id>/plugin.toml`), enables it and approves
+    /// everything it asks for.
+    pub(crate) fn install_shipped(&mut self, group: &str, id: &str, component: &str) {
+        let dir = self.plugin_dir(id);
+        testkit::install(component, &dir);
+        let shipped = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../plugins")
+            .join(group)
+            .join(id)
+            .join("plugin.toml");
+        std::fs::copy(shipped, dir.join("plugin.toml")).unwrap();
+        let digest = pmt_plugins::digest::of_dir(&dir).unwrap();
+        adopted(&dir, &digest);
+        self.config.enabled.push(id.to_owned());
+        let manifest = Manifest::read(&dir, &version()).unwrap();
+        let requested: CapabilitySet = manifest
+            .capabilities
+            .requested(&self.path().join("plugin-data").join(id))
+            .unwrap();
+        let identity = Identity {
+            id: id.to_owned(),
+            digest,
+        };
+        approve(&self.grants(), &identity, &requested, "test").unwrap();
     }
 
     /// Writes the plugin without enabling or approving it.

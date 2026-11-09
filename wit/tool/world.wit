@@ -2,8 +2,8 @@
 /// The host reads `tools` once per instance; the tools join a session's
 /// tool list only when the session starts.
 /// 1.1 adds the messaging imports (live messages, injection, platform
-/// actions).
-package prometheus:tool@1.1.0;
+/// actions); 1.2 the subagents lifecycle import.
+package prometheus:tool@1.2.0;
 
 interface plugin {
     record tool-spec {
@@ -24,5 +24,6 @@ interface plugin {
 world tool {
     include prometheus:host/imports@1.0.0;
     include prometheus:messaging/imports@1.0.0;
+    include prometheus:subagents/imports@1.0.0;
     export plugin;
 }

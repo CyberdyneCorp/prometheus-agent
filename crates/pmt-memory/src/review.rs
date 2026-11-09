@@ -85,15 +85,92 @@ knowledge with the memory tool in one batched call per target; propose correctio
 that turned out wrong. Skip anything temporary, task progress and secrets. If nothing is worth \
 saving, answer \"nothing to save\" without calling tools.";
 
-/// The review's only tool: `memory`, run by a review-mode session.
+/// Where the review's automation suggestions go (the host's suggested
+/// automations inbox).
+pub trait AutomationSuggestions: Send + Sync {
+    /// Offers a scheduled job: `Ok(true)` when it was added, `Ok(false)`
+    /// when its key is known (dismissed ones stay dismissed) or the inbox
+    /// is full; `Err` explains a proposal that does not check.
+    ///
+    /// # Errors
+    ///
+    /// What is wrong with the proposal.
+    fn offer(&self, key: &str, title: &str, schedule: &str, prompt: &str) -> Result<bool, String>;
+}
+
+/// The name of the suggestion tool.
+pub const SUGGEST_TOOL: &str = "suggest_automation";
+
+/// What the review is told about suggestions.
+const SUGGEST_PROMPT: &str = "If the user keeps asking for the same thing that could run on a \
+schedule (a daily report, a weekly summary, a regular check), propose it once with \
+suggest_automation: a short stable key such as \"weekly-standup\", a title, a schedule such as \
+\"weekdays at 9:00\" or \"every 1d\", and the prompt the job would run. It is only offered to \
+the user, who accepts or dismisses it.";
+
+fn suggest_definition() -> Tool {
+    let text = |what: &str| serde_json::json!({"type": "string", "description": what});
+    Tool {
+        name: SUGGEST_TOOL.to_owned(),
+        description: "Offer the user a scheduled job for a request they keep making; it is \
+                      created only if they accept it."
+            .to_owned(),
+        parameters: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "key": text("a short stable key, a-z 0-9 - _ (a dismissed key is never offered again)"),
+                "title": text("what the job does, a few words"),
+                "schedule": text("when it runs: 'weekdays at 9:00', 'every 1d', a cron expression"),
+                "prompt": text("what the job asks the agent each run"),
+            },
+            "required": ["key", "title", "schedule", "prompt"],
+            "additionalProperties": false,
+        }),
+    }
+}
+
+/// The review's tools: `memory`, run by a review-mode session, and
+/// `suggest_automation` when the host has an inbox.
 struct ReviewTools {
     memory: Arc<MemorySession>,
     definition: Tool,
+    suggestions: Option<Arc<dyn AutomationSuggestions>>,
+}
+
+impl ReviewTools {
+    fn suggest(&self, arguments: &str) -> ToolResult {
+        let Some(inbox) = &self.suggestions else {
+            return ToolResult::error(
+                "unknown tool 'suggest_automation': only memory is available",
+            );
+        };
+        let args: serde_json::Value = match serde_json::from_str(arguments) {
+            Ok(args) => args,
+            Err(e) => return ToolResult::error(format!("arguments are not JSON: {e}")),
+        };
+        let field = |k: &str| args[k].as_str().unwrap_or_default();
+        match inbox.offer(
+            field("key"),
+            field("title"),
+            field("schedule"),
+            field("prompt"),
+        ) {
+            Ok(true) => ToolResult::ok("suggested; the user decides whether to schedule it"),
+            Ok(false) => {
+                ToolResult::ok("not offered: already suggested, dismissed or the inbox is full")
+            }
+            Err(why) => ToolResult::error(why),
+        }
+    }
 }
 
 impl ToolPort for ReviewTools {
     fn definitions(&self) -> Vec<Tool> {
-        vec![self.definition.clone()]
+        let mut tools = vec![self.definition.clone()];
+        if self.suggestions.is_some() {
+            tools.push(suggest_definition());
+        }
+        tools
     }
 
     fn run<'a>(
@@ -110,6 +187,8 @@ impl ToolPort for ReviewTools {
                         Ok(arguments) => self.memory.call(arguments).await,
                         Err(e) => ToolResult::error(format!("arguments are not JSON: {e}")),
                     }
+                } else if call.name == SUGGEST_TOOL {
+                    self.suggest(&call.arguments)
                 } else {
                     ToolResult::error(format!(
                         "unknown tool '{}': only memory is available",
@@ -141,6 +220,8 @@ pub struct ReviewRun {
     pub model: Arc<dyn ModelPort>,
     /// What the user asked the review to look for (`/refine <focus>`).
     pub focus: Option<String>,
+    /// The suggested automations inbox, when the host keeps one.
+    pub suggestions: Option<Arc<dyn AutomationSuggestions>>,
 }
 
 /// The review's user message: [`REVIEW_PROMPT`], the focus, the
@@ -263,9 +344,11 @@ pub async fn run(review: ReviewRun) -> Result<TurnResult, Error> {
     setup.review = true;
     setup.redactor = parent.redactor.clone();
     let memory = Arc::new(MemorySession::new(setup));
+    let suggests = review.suggestions.is_some();
     let tools = Arc::new(ReviewTools {
         memory: Arc::clone(&memory),
         definition: tool::definition(scope.config()),
+        suggestions: review.suggestions,
     });
     let mut agent_setup = AgentSetup::new(
         scope.clone(),
@@ -278,7 +361,10 @@ pub async fn run(review: ReviewRun) -> Result<TurnResult, Error> {
     agent_setup.unattended = true;
     agent_setup.interactive = false;
     let agent = Agent::new(agent_setup)?;
-    let text = instruction(review.focus.as_deref(), &excerpt(&store, review.session)?);
+    let mut text = instruction(review.focus.as_deref(), &excerpt(&store, review.session)?);
+    if suggests {
+        text = format!("{SUGGEST_PROMPT}\n\n{text}");
+    }
     agent
         .run_turn(
             Some(&scope),

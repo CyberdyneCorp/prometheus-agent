@@ -269,10 +269,15 @@ impl<'a> Turn<'a> {
             &input.additions,
             &input.images,
         );
-        if let Some(author) = input.author {
-            let mut metadata = row.metadata.take().unwrap_or_else(|| serde_json::json!({}));
-            metadata["author"] = author;
-            row.metadata = Some(metadata);
+        for (key, value) in [
+            ("author", input.author),
+            ("origin", input.origin.map(serde_json::Value::String)),
+        ] {
+            if let Some(value) = value {
+                let mut metadata = row.metadata.take().unwrap_or_else(|| serde_json::json!({}));
+                metadata[key] = value;
+                row.metadata = Some(metadata);
+            }
         }
         let message_id = row.id;
         let wire = row.content.clone().unwrap_or_default();
@@ -375,10 +380,10 @@ impl<'a> Turn<'a> {
         self.empty_streak = 0;
         let mut reply = reply;
         if reply.tool_calls.is_empty() {
-            if let Some(message) = self.verify_nudge(&reply, route).await {
+            if let Some((message, kind)) = self.before_final(&reply, route).await {
                 self.keep_reply(&reply).await?;
                 self.emit_step(Vec::new()).await;
-                self.append(&transcript::notice_row(&message, "pre_verify"))?;
+                self.append(&transcript::notice_row(&message, kind))?;
                 return Ok(Next::Continue);
             }
             reply.text = self.transform_final(reply.text, route).await;
@@ -405,6 +410,21 @@ impl<'a> Turn<'a> {
         let mut end = Ending::new(ExitReason::Completed);
         end.final_response = Some(reply.text);
         Ok(Next::End(end))
+    }
+
+    /// What the model must see before its final answer stands: findings
+    /// of edits still being checked (language-server diagnostics), else
+    /// a `pre_verify` nudge. Each arrives as a new message.
+    async fn before_final(
+        &mut self,
+        reply: &ModelReply,
+        route: &RouteInfo,
+    ) -> Option<(String, &'static str)> {
+        if let Some(findings) = self.agent.setup.tools.settle().await {
+            return Some((findings, "lsp_diagnostics"));
+        }
+        let message = self.verify_nudge(reply, route).await?;
+        Some((message, "pre_verify"))
     }
 
     /// The interrupt and run-budget check at the top of an iteration.
@@ -443,6 +463,7 @@ impl<'a> Turn<'a> {
             max_output_tokens: None,
             cache,
             reasoning: None,
+            body_overrides: None,
         };
         if let Some(ephemeral) = &mut self.ephemeral {
             ephemeral.attach(&mut request.messages);

@@ -11,6 +11,7 @@
 //! - `requests`: approval and clarify prompts and their cards.
 
 mod admin;
+mod automated;
 mod branch;
 mod clarify;
 mod commands;
@@ -88,17 +89,20 @@ pub(crate) enum Msg {
         action: confirm::Action,
         routing: Box<Routing>,
     },
-    /// A message another session sent to this chat (`send_message`), to
-    /// mirror into this session once no turn runs.
-    Mirror {
-        text: String,
-        from_session: Option<String>,
-    },
+    /// A message to append to this session once no turn runs: one another
+    /// session sent to this chat (`send_message`), or a continuable
+    /// scheduled delivery's seed.
+    Mirror(pmt_store::NewMessage),
     /// A model was chosen on a picker card: switch to it.
     ModelPicked {
         reference: String,
         routing: Box<Routing>,
     },
+    /// An automated turn (goal, loop, heartbeat) for the idle
+    /// conversation.
+    Automated(crate::messaging::automation::Automated),
+    /// A status line to say in the chat.
+    Say(String),
 }
 
 /// What a lane shows outside its task.
@@ -126,6 +130,11 @@ impl Handle {
     /// Whether the conversation runs a turn.
     pub(crate) fn running(&self) -> bool {
         self.status.running.load(Ordering::Acquire)
+    }
+
+    /// Whether a person's input waits for the running turn.
+    pub(crate) fn human_pending(&self) -> bool {
+        self.status.human_pending.load(Ordering::Acquire)
     }
 }
 
@@ -195,6 +204,7 @@ struct Pending {
 
 /// The turn the gateway started in the session.
 #[derive(Debug)]
+#[allow(clippy::struct_excessive_bools)] // independent facts of one running turn
 struct Running {
     turn_id: String,
     /// Who asked (may answer its approvals).
@@ -217,6 +227,9 @@ struct Running {
     addressed: bool,
     /// The platform's native stream of the answer, if one is used.
     stream: native::Stream,
+    /// A heartbeat turn: no typing indicator, tool progress or streamed
+    /// draft (approval prompts and failures still show).
+    quiet: bool,
 }
 
 /// A transition run once the stopped turn has ended.
@@ -247,7 +260,7 @@ struct Lane {
     /// The chat policy frozen for the current session.
     policy: Option<pmt_config::schema::ChatPolicy>,
     /// Mirrored messages waiting for the running turn to end.
-    mirrors: Vec<(String, Option<String>)>,
+    mirrors: Vec<pmt_store::NewMessage>,
     /// The event being handled was a voice note.
     voice_input: bool,
     /// The session whose thread already had its title offered (after its
@@ -272,6 +285,9 @@ struct Lane {
     observed_since_turn: bool,
     /// Model picker cards whose buttons still answer.
     pickers: Vec<models::Picker>,
+    /// The automation origin of the turn being started (`goal`, `loop`,
+    /// `heartbeat`).
+    automating: Option<String>,
 }
 
 /// Hands an authorized event to its conversation's lane, starting it.
@@ -282,7 +298,7 @@ pub(crate) fn input(
     inbound: Inbound,
     voice: bool,
 ) -> Admission {
-    let handle = lane(shared, key, &routing);
+    let handle = open(shared, key, &routing);
     let seq = handle.status.seq.fetch_add(1, Ordering::AcqRel) + 1;
     let queued = handle.status.running.load(Ordering::Acquire);
     handle.send(Msg::Input {
@@ -298,7 +314,8 @@ pub(crate) fn input(
     }
 }
 
-fn lane(shared: &Arc<Shared>, key: &SessionKey, routing: &Routing) -> Handle {
+/// The lane of `key`, started with `routing` when it has none.
+pub(crate) fn open(shared: &Arc<Shared>, key: &SessionKey, routing: &Routing) -> Handle {
     let mut lanes = shared.lanes.lock().expect("lanes poisoned");
     if let Some(handle) = lanes.get(key.as_str()) {
         return handle.clone();
@@ -335,6 +352,7 @@ fn lane(shared: &Arc<Shared>, key: &SessionKey, routing: &Routing) -> Handle {
         progress_mode: None,
         observed_since_turn: false,
         pickers: Vec::new(),
+        automating: None,
     };
     let span = tracing::info_span!(
         "conversation",
@@ -494,8 +512,10 @@ impl Lane {
             Msg::ModelPicked { reference, routing } => {
                 self.switch_model(&routing, &reference).await;
             }
-            Msg::Mirror { text, from_session } => {
-                self.mirrors.push((text, from_session));
+            Msg::Automated(automated) => self.automated(automated).await,
+            Msg::Say(text) => self.say(&text),
+            Msg::Mirror(row) => {
+                self.mirrors.push(row);
                 if self.running.is_none() {
                     self.flush_mirrors();
                 }
@@ -549,6 +569,7 @@ impl Lane {
             kind,
             body,
             attachments: Vec::new(),
+            notify: None,
         }
     }
 
@@ -567,8 +588,8 @@ impl Lane {
             self.mirrors.clear();
             return;
         };
-        for (text, from) in self.mirrors.drain(..) {
-            crate::messaging::send::append_mirror(&store, session, &text, from.as_deref());
+        for row in self.mirrors.drain(..) {
+            crate::messaging::send::append_row(&store, session, &row);
         }
     }
 

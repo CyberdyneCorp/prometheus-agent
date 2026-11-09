@@ -51,6 +51,20 @@ jobs:
       # Cargo, nextest and the doctests all honour this, so scripts/check
       # itself needs no target flag and stays the same command as locally.
       CARGO_BUILD_TARGET: ${{ matrix.target }}
+      # The container and SSH backend tests run on the runner's Docker
+      # (podman on the images lacks rootless cgroup delegation); on the
+      # x86_64 gnu job a missing runtime fails them instead of skipping.
+      PMT_TEST_CONTAINER_RUNTIME: ${{ startsWith(matrix.os, 'ubuntu') && 'docker' || 'auto' }}
+      PMT_TEST_CONTAINERS: ${{ matrix.target == 'x86_64-unknown-linux-gnu' && 'require' || '' }}
+      # The singularity backend's real-instance test runs the pinned
+      # Apptainer installed below on the x86_64 gnu job; elsewhere it skips.
+      PMT_TEST_APPTAINER: ${{ matrix.target == 'x86_64-unknown-linux-gnu' && 'require' || '' }}
+      # The read_file document test installs the pinned doc-converter
+      # runtime (a download per job) and converts real files with it.
+      PMT_TEST_DOC_CONVERTER: require
+      # The LSP test installs the pinned pyright with npm (setup-node below)
+      # and checks a real undefined-name diagnostic.
+      PMT_TEST_LSP: require
     steps:
       # Full history: the health ratchet compares health.toml with the merge
       # base on origin/main.
@@ -102,6 +116,17 @@ jobs:
       - name: Allow user namespaces for Chromium's sandbox
         if: runner.os == 'Linux'
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      # Apptainer runs unprivileged in a user namespace (allowed above).
+      - name: Install Apptainer for the singularity backend test
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: |
+          deb="$RUNNER_TEMP/apptainer_1.4.2_amd64.deb"
+          curl -fsSL -o "$deb" https://github.com/apptainer/apptainer/releases/download/v1.4.2/apptainer_1.4.2_amd64.deb
+          echo "c4729da28ea832b8b7d7e4f882da607498f0462011801c15ea049a5643fda3b2  $deb" | sha256sum -c -
+          sudo apt-get update
+          sudo apt-get install -y "$deb"
+          apptainer --version
 
       # The python-bridge tests run real sidecars: the pinned uv and the
       # CPython it provisions, installed before the tests so none downloads.
@@ -179,6 +204,16 @@ jobs:
       - name: Windows sandbox tests
         if: runner.os == 'Windows' && !cancelled()
         run: cargo test -p pmt-sandbox --test sandbox --locked --target "${{ matrix.target }}" -- "windows::"
+
+      # A real local browser inside the AppContainer (execution-environments,
+      # Local browser isolation): the pinned chrome-headless-shell runtime
+      # (downloaded per job), DevTools over inherited pipe handles, every
+      # browser process contained, pages reached only through the proxy.
+      - name: Windows browser isolation tests
+        if: runner.os == 'Windows' && !cancelled()
+        env:
+          PMT_TEST_BROWSER_RUNTIME: require
+        run: cargo test -p prometheus --test browser_windows --locked --target "${{ matrix.target }}"
 
       # The offline smoke run of a Tier 2 target (spec: workspace-architecture,
       # Supported targets and support tiers): the demo's CLI tests, then
@@ -422,7 +457,9 @@ jobs:
   perf:
     name: perf (startup, memory, size)
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    # A pull request builds two release trees (base + head); on a cold cache
+    # the base build alone takes ~17 min, so 45 min cancelled the job.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 

@@ -8,6 +8,7 @@ use std::path::Path;
 use serde_json::{Map, Value, json};
 
 use super::backend::Kind;
+use super::documents;
 use super::text::{self, Encoding};
 use super::tracker::{self, ReadKey};
 use super::{FileSession, guards, io_failure, json_result, lines};
@@ -65,6 +66,11 @@ impl FileSession {
         if let Some(refusal) = guards::read_refusal(&path, shown) {
             return ToolResult::text(Status::Denied, refusal);
         }
+        if let Some(kind) = documents::kind_of(&path)
+            && let Some(result) = self.read_document(args, &path, kind)
+        {
+            return result;
+        }
         let bytes = match self.read_bytes(&path, shown) {
             Ok(bytes) => bytes,
             Err(result) => return *result,
@@ -75,6 +81,109 @@ impl FileSession {
             ));
         };
         self.page_result(args, &path, &bytes, &decoded, encoding)
+    }
+
+    /// A document converted to Markdown and paginated; `None` when the
+    /// file is not one after all (a text file named `.db`).
+    fn read_document(
+        &self,
+        args: &ReadArgs,
+        path: &Path,
+        kind: documents::Kind,
+    ) -> Option<ToolResult> {
+        let shown = args.path.as_str();
+        let host = self.backend().uses_host_filesystem();
+        let converted = match kind {
+            documents::Kind::BuiltIn(ext) if matches!(ext, "db" | "sqlite" | "sqlite3") && host => {
+                if let Err(result) = self.document_meta(path, shown) {
+                    return Some(*result);
+                }
+                if !sqlite_header(path) {
+                    return None;
+                }
+                documents::built_in(ext, shown, Some(path), &[])
+            }
+            documents::Kind::BuiltIn(ext) => {
+                let bytes = match self.document_bytes(path, shown) {
+                    Ok(bytes) => bytes,
+                    Err(result) => return Some(*result),
+                };
+                if (ext.starts_with("db") || ext.starts_with("sqlite"))
+                    && !documents::is_sqlite(&bytes)
+                {
+                    return None;
+                }
+                documents::built_in(ext, shown, None, &bytes)
+            }
+            documents::Kind::Runtime(ext) => self.convert_with_runtime(path, shown, ext, host),
+        };
+        Some(match converted {
+            Ok(markdown) => {
+                self.page_result(args, path, markdown.as_bytes(), &markdown, Encoding::Utf8)
+            }
+            Err(refusal) => ToolResult::error(refusal),
+        })
+    }
+
+    /// Converts with the `doc-converter` runtime: the file itself on this
+    /// host, else a private copy of what the backend returned.
+    fn convert_with_runtime(
+        &self,
+        path: &Path,
+        shown: &str,
+        ext: &str,
+        host: bool,
+    ) -> Result<String, String> {
+        if self.setup.documents.is_none() {
+            return documents::with_runtime(None, ext, shown, path);
+        }
+        if host {
+            self.document_meta(path, shown)
+                .map_err(|r| r.text_content())?;
+            return documents::with_runtime(self.setup.documents.as_ref(), ext, shown, path);
+        }
+        let bytes = self
+            .document_bytes(path, shown)
+            .map_err(|r| r.text_content())?;
+        let copy = documents::TempCopy::new(&bytes, ext)
+            .map_err(|e| format!("cannot stage '{shown}': {e}"))?;
+        documents::with_runtime(self.setup.documents.as_ref(), ext, shown, copy.path())
+    }
+
+    /// The kind and capability checks of a document read in place.
+    fn document_meta(&self, path: &Path, shown: &str) -> Result<(), Box<ToolResult>> {
+        let meta = self
+            .backend()
+            .metadata(path)
+            .map_err(|err| Box::new(self.missing_or_failed(path, shown, &err)))?;
+        if meta.kind != Kind::File {
+            return self.read_bytes(path, shown).map(drop);
+        }
+        self.backend()
+            .check(pmt_core::capability::Access::Read, path)
+            .map_err(|err| Box::new(io_failure(shown, &err)))
+    }
+
+    /// The bytes of a document no larger than [`documents::MAX_BYTES`].
+    fn document_bytes(&self, path: &Path, shown: &str) -> Result<Vec<u8>, Box<ToolResult>> {
+        if let Ok(meta) = self.backend().metadata(path)
+            && meta.len > documents::MAX_BYTES
+        {
+            return Err(Box::new(ToolResult::error(format!(
+                "'{shown}' is too large to convert ({} MB; at most {} MB)",
+                meta.len / (1024 * 1024),
+                documents::MAX_BYTES / (1024 * 1024)
+            ))));
+        }
+        self.read_bytes(path, shown)
+    }
+
+    fn missing_or_failed(&self, path: &Path, shown: &str, err: &io::Error) -> ToolResult {
+        if err.kind() == io::ErrorKind::NotFound {
+            ToolResult::error(self.not_found(path, shown))
+        } else {
+            io_failure(shown, err)
+        }
     }
 
     /// The file's bytes, after the kind checks; `Err` is the final result.
@@ -306,4 +415,13 @@ fn blocked(shown: &str, page: &Page) -> String {
         "BLOCKED: You have already read this exact region of '{shown}' (lines {}-{}) and it has not changed. Use the earlier result instead of reading it again.",
         page.first, page.last
     )
+}
+
+/// Whether the host file at `path` starts with the SQLite header.
+fn sqlite_header(path: &Path) -> bool {
+    use std::io::Read as _;
+    let mut header = [0u8; 16];
+    std::fs::File::open(path)
+        .and_then(|mut file| file.read_exact(&mut header))
+        .is_ok_and(|()| documents::is_sqlite(&header))
 }

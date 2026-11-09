@@ -35,7 +35,23 @@ fn main() {
     println!("cargo:rustc-env=PMT_BUILD_PROFILE={profile}");
     println!("cargo:rustc-env=PMT_BUILD_DATE={date}");
     println!("cargo:rustc-env=PMT_BUILD_ID={id}");
+    main_thread_stack();
     watch_inputs();
+}
+
+/// Windows gives the main thread a 1 MiB stack (Linux and macOS 8 MiB);
+/// the CLI's dispatch in an unoptimized build needs more, so the binaries
+/// reserve 8 MiB there too.
+fn main_thread_stack() {
+    const STACK: u32 = 8 * 1024 * 1024;
+    if env_or("CARGO_CFG_TARGET_OS", "") != "windows" {
+        return;
+    }
+    if env_or("CARGO_CFG_TARGET_ENV", "") == "msvc" {
+        println!("cargo:rustc-link-arg-bins=/STACK:{STACK}");
+    } else {
+        println!("cargo:rustc-link-arg-bins=-Wl,--stack,{STACK}");
+    }
 }
 
 fn env_or(name: &str, fallback: &str) -> String {

@@ -1,0 +1,17 @@
+# First-party terminal backend: Vercel Sandbox (spec: execution-environments,
+# First-party backend plugins). Select it with `terminal.backend = "vercel"`
+# after `prometheus secrets set VERCEL_TOKEN`, setting
+# `plugins.entries.vercel.team_id` and `.project_id`, and
+# `prometheus plugins enable vercel`.
+manifest_version = 1
+id = "vercel"
+version = "1.0.0"
+kind = "wasm"
+description = "Runs terminal commands in a Vercel Sandbox microVM, one per session."
+license = "MIT"
+requires_prometheus = ">=0.1"
+worlds = ["terminal-backend@1.2"]
+
+[capabilities]
+network = ["api.vercel.com"]
+secrets = ["VERCEL_TOKEN"]

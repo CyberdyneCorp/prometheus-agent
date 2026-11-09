@@ -51,7 +51,7 @@ Totals: Specified: 995, N/A: 8.
 | TOOL-037 | Local backend | Specified | execution-environments › Local backend runs under the OS sandbox |
 | TOOL-038 | Docker backend options (`docker_image`, `docker_volumes`, `docker_mount_cwd_to_workspace`, `docker_network: false` → `--network=none`, `docker_extra_args`, `docker_run_as_host_user`, `docker_shared_container_key`, `docker_snap_compat`, persistent container) | Specified | execution-environments › Container backend options |
 | TOOL-039 | SSH backend (persistent shell, file sync to/from remote, `sync_back_max_bytes` 2 GiB) | Specified | execution-environments › Remote file sync and sync-back |
-| TOOL-040 | Singularity/Apptainer backend (official plugin; `terminal.singularity_image` SIF) | Specified | execution-environments › First-party backend plugins |
+| TOOL-040 | Singularity/Apptainer backend (official plugin; `terminal.singularity_image` SIF) | Specified | execution-environments › Singularity backend (built in, not a plugin) |
 | TOOL-041 | Modal backend (direct with Modal creds, or managed via Nous gateway; `terminal.modal_mode` auto) | Specified | execution-environments › First-party backend plugins |
 | TOOL-042 | Daytona backend | Specified | execution-environments › Remote sandboxes are plugins |
 | TOOL-043 | Vercel Sandbox backend (`vercel_image`, token/project/team or OIDC token) | Specified | execution-environments › Remote sandboxes are plugins |

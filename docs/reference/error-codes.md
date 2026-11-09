@@ -165,7 +165,11 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `sandbox.unavailable` | `sandbox` | 77 | The OS sandbox cannot enforce a feature (Landlock, seccomp, Seatbelt, AppContainer) on this host and `security.sandbox.allow_degraded` does not name it, so the command was not run. |
 | `sandbox.setup` | `sandbox` | 77 | The OS sandbox profile for a child process could not be built or applied; the child was not started. |
 | `terminal.unknown_backend` | `config` | 78 | `terminal.backend` names a backend that is neither built in nor provided by an enabled plugin; the error lists the available backends. |
-| `terminal.backend_unavailable` | `unavailable` | 69 | The selected terminal backend (`container`, `ssh`) is reserved but not available in this build. |
+| `terminal.backend_unavailable` | `unavailable` | 69 | The selected terminal backend is a reserved built-in name that is not available in this build. |
+| `terminal.backend_reserved` | `config` | 78 | A `terminal-backend` plugin registered a backend whose lower-cased name is `local`, `container`, `docker`, `podman` or `ssh`; the plugin backend is rejected and the built-in stays selectable. |
+| `terminal.backend_descriptor` | `config` | 78 | A `terminal-backend` plugin's isolation descriptor (`isolation`, `uses_host_filesystem`, `default_cwd`, `session_isolated_when_ephemeral`, `persistent`) is missing a field or holds an invalid value, so the backend was rejected at load time. |
+| `terminal.container_runtime` | `unavailable` | 69 | The `container` backend found no reachable rootless Podman or Docker runtime (`terminal.container.runtime`). |
+| `terminal.container_hardening` | `sandbox` | 77 | The container runtime rejected a hardening flag, or `terminal.container.extra_args`/`volumes` would weaken hardening, and `security.sandbox.allow_degraded` does not cover it; no container was started. |
 | `terminal.env_passthrough_secret` | `config` | 78 | `terminal.env_passthrough` or `terminal.container.env` names a secret (a stored secret, a provider credential, a `PMT_SECRET_*` or secret-looking name); grant it with `secrets.read:<NAME>` instead. |
 | `terminal.shell_not_found` | `unavailable` | 69 | The shell selected by `terminal.windows_shell` (Git Bash, pwsh, Windows PowerShell) is not installed, so the terminal tool is unavailable. |
 | `terminal.shell_confined` | `unavailable` | 69 | `terminal.windows_shell = "git-bash"` while the Windows sandbox confines commands: the MSYS2 runtime behind Git Bash cannot start inside an AppContainer, so the terminal tool is unavailable; select `auto`, `pwsh` or `powershell`. |
@@ -274,6 +278,41 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `runtime.not_installed` | `unavailable` | 69 | The runtime is not in the store and `runtimes.allow_lazy_install = false`; install it with `prometheus runtimes install <name>`. |
 | `runtime.declined` | `cancelled` | 130 | The install prompt was answered no; nothing was downloaded. |
 | `runtime.io` | `io` | 74 | A file under `<PROMETHEUS_HOME>/runtimes/` could not be read, written or renamed. |
+| `lsp.unknown_server` | `usage` | 2 | The id is not a built-in language server or a custom server under `lsp.servers`; `prometheus lsp list` shows the ids. |
+| `lsp.not_found` | `not_found` | 66 | The language server is neither in `<PROMETHEUS_HOME>/runtimes/lsp/` nor on `PATH`, and no `lsp.servers.<id>.command` names one; `prometheus lsp install <id>` installs `npm`, `go` and `pip` servers. |
+| `lsp.install` | `unavailable` | 69 | The server's installer (npm, pnpm, yarn, go or pip) is missing or failed; the message names it. A `manual` server is installed by following the printed instructions. |
+| `delegation.invalid_task` | `invalid_input` | 65 | A `delegate_task` call has an unknown field, a blank or placeholder goal, too much context, too many images or an invalid `output_schema`; the message names the task index and the rule. No child was built. |
+| `delegation.paused` | `unavailable` | 69 | `/delegation pause` stopped new spawns for this profile; control actions still work. Resume with `/delegation resume`. |
+| `delegation.depth_limit` | `permission_denied` | 77 | The calling session is a child at `delegation.max_spawn_depth`; raise the setting (1-4) to let children spawn their own children. |
+| `delegation.session_closed` | `unavailable` | 69 | The session ended (`/stop all`, `/new`, close); its children were stopped and it cannot spawn more. |
+| `delegation.budget_exhausted` | `budget_exceeded` | 3 | The one-shot run used `delegation.oneshot_max_children` subagents, or the root lineage's budget has nothing left to give a child. |
+| `delegation.grant_broadening` | `permission_denied` | 77 | A child's grant can only narrow its parent's: the task named tools, paths, hosts or secrets the parent does not hold (all listed in the message). |
+| `delegation.unknown_agent` | `invalid_input` | 65 | The task's `agent` is not among the definitions loaded at session start (`<profile>/agents/<name>.md`); definitions added later apply to new sessions. |
+| `delegation.at_capacity` | `unavailable` | 69 | `delegation.max_concurrent_children` children run and `delegation.max_queued` spawns wait already; retry when one finishes. |
+| `delegation.router_unavailable` | `unavailable` | 69 | `delegation.router` names a router no enabled plugin provides (or its plugin failed); spawns never fall back to `default`. |
+| `delegation.not_in_tree` | `not_found` | 66 | The subagent id is not a live child in this conversation's spawn tree; `delegate_task(action="list")` shows the ones you can control. |
+| `delegation.unknown_handle` | `not_found` | 66 | The subagent handle failed its signature check, belongs to another conversation or its result expired (results are kept 3600 s). |
+| `execute_code.no_tools` | `permission_denied` | 77 | The intersection of `code_execution.allowed_tools` with the session's granted tools is empty, so no script ran. |
+| `execute_code.refused` | `permission_denied` | 77 | No code, no resolvable sandbox policy, a command that stops the serving gateway, or an approval that was not given; nothing ran. |
+| `worktree.not_a_repository` | `usage` | 2 | `chat -w`, `/worktree` and `worktrees prune --repo` need a directory inside a non-bare git repository with `git` on `PATH`. |
+| `worktree.invalid_name` | `invalid_input` | 65 | A worktree name matches `[A-Za-z0-9._-]{1,64}` and must not exist yet under `<repo>/.worktrees/` or as branch `prometheus/<name>`. |
+| `worktree.archive_not_found` | `not_found` | 66 | No `refs/prometheus/archive/<name>` exists in the repository (or in any recorded repository); `prometheus worktrees list` shows the archives. |
+| `worktree.git` | `io` | 74 | git failed while creating, archiving, removing or restoring a worktree; the message carries git's error and nothing was removed. |
+| `cron.job_not_found` | `not_found` | 66 | No job of the profile has that id or name; `prometheus cron list --all` shows every job, completed ones included. |
+| `cron.run_not_found` | `not_found` | 66 | No run record has that id (records are kept for `cron.run_retention_secs`); `prometheus cron runs <job>` lists a job's runs. |
+| `cron.ambiguous_name` | `usage` | 2 | Several jobs share that name; the message lists their ids, and any of them selects one job. |
+| `cron.invalid_schedule` | `invalid_input` | 65 | The schedule is ambiguous (a bare duration), shorter than 60 s, in the past, or not one of `every <duration>`, a 5-field cron expression or day/time phrase, an RFC 3339 time, `at <time>`, `tomorrow at <time>` or `in <duration>`; nothing was saved. |
+| `cron.invalid_job` | `invalid_input` | 65 | The job has nothing to run, `no_agent` without a script, a script outside `<profile>/scripts`, an unknown skill, toolset, delivery target, model or provider, or a field out of range; nothing was saved. |
+| `cron.prompt_rejected` | `permission_denied` | 77 | The job's prompt holds an injection or concealment directive, a secret-exfiltration pattern or invisible Unicode; the message names the rule and nothing was saved. |
+| `cron.confirmation` | `permission_denied` | 77 | Saving a job (or a changed schedule) needs a confirmation: answer `y` on a terminal or pass `--yes`; the command exits 4 and nothing was saved. |
+| `cron.replay_unavailable` | `unavailable` | 69 | Replaying a run against its recorded model responses needs the model-call cache and the replay provider, which this build does not have yet; `prometheus cron replay <run> --live` re-runs the recorded inputs against the current provider instead. |
+| `cron.invalid_state` | `invalid_input` | 65 | The operation does not apply in the job's state (for example resuming a one-shot job whose time has passed); the message says how to change it. |
+| `cron.incident_not_found` | `not_found` | 66 | No failure incident of the profile has that id; `prometheus cron incidents` lists them. |
+| `cron.invalid_workdir` | `usage` | 2 | A job's `workdir` must be an absolute path to an existing directory, and one set through the `cronjob` tool must lie inside the calling session's workspace; nothing was saved. |
+| `cron.beyond_session` | `permission_denied` | 77 | A job the model sets up through the `cronjob` tool cannot reach past the calling session: its `toolsets` must stay within the session's tools, each `script_secrets` name needs the session's `secrets.read:<NAME>` grant, and its `interpreter` must not be a file the session can write; a person can set them with `prometheus cron add|edit`. Nothing was saved. |
+| `cron.notepad_limit` | `invalid_input` | 65 | A job notepad key is at most 128 characters, a value at most 16 KiB and a notepad at most 64 KiB counting keys and values; the notepad is unchanged. |
+| `cron.already_running` | `conflict` | 75 | A run of the job is queued or running; wait for it (`prometheus cron runs <job>`) before starting another. |
+| `cron.blueprint` | `invalid_input` | 65 | The blueprint name matches none of the catalog, or a slot value is invalid (the message names the slot and the accepted values); nothing was created. |
 | `rpc.parse` | `invalid_input` | 65 | A client protocol frame is not valid JSON (JSON-RPC `-32700`); the connection keeps serving. |
 | `rpc.invalid_request` | `invalid_input` | 65 | A client protocol frame is JSON but not a JSON-RPC 2.0 request object (JSON-RPC `-32600`). |
 | `rpc.unknown_method` | `usage` | 2 | The called method is not declared in the RPC catalog (`schema/rpc.json`); JSON-RPC `-32601`. |

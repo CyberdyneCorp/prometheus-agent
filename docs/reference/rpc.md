@@ -59,8 +59,8 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `complete.path` | `tui` | 1.0 | [`CompleteParams`](#completeparams) | [`Completions`](#completions) |
 | `complete.slash` | `tui` | 1.0 | [`CompleteParams`](#completeparams) | [`Completions`](#completions) |
 | `config.get` | `tui` | 1.0 | [`ConfigGetParams`](#configgetparams) | [`ConfigValue`](#configvalue) |
-| `cron.blueprints.fill` | `scheduled-jobs` | 1.0 | not served yet | |
-| `cron.blueprints.list` | `scheduled-jobs` | 1.0 | not served yet | |
+| `cron.blueprints.fill` | `scheduled-jobs` | 1.0 | [`BlueprintFillParams`](#blueprintfillparams) | [`BlueprintFilled`](#blueprintfilled) |
+| `cron.blueprints.list` | `scheduled-jobs` | 1.0 | [`BlueprintsListParams`](#blueprintslistparams) | [`BlueprintList`](#blueprintlist) |
 | `daemon.update` | `workspace-architecture` | 1.0 | not served yet | |
 | `egress.set` | `security-boundaries` | 1.0 | [`EgressSetParams`](#egresssetparams) | [`EgressState`](#egressstate) |
 | `evolve.cancel` | `harness-evolution` | 1.0 | not served yet | |
@@ -77,8 +77,8 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `experience.pin` | `experience-library` | 1.0 | not served yet | |
 | `experience.restore` | `experience-library` | 1.0 | not served yet | |
 | `experience.show` | `experience-library` | 1.0 | not served yet | |
-| `files.rollback` | `execution-environments` | 1.0 | not served yet | |
-| `files.undo` | `execution-environments` | 1.0 | not served yet | |
+| `files.rollback` | `execution-environments` | 1.0 | [`FilesRollbackParams`](#filesrollbackparams) | [`FilesRolledBack`](#filesrolledback) |
+| `files.undo` | `execution-environments` | 1.0 | [`FilesUndoParams`](#filesundoparams) | [`FilesUndone`](#filesundone) |
 | `grants.list` | `security-boundaries` | 1.0 | not served yet | |
 | `grants.revoke` | `security-boundaries` | 1.0 | not served yet | |
 | `groups.capabilities` | `bot-mode` | 1.0 | not served yet | |
@@ -89,7 +89,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `harness.log` | `harness-evolution` | 1.0 | not served yet | |
 | `harness.rollback` | `harness-evolution` | 1.0 | not served yet | |
 | `journey.list` | `memory` | 1.0 | not served yet | |
-| `lsp.status` | `lsp-diagnostics` | 1.0 | not served yet | |
+| `lsp.status` | `lsp-diagnostics` | 1.0 | [`LspStatusParams`](#lspstatusparams) | [`LspStatus`](#lspstatus) |
 | `moa.presets.delete` | `mixture-of-agents` | 1.0 | not served yet | |
 | `moa.presets.list` | `mixture-of-agents` | 1.0 | not served yet | |
 | `moa.presets.put` | `mixture-of-agents` | 1.0 | not served yet | |
@@ -127,10 +127,10 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `vault.sources` | `security-boundaries` | 1.0 | [`VaultSourcesParams`](#vaultsourcesparams) | [`VaultSourceList`](#vaultsourcelist) |
 | `voice.client_config` | `voice-mode` | 1.0 | not served yet | |
 | `wake.feed` | `voice-mode` | 1.0 | not served yet | |
-| `worktree.list` | `git-worktrees` | 1.0 | not served yet | |
-| `worktree.new` | `git-worktrees` | 1.0 | not served yet | |
-| `worktree.prune` | `git-worktrees` | 1.0 | not served yet | |
-| `worktree.status` | `git-worktrees` | 1.0 | not served yet | |
+| `worktree.list` | `git-worktrees` | 1.0 | [`WorktreeSessionParams`](#worktreesessionparams) | [`WorktreeListing`](#worktreelisting) |
+| `worktree.new` | `git-worktrees` | 1.0 | [`WorktreeNewParams`](#worktreenewparams) | [`WorktreeCreated`](#worktreecreated) |
+| `worktree.prune` | `git-worktrees` | 1.0 | [`WorktreePruneParams`](#worktreepruneparams) | [`WorktreePruned`](#worktreepruned) |
+| `worktree.status` | `git-worktrees` | 1.0 | [`WorktreeSessionParams`](#worktreesessionparams) | [`WorktreeStatus`](#worktreestatus) |
 
 ## Server requests
 
@@ -147,7 +147,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 |---|---|---|---|
 | `achievement.unlocked` | `pets` | 1.0 | not served yet |
 | `adapter.state` | `messaging-gateway` | 1.0 | [`AdapterStatePayload`](#adapterstatepayload) |
-| `automation.state` | `session-automation` | 1.0 | not served yet |
+| `automation.state` | `session-automation` | 1.0 | [`AutomationStatePayload`](#automationstatepayload) |
 | `health.changed` | `observability` | 1.0 | not served yet |
 | `local_model.context_grown` | `local-models` | 1.0 | not served yet |
 | `message.delivery` | `messaging-gateway` | 1.0 | not served yet |
@@ -192,6 +192,7 @@ How `prompt.submit` admitted an input (spec: tui, Prompt submission while busy).
 | `started` | Its turn started. |
 | `queued` | A turn was running: it runs after the queued inputs before it (`busy.input_mode = "queue"`, or `interrupt`, which stops the running turn first). |
 | `steered` | Handed to the running turn after its current tool step (`busy.input_mode = "steer"`). |
+| `handled` | Answered without a turn: the `yes` that saves the job a `/cron` echo just showed (spec: scheduled-jobs, /cron slash command); the result's `notice` says what happened. |
 
 ### `ApprovalAnswer`
 
@@ -271,16 +272,100 @@ What an attached connection may do in the session.
 | `session_id` | string | yes | The session. |
 | `truncated` | boolean | no | Events after the client's `last_seen_seq` were evicted, or the client's epoch is not this daemon's: reload the transcript (`session.transcript`) instead of applying the replayed events. |
 
+### `AutomationStatePayload`
+
+One kind of a session's automation.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `count` | integer | no | Turns (goal), wakeups (loop) or fires (heartbeat) so far. |
+| `kind` | string | yes | `goal`, `loop` or `heartbeat`. |
+| `limit` | integer or null | no | A goal's turn budget (`goals.max_turns`). |
+| `next_fire_at` | string or null | no | When it fires next (RFC 3339), for an active loop or heartbeat or a parked goal's deadline. |
+| `row` | string or null | no | The live row as the CLI shows it (absent once removed). |
+| `session_id` | string | yes | The session. |
+| `status` | string | yes | `active`, `paused`, `done`, `parked`, or `none` once removed. |
+
 ### `BannerInfo`
 
 `session.banner` result: what the TUI's startup banner lists.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `degraded` | string or null | no | The degraded marker while the session runs below full hardening, for example `sandbox: partial:landlock_net` (spec: security-boundaries, Hardening downgrades are never silent). |
 | `mcp_servers` | array of [`McpServerState`](#mcpserverstate) | yes | The session's MCP servers. |
 | `skills` | array of string | yes | The installed skills the session can load. |
 | `system_prompt` | [`FrozenPrompt`](#frozenprompt) or null | no | The frozen system prompt; none before the first turn. |
 | `tools` | array of string | yes | The session's tool names, in request order. |
+
+### `BlueprintFillParams`
+
+`cron.blueprints.fill` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `create` | boolean | no | Save the job (after the caller showed the echo); otherwise only check and echo. |
+| `key` | string | yes | The blueprint (key, prefix or near spelling). |
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
+| `values` | object | no | Slot values by name. |
+
+### `BlueprintFilled`
+
+`cron.blueprints.fill` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `echo` | string or null | no | The schedule echo: the canonical form and the next instants. |
+| `job_id` | string or null | no | The created job's id. |
+| `key` | string | yes | The blueprint's key. |
+| `missing` | string or null | no | The slot that needs a value. |
+| `prompt` | string or null | no | The job's prompt. |
+| `question` | string or null | no | Its question. |
+| `schedule` | string or null | no | The canonical schedule (`cron 0 8 * * 1-5`). |
+| `status` | string | yes | `missing` (a slot needs a value), `ready` (echoed, not saved) or `created`. |
+
+### `BlueprintInfo`
+
+One blueprint.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `category` | string | yes | Its category. |
+| `description` | string | yes | What it does. |
+| `key` | string | yes | Its key (`<plugin>:<key>`, `skill:<key>` outside the built-ins). |
+| `slots` | array of [`BlueprintSlot`](#blueprintslot) | yes | Its slots, in the order they are asked. |
+| `source` | string | yes | `builtin`, `plugin` or `skill`. |
+| `title` | string | yes | Its title. |
+
+### `BlueprintList`
+
+`cron.blueprints.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `blueprints` | array of [`BlueprintInfo`](#blueprintinfo) | yes | The profile's catalog. |
+
+### `BlueprintSlot`
+
+One slot, as a form field.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `default` | string or null | no | The value used when none is given. |
+| `kind` | string | yes | `time`, `enum`, `text` or `weekdays`. |
+| `name` | string | yes | The field name (`time`, `days`...). |
+| `options` | array of string | yes | The options of an `enum`; the presets of `weekdays`. |
+| `question` | string | yes | The question asked for it. |
+| `required` | boolean | yes | Needs a value (given or default). |
+| `strict` | boolean | yes | An `enum` accepts only its options. |
+
+### `BlueprintsListParams`
+
+`cron.blueprints.list` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
 
 ### `ClarifyAnswers`
 
@@ -532,6 +617,48 @@ One event frame: the notification params and the replay item.
 | `last_seen` | integer | yes | The last sequence number the client saw (0 for none). |
 | `session_id` | string | yes | The session. |
 
+### `FilesRollbackParams`
+
+`files.rollback` params: no checkpoint lists them; `diff` previews.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `all` | boolean | no | Overwrite hand-edited files too. |
+| `checkpoint` | integer or null | no | The checkpoint, 1 for the newest. |
+| `diff` | boolean | no | Show the diff to the current state; change nothing. |
+| `file` | string or null | no | Restore only this file. |
+| `session_id` | string | yes | The session (its workspace). |
+
+### `FilesRolledBack`
+
+`files.rollback` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `output` | string | yes | The listing, the diff or what was restored, as text. |
+
+### `FilesUndoParams`
+
+`files.undo` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `dry_run` | boolean | no | Report only; change nothing. |
+| `force` | boolean | no | Overwrite files changed since the session wrote them. |
+| `session_id` | string | yes | The session. |
+| `turns` | integer or null | no | How many of its last turns (default 1). |
+
+### `FilesUndone`
+
+`files.undo` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `conflicts` | array of string | yes | `conflict: <path> changed since turn <n>; use --force to overwrite`. |
+| `removed` | array of string | yes | Files the session had created, removed. |
+| `restored` | array of string | yes | Files given their prior content. |
+| `turns` | array of integer | yes | The turns undone. |
+
 ### `ForkParams`
 
 `session.fork` params.
@@ -577,6 +704,36 @@ The system prompt a session froze on its first turn.
 | `profiles` | array of string | yes | The profiles the connection's ticket grants. |
 | `protocol` | [`Version`](#version) | yes | The protocol the daemon speaks. |
 | `server_version` | string | yes | The daemon's semantic version. |
+
+### `LspServerStatus`
+
+One running language server.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | yes | The server id (`pyright`, `rust-analyzer`...). |
+| `pid` | integer | yes | Its process id. |
+| `session_id` | string | yes | The session that started it. |
+| `state` | string | yes | `ready`. |
+| `trusted_only` | boolean | yes | It executes project code, so it starts only in trusted workspaces. |
+| `uptime_secs` | integer | yes | Seconds since it started. |
+| `workspace` | string | yes | Its workspace root. |
+
+### `LspStatus`
+
+`lsp.status` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `servers` | array of [`LspServerStatus`](#lspserverstatus) | yes | Every running server of the profile, by id and workspace. |
+
+### `LspStatusParams`
+
+`lsp.status` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
 
 ### `McpServerState`
 
@@ -841,6 +998,7 @@ One delegated child of a session.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `admission` | [`Admission`](#admission) | no | How the input was admitted. |
+| `notice` | string or null | no | What a `handled` input did, to show in place of a turn. |
 | `turn_id` | string | yes | The admission id: the turn that runs the input (for a steered input, the running turn it joined). |
 
 ### `SudoAnswer`
@@ -1025,3 +1183,105 @@ A `<major>.<minor>` protocol version on the wire.
 |---|---|---|---|
 | `major` | integer | yes | Incompatible revisions. |
 | `minor` | integer | yes | Backward-compatible additions. |
+
+### `WorktreeArchiveInfo`
+
+One archive.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `age_secs` | integer | yes | Seconds since it was archived. |
+| `branch` | string or null | no | The branch it was on. |
+| `name` | string | yes | The archived tree's name (`worktrees restore <name>`). |
+| `reason` | string | yes | Why it was archived (`sweep`, `exit`, `subagent`). |
+| `reference` | string | yes | `refs/prometheus/archive/<name>`. |
+
+### `WorktreeCreated`
+
+`worktree.new` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `base` | string | yes | The ref it was branched from. |
+| `notices` | array of string | yes | What the user should know (a failed fetch). |
+| `tree` | [`WorktreeInfo`](#worktreeinfo) | yes | The new tree, now the session's working directory. |
+
+### `WorktreeDecision`
+
+One sweep decision.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `action` | string | yes | `remove`, `archive` or `keep`. |
+| `name` | string | yes | The tree. |
+| `outcome` | string | yes | What happened (the plan on a dry run). |
+| `path` | string | yes | Its directory. |
+| `reason` | string or null | no | The reason a tree is kept (`live-process`, `keep-large-untracked`...). |
+
+### `WorktreeInfo`
+
+One Prometheus tree.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `age_secs` | integer | yes | Seconds since it was created. |
+| `branch` | string or null | no | The branch it is on (`null`: detached). |
+| `kind` | string | yes | `generated`, `named`, `subagent` or `kanban`. |
+| `last_decision` | string or null | no | The last sweep decision and its reason. |
+| `name` | string | yes | Its name (directory under `.worktrees/`). |
+| `path` | string | yes | Its directory. |
+
+### `WorktreeListing`
+
+`worktree.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `archives` | array of [`WorktreeArchiveInfo`](#worktreearchiveinfo) | yes | Its archives. |
+| `repo` | string | yes | The repository's main checkout. |
+| `trees` | array of [`WorktreeInfo`](#worktreeinfo) | yes | Its Prometheus trees. |
+
+### `WorktreeNewParams`
+
+`worktree.new` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string or null | no | The tree's name (`[A-Za-z0-9._-]{1,64}`); omitted: `prom-<8 hex>`. |
+| `session_id` | string | yes | The session to move into the new tree. |
+
+### `WorktreePruneParams`
+
+`worktree.prune` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `dry_run` | boolean | no | Report the decisions; change nothing. |
+| `session_id` | string | yes | The session (its working directory's repository). |
+
+### `WorktreePruned`
+
+`worktree.prune` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `decisions` | array of [`WorktreeDecision`](#worktreedecision) | yes | One decision per tree. |
+| `dry_run` | boolean | yes | Nothing was changed. |
+| `repo` | string | yes | The repository's main checkout. |
+
+### `WorktreeSessionParams`
+
+Params naming the session (`worktree.status`, `worktree.list`).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `session_id` | string | yes | The session (its working directory's repository). |
+
+### `WorktreeStatus`
+
+`worktree.status` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `cwd` | string | yes | The session's working directory. |
+| `tree` | [`WorktreeInfo`](#worktreeinfo) or null | no | The Prometheus tree it is in (`null`: none). |

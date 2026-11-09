@@ -11,7 +11,7 @@ use pmt_core::secret::SecretString;
 use pmt_sandbox::{Feature, FeatureReport, Gap, Level, StrengthReport};
 use pmt_tools::terminal::env::{ChildEnv, EnvRequest, granted_secrets};
 use pmt_tools::terminal::guard::{Guard, GuardChain, GuardFuture, GuardRequest};
-use pmt_tools::terminal::{LocalTerminal, Status, TerminalArgs};
+use pmt_tools::terminal::{Status, Terminal, TerminalArgs};
 
 use crate::common::{BOT_TOKEN, Fixture, run};
 
@@ -57,7 +57,7 @@ async fn a_declared_and_granted_secret_is_the_only_one_present() {
         },
     );
     let setup = fixture.setup(TerminalConfig::default(), env, fixture.sandbox(&[], None));
-    let session = LocalTerminal::new(setup).unwrap();
+    let session = Terminal::new(setup).unwrap();
     let result = run(&session, "env").await;
     assert!(
         result.output.contains("OPENAI_API_KEY="),
@@ -108,8 +108,7 @@ async fn a_passthrough_variable_carries_its_launch_value() {
         ..TerminalConfig::default()
     };
     let env = fixture.child_env(&terminal.env_passthrough, &[("JAVA_HOME", "/opt/jdk-21")]);
-    let session =
-        LocalTerminal::new(fixture.setup(terminal, env, fixture.sandbox(&[], None))).unwrap();
+    let session = Terminal::new(fixture.setup(terminal, env, fixture.sandbox(&[], None))).unwrap();
     let result = run(&session, "echo $JAVA_HOME").await;
     assert_eq!(result.output, "/opt/jdk-21\n");
 }
@@ -191,7 +190,7 @@ async fn a_wedged_guard_fails_closed() {
     let env = fixture.child_env(&[], &[]);
     let mut setup = fixture.setup(TerminalConfig::default(), env, fixture.sandbox(&[], None));
     setup.guards = GuardChain::new(vec![Arc::new(Wedged)]);
-    let session = LocalTerminal::new(setup).unwrap();
+    let session = Terminal::new(setup).unwrap();
     let marker = fixture.work.join("ran");
     let args = TerminalArgs {
         timeout: Some(5.0),
@@ -242,7 +241,7 @@ async fn kernel_without_landlock_refuses_to_run() {
         env,
         fixture.sandbox(&[], Some(report)),
     );
-    let session = LocalTerminal::new(setup).unwrap();
+    let session = Terminal::new(setup).unwrap();
     let marker = fixture.work.join("ran");
     let result = run(&session, &format!("touch {}", marker.display())).await;
     assert!(

@@ -6,7 +6,8 @@ use pmt_core::error::{Error, codes};
 use pmt_rpc::RpcError;
 use pmt_rpc::client::{ServerCall, error_of};
 use pmt_rpc::contracts::{
-    Envelope, PromptImage, PromptSubmit, SessionInterrupt, SessionRef, SubmitParams, TurnFinished,
+    Admission, Envelope, PromptImage, PromptSubmit, SessionInterrupt, SessionRef, SubmitParams,
+    TurnFinished,
 };
 use pmt_tools::approval::printable;
 use serde_json::{Value, json};
@@ -89,13 +90,18 @@ pub(super) async fn run(
         input_id: None,
         author: None,
     };
-    let turn_id = attached
+    let submitted = attached
         .client
         .call_typed::<PromptSubmit>(&params)
         .await
-        .map_err(|e| error_of(&e))?
-        .turn_id;
+        .map_err(|e| error_of(&e))?;
     let mut outcome = Outcome::default();
+    if submitted.admission == Admission::Handled {
+        // Answered without a turn (the `yes` to a `/cron` echo).
+        out.notice(submitted.notice.as_deref().unwrap_or_default());
+        return Ok(outcome);
+    }
+    let turn_id = submitted.turn_id;
     let mut asking: Option<Asking> = None;
     loop {
         tokio::select! {
@@ -103,6 +109,9 @@ pub(super) async fn run(
                 let Some(event) = event else {
                     return Err(lost(attached.daemon_pid));
                 };
+                if event.event == "automation.state" {
+                    render::automation(&mut attached.automation, &attached.session, &event.data);
+                }
                 if let Some(finished) = on_event(&event, &turn_id, out, &mut asking) {
                     if let Some(report) = &finished.report {
                         attached.record.remote_turn(report);
@@ -171,7 +180,8 @@ fn on_event(
     None
 }
 
-async fn interrupt(attached: &Attached) {
+/// Interrupts whatever turn the session runs (`session.interrupt`).
+pub(super) async fn interrupt(attached: &Attached) {
     let params = SessionRef {
         session_id: attached.session.clone(),
     };

@@ -236,14 +236,16 @@ mod sandboxed {
 
     use crate::support::{Profile, Session, write};
 
-    #[tokio::test]
-    async fn snippets_run_in_the_session_sandbox_in_the_skill_dir() {
-        let profile =
-            Profile::new("[skills]\ninline_shell = true\ninline_shell_timeout_ms = 300\n");
+    /// Views a one-snippet-body skill `probe` through a real session sandbox
+    /// and returns the rendered content plus the skill's canonical dir.
+    async fn view_in_sandbox(timeout_ms: u64, body: &str) -> (String, std::path::PathBuf) {
+        let profile = Profile::new(&format!(
+            "[skills]\ninline_shell = true\ninline_shell_timeout_ms = {timeout_ms}\n"
+        ));
         write(
             &profile.skills(),
             "probe/SKILL.md",
-            "---\nname: probe\ndescription: Probe.\n---\ncwd=!`pwd`\nfail=!`exit 3`\nslow=!`sleep 5`\n",
+            &format!("---\nname: probe\ndescription: Probe.\n---\n{body}"),
         );
         let id = profile.session();
         let setup = profile.setup(id);
@@ -280,8 +282,15 @@ mod sandboxed {
         )));
         let session = Session::start(&profile, setup).await;
         let view = session.json("skill_view", json!({"name": "probe"})).await;
-        let content = view["content"].as_str().unwrap();
+        let content = view["content"].as_str().unwrap().to_owned();
         let dir = profile.skills().join("probe").canonicalize().unwrap();
+        (content, dir)
+    }
+
+    // A generous timeout: slow CI runners must not turn `pwd` into a timeout.
+    #[tokio::test]
+    async fn snippets_run_in_the_session_sandbox_in_the_skill_dir() {
+        let (content, dir) = view_in_sandbox(30_000, "cwd=!`pwd`\nfail=!`exit 3`\n").await;
         assert!(
             content.contains(&format!("cwd={}", dir.display())),
             "{content}"
@@ -290,6 +299,13 @@ mod sandboxed {
             content.contains("fail=[inline-shell error: exit code 3: ]"),
             "{content}"
         );
+    }
+
+    // The sleep outlasts the timeout by two orders of magnitude, so only the
+    // timeout can end it however slow the runner is.
+    #[tokio::test]
+    async fn a_snippet_past_the_timeout_renders_a_timeout_error() {
+        let (content, _) = view_in_sandbox(300, "slow=!`sleep 60`\n").await;
         assert!(
             content.contains("slow=[inline-shell error: timed out after 300 ms]"),
             "{content}"

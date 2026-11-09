@@ -60,15 +60,16 @@ fn events(home: &Path) -> Vec<Value> {
     .collect()
 }
 
-/// Scenario: Reserved backend selected before it ships.
+/// A selected backend that cannot be set up never falls back to the host
+/// (spec: execution-environments, Typed backend registry and selection).
 #[test]
-fn a_reserved_backend_fails_the_session_start_with_69() {
+fn a_container_backend_without_a_runtime_never_runs_on_the_host() {
     let home = mock_home();
     let marker = home.path().join("ran.txt");
     let s = script(
         home.path(),
         &format!(
-            "[[rule]]\nstep = 0\n[[rule.tool_calls]]\nname = \"terminal\"\narguments = {{ command = \"echo ran > '{}'\" }}\n",
+            "[[rule]]\nstep = 0\n[[rule.tool_calls]]\nname = \"terminal\"\narguments = {{ command = \"echo ran > '{}'\" }}\n[[rule]]\nstep = 1\ntext = \"done\"\n",
             marker.display()
         ),
     );
@@ -76,13 +77,18 @@ fn a_reserved_backend_fails_the_session_start_with_69() {
         home.path(),
         &["config", "set", "terminal.backend", "container"],
     ));
+    let missing = home.path().join("no-such-runtime");
+    ok(&run(
+        home.path(),
+        &[
+            "config",
+            "set",
+            "terminal.container.runtime",
+            missing.to_str().unwrap(),
+        ],
+    ));
     let out = chat(home.path(), &["--mock-script", s.to_str().unwrap()], "go");
-    assert_eq!(out.status.code(), Some(69), "{}", stderr(&out));
-    assert!(
-        stderr(&out).contains("terminal backend 'container' is available in M2"),
-        "{}",
-        stderr(&out)
-    );
+    assert!(out.status.success(), "{}", stderr(&out));
     assert!(!marker.exists(), "the command ran on the host");
 }
 

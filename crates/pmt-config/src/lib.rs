@@ -12,11 +12,14 @@
 //! - [`secrets`] is the per-profile secrets store and resolver.
 //! - [`daemon`] is the machine-wide `daemon.toml`.
 
+pub mod automation_check;
 mod backups;
 pub mod catalog;
 pub mod credential;
 pub mod daemon;
 pub mod daemon_relay;
+pub mod delegation_check;
+pub mod delegation_requests;
 mod edit;
 pub mod essential;
 pub mod gateway_check;
@@ -30,6 +33,7 @@ pub mod hooks_check;
 pub mod keys;
 pub mod layers;
 pub mod layout;
+pub mod lsp_check;
 pub mod managed;
 pub mod mcp_check;
 pub mod migrate;

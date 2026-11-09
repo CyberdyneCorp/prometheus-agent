@@ -27,6 +27,7 @@ pub mod registry;
 pub mod runtime;
 pub mod secret;
 pub mod secret_paths;
+pub mod subagent_tree;
 pub mod tasks;
 
 pub use error::{Error, ErrorKind, Result};

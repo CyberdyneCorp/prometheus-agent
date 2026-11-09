@@ -67,6 +67,8 @@ impl Home {
             },
             read_max_chars: pmt_tools::setting::fixed(100_000),
             linter: Linter::builtin(),
+            documents: None,
+            edits: None,
         })
     }
 }

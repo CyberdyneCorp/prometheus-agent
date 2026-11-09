@@ -29,6 +29,9 @@ pub struct Section {
 pub struct Banner {
     /// The first line (version, profile, model).
     pub title: String,
+    /// The degraded marker, shown under the title while the session runs
+    /// below full hardening.
+    pub degraded: Option<String>,
     /// The sections, in order.
     pub sections: Vec<Section>,
     /// The header `Enter` toggles (moved to with the banner key and the
@@ -47,6 +50,8 @@ pub struct Contents {
     pub system_prompt: Vec<String>,
     /// MCP servers and their state.
     pub mcp_servers: Vec<String>,
+    /// The session's degraded marker (`sandbox: partial:landlock_net`).
+    pub degraded: Option<String>,
 }
 
 impl Banner {
@@ -61,6 +66,7 @@ impl Banner {
         };
         Self {
             title,
+            degraded: contents.degraded,
             sections: vec![
                 section("Tools", contents.tools, true, true),
                 section("Skills", contents.skills, true, false),
@@ -99,6 +105,16 @@ impl Banner {
             )),
             None,
         )];
+        if let Some(marker) = &self.degraded {
+            let text = format!("degraded: {marker}");
+            lines.push((
+                Line::from(Span::styled(
+                    truncate(&text, width),
+                    theme.entry(Kind::Error),
+                )),
+                None,
+            ));
+        }
         for (index, section) in self.sections.iter().enumerate() {
             let marker = if section.open { '▾' } else { '▸' };
             let header = format!("{marker} {} ({})", section.title, section.items.len());
@@ -177,5 +193,18 @@ mod tests {
         banner.move_focus(1);
         banner.move_focus(-1);
         assert_eq!(banner.focus, Some(3), "wraps around");
+    }
+
+    /// Scenario: Explicit downgrade (the banner's degraded marker).
+    #[test]
+    fn a_degraded_session_shows_its_marker_under_the_title() {
+        let contents = Contents {
+            degraded: Some("browser: degraded:web_security".into()),
+            ..Contents::default()
+        };
+        let lines = shown(&Banner::new("Prometheus".into(), contents));
+        assert_eq!(lines[1], "degraded: browser: degraded:web_security");
+        let full = shown(&Banner::new("Prometheus".into(), Contents::default()));
+        assert!(full.iter().all(|l| !l.starts_with("degraded")), "{full:?}");
     }
 }

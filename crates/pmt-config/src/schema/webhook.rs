@@ -59,6 +59,12 @@ pub struct WebhookRoute {
     pub github_token_secret: Option<SecretName>,
     /// Run no model: the rendered prompt is sent verbatim to `deliver`.
     pub deliver_only: bool,
+    /// Fire this scheduled job (its id or name) instead of a turn: the
+    /// rendered prompt becomes the run's `## Run Context`, and the job's
+    /// own delivery, skills and toolsets apply (`deliver` and `skills`
+    /// are ignored). A paused or running job drops the event.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cron_job: Option<String>,
     /// Requests per minute the route admits (fixed window); more are
     /// answered 429.
     #[schemars(range(min = 1, max = 100_000))]
@@ -91,6 +97,7 @@ impl Default for WebhookRoute {
             origin_wait_secs: 30,
             github_token_secret: None,
             deliver_only: false,
+            cron_job: None,
             rate_limit_per_min: 30,
             filters: None,
             script: None,

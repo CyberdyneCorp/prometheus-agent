@@ -252,7 +252,7 @@ impl RpcListenerConfig {
 /// The runtime names of the binary's pinned runtime index (spec:
 /// distribution-and-update, Managed runtime store); `runtimes.exclude`
 /// accepts only these. `pmt-update` checks its index names the same set.
-pub const RUNTIME_NAMES: &[&str] = &["node", "cpython", "uv", "chromium"];
+pub const RUNTIME_NAMES: &[&str] = &["node", "cpython", "uv", "chromium", "doc-converter"];
 
 /// The `[runtimes]` section (spec: distribution-and-update, Lazy runtime
 /// installation policy; Persistent runtime opt-outs; Download mirrors).
@@ -576,7 +576,7 @@ mod tests {
         assert_eq!(err.exit_code(), 78);
         assert!(
             err.message().contains(
-                "runtimes.exclude: unknown runtime 'java' (expected node|cpython|uv|chromium)"
+                "runtimes.exclude: unknown runtime 'java' (expected node|cpython|uv|chromium|doc-converter)"
             ),
             "{err}"
         );

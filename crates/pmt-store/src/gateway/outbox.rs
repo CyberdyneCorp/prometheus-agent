@@ -163,6 +163,10 @@ pub struct NewOutbound {
     pub body: String,
     /// Files sent with it.
     pub attachments: Vec<OutboundAttachment>,
+    /// How it notifies: `None` leaves it to the adapter's notification
+    /// mode, `Some(true)` is a final, notifying message whatever that mode
+    /// says, `Some(false)` is sent silently where the platform can.
+    pub notify: Option<bool>,
 }
 
 /// A stored entry.
@@ -204,11 +208,13 @@ pub struct Outbound {
     pub platform_message_id: Option<String>,
     /// The last error.
     pub last_error: Option<String>,
+    /// How it notifies (see [`NewOutbound::notify`]).
+    pub notify: Option<bool>,
 }
 
 const COLUMNS: &str = "id, idempotency_key, session_id, platform, chat_id, thread_id, reply_to, \
     edit_of, kind, body, state, attempts, next_attempt_at, created_at, updated_at, platform_message_id, \
-    last_error, attachments";
+    last_error, attachments, notify";
 
 fn from_row(row: &Row<'_>) -> Result<Outbound, Error> {
     let kind: String = row.get(8).map_err(sql)?;
@@ -239,6 +245,7 @@ fn from_row(row: &Row<'_>) -> Result<Outbound, Error> {
             }
             None => Vec::new(),
         },
+        notify: row.get(18).map_err(sql)?,
     })
 }
 
@@ -309,8 +316,8 @@ impl Store {
                 .execute(
                     "INSERT INTO gateway_outbox (idempotency_key, session_id, platform, chat_id, \
                      thread_id, reply_to, edit_of, kind, body, state, next_attempt_at, \
-                     created_at, updated_at, attachments) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, \
-                     ?9, ?12, ?10, ?10, ?10, ?11) ON CONFLICT (idempotency_key) DO NOTHING",
+                     created_at, updated_at, attachments, notify) VALUES (?1, ?2, ?3, ?4, ?5, ?6, \
+                     ?7, ?8, ?9, ?12, ?10, ?10, ?10, ?11, ?13) ON CONFLICT (idempotency_key) DO NOTHING",
                     params![
                         new.idempotency_key,
                         new.session_id,
@@ -323,7 +330,8 @@ impl Store {
                         new.body,
                         now,
                         attachments,
-                        state.as_str()
+                        state.as_str(),
+                        new.notify
                     ],
                 )
                 .map_err(sql)?;

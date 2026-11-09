@@ -31,6 +31,13 @@ use super::{Factory, Live, tools};
 use crate::plugins_host::ProfilePlugins;
 use crate::plugins_host::llm::{self, SessionModel};
 
+/// What keeps a session's model and delegation reachable for plugin calls
+/// (`llm.complete`, the `subagents` interface) while the session lives.
+pub(super) type Registrations = (
+    llm::Registration,
+    Option<crate::plugins_host::subagents::Registration>,
+);
+
 /// Locks a session-owned mutex (a poisoned one still holds valid data).
 pub(super) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
@@ -76,11 +83,13 @@ impl PluginTools {
 }
 
 /// The surface that created session `id` (its stored source: `cli`,
-/// `tui`, `gateway`, `cron`...); `cli` when the store does not know it.
+/// `tui`, `gateway`, `cron`..., a `/bg` task's launching surface); `cli`
+/// when the store does not know it.
 pub(super) fn stored_surface(store: &Store, id: SessionId) -> String {
-    store
-        .session(id)
-        .map_or_else(|_| "cli".to_owned(), |s| s.source.as_str().to_owned())
+    store.session(id).map_or_else(
+        |_| "cli".to_owned(),
+        |s| store.running_source(&s).as_str().to_owned(),
+    )
 }
 
 /// What a plugin tool call reports as its session: the calling session's
@@ -174,12 +183,17 @@ impl Factory {
     }
 
     /// Makes the session's route answer its plugins' model calls.
-    pub(super) fn plugin_llm(
+    pub(super) fn plugin_registrations(
         &self,
         id: SessionId,
         model: &Arc<SwitchableModel>,
-    ) -> llm::Registration {
-        llm::register(&id.to_string(), self.session_llm(id, model))
+        delegation: Option<Arc<pmt_delegation::host::Delegator>>,
+    ) -> Registrations {
+        let session = id.to_string();
+        (
+            llm::register(&session, self.session_llm(id, model)),
+            delegation.map(|d| crate::plugins_host::subagents::register(&session, &d)),
+        )
     }
 
     /// The session's model as plugins and MCP sampling call it.
@@ -224,6 +238,7 @@ impl Factory {
             &toolsets,
             &live.session_surface,
         )?;
+        let selection = self.with_browser_opt_ins(live.id, selection);
         live.tool_state.rebuild(registry, selection).await?;
         *lock(&live.plugin_sections) = self.plugin_sections(live.id).await;
         live.agent.rebuild_prompt(Rebuild::Now(reason.to_owned()));

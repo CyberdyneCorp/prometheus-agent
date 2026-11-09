@@ -5,13 +5,18 @@ use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
-use pmt_config::schema::{BrowserConfig, SandboxConfig};
+use pmt_config::schema::{BrowserConfig, DegradedFeature, SandboxConfig};
 use pmt_core::env::{EnvPolicy, LaunchEnv};
 use pmt_core::secret::{Redactor, SecretString};
 use pmt_net::DestinationPolicy;
+use pmt_net::egress::{HostPolicy, Mode, Proxy, Rules};
 use pmt_net::resolve::SystemLookup;
 use pmt_sandbox::{Options, Paths, Policy, Sandbox};
+use pmt_tools::browser::launch::{Confinement, LaunchOptions, Launched, launch};
+use pmt_tools::browser::options::Display;
+use pmt_tools::browser::real_profile::{Browser, Detect};
 use pmt_tools::browser::safety::EgressLookup;
 use pmt_tools::browser::{
     BrowserExec, BrowserManager, BrowserSetup, CloudProvider, ExecArgs, ExecSetup, NoRuntimes,
@@ -32,6 +37,14 @@ pub(crate) struct Fixture {
     pub(crate) profile: PathBuf,
     pub(crate) scratch: PathBuf,
     pub(crate) config: Arc<Mutex<BrowserConfig>>,
+    /// `security.egress.allow_private` of the managers it builds.
+    pub(crate) allow_private: bool,
+    /// `security.sandbox.allow_degraded` of the managers it builds.
+    pub(crate) allow_degraded: Vec<DegradedFeature>,
+    /// The display the managers it builds see.
+    pub(crate) display: Display,
+    /// The default browser the managers it builds detect.
+    pub(crate) detect: Arc<dyn Detect>,
 }
 
 impl Fixture {
@@ -50,6 +63,10 @@ impl Fixture {
             profile,
             scratch,
             config: Arc::new(Mutex::new(BrowserConfig::default())),
+            allow_private: true,
+            allow_degraded: Vec::new(),
+            display: Display::none(),
+            detect: Arc::new(NoDefaultBrowser),
         }
     }
 
@@ -115,17 +132,94 @@ impl Fixture {
             env: self.env(),
             cache_dir: self.browser_cache(),
             safety: UrlSafety {
-                destinations: DestinationPolicy::new(true, &[]).unwrap(),
+                destinations: DestinationPolicy::new(self.allow_private, &[]).unwrap(),
                 lookup: Arc::new(SystemLookup),
                 secrets: Redactor::new([&SecretString::new(KNOWN_SECRET)]),
                 egress,
                 session: None,
             },
             providers,
+            confinement: self.confinement(SandboxConfig {
+                allow_degraded: self.allow_degraded.clone(),
+                ..SandboxConfig::default()
+            }),
+            display: self.display.clone(),
+            detect: Arc::clone(&self.detect),
+            profile_dir: self.profile.clone(),
         })
     }
 
+    /// Where local browsers are confined, with `sandbox` as
+    /// `security.sandbox`.
+    pub(crate) fn confinement(&self, sandbox: SandboxConfig) -> Confinement {
+        Confinement {
+            user_home: self.home.clone(),
+            prometheus_home: self.home.join(".prometheus"),
+            sandbox,
+            launcher: None,
+        }
+    }
+
+    /// A local launch as a manager makes it: through an egress proxy that
+    /// admits public hosts, under the OS sandbox with `sandbox` as
+    /// `security.sandbox`. The proxy stops when dropped.
+    pub(crate) async fn launch(
+        &self,
+        executable: &Path,
+        profiles: &Path,
+        timeout: Duration,
+        sandbox: SandboxConfig,
+    ) -> Result<(Launched, Proxy), String> {
+        self.launch_with_env(executable, profiles, timeout, sandbox, &self.env())
+            .await
+    }
+
+    /// [`Fixture::launch`] with `env` as the browser's environment.
+    pub(crate) async fn launch_with_env(
+        &self,
+        executable: &Path,
+        profiles: &Path,
+        timeout: Duration,
+        sandbox: SandboxConfig,
+        env: &ChildEnv,
+    ) -> Result<(Launched, Proxy), String> {
+        let rules = Rules::new(
+            Arc::new(HostPolicy::new(Mode::Public, Vec::new())),
+            DestinationPolicy::new(true, &[]).unwrap(),
+            "browser",
+        );
+        let proxy = Proxy::start(rules).unwrap();
+        let options = LaunchOptions {
+            timeout,
+            ..LaunchOptions::default()
+        };
+        let launched = launch(
+            executable,
+            profiles,
+            env,
+            &proxy,
+            &self.confinement(sandbox),
+            &options,
+        )
+        .await?;
+        Ok((launched, proxy))
+    }
+
     pub(crate) fn exec(&self, manager: &Arc<BrowserManager>, image_input: bool) -> BrowserExec {
+        self.exec_granted(
+            manager,
+            image_input,
+            pmt_core::capability::CapabilitySet::default(),
+        )
+    }
+
+    /// [`Fixture::exec`] of a session holding `granted`.
+    pub(crate) fn exec_granted(
+        &self,
+        manager: &Arc<BrowserManager>,
+        image_input: bool,
+        granted: pmt_core::capability::CapabilitySet,
+    ) -> BrowserExec {
         let paths = Paths {
             user_home: self.home.clone(),
             prometheus_home: self.home.join(".prometheus"),
@@ -151,6 +245,7 @@ impl Fixture {
             env: self.env(),
             workspace_root: self.scratch.join("browser"),
             image_input,
+            request: pmt_tools::browser::Request { granted },
         })
     }
 }
@@ -221,6 +316,24 @@ pub(crate) async fn run(exec: &BrowserExec, code: &str) -> (ToolResult, Value) {
     run_in(exec, None, code).await
 }
 
+/// [`run`] with `browser_exec(local=true)`.
+pub(crate) async fn run_local(exec: &BrowserExec, code: &str) -> (ToolResult, Value) {
+    let result = exec
+        .exec(
+            "ses_b",
+            &ExecArgs {
+                code: code.to_owned(),
+                session: None,
+                timeout_secs: Some(60),
+                local: true,
+            },
+        )
+        .await;
+    let body: Value = serde_json::from_str(&result.text_content())
+        .unwrap_or_else(|_| Value::String(result.text_content()));
+    (result, body)
+}
+
 pub(crate) async fn run_in(
     exec: &BrowserExec,
     session: Option<&str>,
@@ -233,6 +346,7 @@ pub(crate) async fn run_in(
                 code: code.to_owned(),
                 session: session.map(str::to_owned),
                 timeout_secs: Some(60),
+                local: false,
             },
         )
         .await;
@@ -246,4 +360,73 @@ pub(crate) fn records(cache: &Path) -> Vec<PathBuf> {
     std::fs::read_dir(cache.join("records"))
         .map(|d| d.flatten().map(|e| e.path()).collect())
         .unwrap_or_default()
+}
+
+/// A browser of this host started outside any manager with a loopback
+/// DevTools port, standing in for a browser the user runs.
+pub(crate) struct External {
+    child: std::process::Child,
+    /// Its browser-level DevTools WebSocket URL.
+    pub(crate) endpoint: String,
+}
+
+impl External {
+    pub(crate) fn start(executable: &Path, dir: &Path) -> Self {
+        std::fs::create_dir_all(dir).unwrap();
+        let profile = tempfile::tempdir_in(dir).unwrap().keep();
+        let mut flag = OsString::from("--user-data-dir=");
+        flag.push(&profile);
+        let mut child = std::process::Command::new(executable)
+            .args([
+                "--headless=new",
+                "--remote-debugging-port=0",
+                "--no-first-run",
+            ])
+            .arg(flag)
+            .arg("about:blank")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let file = profile.join("DevToolsActivePort");
+        for _ in 0..600 {
+            if let Ok(text) = std::fs::read_to_string(&file) {
+                let mut lines = text.lines();
+                if let (Some(port), Some(path)) = (lines.next(), lines.next()) {
+                    let endpoint = format!("ws://127.0.0.1:{}{}", port.trim(), path.trim());
+                    return Self { child, endpoint };
+                }
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+        panic!("{} published no DevTools port", executable.display());
+    }
+
+    /// Its DevTools HTTP endpoint (`http://127.0.0.1:<port>`).
+    pub(crate) fn http(&self) -> String {
+        let rest = self.endpoint.trim_start_matches("ws://");
+        format!("http://{}", rest.split('/').next().unwrap())
+    }
+
+    /// Whether the browser process still runs.
+    pub(crate) fn running(&mut self) -> bool {
+        matches!(self.child.try_wait(), Ok(None))
+    }
+
+    pub(crate) fn stop(mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+/// A host whose default browser is not usable (real-profile tests give
+/// their own).
+pub(crate) struct NoDefaultBrowser;
+
+impl Detect for NoDefaultBrowser {
+    fn default_browser(&self) -> Result<Browser, String> {
+        Err("no default browser in tests".to_owned())
+    }
 }

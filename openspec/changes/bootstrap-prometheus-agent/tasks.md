@@ -360,68 +360,70 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 35. M2 Execution environments: containers, SSH and remote
 
-- [ ] 35.1 Implement the `container` backend (rootless Podman/Docker, `--cap-drop ALL`, `no-new-privileges`, read-only root, tmpfs), hardening that is never silently dropped, and lifecycle with orphan reaping; verify with container integration tests (spec: execution-environments)
-- [ ] 35.2 Implement the `ssh` backend, reserved built-in names and the backend isolation descriptor; verify against an SSH server container (spec: execution-environments)
-- [ ] 35.3 Implement remote sandboxes as `terminal-backend` plugins; verify with a sample plugin backend (spec: execution-environments)
-- [ ] 35.4 Implement container backend options (network off, privileged extra args refused), remote file sync with capped sync-back, first-party backend plugins (auto mode skips providers without credentials) and sudo password handling (interactive prompt, never for subagents); verify with container and SSH fixtures (spec: execution-environments)
-- [ ] 35.5 Implement quiet-wait auto-notify (second unchanged poll notifies; cron runs wait silently), retained process receipts readable after compression and scoped to their conversation, and `read_file` document extraction (PDF, Office, SQLite schema overview, scanned PDF notice); verify with fixtures (spec: execution-environments)
-- [ ] 35.6 Implement snapshot triggers, caps and the per-run toggle (one checkpoint per directory per turn, large files skipped), rollback listing, diff and selective restore (hand edits preserved, preview only), the snapshot store management CLI, the working-tree diff command and project run-recipe verification (detect-only and failing-test reporting); verify with workspace fixtures (spec: execution-environments)
-- [ ] 35.7 Implement throttled background notifications, subagent process handoff, file snapshots with undo, and local browser isolation; verify that `/undo` restores a file (spec: execution-environments)
+- [x] 35.1 Implement the `container` backend (rootless Podman/Docker, `--cap-drop ALL`, `no-new-privileges`, read-only root, tmpfs), hardening that is never silently dropped, and lifecycle with orphan reaping; verify with container integration tests (spec: execution-environments)
+- [x] 35.2 Implement the `ssh` backend, reserved built-in names and the backend isolation descriptor; verify against an SSH server container (spec: execution-environments)
+- [x] 35.3 Implement remote sandboxes as `terminal-backend` plugins; verify with a sample plugin backend (spec: execution-environments)
+- [x] 35.4 Implement container backend options (network off, privileged extra args refused), remote file sync with capped sync-back, first-party backend plugins (auto mode skips providers without credentials) and sudo password handling (interactive prompt, never for subagents); verify with container and SSH fixtures (spec: execution-environments)
+  - Singularity/Apptainer is a built-in backend kind (`singularity`), not a plugin; the `modal` plugin authenticates through the host credential handle `modal` (plugin-system, Host credential handles; terminal-backend world 1.2).
+  - Known gap (deviation): the first-party `modal`, `daytona` and `vercel` plugins are built from `plugins/first-party/` and installed unsigned; signing them with the release key and embedding them in the release is deferred (design.md, Known gaps).
+- [x] 35.5 Implement quiet-wait auto-notify (second unchanged poll notifies; cron runs wait silently), retained process receipts readable after compression and scoped to their conversation, and `read_file` document extraction (PDF, Office, SQLite schema overview, scanned PDF notice); verify with fixtures (spec: execution-environments)
+- [x] 35.6 Implement snapshot triggers, caps and the per-run toggle (one checkpoint per directory per turn, large files skipped), rollback listing, diff and selective restore (hand edits preserved, preview only), the snapshot store management CLI, the working-tree diff command and project run-recipe verification (detect-only and failing-test reporting); verify with workspace fixtures (spec: execution-environments)
+- [x] 35.7 Implement throttled background notifications, subagent process handoff, file snapshots with undo, and local browser isolation; verify that `/undo` restores a file (spec: execution-environments)
 
 ## 36. M2 Browser upgrades
 
-- [ ] 36.1 Implement `browser_cdp` and `browser_dialog`, local browser options with headed mode (refused on a headless server) and connecting to the user's running browser (disconnect keeps it open); verify against a local Chromium (spec: execution-environments)
-- [ ] 36.2 Implement first-party cloud browser providers (used only when configured), routing of private URLs to a local browser, and real-profile browsing with pin and consent revocation; verify with mock provider endpoints (spec: execution-environments)
+- [x] 36.1 Implement `browser_cdp` and `browser_dialog`, local browser options with headed mode (refused on a headless server) and connecting to the user's running browser (disconnect keeps it open); verify against a local Chromium (spec: execution-environments)
+- [x] 36.2 Implement first-party cloud browser providers (used only when configured), routing of private URLs to a local browser, and real-profile browsing with pin and consent revocation; verify with mock provider endpoints (spec: execution-environments)
 
 ## 37. M2 LSP diagnostics
 
-- [ ] 37.1 Implement workspace gating (no LSP for gateway sessions in the home directory), workspace trust (fresh clones untrusted until trusted explicitly), the built-in server registry, server installation through managed runtimes (package-manager policy respected) and server overrides with custom servers; verify with registry and trust tests (spec: lsp-diagnostics)
-- [ ] 37.2 Implement sandboxed language servers (read-only workspace), diagnostics introduced by an edit (only new diagnostics reported, cold servers awaited) and wait modes with timeouts and broken-server retry; verify with a rust-analyzer or pyright fixture that an undefined name is reported after a patch (spec: lsp-diagnostics)
-- [ ] 37.3 Implement `prometheus lsp status|list|install|install-all|…` and document LSP diagnostics; verify with CLI tests that a missing server is named (spec: lsp-diagnostics)
+- [x] 37.1 Implement workspace gating (no LSP for gateway sessions in the home directory), workspace trust (fresh clones untrusted until trusted explicitly), the built-in server registry, server installation through managed runtimes (package-manager policy respected) and server overrides with custom servers; verify with registry and trust tests (spec: lsp-diagnostics)
+- [x] 37.2 Implement sandboxed language servers (read-only workspace), diagnostics introduced by an edit (only new diagnostics reported, cold servers awaited) and wait modes with timeouts and broken-server retry; verify with a rust-analyzer or pyright fixture that an undefined name is reported after a patch (spec: lsp-diagnostics)
+- [x] 37.3 Implement `prometheus lsp status|list|install|install-all|…` and document LSP diagnostics; verify with CLI tests that a missing server is named (spec: lsp-diagnostics)
 
 ## 38. M2 Subagent delegation
 
-- [ ] 38.1 Implement `delegate_task` (contract, spawn preconditions, task validation, config defaults, role from depth) with children in isolated sessions and a capability grant that can only narrow; verify that a child cannot gain a tool the parent lacks (spec: subagent-delegation)
-- [ ] 38.2 Implement named subagent definitions, child model routing and fail-closed child approvals; verify with mock-provider tests (spec: subagent-delegation)
-- [ ] 38.3 Implement background and synchronous dispatch, the concurrency limit with fair queueing, durable background completions and stall detection; verify that a background child's result survives a daemon restart (spec: subagent-delegation)
-- [ ] 38.4 Implement control actions scoped to the caller's spawn tree, stop semantics, live progress streaming, the structured result contract, `output_schema` validation, the summary budget, fan-out budget split/roll-up and the one-shot spawn budget; verify with tree-scoped tests (spec: subagent-delegation)
-- [ ] 38.5 Implement fail-closed delegation routers, delegation settings changes that respect caching, profile routes into the target `ProfileScope`, the plugin lifecycle interface and child reaping; verify with tests (spec: subagent-delegation)
-- [ ] 38.6 Implement programmatic tool calling (`execute_code`) under the caller's grant with its RPC channel, limits and pre-execution guards; verify that an empty grant intersection is refused (spec: subagent-delegation)
+- [x] 38.1 Implement `delegate_task` (contract, spawn preconditions, task validation, config defaults, role from depth) with children in isolated sessions and a capability grant that can only narrow; verify that a child cannot gain a tool the parent lacks (spec: subagent-delegation)
+- [x] 38.2 Implement named subagent definitions, child model routing and fail-closed child approvals; verify with mock-provider tests (spec: subagent-delegation)
+- [x] 38.3 Implement background and synchronous dispatch, the concurrency limit with fair queueing, durable background completions and stall detection; verify that a background child's result survives a daemon restart (spec: subagent-delegation)
+- [x] 38.4 Implement control actions scoped to the caller's spawn tree, stop semantics, live progress streaming, the structured result contract, `output_schema` validation, the summary budget, fan-out budget split/roll-up and the one-shot spawn budget; verify with tree-scoped tests (spec: subagent-delegation)
+- [x] 38.5 Implement fail-closed delegation routers, delegation settings changes that respect caching, profile routes into the target `ProfileScope`, the plugin lifecycle interface and child reaping; verify with tests (spec: subagent-delegation)
+- [x] 38.6 Implement programmatic tool calling (`execute_code`) under the caller's grant with its RPC channel, limits and pre-execution guards; verify that an empty grant intersection is refused (spec: subagent-delegation)
 
 ## 39. M2 Git worktrees
 
-- [ ] 39.1 Implement worktree creation (post-checkout hooks run under the sandbox, generated names for unnamed trees), `chat -w` worktree mode, exit disposition (uncommitted work kept on Ctrl-D, gateway sessions handled) and the in-session worktree command that preserves the prompt cache; verify with git fixture repositories (spec: git-worktrees)
-- [ ] 39.2 Implement the repository registry and sweep schedule, the sweep decision table (live processes and large untracked files protect a tree), the archive format (consistent under concurrent index changes) and the worktree CLI with restore; verify that an archived lane restores (spec: git-worktrees)
-- [ ] 39.3 Implement subagent worktree isolation (child commits land on the child's branch; container backends handled); verify with a mock-provider delegation that commits in a child worktree (spec: git-worktrees)
+- [x] 39.1 Implement worktree creation (post-checkout hooks run under the sandbox, generated names for unnamed trees), `chat -w` worktree mode, exit disposition (uncommitted work kept on Ctrl-D, gateway sessions handled) and the in-session worktree command that preserves the prompt cache; verify with git fixture repositories (spec: git-worktrees)
+- [x] 39.2 Implement the repository registry and sweep schedule, the sweep decision table (live processes and large untracked files protect a tree), the archive format (consistent under concurrent index changes) and the worktree CLI with restore; verify that an archived lane restores (spec: git-worktrees)
+- [x] 39.3 Implement subagent worktree isolation (child commits land on the child's branch; container backends handled); verify with a mock-provider delegation that commits in a child worktree (spec: git-worktrees)
 
 ## 40. M2 Delegation upgrades
 
-- [ ] 40.1 Implement user-launched background sessions, the agents monitor with live transcripts (stop one child, tail a transcript), the review command and independent completions (ungrouped results arrive separately); verify with mock-provider tests (spec: subagent-delegation)
-- [ ] 40.2 Implement child request overrides and direct endpoints, gateway delegation mode with one-shot joining (one message per turn on messaging platforms) and worktree isolation for children (clean children pruned, failed probes keep work); verify with mock-provider tests (spec: subagent-delegation)
-- [ ] 40.3 Implement the persistent `execute_code` session kernel (state kept between calls, reset discards it) and `execute_code` execution modes (broken venv falls back); verify with kernel tests (spec: subagent-delegation)
+- [x] 40.1 Implement user-launched background sessions, the agents monitor with live transcripts (stop one child, tail a transcript), the review command and independent completions (ungrouped results arrive separately); verify with mock-provider tests (spec: subagent-delegation)
+- [x] 40.2 Implement child request overrides and direct endpoints, gateway delegation mode with one-shot joining (one message per turn on messaging platforms) and worktree isolation for children (clean children pruned, failed probes keep work); verify with mock-provider tests (spec: subagent-delegation)
+- [x] 40.3 Implement the persistent `execute_code` session kernel (state kept between calls, reset discards it) and `execute_code` execution modes (broken venv falls back); verify with kernel tests (spec: subagent-delegation)
 
 ## 41. M2 Scheduled jobs
 
-- [ ] 41.1 Implement the schedule grammar (cron, interval, one-shot) with canonical echo and confirmation, payload validation, job records and state literals; verify with grammar table tests (spec: scheduled-jobs)
-- [ ] 41.2 Implement next-run computation, grace and missed occurrences, and at-most-once firing; verify with a fake clock across a daemon restart (spec: scheduled-jobs)
-- [ ] 41.3 Implement the built-in trigger in the daemon and the headless tick, execution concurrency and timeouts, fresh isolated sessions, the unattended memory policy and fail-closed approvals; verify with integration tests (spec: scheduled-jobs)
-- [ ] 41.4 Implement script-backed and no-agent jobs, the prompt safety scan, pre-dispatch preflight, delivery targets via the durable outbox, and response framing and silence; verify with a fake adapter (spec: scheduled-jobs)
-- [ ] 41.5 Implement run history and replay, lifecycle ops, repeat limits and retention, the pluggable trigger provider, the `cron` CLI and model tools, and the cron doctor; verify with CLI tests and document cron (spec: scheduled-jobs)
+- [x] 41.1 Implement the schedule grammar (cron, interval, one-shot) with canonical echo and confirmation, payload validation, job records and state literals; verify with grammar table tests (spec: scheduled-jobs)
+- [x] 41.2 Implement next-run computation, grace and missed occurrences, and at-most-once firing; verify with a fake clock across a daemon restart (spec: scheduled-jobs)
+- [x] 41.3 Implement the built-in trigger in the daemon and the headless tick, execution concurrency and timeouts, fresh isolated sessions, the unattended memory policy and fail-closed approvals; verify with integration tests (spec: scheduled-jobs)
+- [x] 41.4 Implement script-backed and no-agent jobs, the prompt safety scan, pre-dispatch preflight, delivery targets via the durable outbox, and response framing and silence; verify with a fake adapter (spec: scheduled-jobs)
+- [x] 41.5 Implement run history and live replay (`cron replay <run> --live`; deterministic replay against recorded model responses needs the replay provider and moves to 51.2), lifecycle ops, repeat limits and retention, the pluggable trigger provider, the `cron` CLI and model tools, and the cron doctor; verify with CLI tests and document cron (spec: scheduled-jobs)
 
 ## 42. M2 Scheduled job upgrades
 
-- [ ] 42.1 Implement the per-job working directory (context files loaded, relative paths refused), model pinning with the cron fleet default (the agent cannot choose a model), creating jobs paused with an auditable reason, the complete cronjob tool field set (timezone pin) and the `/cron` slash command; verify with job tests (spec: scheduled-jobs)
-- [ ] 42.2 Implement the failure streak with a review nudge, automatic re-runs when the model was unreachable, holding through a closed provider usage window, failure incidents with alert-once and acknowledge, failure notice routing and agent-declared run failure; verify with a fake clock and fault-injected providers (spec: scheduled-jobs)
-- [ ] 42.3 Implement the Bot Chat delivery target (`bot_chat[:<profile>]`, unknown profile rejected at create), the push notification flag, cron threads and delivery confirmation, and continuable deliveries (a reply continues the run's session); verify with the fake adapter (spec: scheduled-jobs)
-- [ ] 42.4 Implement the script wake gate with script credentials (unchanged polls skip the model, provider keys never reach scripts), monitor mode, job chaining with continuity, the per-job notepad and asynchronous tool-initiated runs with per-run context; verify with job tests (spec: scheduled-jobs)
-- [ ] 42.5 Implement the suggested automations inbox (dismissals remembered), the automation blueprint catalog (slot validation, inline values) and webhook-triggered job runs (bursts never double-fire); verify with fixtures and document the additions (spec: scheduled-jobs)
+- [x] 42.1 Implement the per-job working directory (context files loaded, relative paths refused), model pinning with the cron fleet default (the agent cannot choose a model), creating jobs paused with an auditable reason, the complete cronjob tool field set (timezone pin) and the `/cron` slash command; verify with job tests (spec: scheduled-jobs)
+- [x] 42.2 Implement the failure streak with a review nudge, automatic re-runs when the model was unreachable, holding through a closed provider usage window, failure incidents with alert-once and acknowledge, failure notice routing and agent-declared run failure; verify with a fake clock and fault-injected providers (spec: scheduled-jobs)
+- [x] 42.3 Implement the Bot Chat delivery target (`bot_chat[:<profile>]`, unknown profile rejected at create), the push notification flag, cron threads and delivery confirmation, and continuable deliveries (a reply continues the run's session); verify with the fake adapter (spec: scheduled-jobs)
+- [x] 42.4 Implement the script wake gate with script credentials (unchanged polls skip the model, provider keys never reach scripts), monitor mode, job chaining with continuity, the per-job notepad and asynchronous tool-initiated runs with per-run context; verify with job tests (spec: scheduled-jobs)
+- [x] 42.5 Implement the suggested automations inbox (dismissals remembered), the automation blueprint catalog (slot validation, inline values) and webhook-triggered job runs (bursts never double-fire); verify with fixtures and document the additions (spec: scheduled-jobs)
 
 ## 43. M2 Session automation: /goal, /loop and /heartbeat
 
-- [ ] 43.1 Implement persisted per-session automation state (survives resume, cleared on reset), automated turns as plain user turns that preserve the cache prefix, idle-boundary arbitration (user input preempts), automation configuration validation and the separation from kanban and cron; verify with mock-provider sessions (spec: session-automation)
-- [ ] 43.2 Implement the `/goal` command surface (control-word escape, drafts), goal changes while a turn runs, the judge loop (continue injects the next turn, a broken judge fails open) and the goal turn budget with the blocked verdict; verify with a scripted mock judge (spec: session-automation)
-- [ ] 43.3 Implement completion contracts (inline parsing, draft fallback), subgoals, quality gates (a red gate blocks completion, an exhausted gate pauses) and goal wait barriers (park on a watcher, dead pids rejected); verify with mock-provider tests (spec: session-automation)
-- [ ] 43.4 Implement `/loop` with cadence (interval floor, self-paced backoff) and stop conditions, the session `/heartbeat` (missed ticks coalesce), heartbeat ownership, recovery and silence on the gateway, goal messages on messaging platforms and automation status on every surface; verify with a fake clock across a daemon restart and document session automation (spec: session-automation)
+- [x] 43.1 Implement persisted per-session automation state (survives resume, cleared on reset), automated turns as plain user turns that preserve the cache prefix, idle-boundary arbitration (user input preempts), automation configuration validation and the separation from kanban and cron; verify with mock-provider sessions (spec: session-automation)
+- [x] 43.2 Implement the `/goal` command surface (control-word escape, drafts), goal changes while a turn runs, the judge loop (continue injects the next turn, a broken judge fails open) and the goal turn budget with the blocked verdict; verify with a scripted mock judge (spec: session-automation)
+- [x] 43.3 Implement completion contracts (inline parsing, draft fallback), subgoals, quality gates (a red gate blocks completion, an exhausted gate pauses) and goal wait barriers (park on a watcher, dead pids rejected); verify with mock-provider tests (spec: session-automation)
+- [x] 43.4 Implement `/loop` with cadence (interval floor, self-paced backoff) and stop conditions, the session `/heartbeat` (missed ticks coalesce), heartbeat ownership, recovery and silence on the gateway, goal messages on messaging platforms and automation status on every surface; verify with a fake clock across a daemon restart and document session automation (spec: session-automation)
 
 ## 44. M2 Turn loop, compression, memory and storage upgrades
 
@@ -481,7 +483,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 ## 51. M2 Replay and model-call cache
 
 - [ ] 51.1 Implement the canonical request hash (excluding transport, streaming and cache-control fields) and the content-addressed model-call cache with admin commands and limits; verify that equivalent requests hash identically (spec: replay-and-evaluation)
-- [ ] 51.2 Implement session recordings, replay modes, divergence detection and side-effect-free replay; verify that replaying a recorded session offline reproduces the trajectory (spec: replay-and-evaluation)
+- [ ] 51.2 Implement session recordings, replay modes, divergence detection and side-effect-free replay, and deterministic `cron replay <run>` through the replay provider (today it exits 69 `cron.replay_unavailable`); verify that replaying a recorded session offline reproduces the trajectory and that `cron replay <run>` prints `replay matched: <n> calls` with no network request and no delivery (spec: replay-and-evaluation, spec: scheduled-jobs)
 - [ ] 51.3 Add the golden-recording regression gate and the built-in smoke suite to `scripts/check`; verify that a behavior change in the loop fails the gate (spec: replay-and-evaluation)
 
 ## 52. M2 Observability upgrades
@@ -533,7 +535,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 - [ ] 58.1 Implement streaming JSONL output (ends with a result record), the planning-only turn (writes outside plans refused) and exit-with-delete and profile archive slash forms; verify with CLI tests (spec: cli)
 - [ ] 58.2 Implement theme commands with branding keys, setup wizard modes (quick setup asks only unset values, adapter fields from the schema) and the Windows console behaviour (code page restored); verify with snapshot tests (spec: cli)
-- [ ] 58.3 Implement the safe command console (shell metacharacters refused), webhook subscriptions (secret printed once) and background sessions with results delivered back; verify with CLI tests (spec: cli)
+- [ ] 58.3 Implement the safe command console (shell metacharacters refused) and webhook subscriptions (secret printed once); verify with CLI tests. Background sessions (`/background`, alias `/bg`) are owned by subagent-delegation › User-launched background sessions and already implemented by task 40.1: do not build a second one (spec: cli)
 
 ## 59. M2 OpenAI-compatible API server
 

@@ -59,7 +59,7 @@ export interface AdapterStatePayload {
 }
 
 /** How `prompt.submit` admitted an input (spec: tui, Prompt submission while busy). */
-export type Admission = "started" | "queued" | "steered";
+export type Admission = "started" | "queued" | "steered" | "handled";
 
 /** The answer to `approval.request` (also `approval.respond` params, with its `id`). */
 export interface ApprovalAnswer {
@@ -142,8 +142,28 @@ export interface Attached {
   truncated?: boolean;
 }
 
+/** One kind of a session's automation. */
+export interface AutomationStatePayload {
+  /** Turns (goal), wakeups (loop) or fires (heartbeat) so far. */
+  count?: number;
+  /** `goal`, `loop` or `heartbeat`. */
+  kind: string;
+  /** A goal's turn budget (`goals.max_turns`). */
+  limit?: number | null;
+  /** When it fires next (RFC 3339), for an active loop or heartbeat or a parked goal's deadline. */
+  next_fire_at?: string | null;
+  /** The live row as the CLI shows it (absent once removed). */
+  row?: string | null;
+  /** The session. */
+  session_id: string;
+  /** `active`, `paused`, `done`, `parked`, or `none` once removed. */
+  status: string;
+}
+
 /** `session.banner` result: what the TUI's startup banner lists. */
 export interface BannerInfo {
+  /** The degraded marker while the session runs below full hardening, for example `sandbox: partial:landlock_net` (spec: security-boundaries, Hardening downgrades are never silent). */
+  degraded?: string | null;
   /** The session's MCP servers. */
   mcp_servers: Array<McpServerState>;
   /** The installed skills the session can load. */
@@ -152,6 +172,84 @@ export interface BannerInfo {
   system_prompt?: FrozenPrompt | null;
   /** The session's tool names, in request order. */
   tools: Array<string>;
+}
+
+/** `cron.blueprints.fill` params. */
+export interface BlueprintFillParams {
+  /** Save the job (after the caller showed the echo); otherwise only check and echo. */
+  create?: boolean;
+  /** The blueprint (key, prefix or near spelling). */
+  key: string;
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+  /** Slot values by name. */
+  values?: Record<string, string>;
+}
+
+/** `cron.blueprints.fill` result. */
+export interface BlueprintFilled {
+  /** The schedule echo: the canonical form and the next instants. */
+  echo?: string | null;
+  /** The created job's id. */
+  job_id?: string | null;
+  /** The blueprint's key. */
+  key: string;
+  /** The slot that needs a value. */
+  missing?: string | null;
+  /** The job's prompt. */
+  prompt?: string | null;
+  /** Its question. */
+  question?: string | null;
+  /** The canonical schedule (`cron 0 8 * * 1-5`). */
+  schedule?: string | null;
+  /** `missing` (a slot needs a value), `ready` (echoed, not saved) or `created`. */
+  status: string;
+}
+
+/** One blueprint. */
+export interface BlueprintInfo {
+  /** Its category. */
+  category: string;
+  /** What it does. */
+  description: string;
+  /** Its key (`<plugin>:<key>`, `skill:<key>` outside the built-ins). */
+  key: string;
+  /** Its slots, in the order they are asked. */
+  slots: Array<BlueprintSlot>;
+  /** `builtin`, `plugin` or `skill`. */
+  source: string;
+  /** Its title. */
+  title: string;
+}
+
+/** `cron.blueprints.list` result. */
+export interface BlueprintList {
+  /** The profile's catalog. */
+  blueprints: Array<BlueprintInfo>;
+}
+
+/** One slot, as a form field. */
+export interface BlueprintSlot {
+  /** The value used when none is given. */
+  default?: string | null;
+  /** `time`, `enum`, `text` or `weekdays`. */
+  kind: string;
+  /** The field name (`time`, `days`...). */
+  name: string;
+  /** The options of an `enum`; the presets of `weekdays`. */
+  options: Array<string>;
+  /** The question asked for it. */
+  question: string;
+  /** Needs a value (given or default). */
+  required: boolean;
+  /** An `enum` accepts only its options. */
+  strict: boolean;
+}
+
+/** `cron.blueprints.list` params. */
+export interface BlueprintsListParams {
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
 }
 
 /** `clarify.request` result. */
@@ -374,6 +472,50 @@ export interface EventsSinceParams {
   session_id: string;
 }
 
+/** `files.rollback` params: no checkpoint lists them; `diff` previews. */
+export interface FilesRollbackParams {
+  /** Overwrite hand-edited files too. */
+  all?: boolean;
+  /** The checkpoint, 1 for the newest. */
+  checkpoint?: number | null;
+  /** Show the diff to the current state; change nothing. */
+  diff?: boolean;
+  /** Restore only this file. */
+  file?: string | null;
+  /** The session (its workspace). */
+  session_id: string;
+}
+
+/** `files.rollback` result. */
+export interface FilesRolledBack {
+  /** The listing, the diff or what was restored, as text. */
+  output: string;
+}
+
+/** `files.undo` params. */
+export interface FilesUndoParams {
+  /** Report only; change nothing. */
+  dry_run?: boolean;
+  /** Overwrite files changed since the session wrote them. */
+  force?: boolean;
+  /** The session. */
+  session_id: string;
+  /** How many of its last turns (default 1). */
+  turns?: number | null;
+}
+
+/** `files.undo` result. */
+export interface FilesUndone {
+  /** `conflict: <path> changed since turn <n>; use --force to overwrite`. */
+  conflicts: Array<string>;
+  /** Files the session had created, removed. */
+  removed: Array<string>;
+  /** Files given their prior content. */
+  restored: Array<string>;
+  /** The turns undone. */
+  turns: Array<number>;
+}
+
 /** `session.fork` params. */
 export interface ForkParams {
   /** The last message the fork keeps (`msg_<ULID>`); default the session's last active message. */
@@ -424,6 +566,36 @@ export interface HelloResult {
   protocol: Version;
   /** The daemon's semantic version. */
   server_version: string;
+}
+
+/** One running language server. */
+export interface LspServerStatus {
+  /** The server id (`pyright`, `rust-analyzer`...). */
+  id: string;
+  /** Its process id. */
+  pid: number;
+  /** The session that started it. */
+  session_id: string;
+  /** `ready`. */
+  state: string;
+  /** It executes project code, so it starts only in trusted workspaces. */
+  trusted_only: boolean;
+  /** Seconds since it started. */
+  uptime_secs: number;
+  /** Its workspace root. */
+  workspace: string;
+}
+
+/** `lsp.status` result. */
+export interface LspStatus {
+  /** Every running server of the profile, by id and workspace. */
+  servers: Array<LspServerStatus>;
+}
+
+/** `lsp.status` params. */
+export interface LspStatusParams {
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
 }
 
 /** One MCP server of a session. */
@@ -686,6 +858,8 @@ export interface SubmitParams {
 export interface Submitted {
   /** How the input was admitted. */
   admission?: Admission;
+  /** What a `handled` input did, to show in place of a turn. */
+  notice?: string | null;
   /** The admission id: the turn that runs the input (for a steered input, the running turn it joined). */
   turn_id: string;
 }
@@ -876,6 +1050,110 @@ export interface Version {
   minor: number;
 }
 
+/** One archive. */
+export interface WorktreeArchiveInfo {
+  /** Seconds since it was archived. */
+  age_secs: number;
+  /** The branch it was on. */
+  branch?: string | null;
+  /** The archived tree's name (`worktrees restore <name>`). */
+  name: string;
+  /** Why it was archived (`sweep`, `exit`, `subagent`). */
+  reason: string;
+  /** `refs/prometheus/archive/<name>`. */
+  reference: string;
+}
+
+/** `worktree.new` result. */
+export interface WorktreeCreated {
+  /** The ref it was branched from. */
+  base: string;
+  /** What the user should know (a failed fetch). */
+  notices: Array<string>;
+  /** The new tree, now the session's working directory. */
+  tree: WorktreeInfo;
+}
+
+/** One sweep decision. */
+export interface WorktreeDecision {
+  /** `remove`, `archive` or `keep`. */
+  action: string;
+  /** The tree. */
+  name: string;
+  /** What happened (the plan on a dry run). */
+  outcome: string;
+  /** Its directory. */
+  path: string;
+  /** The reason a tree is kept (`live-process`, `keep-large-untracked`...). */
+  reason?: string | null;
+}
+
+/** One Prometheus tree. */
+export interface WorktreeInfo {
+  /** Seconds since it was created. */
+  age_secs: number;
+  /** The branch it is on (`null`: detached). */
+  branch?: string | null;
+  /** `generated`, `named`, `subagent` or `kanban`. */
+  kind: string;
+  /** The last sweep decision and its reason. */
+  last_decision?: string | null;
+  /** Its name (directory under `.worktrees/`). */
+  name: string;
+  /** Its directory. */
+  path: string;
+}
+
+/** `worktree.list` result. */
+export interface WorktreeListing {
+  /** Its archives. */
+  archives: Array<WorktreeArchiveInfo>;
+  /** The repository's main checkout. */
+  repo: string;
+  /** Its Prometheus trees. */
+  trees: Array<WorktreeInfo>;
+}
+
+/** `worktree.new` params. */
+export interface WorktreeNewParams {
+  /** The tree's name (`[A-Za-z0-9._-]{1,64}`); omitted: `prom-<8 hex>`. */
+  name?: string | null;
+  /** The session to move into the new tree. */
+  session_id: string;
+}
+
+/** `worktree.prune` params. */
+export interface WorktreePruneParams {
+  /** Report the decisions; change nothing. */
+  dry_run?: boolean;
+  /** The session (its working directory's repository). */
+  session_id: string;
+}
+
+/** `worktree.prune` result. */
+export interface WorktreePruned {
+  /** One decision per tree. */
+  decisions: Array<WorktreeDecision>;
+  /** Nothing was changed. */
+  dry_run: boolean;
+  /** The repository's main checkout. */
+  repo: string;
+}
+
+/** Params naming the session (`worktree.status`, `worktree.list`). */
+export interface WorktreeSessionParams {
+  /** The session (its working directory's repository). */
+  session_id: string;
+}
+
+/** `worktree.status` result. */
+export interface WorktreeStatus {
+  /** The session's working directory. */
+  cwd: string;
+  /** The Prometheus tree it is in (`null`: none). */
+  tree?: WorktreeInfo | null;
+}
+
 export interface Methods {
   "approval.respond": { params: ApprovalRespondParams; result: Ack };
   "command.dispatch": { params: DispatchParams; result: Dispatched };
@@ -883,7 +1161,12 @@ export interface Methods {
   "complete.path": { params: CompleteParams; result: Completions };
   "complete.slash": { params: CompleteParams; result: Completions };
   "config.get": { params: ConfigGetParams; result: ConfigValue };
+  "cron.blueprints.fill": { params: BlueprintFillParams; result: BlueprintFilled };
+  "cron.blueprints.list": { params: BlueprintsListParams; result: BlueprintList };
   "egress.set": { params: EgressSetParams; result: EgressState };
+  "files.rollback": { params: FilesRollbackParams; result: FilesRolledBack };
+  "files.undo": { params: FilesUndoParams; result: FilesUndone };
+  "lsp.status": { params: LspStatusParams; result: LspStatus };
   "model.options": { params: SessionRef; result: ModelOptions };
   "pairing.approve": { params: PairingApproveParams; result: PairingApproved };
   "prompt.submit": { params: SubmitParams; result: Submitted };
@@ -907,6 +1190,10 @@ export interface Methods {
   "vault.list": { params: VaultListParams; result: VaultItems };
   "vault.remove": { params: VaultRemoveParams; result: VaultItem };
   "vault.sources": { params: VaultSourcesParams; result: VaultSourceList };
+  "worktree.list": { params: WorktreeSessionParams; result: WorktreeListing };
+  "worktree.new": { params: WorktreeNewParams; result: WorktreeCreated };
+  "worktree.prune": { params: WorktreePruneParams; result: WorktreePruned };
+  "worktree.status": { params: WorktreeSessionParams; result: WorktreeStatus };
 }
 
 export interface ServerRequests {
@@ -918,6 +1205,7 @@ export interface ServerRequests {
 
 export interface Events {
   "adapter.state": AdapterStatePayload;
+  "automation.state": AutomationStatePayload;
   "request.cancel": RequestCancel;
   "request.resolved": RequestResolved;
   "session.event": unknown;
@@ -932,8 +1220,6 @@ export const UNDECLARED = [
   "bot.relay.deliver",
   "bot.relay.drain",
   "bot.roster.list",
-  "cron.blueprints.fill",
-  "cron.blueprints.list",
   "daemon.update",
   "evolve.cancel",
   "evolve.choose",
@@ -949,8 +1235,6 @@ export const UNDECLARED = [
   "experience.pin",
   "experience.restore",
   "experience.show",
-  "files.rollback",
-  "files.undo",
   "grants.list",
   "grants.revoke",
   "groups.capabilities",
@@ -961,7 +1245,6 @@ export const UNDECLARED = [
   "harness.log",
   "harness.rollback",
   "journey.list",
-  "lsp.status",
   "moa.presets.delete",
   "moa.presets.list",
   "moa.presets.put",
@@ -976,12 +1259,7 @@ export const UNDECLARED = [
   "ui.prefs.patch",
   "voice.client_config",
   "wake.feed",
-  "worktree.list",
-  "worktree.new",
-  "worktree.prune",
-  "worktree.status",
   "achievement.unlocked",
-  "automation.state",
   "health.changed",
   "local_model.context_grown",
   "message.delivery",

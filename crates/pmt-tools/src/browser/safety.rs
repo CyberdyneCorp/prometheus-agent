@@ -103,6 +103,62 @@ impl UrlSafety {
 }
 
 impl UrlSafety {
+    /// The refusals no route lifts: a secret in the URL and cloud metadata
+    /// endpoints (checked before a cloud session picks a browser).
+    ///
+    /// # Errors
+    ///
+    /// [`SECRET`] or [`METADATA`].
+    pub async fn check_always_refused(&self, url: &str) -> Result<(), String> {
+        match self.check(url).await {
+            Err(why) if why == SECRET || why == METADATA => Err(why),
+            _ => Ok(()),
+        }
+    }
+
+    /// Whether `url` names a private, loopback or LAN destination: a
+    /// private-range address (literal or resolved), `localhost`, or a
+    /// `.local`, `.lan`, `.internal` or `.localhost` name (spec:
+    /// execution-environments, Private URLs route to a local browser).
+    pub async fn is_private(&self, url: &str) -> bool {
+        let Ok(parsed) = url::Url::parse(url) else {
+            return false;
+        };
+        let Some(host) = parsed.host_str() else {
+            return false;
+        };
+        let host = host
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .to_ascii_lowercase();
+        let local_name = host == "localhost"
+            || [".local", ".lan", ".internal", ".localhost"]
+                .iter()
+                .any(|suffix| host.ends_with(suffix));
+        if local_name {
+            return true;
+        }
+        let Ok(strict) = DestinationPolicy::new(false, &[]) else {
+            return false;
+        };
+        let private = |ip: IpAddr| {
+            matches!(
+                strict.check_addr(None, ip, None),
+                Err(pmt_net::destination::Refusal {
+                    reason: RefusalReason::Private,
+                    ..
+                })
+            )
+        };
+        if let Ok(ip) = host.parse::<IpAddr>() {
+            return private(ip);
+        }
+        self.lookup
+            .lookup(&host)
+            .await
+            .is_ok_and(|addresses| addresses.into_iter().any(private))
+    }
+
     /// The session egress check of a navigation to `host:port`.
     fn check_session(&self, host: &str, port: u16) -> Result<(), String> {
         let (Some(lookup), Some(key)) = (&self.egress, &self.session) else {

@@ -1,0 +1,58 @@
+/// Subagents a plugin launches for the conversation it acts in (spec:
+/// subagent-delegation, Subagent lifecycle interface for plugins). Imported
+/// by the `tool` world (1.2). Every call needs the `subagents` capability;
+/// launches go through the same host-owned path as the `delegate_task`
+/// tool: the same validation, the same grant narrowing (a child never
+/// holds more than the calling session), the same concurrency limit.
+package prometheus:subagents@1.0.0;
+
+interface lifecycle {
+    /// Where a child is. Every state is reachable: `cancel-requested`
+    /// until a cancelled child has stopped, `cancelled` after; a child
+    /// stopped by its conversation (not the plugin) ends `interrupted`.
+    enum state {
+        queued,
+        running,
+        completed,
+        failed,
+        interrupted,
+        stalled,
+        cancel-requested,
+        cancelled,
+    }
+
+    /// Why a call did nothing.
+    variant failure {
+        /// The grant lacks `subagents`: `capability_denied: subagents`.
+        denied(string),
+        /// The handle is forged, altered, belongs to another conversation
+        /// or names a child gone for over an hour.
+        unknown-handle,
+        /// The spawn or action was refused: `<error code>: <message>`
+        /// (`delegation.invalid_task: ...`, `delegation.paused: ...`).
+        refused(string),
+    }
+
+    /// Starts one child for the calling session. `task` is one
+    /// `delegate_task` task object as JSON (`{"goal": "..."}`); the answer
+    /// is the child's handle. The child runs in the background; its result
+    /// goes to the plugin, never into the conversation.
+    launch: func(task: string) -> result<string, failure>;
+    /// Its state now.
+    status: func(handle: string) -> result<state, failure>;
+    /// Waits up to `timeout-ms` for it to end: its `SubagentResult` JSON,
+    /// or none while it still runs.
+    wait: func(handle: string, timeout-ms: u32) -> result<option<string>, failure>;
+    /// Queues `message` for its next iteration.
+    steer: func(handle: string, message: string) -> result<_, failure>;
+    /// Asks it to stop (`cancel-requested`, then `cancelled`).
+    cancel: func(handle: string) -> result<_, failure>;
+    /// Its `SubagentResult` JSON once it ended (immutable from then on,
+    /// kept for 3600 seconds), or none before.
+    %result: func(handle: string) -> result<option<string>, failure>;
+}
+
+/// Every subagents import.
+world imports {
+    import lifecycle;
+}

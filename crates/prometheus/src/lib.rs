@@ -9,8 +9,10 @@ pub mod accounts;
 pub mod advisories;
 pub mod approvals_cmd;
 pub mod auth_cmd;
+pub mod automation;
 pub mod backup_cmd;
 pub mod bridge_cmd;
+pub mod browser_cmd;
 pub mod build_info;
 pub mod chat;
 pub mod cli;
@@ -19,6 +21,8 @@ pub mod config_cmd;
 pub mod connectors_cmd;
 pub mod connectors_host;
 pub mod context;
+pub mod cron_cmd;
+pub mod cron_host;
 pub mod daemon_client;
 #[cfg(feature = "gateway")]
 pub mod daemon_cmd;
@@ -27,9 +31,11 @@ pub mod demo_cmd;
 pub mod doctor_cmd;
 pub mod egress;
 pub mod fallback_cmd;
+pub mod files_cmd;
 pub mod grants_cmd;
 pub mod hooks_host;
 pub mod logs_cmd;
+pub mod lsp_cmd;
 #[cfg(feature = "mcp")]
 pub mod mcp_cmd;
 pub mod mcp_host;
@@ -45,6 +51,7 @@ pub mod prompt;
 pub mod prompt_cmd;
 pub mod rpc_cmd;
 pub mod runtimes_cmd;
+pub mod schema_cmd;
 pub mod secrets_cmd;
 pub mod security_cmd;
 pub mod self_test_cmd;
@@ -64,7 +71,9 @@ pub mod tui_cmd;
 pub mod update_cmd;
 pub mod usage_cmd;
 pub mod vault_cmd;
+pub mod verify_cmd;
 pub mod version;
+pub mod worktrees_cmd;
 
 pub use cli::{
     ApprovalsCommand, AuthCommand, BackupCommand, Cli, Command, ConfigCommand, DemoArgs,

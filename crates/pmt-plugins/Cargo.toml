@@ -17,6 +17,7 @@ pmt-config.workspace = true
 pmt-core.workspace = true
 # Model-provider plugins register `model-providers` descriptors.
 pmt-providers.workspace = true
+pmt-sandbox.workspace = true
 pmt-skills.workspace = true
 pmt-tools.workspace = true
 semver.workspace = true
@@ -41,6 +42,8 @@ testkit = ["dep:wit-component"]
 
 [dev-dependencies]
 pmt-plugins = { path = ".", features = ["testkit"] }
+flate2.workspace = true
+tar.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
 
 [lints]

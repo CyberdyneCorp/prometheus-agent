@@ -10,10 +10,13 @@
 
 pub mod backend;
 mod diff;
+pub mod documents;
+pub mod edits;
 pub mod guards;
 pub mod lint;
 pub mod patch;
 mod read;
+pub mod remote;
 pub mod search;
 pub mod text;
 pub mod tools;
@@ -23,7 +26,8 @@ mod write;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
+use std::time::Instant;
 
 use serde_json::Value;
 
@@ -31,6 +35,7 @@ pub use backend::{Entry, FileBackend, Kind, LocalBackend, Meta};
 pub use guards::ControlPaths;
 pub use lint::Linter;
 pub use read::{DEFAULT_LIMIT, ReadArgs};
+pub use remote::RemoteFiles;
 
 use crate::result::{Status, ToolResult};
 use tracker::Tracker;
@@ -53,6 +58,26 @@ pub struct FileSetup {
     pub read_max_chars: crate::setting::Limit,
     /// Post-write syntax checks.
     pub linter: Linter,
+    /// The `doc-converter` runtime (PDF, legacy Office...), when the
+    /// profile has a runtime store.
+    pub documents: Option<Arc<dyn documents::DocConverter>>,
+    /// Records every file-tool change (snapshots for undo and rollback).
+    pub edits: Option<Arc<dyn edits::EditRecorder>>,
+}
+
+/// Semantic checks after a write (language-server diagnostics, spec:
+/// lsp-diagnostics): the rendered findings the edit introduced, when they
+/// arrive while the tool call that started at `started` is still within
+/// its budget.
+pub trait PostWrite: Send + Sync {
+    /// Checks `path`, now `after` (was `before`; `None` for a new file).
+    fn after_write(
+        &self,
+        path: &Path,
+        before: Option<&str>,
+        after: &str,
+        started: Instant,
+    ) -> Option<Vec<String>>;
 }
 
 /// One session's file tools.
@@ -60,6 +85,7 @@ pub struct FileSession {
     setup: FileSetup,
     tracker: Mutex<Tracker>,
     generation: AtomicU64,
+    post_write: OnceLock<Arc<dyn PostWrite>>,
 }
 
 impl FileSession {
@@ -70,7 +96,33 @@ impl FileSession {
             setup,
             tracker: Mutex::default(),
             generation: AtomicU64::new(0),
+            post_write: OnceLock::new(),
         }
+    }
+
+    /// Adds semantic checks after writes whose syntax check is clean.
+    #[must_use]
+    pub fn with_post_write(self, check: Arc<dyn PostWrite>) -> Self {
+        let _ = self.post_write.set(check);
+        self
+    }
+
+    /// The semantic findings an edit of `path` introduced, unless its
+    /// syntax check failed (the model fixes the syntax first).
+    pub(crate) fn semantic(
+        &self,
+        path: &Path,
+        before: Option<&[u8]>,
+        after: &str,
+        lint: &lint::Lint,
+        started: Instant,
+    ) -> Option<Vec<String>> {
+        if lint.status == lint::LintStatus::Error {
+            return None;
+        }
+        let check = self.post_write.get()?;
+        let before = before.map(String::from_utf8_lossy);
+        check.after_write(path, before.as_deref(), after, started)
     }
 
     /// Context compaction happened: earlier read results may be gone from
@@ -135,6 +187,20 @@ impl FileSession {
 
     fn generation(&self) -> u64 {
         self.generation.load(Ordering::SeqCst)
+    }
+
+    /// Tells the edit recorder a file tool is about to change `path`.
+    pub(crate) fn before_change(&self, path: &Path) {
+        if let Some(edits) = &self.setup.edits {
+            edits.before_change(path, edits::current().as_ref());
+        }
+    }
+
+    /// Tells the edit recorder a file tool changed `path`.
+    pub(crate) fn changed(&self, path: &Path, before: Option<&[u8]>, after: Option<&[u8]>) {
+        if let Some(edits) = &self.setup.edits {
+            edits.changed(path, before, after, edits::current().as_ref());
+        }
     }
 }
 

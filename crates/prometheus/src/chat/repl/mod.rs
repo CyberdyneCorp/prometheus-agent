@@ -9,6 +9,7 @@
 //! their busy policy and prompts (approvals, clarify questions, memory
 //! approvals, confirmations) are answered from the next line.
 
+mod automation;
 mod bottom_line;
 mod commands;
 pub(crate) mod compose;
@@ -91,6 +92,8 @@ struct Repl {
     /// Messages background work posts to the chat (`/refine` summaries).
     posted: mpsc::UnboundedSender<String>,
     to_post: mpsc::UnboundedReceiver<String>,
+    /// Background delegation completions waiting for the idle prompt.
+    completions: mpsc::UnboundedReceiver<String>,
     last_interrupt: Option<Instant>,
     start: Start,
     confirm_destructive: bool,
@@ -102,6 +105,9 @@ struct Repl {
     running: bool,
     /// The bottom status line's toggles (`/statusbar`, `/battery`).
     status_bar: crate::chat::status_bar::StatusBar,
+    /// The automated turn the next idle boundary runs (a goal
+    /// continuation or a reserved timer wakeup).
+    wakeup: Option<crate::automation::boundary::Reserved>,
 }
 
 /// The memory approver of an interactive session and the REPL's end of
@@ -122,6 +128,11 @@ pub struct Asks {
     pub secrets: mpsc::UnboundedReceiver<SecretAsk>,
     /// The secret prompt to start listening when the REPL runs.
     pub secret_prompt: Option<Arc<CliSecretPrompt>>,
+    /// Background process notices, printed as their own messages.
+    pub notices: mpsc::UnboundedReceiver<pmt_tools::terminal::process::Notice>,
+    /// Background delegation completions: each runs as the agent's next
+    /// input once the chat is idle.
+    pub completions: mpsc::UnboundedReceiver<String>,
 }
 
 impl Asks {
@@ -133,8 +144,32 @@ impl Asks {
             installs: mpsc::unbounded_channel().1,
             secrets: mpsc::unbounded_channel().1,
             secret_prompt: None,
+            notices: mpsc::unbounded_channel().1,
+            completions: mpsc::unbounded_channel().1,
         }
     }
+}
+
+/// Sleeps until `at`; never wakes without one.
+async fn sleep_until(at: Option<tokio::time::Instant>) {
+    match at {
+        Some(at) => tokio::time::sleep_until(at).await,
+        None => std::future::pending().await,
+    }
+}
+
+/// Prints every background process notice above the prompt, as its own
+/// message. The task holds a printer, so it must end (aborted and awaited)
+/// before the input is dropped: the input waits for every printer.
+fn print_notices(
+    mut notices: mpsc::UnboundedReceiver<pmt_tools::terminal::process::Notice>,
+    printer: input::Printer,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        while let Some(notice) = notices.recv().await {
+            printer.print(&format!("[background] {}", notice.text()));
+        }
+    })
 }
 
 /// Runs the line interface over `live` until the user leaves; returns the
@@ -183,6 +218,7 @@ pub async fn run(
         memory: asks.memory,
         installs: asks.installs,
         secrets: asks.secrets,
+        completions: asks.completions,
         posted,
         to_post,
         last_interrupt: None,
@@ -192,8 +228,10 @@ pub async fn run(
         shell_context: Vec::new(),
         running: false,
         status_bar,
+        wakeup: None,
     };
     repl.attach(live);
+    let notices = print_notices(asks.notices, repl.input.printer());
     if let Some(prompt) = &asks.secret_prompt {
         prompt.listen();
     }
@@ -203,7 +241,10 @@ pub async fn run(
         repl.recap();
     }
     repl.spacer();
-    Ok(Box::pin(repl.main_loop()).await)
+    let status = Box::pin(repl.main_loop()).await;
+    notices.abort();
+    let _ = notices.await;
+    Ok(status)
 }
 
 impl Repl {
@@ -214,9 +255,19 @@ impl Repl {
             self.user_turn(seed).await;
         }
         loop {
+            // A queued line goes before any automated turn.
             let flow = match self.queue.pop_front() {
-                Some(line) => self.idle_line(line).await,
-                None => self.idle_event().await,
+                Some(line) => {
+                    self.drop_wakeup();
+                    self.idle_line(line).await
+                }
+                None => match self.wakeup.take() {
+                    Some(reserved) => {
+                        self.automated(reserved).await;
+                        Flow::Continue
+                    }
+                    None => self.idle_event().await,
+                },
             };
             if flow == Flow::Exit {
                 break;
@@ -231,10 +282,20 @@ impl Repl {
         let prompt = self.prompt();
         self.show_status();
         self.input.request(&prompt);
+        let automation = self.automation_deadline();
         let event = tokio::select! {
             event = self.input.next() => event,
+            () = sleep_until(automation) => {
+                self.automation_due();
+                return Flow::Continue;
+            }
             Some(text) = self.to_post.recv() => {
                 self.notice(&text);
+                return Flow::Continue;
+            }
+            Some(completion) = self.completions.recv() => {
+                self.notice("Background subagents finished; their results go to the agent.");
+                self.queue.push_back(completion);
                 return Flow::Continue;
             }
         };
@@ -283,6 +344,16 @@ impl Repl {
         if trimmed.is_empty() {
             return Flow::Continue;
         }
+        // A `yes` saves the job a `/cron` echo just showed; any other input
+        // drops it.
+        if let Some(confirmation) = crate::chat::commands::cron::take(self.live().id, trimmed) {
+            let session = self.live();
+            self.show(crate::chat::commands::cron::confirm(
+                &self.ctx(session),
+                confirmation,
+            ));
+            return Flow::Continue;
+        }
         if trimmed.starts_with('/') {
             return self.slash(trimmed.to_owned()).await;
         }
@@ -304,11 +375,19 @@ impl Repl {
                 target.provider,
                 target.model.as_deref().unwrap_or("default")
             );
-            crate::chat::status_bar::line_text(
+            let line = crate::chat::status_bar::line_text(
                 &self.status_bar,
                 self.factory.scope.name().as_str(),
                 Some(&model),
-            )
+            )?;
+            // The live automation rows (`loop · every 5m · 2 runs · next
+            // in 4m`).
+            let rows = self.automation_rows();
+            Some(if rows.is_empty() {
+                line
+            } else {
+                format!("{line} │ {}", rows.join(" │ "))
+            })
         });
         self.input.set_status(text.flatten());
     }
@@ -359,6 +438,7 @@ impl Repl {
             post: Arc::new(move |text| {
                 let _ = posted.send(text);
             }),
+            message_limit: None,
         }
     }
 
@@ -393,6 +473,10 @@ impl Repl {
             )
         };
         self.say(Role::Accent, &banner);
+        // Spec: security-boundaries, Hardening downgrades are never silent.
+        if let Some(marker) = self.live().downgrades.banner_marker() {
+            self.say(Role::Error, &format!("degraded: {marker}"));
+        }
         self.tip(
             "slash-help",
             "Tip: type /help for the commands, /status for this session",

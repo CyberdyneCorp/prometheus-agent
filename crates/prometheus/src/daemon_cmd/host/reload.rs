@@ -86,6 +86,10 @@ impl DaemonHost {
     /// read (the poll calls it; so does a plugin reload, which must see a
     /// change the CLI wrote a moment ago).
     pub(super) async fn check(&self, profile: &Profile) {
+        // The poll may have taken the new bytes and still be applying
+        // them: without this a reload asked for meanwhile saw the file as
+        // unchanged and loaded the plugins from the old configuration.
+        let _rereading = profile.rereading.lock().await;
         let current = profile.scope();
         let text = std::fs::read(config_path(&current)).ok();
         {

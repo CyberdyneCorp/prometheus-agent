@@ -596,6 +596,18 @@ impl CommandGate {
 
     /// Asks the human; an `explain` answer adds the explanation and asks
     /// again (the command never runs on it), at most [`EXPLAINS`] times.
+    /// Asks this gate's human channel about a request raised elsewhere (a
+    /// delegated child escalating to its root session's surface; spec:
+    /// subagent-delegation, Child approvals fail closed). Without a human
+    /// channel the answer is `Unanswered`, which callers deny.
+    ///
+    /// # Errors
+    ///
+    /// [`Unanswered`] when nobody answered.
+    pub async fn escalate(&self, request: ApprovalRequest) -> Result<Decision, Unanswered> {
+        self.ask_explaining(request).await
+    }
+
     async fn ask_explaining(&self, mut request: ApprovalRequest) -> Result<Decision, Unanswered> {
         for _ in 0..EXPLAINS {
             match self.setup.channel.ask(request.clone()).await {

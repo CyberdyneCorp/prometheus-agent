@@ -30,15 +30,6 @@ pub(crate) fn take_now(args: &str) -> (String, bool) {
     (kept.join(" "), now)
 }
 
-/// `/undo`: the last exchange leaves the active transcript.
-pub(super) fn undo(ctx: &Ctx<'_>) -> Result<String, Error> {
-    let rewound = ctx.factory.store.undo_last_turn(ctx.live.id, None)?;
-    Ok(format!(
-        "undid the last exchange ({} messages)",
-        rewound.messages.len()
-    ))
-}
-
 /// `/retry`: the last user message again, with its attachments; what
 /// followed it leaves the active transcript. `None`: nothing to retry.
 ///
@@ -206,7 +197,9 @@ async fn apply_tools_now(ctx: &Ctx<'_>, toolset: &str, enable: bool) -> Result<(
     } else {
         vec![toolset.to_owned()]
     };
-    let selection = Selection::resolve(&ctx.live.registry(), &enabled, &disabled)?;
+    let opt_ins = live.selection().session_opt_ins;
+    let selection = Selection::resolve(&ctx.live.registry(), &enabled, &disabled)?
+        .with_session_opt_ins(opt_ins.iter().map(String::as_str));
     ctx.factory.rebuild_tools(live, &selection).await?;
     live.agent.rebuild_prompt(Rebuild::Now("tools".to_owned()));
     Ok(())

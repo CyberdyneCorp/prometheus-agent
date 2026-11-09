@@ -4,13 +4,14 @@
 //! its error. A one-shot run writes them plainly ([`Plain`]); the line
 //! interface paints them above its prompt.
 
+use std::collections::BTreeMap;
 use std::io::Write as _;
 
 use pmt_core::error::Error;
-use pmt_rpc::contracts::TurnFinished;
+use pmt_rpc::contracts::{AutomationStatePayload, TurnFinished};
 use serde_json::Value;
 
-use pmt_rpc::contracts::COMMAND_NOTICE;
+use pmt_rpc::contracts::{COMMAND_NOTICE, PROCESS_NOTICE};
 
 /// Where an attached chat shows things.
 pub(super) trait Out {
@@ -76,7 +77,37 @@ pub(super) fn event(out: &dyn Out, data: &Value) {
             out.tool(&format!("· {tool}"));
         }
         Some(COMMAND_NOTICE) => out.notice(data["payload"]["text"].as_str().unwrap_or_default()),
+        Some(PROCESS_NOTICE) => out.notice(&format!(
+            "[background] {}",
+            data["payload"]["text"].as_str().unwrap_or_default()
+        )),
         _ => {}
+    }
+}
+
+/// Whether a `session.event` is a notice posted between turns (a command's
+/// output, a background process) rather than part of a turn.
+pub(super) fn is_notice(data: &Value) -> bool {
+    matches!(data["type"].as_str(), Some(COMMAND_NOTICE | PROCESS_NOTICE))
+}
+
+/// Keeps the latest live row per kind from an `automation.state` event of
+/// `session` (spec: session-automation, Automation status on every
+/// surface); a removed goal, loop or heartbeat drops its row.
+pub(super) fn automation(rows: &mut BTreeMap<String, String>, session: &str, data: &Value) {
+    let Ok(state) = serde_json::from_value::<AutomationStatePayload>(data.clone()) else {
+        return;
+    };
+    if state.session_id != session {
+        return;
+    }
+    match state.row {
+        Some(row) => {
+            rows.insert(state.kind, row);
+        }
+        None => {
+            rows.remove(&state.kind);
+        }
     }
 }
 

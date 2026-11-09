@@ -72,6 +72,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "first-party-daytona"
+version = "0.1.0"
+dependencies = [
+ "remote-kit",
+ "serde_json",
+ "wit-bindgen",
+]
+
+[[package]]
+name = "first-party-modal"
+version = "0.1.0"
+dependencies = [
+ "remote-kit",
+ "serde_json",
+ "wit-bindgen",
+]
+
+[[package]]
+name = "first-party-vercel"
+version = "0.1.0"
+dependencies = [
+ "remote-kit",
+ "serde_json",
+ "wit-bindgen",
+]
+
+[[package]]
 name = "flate2"
 version = "1.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -324,6 +351,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "remote-kit"
+version = "0.1.0"
+
+[[package]]
 name = "sample-context-engine"
 version = "0.1.0"
 dependencies = [
@@ -500,6 +531,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "testing-backend"
+version = "0.1.0"
+dependencies = [
+ "wit-bindgen",
+]
+
+[[package]]
 name = "testing-hooks"
 version = "0.1.0"
 dependencies = [
@@ -523,6 +561,13 @@ dependencies = [
 
 [[package]]
 name = "testing-provider"
+version = "0.1.0"
+dependencies = [
+ "wit-bindgen",
+]
+
+[[package]]
+name = "testing-router"
 version = "0.1.0"
 dependencies = [
  "wit-bindgen",
