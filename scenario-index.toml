@@ -2833,7 +2833,7 @@ capabilities = [
 
 [scheduled-jobs."Run replay (upgrade)"]
 "Compare against current harness" = ["crates/prometheus/tests/cron_cli.rs::a_live_replay_reruns_the_inputs_and_diffs_the_outputs"]
-"Deterministic replay" = { deferred = "needs the model-call cache and replay provider of group 51 (task 51.2 owns it)" }
+"Deterministic replay" = ["crates/prometheus/tests/cron_cli.rs::a_deterministic_replay_matches_without_a_request_or_a_delivery"]
 
 [scheduled-jobs."Lifecycle operations"]
 "Run-now is synchronous by default" = ["crates/prometheus/tests/cron_cli.rs::run_now_executes_a_paused_job_in_the_foreground_and_keeps_it_paused", "crates/pmt-cron/tests/exec.rs::a_manual_run_of_a_paused_job_keeps_it_paused"]
@@ -3453,3 +3453,32 @@ capabilities = [
 
 [voice-mode."Gateway per-chat voice reply command"]
 "Persisted chat voice mode" = ["crates/pmt-gateway/tests/messaging/media.rs::a_chats_voice_choice_survives_a_restart"]
+
+# Group 51 (replay and the model-call cache)
+
+[replay-and-evaluation."Canonical request hash"]
+"Cache markers do not change the hash" = ["crates/pmt-providers/tests/providers/call_cache.rs::cache_markers_do_not_change_the_hash", "crates/pmt-providers/src/request.rs::hash_ignores_cache_markers_and_depends_on_content_and_route"]
+
+[replay-and-evaluation."Content-addressed model-call cache"]
+"Resumed evaluation makes no new calls" = { tests = ["crates/pmt-providers/tests/providers/call_cache.rs::a_repeated_call_is_served_from_the_cache_without_reaching_the_provider"], note = "`prometheus eval run` arrives in M3; the rerun of the same request with read_write caching reaches no provider and its ledger row is a cache hit at zero cost" }
+
+[replay-and-evaluation."Cache administration and limits"]
+"Errors are not cached" = ["crates/pmt-providers/tests/providers/call_cache.rs::errors_are_not_cached", "crates/prometheus/tests/replay_cli.rs::the_cache_commands_report_and_remove_entries", "crates/pmt-providers/tests/providers/call_cache.rs::the_least_recently_used_entries_are_evicted_above_the_limit"]
+
+[replay-and-evaluation."Session recordings"]
+"Recording without workspace contents" = ["crates/prometheus/tests/replay_cli.rs::a_recording_without_workspace_lists_files_with_hashes_and_no_contents"]
+
+[replay-and-evaluation."Replay modes"]
+"Tampered recording" = ["crates/prometheus/tests/replay_cli.rs::a_tampered_recording_is_refused_with_exit_65", "crates/pmt-eval/src/recording.rs::a_written_recording_reads_back_and_a_changed_hash_is_named"]
+
+[replay-and-evaluation."Divergence detection"]
+"Prompt change detected" = ["crates/prometheus/tests/replay_cli.rs::a_changed_tool_guidance_layer_diverges_at_the_first_model_call_with_a_diff"]
+
+[replay-and-evaluation."Replay has no side effects"]
+"Recorded message send is not re-sent" = ["crates/prometheus/tests/replay_cli.rs::a_strict_replay_serves_recorded_side_effects_without_running_them"]
+
+[replay-and-evaluation."Golden recording regression gate"]
+"Unintended prompt drift" = ["crates/prometheus/tests/replay_cli.rs::the_golden_gate_names_each_recording_a_layer_reorder_breaks"]
+
+[replay-and-evaluation."Built-in smoke suite"]
+"Regression in tool dispatch" = ["crates/prometheus/tests/smoke_suite.rs::a_broken_parallel_dispatch_misses_the_smoke_grade"]

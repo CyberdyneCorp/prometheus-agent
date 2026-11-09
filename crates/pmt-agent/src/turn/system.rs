@@ -35,9 +35,11 @@ impl Turn<'_> {
         // The blocking pool does not inherit the span: its records (a
         // blocked context file) must keep the session's profile and ids.
         let span = tracing::Span::current();
-        let built = tokio::task::spawn_blocking(move || span.in_scope(|| prompt::build(&inputs)))
-            .await
-            .map_err(|e| Error::new(&codes::TASK_PANICKED, format!("prompt build: {e}")))??;
+        let mut built =
+            tokio::task::spawn_blocking(move || span.in_scope(|| prompt::build(&inputs)))
+                .await
+                .map_err(|e| Error::new(&codes::TASK_PANICKED, format!("prompt build: {e}")))??;
+        self.pin_and_record(&mut built);
         // Rebuilt bytes equal to the stored ones keep the stored prompt.
         let frozen = match stored {
             Some(stored)
@@ -64,6 +66,24 @@ impl Turn<'_> {
         }))
         .await;
         Ok(frozen)
+    }
+
+    /// A replay's recorded layers replace the fresh ones; the build is
+    /// kept in the session's recording.
+    fn pin_and_record(&self, built: &mut prompt::Built) {
+        let setup = &self.agent.setup;
+        if let Some(pins) = &setup.prompt_pins {
+            built.prompt = pins.pin(setup.session, std::mem::take(&mut built.prompt));
+        }
+        if let Some(recording) = &setup.recording {
+            recording.prompt(
+                &setup.session.to_string(),
+                &pmt_obs::recording::Prompt {
+                    ts: jiff::Timestamp::now().to_string(),
+                    sections: prompt::pins::sections(&built.prompt),
+                },
+            );
+        }
     }
 
     fn inputs(&self, route: &RouteInfo, tool_names: Vec<String>) -> PromptInputs {

@@ -28,6 +28,8 @@ Commands:
   vault        The credential vault: logins, cards and addresses the browser fills by handle
   security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one
+  replay       Session recordings: export one, replay it (detecting divergence), or re-record it with this build
+  cache        The model-call cache: stats, prune, clear
   files        Undo a session's file changes, roll a workspace back to a checkpoint, and manage the file snapshot store
   verify       Detect a project's build/test/start recipe and run it
   snapshots    Snapshot and restore the selected profile's critical state
@@ -8217,6 +8219,486 @@ Usage: prometheus backup help restore
 Print this message or the help of the given subcommand(s)
 
 Usage: prometheus backup help help
+```
+
+## `prometheus replay`
+
+```text
+Session recordings: export one, replay it (detecting divergence), or re-record it with this build
+
+Usage: prometheus replay [OPTIONS] <COMMAND>
+
+Commands:
+  export  Write a session's recording (`.pmtrec`)
+  run     Re-execute a recording and report the first divergence
+  bless   Re-record a recording with this build and print the diff accepted
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus replay export`
+
+```text
+Write a session's recording (`.pmtrec`)
+
+Usage: prometheus replay export [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          The session (id or unique title)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -o, --output <FILE>
+          The file (default `<session>.pmtrec`)
+
+      --include-workspace
+          Include the workspace files' contents (only their manifest otherwise)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --lineage
+          Include every descendant session (subagents, forks)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus replay run`
+
+```text
+Re-execute a recording and report the first divergence
+
+Usage: prometheus replay run [OPTIONS] <RECORDING>
+
+Arguments:
+  <RECORDING>
+          The `.pmtrec` file
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --mode <MODE>
+          What is served from the recording
+
+          Possible values:
+          - strict:     Model responses and tool results from the recording
+          - tools-live: Model responses from the recording; tools run for real in a scratch copy of the recorded workspace
+          - model-live: User inputs and tool results from the recording; the model calls go to the configured provider
+
+          [default: strict]
+
+      --on-divergence <ON_DIVERGENCE>
+          Stop at the first divergence, or continue live
+
+          Possible values:
+          - stop:     End the replay at the first divergence
+          - continue: Fall through to the live provider and live tools for the rest
+
+          [default: stop]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --out <DIR>
+          Where the replay's home, workspace and trajectory go (default: a new directory under the profile's `cache/replay/`)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus replay bless`
+
+```text
+Re-record a recording with this build and print the diff accepted
+
+Usage: prometheus replay bless [OPTIONS] <RECORDING>
+
+Arguments:
+  <RECORDING>
+          The `.pmtrec` file (rewritten in place)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --mode <MODE>
+          Only `strict` re-records
+
+          Possible values:
+          - strict:     Model responses and tool results from the recording
+          - tools-live: Model responses from the recording; tools run for real in a scratch copy of the recorded workspace
+          - model-live: User inputs and tool results from the recording; the model calls go to the configured provider
+
+          [default: strict]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus replay help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus replay help [COMMAND]
+
+Commands:
+  export  Write a session's recording (`.pmtrec`)
+  run     Re-execute a recording and report the first divergence
+  bless   Re-record a recording with this build and print the diff accepted
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus replay help export`
+
+```text
+Write a session's recording (`.pmtrec`)
+
+Usage: prometheus replay help export
+```
+
+## `prometheus replay help run`
+
+```text
+Re-execute a recording and report the first divergence
+
+Usage: prometheus replay help run
+```
+
+## `prometheus replay help bless`
+
+```text
+Re-record a recording with this build and print the diff accepted
+
+Usage: prometheus replay help bless
+```
+
+## `prometheus replay help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus replay help help
+```
+
+## `prometheus cache`
+
+```text
+The model-call cache: stats, prune, clear
+
+Usage: prometheus cache [OPTIONS] <COMMAND>
+
+Commands:
+  stats  Entries and bytes, in total and per namespace
+  prune  Remove entries not used for a while
+  clear  Remove every entry (of one namespace)
+  help   Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus cache stats`
+
+```text
+Entries and bytes, in total and per namespace
+
+Usage: prometheus cache stats [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus cache prune`
+
+```text
+Remove entries not used for a while
+
+Usage: prometheus cache prune [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --older-than <OLDER_THAN>
+          Remove entries last used longer ago than this (`30d`, `12h`, `90m`, `45s`)
+
+          [default: 30d]
+
+      --namespace <NS>
+          Only this namespace
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus cache clear`
+
+```text
+Remove every entry (of one namespace)
+
+Usage: prometheus cache clear [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --namespace <NS>
+          Only this namespace
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus cache help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus cache help [COMMAND]
+
+Commands:
+  stats  Entries and bytes, in total and per namespace
+  prune  Remove entries not used for a while
+  clear  Remove every entry (of one namespace)
+  help   Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus cache help stats`
+
+```text
+Entries and bytes, in total and per namespace
+
+Usage: prometheus cache help stats
+```
+
+## `prometheus cache help prune`
+
+```text
+Remove entries not used for a while
+
+Usage: prometheus cache help prune
+```
+
+## `prometheus cache help clear`
+
+```text
+Remove every entry (of one namespace)
+
+Usage: prometheus cache help clear
+```
+
+## `prometheus cache help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus cache help help
 ```
 
 ## `prometheus files`
@@ -21384,6 +21866,8 @@ Commands:
   vault        The credential vault: logins, cards and addresses the browser fills by handle
   security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one
+  replay       Session recordings: export one, replay it (detecting divergence), or re-record it with this build
+  cache        The model-call cache: stats, prune, clear
   files        Undo a session's file changes, roll a workspace back to a checkpoint, and manage the file snapshot store
   verify       Detect a project's build/test/start recipe and run it
   snapshots    Snapshot and restore the selected profile's critical state
@@ -22649,6 +23133,80 @@ Usage: prometheus help backup create
 Restore an archive after verifying every member (-p/--profile NAME restores only that profile)
 
 Usage: prometheus help backup restore
+```
+
+## `prometheus help replay`
+
+```text
+Session recordings: export one, replay it (detecting divergence), or re-record it with this build
+
+Usage: prometheus help replay [COMMAND]
+
+Commands:
+  export  Write a session's recording (`.pmtrec`)
+  run     Re-execute a recording and report the first divergence
+  bless   Re-record a recording with this build and print the diff accepted
+```
+
+## `prometheus help replay export`
+
+```text
+Write a session's recording (`.pmtrec`)
+
+Usage: prometheus help replay export
+```
+
+## `prometheus help replay run`
+
+```text
+Re-execute a recording and report the first divergence
+
+Usage: prometheus help replay run
+```
+
+## `prometheus help replay bless`
+
+```text
+Re-record a recording with this build and print the diff accepted
+
+Usage: prometheus help replay bless
+```
+
+## `prometheus help cache`
+
+```text
+The model-call cache: stats, prune, clear
+
+Usage: prometheus help cache [COMMAND]
+
+Commands:
+  stats  Entries and bytes, in total and per namespace
+  prune  Remove entries not used for a while
+  clear  Remove every entry (of one namespace)
+```
+
+## `prometheus help cache stats`
+
+```text
+Entries and bytes, in total and per namespace
+
+Usage: prometheus help cache stats
+```
+
+## `prometheus help cache prune`
+
+```text
+Remove entries not used for a while
+
+Usage: prometheus help cache prune
+```
+
+## `prometheus help cache clear`
+
+```text
+Remove every entry (of one namespace)
+
+Usage: prometheus help cache clear
 ```
 
 ## `prometheus help files`
@@ -24772,6 +25330,9 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 
 | Schema | Command |
 |---|---|
+| `prometheus.cache_stats.v1` | `prometheus cache stats` |
+| `prometheus.cache_prune.v1` | `prometheus cache prune` |
+| `prometheus.cache_clear.v1` | `prometheus cache clear` |
 | `prometheus.profile_export.v1` | `prometheus profile export` |
 | `prometheus.doctor.v1` | `prometheus doctor` |
 | `prometheus.update_status.v1` | `prometheus update --status` |

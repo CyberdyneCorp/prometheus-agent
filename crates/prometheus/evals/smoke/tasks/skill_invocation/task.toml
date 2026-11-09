@@ -1,0 +1,3 @@
+# Loading a bundled skill.
+prompt = "how do I configure prometheus?"
+files = ["README.md"]

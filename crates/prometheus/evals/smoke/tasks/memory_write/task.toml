@@ -1,0 +1,3 @@
+# A memory write.
+prompt = "remember that I prefer CSV"
+files = ["README.md"]

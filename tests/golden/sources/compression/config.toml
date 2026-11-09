@@ -1,0 +1,6 @@
+[models."mock/mock"]
+context_window = 16000
+
+[compression]
+target_ratio = 0.1
+protect_first_n = 0

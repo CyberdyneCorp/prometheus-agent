@@ -637,6 +637,9 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `quick_commands.<name>.target` | string | unset | any | `live` | The slash command an `alias` runs (with or without the leading `/`); the user's arguments are appended. |
 | `quick_commands.<name>.timeout_secs` | integer | `30` | 1 to 3600 | `live` | An `exec` command is killed after this many seconds. |
 | `quick_commands.<name>.type` | one of "alias", "exec" | unset | `"alias"`, `"exec"` | `live` | `alias` re-dispatches `target`; `exec` runs `command` in the local sandbox. |
+| `replay.cache.max_bytes` | integer | `4294967296` | ≥ 1 | `next_session` | Least-recently-used entries are evicted above this size. |
+| `replay.cache.mode` | one of "off", "read", "write", "read_write" | `"off"` | `"off"`, `"read"`, `"write"`, `"read_write"` | `next_session` | `off`, `read` (serve stored responses), `write` (store new ones) or `read_write`. Off for interactive sessions; the offline demo (and eval runs) use `read_write`. |
+| `replay.cache.namespace` | string | `"default"` | any | `next_session` | Entries of different namespaces never serve each other. |
 | `routing.health_half_life_secs` | integer | `1800` | ≥ 1 | `next_session` | Half-life (seconds) of the decay of an idle route's health score toward 1.0. |
 | `routing.health_window` | integer | `50` | 1 to 500 | `next_session` | Calls per (provider, model, credential) a health score is computed over. |
 | `schema_version` | integer | `1` | ≥ 0 | `restart` | Version of this file's schema; older files are migrated forward and a newer one is refused. |

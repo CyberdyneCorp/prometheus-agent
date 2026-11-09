@@ -870,6 +870,21 @@ error_codes! {
     /// The demo could not write its directory.
     DEMO_IO = ("demo.io", Io,
         "`prometheus demo` could not create its directory, home, ledger repository or mock script.");
+    /// A recording's members do not match its manifest.
+    REPLAY_INTEGRITY = ("replay.integrity", InvalidInput,
+        "A member of the `.pmtrec` recording is missing, unlisted or no longer matches the sha256 its manifest records (the message names it); the recording was changed after export and is not replayed.");
+    /// A recording cannot be read.
+    REPLAY_MALFORMED = ("replay.malformed", InvalidInput,
+        "The file is not a `.pmtrec` recording this build reads: not a zstd-compressed tar, no `manifest.json`, a newer `format_version`, or a member that does not parse.");
+    /// A session has no recording to export or replay.
+    REPLAY_NOT_RECORDED = ("replay.not_recorded", NotFound,
+        "The session has no recording under `<profile>/recordings/` (it ran with `observability.trajectories.enabled = false`, before recordings existed, or retention removed it), so it cannot be exported or replayed.");
+    /// A replay met a call its recording does not have.
+    REPLAY_DIVERGED = ("replay.diverged", Conflict,
+        "During a replay a model request or tool call differed from the recording at the same step; the report names the step and shows a diff. Rerun with `--on-divergence continue` to fall through to the live provider and tools.");
+    /// A recording could not be written or read from disk.
+    REPLAY_IO = ("replay.io", Io,
+        "A `.pmtrec` recording or a replay's output directory could not be written or read.");
     /// A runtime name is not in the pinned runtime index.
     RUNTIME_UNKNOWN = ("runtime.unknown", Usage,
         "The name is not a runtime of this build's pinned runtime index; `prometheus runtimes list` shows the pinned names.");
@@ -975,9 +990,6 @@ error_codes! {
     /// A job create or edit was not confirmed.
     CRON_CONFIRMATION = ("cron.confirmation", PermissionDenied,
         "Saving a job (or a changed schedule) needs a confirmation: answer `y` on a terminal or pass `--yes`; the command exits 4 and nothing was saved.");
-    /// Deterministic replay of a run is not available.
-    CRON_REPLAY_UNAVAILABLE = ("cron.replay_unavailable", Unavailable,
-        "Replaying a run against its recorded model responses needs the model-call cache and the replay provider, which this build does not have yet; `prometheus cron replay <run> --live` re-runs the recorded inputs against the current provider instead.");
     /// A lifecycle operation does not apply to the job.
     CRON_INVALID_STATE = ("cron.invalid_state", InvalidInput,
         "The operation does not apply in the job's state (for example resuming a one-shot job whose time has passed); the message says how to change it.");

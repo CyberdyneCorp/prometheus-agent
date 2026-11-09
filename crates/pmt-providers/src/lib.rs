@@ -17,6 +17,8 @@ pub mod aws;
 pub mod azure;
 pub mod builtin;
 pub mod caller;
+pub mod calls;
+pub mod canonical;
 pub mod capability;
 pub mod classify;
 pub mod cost;

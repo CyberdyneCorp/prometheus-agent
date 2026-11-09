@@ -46,8 +46,9 @@ pub fn daily(store: &Store, scope: &ProfileScope) -> Result<Option<Swept>, Error
 }
 
 /// The sweep of the scope's profile as of `now`: its trajectories, then
-/// its MoA traces (spec: mixture-of-agents, MoA traces), which go with
-/// their session's trajectory or with the session itself.
+/// its MoA traces (spec: mixture-of-agents, MoA traces) and session
+/// recordings (spec: replay-and-evaluation, Session recordings), which go
+/// with their session's trajectory or with the session itself.
 ///
 /// # Errors
 ///
@@ -56,13 +57,18 @@ pub fn profile(store: &Store, scope: &ProfileScope, now: Timestamp) -> Result<Sw
     let config = scope.config();
     let retention = config.observability.trajectories.retention_secs;
     let mut swept = sweep(store, &scope.path(files::DIR), retention, now)?;
+    // MoA traces and session recordings go with their session's trajectory
+    // or with the session itself.
     let traces = config.moa.trace_dir(scope.dir());
-    for id in &swept.purged {
-        files::remove(&traces, &id.to_string()).map_err(|err| {
-            Error::io_doing(&codes::TRAJECTORY_IO, "cannot remove", &traces, &err)
-        })?;
+    let recordings = scope.path(crate::recording::DIR);
+    for dir in [&traces, &recordings] {
+        for id in &swept.purged {
+            files::remove(dir, &id.to_string()).map_err(|err| {
+                Error::io_doing(&codes::TRAJECTORY_IO, "cannot remove", dir, &err)
+            })?;
+        }
+        swept.orphans.extend(remove_orphans(store, dir, now)?);
     }
-    swept.orphans.extend(remove_orphans(store, &traces, now)?);
     Ok(swept)
 }
 

@@ -1,0 +1,3 @@
+# A delegation to two subagents whose answers come back.
+prompt = "review the ledger"
+files = ["README.md"]

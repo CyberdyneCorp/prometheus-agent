@@ -11,6 +11,7 @@ use pmt_core::error::Error;
 use pmt_core::id::SessionId;
 use pmt_obs::usage::UsageRecorder;
 
+use crate::calls::Before;
 use crate::capability;
 use crate::classify::{ErrorClass, ProviderError};
 use crate::cost::{CallContext, Pending};
@@ -113,12 +114,58 @@ pub enum Recovery {
 
 /// Sends `request` on `route` once, running `hooks` around it: prepared,
 /// and sent once more at once when a refused sign-in token was refreshed.
-/// Returns the stream and the route it went out on.
+/// The sender's call layers come first: a replay or a cache hit serves the
+/// response without sending (and without credentials), and a successful
+/// sent response is cached and recorded. Returns the stream and the route
+/// it went out on.
 ///
 /// # Errors
 ///
-/// The classified failure, or the hooks' refusal.
+/// The classified failure, the hooks' refusal, or a replay's refusal.
 pub(crate) async fn send_once(
+    sender: &Sender,
+    hooks: Option<&dyn CredentialHooks>,
+    route: &Route,
+    request: &Request,
+    session: Option<SessionId>,
+) -> Result<(ModelStream, Route), ProviderError> {
+    let calls = sender.calls();
+    if calls.is_empty() {
+        return send_prepared(sender, hooks, route, request, session).await;
+    }
+    let key = crate::calls::CallKey::of(route, request);
+    let (mut stream, sent_on, served) = match calls.before(&key).await {
+        Before::Refuse(error) => return Err(error),
+        Before::Serve(recorded) => match &recorded.failure {
+            // A recorded failure before anything streamed.
+            Some(failure) if recorded.chunks.is_empty() => return Err(failure.to_error()),
+            _ => {
+                let limits = crate::transport::Limits::of(route);
+                (
+                    ModelStream::served(recorded, limits).await?,
+                    route.clone(),
+                    true,
+                )
+            }
+        },
+        Before::Send => match send_prepared(sender, hooks, route, request, session).await {
+            Ok((stream, prepared)) => (stream, prepared, false),
+            Err(error) => {
+                // A request refused unsent got no response to record.
+                if error.refusal.is_none() {
+                    calls.failed(session, &key, &error);
+                }
+                return Err(error);
+            }
+        },
+    };
+    let calls = sender.calls_handle();
+    stream.capture(move |recorded| calls.after(session, &key, &recorded, served));
+    Ok((stream, sent_on))
+}
+
+/// [`send_once`] without the call layers.
+async fn send_prepared(
     sender: &Sender,
     hooks: Option<&dyn CredentialHooks>,
     route: &Route,
@@ -372,6 +419,14 @@ impl ModelCaller {
     #[must_use]
     pub fn with_mock(mut self, mock: Arc<Mock>) -> Self {
         self.sender = self.sender.with_mock(mock);
+        self
+    }
+
+    /// Runs `calls` around every call: a replay source, the model-call
+    /// cache and the session recorder.
+    #[must_use]
+    pub fn with_calls(mut self, calls: Arc<crate::calls::Calls>) -> Self {
+        self.sender = self.sender.with_calls(calls);
         self
     }
 

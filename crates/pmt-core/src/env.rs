@@ -332,6 +332,22 @@ impl LaunchEnv {
             .or_else(|| self.secrets.get(name))
     }
 
+    /// This environment with exactly `secrets` (secret name to value)
+    /// instead of the ones the process was launched with: a replay runs
+    /// with placeholders, or with only the secrets it may use, and never
+    /// sees the rest.
+    #[must_use]
+    pub fn with_secrets(
+        mut self,
+        secrets: impl IntoIterator<Item = (String, SecretString)>,
+    ) -> Self {
+        self.secrets = secrets
+            .into_iter()
+            .map(|(name, value)| (format!("{SECRET_PREFIX}{name}"), value))
+            .collect();
+        self
+    }
+
     /// Every environment-supplied secret, keyed by variable name (for
     /// building the known-secret redactor).
     pub fn secrets(&self) -> impl Iterator<Item = (&str, &SecretString)> {

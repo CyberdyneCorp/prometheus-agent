@@ -45,7 +45,7 @@ impl Summary {
                 .reasoning
                 .map(pmt_config::schema::ReasoningLevel::as_str),
             temperature,
-            request_hash: request.hash(&route.provider, &route.model),
+            request_hash: request.hash(route),
         }
     }
 }

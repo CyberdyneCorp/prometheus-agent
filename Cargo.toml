@@ -19,6 +19,7 @@ pmt-config = { path = "crates/pmt-config" }
 pmt-core = { path = "crates/pmt-core" }
 pmt-cron = { path = "crates/pmt-cron" }
 pmt-delegation = { path = "crates/pmt-delegation" }
+pmt-eval = { path = "crates/pmt-eval" }
 pmt-worktrees = { path = "crates/pmt-worktrees" }
 pmt-memory = { path = "crates/pmt-memory" }
 pmt-mcp = { path = "crates/pmt-mcp" }

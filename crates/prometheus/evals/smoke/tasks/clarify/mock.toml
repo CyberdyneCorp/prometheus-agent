@@ -1,0 +1,13 @@
+[[rule]]
+step = 0
+[[rule.tool_calls]]
+name = "clarify"
+arguments = { questions = [{ question = "CSV or JSON?", choices = ["CSV", "JSON"] }] }
+
+[[rule]]
+step = 1
+text = "Asked the user."
+
+[[rule]]
+repeat = true
+text = "unexpected"

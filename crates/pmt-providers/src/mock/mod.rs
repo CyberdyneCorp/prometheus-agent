@@ -18,7 +18,7 @@ mod fault;
 mod feed;
 mod script;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use pmt_config::Config;
@@ -101,12 +101,7 @@ impl Mock {
         config: &Config,
         profile_dir: &Path,
     ) -> Result<Self, Error> {
-        let configured = config
-            .providers
-            .get(PROVIDER_ID)
-            .and_then(|p| p.script.as_deref())
-            .map(|path| profile_dir.join(path));
-        match flag.map(Path::to_path_buf).or(configured) {
+        match script_path(flag, config, profile_dir) {
             Some(path) => Script::load(&path).map(Self::new),
             None => Ok(Self::echo()),
         }
@@ -223,6 +218,18 @@ impl<'a> Call<'a> {
                 .is_none_or(|t| self.tool_result.is_some_and(|r| t.matches(r)))
             && m.tools.as_ref().is_none_or(|t| t.matches(&self.tools))
     }
+}
+
+/// The script a session's mock routes play: `--mock-script`, else
+/// `providers.mock.script` (relative to the profile directory).
+#[must_use]
+pub fn script_path(flag: Option<&Path>, config: &Config, profile_dir: &Path) -> Option<PathBuf> {
+    let configured = config
+        .providers
+        .get(PROVIDER_ID)
+        .and_then(|p| p.script.as_deref())
+        .map(|path| profile_dir.join(path));
+    flag.map(Path::to_path_buf).or(configured)
 }
 
 #[cfg(test)]

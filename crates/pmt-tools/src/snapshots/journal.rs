@@ -104,6 +104,13 @@ pub fn read_edits(path: &Path) -> Vec<Edit> {
         .collect()
 }
 
+/// Every edit of `session`, oldest first, undone ones included (the first
+/// edit of each file holds its content before the session).
+#[must_use]
+pub fn session_edits(store: &SnapshotStore, session: &str) -> Vec<Edit> {
+    read_edits(&store.journal_path(session))
+}
+
 /// The edits of `session` not yet undone, oldest first.
 #[must_use]
 pub fn live_edits(store: &SnapshotStore, session: &str) -> Vec<Edit> {

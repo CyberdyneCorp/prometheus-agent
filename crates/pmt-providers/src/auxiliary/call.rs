@@ -147,6 +147,13 @@ impl AuxCaller {
         self
     }
 
+    /// Runs `calls` around every call (replay, cache, recording).
+    #[must_use]
+    pub fn with_calls(mut self, calls: Arc<crate::calls::Calls>) -> Self {
+        self.sender = self.sender.with_calls(calls);
+        self
+    }
+
     /// Records every attempt's usage in the ledger.
     #[must_use]
     pub fn with_recorder(mut self, recorder: Arc<UsageRecorder>) -> Self {

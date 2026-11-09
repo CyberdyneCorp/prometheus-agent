@@ -15,11 +15,13 @@ use pmt_agent::vision::AuxDescriber;
 use pmt_config::ProfileScope;
 use pmt_config::schema::ReasoningLevel;
 use pmt_core::error::{Error, codes};
+use pmt_obs::recording::Writer;
 use pmt_obs::usage::{Prices, UsageRecorder};
 use pmt_providers::ModelCaller;
 use pmt_providers::ProviderRegistry;
 use pmt_providers::auth::Accounts;
 use pmt_providers::auxiliary::{self, AuxArgs, AuxCaller, AuxContext, AuxTask};
+use pmt_providers::calls::{Calls, ModelCallCache, ReplaySource};
 use pmt_providers::cost::CallContext;
 use pmt_providers::fallback::MeteredConfirm;
 use pmt_providers::health::StoreHealth;
@@ -32,6 +34,31 @@ use pmt_providers::resolve::{
 use pmt_providers::switch::SessionModel;
 use pmt_providers::transport::{Binding, Conversations};
 use pmt_store::Store;
+
+/// The cache (`replay.cache.*`) and, while trajectories are on, the
+/// session recordings of the profile's model calls; recordings note the
+/// configuration the sessions run with (a scheduled run's differs from
+/// the profile's) and the mock script the calls were played from, so a
+/// replay can re-run them.
+fn calls_for(scope: &ProfileScope, mock_flag: Option<&Path>) -> (Calls, Option<Arc<Writer>>) {
+    let config = scope.config();
+    let cache = ModelCallCache::for_profile(scope.dir(), &config.replay.cache);
+    let recording = config.observability.trajectories.enabled.then(|| {
+        let script = pmt_providers::mock::script_path(mock_flag, config, scope.dir())
+            .and_then(|path| std::fs::read_to_string(path).ok());
+        let header = serde_json::json!({
+            "config": toml::to_string(config).unwrap_or_default(),
+            "mock_script": script,
+        });
+        Arc::new(Writer::new(scope.dir(), Some(header)))
+    });
+    let calls = Calls {
+        replay: None,
+        cache: cache.map(Arc::new),
+        recorder: recording.clone().map(|w| w as _),
+    };
+    (calls, recording)
+}
 
 /// The exact message of a profile with nothing to talk to.
 pub const NO_MODEL: &str = "no model configured; run: prometheus setup model";
@@ -52,6 +79,11 @@ pub struct Models {
     /// headers); per session because a daemon shares one `Models` between
     /// all the sessions of a profile and working directory.
     conversations: Conversations,
+    /// What runs around every call: the model-call cache and the session
+    /// recordings (and a replay's source).
+    calls: Calls,
+    /// The session recordings, when trajectories are on.
+    recording: Option<Arc<Writer>>,
 }
 
 /// The shareable parts of a [`ProviderSetup`].
@@ -157,6 +189,7 @@ impl Models {
         let catalog = Arc::new(Catalog::new(config, Some(scope.path("cache/models"))));
         let accounts = Arc::new(crate::accounts::open(scope, config, &registry, user_home)?);
         let mock = Arc::new(Mock::for_session(flags.mock_script, config, scope.dir())?);
+        let (calls, recording) = calls_for(scope, flags.mock_script);
         let prices: Arc<dyn Prices> = catalog.clone();
         let client = crate::model_cmd::client(config)?;
         let recorder = Arc::new(UsageRecorder::new(Arc::clone(store), prices));
@@ -170,6 +203,7 @@ impl Models {
                 config.auxiliary.max_concurrency,
             ))
             .with_mock(Arc::clone(&mock))
+            .with_calls(Arc::new(calls.clone()))
             .with_recorder(Arc::clone(&recorder))
             .with_credentials(Arc::clone(&accounts) as _);
         // Mixture of Agents: traces under the profile, advisor text shown
@@ -182,6 +216,7 @@ impl Models {
             .with_mixture(Arc::new(mixture))
             .with_conversations(conversations.clone())
             .with_mock(mock)
+            .with_calls(Arc::new(calls.clone()))
             .with_recorder(recorder)
             .with_credentials(Arc::clone(&accounts) as _)
             .with_observer(Arc::clone(&health) as _);
@@ -211,7 +246,26 @@ impl Models {
             pii,
             client,
             conversations,
+            calls,
+            recording,
         })
+    }
+
+    /// Answers every model call of these sessions from `replay` first
+    /// (spec: replay-and-evaluation, Replay modes): served calls are never
+    /// sent. Call it before opening sessions.
+    pub fn replay_from(&mut self, replay: Arc<dyn ReplaySource>) {
+        self.calls.replay = Some(replay);
+        let calls = Arc::new(self.calls.clone());
+        self.caller = self.caller.clone().with_calls(Arc::clone(&calls));
+        self.aux = Arc::new((*self.aux).clone().with_calls(calls));
+    }
+
+    /// Where the sessions' recordings are written (`None`: trajectories
+    /// are off).
+    #[must_use]
+    pub fn recording(&self) -> Option<Arc<Writer>> {
+        self.recording.clone()
     }
 
     /// `session`'s calls belong to its conversation while the returned
@@ -356,6 +410,8 @@ impl Models {
             pii: self.pii.clone(),
             client: self.client.clone(),
             conversations: self.conversations.clone(),
+            calls: self.calls.clone(),
+            recording: self.recording.clone(),
         };
         Ok((reloaded, changed))
     }

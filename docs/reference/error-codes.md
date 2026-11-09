@@ -288,6 +288,11 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `update.backup_failed` | `io` | 74 | The pre-update backup (`update.pre_update_backup`, `--backup`) could not be written, usually because the home volume is full; the update stopped before the swap (exit 73) and the installed binary is unchanged. Free space, or rerun with `--no-backup`. |
 | `demo.output_not_empty` | `usage` | 2 | `prometheus demo --output DIR` names a directory that is not empty; the demo only runs in a new or empty directory, so it never removes files it did not create. |
 | `demo.io` | `io` | 74 | `prometheus demo` could not create its directory, home, ledger repository or mock script. |
+| `replay.integrity` | `invalid_input` | 65 | A member of the `.pmtrec` recording is missing, unlisted or no longer matches the sha256 its manifest records (the message names it); the recording was changed after export and is not replayed. |
+| `replay.malformed` | `invalid_input` | 65 | The file is not a `.pmtrec` recording this build reads: not a zstd-compressed tar, no `manifest.json`, a newer `format_version`, or a member that does not parse. |
+| `replay.not_recorded` | `not_found` | 66 | The session has no recording under `<profile>/recordings/` (it ran with `observability.trajectories.enabled = false`, before recordings existed, or retention removed it), so it cannot be exported or replayed. |
+| `replay.diverged` | `conflict` | 75 | During a replay a model request or tool call differed from the recording at the same step; the report names the step and shows a diff. Rerun with `--on-divergence continue` to fall through to the live provider and tools. |
+| `replay.io` | `io` | 74 | A `.pmtrec` recording or a replay's output directory could not be written or read. |
 | `runtime.unknown` | `usage` | 2 | The name is not a runtime of this build's pinned runtime index; `prometheus runtimes list` shows the pinned names. |
 | `runtime.unsupported` | `unavailable` | 69 | The pinned runtime index has no archive of this runtime for this host's OS, architecture and C library. |
 | `runtime.digest_mismatch` | `permission_denied` | 77 | The downloaded archive's size or SHA-256 differs from the digest pinned in this binary (a corrupted download, or a mirror serving other bytes); the download was deleted and nothing was installed. |
@@ -323,7 +328,6 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `cron.invalid_job` | `invalid_input` | 65 | The job has nothing to run, `no_agent` without a script, a script outside `<profile>/scripts`, an unknown skill, toolset, delivery target, model or provider, or a field out of range; nothing was saved. |
 | `cron.prompt_rejected` | `permission_denied` | 77 | The job's prompt holds an injection or concealment directive, a secret-exfiltration pattern or invisible Unicode; the message names the rule and nothing was saved. |
 | `cron.confirmation` | `permission_denied` | 77 | Saving a job (or a changed schedule) needs a confirmation: answer `y` on a terminal or pass `--yes`; the command exits 4 and nothing was saved. |
-| `cron.replay_unavailable` | `unavailable` | 69 | Replaying a run against its recorded model responses needs the model-call cache and the replay provider, which this build does not have yet; `prometheus cron replay <run> --live` re-runs the recorded inputs against the current provider instead. |
 | `cron.invalid_state` | `invalid_input` | 65 | The operation does not apply in the job's state (for example resuming a one-shot job whose time has passed); the message says how to change it. |
 | `cron.incident_not_found` | `not_found` | 66 | No failure incident of the profile has that id; `prometheus cron incidents` lists them. |
 | `cron.invalid_workdir` | `usage` | 2 | A job's `workdir` must be an absolute path to an existing directory, and one set through the `cronjob` tool must lie inside the calling session's workspace; nothing was saved. |

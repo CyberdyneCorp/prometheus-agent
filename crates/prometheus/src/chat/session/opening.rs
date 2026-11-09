@@ -207,6 +207,7 @@ impl Factory {
             Arc::clone(inputs.tools) as _,
             inputs.prompt,
         );
+        self.record_and_replay(&mut setup, inputs.tools, id);
         let in_process = inputs.clients.is_none() && child.is_none();
         let events = events_to(inputs.trajectory.cloned(), inputs.clients);
         let _ = inputs.environment.denials.set(Arc::downgrade(&events));
@@ -247,5 +248,24 @@ impl Factory {
         );
         self.surface_setup(&mut setup, id);
         Ok((Agent::new(setup)?, progress, mcp))
+    }
+
+    /// The session's recording (prompt builds and tool results; its model
+    /// calls are recorded by the model side) and a replay's recorded
+    /// tool results and prompts (spec: replay-and-evaluation).
+    fn record_and_replay(
+        &self,
+        setup: &mut AgentSetup,
+        tools: &Arc<SwappableTools>,
+        id: SessionId,
+    ) {
+        setup.recording = self.models.recording();
+        if let Some(writer) = &setup.recording {
+            tools.record_into(Arc::clone(writer), &id.to_string());
+        }
+        if let Some(replay) = &self.options.replay {
+            setup.prompt_pins = Some(Arc::clone(&replay.pins));
+            tools.replay_from(Arc::clone(&replay.tools));
+        }
     }
 }

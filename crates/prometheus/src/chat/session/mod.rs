@@ -108,6 +108,8 @@ pub struct Options {
     pub egress: crate::egress::Overrides,
     /// A scheduled run's session (spec: scheduled-jobs).
     pub cron: Option<cron::CronRun>,
+    /// A replay's recorded tool results and prompts.
+    pub replay: Option<Arc<crate::replay::Hooks>>,
 }
 
 /// The clients of one daemon session: they see its events and answer its

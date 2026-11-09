@@ -197,6 +197,12 @@ pub struct AgentSetup {
     /// The plugin context engine `context.engine` names; `None` compacts
     /// with the built-in engine.
     pub context_engine: Option<Arc<dyn crate::compress::engine::ContextEngine>>,
+    /// Where each prompt build is kept for the session's recording (spec:
+    /// replay-and-evaluation, Session recordings).
+    pub recording: Option<Arc<pmt_obs::recording::Writer>>,
+    /// A replay's recorded prompts (spec: replay-and-evaluation,
+    /// Divergence detection).
+    pub prompt_pins: Option<Arc<dyn crate::prompt::pins::PromptPins>>,
 }
 
 /// What a session refreshes when a compaction commits. The prompt cache
@@ -340,6 +346,8 @@ impl AgentSetup {
             turn_hooks: None,
             compaction_boundary: None,
             context_engine: None,
+            recording: None,
+            prompt_pins: None,
         }
     }
 }

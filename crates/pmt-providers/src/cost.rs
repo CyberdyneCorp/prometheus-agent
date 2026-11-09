@@ -91,7 +91,7 @@ impl Pending {
         call.parent_call_id.clone_from(&ctx.parent_call_id);
         call.purpose_detail.clone_from(&ctx.purpose_detail);
         call.billing_source = route.billing_source();
-        call.request_hash = Some(request.hash(&route.provider, &route.model));
+        call.request_hash = Some(request.hash(route));
         call.service_tier = request
             .speed
             .and(route.fast_tier)
@@ -112,11 +112,17 @@ impl Pending {
         self
     }
 
-    /// Prices and appends the row for `usage`.
-    pub(crate) fn record(self, usage: &Usage) -> Result<UsageEvent, Error> {
+    /// Prices and appends the row for `usage`; a `served` response (from
+    /// a replay or the model-call cache) is a cache hit and costs nothing.
+    pub(crate) fn record(self, usage: &Usage, served: bool) -> Result<UsageEvent, Error> {
         let mut call = self.call;
         call.tokens = usage.tokens();
-        call.reported_usd = usage.cost_usd.or(self.local_model.then_some(0.0));
+        call.reported_usd = if served {
+            Some(0.0)
+        } else {
+            usage.cost_usd.or(self.local_model.then_some(0.0))
+        };
+        call.cache_hit = served;
         self.recorder.record(call)
     }
 }

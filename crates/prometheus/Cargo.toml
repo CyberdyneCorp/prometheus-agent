@@ -90,6 +90,7 @@ pmt-net.workspace = true
 pmt-plugins.workspace = true
 pmt-pybridge.workspace = true
 pmt-obs.workspace = true
+pmt-eval.workspace = true
 pmt-providers.workspace = true
 pmt-rpc.workspace = true
 pmt-sandbox.workspace = true
@@ -112,6 +113,8 @@ url.workspace = true
 regex.workspace = true
 # Webhook signatures (HMAC-SHA256).
 sha2.workspace = true
+# Workspace manifests of session recordings (gitignore-aware).
+ignore.workspace = true
 semver.workspace = true
 rpassword.workspace = true
 rustyline.workspace = true

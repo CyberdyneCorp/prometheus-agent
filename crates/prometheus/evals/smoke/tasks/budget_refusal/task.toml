@@ -1,0 +1,3 @@
+# A turn token budget refuses the next call: the run exits 3.
+prompt = "check everything"
+files = ["README.md"]

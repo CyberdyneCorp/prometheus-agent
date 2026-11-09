@@ -1,0 +1,4 @@
+# Two independent tool calls in one response, dispatched together; the
+# answer needs the batch's results back.
+prompt = "who owns the ledger and what is its total?"
+files = ["README.md", "OWNERS.md"]

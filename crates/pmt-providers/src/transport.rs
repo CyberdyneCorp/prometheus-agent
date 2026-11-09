@@ -200,6 +200,7 @@ pub trait RequestHooks: Send + Sync {
 pub(crate) struct Sender {
     client: reqwest::Client,
     mock: Arc<Mock>,
+    calls: Arc<crate::calls::Calls>,
     hooks: Option<Arc<dyn RequestHooks>>,
     pii: Option<Arc<pmt_core::pii::Pii>>,
     conversations: Conversations,
@@ -217,6 +218,7 @@ impl Sender {
         Self {
             client,
             mock: Arc::new(Mock::echo()),
+            calls: Arc::default(),
             hooks: None,
             pii: None,
             conversations: Conversations::default(),
@@ -246,6 +248,22 @@ impl Sender {
     pub(crate) fn with_mock(mut self, mock: Arc<Mock>) -> Self {
         self.mock = mock;
         self
+    }
+
+    /// Runs `calls` around every call (replay, cache, recording).
+    pub(crate) fn with_calls(mut self, calls: Arc<crate::calls::Calls>) -> Self {
+        self.calls = calls;
+        self
+    }
+
+    /// The layers around every call.
+    pub(crate) fn calls(&self) -> &crate::calls::Calls {
+        &self.calls
+    }
+
+    /// The layers, shared.
+    pub(crate) fn calls_handle(&self) -> Arc<crate::calls::Calls> {
+        Arc::clone(&self.calls)
     }
 
     /// Sends one attempt of `session`'s call and waits for its first
@@ -559,7 +577,7 @@ pub(crate) struct Limits {
 
 impl Limits {
     /// The limits of an attempt on `route` starting now.
-    fn of(route: &Route) -> Self {
+    pub(crate) fn of(route: &Route) -> Self {
         Self {
             deadline: Instant::now() + route.timeouts.request,
             idle: route.timeouts.idle,
@@ -588,6 +606,9 @@ enum Source {
     Http(HttpBody),
     Mock(Feed),
     Acp(Box<crate::external::AcpFeed>),
+    /// A served response: one recorded chunk per read, then its recorded
+    /// failure, if it failed.
+    Served(VecDeque<Vec<StreamEvent>>, Option<ProviderError>),
 }
 
 /// An HTTP response body decoded from its wire format's SSE events.
@@ -640,6 +661,25 @@ pub struct ModelStream {
     recorded: Option<Result<pmt_store::UsageEvent, pmt_core::Error>>,
     on_end: Vec<OnEnd>,
     tap: Option<Tap>,
+    /// The response was served, not sent (a cache hit).
+    served: bool,
+    capture: Option<Capture>,
+}
+
+/// What [`Capture`] calls with a successful response.
+type CapturedFn = dyn FnOnce(crate::calls::Recorded) + Send + Sync;
+
+/// Collects a response's chunks and hands them over once it ended
+/// successfully (a failed response is dropped).
+pub(crate) struct Capture {
+    chunks: Vec<Vec<StreamEvent>>,
+    done: Box<CapturedFn>,
+}
+
+impl std::fmt::Debug for Capture {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Capture")
+    }
 }
 
 /// Sees every event of a stream as it is read (a MoA trace collects the
@@ -692,9 +732,71 @@ impl ModelStream {
             recorded: None,
             on_end: Vec::new(),
             tap: None,
+            served: false,
+            capture: None,
         };
         stream.fill().await?;
         Ok(stream)
+    }
+
+    /// A stream replaying `recorded` chunk by chunk (a served call).
+    pub(crate) async fn served(
+        recorded: crate::calls::Recorded,
+        limits: Limits,
+    ) -> Result<Self, ProviderError> {
+        let failure = recorded
+            .failure
+            .as_ref()
+            .map(crate::calls::Failure::to_error);
+        let source = Source::Served(recorded.chunks.into_iter().collect(), failure);
+        let mut stream = Self::start(source, limits).await?;
+        stream.served = true;
+        Ok(stream)
+    }
+
+    /// Whether the response was served rather than sent.
+    #[must_use]
+    pub fn is_served(&self) -> bool {
+        self.served
+    }
+
+    /// Hands the response to `done` once it ended.
+    pub(crate) fn capture(
+        &mut self,
+        done: impl FnOnce(crate::calls::Recorded) + Send + Sync + 'static,
+    ) {
+        let first: Vec<StreamEvent> = self.pending.iter().cloned().collect();
+        self.capture = Some(Capture {
+            chunks: if first.is_empty() {
+                Vec::new()
+            } else {
+                vec![first]
+            },
+            done: Box::new(done),
+        });
+    }
+
+    /// The stream ended with `stop`: the capture gets the response, with
+    /// its failure when it failed.
+    fn ended(&mut self, event: &StreamEvent) {
+        let Some(capture) = self.capture.take() else {
+            return;
+        };
+        let failure = match (&self.failure, event) {
+            (Some(error), _) => Some(crate::calls::Failure::of(error)),
+            (
+                None,
+                StreamEvent::Stop {
+                    stop_reason: StopReason::Error,
+                },
+            ) => Some(crate::calls::Failure::of(&wire::truncated())),
+            _ => None,
+        };
+        (capture.done)(crate::calls::Recorded {
+            chunks: capture.chunks,
+            usage: self.usage.unwrap_or_default(),
+            failure,
+        });
     }
 
     /// The next event; `None` after `stop`.
@@ -713,11 +815,12 @@ impl ModelStream {
             for OnEnd(on_end) in std::mem::take(&mut self.on_end) {
                 on_end(self.failure.as_ref(), self.usage);
             }
+            self.ended(&event);
         }
         if let StreamEvent::Usage { usage } = &event {
             self.usage = Some(*usage);
             if let Some(pending) = self.ledger.take() {
-                let recorded = pending.record(usage);
+                let recorded = pending.record(usage, self.served);
                 if let Err(err) = &recorded {
                     tracing::error!(
                         code = err.code().code,
@@ -782,8 +885,18 @@ impl ModelStream {
                 Source::Http(body) => body.step(&mut self.normalizer, self.limits).await?,
                 Source::Mock(feed) => feed.step(&mut self.normalizer, self.limits).await?,
                 Source::Acp(feed) => feed.step(&mut self.normalizer, self.limits).await?,
+                Source::Served(chunks, failure) => match chunks.pop_front() {
+                    Some(chunk) => self.normalizer.replay(chunk),
+                    None => return Err(failure.take().unwrap_or_else(wire::truncated)),
+                },
             }
-            self.pending.extend(self.normalizer.drain());
+            let drained: Vec<StreamEvent> = self.normalizer.drain().collect();
+            if let Some(capture) = &mut self.capture
+                && !drained.is_empty()
+            {
+                capture.chunks.push(drained.clone());
+            }
+            self.pending.extend(drained);
         }
         Ok(())
     }

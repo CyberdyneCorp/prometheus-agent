@@ -893,6 +893,31 @@
         }
       ]
     },
+    "CacheMode": {
+      "description": "How model calls use the cache.",
+      "oneOf": [
+        {
+          "const": "off",
+          "description": "Neither read nor written.",
+          "type": "string"
+        },
+        {
+          "const": "read",
+          "description": "Stored responses are served; nothing new is stored.",
+          "type": "string"
+        },
+        {
+          "const": "write",
+          "description": "Successful responses are stored; nothing is served.",
+          "type": "string"
+        },
+        {
+          "const": "read_write",
+          "description": "Both.",
+          "type": "string"
+        }
+      ]
+    },
     "CapabilityText": {
       "description": "A capability string of the closed vocabulary (`pmt_core::capability`);\nvalidation refuses any other string with `unknown capability '<s>'`.",
       "type": "string",
@@ -5057,6 +5082,34 @@
       ],
       "description": "One `[model.aliases.<name>]` entry."
     },
+    "ModelCallCacheConfig": {
+      "additionalProperties": false,
+      "description": "The `[replay.cache]` section: model responses stored by request hash\nunder `<profile>/cache/model-calls/`.",
+      "properties": {
+        "max_bytes": {
+          "default": 4294967296,
+          "description": "Least-recently-used entries are evicted above this size.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "mode": {
+          "$ref": "#/$defs/CacheMode",
+          "default": "off",
+          "description": "`off`, `read` (serve stored responses), `write` (store new ones) or\n`read_write`. Off for interactive sessions; the offline demo (and\neval runs) use `read_write`."
+        },
+        "namespace": {
+          "default": "default",
+          "description": "Entries of different namespaces never serve each other.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.-]+$",
+          "type": "string"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
     "ModelConfig": {
       "additionalProperties": false,
       "description": "The `[model]` section.",
@@ -7186,6 +7239,23 @@
         }
       },
       "type": "object"
+    },
+    "ReplayConfig": {
+      "additionalProperties": false,
+      "description": "The `[replay]` section.",
+      "properties": {
+        "cache": {
+          "$ref": "#/$defs/ModelCallCacheConfig",
+          "default": {
+            "max_bytes": 4294967296,
+            "mode": "off",
+            "namespace": "default"
+          },
+          "description": "The content-addressed model-call cache."
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
     },
     "ReplyToMode": {
       "description": "Which parts of a reply quote the message they answer.",
@@ -11037,6 +11107,17 @@
       "description": "User slash commands (`/<name>`), keyed by name.",
       "type": "object",
       "x-apply": "live"
+    },
+    "replay": {
+      "$ref": "#/$defs/ReplayConfig",
+      "default": {
+        "cache": {
+          "max_bytes": 4294967296,
+          "mode": "off",
+          "namespace": "default"
+        }
+      },
+      "description": "The model-call cache."
     },
     "routing": {
       "$ref": "#/$defs/RoutingConfig",

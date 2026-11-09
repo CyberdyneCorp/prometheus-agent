@@ -106,11 +106,17 @@ struct Session {
 /// language server.
 const OFFLINE: &str = "lsp.enabled=false";
 
+/// The demo stores and serves its model calls through the model-call cache
+/// of its own profile (spec: replay-and-evaluation, Content-addressed
+/// model-call cache: the demo defaults to `read_write`).
+const CACHED: &str = "replay.cache.mode=read_write";
+
 /// Runs the scenario's one turn in the demo's home.
 fn run_session(place: &Place, launch: &LaunchEnv) -> Result<Session, Error> {
     let home = place.home();
     let mut set = unconfined_override();
     set.push(OFFLINE.to_owned());
+    set.push(CACHED.to_owned());
     let ctx = Context {
         home_flag: Some(&home),
         launch,
@@ -140,6 +146,7 @@ fn run_session(place: &Place, launch: &LaunchEnv) -> Result<Session, Error> {
         ignore_rules: false,
         egress: crate::egress::Overrides::default(),
         cron: None,
+        replay: None,
     };
     let factory = Factory::new(scope, launch, &flags, None, options)?;
     crate::model_cmd::block_on(session(factory, &flags))?

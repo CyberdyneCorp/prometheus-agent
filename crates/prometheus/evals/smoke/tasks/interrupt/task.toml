@@ -1,0 +1,3 @@
+# Ctrl-C during a model call interrupts the turn: the run exits 130.
+prompt = "count slowly"
+files = ["README.md"]

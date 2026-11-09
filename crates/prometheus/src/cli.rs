@@ -182,6 +182,19 @@ pub enum Command {
         #[command(subcommand)]
         command: BackupCommand,
     },
+    /// Session recordings: export one, replay it (detecting divergence),
+    /// or re-record it with this build.
+    Replay {
+        /// The replay subcommand.
+        #[command(subcommand)]
+        command: crate::replay_cmd::ReplayCommand,
+    },
+    /// The model-call cache: stats, prune, clear.
+    Cache {
+        /// The cache subcommand.
+        #[command(subcommand)]
+        command: crate::cache_cmd::CacheCommand,
+    },
     /// Undo a session's file changes, roll a workspace back to a
     /// checkpoint, and manage the file snapshot store.
     Files {

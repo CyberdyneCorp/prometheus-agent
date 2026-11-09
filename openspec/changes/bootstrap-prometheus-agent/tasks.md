@@ -482,9 +482,9 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 51. M2 Replay and model-call cache
 
-- [ ] 51.1 Implement the canonical request hash (excluding transport, streaming and cache-control fields) and the content-addressed model-call cache with admin commands and limits; verify that equivalent requests hash identically (spec: replay-and-evaluation)
-- [ ] 51.2 Implement session recordings, replay modes, divergence detection and side-effect-free replay, and deterministic `cron replay <run>` through the replay provider (today it exits 69 `cron.replay_unavailable`); verify that replaying a recorded session offline reproduces the trajectory and that `cron replay <run>` prints `replay matched: <n> calls` with no network request and no delivery (spec: replay-and-evaluation, spec: scheduled-jobs)
-- [ ] 51.3 Add the golden-recording regression gate and the built-in smoke suite to `scripts/check`; verify that a behavior change in the loop fails the gate (spec: replay-and-evaluation)
+- [x] 51.1 Implement the canonical request hash (excluding transport, streaming and cache-control fields) and the content-addressed model-call cache with admin commands and limits; verify that equivalent requests hash identically (spec: replay-and-evaluation)
+- [x] 51.2 Implement session recordings, replay modes, divergence detection and side-effect-free replay, and deterministic `cron replay <run>` through the replay provider (today it exits 69 `cron.replay_unavailable`); verify that replaying a recorded session offline reproduces the trajectory and that `cron replay <run>` prints `replay matched: <n> calls` with no network request and no delivery (spec: replay-and-evaluation, spec: scheduled-jobs)
+- [x] 51.3 Add the golden-recording regression gate and the built-in smoke suite to `scripts/check`; verify that a behavior change in the loop fails the gate (spec: replay-and-evaluation)
 
 ## 52. M2 Observability upgrades
 

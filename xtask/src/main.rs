@@ -38,6 +38,11 @@
 //! each complete milestone's requirements, and every indexed scenario of a
 //! milestone still in progress, maps to existing test functions.
 //!
+//! `cargo xtask goldens` replays the golden session recordings in
+//! `tests/golden/` and fails naming each one that diverges; `--record`
+//! re-creates them from their sources. `cargo xtask smoke` runs the
+//! built-in smoke suite with the built binary on the mock provider.
+//!
 //! `cargo xtask plugin-samples [--check]` builds the sample plugin of every
 //! WIT world with `cargo component`.
 //!
@@ -47,11 +52,13 @@
 
 mod artifacts;
 mod deps_age;
+mod goldens;
 mod health;
 mod perf;
 mod plugin_samples;
 mod release;
 mod scenarios;
+mod smoke;
 mod tool_refs;
 
 use std::path::{Path, PathBuf};
@@ -111,6 +118,16 @@ enum Command {
     /// Check that the indexed milestones' scenarios map to tests
     /// (`scenario-index.toml`).
     Scenarios,
+    /// Replay every golden recording (`tests/golden/*.pmtrec`) strictly
+    /// and fail on any divergence.
+    Goldens {
+        /// Re-create the recordings from `tests/golden/sources/` instead.
+        #[arg(long)]
+        record: bool,
+    },
+    /// Run the built-in `smoke` eval suite on the mock provider and fail
+    /// on any task below its grade.
+    Smoke,
     /// Build the sample plugin of every WIT world with `cargo component`.
     PluginSamples {
         /// Fail when a sample's generated bindings were stale.
@@ -141,6 +158,8 @@ fn main() -> ExitCode {
         }
         Command::DepsAge { base } => deps_age::run(&repo_root(), &base),
         Command::Scenarios => scenarios::run(&repo_root()),
+        Command::Goldens { record } => goldens::run(&repo_root(), record),
+        Command::Smoke => smoke::run(&repo_root()),
         Command::PluginSamples { check } => plugin_samples::run(&repo_root(), check),
         Command::Release { step } => release::run(step),
     };

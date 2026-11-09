@@ -18,6 +18,7 @@ pub mod frozen;
 pub mod install_tree;
 pub mod inventory;
 pub mod personality;
+pub mod pins;
 pub mod platform;
 pub mod prefill;
 pub mod scan;

@@ -38,6 +38,7 @@ mod operations;
 mod plugins;
 mod provider_routing;
 mod python_bridge;
+mod replay;
 mod state;
 mod tool_gateway;
 mod tools;
@@ -115,6 +116,7 @@ pub use provider_routing::{
     RoutingPrefs, RoutingSort,
 };
 pub use python_bridge::{PYTHON_VERSIONS, PythonBridgeConfig, PythonVersion};
+pub use replay::{CacheMode, DEFAULT_NAMESPACE, ModelCallCacheConfig, ReplayConfig};
 pub use state::{
     AttachmentStorage, AttachmentsConfig, JournalMode, MemoryConfig, MemoryNotifications,
     MemoryReviewConfig, MemoryReviewMode, RecallConfig, ReviewDefer, SessionsConfig, SkillsConfig,
@@ -236,6 +238,8 @@ pub struct Config {
     /// User slash commands (`/<name>`), keyed by name.
     #[schemars(extend("x-apply" = "live"))]
     pub quick_commands: std::collections::BTreeMap<String, QuickCommand>,
+    /// The model-call cache.
+    pub replay: ReplayConfig,
     /// Provider health scoring.
     pub routing: RoutingConfig,
     /// Secrets store backend.
@@ -333,6 +337,7 @@ impl Default for Config {
             provider_routing: ProviderRoutingConfig::default(),
             providers: std::collections::BTreeMap::new(),
             quick_commands: std::collections::BTreeMap::new(),
+            replay: ReplayConfig::default(),
             routing: RoutingConfig::default(),
             secrets: SecretsConfig::default(),
             security: SecurityConfig::default(),

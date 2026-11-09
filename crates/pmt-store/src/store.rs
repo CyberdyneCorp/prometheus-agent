@@ -58,6 +58,10 @@ pub struct Store {
     /// The profile's secrets, read at every write to redact message text;
     /// `None` when `security.redact_secrets = false`.
     secrets: Option<SecretsHandle>,
+    /// Ids the next root and compression-continuation sessions take (a
+    /// replay recreates the recorded ones; see
+    /// [`Store::plan_session_ids`]).
+    pub(crate) planned_ids: Mutex<std::collections::VecDeque<pmt_core::id::SessionId>>,
 }
 
 struct Writer {
@@ -154,6 +158,7 @@ impl Store {
                 .security
                 .redact_secrets
                 .then(|| scope.secrets().clone()),
+            planned_ids: Mutex::default(),
         };
         if let Some(quarantined) = quarantined {
             store.quarantine = Some(store.salvage(quarantined)?);

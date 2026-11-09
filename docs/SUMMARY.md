@@ -14,6 +14,7 @@
 - [Turns and the system prompt](guide/turns.md)
 - [Context compression](guide/compression.md)
 - [Logs and trajectories](guide/observability.md)
+- [Session recordings and replay](guide/replay.md)
 - [Models and providers](guide/models.md)
 - [Provider credentials and sign-ins](guide/providers.md)
 - [Mixture of Agents](guide/moa.md)

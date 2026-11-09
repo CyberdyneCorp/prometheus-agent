@@ -1,0 +1,3 @@
+# Two large reads, then an overflow on the next turn: the context is
+# compacted (the summary is a mock auxiliary call) and the turn retried.
+prompts = ["summarise the ledgers", "and the totals?"]

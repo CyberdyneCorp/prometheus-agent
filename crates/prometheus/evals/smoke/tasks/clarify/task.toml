@@ -1,0 +1,3 @@
+# A clarify call; a one-shot run has nobody to answer and the turn goes on.
+prompt = "pick a format"
+files = ["README.md"]

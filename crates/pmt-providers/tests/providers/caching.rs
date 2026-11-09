@@ -183,7 +183,10 @@ async fn every_call_records_one_priced_ledger_row_with_its_billing_source() {
     assert_eq!(row.cost_status, CostStatus::Estimated);
     let expected = (120.0 * 3.0 + 42.0 * 15.0 + 4096.0 * 0.3 + 2048.0 * 3.75) / 1e6;
     assert!((row.cost_usd.unwrap() - expected).abs() < 1e-12);
-    assert_eq!(row.request_hash, Some(req.hash("ant", "m")));
+    assert_eq!(
+        row.request_hash,
+        Some(req.hash(&env.route("ant", "m").await))
+    );
     assert_eq!(store.usage_events(session).unwrap().len(), 1);
 
     // A model without prices: unknown, never zero.

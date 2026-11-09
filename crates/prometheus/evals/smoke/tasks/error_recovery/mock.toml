@@ -1,0 +1,8 @@
+[[rule]]
+step = 0
+fault = "server_error"
+status = 503
+
+[[rule]]
+repeat = true
+text = "Recovered after a retry."

@@ -216,18 +216,24 @@ impl SessionTools {
         }
     }
 
-    async fn run_all(
-        &self,
-        calls: &[RequestedCall],
-        turn_id: &str,
-        cancel: &CancelToken,
-    ) -> ToolBatch {
-        let batch: Vec<ToolCall> = calls
+    /// The plan `calls` would run by (`tool.batch_planned`), without
+    /// running them: a replay that serves recorded results reports the
+    /// same plan.
+    #[must_use]
+    pub fn plan(&self, calls: &[RequestedCall], turn_id: &str) -> BatchPlanned {
+        let batch = Self::batch(calls, turn_id);
+        Self::planned(calls, &self.dispatcher.plan(&batch))
+    }
+
+    fn batch(calls: &[RequestedCall], turn_id: &str) -> Vec<ToolCall> {
+        calls
             .iter()
             .map(|c| ToolCall::new(&c.id, &c.name, &c.arguments).in_turn(turn_id))
-            .collect();
-        let plan = self.dispatcher.plan(&batch);
-        let planned = BatchPlanned {
+            .collect()
+    }
+
+    fn planned(calls: &[RequestedCall], plan: &pmt_tools::dispatch::BatchPlan) -> BatchPlanned {
+        BatchPlanned {
             calls: calls.iter().map(|c| c.id.clone()).collect(),
             edges: plan
                 .edges()
@@ -236,7 +242,18 @@ impl SessionTools {
                     after: calls[from].id.clone(),
                 })
                 .collect(),
-        };
+        }
+    }
+
+    async fn run_all(
+        &self,
+        calls: &[RequestedCall],
+        turn_id: &str,
+        cancel: &CancelToken,
+    ) -> ToolBatch {
+        let batch = Self::batch(calls, turn_id);
+        let plan = self.dispatcher.plan(&batch);
+        let planned = Self::planned(calls, &plan);
         let started = Instant::now();
         let results = self
             .dispatcher

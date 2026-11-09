@@ -8,10 +8,13 @@
 //! - [`usage`]: pricing, the ledger writer and grouped reports;
 //! - [`budget`]: pre-call budget checks, warnings and the agent-write
 //!   guard on `budgets.*`;
-//! - [`telemetry`]: the opt-in telemetry gate (nothing is sent by default).
+//! - [`telemetry`]: the opt-in telemetry gate (nothing is sent by default);
+//! - [`recording`]: the per-session journal session recordings are built
+//!   from (prompt builds, model calls, tool results).
 
 pub mod budget;
 pub mod logs;
+pub mod recording;
 pub mod redaction;
 pub mod telemetry;
 pub mod time;

@@ -320,5 +320,6 @@ async fn requests_carry_the_clamped_reasoning_effort_per_wire_format() {
         ..high.clone()
     };
     assert_eq!(high.system, low.system);
-    assert_ne!(high.hash("chat", "m"), low.hash("chat", "m"));
+    let route = env.route("chat", "m").await;
+    assert_ne!(high.hash(&route), low.hash(&route));
 }

@@ -21,6 +21,8 @@ Commands:
   vault        The credential vault: logins, cards and addresses the browser fills by handle
   security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one
+  replay       Session recordings: export one, replay it (detecting divergence), or re-record it with this build
+  cache        The model-call cache: stats, prune, clear
   files        Undo a session's file changes, roll a workspace back to a checkpoint, and manage the file snapshot store
   verify       Detect a project's build/test/start recipe and run it
   snapshots    Snapshot and restore the selected profile's critical state

@@ -61,6 +61,28 @@ impl ErrorClass {
         }
     }
 
+    /// Every class.
+    pub const ALL: [Self; 12] = [
+        Self::Auth,
+        Self::Entitlement,
+        Self::Billing,
+        Self::RateLimit,
+        Self::Overloaded,
+        Self::ServerError,
+        Self::Timeout,
+        Self::Network,
+        Self::ContextOverflow,
+        Self::ContentFilter,
+        Self::InvalidRequest,
+        Self::Config,
+    ];
+
+    /// The class named `name` ([`Self::as_str`]).
+    #[must_use]
+    pub fn parse(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|c| c.as_str() == name)
+    }
+
     /// Retried on the same route.
     #[must_use]
     pub const fn is_retryable(self) -> bool {

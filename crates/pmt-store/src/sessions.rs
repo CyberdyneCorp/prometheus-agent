@@ -279,7 +279,28 @@ impl Store {
             .transpose()?
             .flatten();
         let profile_id = self.profile_id().to_string();
-        self.write(|tx| insert(tx, new, given_title.as_deref(), &profile_id))
+        let planned = matches!(new.parent, None | Some((_, LineageKind::Compression)))
+            .then(|| {
+                self.planned_ids
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .pop_front()
+            })
+            .flatten();
+        let id = planned.unwrap_or_else(SessionId::new);
+        self.write(|tx| insert(tx, new, (id, given_title.as_deref()), &profile_id))
+    }
+
+    /// The ids the next root and compression-continuation sessions take,
+    /// in order (spec: replay-and-evaluation, Divergence detection: a
+    /// replay recreates its recording's sessions under their recorded ids,
+    /// so everything derived from an id, such as the untrusted-content
+    /// delimiter, reads the same).
+    pub fn plan_session_ids(&self, ids: impl IntoIterator<Item = SessionId>) {
+        self.planned_ids
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .extend(ids);
     }
 
     /// The profile's canonical Bot Chat, created from `new` (with the
@@ -314,7 +335,10 @@ impl Store {
                 let id: SessionId = id.parse().map_err(|e| corrupt("sessions.id", e))?;
                 return Ok((load(tx, id)?.ok_or_else(|| not_found(id))?, false));
             }
-            Ok((insert(tx, &new, None, &profile_id)?, true))
+            Ok((
+                insert(tx, &new, (SessionId::new(), None), &profile_id)?,
+                true,
+            ))
         })
     }
 
@@ -552,10 +576,9 @@ fn continuation(conn: &Connection, id: SessionId) -> Result<Option<SessionId>, E
 fn insert(
     tx: &Connection,
     new: &NewSession,
-    given_title: Option<&str>,
+    (id, given_title): (SessionId, Option<&str>),
     profile_id: &str,
 ) -> Result<Session, Error> {
-    let id = SessionId::new();
     let origin = serde_json::to_string(&new.origin).expect("origins serialize");
     let parent = new
         .parent

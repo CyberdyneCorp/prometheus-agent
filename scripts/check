@@ -120,6 +120,10 @@ run_gates() {
     step openspec validate --all --strict --no-interactive
     step cargo xtask gen --check
     step cargo xtask scenarios
+    # The golden session recordings replay without divergence, and the
+    # built-in smoke suite passes on the mock provider.
+    step cargo xtask goldens
+    step cargo xtask smoke
     # The sample plugin of every WIT world builds with cargo component.
     step cargo xtask plugin-samples --check
     docs_gate

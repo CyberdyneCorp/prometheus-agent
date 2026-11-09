@@ -141,6 +141,8 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Worktrees { command }) => prometheus::worktrees_cmd::run(command, &ctx),
         Some(Command::Vault { command }) => prometheus::vault_cmd::run(command, &ctx),
         Some(Command::Files { command }) => prometheus::files_cmd::run(command, &ctx),
+        Some(Command::Cache { command }) => prometheus::cache_cmd::run(command, &ctx),
+        Some(Command::Replay { command }) => prometheus::replay_cmd::run(command, &ctx),
         Some(Command::Verify(args)) => prometheus::verify_cmd::run(args, &ctx),
         Some(Command::Skills { command }) => skills_cmd::run(command, &ctx),
         Some(Command::Memory { command }) => memory_cmd::run(command, &ctx),

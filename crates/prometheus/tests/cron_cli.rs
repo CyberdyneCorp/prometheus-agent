@@ -503,8 +503,44 @@ fn a_one_shot_in_the_past_cannot_be_resumed() {
     assert!(stderr(&out).contains("is in the past; use 'prometheus cron edit --schedule'"));
 }
 
-/// `cron replay --live` re-runs the recorded inputs as a new run;
-/// replaying recorded responses is not in this build (exit 69).
+/// Scenario: Deterministic replay: the run's recorded model responses
+/// answer through the replay provider; no connection is made (every proxy
+/// variable points at a listener nobody may reach), and no run is added,
+/// so nothing goes through delivery.
+#[test]
+fn a_deterministic_replay_matches_without_a_request_or_a_delivery() {
+    let home = cron_home(ANSWER);
+    let id = add(home.path(), &["every 1h", "--prompt", "report"]);
+    ok(&run(home.path(), &["cron", "run", &id]));
+    let runs = json(home.path(), &["cron", "runs", &id]);
+    let original = runs["runs"][0]["run_id"].as_str().unwrap().to_owned();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let proxy = format!("http://{}", listener.local_addr().unwrap());
+    listener.set_nonblocking(true).unwrap();
+    let mut cmd = common::command(home.path());
+    for var in ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"] {
+        cmd.env(var, &proxy).env(var.to_lowercase(), &proxy);
+    }
+    let out = cmd
+        .args(["cron", "replay", &original])
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}\n{}",
+        stdout(&out),
+        stderr(&out)
+    );
+    assert_eq!(stdout(&out), "replay matched: 1 calls\n");
+    assert!(listener.accept().is_err(), "the replay connected");
+    // No new run, so nothing went through delivery.
+    let after = json(home.path(), &["cron", "runs", &id]);
+    assert_eq!(after["runs"], runs["runs"]);
+}
+
+/// `cron replay --live` re-runs the recorded inputs as a new run.
 #[test]
 fn a_live_replay_reruns_the_inputs_and_diffs_the_outputs() {
     let home = cron_home(ANSWER);
@@ -514,8 +550,6 @@ fn a_live_replay_reruns_the_inputs_and_diffs_the_outputs() {
         .as_str()
         .unwrap()
         .to_owned();
-    let out = run(home.path(), &["cron", "replay", &original]);
-    assert_eq!(out.status.code(), Some(69), "{}", stderr(&out));
     std::fs::write(
         home.path().join("profiles/default/mock.toml"),
         "[[rule]]\nrepeat = true\ntext = \"report changed\"\n",

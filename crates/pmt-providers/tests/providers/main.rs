@@ -9,6 +9,7 @@ mod azure;
 mod borrowed;
 mod bundled;
 mod caching;
+mod call_cache;
 mod external;
 mod faults;
 mod idp;

@@ -1,0 +1,20 @@
+[[rule]]
+step = 0
+[[rule.tool_calls]]
+name = "terminal"
+arguments = { command = "echo first-step" }
+
+[[rule]]
+tool_result = "first-step"
+step = 1
+[[rule.tool_calls]]
+name = "terminal"
+arguments = { command = "echo second-step" }
+
+[[rule]]
+tool_result = "second-step"
+text = "ran first-step and second-step"
+
+[[rule]]
+repeat = true
+text = "unexpected"
