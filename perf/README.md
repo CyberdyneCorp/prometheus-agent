@@ -148,7 +148,11 @@ the whole-profile setting does, because the LTO pass optimizes the single
 merged unit at the profile's level. The cost is throughput in CPU-bound
 code (Cranelift compiling a plugin, hashing a download), which is small next
 to the network and model latency a turn waits on; startup and RSS, the
-budgeted quantities, do not regress.
+budgeted quantities, do not regress. On the reference runner (CI run
+42636959071) the stripped binary went from 74.69 MiB on the base branch
+(speed-optimized) to 53.87 MiB with this branch's code included, with the
+`--version` median at 3.57 -> 3.90 ms (inside the 1 ms floor), the chat
+prompt median at 39.62 -> 39.35 ms and peak RSS at 12.11 -> 12.42 MiB.
 
 The checked-in `perf/baseline.json` starts empty; it holds entries only when
 someone records them deliberately with `--update-baseline`.
