@@ -216,20 +216,24 @@ pub async fn switch(
             model: Some(reference.to_owned()),
             ..Target::default()
         },
-        None => target::parse(
-            reference,
-            &config.model,
-            ctx.resolver.registry,
-            Some(&ctx.current.provider),
-        )?,
+        None => match preset_target(reference, config) {
+            Some(target) => target,
+            None => target::parse(
+                reference,
+                &config.model,
+                ctx.resolver.registry,
+                Some(&ctx.current.provider),
+            )?,
+        },
     };
     let route = ctx
         .resolver
         .resolve_target(&target, &mut Trace::default())
         .await?;
-    let (meta, _) = ctx
-        .catalog
-        .metadata_at(&route.provider, &route.model, Some(&route.base_url));
+    let acting = route.acting();
+    let (meta, _) =
+        ctx.catalog
+            .metadata_at(&acting.provider, &acting.model, Some(&acting.base_url));
     let needs = capability::Needs {
         tools: ctx.needs.tools,
         ..capability::Needs::default()
@@ -253,11 +257,30 @@ pub async fn switch(
             state.session = Some(choice);
         }
     }
-    let notice = notice(ctx.current, &route, scope);
+    let mut notice = notice(ctx.current, &route, scope);
+    if let Some(billing) = crate::moa::serves(&route)
+        .then(|| crate::moa::billing_notice(config, &route.model))
+        .flatten()
+    {
+        notice = format!("{notice}\n{billing}");
+    }
     Ok(Switched {
         route,
         scope,
         notice,
+    })
+}
+
+/// The `moa/<name>` target of a bare `reference` naming a Mixture of
+/// Agents preset that no alias shadows (spec: mixture-of-agents, MoA
+/// virtual provider and presets).
+fn preset_target(reference: &str, config: &pmt_config::Config) -> Option<Target> {
+    let name = reference.trim();
+    let bare = !name.contains('/') && target::alias(&config.model, name).is_none();
+    (bare && crate::moa::has_preset(config, name)).then(|| Target {
+        provider: crate::moa::PROVIDER_ID.to_owned(),
+        model: Some(name.to_owned()),
+        ..Target::default()
     })
 }
 

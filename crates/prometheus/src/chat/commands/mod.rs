@@ -17,6 +17,7 @@ mod fast;
 pub mod files;
 pub mod info;
 mod mcp;
+mod moa;
 pub(crate) mod plugins;
 mod provider;
 pub(crate) mod quick;
@@ -81,6 +82,7 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "learn" => return Some(learn(ctx, args)),
         "init" => return Some(Ok(Reply::Send(pmt_agent::init::input(args)))),
         "retry" => return Some(retry(ctx)),
+        "moa" => return Some(moa::moa(ctx, args).await),
         "help" => Ok(ctx.registry.help(ctx.surface).trim_end().to_owned()),
         "btw" => side::btw(ctx, args),
         "autoprune" => crate::chat::autoprune::command(ctx.scope, &ctx.factory.store, args),

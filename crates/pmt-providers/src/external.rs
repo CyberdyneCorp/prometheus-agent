@@ -264,6 +264,7 @@ pub(crate) fn route(
         bundled: None,
         key_header: None,
         region: None,
+        aggregator: None,
     })
 }
 

@@ -26,6 +26,7 @@ pub mod host;
 pub mod hub;
 pub mod messaging;
 pub mod methods;
+pub mod moa;
 pub mod router;
 pub mod server;
 pub mod slots;

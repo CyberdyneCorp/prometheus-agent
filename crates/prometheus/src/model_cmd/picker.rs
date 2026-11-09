@@ -99,7 +99,11 @@ pub(crate) fn pick(
         } else {
             ""
         };
-        format!("{}{ready}", p.id())
+        if p.id() == pmt_providers::moa::PROVIDER_ID {
+            format!("{} ({}){ready}", p.id(), pmt_providers::moa::DISPLAY_NAME)
+        } else {
+            format!("{}{ready}", p.id())
+        }
     }));
     let Some(mut index) = ask(input, out, "provider", &names)? else {
         return Ok(None);
@@ -132,6 +136,18 @@ pub(crate) fn chat_choices(models: &Models) -> Vec<pmt_gateway::messaging::Model
             models: models.model_ids(p),
         })
         .filter(|c| !c.models.is_empty())
+        .collect()
+}
+
+/// `moa/<preset>` for every Mixture of Agents preset of `config`: the
+/// models of the `Mixture of Agents` provider row in the TUI and remote
+/// pickers (`model.options`).
+pub(crate) fn preset_ids(config: &pmt_config::Config) -> Vec<String> {
+    config
+        .moa
+        .names()
+        .into_iter()
+        .map(|name| format!("{}/{name}", pmt_providers::moa::PROVIDER_ID))
         .collect()
 }
 
@@ -225,6 +241,44 @@ mod tests {
     use pmt_config::{Home, Launch, Overrides, ProfileName, ProfileScope};
 
     use super::*;
+
+    /// Scenario: Presets in every picker (spec: mixture-of-agents, Preset
+    /// management commands).
+    #[test]
+    fn a_mixture_of_agents_row_lists_every_preset() {
+        let target = concat!(env!("CARGO_MANIFEST_DIR"), "/../../target");
+        let dir = tempfile::tempdir_in(target).unwrap();
+        let home = Home::open(dir.path()).unwrap();
+        let profile = home.profile(&ProfileName::default_profile()).unwrap();
+        profile
+            .config_file()
+            .replace(
+                "schema_version = 1
+                 [moa.presets.review]
+reference_models = [{provider = \"mock\", model = \"a\"}]
+                 aggregator = {provider = \"mock\", model = \"b\"}
+",
+            )
+            .unwrap();
+        let scope = ProfileScope::open(profile, &Overrides::default(), Launch::Other).unwrap();
+        let models = Models::for_config(scope.clone(), scope.config(), None).unwrap();
+        // The CLI picker.
+        let mut out = Vec::new();
+        let picked = pick(&models, &mut "moa\n2\n".as_bytes(), &mut out, false).unwrap();
+        assert_eq!(picked, Some(Picked::Model("moa/review".to_owned())));
+        let shown = String::from_utf8(out).unwrap();
+        assert!(shown.contains("moa (Mixture of Agents)"), "{shown}");
+        assert!(
+            shown.contains("1) default") && shown.contains("2) review"),
+            "{shown}"
+        );
+        // The chat picker of the gateway.
+        let choices = chat_choices(&models);
+        let moa = choices.iter().find(|c| c.provider == "moa").unwrap();
+        assert_eq!(moa.models, ["default", "review"]);
+        // The TUI and remote pickers (`model.options`).
+        assert_eq!(preset_ids(scope.config()), ["moa/default", "moa/review"]);
+    }
 
     #[test]
     fn choosing_a_provider_then_a_listed_or_typed_model() {

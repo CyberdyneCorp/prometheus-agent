@@ -226,3 +226,53 @@ fn argument_rules() {
     assert!(Args::parse("x --bogus").is_err());
     assert!(Args::parse("x y").is_err());
 }
+
+/// A profile on Anthropic with a `review` preset aggregating on
+/// OpenRouter.
+const PRESETS: &str = "[model]\nprovider = \"anthropic\"\ndefault = \"claude-x\"\n\
+    [moa.presets.review]\nreference_models = [{provider = \"anthropic\", model = \"claude-y\"}]\n\
+    aggregator = {provider = \"openrouter\", model = \"some-model\"}\n";
+
+/// Scenario: Preset selectable as a model (spec: mixture-of-agents, MoA
+/// virtual provider and presets).
+#[tokio::test]
+async fn a_preset_is_selectable_as_a_model_of_the_moa_provider() {
+    let env = Env::new(PRESETS, &["ANTHROPIC_API_KEY", "OPENROUTER_API_KEY"]);
+    let current = env.route("anthropic", "claude-x").await;
+    let mut state = SessionModel::default();
+    let switched = env
+        .run("review --provider moa", &mut state, &current)
+        .await
+        .unwrap();
+    assert_eq!(switched.route.label(), "moa/review");
+    assert!(
+        switched.notice.contains(
+            "Aggregator is on openrouter; the whole tool loop will be billed there, not to anthropic."
+        ),
+        "{}",
+        switched.notice
+    );
+    let (target, _) = state.next_turn();
+    let target = target.unwrap();
+    assert_eq!(
+        (target.provider.as_str(), target.model.as_deref()),
+        ("moa", Some("review"))
+    );
+}
+
+/// Scenario: Bare preset name.
+#[tokio::test]
+async fn a_bare_preset_name_selects_the_preset() {
+    let env = Env::new(PRESETS, &["ANTHROPIC_API_KEY", "OPENROUTER_API_KEY"]);
+    let current = env.route("anthropic", "claude-x").await;
+    let mut state = SessionModel::default();
+    let switched = env.run("review", &mut state, &current).await.unwrap();
+    assert_eq!(switched.route.label(), "moa/review");
+    // An alias of the same name wins over the preset.
+    let aliased = Env::new(
+        &format!("{PRESETS}[model.aliases]\nreview = \"openrouter/other\"\n"),
+        &["ANTHROPIC_API_KEY", "OPENROUTER_API_KEY"],
+    );
+    let switched = aliased.run("review", &mut state, &current).await.unwrap();
+    assert_eq!(switched.route.label(), "openrouter/other");
+}

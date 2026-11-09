@@ -93,6 +93,9 @@ pub struct ModelReply {
     pub fallbacks: Vec<ProviderFallback>,
     /// The server-side compaction item the response returned.
     pub compaction_item: Option<serde_json::Value>,
+    /// The advisor blocks a Mixture of Agents call shows (spec:
+    /// mixture-of-agents, Privacy filter for advisor outputs).
+    pub advisors: Vec<String>,
 }
 
 impl ModelReply {
@@ -275,6 +278,7 @@ impl ProviderModel {
     /// supports. A bad override was refused by config validation, so it
     /// sends no control here rather than failing the call.
     fn with_effort(&self, request: &Request, route: &Route) -> Request {
+        let route = route.acting();
         let (meta, _) =
             self.setup
                 .catalog
@@ -324,6 +328,7 @@ impl ProviderModel {
         primary: &Target,
         chain: Vec<Target>,
     ) -> Result<Self, Error> {
+        pmt_providers::moa::validate(&setup.config, &setup.registry)?;
         let route = setup
             .resolver()
             .resolve_target(primary, &mut Trace::default())
@@ -352,14 +357,16 @@ impl ProviderModel {
     }
 
     fn info(&self, route: &Route) -> RouteInfo {
+        // A MoA preset reports its aggregator's window and price.
+        let acting = route.acting();
         let (meta, _) =
             self.setup
                 .catalog
-                .metadata_at(&route.provider, &route.model, Some(&route.base_url));
+                .metadata_at(&acting.provider, &acting.model, Some(&acting.base_url));
         RouteInfo {
             provider: route.provider.clone(),
             model: route.model.clone(),
-            price: self.setup.catalog.price(&route.provider, &route.model),
+            price: self.setup.catalog.price(&acting.provider, &acting.model),
             context_window: Some(meta.context_window),
             max_output_tokens: meta.max_output_tokens,
             wire_format: route.wire_format,
@@ -408,6 +415,7 @@ impl ProviderModel {
         let mut stream = called.stream;
         let mut reply = ModelReply {
             fallbacks,
+            advisors: called.advice,
             ..ModelReply::default()
         };
         let mut reasoning = String::new();

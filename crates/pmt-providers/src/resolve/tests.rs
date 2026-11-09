@@ -402,6 +402,8 @@ async fn plugin_wire_formats_fail_typed_and_bundled_ones_route() {
     )
     .flag("gemini");
     assert_eq!(code(&openai.run().await), "model.not_selected");
+    // The virtual `moa` provider resolves its default preset, whose
+    // aggregator (OpenRouter) needs a key here.
     let moa = Case::new("", &[]).flag("moa").run().await.unwrap_err();
-    assert_eq!(moa.code().code, "provider.plugin_unavailable");
+    assert_eq!(moa.code().code, "provider.missing_credential");
 }

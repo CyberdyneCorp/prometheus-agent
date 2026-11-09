@@ -15,6 +15,7 @@ mod hooks;
 mod images;
 mod init;
 mod journal;
+mod moa;
 mod prefill;
 mod prompt;
 mod reasoning;

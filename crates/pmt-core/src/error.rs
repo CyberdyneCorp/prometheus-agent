@@ -596,7 +596,16 @@ error_codes! {
         "`providers.<id>.confirm_metered_fallback = true` and the fallback would move the session from a subscription to a pay-per-token credential, which the user declined or which a non-interactive run cannot confirm; the turn failed instead.");
     /// The provider's wire format is implemented by a plugin that is not installed.
     PROVIDER_PLUGIN_UNAVAILABLE = ("provider.plugin_unavailable", Config,
-        "The provider speaks a wire format that only a provider plugin that is not installed implements (bridged plugins such as `github-copilot` and `solstice`) or is a virtual provider of a capability this build does not include (`moa`); the message names what is missing.");
+        "The provider speaks a wire format that only a provider plugin that is not installed implements (bridged plugins such as `github-copilot` and `solstice`) or is a virtual provider of a capability this build does not include; the message names what is missing.");
+    /// A virtual provider was asked for a model it does not have.
+    MODEL_UNKNOWN = ("model.unknown", Config,
+        "The provider has no model of that name: for the Mixture of Agents provider `moa`, the name is not a configured preset (`[moa.presets.<name>]` or the built-in `default`); the message lists the preset names.");
+    /// `moa delete` named the profile's default preset.
+    MOA_DEFAULT_PRESET_PROTECTED = ("moa.default_preset_protected", Tool,
+        "`prometheus moa delete` named the preset `moa.default_preset` selects; set another default first (`prometheus config set moa.default_preset <name>`). Exit 1.");
+    /// `moa delete` named no configured preset.
+    MOA_PRESET_NOT_FOUND = ("moa.preset_not_found", NotFound,
+        "No `[moa.presets.<name>]` of that name is configured (the built-in `default` preset cannot be deleted, only redefined); `prometheus moa list` shows the presets.");
     /// No model, provider or launch endpoint is configured.
     MODEL_NOT_CONFIGURED = ("model.not_configured", Config,
         "The profile names no model and no provider, and no `--model`, `--provider` or `--base-url` was given, so a chat has nothing to talk to. Run `prometheus setup model` (or `prometheus model`).");

@@ -4493,6 +4493,176 @@
       },
       "type": "object"
     },
+    "MoaConfig": {
+      "additionalProperties": false,
+      "description": "The `[moa]` section.",
+      "properties": {
+        "default_preset": {
+          "default": "default",
+          "description": "The preset `/moa` runs and `moa configure` edits by default.",
+          "type": "string"
+        },
+        "presets": {
+          "additionalProperties": {
+            "$ref": "#/$defs/MoaPreset"
+          },
+          "default": {},
+          "description": "Named presets; the built-in `default` exists unless redefined here.",
+          "type": "object"
+        },
+        "privacy_filter": {
+          "$ref": "#/$defs/MoaPrivacyFilter",
+          "default": "",
+          "description": "Redact advisor text: `\"\"` (off), `display` (shown blocks and\ntraces) or `full` (also the aggregator's guidance)."
+        },
+        "save_traces": {
+          "default": false,
+          "description": "Append one JSONL record per MoA call to `moa-traces/<session>.jsonl`.",
+          "type": "boolean"
+        },
+        "trace_dir": {
+          "description": "Where traces go instead of `<profile>/moa-traces`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "MoaFanout": {
+      "anyOf": [
+        {
+          "description": "`user_turn`, `per_iteration` or `every_n:N`.",
+          "type": "string"
+        },
+        {
+          "description": "`{ mode = \"every_n\", n = N }`.",
+          "properties": {
+            "mode": {
+              "description": "The cadence mode.",
+              "type": "string"
+            },
+            "n": {
+              "description": "Every how many iterations (`every_n`, N >= 2).",
+              "format": "int64",
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "When the references run (`fanout`): `user_turn`, `per_iteration`,\n`every_n:N`, or `{ mode = \"every_n\", n = N }`. Any other value warns\nonce and behaves as `user_turn`."
+    },
+    "MoaPreset": {
+      "additionalProperties": false,
+      "description": "One `[moa.presets.<name>]` preset.",
+      "properties": {
+        "aggregator": {
+          "$ref": "#/$defs/MoaSlot",
+          "description": "The model that reads the advisors' outputs and acts with the\nsession's tools; the whole tool loop is billed to it."
+        },
+        "aggregator_temperature": {
+          "description": "Temperature sent to the aggregator (0.0-2.0); unset sends none.",
+          "format": "double",
+          "maximum": 2.0,
+          "minimum": 0.0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "enabled": {
+          "default": true,
+          "description": "`false` calls the aggregator alone, as a plain model.",
+          "type": "boolean"
+        },
+        "fanout": {
+          "$ref": "#/$defs/MoaFanout",
+          "default": "user_turn",
+          "description": "When the references run within a turn."
+        },
+        "reference_models": {
+          "description": "The advisors, run concurrently without tools (at least one).",
+          "items": {
+            "$ref": "#/$defs/MoaSlot"
+          },
+          "type": "array"
+        },
+        "reference_temperature": {
+          "description": "Temperature sent to the references (0.0-2.0); unset sends none.",
+          "format": "double",
+          "maximum": 2.0,
+          "minimum": 0.0,
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "reference_models",
+        "aggregator"
+      ],
+      "type": "object"
+    },
+    "MoaPrivacyFilter": {
+      "description": "How advisor text is redacted (`moa.privacy_filter`).",
+      "oneOf": [
+        {
+          "const": "",
+          "description": "No redaction.",
+          "type": "string"
+        },
+        {
+          "const": "display",
+          "description": "Redact the advisor blocks shown to users and saved in traces; the\naggregator still reads the raw text.",
+          "type": "string"
+        },
+        {
+          "const": "full",
+          "description": "Also redact the guidance the aggregator reads.",
+          "type": "string"
+        }
+      ]
+    },
+    "MoaSlot": {
+      "additionalProperties": false,
+      "description": "One model slot of a preset.",
+      "properties": {
+        "model": {
+          "description": "Model id at that provider.",
+          "type": "string"
+        },
+        "provider": {
+          "description": "Provider id or alias (never `moa`: presets do not nest).",
+          "type": "string"
+        },
+        "reasoning_effort": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReasoningLevel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Reasoning effort sent to this slot; unset uses the model's default."
+        }
+      },
+      "required": [
+        "provider",
+        "model"
+      ],
+      "type": "object"
+    },
     "ModalConfig": {
       "additionalProperties": false,
       "description": "The `[terminal.modal]` section.",
@@ -9660,6 +9830,16 @@
         "write_approval": false
       },
       "description": "Built-in memory."
+    },
+    "moa": {
+      "$ref": "#/$defs/MoaConfig",
+      "default": {
+        "default_preset": "default",
+        "presets": {},
+        "privacy_filter": "",
+        "save_traces": false
+      },
+      "description": "Mixture of Agents presets."
     },
     "model": {
       "$ref": "#/$defs/ModelConfig",

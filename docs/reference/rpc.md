@@ -92,9 +92,9 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `journey.list` | `memory` | 1.0 | [`JourneyListParams`](#journeylistparams) | [`JourneyList`](#journeylist) |
 | `lsp.status` | `lsp-diagnostics` | 1.0 | [`LspStatusParams`](#lspstatusparams) | [`LspStatus`](#lspstatus) |
 | `memory.summary` | `memory` | 1.0 | [`SessionRef`](#sessionref) | [`MemorySummary`](#memorysummary) |
-| `moa.presets.delete` | `mixture-of-agents` | 1.0 | not served yet | |
-| `moa.presets.list` | `mixture-of-agents` | 1.0 | not served yet | |
-| `moa.presets.put` | `mixture-of-agents` | 1.0 | not served yet | |
+| `moa.presets.delete` | `mixture-of-agents` | 1.0 | [`MoaPresetsDeleteParams`](#moapresetsdeleteparams) | [`MoaPresetList`](#moapresetlist) |
+| `moa.presets.list` | `mixture-of-agents` | 1.0 | [`MoaPresetsListParams`](#moapresetslistparams) | [`MoaPresetList`](#moapresetlist) |
+| `moa.presets.put` | `mixture-of-agents` | 1.0 | [`MoaPresetsPutParams`](#moapresetsputparams) | [`MoaPresetList`](#moapresetlist) |
 | `model.options` | `tui` | 1.0 | [`SessionRef`](#sessionref) | [`ModelOptions`](#modeloptions) |
 | `pairing.approve` | `messaging-gateway` | 1.0 | [`PairingApproveParams`](#pairingapproveparams) | [`PairingApproved`](#pairingapproved) |
 | `prompt.submit` | `workspace-architecture` | 1.0 | [`SubmitParams`](#submitparams) | [`Submitted`](#submitted) |
@@ -825,6 +825,82 @@ One MCP server of a session.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `line` | string or null | no | `Memory: +<added> ~<patched> -<removed> (review with /memory review)` when the agent changed memory in the session and `memory.review_mode` is not `off`; `null` otherwise. |
+
+### `MoaPresetInfo`
+
+One preset as editors show it.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `aggregator` | [`MoaSlotInfo`](#moaslotinfo) | yes | The model that acts with the tools and is billed. |
+| `aggregator_temperature` | number or null | no | Temperature sent to the aggregator. |
+| `billing_notice` | string or null | no | `Aggregator is on <provider>; ...` when it bills another provider than `model.provider`. |
+| `builtin` | boolean | yes | The built-in `default`, not redefined in `config.toml`. |
+| `default` | boolean | yes | It is `moa.default_preset` (cannot be deleted). |
+| `enabled` | boolean | yes | `false`: the aggregator runs alone. |
+| `fanout` | string | yes | When the advisors run (`user_turn`, `per_iteration`, `every_n:N`). |
+| `name` | string | yes | The preset name (`/model <name>`, `moa/<name>`). |
+| `reference_temperature` | number or null | no | Temperature sent to the references. |
+| `references` | array of [`MoaSlotInfo`](#moaslotinfo) | yes | The advisors. |
+
+### `MoaPresetInput`
+
+A preset to write.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `aggregator` | [`MoaSlotInfo`](#moaslotinfo) | yes | The aggregator (never `moa`). |
+| `aggregator_temperature` | number or null | no | Temperature sent to the aggregator (0.0-2.0). |
+| `enabled` | boolean or null | no | Whether the references run (default `true`). |
+| `fanout` | string or null | no | The cadence (default `user_turn`). |
+| `reference_temperature` | number or null | no | Temperature sent to the references (0.0-2.0). |
+| `references` | array of [`MoaSlotInfo`](#moaslotinfo) | yes | The advisors (at least one). |
+
+### `MoaPresetList`
+
+`moa.presets.list` (and `put`, `delete`) result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `default_preset` | string | yes | `moa.default_preset`. |
+| `presets` | array of [`MoaPresetInfo`](#moapresetinfo) | yes | Every preset, sorted by name. |
+
+### `MoaPresetsDeleteParams`
+
+`moa.presets.delete` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | The preset name (never `moa.default_preset`). |
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
+
+### `MoaPresetsListParams`
+
+`moa.presets.list` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
+
+### `MoaPresetsPutParams`
+
+`moa.presets.put` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | The preset name. |
+| `preset` | [`MoaPresetInput`](#moapresetinput) | yes | The preset. |
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
+
+### `MoaSlotInfo`
+
+One preset slot.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `model` | string | yes | Model id. |
+| `provider` | string | yes | Provider id. |
+| `reasoning_effort` | string or null | no | `none`...`ultra`, when set. |
 
 ### `ModelOption`
 

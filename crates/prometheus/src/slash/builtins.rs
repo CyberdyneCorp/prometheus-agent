@@ -432,6 +432,16 @@ pub static BUILTINS: &[Command] = &[
         Effect::Immediate,
     ),
     command(
+        "moa",
+        &[],
+        Model,
+        "Run one prompt through the default Mixture of Agents preset, then return to the session's model: /moa <prompt>",
+        &[text("prompt")],
+        CHATS,
+        BusyPolicy::Reject,
+        Effect::None,
+    ),
+    command(
         "provider",
         &[],
         Model,

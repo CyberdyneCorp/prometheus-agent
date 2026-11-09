@@ -6,7 +6,8 @@
 //! [`metadata`] catalog with capability checks, per-call cost accounting
 //! ([`cost`]), [`auxiliary`] task routing, [`reasoning`] effort, model
 //! references and aliases ([`target`]), the `/model` [`switch`], local
-//! inference servers ([`local`]), credentials and subscription sign-in
+//! inference servers ([`local`]), Mixture of Agents presets ([`moa`]),
+//! credentials and subscription sign-in
 //! ([`auth`]) and the deterministic in-process [`mock`] provider.
 
 pub mod account;
@@ -30,6 +31,7 @@ pub mod fast;
 pub mod health;
 pub mod local;
 pub mod metadata;
+pub mod moa;
 pub mod mock;
 pub mod pool;
 pub mod quota;

@@ -203,6 +203,17 @@ pub(crate) async fn mock_model_priced(
     model: &str,
     price: Priced,
 ) -> Arc<Recording> {
+    scripted_port(profile, script, ("mock", model), price).await
+}
+
+/// A port on `provider`/`model` whose mock routes (a MoA preset's slots
+/// included) answer from `script`.
+pub(crate) async fn scripted_port(
+    profile: &Profile,
+    script: &str,
+    (provider, model): (&str, &str),
+    price: Priced,
+) -> Arc<Recording> {
     let config = Arc::new(profile.scope.config().clone());
     let registry = Arc::new(ProviderRegistry::for_profile(&config, Vec::new()).unwrap());
     let catalog = Arc::new(Catalog::new(&config, None));
@@ -227,7 +238,7 @@ pub(crate) async fn mock_model_priced(
         metered_confirm: None,
     };
     let target = Target {
-        provider: "mock".into(),
+        provider: provider.into(),
         model: Some(model.into()),
         ..Target::default()
     };

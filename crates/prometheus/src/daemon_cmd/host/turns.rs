@@ -447,6 +447,9 @@ async fn run_one(
         None => agent.run_turn(Some(&scope), id, job.input, options).await,
     };
     session.interrupt.lock().expect("interrupt poisoned").take();
+    // A `/model --once` or `/moa` route ends with its turn, whatever the
+    // turn's outcome (spec: mixture-of-agents, One-shot /moa command).
+    session.live.model.end_turn();
     if let Ok(result) = &outcome {
         crate::chat::reviews::after_turn(&session.factory, &session.live, result).await;
     }

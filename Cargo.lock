@@ -3226,6 +3226,7 @@ dependencies = [
  "base64 0.23.1",
  "crc32fast",
  "fastrand",
+ "futures-util",
  "getrandom 0.4.3",
  "jiff",
  "percent-encoding",

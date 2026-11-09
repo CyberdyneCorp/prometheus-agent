@@ -397,17 +397,19 @@ impl Fallback {
             .resolve_target(target, &mut Trace::default())
             .await
             .ok()?;
+        // A MoA preset stands or falls with its aggregator.
+        let acting = route.acting();
         let unusable = route.identity() == failed.identity()
             || walk
                 .health
-                .benched_for(&route.provider, now)
+                .benched_for(&acting.provider, now)
                 .is_some_and(|d| d > MAX_BENCH)
-            || walk.health.score(&route.provider, &route.model) < self.min_health
+            || walk.health.score(&acting.provider, &acting.model) < self.min_health
             || capability::check(
                 &route.label(),
                 &walk
                     .catalog
-                    .metadata_at(&route.provider, &route.model, Some(&route.base_url))
+                    .metadata_at(&acting.provider, &acting.model, Some(&acting.base_url))
                     .0,
                 &walk.needs,
             )

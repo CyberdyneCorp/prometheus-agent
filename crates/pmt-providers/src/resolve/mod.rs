@@ -159,6 +159,10 @@ pub struct Route {
     pub key_header: Option<String>,
     /// The region a Bedrock route's requests are signed for.
     pub region: Option<String>,
+    /// The aggregator's route of a Mixture of Agents preset route (spec:
+    /// mixture-of-agents): the model that acts, whose metadata, health
+    /// and billing source stand for the preset's.
+    pub aggregator: Option<Box<Route>>,
 }
 
 impl Route {
@@ -175,10 +179,21 @@ impl Route {
         identity(&self.provider, &self.model, &self.base_url)
     }
 
-    /// The ledger's `billing_source` of calls on this route.
+    /// The ledger's `billing_source` of calls on this route (a MoA
+    /// preset's is its aggregator's).
     #[must_use]
     pub fn billing_source(&self) -> String {
-        self.credential.billing_source(&self.provider, self.local)
+        match &self.aggregator {
+            Some(aggregator) => aggregator.billing_source(),
+            None => self.credential.billing_source(&self.provider, self.local),
+        }
+    }
+
+    /// The route whose model answers: a MoA preset's aggregator, else
+    /// this route (capability checks, metadata, health).
+    #[must_use]
+    pub fn acting(&self) -> &Self {
+        self.aggregator.as_deref().unwrap_or(self)
     }
 }
 
@@ -428,6 +443,9 @@ impl Resolver<'_> {
             "enabled",
             format!("providers.{}.enabled = true", provider.id()),
         );
+        if provider.id() == crate::moa::PROVIDER_ID {
+            return crate::moa::route(self, target, trace).await;
+        }
         if let Some(err) = wire::virtual_unavailable(provider) {
             return trace.check("endpoint", Err(err));
         }
@@ -515,6 +533,7 @@ impl Resolver<'_> {
             bundled: choice.bundled,
             key_header: key_header(provider, choice),
             region: bedrock.then(|| crate::aws::region(provider)),
+            aggregator: None,
             model,
             base_url,
         }

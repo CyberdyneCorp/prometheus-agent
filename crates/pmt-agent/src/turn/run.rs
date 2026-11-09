@@ -614,6 +614,7 @@ impl<'a> Turn<'a> {
         for fallback in &reply.fallbacks {
             self.emit(Event::ProviderFallback(fallback.clone())).await;
         }
+        self.notices.extend(reply.advisors.iter().cloned());
         let cost = reply.record.as_ref().and_then(|r| r.cost_usd);
         self.usage.add(&reply.usage, cost);
         self.observe(reply)?;

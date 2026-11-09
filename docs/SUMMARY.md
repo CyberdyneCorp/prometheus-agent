@@ -16,6 +16,7 @@
 - [Logs and trajectories](guide/observability.md)
 - [Models and providers](guide/models.md)
 - [Provider credentials and sign-ins](guide/providers.md)
+- [Mixture of Agents](guide/moa.md)
 - [Usage, costs and budgets](guide/usage-and-budgets.md)
 - [OS sandbox and terminal backends](guide/sandbox.md)
 - [The local terminal](guide/terminal.md)

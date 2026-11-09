@@ -46,6 +46,8 @@ pub struct CallContext {
     pub turn_id: Option<String>,
     /// Dotted purpose (`main`, `auxiliary.title`...).
     pub purpose: String,
+    /// Extra purpose detail (the MoA preset of `moa.*` calls).
+    pub purpose_detail: Option<String>,
     /// The call this one serves.
     pub parent_call_id: Option<String>,
     /// Caps implicit stream idle timeouts (a turn under a run budget).
@@ -60,6 +62,7 @@ impl CallContext {
             session_id,
             turn_id: None,
             purpose: purpose.to_owned(),
+            purpose_detail: None,
             parent_call_id: None,
             stale_cap: None,
         }
@@ -83,6 +86,7 @@ impl Pending {
         let mut call = Call::new(ctx.session_id, &ctx.purpose, &route.provider, &route.model);
         call.turn_id.clone_from(&ctx.turn_id);
         call.parent_call_id.clone_from(&ctx.parent_call_id);
+        call.purpose_detail.clone_from(&ctx.purpose_detail);
         call.billing_source = route.billing_source();
         call.request_hash = Some(request.hash(&route.provider, &route.model));
         call.service_tier = request

@@ -200,6 +200,10 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "fallback list",
     },
     JsonShape {
+        schema: "prometheus.moa_presets.v1",
+        command: "moa list",
+    },
+    JsonShape {
         schema: "prometheus.auth.v1",
         command: "auth list",
     },

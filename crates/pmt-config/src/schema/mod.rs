@@ -31,6 +31,7 @@ mod hooks;
 mod interface;
 mod lsp;
 mod mcp;
+mod moa;
 mod models;
 mod operations;
 mod plugins;
@@ -82,6 +83,9 @@ pub use mcp::{
     McpAuth, McpCapabilities, McpConfig, McpElicitationConfig, McpOAuthConfig, McpOAuthFlow,
     McpRedirectHost, McpSamplingConfig, McpServerConfig, McpServerModeConfig, McpToolFilter,
     McpTransport, McpTrust,
+};
+pub use moa::{
+    DEFAULT_PRESET, MoaConfig, MoaFanout, MoaPreset, MoaPrivacyFilter, MoaSlot, TRACE_DIR,
 };
 pub use models::{
     AliasRoute, AuthConfig, AuxiliaryConfig, AuxiliaryTask, FallbackConfig, FallbackEntry,
@@ -190,6 +194,8 @@ pub struct Config {
     pub mcp_server: McpServerModeConfig,
     /// Built-in memory.
     pub memory: MemoryConfig,
+    /// Mixture of Agents presets.
+    pub moa: MoaConfig,
     /// The main model and provider.
     pub model: ModelConfig,
     /// Model aliases and metadata overrides, keyed by name or
@@ -299,6 +305,7 @@ impl Default for Config {
             mcp: McpConfig::default(),
             mcp_server: McpServerModeConfig::default(),
             memory: MemoryConfig::default(),
+            moa: MoaConfig::default(),
             model: ModelConfig::default(),
             models: std::collections::BTreeMap::new(),
             network: NetworkConfig::default(),

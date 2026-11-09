@@ -455,10 +455,10 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 47. M2 Mixture of agents
 
-- [ ] 47.1 Implement the MoA virtual provider with presets selectable as models (bare names, unknown presets refused) and preset validation (no recursive aggregator, temperature omitted by default); verify with resolution tests (spec: mixture-of-agents)
-- [ ] 47.2 Implement the MoA call procedure (references never see tools, the aggregator's tool calls execute), cache-safe guidance injection, strict-alternation recovery, advisor cadence and non-fatal reference failures; verify with mock-provider scripts that the session prefix is unchanged across iterations (spec: mixture-of-agents)
-- [ ] 47.3 Implement the privacy filter for advisor outputs (display-only redaction), MoA traces and per-slot billing rows in the ledger; verify with ledger and trace tests (spec: mixture-of-agents)
-- [ ] 47.4 Implement MoA as a fallback entry, the one-shot `/moa` command (route restored after one turn), preset management commands (default preset protected, presets in every picker) and prompt-cache preservation when returning from MoA; verify with mock-provider tests and document MoA (spec: mixture-of-agents)
+- [x] 47.1 Implement the MoA virtual provider with presets selectable as models (bare names, unknown presets refused) and preset validation (no recursive aggregator, temperature omitted by default); verify with resolution tests (spec: mixture-of-agents)
+- [x] 47.2 Implement the MoA call procedure (references never see tools, the aggregator's tool calls execute), cache-safe guidance injection, strict-alternation recovery, advisor cadence and non-fatal reference failures; verify with mock-provider scripts that the session prefix is unchanged across iterations (spec: mixture-of-agents)
+- [x] 47.3 Implement the privacy filter for advisor outputs (display-only redaction), MoA traces and per-slot billing rows in the ledger; verify with ledger and trace tests (spec: mixture-of-agents)
+- [x] 47.4 Implement MoA as a fallback entry, the one-shot `/moa` command (route restored after one turn), preset management commands (default preset protected, presets in every picker) and prompt-cache preservation when returning from MoA; verify with mock-provider tests and document MoA (spec: mixture-of-agents)
 
 ## 48. M2 Local models
 

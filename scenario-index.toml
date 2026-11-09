@@ -3277,3 +3277,53 @@ capabilities = [
 [model-providers."Azure AI Foundry provider"]
 "Keyless Entra ID access" = ["crates/pmt-providers/tests/providers/azure.rs::keyless_entra_id_access_from_a_managed_identity", "crates/pmt-providers/tests/providers/azure.rs::keyless_entra_id_access_from_the_azure_cli_login", "crates/prometheus/tests/azure_cli.rs::a_session_uses_the_azure_cli_login_without_a_key"]
 "Claude deployment uses Anthropic wire" = ["crates/pmt-providers/tests/providers/azure.rs::claude_deployment_uses_anthropic_wire", "crates/pmt-providers/src/azure.rs::claude_deployments_use_anthropic_messages"]
+
+# Group 47: Mixture of Agents.
+[mixture-of-agents."MoA virtual provider and presets"]
+"Preset selectable as a model" = ["crates/pmt-providers/src/switch/tests.rs::a_preset_is_selectable_as_a_model_of_the_moa_provider"]
+"Bare preset name" = ["crates/pmt-providers/src/switch/tests.rs::a_bare_preset_name_selects_the_preset"]
+"Unknown preset" = ["crates/pmt-providers/tests/providers/moa.rs::an_unknown_preset_lists_the_configured_ones"]
+
+[mixture-of-agents."Preset validation"]
+"Recursive aggregator refused" = ["crates/pmt-config/src/moa_check.rs::a_recursive_aggregator_is_refused_naming_the_key"]
+"Temperature omitted by default" = ["crates/pmt-providers/tests/providers/moa.rs::references_never_see_tools_or_the_system_prompt", "crates/pmt-providers/tests/providers/moa.rs::a_set_temperature_is_sent_and_a_disabled_preset_calls_the_aggregator_alone"]
+
+[mixture-of-agents."MoA call procedure"]
+"References never see tools" = ["crates/pmt-providers/tests/providers/moa.rs::references_never_see_tools_or_the_system_prompt"]
+"Aggregator tool call executed" = ["crates/pmt-agent/tests/turn/moa.rs::the_aggregators_tool_call_runs_and_the_next_iteration_follows_the_fanout"]
+
+[mixture-of-agents."Cache-safe guidance injection"]
+"Prefix preserved across iterations" = ["crates/pmt-providers/tests/providers/moa.rs::the_second_aggregator_request_keeps_the_first_ones_prefix"]
+
+[mixture-of-agents."Strict-alternation recovery"]
+"Merge remembered per destination" = ["crates/pmt-providers/tests/providers/moa.rs::an_alternating_destination_is_merged_for_the_rest_of_the_session"]
+
+[mixture-of-agents."Advisor cadence"]
+"Every third iteration" = ["crates/pmt-providers/tests/providers/moa.rs::every_third_iteration_runs_the_references_and_every_request_has_guidance", "crates/pmt-providers/src/moa/cadence.rs::every_third_iteration_runs_on_one_three_and_six"]
+"Malformed fanout" = ["crates/pmt-providers/tests/providers/moa.rs::a_malformed_fanout_warns_naming_the_preset_and_runs_once_per_turn"]
+
+[mixture-of-agents."Reference failures are non-fatal"]
+"One advisor missing credentials" = ["crates/pmt-providers/tests/providers/moa.rs::an_advisor_without_credentials_becomes_a_note"]
+
+[mixture-of-agents."Privacy filter for advisor outputs"]
+"Display-only redaction" = ["crates/pmt-providers/tests/providers/moa_accounting.rs::display_redaction_leaves_the_aggregator_the_raw_text", "crates/pmt-providers/src/moa/privacy.rs::display_redacts_contacts_and_secrets_but_not_identifiers"]
+"SHA untouched" = ["crates/pmt-providers/tests/providers/moa_accounting.rs::the_full_filter_redacts_guidance_but_not_a_commit_sha"]
+
+[mixture-of-agents."MoA traces"]
+"Trace written" = ["crates/pmt-providers/tests/providers/moa_accounting.rs::a_trace_record_lists_every_slot_with_usage"]
+
+[mixture-of-agents."MoA billing and accounting"]
+"Ledger rows per slot" = ["crates/pmt-providers/tests/providers/moa_accounting.rs::every_slot_is_its_own_ledger_row", "crates/prometheus/tests/moa_cli.rs::a_moa_turn_bills_every_slot_to_its_own_model"]
+
+[mixture-of-agents."MoA as a fallback entry"]
+"Preset activated on primary failure" = ["crates/pmt-providers/tests/providers/moa_accounting.rs::a_preset_in_the_chain_takes_over_from_an_overloaded_primary"]
+
+[mixture-of-agents."One-shot /moa command"]
+"Route restored after one turn" = ["crates/prometheus/tests/moa_cli.rs::moa_runs_one_turn_on_the_default_preset_then_the_route_goes_back", "crates/prometheus/tests/moa_cli.rs::moa_in_a_daemon_session_returns_to_the_route_after_its_turn"]
+
+[mixture-of-agents."Preset management commands"]
+"Deleting the default preset refused" = ["crates/prometheus/tests/moa_cli.rs::deleting_the_default_preset_is_refused_with_exit_1"]
+"Presets in every picker" = ["crates/prometheus/src/model_cmd/picker.rs::a_mixture_of_agents_row_lists_every_preset"]
+
+[mixture-of-agents."MoA preserves the session prompt cache"]
+"Returning from MoA replays the prefix" = ["crates/pmt-agent/tests/turn/moa.rs::returning_from_a_preset_replays_the_same_system_prompt_and_tools"]

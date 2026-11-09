@@ -160,6 +160,28 @@ pub trait Host: Send + Sync + 'static {
         })
     }
 
+    /// The Mixture of Agents presets of `profile` after `change` (`None`
+    /// only reads): `moa.presets.*`. Hosts without profiles on disk
+    /// refuse.
+    ///
+    /// # Errors
+    ///
+    /// `rpc.not_served`; the change's refusal (`config.invalid`,
+    /// `moa.default_preset_protected`, `moa.preset_not_found`).
+    fn moa_presets<'a>(
+        &'a self,
+        profile: &'a str,
+        change: Option<crate::moa::Change>,
+    ) -> HostFuture<'a, pmt_rpc::contracts::MoaPresetList> {
+        let _ = (profile, change);
+        Box::pin(async {
+            Err(Error::new(
+                &pmt_core::error::codes::RPC_NOT_SERVED,
+                "this host has no Mixture of Agents presets",
+            ))
+        })
+    }
+
     /// The credential vault of `profile` and its scope (`vault.*`). Hosts
     /// without profiles on disk refuse.
     ///

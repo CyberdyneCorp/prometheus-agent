@@ -144,11 +144,13 @@ pub fn save(
     let redactor = redact
         .then(|| crate::sessions_cmd::redactor(scope))
         .transpose()?;
+    let traces = scope.config().moa.trace_dir(scope.dir());
     let options = ExportOptions {
         format,
         include_inactive: false,
         with_blobs: false,
         redactor: redactor.as_ref(),
+        moa_traces: Some(&traces),
     };
     let io_error = |e: &std::io::Error| {
         Error::new(

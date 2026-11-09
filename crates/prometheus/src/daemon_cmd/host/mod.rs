@@ -773,6 +773,24 @@ impl Host for DaemonHost {
         crate::cron_host::blueprint_rpc::fill(&served.scope(), &self.launch, store, params)
     }
 
+    fn moa_presets<'a>(
+        &'a self,
+        profile: &'a str,
+        change: Option<pmt_gateway::moa::Change>,
+    ) -> HostFuture<'a, pmt_rpc::contracts::MoaPresetList> {
+        Box::pin(async move {
+            let profile = self.profile(profile)?;
+            // Read what the CLI may have written a moment ago, and serve
+            // the result to new sessions at once.
+            self.check(&profile).await;
+            if let Some(change) = change {
+                crate::moa_cmd::rpc::apply(&profile.scope(), change)?;
+                self.check(&profile).await;
+            }
+            crate::moa_cmd::rpc::list(profile.scope().config())
+        })
+    }
+
     fn vault(&self, profile: &str) -> Result<pmt_gateway::vault::VaultAccess, Error> {
         let scope = self.profile(profile)?.scope();
         Ok(pmt_gateway::vault::VaultAccess {

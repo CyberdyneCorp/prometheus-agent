@@ -14,6 +14,8 @@ mod faults;
 mod idp;
 mod local;
 mod minting;
+mod moa;
+mod moa_accounting;
 mod mock;
 mod pool_seeding;
 mod pools;

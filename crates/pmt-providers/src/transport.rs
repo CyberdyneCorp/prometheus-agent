@@ -638,7 +638,18 @@ pub struct ModelStream {
     usage: Option<Usage>,
     ledger: Option<Pending>,
     recorded: Option<Result<pmt_store::UsageEvent, pmt_core::Error>>,
-    on_end: Option<OnEnd>,
+    on_end: Vec<OnEnd>,
+    tap: Option<Tap>,
+}
+
+/// Sees every event of a stream as it is read (a MoA trace collects the
+/// aggregator's output with it).
+pub(crate) struct Tap(pub(crate) Box<dyn FnMut(&StreamEvent) + Send + Sync>);
+
+impl std::fmt::Debug for Tap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Tap")
+    }
 }
 
 /// What [`OnEnd`] calls.
@@ -679,7 +690,8 @@ impl ModelStream {
             usage: None,
             ledger: None,
             recorded: None,
-            on_end: None,
+            on_end: Vec::new(),
+            tap: None,
         };
         stream.fill().await?;
         Ok(stream)
@@ -694,10 +706,13 @@ impl ModelStream {
             self.fail(error);
         }
         let event = self.pending.pop_front()?;
-        if matches!(event, StreamEvent::Stop { .. })
-            && let Some(OnEnd(on_end)) = self.on_end.take()
-        {
-            on_end(self.failure.as_ref(), self.usage);
+        if let Some(Tap(tap)) = &mut self.tap {
+            tap(&event);
+        }
+        if matches!(event, StreamEvent::Stop { .. }) {
+            for OnEnd(on_end) in std::mem::take(&mut self.on_end) {
+                on_end(self.failure.as_ref(), self.usage);
+            }
         }
         if let StreamEvent::Usage { usage } = &event {
             self.usage = Some(*usage);
@@ -716,9 +731,15 @@ impl ModelStream {
         Some(event)
     }
 
-    /// Calls `on_end` once, when the stream's `stop` event is read.
+    /// Calls `on_end` once, when the stream's `stop` event is read (after
+    /// any added before it).
     pub(crate) fn on_end(&mut self, on_end: OnEnd) {
-        self.on_end = Some(on_end);
+        self.on_end.push(on_end);
+    }
+
+    /// Shows `tap` every event from now on.
+    pub(crate) fn tap(&mut self, tap: Tap) {
+        self.tap = Some(tap);
     }
 
     /// Records the call's ledger row when its usage arrives.

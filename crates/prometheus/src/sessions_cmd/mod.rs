@@ -411,11 +411,13 @@ fn export(
             .collect::<Result<_, _>>()?
     };
     let redactor = args.redact.then(|| redactor(scope)).transpose()?;
+    let traces = scope.config().moa.trace_dir(scope.dir());
     let options = ExportOptions {
         format: args.format,
         include_inactive: args.include_inactive,
         with_blobs: args.with_blobs,
         redactor: redactor.as_ref(),
+        moa_traces: Some(&traces),
     };
     let Some(path) = &args.output else {
         session_export::export(store, &ids, options, &mut std::io::stdout().lock())?;

@@ -172,7 +172,14 @@ impl Models {
             .with_mock(Arc::clone(&mock))
             .with_recorder(Arc::clone(&recorder))
             .with_credentials(Arc::clone(&accounts) as _);
+        // Mixture of Agents: traces under the profile, advisor text shown
+        // or traced without the profile's known secrets.
+        let mixture = pmt_providers::moa::Mixture::new(
+            Some(scope.dir().to_path_buf()),
+            scope.secrets().redactor().unwrap_or_default(),
+        );
         let caller = ModelCaller::new(client.clone())
+            .with_mixture(Arc::new(mixture))
             .with_conversations(conversations.clone())
             .with_mock(mock)
             .with_recorder(recorder)

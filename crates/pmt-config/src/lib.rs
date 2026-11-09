@@ -37,6 +37,8 @@ pub mod lsp_check;
 pub mod managed;
 pub mod mcp_check;
 pub mod migrate;
+pub mod moa_check;
+mod moa_edit;
 mod parse;
 pub mod passthrough;
 mod platform_options;

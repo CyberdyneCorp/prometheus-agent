@@ -15,7 +15,7 @@ use toml_edit::DocumentMut;
 
 use crate::layers::{Layered, Overrides, typed_value};
 use crate::migrate::{self, Migrated};
-use crate::schema::FallbackEntry;
+use crate::schema::{FallbackEntry, MoaPreset};
 use crate::{backups, catalog, edit, parse};
 
 /// A profile's `config.toml` with its backup directory.
@@ -189,6 +189,34 @@ impl ConfigFile {
             route.insert("accept_data_use", toml_edit::value(true));
             Ok(())
         })
+    }
+
+    /// Writes preset `name` as `[moa.presets.<name>]` (spec:
+    /// mixture-of-agents, Preset management commands).
+    ///
+    /// # Errors
+    ///
+    /// A managed lock on `moa.presets`, the file's own errors and
+    /// validation of the result (a recursive or empty preset, exit 78).
+    pub fn put_moa_preset(&self, name: &str, preset: &MoaPreset) -> Result<(), Error> {
+        crate::managed::check_writable("moa.presets")?;
+        self.modify(|doc| crate::moa_edit::set(doc, name, preset))
+    }
+
+    /// Removes `[moa.presets.<name>]`; whether it was defined.
+    ///
+    /// # Errors
+    ///
+    /// A managed lock on `moa.presets`, the file's own errors and
+    /// validation of the result.
+    pub fn remove_moa_preset(&self, name: &str) -> Result<bool, Error> {
+        crate::managed::check_writable("moa.presets")?;
+        let mut removed = false;
+        self.modify(|doc| {
+            removed = crate::moa_edit::remove(doc, name);
+            Ok(())
+        })?;
+        Ok(removed)
     }
 
     /// `config unset`: removes `key` so its default applies; returns

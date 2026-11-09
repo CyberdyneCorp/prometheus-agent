@@ -511,6 +511,18 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `memory.user_char_limit` | integer | `1375` | ≥ 0 | `next_session` | Character budget of core user-profile entries. |
 | `memory.user_profile_enabled` | boolean | `true` | any | `next_session` | The user profile store. |
 | `memory.write_approval` | boolean | `false` | any | `next_session` | Approve every memory write. |
+| `moa.default_preset` | string | `"default"` | any | `next_session` | The preset `/moa` runs and `moa configure` edits by default. |
+| `moa.presets.<name>.aggregator.model` | string | unset | any | `next_session` | Model id at that provider. |
+| `moa.presets.<name>.aggregator.provider` | string | unset | any | `next_session` | Provider id or alias (never `moa`: presets do not nest). |
+| `moa.presets.<name>.aggregator.reasoning_effort` | one of "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra" | unset | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`, `"ultra"` | `next_session` | Reasoning effort sent to this slot; unset uses the model's default. |
+| `moa.presets.<name>.aggregator_temperature` | number | unset | 0.0 to 2.0 | `next_session` | Temperature sent to the aggregator (0.0-2.0); unset sends none. |
+| `moa.presets.<name>.enabled` | boolean | `true` | any | `next_session` | `false` calls the aggregator alone, as a plain model. |
+| `moa.presets.<name>.fanout` | string or table | `"user_turn"` | any | `next_session` | When the references run within a turn. |
+| `moa.presets.<name>.reference_models` | array of table | unset | any | `next_session` | The advisors, run concurrently without tools (at least one). |
+| `moa.presets.<name>.reference_temperature` | number | unset | 0.0 to 2.0 | `next_session` | Temperature sent to the references (0.0-2.0); unset sends none. |
+| `moa.privacy_filter` | one of "", "display", "full" | `""` | `""`, `"display"`, `"full"` | `next_session` | Redact advisor text: `""` (off), `display` (shown blocks and traces) or `full` (also the aggregator's guidance). |
+| `moa.save_traces` | boolean | `false` | any | `next_session` | Append one JSONL record per MoA call to `moa-traces/<session>.jsonl`. |
+| `moa.trace_dir` | string | unset | any | `next_session` | Where traces go instead of `<profile>/moa-traces`. |
 | `model.aliases` | table | `{}` | any | `next_session` | User model aliases: a name (matched case-insensitively) for a `"<provider>/<model>"` string or a route table. Usable wherever a model is named (`/model`, `prometheus model set`, fallback and auxiliary slots). |
 | `model.auto_order` | array of string | `["anthropic","openai","openrouter","google","nous"]` | any | `next_session` | Provider order tried by `auto` among providers with a stored secret. |
 | `model.codex_bin` | string | unset | any | `next_session` | Absolute path of the Codex CLI the Codex app-server runtime runs; unset finds `codex` on `PATH`, in the user-local bin directories and the vendor's install prefixes. |

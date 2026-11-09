@@ -43,6 +43,7 @@ pub mod mcp_cmd;
 pub mod mcp_host;
 pub mod memory_cmd;
 pub mod memory_provider;
+pub mod moa_cmd;
 pub mod model_cmd;
 pub mod model_slash;
 pub mod output;

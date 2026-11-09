@@ -40,6 +40,7 @@ Commands:
   trajectory   Render the recorded trajectory of a session
   model        Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
   providers    Provider routing state: per-route health scores
+  moa          List, create, update and delete Mixture of Agents presets (`[moa.presets.<name>]`)
   fallback     List and edit the profile's fallback chain (`[[fallback.chain]]`)
   auth         Add, list and remove provider API keys and subscription sign-ins (an interactive manager without a subcommand on a terminal)
   tools        List the profile's tools and explain one (exposure, capabilities, approvals)
@@ -11942,6 +11943,222 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus providers help help
 ```
 
+## `prometheus moa`
+
+```text
+List, create, update and delete Mixture of Agents presets (`[moa.presets.<name>]`)
+
+Usage: prometheus moa [OPTIONS] <COMMAND>
+
+Commands:
+  list       List the presets: the aggregator acts and is billed, the references advise on their cadence
+  configure  Create or update a preset with the model picker (default: the preset `moa.default_preset` names)
+  delete     Delete a configured preset (never the default one)
+  help       Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus moa list`
+
+```text
+List the presets: the aggregator acts and is billed, the references advise on their cadence
+
+Usage: prometheus moa list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus moa configure`
+
+```text
+Create or update a preset with the model picker (default: the preset `moa.default_preset` names)
+
+Usage: prometheus moa configure [OPTIONS] [NAME]
+
+Arguments:
+  [NAME]
+          The preset name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus moa delete`
+
+```text
+Delete a configured preset (never the default one)
+
+Usage: prometheus moa delete [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The preset name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus moa help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus moa help [COMMAND]
+
+Commands:
+  list       List the presets: the aggregator acts and is billed, the references advise on their cadence
+  configure  Create or update a preset with the model picker (default: the preset `moa.default_preset` names)
+  delete     Delete a configured preset (never the default one)
+  help       Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus moa help list`
+
+```text
+List the presets: the aggregator acts and is billed, the references advise on their cadence
+
+Usage: prometheus moa help list
+```
+
+## `prometheus moa help configure`
+
+```text
+Create or update a preset with the model picker (default: the preset `moa.default_preset` names)
+
+Usage: prometheus moa help configure
+```
+
+## `prometheus moa help delete`
+
+```text
+Delete a configured preset (never the default one)
+
+Usage: prometheus moa help delete
+```
+
+## `prometheus moa help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus moa help help
+```
+
 ## `prometheus fallback`
 
 ```text
@@ -20353,6 +20570,7 @@ Commands:
   trajectory   Render the recorded trajectory of a session
   model        Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
   providers    Provider routing state: per-route health scores
+  moa          List, create, update and delete Mixture of Agents presets (`[moa.presets.<name>]`)
   fallback     List and edit the profile's fallback chain (`[[fallback.chain]]`)
   auth         Add, list and remove provider API keys and subscription sign-ins (an interactive manager without a subcommand on a terminal)
   tools        List the profile's tools and explain one (exposure, capabilities, approvals)
@@ -22179,6 +22397,43 @@ Health of every route called: success rate, errors by class, time to first token
 Usage: prometheus help providers health
 ```
 
+## `prometheus help moa`
+
+```text
+List, create, update and delete Mixture of Agents presets (`[moa.presets.<name>]`)
+
+Usage: prometheus help moa [COMMAND]
+
+Commands:
+  list       List the presets: the aggregator acts and is billed, the references advise on their cadence
+  configure  Create or update a preset with the model picker (default: the preset `moa.default_preset` names)
+  delete     Delete a configured preset (never the default one)
+```
+
+## `prometheus help moa list`
+
+```text
+List the presets: the aggregator acts and is billed, the references advise on their cadence
+
+Usage: prometheus help moa list
+```
+
+## `prometheus help moa configure`
+
+```text
+Create or update a preset with the model picker (default: the preset `moa.default_preset` names)
+
+Usage: prometheus help moa configure
+```
+
+## `prometheus help moa delete`
+
+```text
+Delete a configured preset (never the default one)
+
+Usage: prometheus help moa delete
+```
+
 ## `prometheus help fallback`
 
 ```text
@@ -23589,6 +23844,7 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.model_info.v1` | `prometheus model info` |
 | `prometheus.model_set.v1` | `prometheus model set` |
 | `prometheus.fallback.v1` | `prometheus fallback list` |
+| `prometheus.moa_presets.v1` | `prometheus moa list` |
 | `prometheus.auth.v1` | `prometheus auth list` |
 | `prometheus.auth_status.v1` | `prometheus auth status` |
 | `prometheus.tools.v1` | `prometheus tools list` |

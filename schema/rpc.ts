@@ -680,6 +680,88 @@ export interface MemorySummary {
   line?: string | null;
 }
 
+/** One preset as editors show it. */
+export interface MoaPresetInfo {
+  /** The model that acts with the tools and is billed. */
+  aggregator: MoaSlotInfo;
+  /** Temperature sent to the aggregator. */
+  aggregator_temperature?: number | null;
+  /** `Aggregator is on <provider>; ...` when it bills another provider than `model.provider`. */
+  billing_notice?: string | null;
+  /** The built-in `default`, not redefined in `config.toml`. */
+  builtin: boolean;
+  /** It is `moa.default_preset` (cannot be deleted). */
+  default: boolean;
+  /** `false`: the aggregator runs alone. */
+  enabled: boolean;
+  /** When the advisors run (`user_turn`, `per_iteration`, `every_n:N`). */
+  fanout: string;
+  /** The preset name (`/model <name>`, `moa/<name>`). */
+  name: string;
+  /** Temperature sent to the references. */
+  reference_temperature?: number | null;
+  /** The advisors. */
+  references: Array<MoaSlotInfo>;
+}
+
+/** A preset to write. */
+export interface MoaPresetInput {
+  /** The aggregator (never `moa`). */
+  aggregator: MoaSlotInfo;
+  /** Temperature sent to the aggregator (0.0-2.0). */
+  aggregator_temperature?: number | null;
+  /** Whether the references run (default `true`). */
+  enabled?: boolean | null;
+  /** The cadence (default `user_turn`). */
+  fanout?: string | null;
+  /** Temperature sent to the references (0.0-2.0). */
+  reference_temperature?: number | null;
+  /** The advisors (at least one). */
+  references: Array<MoaSlotInfo>;
+}
+
+/** `moa.presets.list` (and `put`, `delete`) result. */
+export interface MoaPresetList {
+  /** `moa.default_preset`. */
+  default_preset: string;
+  /** Every preset, sorted by name. */
+  presets: Array<MoaPresetInfo>;
+}
+
+/** `moa.presets.delete` params. */
+export interface MoaPresetsDeleteParams {
+  /** The preset name (never `moa.default_preset`). */
+  name: string;
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+}
+
+/** `moa.presets.list` params. */
+export interface MoaPresetsListParams {
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+}
+
+/** `moa.presets.put` params. */
+export interface MoaPresetsPutParams {
+  /** The preset name. */
+  name: string;
+  /** The preset. */
+  preset: MoaPresetInput;
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+}
+
+/** One preset slot. */
+export interface MoaSlotInfo {
+  /** Model id. */
+  model: string;
+  /** Provider id. */
+  provider: string;
+  /** `none`...`ultra`, when set. */
+  reasoning_effort?: string | null;
+}
+
 /** One `model.options` entry. */
 export interface ModelOption {
   /** The model's context window, when known. */
@@ -1285,6 +1367,9 @@ export interface Methods {
   "journey.list": { params: JourneyListParams; result: JourneyList };
   "lsp.status": { params: LspStatusParams; result: LspStatus };
   "memory.summary": { params: SessionRef; result: MemorySummary };
+  "moa.presets.delete": { params: MoaPresetsDeleteParams; result: MoaPresetList };
+  "moa.presets.list": { params: MoaPresetsListParams; result: MoaPresetList };
+  "moa.presets.put": { params: MoaPresetsPutParams; result: MoaPresetList };
   "model.options": { params: SessionRef; result: ModelOptions };
   "pairing.approve": { params: PairingApproveParams; result: PairingApproved };
   "prompt.submit": { params: SubmitParams; result: Submitted };
@@ -1365,9 +1450,6 @@ export const UNDECLARED = [
   "harness.diff",
   "harness.log",
   "harness.rollback",
-  "moa.presets.delete",
-  "moa.presets.list",
-  "moa.presets.put",
   "screen.handback",
   "screen.takeover",
   "subagent.subscribe",

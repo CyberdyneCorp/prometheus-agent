@@ -32,6 +32,9 @@ pub struct ExportOptions<'a> {
     pub with_blobs: bool,
     /// Scrub secrets before writing.
     pub redactor: Option<&'a Redactor>,
+    /// The profile's MoA traces directory (JSONL only): one `moa_trace`
+    /// record per traced MoA call of the session.
+    pub moa_traces: Option<&'a std::path::Path>,
 }
 
 /// The file extension of a format.
@@ -176,6 +179,9 @@ pub fn export(
         match options.format {
             ExportFormat::Jsonl => {
                 jsonl(store, &session, visibility, &mut sink)?;
+                if let Some(dir) = options.moa_traces {
+                    moa_traces(dir, &session, &mut sink)?;
+                }
                 if options.with_blobs {
                     blobs(store, &session, &mut written_blobs, &mut sink)?;
                 }
@@ -212,6 +218,22 @@ fn jsonl(
         "lineage_kind": session.lineage_kind.map(pmt_store::LineageKind::as_str),
         "root_session_id": session.root_session_id.to_string(),
     }))
+}
+
+/// The `moa_trace` records of `session` (spec: mixture-of-agents, MoA
+/// traces): its trace file's lines, as written.
+fn moa_traces(dir: &std::path::Path, session: &Session, sink: &mut Sink<'_>) -> Result<(), Error> {
+    let path = dir.join(format!("{}.jsonl", session.id));
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return Ok(());
+    };
+    for record in text
+        .lines()
+        .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+    {
+        sink.line(&json!({"type": "moa_trace", "trace": record}))?;
+    }
+    Ok(())
 }
 
 /// The `blob_ref` records of `session` and a `blob` record for each blob

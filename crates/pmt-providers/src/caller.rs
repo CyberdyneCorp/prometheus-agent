@@ -152,6 +152,7 @@ pub struct ModelCaller {
     hooks: Option<Arc<dyn CredentialHooks>>,
     classifier: Option<Arc<dyn ErrorClassifier>>,
     observer: Option<Arc<dyn CallObserver>>,
+    mixture: Arc<crate::moa::Mixture>,
 }
 
 impl std::fmt::Debug for ModelCaller {
@@ -172,6 +173,9 @@ pub struct Called {
     pub route: Route,
     /// Fallback activations on the way (each one a `provider.fallback`).
     pub fallbacks: Vec<Activated>,
+    /// The advisor blocks a MoA call shows (privacy-filtered), when its
+    /// references ran.
+    pub advice: Vec<String>,
 }
 
 /// A call that failed on every route it could use.
@@ -231,7 +235,21 @@ impl ModelCaller {
             hooks: None,
             classifier: None,
             observer: None,
+            mixture: Arc::default(),
         }
+    }
+
+    /// Keeps the profile's Mixture of Agents state in `mixture` (traces,
+    /// known secrets, per-session cadence).
+    #[must_use]
+    pub fn with_mixture(mut self, mixture: Arc<crate::moa::Mixture>) -> Self {
+        self.mixture = mixture;
+        self
+    }
+
+    /// The profile's Mixture of Agents state.
+    pub(crate) fn mixture(&self) -> &crate::moa::Mixture {
+        &self.mixture
     }
 
     /// Tells `observer` the outcome of every call sent.
@@ -392,7 +410,7 @@ impl ModelCaller {
 
     /// [`Self::send`], telling classification hooks the route's context
     /// window.
-    async fn send_sized(
+    pub(crate) async fn send_sized(
         &self,
         route: &Route,
         request: &Request,
@@ -454,33 +472,23 @@ impl ModelCaller {
         ctx: Option<&CallContext>,
     ) -> Result<Called, CallError> {
         let current = state.current();
+        let acting = current.acting();
         let (meta, _) =
             walk.catalog
-                .metadata_at(&current.provider, &current.model, Some(&current.base_url));
+                .metadata_at(&acting.provider, &acting.model, Some(&acting.base_url));
         capability::check(&current.label(), &meta, &walk.needs).map_err(CallError::Refused)?;
         let mut fallbacks = Vec::new();
         let mut first: Option<(ProviderError, Route)> = None;
         loop {
             let route = state.current().clone();
-            let fitted = fit_reasoning(request, &route, walk.catalog);
-            let (meta, _) =
-                walk.catalog
-                    .metadata_at(&route.provider, &route.model, Some(&route.base_url));
-            match self
-                .send_sized(
-                    &route,
-                    fitted.as_ref().unwrap_or(request),
-                    ctx,
-                    Some(meta.context_window),
-                )
-                .await
-            {
-                Ok(stream) => {
+            match self.send_route(&route, request, ctx, walk).await {
+                Ok((stream, advice)) => {
                     state.primary_succeeded();
                     return Ok(Called {
                         stream,
                         route,
                         fallbacks,
+                        advice,
                     });
                 }
                 Err(error) => {
@@ -509,6 +517,35 @@ impl ModelCaller {
     }
 }
 
+impl ModelCaller {
+    /// One send on `route`: a MoA preset runs its references and
+    /// aggregator, any other route takes the request as it is.
+    async fn send_route(
+        &self,
+        route: &Route,
+        request: &Request,
+        ctx: Option<&CallContext>,
+        walk: &Walk<'_>,
+    ) -> Result<(ModelStream, Vec<String>), ProviderError> {
+        if crate::moa::serves(route) {
+            return self.send_moa(route, request, ctx, walk).await;
+        }
+        let fitted = fit_reasoning(request, route, walk.catalog);
+        let (meta, _) =
+            walk.catalog
+                .metadata_at(&route.provider, &route.model, Some(&route.base_url));
+        let stream = self
+            .send_sized(
+                route,
+                fitted.as_ref().unwrap_or(request),
+                ctx,
+                Some(meta.context_window),
+            )
+            .await?;
+        Ok((stream, Vec::new()))
+    }
+}
+
 /// The provider's error code in a JSON error body (`error.code`, else
 /// `error.type`).
 fn error_code(body: &str) -> Option<String> {
@@ -524,7 +561,11 @@ fn error_code(body: &str) -> Option<String> {
 /// `request` with its reasoning level clamped to what `route`'s model
 /// supports, when that differs (a fallback route may reason less, or not
 /// at all); `None` when the request fits as it is.
-fn fit_reasoning(request: &Request, route: &Route, catalog: &Catalog) -> Option<Request> {
+pub(crate) fn fit_reasoning(
+    request: &Request,
+    route: &Route,
+    catalog: &Catalog,
+) -> Option<Request> {
     let level = request.reasoning?;
     let (meta, _) = catalog.metadata_at(&route.provider, &route.model, Some(&route.base_url));
     let (sent, _) = crate::reasoning::clamp(level, &meta);

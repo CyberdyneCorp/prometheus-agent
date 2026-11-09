@@ -43,6 +43,16 @@ static ATTRIBUTION: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?m)^\[([^|\]\n]*)\|([^\]\n|]+)\]").expect("valid attribution pattern")
 });
 
+/// `text` with every email address and delimited phone number replaced
+/// (`[REDACTED:email]`, `[REDACTED:phone]`), without the profile owner's
+/// exemption or user-id hashing: what an advisor privacy filter needs
+/// (spec: mixture-of-agents, Privacy filter for advisor outputs).
+#[must_use]
+pub fn redact_contacts(text: &str) -> String {
+    let out = EMAIL_ADDRESS.replace_all(text, EMAIL);
+    PHONE_NUMBER.replace_all(&out, PHONE).into_owned()
+}
+
 /// One profile's PII redaction.
 pub struct Pii {
     key: [u8; 32],

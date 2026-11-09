@@ -1949,6 +1949,248 @@
       },
       "type": "object"
     },
+    "MoaPresetInfo": {
+      "additionalProperties": false,
+      "description": "One preset as editors show it.",
+      "properties": {
+        "aggregator": {
+          "$ref": "#/$defs/MoaSlotInfo",
+          "description": "The model that acts with the tools and is billed."
+        },
+        "aggregator_temperature": {
+          "default": null,
+          "description": "Temperature sent to the aggregator.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "billing_notice": {
+          "default": null,
+          "description": "`Aggregator is on <provider>; ...` when it bills another provider\nthan `model.provider`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "builtin": {
+          "description": "The built-in `default`, not redefined in `config.toml`.",
+          "type": "boolean"
+        },
+        "default": {
+          "description": "It is `moa.default_preset` (cannot be deleted).",
+          "type": "boolean"
+        },
+        "enabled": {
+          "description": "`false`: the aggregator runs alone.",
+          "type": "boolean"
+        },
+        "fanout": {
+          "description": "When the advisors run (`user_turn`, `per_iteration`, `every_n:N`).",
+          "type": "string"
+        },
+        "name": {
+          "description": "The preset name (`/model <name>`, `moa/<name>`).",
+          "type": "string"
+        },
+        "reference_temperature": {
+          "default": null,
+          "description": "Temperature sent to the references.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "references": {
+          "description": "The advisors.",
+          "items": {
+            "$ref": "#/$defs/MoaSlotInfo"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "default",
+        "builtin",
+        "enabled",
+        "aggregator",
+        "references",
+        "fanout"
+      ],
+      "type": "object"
+    },
+    "MoaPresetInput": {
+      "additionalProperties": false,
+      "description": "A preset to write.",
+      "properties": {
+        "aggregator": {
+          "$ref": "#/$defs/MoaSlotInfo",
+          "description": "The aggregator (never `moa`)."
+        },
+        "aggregator_temperature": {
+          "default": null,
+          "description": "Temperature sent to the aggregator (0.0-2.0).",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "enabled": {
+          "default": null,
+          "description": "Whether the references run (default `true`).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "fanout": {
+          "default": null,
+          "description": "The cadence (default `user_turn`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reference_temperature": {
+          "default": null,
+          "description": "Temperature sent to the references (0.0-2.0).",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "references": {
+          "description": "The advisors (at least one).",
+          "items": {
+            "$ref": "#/$defs/MoaSlotInfo"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "references",
+        "aggregator"
+      ],
+      "type": "object"
+    },
+    "MoaPresetList": {
+      "additionalProperties": false,
+      "description": "`moa.presets.list` (and `put`, `delete`) result.",
+      "properties": {
+        "default_preset": {
+          "description": "`moa.default_preset`.",
+          "type": "string"
+        },
+        "presets": {
+          "description": "Every preset, sorted by name.",
+          "items": {
+            "$ref": "#/$defs/MoaPresetInfo"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "default_preset",
+        "presets"
+      ],
+      "type": "object"
+    },
+    "MoaPresetsDeleteParams": {
+      "additionalProperties": false,
+      "description": "`moa.presets.delete` params.",
+      "properties": {
+        "name": {
+          "description": "The preset name (never `moa.default_preset`).",
+          "type": "string"
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "MoaPresetsListParams": {
+      "additionalProperties": false,
+      "description": "`moa.presets.list` params.",
+      "properties": {
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "MoaPresetsPutParams": {
+      "additionalProperties": false,
+      "description": "`moa.presets.put` params.",
+      "properties": {
+        "name": {
+          "description": "The preset name.",
+          "type": "string"
+        },
+        "preset": {
+          "$ref": "#/$defs/MoaPresetInput",
+          "description": "The preset."
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "preset"
+      ],
+      "type": "object"
+    },
+    "MoaSlotInfo": {
+      "additionalProperties": false,
+      "description": "One preset slot.",
+      "properties": {
+        "model": {
+          "description": "Model id.",
+          "type": "string"
+        },
+        "provider": {
+          "description": "Provider id.",
+          "type": "string"
+        },
+        "reasoning_effort": {
+          "default": null,
+          "description": "`none`...`ultra`, when set.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "provider",
+        "model"
+      ],
+      "type": "object"
+    },
     "ModelOption": {
       "additionalProperties": false,
       "description": "One `model.options` entry.",
@@ -4073,18 +4315,33 @@
       "since": "1.0"
     },
     "moa.presets.delete": {
-      "declared": false,
       "owner": "mixture-of-agents",
+      "params": {
+        "$ref": "#/$defs/MoaPresetsDeleteParams"
+      },
+      "result": {
+        "$ref": "#/$defs/MoaPresetList"
+      },
       "since": "1.0"
     },
     "moa.presets.list": {
-      "declared": false,
       "owner": "mixture-of-agents",
+      "params": {
+        "$ref": "#/$defs/MoaPresetsListParams"
+      },
+      "result": {
+        "$ref": "#/$defs/MoaPresetList"
+      },
       "since": "1.0"
     },
     "moa.presets.put": {
-      "declared": false,
       "owner": "mixture-of-agents",
+      "params": {
+        "$ref": "#/$defs/MoaPresetsPutParams"
+      },
+      "result": {
+        "$ref": "#/$defs/MoaPresetList"
+      },
       "since": "1.0"
     },
     "model.options": {

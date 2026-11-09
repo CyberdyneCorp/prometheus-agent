@@ -241,6 +241,13 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::providers_cmd::ProvidersCommand,
     },
+    /// List, create, update and delete Mixture of Agents presets
+    /// (`[moa.presets.<name>]`).
+    Moa {
+        /// The moa subcommand.
+        #[command(subcommand)]
+        command: crate::moa_cmd::MoaCommand,
+    },
     /// List and edit the profile's fallback chain (`[[fallback.chain]]`).
     Fallback {
         /// The fallback subcommand.
