@@ -287,7 +287,7 @@ remote service.
 ```console
 $ prometheus config set terminal.backend acmebox
 $ prometheus config validate   # exits 78
-error: unknown terminal backend 'acmebox'; available: local, container, ssh
+error: unknown terminal backend 'acmebox'; available: local, container, ssh, singularity
 $ prometheus config set terminal.backend local
 $ prometheus config validate
 <...>config.toml is valid
