@@ -76,6 +76,26 @@ fn recover_is_refused_while_a_daemon_serves_the_profile() {
     drop(daemon);
 }
 
+#[cfg(feature = "gateway")]
+#[test]
+fn journal_mode_is_refused_while_a_daemon_serves_the_profile() {
+    // Switching the journal mode under an open connection would leave the
+    // daemon on the old mode, so it is an offline-only operation.
+    let home = mock_home();
+    ok(&run(home.path(), &["-z", "hello"]));
+    let daemon = common::daemon::start(home.path(), &[]);
+    let pid = common::daemon::record(home.path()).process.pid;
+    let out = run(home.path(), &["sessions", "journal-mode", "delete"]);
+    assert_eq!(out.status.code(), Some(75), "{}", stderr(&out));
+    assert!(stderr(&out).contains(&pid.to_string()), "{}", stderr(&out));
+    drop(daemon);
+    let db = rusqlite::Connection::open(profile_dir(home.path()).join("state.db")).unwrap();
+    let mode: String = db
+        .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(mode, "wal", "the mode is unchanged");
+}
+
 #[test]
 fn the_journal_mode_is_recorded_in_the_store_and_reapplied_on_open() {
     let home = mock_home();
