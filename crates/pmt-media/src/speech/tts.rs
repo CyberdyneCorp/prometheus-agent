@@ -267,7 +267,14 @@ pub async fn speak(
         _ if voice.command.is_some() => super::command_tts::speak(setup, state, voice, text).await,
         "edge" => {
             let speed = options.speed.unwrap_or(1.0);
-            super::edge::synthesize(&voice.base_url, text, &voice.voice, speed).await
+            super::edge::synthesize(
+                &voice.base_url,
+                &setup.config().network,
+                text,
+                &voice.voice,
+                speed,
+            )
+            .await
         }
         "elevenlabs" => elevenlabs(setup, voice, text, options).await,
         "gemini" => gemini(setup, voice, text).await,

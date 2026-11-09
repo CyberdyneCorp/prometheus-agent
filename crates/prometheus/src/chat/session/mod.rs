@@ -568,6 +568,7 @@ impl Factory {
         let at = place::At { vision, ..at };
         let environment =
             self.environment(&session, target, &capabilities, &current, &skills, &at)?;
+        media::prime(&id.to_string()).await;
         let memory = self.memory_for(id, &model, announce).await?;
         let summarizer = self.models.summarizer(&model, id);
         let cards = shows_cards(self.options.interactive, &session_surface);

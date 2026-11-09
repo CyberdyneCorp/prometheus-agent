@@ -709,7 +709,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `stt.openai.model` | string | unset | any | `next_session` | The model (unset: the provider's default). |
 | `stt.openai.timeout_secs` | integer | unset | ≥ 1 | `next_session` | Bound on one request (unset: the provider's default). |
 | `stt.provider` | string | unset | any | `next_session` | The transcription provider: `local`, `whisper-cpp`, `groq`, `openai`, `mistral`, `xai`, `elevenlabs`, `deepinfra`, `nous`, a `[stt.providers.<name>]` command or a plugin's. Set: used strictly; unset: the first available, local engines first. |
-| `stt.providers.<name>.command` | string | `""` | any | `next_session` | The command: `{input_path}`, `{output_path}`, `{output_dir}`, `{format}`, `{language}` and `{model}` are replaced by shell-quoted values; `{{` and `}}` are literal braces. The transcript is read from `{output_path}` when written, else stdout. |
+| `stt.providers.<name>.command` | string | `""` | any | `next_session` | The command: `{input_path}`, `{output_path}`, `{output_dir}`, `{format}`, `{language}` and `{model}` are replaced by values quoted for their position in the shell that runs it (the session's sh, bash or PowerShell; cmd.exe for voice messages on Windows); `{{` and `}}` are literal braces. The transcript is read from `{output_path}` when written, else stdout. |
 | `stt.providers.<name>.format` | one of "txt", "json", "srt", "vtt" | `"txt"` | `"txt"`, `"json"`, `"srt"`, `"vtt"` | `next_session` | The transcript format. |
 | `stt.providers.<name>.language` | string | unset | any | `next_session` | `{language}` (unset: `stt.language`). |
 | `stt.providers.<name>.model` | string | unset | any | `next_session` | `{model}`. |
@@ -839,7 +839,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `tts.piper.model` | string | unset | any | `next_session` | The model. |
 | `tts.piper.voice` | string | unset | any | `next_session` | The voice. |
 | `tts.provider` | string | unset | any | `next_session` | The speech provider: `edge` (default, keyless), `elevenlabs`, `openai`, `gemini`, `xai`, `mistral`, `minimax`, `deepinfra`, `nous`, the local engines `piper`, `kittentts`, `neutts`, a `[tts.providers.<name>]` command or a plugin's. |
-| `tts.providers.<name>.command` | string | `""` | any | `next_session` | The command: `{input_path}` (alias `{text_path}`), `{output_path}`, `{format}`, `{voice}` and `{model}` are replaced by shell-quoted values; `{{` and `}}` are literal braces. |
+| `tts.providers.<name>.command` | string | `""` | any | `next_session` | The command: `{input_path}` (alias `{text_path}`), `{output_path}`, `{format}`, `{voice}` and `{model}` are replaced by values quoted for their position in the shell that runs it (the session's sh, bash or PowerShell; cmd.exe for voice messages on Windows); `{{` and `}}` are literal braces. |
 | `tts.providers.<name>.max_text_length` | integer | `5000` | ≥ 1 | `next_session` | Characters per run; longer text is split. |
 | `tts.providers.<name>.model` | string | unset | any | `next_session` | `{model}`. |
 | `tts.providers.<name>.output_format` | one of "mp3", "wav", "ogg", "flac", "m4a", "aac", "amr", "opus" | `"mp3"` | `"mp3"`, `"wav"`, `"ogg"`, `"flac"`, `"m4a"`, `"aac"`, `"amr"`, `"opus"` | `next_session` | The format the command writes. |

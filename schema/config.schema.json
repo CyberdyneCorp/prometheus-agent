@@ -1177,7 +1177,7 @@
       "properties": {
         "command": {
           "default": "",
-          "description": "The command: `{input_path}`, `{output_path}`, `{output_dir}`,\n`{format}`, `{language}` and `{model}` are replaced by shell-quoted\nvalues; `{{` and `}}` are literal braces. The transcript is read\nfrom `{output_path}` when written, else stdout.",
+          "description": "The command: `{input_path}`, `{output_path}`, `{output_dir}`,\n`{format}`, `{language}` and `{model}` are replaced by values quoted\nfor their position in the shell that runs it (the session's sh,\nbash or PowerShell; cmd.exe for voice messages on Windows); `{{` and\n`}}` are literal braces. The transcript is read\nfrom `{output_path}` when written, else stdout.",
           "type": "string"
         },
         "format": {
@@ -1225,7 +1225,7 @@
       "properties": {
         "command": {
           "default": "",
-          "description": "The command: `{input_path}` (alias `{text_path}`), `{output_path}`,\n`{format}`, `{voice}` and `{model}` are replaced by shell-quoted\nvalues; `{{` and `}}` are literal braces.",
+          "description": "The command: `{input_path}` (alias `{text_path}`), `{output_path}`,\n`{format}`, `{voice}` and `{model}` are replaced by values quoted\nfor their position in the shell that runs it (the session's sh,\nbash or PowerShell; cmd.exe for voice messages on Windows); `{{` and\n`}}` are literal braces.",
           "type": "string"
         },
         "max_text_length": {

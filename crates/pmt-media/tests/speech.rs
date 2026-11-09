@@ -20,35 +20,119 @@ use tokio_tungstenite::tungstenite::Message;
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-/// A read-aloud server: records each SSML message and answers MP3 audio
-/// frames then `turn.end`.
+/// Serves one read-aloud connection: records each SSML message and
+/// answers MP3 audio frames then `turn.end`.
+async fn serve_edge<S>(stream: S, seen: Arc<Mutex<Vec<String>>>)
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    let mut socket = tokio_tungstenite::accept_async(stream).await.unwrap();
+    while let Some(Ok(Message::Text(text))) = socket.next().await {
+        if !text.contains("Path:ssml") {
+            continue;
+        }
+        seen.lock().unwrap().push(text.to_string());
+        let header = b"Path:audio\r\n";
+        let mut frame = u16::try_from(header.len()).unwrap().to_be_bytes().to_vec();
+        frame.extend_from_slice(header);
+        frame.extend_from_slice(b"ID3edge-mp3");
+        socket.send(Message::binary(frame)).await.unwrap();
+        socket
+            .send(Message::text("Path:turn.end\r\n\r\n{}"))
+            .await
+            .unwrap();
+    }
+}
+
+/// A plain read-aloud server.
 async fn edge_server(seen: Arc<Mutex<Vec<String>>>) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     tokio::spawn(async move {
         while let Ok((stream, _)) = listener.accept().await {
-            let seen = Arc::clone(&seen);
+            tokio::spawn(serve_edge(stream, Arc::clone(&seen)));
+        }
+    });
+    format!("ws://{address}/readaloud")
+}
+
+/// A read-aloud server speaking TLS as `speech.test` with a certificate
+/// of a private CA: its loopback port and the CA's PEM.
+async fn private_ca_edge_server(seen: Arc<Mutex<Vec<String>>>) -> (u16, String) {
+    use rcgen::{BasicConstraints, CertificateParams, CertifiedIssuer, IsCa, KeyPair};
+    let mut ca_params = CertificateParams::new(Vec::<String>::new()).unwrap();
+    ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+    let ca = CertifiedIssuer::self_signed(ca_params, KeyPair::generate().unwrap()).unwrap();
+    let leaf_key = KeyPair::generate().unwrap();
+    let leaf = CertificateParams::new(vec!["speech.test".into()])
+        .unwrap()
+        .signed_by(&leaf_key, &ca)
+        .unwrap();
+    let key = rustls::pki_types::PrivateKeyDer::try_from(leaf_key.serialize_der()).unwrap();
+    let config = rustls::ServerConfig::builder_with_provider(Arc::new(
+        rustls::crypto::ring::default_provider(),
+    ))
+    .with_safe_default_protocol_versions()
+    .unwrap()
+    .with_no_client_auth()
+    .with_single_cert(vec![leaf.der().clone()], key)
+    .unwrap();
+    let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(config));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    tokio::spawn(async move {
+        while let Ok((tcp, _)) = listener.accept().await {
+            let (acceptor, seen) = (acceptor.clone(), Arc::clone(&seen));
             tokio::spawn(async move {
-                let mut socket = tokio_tungstenite::accept_async(stream).await.unwrap();
-                while let Some(Ok(Message::Text(text))) = socket.next().await {
-                    if !text.contains("Path:ssml") {
-                        continue;
-                    }
-                    seen.lock().unwrap().push(text.to_string());
-                    let header = b"Path:audio\r\n";
-                    let mut frame = u16::try_from(header.len()).unwrap().to_be_bytes().to_vec();
-                    frame.extend_from_slice(header);
-                    frame.extend_from_slice(b"ID3edge-mp3");
-                    socket.send(Message::binary(frame)).await.unwrap();
-                    socket
-                        .send(Message::text("Path:turn.end\r\n\r\n{}"))
-                        .await
-                        .unwrap();
+                if let Ok(tls) = acceptor.accept(tcp).await {
+                    serve_edge(tls, seen).await;
                 }
             });
         }
     });
-    format!("ws://{address}/readaloud")
+    (port, ca.pem())
+}
+
+/// An HTTP proxy that records each `CONNECT` target and tunnels it to
+/// `127.0.0.1:<port>` (so `speech.test` needs no DNS): its URL.
+async fn connect_proxy(port: u16, targets: Arc<Mutex<Vec<String>>>) -> String {
+    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut client, _)) = listener.accept().await {
+            let targets = Arc::clone(&targets);
+            tokio::spawn(async move {
+                let mut head = Vec::new();
+                let mut byte = [0u8; 1];
+                while !head.ends_with(b"\r\n\r\n") {
+                    if client.read(&mut byte).await.unwrap_or(0) == 0 {
+                        return;
+                    }
+                    head.push(byte[0]);
+                }
+                let head = String::from_utf8_lossy(&head).into_owned();
+                let mut words = head.split_whitespace();
+                if words.next() != Some("CONNECT") {
+                    let _ = client.write_all(b"HTTP/1.1 405 Only CONNECT\r\n\r\n").await;
+                    return;
+                }
+                targets
+                    .lock()
+                    .unwrap()
+                    .push(words.next().unwrap_or_default().to_owned());
+                let mut upstream = tokio::net::TcpStream::connect(("127.0.0.1", port))
+                    .await
+                    .unwrap();
+                client
+                    .write_all(b"HTTP/1.1 200 Connection established\r\n\r\n")
+                    .await
+                    .unwrap();
+                let _ = tokio::io::copy_bidirectional(&mut client, &mut upstream).await;
+            });
+        }
+    });
+    format!("http://{address}")
 }
 
 #[tokio::test]
@@ -69,6 +153,49 @@ async fn zero_config_speech_uses_edge_and_aria() {
     assert_eq!(details(&text)["voice_compatible"], false);
     assert!(seen.lock().unwrap()[0].contains("<voice name='en-US-AriaNeural'>"));
     assert_eq!(result.metadata[BILLING_SOURCE], "keyless:edge");
+}
+
+#[tokio::test]
+async fn edge_speech_goes_through_the_network_proxy_and_trusts_the_extra_ca() {
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let (port, ca_pem) = private_ca_edge_server(Arc::clone(&seen)).await;
+    let targets = Arc::new(Mutex::new(Vec::new()));
+    let proxy = connect_proxy(port, Arc::clone(&targets)).await;
+    let mut config = Config::default();
+    config.network.proxy = Some(proxy);
+    let mut rig = Rig::new(config).at("edge", &format!("wss://speech.test:{port}/readaloud"));
+    let speak = |rig: &Rig| {
+        let session = rig.session();
+        async move {
+            session
+                .text_to_speech(&json!({"text": "Through the proxy."}))
+                .await
+        }
+    };
+
+    // Without network.extra_ca_file the private CA is not trusted.
+    let refused = speak(&rig).await;
+    assert_eq!(refused.status, Status::Error, "{}", refused.text_content());
+    assert!(
+        refused.text_content().contains("TLS"),
+        "{}",
+        refused.text_content()
+    );
+    assert!(seen.lock().unwrap().is_empty());
+
+    let ca_file = rig.profile.join("corp-ca.pem");
+    std::fs::write(&ca_file, ca_pem).unwrap();
+    rig.config.network.extra_ca_file = Some(ca_file.display().to_string());
+    let result = speak(&rig).await;
+    assert_eq!(result.status, Status::Ok, "{}", result.text_content());
+    assert_eq!(
+        std::fs::read(media_path(&result.text_content())).unwrap(),
+        b"ID3edge-mp3"
+    );
+    assert_eq!(seen.lock().unwrap().len(), 1);
+    // Both connections were tunnelled; none went direct.
+    let expected = format!("speech.test:{port}");
+    assert_eq!(*targets.lock().unwrap(), vec![expected.clone(), expected]);
 }
 
 #[tokio::test]

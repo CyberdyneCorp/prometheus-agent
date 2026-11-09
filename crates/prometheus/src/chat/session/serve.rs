@@ -74,6 +74,7 @@ impl Factory {
             &skills,
             &super::place::At::open(&self.options.cwd, None),
         )?;
+        super::media::prime(&id.to_string()).await;
         let gate = self.gate(id, None, None)?.gate;
         // No one can answer a prompt: a call that needs approval is denied.
         let mut approvals = self.scope.config().approvals.clone();

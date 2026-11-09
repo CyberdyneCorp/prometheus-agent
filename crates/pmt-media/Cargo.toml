@@ -19,12 +19,10 @@ pmt-providers.workspace = true
 pmt-tools.workspace = true
 regex.workspace = true
 reqwest.workspace = true
-rustls.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 tokio = { workspace = true, features = ["process", "io-util", "net", "fs"] }
-tokio-rustls.workspace = true
 tokio-tungstenite.workspace = true
 tracing.workspace = true
 ulid.workspace = true
@@ -36,7 +34,10 @@ nix = { workspace = true, features = ["signal", "process"] }
 [dev-dependencies]
 futures-util.workspace = true
 jiff.workspace = true
+rcgen.workspace = true
+rustls.workspace = true
 tempfile.workspace = true
+tokio-rustls.workspace = true
 wiremock.workspace = true
 
 [lints]

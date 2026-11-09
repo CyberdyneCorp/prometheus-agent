@@ -46,6 +46,7 @@ pub async fn speak(
     let line = render(
         &config.command,
         &command_values(voice, &input, &output, format),
+        setup.runner.syntax(),
     )
     .map_err(|why| format!("tts.providers.{}.command: {why}", voice.provider))?;
     let ran = command::run(setup.runner.as_ref(), &line, &setup.workspace, idle, true)

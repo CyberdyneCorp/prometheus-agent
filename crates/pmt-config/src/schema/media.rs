@@ -377,8 +377,10 @@ pub struct CommandTtsConfig {
     #[serde(rename = "type")]
     pub kind: SpeechProviderType,
     /// The command: `{input_path}` (alias `{text_path}`), `{output_path}`,
-    /// `{format}`, `{voice}` and `{model}` are replaced by shell-quoted
-    /// values; `{{` and `}}` are literal braces.
+    /// `{format}`, `{voice}` and `{model}` are replaced by values quoted
+    /// for their position in the shell that runs it (the session's sh,
+    /// bash or PowerShell; cmd.exe for voice messages on Windows); `{{` and
+    /// `}}` are literal braces.
     pub command: String,
     /// Idle deadline: any output resets it.
     #[schemars(range(min = 1))]
@@ -636,8 +638,10 @@ pub struct CommandSttConfig {
     #[serde(rename = "type")]
     pub kind: SpeechProviderType,
     /// The command: `{input_path}`, `{output_path}`, `{output_dir}`,
-    /// `{format}`, `{language}` and `{model}` are replaced by shell-quoted
-    /// values; `{{` and `}}` are literal braces. The transcript is read
+    /// `{format}`, `{language}` and `{model}` are replaced by values quoted
+    /// for their position in the shell that runs it (the session's sh,
+    /// bash or PowerShell; cmd.exe for voice messages on Windows); `{{` and
+    /// `}}` are literal braces. The transcript is read
     /// from `{output_path}` when written, else stdout.
     pub command: String,
     /// Bound on one run.

@@ -18,7 +18,7 @@ use pmt_tools::usage;
 use serde_json::{Value, json};
 
 use super::providers::{Aspect, Generated, Request, generate};
-use super::{Model, configured_provider, edit_capable, model_for, plan};
+use super::{Model, configured_provider, default_base, edit_capable, model_for, openrouter, plan};
 use crate::{MediaSession, MediaSessions};
 
 /// The tool's toolset.
@@ -191,6 +191,7 @@ impl MediaSession {
             Ok(plan) => plan,
             Err(why) => return ToolResult::error(format!("image_generate unavailable: {why}")),
         };
+        let plan = self.with_live_catalog(plan).await;
         let has_inputs = request.image_url.is_some() || !request.references.is_empty();
         if has_inputs && !plan.model.supports_edit {
             let hint = edit_capable(&plan.provider)
@@ -216,6 +217,37 @@ impl MediaSession {
                 ToolResult::error(format!("image_generate failed ({}): {why}", plan.provider))
             }
         }
+    }
+
+    /// Fetches what the session's tool surface depends on: OpenRouter's
+    /// live image catalog when `image_gen` resolves to `openrouter`
+    /// (bounded by [`openrouter::FETCH_TIMEOUT`]; failures leave the
+    /// built-in list).
+    pub async fn prime(&self) {
+        let setup = self.setup();
+        let config = setup.config();
+        let choice = setup.credentials.choose(
+            pmt_providers::auth::gateway::Category::ImageGeneration,
+            config.image_gen.provider.as_deref(),
+            pmt_config::image_models::DEFAULT_IMAGE_PROVIDER,
+        );
+        if choice.provider == openrouter::PROVIDER {
+            let base = setup.endpoint(openrouter::PROVIDER, default_base(openrouter::PROVIDER));
+            openrouter::prime(&setup.client, &base).await;
+        }
+    }
+
+    /// `plan` with its OpenRouter model as the live catalog describes it,
+    /// refreshing a stale catalog first.
+    async fn with_live_catalog(&self, mut plan: super::Plan) -> super::Plan {
+        if plan.provider != openrouter::PROVIDER || openrouter::fresh() {
+            return plan;
+        }
+        openrouter::prime(&self.setup().client, &plan.base_url).await;
+        if let Some(model) = model_for(self.setup().config(), &plan.provider) {
+            plan.model = model;
+        }
+        plan
     }
 
     /// A call to the provider an enabled plugin registered.

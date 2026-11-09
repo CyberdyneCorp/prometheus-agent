@@ -11,7 +11,7 @@ use std::sync::Arc;
 use pmt_config::ProfileScope;
 use pmt_gateway::messaging::adapter::AdapterFuture;
 use pmt_gateway::messaging::voice::Speech;
-use pmt_media::speech::command::CommandRunner;
+use pmt_media::speech::command::{CommandRunner, ShellSyntax};
 use pmt_media::{MediaSession, MediaSetup};
 
 /// Command speech providers run in a sandbox of the profile with
@@ -19,6 +19,14 @@ use pmt_media::{MediaSession, MediaSetup};
 struct ProfileRunner(ProfileScope);
 
 impl CommandRunner for ProfileRunner {
+    fn syntax(&self) -> ShellSyntax {
+        if cfg!(windows) {
+            ShellSyntax::Cmd
+        } else {
+            ShellSyntax::Posix
+        }
+    }
+
     fn command(&self, line: &str, cwd: &Path) -> Result<tokio::process::Command, String> {
         let (shell, flag) = if cfg!(windows) {
             ("cmd", "/C")

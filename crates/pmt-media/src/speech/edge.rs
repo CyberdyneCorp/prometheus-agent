@@ -5,17 +5,19 @@
 //! One synthesis is one connection: a `speech.config` message picks MP3
 //! output, an `ssml` message carries the text, and binary `Path:audio`
 //! frames bring the audio until `Path:turn.end`. Each connection carries
-//! the time-bound `Sec-MS-GEC` token the service expects.
+//! the time-bound `Sec-MS-GEC` token the service expects. Like every
+//! outbound client it goes through `network.proxy` (an HTTP `CONNECT`
+//! tunnel) and trusts `network.extra_ca_file` besides the platform store,
+//! so zero-config speech also works behind a TLS-inspecting proxy.
 
 use std::fmt::Write as _;
-use std::sync::Arc;
+use std::path::Path;
 
 use futures_util::{SinkExt as _, StreamExt as _};
+use pmt_config::schema::NetworkConfig;
+use pmt_net::stream::{Route, Stream};
 use sha2::{Digest as _, Sha256};
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::net::TcpStream;
-use tokio_rustls::TlsConnector;
-use tokio_rustls::rustls::pki_types::ServerName;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest as _;
 
@@ -64,9 +66,6 @@ pub fn ssml(text: &str, voice: &str, speed: f64) -> String {
     )
 }
 
-trait Io: AsyncRead + AsyncWrite + Unpin + Send {}
-impl<T: AsyncRead + AsyncWrite + Unpin + Send> Io for T {}
-
 fn timestamp() -> String {
     jiff::Timestamp::now()
         .strftime("%a %b %d %Y %H:%M:%S GMT+0000 (Coordinated Universal Time)")
@@ -74,13 +73,15 @@ fn timestamp() -> String {
 }
 
 /// Synthesizes `text` with `voice` at `speed` against `base` (the
-/// read-aloud endpoint or a test server): MP3 bytes.
+/// read-aloud endpoint or a test server), reached along `network`: MP3
+/// bytes.
 ///
 /// # Errors
 ///
 /// Connection, handshake or protocol failures; no audio.
 pub async fn synthesize(
     base: &str,
+    network: &NetworkConfig,
     text: &str,
     voice: &str,
     speed: f64,
@@ -102,7 +103,7 @@ pub async fn synthesize(
             .parse()
             .map_err(|_| "bad header")?,
     );
-    let mut socket = dial(request).await?;
+    let mut socket = dial(request, network).await?;
     let config = format!(
         "X-Timestamp:{}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n\
          {{\"context\":{{\"synthesis\":{{\"audio\":{{\"metadataoptions\":{{\"sentenceBoundaryEnabled\":\"false\",\"wordBoundaryEnabled\":\"false\"}},\"outputFormat\":\"audio-24khz-48kbitrate-mono-mp3\"}}}}}}}}",
@@ -151,27 +152,23 @@ where
 
 async fn dial(
     request: tokio_tungstenite::tungstenite::handshake::client::Request,
-) -> Result<tokio_tungstenite::WebSocketStream<Box<dyn Io>>, String> {
+    network: &NetworkConfig,
+) -> Result<tokio_tungstenite::WebSocketStream<Box<dyn Stream>>, String> {
     let uri = request.uri().clone();
-    let host = uri.host().ok_or("edge URL has no host")?.to_owned();
+    let host = uri
+        .host()
+        .ok_or("edge URL has no host")?
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .to_owned();
     let tls = uri.scheme_str() == Some("wss");
     let port = uri.port_u16().unwrap_or(if tls { 443 } else { 80 });
-    let tcp = TcpStream::connect((host.as_str(), port))
-        .await
-        .map_err(|e| format!("cannot reach {host}:{port}: {e}"))?;
-    let stream: Box<dyn Io> = if tls {
-        let config = pmt_net::tls::client_config(None).map_err(|e| e.to_string())?;
-        let name = ServerName::try_from(host.clone())
-            .map_err(|_| format!("{host} is not a valid TLS name"))?;
-        Box::new(
-            TlsConnector::from(Arc::new(config))
-                .connect(name, tcp)
-                .await
-                .map_err(|e| format!("TLS with {host} failed: {e}"))?,
-        )
-    } else {
-        Box::new(tcp)
+    let route = Route {
+        proxy: network.proxy.as_deref(),
+        extra_ca_file: network.extra_ca_file.as_deref().map(Path::new),
+        force_ipv4: network.force_ipv4,
     };
+    let stream = pmt_net::stream::open(&host, port, tls, route).await?;
     let (socket, _) = tokio_tungstenite::client_async(request, stream)
         .await
         .map_err(|e| format!("the edge handshake failed: {e}"))?;

@@ -4,8 +4,10 @@
 //! `[tts.providers.<name>]` and `[stt.providers.<name>]` run a shell
 //! command whose `{placeholders}` are replaced by values quoted for the
 //! quoting context they appear in (bare, inside single quotes, inside
-//! double quotes), so a path with spaces stays one argument; `{{` and `}}`
-//! are literal braces. Commands run through the session's
+//! double quotes) in the language of the shell that runs the line (POSIX
+//! sh, PowerShell or cmd.exe: [`CommandRunner::syntax`]), so a path with
+//! spaces stays one argument and no value is expanded; `{{` and `}}` are
+//! literal braces. Commands run through the session's
 //! [`CommandRunner`] (inside the execution sandbox under the profile's
 //! `process.spawn` grant); a timeout kills the whole process tree, and a
 //! non-zero exit, empty output or timeout fails with the stderr tail.
@@ -21,6 +23,9 @@ use super::audio::tail;
 
 /// Builds the confined command that runs one shell command line.
 pub trait CommandRunner: Send + Sync {
+    /// The language of the shell [`command`](Self::command) runs lines in.
+    fn syntax(&self) -> ShellSyntax;
+
     /// A command running `line` through the shell in `cwd`.
     ///
     /// # Errors
@@ -29,11 +34,30 @@ pub trait CommandRunner: Send + Sync {
     fn command(&self, line: &str, cwd: &Path) -> Result<tokio::process::Command, String>;
 }
 
+/// The quoting rules of the shell a command line runs in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShellSyntax {
+    /// `sh` and `bash`.
+    Posix,
+    /// PowerShell (Windows PowerShell 5 and `pwsh`).
+    PowerShell,
+    /// `cmd.exe /C`.
+    Cmd,
+}
+
 /// Runs command lines through the platform shell without confinement
 /// (tests, and hosts without a sandbox).
 pub struct PlainShell;
 
 impl CommandRunner for PlainShell {
+    fn syntax(&self) -> ShellSyntax {
+        if cfg!(windows) {
+            ShellSyntax::Cmd
+        } else {
+            ShellSyntax::Posix
+        }
+    }
+
     fn command(&self, line: &str, cwd: &Path) -> Result<tokio::process::Command, String> {
         let mut command = if cfg!(windows) {
             let mut c = tokio::process::Command::new("cmd");
@@ -57,14 +81,63 @@ enum Quote {
     Double,
 }
 
-fn quoted(value: &str, quote: Quote) -> String {
-    if cfg!(windows) {
-        // cmd.exe: double quotes, doubled inside.
-        return match quote {
-            Quote::Bare => format!("\"{}\"", value.replace('"', "\"\"")),
-            Quote::Single | Quote::Double => value.replace('"', "\"\""),
-        };
+/// PowerShell treats these typographic quotes like `'` and `"`.
+const PS_SINGLE: [char; 5] = ['\'', '\u{2018}', '\u{2019}', '\u{201A}', '\u{201B}'];
+const PS_DOUBLE: [char; 4] = ['"', '\u{201C}', '\u{201D}', '\u{201E}'];
+
+impl ShellSyntax {
+    /// `value` as a literal for a `quote` position: a bare value becomes
+    /// one quoted word; inside quotes only what would end the quotes or
+    /// expand is escaped.
+    fn quote(self, value: &str, quote: Quote) -> String {
+        match self {
+            Self::Posix => posix(value, quote),
+            Self::PowerShell => powershell(value, quote),
+            Self::Cmd => cmd(value, quote),
+        }
     }
+
+    /// Whether `c` starts a single-quoted string here.
+    fn single_quote(self, c: char) -> bool {
+        match self {
+            Self::Posix => c == '\'',
+            Self::PowerShell => PS_SINGLE.contains(&c),
+            Self::Cmd => false,
+        }
+    }
+
+    /// Whether `c` starts a double-quoted string here.
+    fn double_quote(self, c: char) -> bool {
+        match self {
+            Self::PowerShell => PS_DOUBLE.contains(&c),
+            Self::Posix | Self::Cmd => c == '"',
+        }
+    }
+
+    /// Whether `c` escapes the next template character in `quote`.
+    fn escapes(self, c: char, quote: Quote) -> bool {
+        match self {
+            Self::Posix => c == '\\' && quote != Quote::Single,
+            Self::PowerShell => c == '`' && quote != Quote::Single,
+            Self::Cmd => c == '^' && quote == Quote::Bare,
+        }
+    }
+
+    /// The quoting context after the template character `c`.
+    fn after(self, c: char, quote: Quote) -> Quote {
+        match quote {
+            Quote::Bare if self.single_quote(c) => Quote::Single,
+            Quote::Bare if self.double_quote(c) => Quote::Double,
+            Quote::Single if self.single_quote(c) => Quote::Bare,
+            Quote::Double if self.double_quote(c) => Quote::Bare,
+            other => other,
+        }
+    }
+}
+
+/// POSIX sh: single quotes are literal (a `'` is closed, escaped and
+/// reopened); inside double quotes `\`, `"`, `$` and `` ` `` are escaped.
+fn posix(value: &str, quote: Quote) -> String {
     match quote {
         Quote::Bare => format!("'{}'", value.replace('\'', r"'\''")),
         Quote::Single => value.replace('\'', r"'\''"),
@@ -78,56 +151,79 @@ fn quoted(value: &str, quote: Quote) -> String {
     }
 }
 
+/// PowerShell: single-quoted strings are literal (each single quote,
+/// typographic ones too, is doubled); inside double quotes the backtick
+/// escapes `` ` ``, `$` and the double quotes.
+fn powershell(value: &str, quote: Quote) -> String {
+    let single = |value: &str| {
+        value
+            .chars()
+            .flat_map(|c| {
+                if PS_SINGLE.contains(&c) {
+                    vec![c, c]
+                } else {
+                    vec![c]
+                }
+            })
+            .collect::<String>()
+    };
+    match quote {
+        Quote::Bare => format!("'{}'", single(value)),
+        Quote::Single => single(value),
+        Quote::Double => value
+            .chars()
+            .flat_map(|c| {
+                if c == '`' || c == '$' || PS_DOUBLE.contains(&c) {
+                    vec!['`', c]
+                } else {
+                    vec![c]
+                }
+            })
+            .collect(),
+    }
+}
+
+/// cmd.exe: inside double quotes `&|<>^` are literal and a `"` is
+/// doubled; `%` would still expand, so it is written outside the quotes
+/// as `^%` (`"a"^%"b"` reaches the program as `a%b`).
+fn cmd(value: &str, quote: Quote) -> String {
+    let inner = value.replace('"', "\"\"").replace('%', "\"^%\"");
+    match quote {
+        Quote::Bare => format!("\"{inner}\""),
+        // cmd has no single quotes: a `Single` position never occurs.
+        Quote::Single | Quote::Double => inner,
+    }
+}
+
 /// Renders `template` with `values` (`{name}`), each quoted for its
-/// context.
+/// context in `syntax`.
 ///
 /// # Errors
 ///
 /// An unknown or unclosed placeholder.
-pub fn render(template: &str, values: &BTreeMap<&str, String>) -> Result<String, String> {
+pub fn render(
+    template: &str,
+    values: &BTreeMap<&str, String>,
+    syntax: ShellSyntax,
+) -> Result<String, String> {
     let mut out = String::with_capacity(template.len());
     let mut quote = Quote::Bare;
     let mut chars = template.chars().peekable();
     while let Some(c) = chars.next() {
-        match c {
-            '{' if chars.peek() == Some(&'{') => {
-                chars.next();
-                out.push('{');
-            }
-            '}' if chars.peek() == Some(&'}') => {
-                chars.next();
-                out.push('}');
-            }
-            '{' => {
-                let name: String = chars.by_ref().take_while(|c| *c != '}').collect();
-                let value = values
-                    .get(name.as_str())
-                    .ok_or_else(|| format!("unknown placeholder {{{name}}}"))?;
-                out.push_str(&quoted(value, quote));
-            }
-            '\'' if quote != Quote::Double => {
-                quote = if quote == Quote::Single {
-                    Quote::Bare
-                } else {
-                    Quote::Single
-                };
-                out.push(c);
-            }
-            '"' if quote != Quote::Single => {
-                quote = if quote == Quote::Double {
-                    Quote::Bare
-                } else {
-                    Quote::Double
-                };
-                out.push(c);
-            }
-            '\\' if quote != Quote::Single => {
-                out.push(c);
-                if let Some(next) = chars.next() {
-                    out.push(next);
-                }
-            }
-            c => out.push(c),
+        if matches!(c, '{' | '}') && chars.next_if_eq(&c).is_some() {
+            out.push(c);
+        } else if c == '{' {
+            let name: String = chars.by_ref().take_while(|c| *c != '}').collect();
+            let value = values
+                .get(name.as_str())
+                .ok_or_else(|| format!("unknown placeholder {{{name}}}"))?;
+            out.push_str(&syntax.quote(value, quote));
+        } else if syntax.escapes(c, quote) {
+            out.push(c);
+            out.extend(chars.next());
+        } else {
+            out.push(c);
+            quote = syntax.after(c, quote);
         }
     }
     Ok(out)
@@ -240,24 +336,135 @@ mod tests {
         pairs.iter().map(|(k, v)| (*k, (*v).to_owned())).collect()
     }
 
-    #[cfg(unix)]
     #[test]
-    fn values_are_quoted_for_their_context() {
-        let v = values(&[("output_path", "/tmp/my out/a'b.mp3"), ("voice", "x\"$y")]);
+    fn posix_values_are_quoted_for_their_context() {
+        let v = values(&[
+            ("output_path", "/tmp/my out/a'b.mp3"),
+            ("voice", "x\"$y`z\\"),
+        ]);
+        let render = |t: &str| render(t, &v, ShellSyntax::Posix).unwrap();
         assert_eq!(
-            render("mytts --out {output_path}", &v).unwrap(),
+            render("mytts --out {output_path}"),
             r"mytts --out '/tmp/my out/a'\''b.mp3'"
         );
         assert_eq!(
-            render("mytts --out '{output_path}'", &v).unwrap(),
+            render("mytts --out '{output_path}'"),
             r"mytts --out '/tmp/my out/a'\''b.mp3'"
         );
         assert_eq!(
-            render("mytts --voice \"{voice}\"", &v).unwrap(),
-            r#"mytts --voice "x\"\$y""#
+            render("mytts --voice \"{voice}\""),
+            r#"mytts --voice "x\"\$y\`z\\""#
         );
-        assert_eq!(render("echo {{literal}}", &v).unwrap(), "echo {literal}");
-        assert!(render("x {nope}", &v).unwrap_err().contains("{nope}"));
+        assert_eq!(render(r"echo \'{voice}"), r#"echo \''x"$y`z\'"#);
+        assert_eq!(render("echo {{literal}}"), "echo {literal}");
+        assert!(
+            super::render("x {nope}", &v, ShellSyntax::Posix)
+                .unwrap_err()
+                .contains("{nope}")
+        );
+    }
+
+    #[test]
+    fn powershell_values_are_literal_in_every_context() {
+        let v = values(&[
+            ("output_path", r"C:\my out\it's ‘q’.mp3"),
+            ("voice", "a$env:HOME `n \"b\" “c”"),
+        ]);
+        let render = |t: &str| render(t, &v, ShellSyntax::PowerShell).unwrap();
+        assert_eq!(
+            render("mytts --out {output_path}"),
+            r"mytts --out 'C:\my out\it''s ‘‘q’’.mp3'"
+        );
+        assert_eq!(
+            render("mytts --out '{output_path}'"),
+            r"mytts --out 'C:\my out\it''s ‘‘q’’.mp3'"
+        );
+        assert_eq!(
+            render("mytts --voice \"{voice}\""),
+            "mytts --voice \"a`$env:HOME ``n `\"b`\" `“c`”\""
+        );
+        // A backtick escapes the next template character, not a quote.
+        assert_eq!(
+            render("echo `\"{voice}"),
+            "echo `\"'a$env:HOME `n \"b\" “c”'"
+        );
+        // A single-quoted template string is closed by its own `''`.
+        assert!(render("echo 'x''y' {voice}").ends_with("'a$env:HOME `n \"b\" “c”'"));
+    }
+
+    #[test]
+    fn cmd_values_keep_metacharacters_and_percent_literal() {
+        let v = values(&[
+            ("output_path", r"C:\my out\50%PATH%&x.mp3"),
+            ("voice", "say \"hi\""),
+        ]);
+        let render = |t: &str| render(t, &v, ShellSyntax::Cmd).unwrap();
+        assert_eq!(
+            render("mytts --out {output_path}"),
+            r#"mytts --out "C:\my out\50"^%"PATH"^%"&x.mp3""#
+        );
+        assert_eq!(
+            render("mytts --voice \"{voice}\""),
+            r#"mytts --voice "say ""hi""""#
+        );
+        // A single quote is an ordinary character in cmd.
+        assert_eq!(render("echo '{voice}'"), r#"echo '"say ""hi"""'"#);
+        assert_eq!(render("echo ^\"{voice}"), r#"echo ^""say ""hi""""#);
+    }
+
+    /// A rendered line run by the real shell hands the engine each value
+    /// unchanged, as one argument.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_rendered_posix_line_passes_values_through_unchanged() {
+        let dir = tempfile::tempdir().unwrap();
+        let value = "it's a \"$HOME\" `x` \\ path";
+        let v = values(&[("v", value)]);
+        for template in [
+            "printf '%s|' {v}",
+            "printf '%s|' '{v}'",
+            "printf '%s|' \"{v}\"",
+        ] {
+            let line = render(template, &v, ShellSyntax::Posix).unwrap();
+            let ran = run(&PlainShell, &line, dir.path(), Duration::from_secs(5), true)
+                .await
+                .unwrap();
+            assert_eq!(ran.stdout, format!("{value}|"), "{template}");
+        }
+    }
+
+    /// The same through Windows PowerShell, the shell Windows sessions
+    /// run command providers in.
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn a_rendered_powershell_line_passes_values_through_unchanged() {
+        struct Pwsh;
+        impl CommandRunner for Pwsh {
+            fn syntax(&self) -> ShellSyntax {
+                ShellSyntax::PowerShell
+            }
+            fn command(&self, line: &str, cwd: &Path) -> Result<tokio::process::Command, String> {
+                let mut c = tokio::process::Command::new("powershell");
+                c.args(["-NoProfile", "-NonInteractive", "-Command", line])
+                    .current_dir(cwd);
+                Ok(c)
+            }
+        }
+        let dir = tempfile::tempdir().unwrap();
+        // ASCII only: the console's code page would mangle other output.
+        let value = "it's \"a\" $HOME `n path";
+        let v = values(&[("v", value)]);
+        for template in [
+            "[Console]::Out.Write({v})",
+            "[Console]::Out.Write('{v}')",
+            "[Console]::Out.Write(\"{v}\")",
+        ] {
+            let line = render(template, &v, ShellSyntax::PowerShell).unwrap();
+            let ran = run(&Pwsh, &line, dir.path(), Duration::from_secs(60), true)
+                .await
+                .unwrap();
+            assert_eq!(ran.stdout, value, "{template}");
+        }
     }
 
     #[cfg(unix)]

@@ -144,6 +144,14 @@ pub fn credentials(scope: &ProfileScope) -> Credentials {
 struct SandboxRunner(super::env::Commands);
 
 impl pmt_media::speech::command::CommandRunner for SandboxRunner {
+    fn syntax(&self) -> pmt_media::speech::command::ShellSyntax {
+        if self.0.shell.kind.is_posix() {
+            pmt_media::speech::command::ShellSyntax::Posix
+        } else {
+            pmt_media::speech::command::ShellSyntax::PowerShell
+        }
+    }
+
     fn command(&self, line: &str, cwd: &Path) -> Result<tokio::process::Command, String> {
         let shell = &self.0.shell;
         let mut command = self
@@ -284,6 +292,14 @@ pub fn attach(inputs: MediaInputs<'_>) -> Option<pmt_media::Attachment> {
     })
     .with_ffmpeg(ffmpeg(scope));
     Some(MediaSessions::process().attach(&inputs.session.to_string(), Arc::new(session)))
+}
+
+/// Fetches what the media tools' surface of `session_id` depends on (the
+/// live OpenRouter image catalog) before the surface is built.
+pub async fn prime(session_id: &str) {
+    if let Some(media) = pmt_media::MediaSessions::process().session(session_id) {
+        media.prime().await;
+    }
 }
 
 /// The surface name a session's media tools see: the platform of a

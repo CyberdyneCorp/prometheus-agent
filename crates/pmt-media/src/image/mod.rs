@@ -3,8 +3,10 @@
 //!
 //! [`plan`] settles the provider, model and credential of a call from
 //! `[image_gen]` (the agent never picks the model); [`providers`] speaks
-//! each provider's API; [`tool`] is the model-facing tool.
+//! each provider's API; [`tool`] is the model-facing tool; [`openrouter`]
+//! keeps OpenRouter's live catalog.
 
+pub mod openrouter;
 pub mod providers;
 pub mod tool;
 
@@ -78,7 +80,8 @@ pub fn configured_provider(config: &Config) -> &str {
 }
 
 /// The model `config` gives `provider`: `image_gen.openai.model` for
-/// `openai`, else `image_gen.model`, else the provider's default.
+/// `openai`, else `image_gen.model`, else the provider's default. An
+/// `openrouter` model is described by the live catalog once fetched.
 #[must_use]
 pub fn model_for(config: &Config, provider: &str) -> Option<Model> {
     let image = &config.image_gen;
@@ -88,6 +91,11 @@ pub fn model_for(config: &Config, provider: &str) -> Option<Model> {
     };
     let known = image_provider(provider)?;
     let id = chosen.unwrap_or(known.default_model);
+    if provider == openrouter::PROVIDER
+        && let Some(live) = openrouter::model(id)
+    {
+        return Some(live);
+    }
     Some(
         known
             .model(id)

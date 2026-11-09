@@ -609,7 +609,7 @@ async fn run_command_stt(
         ("language", language),
         ("model", config.model.clone().unwrap_or_default()),
     ]);
-    let line = render(&config.command, &values)?;
+    let line = render(&config.command, &values, setup.runner.syntax())?;
     let idle = Duration::from_secs(config.timeout_secs);
     let ran = command::run(setup.runner.as_ref(), &line, &setup.workspace, idle, false).await?;
     let written = tokio::fs::read_to_string(&output).await.unwrap_or_default();
