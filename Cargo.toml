@@ -281,6 +281,10 @@ opt-level = 3
 # (perf/README.md).
 lto = "fat"
 codegen-units = 1
+# Size-optimized code: the stripped binary is 28% smaller with unchanged
+# startup, chat prompt and peak RSS; the agent's time goes to network and
+# model latency, not to tight loops (perf/README.md).
+opt-level = "s"
 strip = "symbols"
 
 # The profile cargo-dist builds the release archives with (dist-workspace.toml).
