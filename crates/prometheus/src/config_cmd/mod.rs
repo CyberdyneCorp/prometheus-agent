@@ -200,6 +200,8 @@ fn validate(ctx: &Context<'_>) -> Result<u8, Error> {
     // plugin providers included).
     let (providers, _) = crate::plugins_host::providers::registry(&scope, scope.config())?;
     pmt_providers::fallback::chain(scope.config(), &providers)?;
+    // MoA slots name registry providers too (built-in, custom, plugin).
+    pmt_providers::moa::validate(scope.config(), &providers)?;
     // Model aliases name registry providers; reasoning overrides name
     // levels or tiers.
     for (name, alias) in &scope.config().model.aliases {

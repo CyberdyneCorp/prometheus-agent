@@ -41,7 +41,10 @@ A preset is refused when the config loads (exit 78, naming the key) if it
 has no reference, if a slot names `moa` itself (presets do not nest) or an
 unknown provider, if a `reasoning_effort` is not one of `none`, `minimal`,
 `low`, `medium`, `high`, `xhigh`, `max`, `ultra`, or if a temperature is
-outside 0.0-2.0. A slot without `reasoning_effort` uses the session's
+outside 0.0-2.0. Provider names are checked against the provider
+registry (built-in, custom and plugin providers), so an unknown provider
+is refused by `prometheus config validate`, when a session starts and
+when `prometheus moa configure` or the preset editors save. A slot without `reasoning_effort` uses the session's
 reasoning level, clamped to its model.
 
 ## Selecting a preset

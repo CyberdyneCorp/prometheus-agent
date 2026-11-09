@@ -51,6 +51,44 @@ fn deleting_the_default_preset_is_refused_with_exit_1() {
     assert_eq!(missing.status.code(), Some(66), "{}", stderr(&missing));
 }
 
+/// A preset whose second reference names a provider no registry knows.
+const UNKNOWN_SLOT: &str = "\n[moa.presets.bad]\n\
+     reference_models = [{provider = \"mock\", model = \"ref-a\"}, {provider = \"nowhere\", model = \"m\"}]\n\
+     aggregator = {provider = \"mock\", model = \"agg\"}\n";
+
+/// The key a refusal of [`UNKNOWN_SLOT`] names.
+const UNKNOWN_SLOT_KEY: &str = "moa.presets.bad.reference_models[1].provider";
+
+/// Presets are validated when the config loads (spec: mixture-of-agents,
+/// MoA presets and validation): a slot on an unknown provider fails with
+/// exit 78 naming the key, from `config validate` and at session start.
+#[test]
+fn a_slot_on_an_unknown_provider_fails_with_exit_78_naming_the_key() {
+    let home = mock_home();
+    let script = moa_home(home.path());
+    append_config(home.path(), UNKNOWN_SLOT);
+    let checked = run(home.path(), &["config", "validate"]);
+    assert_eq!(checked.status.code(), Some(78), "{}", stderr(&checked));
+    assert!(
+        stderr(&checked).contains(UNKNOWN_SLOT_KEY),
+        "{}",
+        stderr(&checked)
+    );
+    // The session does not start, whichever model it would use.
+    let started = run(home.path(), &["-z", "hi", "--mock-script", &script]);
+    assert_eq!(started.status.code(), Some(78), "{}", stderr(&started));
+    assert!(
+        stderr(&started).contains(UNKNOWN_SLOT_KEY),
+        "{}",
+        stderr(&started)
+    );
+    assert!(!ok_text(&started).contains("answered by alpha"));
+}
+
+fn ok_text(out: &std::process::Output) -> String {
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
 #[test]
 fn moa_list_marks_the_billed_aggregator_and_the_cadence() {
     let home = mock_home();
@@ -281,6 +319,26 @@ fn preset_editors_list_write_and_delete_through_the_daemon() {
             nested.message.contains("moa.presets.loop.aggregator"),
             "{}",
             nested.message
+        );
+        // The editors' write refuses a slot on an unknown provider,
+        // naming the key, and leaves config.toml alone.
+        let unknown = client
+            .call(
+                "moa.presets.put",
+                json!({"name": "far", "preset": {
+                    "references": [{"provider": "nowhere", "model": "a"}],
+                    "aggregator": {"provider": "mock", "model": "agg"}
+                }}),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(unknown.data.unwrap().code, "config.invalid");
+        assert!(
+            unknown
+                .message
+                .contains("moa.presets.far.reference_models[0].provider"),
+            "{}",
+            unknown.message
         );
         let deleted = client
             .call("moa.presets.delete", json!({"name": "team"}))

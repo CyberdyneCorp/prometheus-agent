@@ -228,4 +228,44 @@ mod tests {
             "{written}"
         );
     }
+
+    /// What `configure` saves goes through `put`, which refuses a slot on
+    /// an unknown provider with exit 78 naming the key (spec:
+    /// mixture-of-agents, MoA presets and validation).
+    #[test]
+    fn saving_a_slot_on_an_unknown_provider_is_refused_naming_the_key() {
+        let target = concat!(env!("CARGO_MANIFEST_DIR"), "/../../target");
+        let dir = tempfile::tempdir_in(target).unwrap();
+        let home = Home::open(dir.path()).unwrap();
+        let profile = home.profile(&ProfileName::default_profile()).unwrap();
+        profile
+            .config_file()
+            .replace("schema_version = 1\n")
+            .unwrap();
+        let scope = ProfileScope::open(profile, &Overrides::default(), Launch::Other).unwrap();
+        let slot = |provider: &str| MoaSlot {
+            provider: provider.into(),
+            model: "m".into(),
+            reasoning_effort: None,
+        };
+        let preset = MoaPreset {
+            reference_models: vec![slot("mock")],
+            aggregator: slot("nowhere"),
+            reference_temperature: None,
+            aggregator_temperature: None,
+            fanout: MoaFanout::default(),
+            enabled: true,
+        };
+        let err = super::super::put(&scope, "far", &preset).unwrap_err();
+        assert_eq!(err.code(), &codes::CONFIG_INVALID);
+        assert_eq!(err.exit_code(), 78);
+        assert!(
+            err.message()
+                .contains("moa.presets.far.aggregator.provider"),
+            "{}",
+            err.message()
+        );
+        let written = scope.profile().config_file().read().unwrap().0;
+        assert!(!written.contains("moa.presets"), "{written}");
+    }
 }
