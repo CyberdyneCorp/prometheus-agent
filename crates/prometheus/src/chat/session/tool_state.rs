@@ -180,7 +180,11 @@ impl ToolState {
         registry: Arc<ToolRegistry>,
         selection: Selection,
     ) -> Result<(), Error> {
-        let route = tools::route_traits(self.inputs.model.as_ref()).await;
+        let route = Box::pin(tools::session_route(
+            self.inputs.model.as_ref(),
+            self.inputs.session,
+        ))
+        .await;
         let built =
             tools::session_tools(&self.inputs.surface(&registry, &selection, &route)).await?;
         self.tools.swap(built);

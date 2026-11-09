@@ -13,6 +13,7 @@ mod bridge;
 mod daemon;
 mod fix;
 mod groups;
+mod media;
 mod system;
 mod wsl;
 

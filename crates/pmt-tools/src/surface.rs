@@ -122,13 +122,19 @@ impl ToolSurface {
             }
         }
         let verdicts = probe_all(&candidates, inputs).await;
-        candidates.retain(|tool| match probe_failure(tool, &verdicts) {
-            Some(_) if selection.session_opt_ins.contains(tool.name()) => true,
-            Some(reason) => {
-                excluded.insert(tool.name().to_owned(), Exclusion::Unavailable(reason));
-                false
+        candidates.retain(|tool| {
+            let failure = probe_failure(tool, &verdicts).or_else(|| {
+                let check = tool.route_check.as_ref()?;
+                check(inputs.config, inputs.route).err()
+            });
+            match failure {
+                Some(_) if selection.session_opt_ins.contains(tool.name()) => true,
+                Some(reason) => {
+                    excluded.insert(tool.name().to_owned(), Exclusion::Unavailable(reason));
+                    false
+                }
+                None => true,
             }
-            None => true,
         });
         // Model order: the selection's expansion order.
         let position: BTreeMap<&str, usize> = selection

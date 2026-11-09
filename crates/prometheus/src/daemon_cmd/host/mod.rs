@@ -45,6 +45,7 @@ mod notify;
 mod reload;
 mod send_tool;
 mod setup;
+mod speech;
 mod turns;
 mod worktrees;
 

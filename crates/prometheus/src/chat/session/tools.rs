@@ -227,6 +227,24 @@ pub async fn route_traits(model: &dyn pmt_agent::turn::model::ModelPort) -> Rout
         .with_context_window(route.context_window)
 }
 
+/// [`route_traits`] with the auxiliary capabilities session `id` reaches
+/// (`video`: its `vision` route takes video, so `video_analyze` works).
+pub async fn session_route(
+    model: &dyn pmt_agent::turn::model::ModelPort,
+    id: pmt_core::id::SessionId,
+) -> RouteTraits {
+    let mut traits = route_traits(model).await;
+    let video = pmt_media::MediaSessions::process()
+        .session(&id.to_string())
+        .is_some_and(|media| media.setup().video.is_some());
+    if video {
+        traits
+            .auxiliary
+            .insert(pmt_media::video::VIDEO_AUX.to_owned());
+    }
+    traits
+}
+
 /// What one surface build needs.
 pub struct SurfaceInputsOwned<'a> {
     /// The profile.

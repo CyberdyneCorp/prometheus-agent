@@ -261,14 +261,14 @@ impl Repl {
             let flow = match self.queue.pop_front() {
                 Some(line) => {
                     self.drop_wakeup();
-                    self.idle_line(line).await
+                    Box::pin(self.idle_line(line)).await
                 }
                 None => match self.wakeup.take() {
                     Some(reserved) => {
                         self.automated(reserved).await;
                         Flow::Continue
                     }
-                    None => self.idle_event().await,
+                    None => Box::pin(self.idle_event()).await,
                 },
             };
             if flow == Flow::Exit {
@@ -304,7 +304,7 @@ impl Repl {
         match event {
             Event::Line(line) => {
                 self.last_interrupt = None;
-                self.idle_line(line).await
+                Box::pin(self.idle_line(line)).await
             }
             Event::Interrupt => self.idle_interrupt(),
             Event::Eof => Flow::Exit,
@@ -340,7 +340,7 @@ impl Repl {
     /// One line typed while no turn runs.
     async fn idle_line(&mut self, line: String) -> Flow {
         if let Some(pending) = self.pending.take() {
-            return self.answer(pending, &line).await;
+            return Box::pin(self.answer(pending, &line)).await;
         }
         let trimmed = line.trim();
         if trimmed.is_empty() {
@@ -357,7 +357,7 @@ impl Repl {
             return Flow::Continue;
         }
         if trimmed.starts_with('/') {
-            return self.slash(trimmed.to_owned()).await;
+            return Box::pin(self.slash(trimmed.to_owned())).await;
         }
         if trimmed.starts_with('!') {
             self.shell_escape(trimmed).await;

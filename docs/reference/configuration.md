@@ -409,7 +409,13 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `heartbeat.min_interval_secs` | integer | `60` | 1 to 86400 | `live` | Shortest `/heartbeat every` interval (seconds). |
 | `hooks.auto_accept` | boolean | `false` | any | `next_session` | Run shell hooks nobody approved yet without asking (as `--accept-hooks` does for one run); every hook still runs in the session's sandbox. |
 | `hooks.outbound` | array of table | `[]` | any | `next_session` | Outbound webhooks: hook events sent as HTTPS `POST` requests. |
-| `image_gen.provider` | string | unset | any | `next_session` | The provider serving the category (`nous` routes it through the subscription tool gateway); unset picks one automatically. |
+| `image_gen.max_parallel_requests` | integer | `4` | ≥ 1 | `next_session` | Generations of one tool-call batch running at once (at most `agent.tool_concurrency`). |
+| `image_gen.model` | string | unset | any | `next_session` | The model (unset: the provider's default). The agent never picks it. |
+| `image_gen.openai.base_url` | string | unset | any | `next_session` | An OpenAI-compatible endpoint (`.../v1`); unset is OpenAI's API. |
+| `image_gen.openai.key_secret` | string | unset | a secret name | `next_session` | The secret holding the key (default `OPENAI_API_KEY`). |
+| `image_gen.openai.model` | string | unset | any | `next_session` | The model on this endpoint (wins over `image_gen.model`); an id outside the catalog is sent verbatim, without `quality`. |
+| `image_gen.openai.provider` | string | unset | any | `next_session` | A configured custom provider (`[providers.<id>]`) whose endpoint and key are used instead. |
+| `image_gen.provider` | string | unset | any | `next_session` | The provider generating images: `fal` (default), `openai`, `openai-codex`, `openrouter`, `xai`, `krea`, `meta-ai`, `deepinfra`, `nous` (the subscription tool gateway) or a plugin's; unset picks one by the keys present. |
 | `logging.level` | one of "error", "warn", "info", "debug", "trace" | `"info"` | `"error"`, `"warn"`, `"info"`, `"debug"`, `"trace"` | `restart` | Log level; `PMT_LOG` or `RUST_LOG` override it. |
 | `loops.max_ticks` | integer | `100` | 0 to 100000 | `live` | Wakeups after which a loop pauses (`0` = unlimited). |
 | `loops.min_interval_secs` | integer | `30` | 1 to 86400 | `live` | Shortest fixed interval a loop may use (seconds). |
@@ -674,7 +680,48 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `skills.write_approval` | boolean | `false` | any | `next_session` | Stage skill writes as pending for review. |
 | `snapshots.keep` | integer | `20` | ≥ 0 | `live` | Manual snapshots kept per profile. |
 | `storage.journal_mode` | one of "wal", "delete" | `"wal"` | `"wal"`, `"delete"` | `restart` | `state.db` journal mode; `delete` only for filesystems without WAL support. |
-| `stt.provider` | string | unset | any | `next_session` | The provider serving the category (`nous` routes it through the subscription tool gateway); unset picks one automatically. |
+| `stt.cloud_trim_keep_ms` | integer | `300` | ≥ 0 | `next_session` | Silence kept of each trimmed pause. |
+| `stt.cloud_trim_silence` | boolean | `true` | any | `next_session` | Trim long silences before a cloud upload. |
+| `stt.cloud_trim_threshold_db` | integer | `-40` | -90 to 0 | `next_session` | Level below which audio counts as silence, in dBFS. |
+| `stt.deepinfra.language` | string | unset | any | `next_session` | Spoken language (unset: `stt.language`). |
+| `stt.deepinfra.model` | string | unset | any | `next_session` | The model (unset: the provider's default). |
+| `stt.deepinfra.timeout_secs` | integer | unset | ≥ 1 | `next_session` | Bound on one request (unset: the provider's default). |
+| `stt.elevenlabs.diarize` | boolean | `false` | any | `next_session` | Label speakers. |
+| `stt.elevenlabs.language` | string | unset | any | `next_session` | Spoken language (unset: `stt.language`). |
+| `stt.elevenlabs.model` | string | unset | any | `next_session` | The model (default `scribe_v2`). |
+| `stt.elevenlabs.tag_audio_events` | boolean | `false` | any | `next_session` | Tag non-speech events (`(laughter)`). |
+| `stt.groq.language` | string | unset | any | `next_session` | Spoken language (unset: `stt.language`). |
+| `stt.groq.model` | string | unset | any | `next_session` | The model (unset: the provider's default). |
+| `stt.groq.timeout_secs` | integer | unset | ≥ 1 | `next_session` | Bound on one request (unset: the provider's default). |
+| `stt.language` | string | `"en"` | any | `next_session` | Spoken language (empty: detect); a provider's own `language` wins. |
+| `stt.local.language` | string | unset | any | `next_session` | Spoken language (unset: `stt.language`). |
+| `stt.local.model` | one of "tiny", "base", "small", "medium", "large-v3", "turbo" | `"base"` | `"tiny"`, `"base"`, `"small"`, `"medium"`, `"large-v3"`, `"turbo"` | `next_session` | The model size. |
+| `stt.local.unload_after_idle_secs` | integer | `0` | ≥ 0 | `next_session` | Unload the model after this idle time (`0`: never). |
+| `stt.local.vad` | boolean | `true` | any | `next_session` | Voice-activity filtering. |
+| `stt.local.vad_min_silence_ms` | integer | `500` | ≥ 0 | `next_session` | Shortest silence the voice-activity filter splits on. |
+| `stt.mistral.language` | string | unset | any | `next_session` | Spoken language (unset: `stt.language`). |
+| `stt.mistral.model` | string | unset | any | `next_session` | The model (unset: the provider's default). |
+| `stt.mistral.timeout_secs` | integer | unset | ≥ 1 | `next_session` | Bound on one request (unset: the provider's default). |
+| `stt.nous.language` | string | unset | any | `next_session` | Spoken language (unset: `stt.language`). |
+| `stt.nous.model` | string | unset | any | `next_session` | The model (unset: the provider's default). |
+| `stt.nous.timeout_secs` | integer | unset | ≥ 1 | `next_session` | Bound on one request (unset: the provider's default). |
+| `stt.openai.language` | string | unset | any | `next_session` | Spoken language (unset: `stt.language`). |
+| `stt.openai.model` | string | unset | any | `next_session` | The model (unset: the provider's default). |
+| `stt.openai.timeout_secs` | integer | unset | ≥ 1 | `next_session` | Bound on one request (unset: the provider's default). |
+| `stt.provider` | string | unset | any | `next_session` | The transcription provider: `local`, `whisper-cpp`, `groq`, `openai`, `mistral`, `xai`, `elevenlabs`, `deepinfra`, `nous`, a `[stt.providers.<name>]` command or a plugin's. Set: used strictly; unset: the first available, local engines first. |
+| `stt.providers.<name>.command` | string | `""` | any | `next_session` | The command: `{input_path}`, `{output_path}`, `{output_dir}`, `{format}`, `{language}` and `{model}` are replaced by shell-quoted values; `{{` and `}}` are literal braces. The transcript is read from `{output_path}` when written, else stdout. |
+| `stt.providers.<name>.format` | one of "txt", "json", "srt", "vtt" | `"txt"` | `"txt"`, `"json"`, `"srt"`, `"vtt"` | `next_session` | The transcript format. |
+| `stt.providers.<name>.language` | string | unset | any | `next_session` | `{language}` (unset: `stt.language`). |
+| `stt.providers.<name>.model` | string | unset | any | `next_session` | `{model}`. |
+| `stt.providers.<name>.normalize` | boolean | `false` | any | `next_session` | Transcode the audio to 16 kHz mono first. |
+| `stt.providers.<name>.timeout_secs` | integer | `300` | ≥ 1 | `next_session` | Bound on one run. |
+| `stt.providers.<name>.type` | one of "command" | `"command"` | `"command"` | `next_session` | Always `command`. |
+| `stt.whisper_cpp.binary` | string | unset | any | `next_session` | The `whisper-cli` executable (unset: found on PATH). |
+| `stt.whisper_cpp.language` | string | unset | any | `next_session` | Spoken language (unset: `stt.language`). |
+| `stt.whisper_cpp.model` | string | unset | any | `next_session` | The GGML model file. |
+| `stt.xai.language` | string | unset | any | `next_session` | Spoken language (unset: `stt.language`). |
+| `stt.xai.model` | string | unset | any | `next_session` | The model (unset: the provider's default). |
+| `stt.xai.timeout_secs` | integer | unset | ≥ 1 | `next_session` | Bound on one request (unset: the provider's default). |
 | `telemetry.enabled` | boolean | `false` | any | `restart` | Send redacted aggregate counters. |
 | `telemetry.endpoint` | string | unset | any | `restart` | HTTPS endpoint (loopback HTTP allowed). |
 | `terminal.auto_source_bashrc` | boolean | `true` | any | `next_session` | Source `~/.bashrc` once when the shell is bash. |
@@ -753,7 +800,59 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `toolsets.surfaces.desktop` | array | unset | any | `next_session` | The desktop app (default `core`). |
 | `toolsets.surfaces.gateway` | table | unset | any | `next_session` | Messaging sessions per platform (`gateway.<platform>`, default `platform-<platform>`; `gateway.webhook` defaults to `webhook-safe`). |
 | `toolsets.surfaces.tui` | array | unset | any | `next_session` | The terminal UI (default `core`). |
-| `tts.provider` | string | unset | any | `next_session` | The provider serving the category (`nous` routes it through the subscription tool gateway); unset picks one automatically. |
+| `tts.deepinfra.max_text_length` | integer | unset | ≥ 1 | `next_session` | Characters per request (a positive integer; default by provider). |
+| `tts.deepinfra.model` | string | unset | any | `next_session` | The model. |
+| `tts.deepinfra.voice` | string | unset | any | `next_session` | The voice. |
+| `tts.edge.max_text_length` | integer | unset | ≥ 1 | `next_session` | Characters per request (a positive integer; default 5,000). |
+| `tts.edge.voice` | string | `"en-US-AriaNeural"` | any | `next_session` | The voice. |
+| `tts.elevenlabs.max_text_length` | integer | unset | ≥ 1 | `next_session` | Characters per request (a positive integer; default by model). |
+| `tts.elevenlabs.model_id` | string | `"eleven_multilingual_v2"` | any | `next_session` | The model; it decides the per-request cap. |
+| `tts.elevenlabs.voice_id` | string | `"pNInz6obpgDQGcFmaJgB"` | any | `next_session` | The voice (the tool's `voice` argument may pick another). |
+| `tts.gemini.audio_tags` | boolean | `false` | any | `next_session` | Keep inline audio tags (`[laughs]`) as performance directions. |
+| `tts.gemini.max_text_length` | integer | unset | ≥ 1 | `next_session` | Characters per request (a positive integer; default 32,000). |
+| `tts.gemini.model` | string | `"gemini-2.5-flash-preview-tts"` | any | `next_session` | The model. |
+| `tts.gemini.persona_prompt_file` | string | unset | any | `next_session` | A prompt file framing the text; `{transcript}` marks where it goes. |
+| `tts.gemini.voice` | string | `"Kore"` | any | `next_session` | The prebuilt voice. |
+| `tts.keep_warm_secs` | integer | `60` | ≥ 0 | `next_session` | Seconds a local engine stays loaded after the last surface released it (`0` unloads at once). |
+| `tts.kittentts.max_text_length` | integer | unset | ≥ 1 | `next_session` | Characters per request (a positive integer; default by provider). |
+| `tts.kittentts.model` | string | unset | any | `next_session` | The model. |
+| `tts.kittentts.voice` | string | unset | any | `next_session` | The voice. |
+| `tts.minimax.max_text_length` | integer | unset | ≥ 1 | `next_session` | Characters per request (a positive integer; default by provider). |
+| `tts.minimax.model` | string | unset | any | `next_session` | The model. |
+| `tts.minimax.voice` | string | unset | any | `next_session` | The voice. |
+| `tts.mistral.max_text_length` | integer | unset | ≥ 1 | `next_session` | Characters per request (a positive integer; default by provider). |
+| `tts.mistral.model` | string | unset | any | `next_session` | The model. |
+| `tts.mistral.voice` | string | unset | any | `next_session` | The voice. |
+| `tts.neutts.max_text_length` | integer | unset | ≥ 1 | `next_session` | Characters per request (a positive integer; default by provider). |
+| `tts.neutts.model` | string | unset | any | `next_session` | The model. |
+| `tts.neutts.voice` | string | unset | any | `next_session` | The voice. |
+| `tts.nous.max_text_length` | integer | unset | ≥ 1 | `next_session` | Characters per request (a positive integer; default by provider). |
+| `tts.nous.model` | string | unset | any | `next_session` | The model. |
+| `tts.nous.voice` | string | unset | any | `next_session` | The voice. |
+| `tts.openai.base_url` | string | unset | any | `next_session` | An OpenAI-compatible endpoint (`.../v1`); unset is OpenAI's API. |
+| `tts.openai.consent_attestation` | boolean | `false` | any | `next_session` | Confirms the operator may clone the configured custom voice. |
+| `tts.openai.max_text_length` | integer | unset | ≥ 1 | `next_session` | Characters per request (a positive integer; default 4,096). |
+| `tts.openai.model` | string | `"gpt-4o-mini-tts"` | any | `next_session` | The model. |
+| `tts.openai.speed` | number | unset | 0.25 to 4.0 | `next_session` | Speaking speed (0.25..4.0; the tool's `speed` argument wins). |
+| `tts.openai.voice` | string | `"alloy"` | any | `next_session` | The voice. |
+| `tts.piper.max_text_length` | integer | unset | ≥ 1 | `next_session` | Characters per request (a positive integer; default by provider). |
+| `tts.piper.model` | string | unset | any | `next_session` | The model. |
+| `tts.piper.voice` | string | unset | any | `next_session` | The voice. |
+| `tts.provider` | string | unset | any | `next_session` | The speech provider: `edge` (default, keyless), `elevenlabs`, `openai`, `gemini`, `xai`, `mistral`, `minimax`, `deepinfra`, `nous`, the local engines `piper`, `kittentts`, `neutts`, a `[tts.providers.<name>]` command or a plugin's. |
+| `tts.providers.<name>.command` | string | `""` | any | `next_session` | The command: `{input_path}` (alias `{text_path}`), `{output_path}`, `{format}`, `{voice}` and `{model}` are replaced by shell-quoted values; `{{` and `}}` are literal braces. |
+| `tts.providers.<name>.max_text_length` | integer | `5000` | ≥ 1 | `next_session` | Characters per run; longer text is split. |
+| `tts.providers.<name>.model` | string | unset | any | `next_session` | `{model}`. |
+| `tts.providers.<name>.output_format` | one of "mp3", "wav", "ogg", "flac", "m4a", "aac", "amr", "opus" | `"mp3"` | `"mp3"`, `"wav"`, `"ogg"`, `"flac"`, `"m4a"`, `"aac"`, `"amr"`, `"opus"` | `next_session` | The format the command writes. |
+| `tts.providers.<name>.release_command` | string | unset | any | `next_session` | Run when the provider is released. |
+| `tts.providers.<name>.timeout_secs` | integer | `120` | ≥ 1 | `next_session` | Idle deadline: any output resets it. |
+| `tts.providers.<name>.type` | one of "command" | `"command"` | `"command"` | `next_session` | Always `command`. |
+| `tts.providers.<name>.voice` | string | unset | any | `next_session` | `{voice}`. |
+| `tts.providers.<name>.voice_compatible` | boolean | `false` | any | `next_session` | The output can be sent as a voice bubble as is. |
+| `tts.providers.<name>.warm_command` | string | unset | any | `next_session` | Run before first use (load a model). |
+| `tts.xai.language` | string | `"en"` | any | `next_session` | The language. |
+| `tts.xai.max_text_length` | integer | unset | ≥ 1 | `next_session` | Characters per request (a positive integer; default 15,000). |
+| `tts.xai.speed` | number | `1.0` | 0.7 to 1.5 | `next_session` | Speaking speed. |
+| `tts.xai.voice` | string | `"eve"` | any | `next_session` | The voice: a built-in name or a custom cloned voice id. |
 | `ui.composer.paste_collapse_chars` | integer | `2000` | ≥ 0 | `next_session` | A paste of at least this many characters collapses into a chip; `0` disables the character threshold. |
 | `ui.composer.paste_collapse_lines` | integer | `5` | ≥ 0 | `next_session` | A paste of at least this many lines collapses into a chip; `0` disables the line threshold. |
 | `ui.interface` | one of "tui", "line" | `"tui"` | `"tui"`, `"line"` | `next_session` | Interactive interface when stdin and stdout are terminals: the full-screen `tui` or the `line` CLI (`--tui`/`--line` override it). |
@@ -791,15 +890,28 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `vision.max_calls_per_image` | integer | unset | ≥ 0 | `next_session` | Times one image may be embedded by `vision_analyze` per session; unset is 3 in delegated children and unlimited for the main agent, `0` is unlimited. |
 | `vision.replay_recent_images` | integer | `3` | ≥ 0 | `next_session` | Newest user images re-sent when history is rebuilt from storage; `0` disables. |
 | `web.backend` | string | `"auto"` | any | `next_session` | Shared backend for web search and extract (`auto` picks the first with credentials). |
+| `web.cache_enabled` | boolean | `true` | any | `next_session` | Serve repeat searches and extractions from a cache. |
+| `web.cache_exempt_hosts` | array of string | `[]` | any | `next_session` | Hosts never cached (exact, `*.` wildcard or domain suffix), beside local, private and single-label hosts which never are. |
+| `web.cache_ttl_secs` | integer | `1200` | ≥ 0 | `next_session` | How long a cached result is served (clamped to 60..86,400). |
 | `web.extract_backend` | string | unset | any | `next_session` | Extract backend; unset uses `backend`. |
 | `web.extract_char_limit` | integer | `15000` | 2000 to 500000 | `next_session` | Characters per extracted page. |
 | `web.extract_timeout_secs` | integer | `120` | ≥ 0 | `next_session` | Bound on one extract dispatch. |
 | `web.firecrawl.base_url` | string | unset | any | `next_session` | Self-hosted Firecrawl base URL; unset is the hosted API (`https://api.firecrawl.dev`, secret `FIRECRAWL_API_KEY`). |
 | `web.keyless.enabled` | boolean | `false` | any | `next_session` | Allow keyless web search as the last `auto` choice. |
+| `web.keyless.rescue` | boolean | `false` | any | `next_session` | Retry one failed call of a keyed backend once on the keyless ring (only with `enabled`); the next call still tries the keyed backend. |
+| `web.provider_tier` | table | `{}` | any | `next_session` | Pins a vendor's anonymous (`free`) or keyed (`paid`) endpoint in the keyless ring (`paid` without its key removes the vendor). |
 | `web.search_backend` | string | unset | any | `next_session` | Search backend; unset uses `backend`. |
 | `web.searxng.url` | string | unset | any | `next_session` | Base URL of the SearXNG instance (its JSON output must be enabled); `searxng` is unavailable until it is set. |
+| `web.xai.allowed_domains` | array of string | `[]` | any | `next_session` | Only these domains (at most 5; not with `excluded_domains`). |
+| `web.xai.excluded_domains` | array of string | `[]` | any | `next_session` | Never these domains (at most 5; not with `allowed_domains`). |
+| `web.xai.model` | string | `"grok-4.5"` | any | `next_session` | The model running the search. |
+| `web.xai.timeout_secs` | integer | `90` | ≥ 1 | `next_session` | Bound on one search. |
 | `worktrees.archive_dirty` | boolean | `true` | any | `live` | Archive dirty or unpushed trees past their idle tier before removing them; `false` keeps such trees. |
 | `worktrees.archive_max_file_bytes` | integer | `52428800` | ≥ 0 | `live` | Untracked files larger than this keep a tree from the sweep (`keep-large-untracked`) and are left out of archives. |
 | `worktrees.archive_retention_secs` | integer | `2592000` | ≥ 0 | `live` | Seconds an archive is kept before the sweep deletes it (`0` = forever). |
 | `worktrees.max_total_bytes` | integer | `0` | ≥ 0 | `live` | Total bytes of trees above which the oldest idle ones past their tier are archived and removed first (`0` = off). |
 | `worktrees.sync_remote` | boolean | `true` | any | `live` | Fetch the default remote before creating a tree (a failed fetch falls back to the local tip). |
+| `x_search.model` | string | `"grok-4.5"` | any | `next_session` | The xAI model answering X searches. |
+| `x_search.reasoning_effort` | string | unset | any | `next_session` | Reasoning effort sent with each search (unset: the model's own). |
+| `x_search.retries` | integer | `2` | 0 to 10 | `next_session` | Retries on 5xx, read timeouts and connection errors (backoff of 1.5 s per attempt, capped at 5 s). |
+| `x_search.timeout_secs` | integer | `180` | ≥ 30 | `next_session` | Bound on one search request. |

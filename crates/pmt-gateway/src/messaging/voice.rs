@@ -24,6 +24,45 @@ pub trait Speech: Send + Sync {
         text: &'a str,
         out_dir: &'a Path,
     ) -> AdapterFuture<'a, Result<PathBuf, String>>;
+    /// An Opus/Ogg copy of the audio at `path` for a voice bubble, or
+    /// `None` when it cannot be made (the file then goes as plain audio).
+    /// The default cannot convert.
+    fn voice_note<'a>(&'a self, _path: &'a Path) -> AdapterFuture<'a, Option<PathBuf>> {
+        Box::pin(async { None })
+    }
+}
+
+/// Whether the file at `path` is an Ogg stream (what voice bubbles play).
+#[must_use]
+pub fn is_ogg_file(path: &Path) -> bool {
+    use std::io::Read as _;
+    let mut head = [0u8; 4];
+    std::fs::File::open(path)
+        .and_then(|mut f| f.read_exact(&mut head))
+        .is_ok_and(|()| &head == b"OggS")
+}
+
+/// Voice-note files of a reply as voice bubbles take them (spec:
+/// web-and-media-tools, `text_to_speech` tool and delivery): Opus/Ogg as
+/// is, other audio converted through `speech`, and a file that cannot be
+/// converted sent as a plain audio attachment.
+pub(crate) async fn voice_notes(
+    speech: Option<&dyn Speech>,
+    files: &mut [pmt_store::gateway::outbox::OutboundAttachment],
+) {
+    for file in files.iter_mut().filter(|f| f.as_voice) {
+        let path = PathBuf::from(&file.path);
+        if is_ogg_file(&path) {
+            continue;
+        }
+        match speech {
+            Some(speech) => match speech.voice_note(&path).await {
+                Some(note) => file.path = note.to_string_lossy().into_owned(),
+                None => file.as_voice = false,
+            },
+            None => file.as_voice = false,
+        }
+    }
 }
 
 /// The note the agent gets for a voice message it cannot read.

@@ -613,6 +613,35 @@ impl Models {
         &self.setup.catalog
     }
 
+    /// The `vision` auxiliary route of a session on `main` when its model
+    /// takes video (`supports_video`), for `video_analyze`; `None`
+    /// otherwise (spec: web-and-media-tools, `video_analyze` tool: never
+    /// another route).
+    pub(crate) async fn video_route(
+        &self,
+        main: &Route,
+        session: pmt_core::id::SessionId,
+    ) -> Option<super::media::VideoAux> {
+        let resolver = self.resolver();
+        let ctx = AuxContext {
+            resolver: &resolver,
+            main: Some(main),
+            health: &*self.setup.health,
+        };
+        let route = auxiliary::resolve(AuxTask::Vision, &AuxArgs::default(), &ctx)
+            .await
+            .ok()
+            .flatten()?;
+        let (meta, _) = self
+            .catalog()
+            .metadata(&route.route.provider, &route.route.model);
+        meta.supports_video.then(|| super::media::VideoAux {
+            caller: Arc::clone(&self.aux),
+            context: CallContext::new(session, &AuxTask::Vision.purpose()),
+            route,
+        })
+    }
+
     /// The `vision` auxiliary route of a session on `main` as a describer;
     /// `None` when no route answers.
     ///

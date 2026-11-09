@@ -1081,6 +1081,15 @@ impl Speech for FakeSpeech {
             Ok(path)
         })
     }
+
+    /// Converts by writing an Ogg file beside the input.
+    fn voice_note<'a>(
+        &'a self,
+        path: &'a std::path::Path,
+    ) -> AdapterFuture<'a, Option<std::path::PathBuf>> {
+        let note = path.with_extension("voice.ogg");
+        Box::pin(async move { std::fs::write(&note, b"OggS").ok().map(|()| note) })
+    }
 }
 
 /// A gateway on a temporary home.

@@ -51,6 +51,7 @@ pub mod spillover;
 pub mod surface;
 pub mod terminal;
 pub mod toolset;
+pub mod usage;
 pub mod variants;
 pub mod vision;
 pub mod web;

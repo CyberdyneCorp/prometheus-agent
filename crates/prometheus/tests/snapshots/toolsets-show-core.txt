@@ -9,7 +9,7 @@ write_file             exposed
 patch                  exposed
 search_files           exposed
 vision_analyze         exposed
-image_generate         unregistered
+image_generate         unavailable:needs FAL_KEY (image_gen.provider unset; fal is the default)
 skills_list            exposed
 skill_view             exposed
 skill_manage           exposed
@@ -18,7 +18,7 @@ browser_cdp            unavailable:no browser connected (/browser connect or bro
 browser_dialog         unavailable:no browser connected (/browser connect or browser.cdp_url)
 browser_vault          exposed
 browser_close_profile  unavailable:browser.real_profile_autoclose is off
-text_to_speech         unregistered
+text_to_speech         exposed
 todo                   exposed
 memory                 exposed
 session_search         exposed

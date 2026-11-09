@@ -47,6 +47,11 @@ fn encode_message(message: &Message, out: &mut Vec<Value>) {
     for part in &message.parts {
         match part {
             Part::Text { text } => content.push(json!({"type": "text", "text": text})),
+            // Video for a `supports_video` route (`video_analyze`) goes as
+            // the OpenAI-compatible `video_url` part.
+            Part::Image { media_type, data, is_url } if media_type.starts_with("video/") => content.push(
+                json!({"type": "video_url", "video_url": {"url": image_url(media_type, data, *is_url)}}),
+            ),
             Part::Image { media_type, data, is_url } => content.push(
                 json!({"type": "image_url", "image_url": {"url": image_url(media_type, data, *is_url)}}),
             ),
@@ -172,5 +177,44 @@ fn usage_report(usage: &Value) -> UsageReport {
         cache_write: count(usage, "/prompt_tokens_details/cache_write_tokens"),
         reasoning: count(usage, "/completion_tokens_details/reasoning_tokens"),
         cost_usd: usage.get("cost").and_then(Value::as_f64),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::request::{Message, Part, Role};
+
+    #[test]
+    fn a_video_goes_as_a_video_url_part() {
+        let request = Request {
+            model: "qwen-vl".into(),
+            messages: vec![Message {
+                role: Role::User,
+                parts: vec![
+                    Part::Image {
+                        media_type: "video/mp4".into(),
+                        data: "AAAA".into(),
+                        is_url: false,
+                    },
+                    Part::Image {
+                        media_type: "image/png".into(),
+                        data: "BBBB".into(),
+                        is_url: false,
+                    },
+                ],
+                cache_breakpoint: false,
+            }],
+            ..Request::default()
+        };
+        let options = EncodeOptions {
+            cache_key: None,
+            compaction: None,
+        };
+        let body = encode(&request, &options);
+        let content = &body["messages"][0]["content"];
+        assert_eq!(content[0]["type"], "video_url");
+        assert_eq!(content[0]["video_url"]["url"], "data:video/mp4;base64,AAAA");
+        assert_eq!(content[1]["type"], "image_url");
     }
 }

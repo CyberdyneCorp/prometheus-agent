@@ -20,6 +20,7 @@ pub mod judge;
 mod lifecycle;
 mod lsp;
 mod mcp;
+pub mod media;
 mod memory;
 pub mod modal;
 pub mod model;
@@ -582,7 +583,7 @@ impl Factory {
         skills::bind_shell(&inline_shell, environment.commands.as_ref(), &gate.gate);
         let ports = (&gate.gate, &agent_tools, &model);
         let built = (registry, selection, &capabilities);
-        let tool_state = self.tool_state(id, built, ports).await?;
+        let tool_state = Box::pin(self.tool_state(id, built, ports)).await?;
         let tool_port = tool_state.tools();
         delegation.parent_is(&tool_port, &capabilities, &gate.gate);
         let trajectory = self.trajectory(&session)?;
@@ -871,6 +872,8 @@ impl Factory {
             input_roots: input_roots(&self.scope, skills),
             automatic_trust: automatic_trust(session),
             cron_notepad: cron.and_then(|c| c.notepad.as_deref()),
+            store: &self.store,
+            session,
         })?;
         // Skills pass their declared secrets to the terminal.
         if let Some(terminal) = &environment.terminal {
@@ -1050,7 +1053,7 @@ impl Factory {
         (registry, selection, capabilities): (Arc<ToolRegistry>, Selection, &CapabilitySet),
         (gate, agent, model): (&Arc<CommandGate>, &Arc<AgentTools>, &Arc<SwitchableModel>),
     ) -> Result<Arc<ToolState>, Error> {
-        let route = tools::route_traits(model.as_ref()).await;
+        let route = Box::pin(tools::session_route(model.as_ref(), id)).await;
         let inputs = tool_state::Inputs {
             scope: self.scope.clone(),
             store: Arc::clone(&self.store),

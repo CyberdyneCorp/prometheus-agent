@@ -25,8 +25,11 @@ pub enum Vision {
     Off,
     /// A new session's, built with its environment.
     Planned(Plan),
-    /// A running session's, kept across a move.
-    Kept(Arc<VisionSession>),
+    /// A running session's, kept across a move (with its video route).
+    Kept(
+        Arc<VisionSession>,
+        Option<Arc<dyn pmt_media::video::VideoDescriber>>,
+    ),
 }
 
 /// Everything of a [`VisionSetup`] but the session's URL policy.
@@ -37,9 +40,21 @@ pub struct Plan {
     describer: Option<Arc<dyn Describer>>,
     embed_target: u64,
     per_image_cap: Option<u32>,
+    /// The `vision` auxiliary route when its model takes video.
+    video: Option<Arc<dyn pmt_media::video::VideoDescriber>>,
 }
 
 impl Vision {
+    /// The video-capable `vision` route, when the session has one.
+    #[must_use]
+    pub fn video(&self) -> Option<Arc<dyn pmt_media::video::VideoDescriber>> {
+        match self {
+            Self::Off => None,
+            Self::Planned(plan) => plan.video.clone(),
+            Self::Kept(_, video) => video.clone(),
+        }
+    }
+
     /// The session's `VisionSession`; `fetcher` gives its URL policy and
     /// `media_dir` is where returned images are kept.
     pub fn session(
@@ -49,7 +64,7 @@ impl Vision {
     ) -> Option<Arc<VisionSession>> {
         match self {
             Self::Off => None,
-            Self::Kept(session) => Some(Arc::clone(session)),
+            Self::Kept(session, _) => Some(Arc::clone(session)),
             Self::Planned(plan) => {
                 let plan = plan.clone();
                 Some(Arc::new(VisionSession::new(VisionSetup {
@@ -113,7 +128,13 @@ impl Factory {
                 .flatten()
                 .map(|d| Arc::new(d) as Arc<dyn Describer>)
         };
+        // Boxed: the route resolution would otherwise grow every session
+        // opening future.
+        let video = Box::pin(self.models.video_route(&route, id))
+            .await
+            .map(|aux| Arc::new(aux) as Arc<dyn pmt_media::video::VideoDescriber>);
         Vision::Planned(Plan {
+            video,
             routing,
             tool_result_images,
             describer,

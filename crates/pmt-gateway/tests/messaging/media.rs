@@ -310,3 +310,58 @@ async fn locations_are_read_as_text_and_sent_as_pins_or_links() {
     )
     .await;
 }
+
+/// A voice-note attachment of a reply reaches a voice-bubble platform as
+/// Ogg (spec: web-and-media-tools, `text_to_speech` tool and delivery:
+/// Telegram bubble); without a converter it goes as plain audio.
+#[tokio::test]
+async fn mp3_voice_attachments_are_converted_for_voice_bubbles_or_sent_as_audio() {
+    let mut setup = Setup::new(&open("telegram"));
+    setup.descriptors.push(Descriptor {
+        media_out: [MediaKind::Voice, MediaKind::Audio].into_iter().collect(),
+        ..Descriptor::new("telegram", 4096)
+    });
+    let h = Harness::start(setup).await;
+    *h.agents.speech.lock().unwrap() = Some(Arc::new(FakeSpeech::default()));
+    let media = media_dir(&h);
+    std::fs::create_dir_all(&media).unwrap();
+    std::fs::write(media.join("speech.mp3"), b"ID3audio").unwrap();
+    let reply = format!(
+        "say:Listen\nMEDIA:{} [[as_voice]]",
+        media.join("speech.mp3").display()
+    );
+    h.dm("telegram", "1", &reply).await;
+    said(&h.adapter("telegram"), "Listen").await;
+    let sent = |h: &Harness| {
+        h.adapter("telegram")
+            .all()
+            .into_iter()
+            .find_map(|d| match d {
+                Did::Send(m) if !m.attachments.is_empty() => Some(m.attachments[0].clone()),
+                _ => None,
+            })
+            .unwrap()
+    };
+    let file = sent(&h);
+    assert!(file.as_voice, "{file:?}");
+    assert!(file.path.ends_with("speech.voice.ogg"), "{file:?}");
+
+    let mut setup = Setup::new(&open("telegram"));
+    setup.descriptors.push(Descriptor {
+        media_out: [MediaKind::Voice, MediaKind::Audio].into_iter().collect(),
+        ..Descriptor::new("telegram", 4096)
+    });
+    let plain = Harness::start(setup).await;
+    let media = media_dir(&plain);
+    std::fs::create_dir_all(&media).unwrap();
+    std::fs::write(media.join("speech.mp3"), b"ID3audio").unwrap();
+    let reply = format!(
+        "say:Listen\nMEDIA:{} [[as_voice]]",
+        media.join("speech.mp3").display()
+    );
+    plain.dm("telegram", "1", &reply).await;
+    said(&plain.adapter("telegram"), "Listen").await;
+    let file = sent(&plain);
+    assert!(!file.as_voice, "{file:?}");
+    assert!(file.path.ends_with("speech.mp3"));
+}

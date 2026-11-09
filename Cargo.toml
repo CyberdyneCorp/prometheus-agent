@@ -22,6 +22,7 @@ pmt-delegation = { path = "crates/pmt-delegation" }
 pmt-worktrees = { path = "crates/pmt-worktrees" }
 pmt-memory = { path = "crates/pmt-memory" }
 pmt-mcp = { path = "crates/pmt-mcp" }
+pmt-media = { path = "crates/pmt-media" }
 pmt-net = { path = "crates/pmt-net" }
 pmt-obs = { path = "crates/pmt-obs" }
 pmt-plugins = { path = "crates/pmt-plugins" }

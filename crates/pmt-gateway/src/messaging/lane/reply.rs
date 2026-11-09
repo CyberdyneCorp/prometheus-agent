@@ -122,6 +122,8 @@ impl Lane {
         let (mut files, notes) = roots.filter(files);
         files.extend(detected);
         fit_kinds(&mut files, &descriptor);
+        let speech = self.shared.agents.speech(&self.profile);
+        voice::voice_notes(speech.as_deref(), &mut files).await;
         let (text, pins) = crate::messaging::geo::extract(&text);
         let text = if descriptor.sends(MediaKind::Location) {
             files.extend(pins.iter().map(crate::messaging::geo::Location::attachment));
@@ -316,6 +318,7 @@ impl Lane {
             Ok(path) => {
                 let mut file = OutboundAttachment::new(&path.to_string_lossy());
                 file.as_voice = true;
+                voice::voice_notes(Some(speech.as_ref()), std::slice::from_mut(&mut file)).await;
                 let new = NewOutbound {
                     idempotency_key: format!(
                         "{}:{}:voice",

@@ -1,19 +1,19 @@
 //! `web_search` and `web_extract` as registry entries.
 
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 
+use pmt_config::schema::{Config, WireFormat};
 use pmt_core::capability::Capability as Cap;
-use regex::Regex;
 use serde_json::{Value, json};
 
-use super::{Capability, WebSession, resolve, window::window};
+use super::{Capability, resolve};
 use crate::descriptor::{
     CallContext, Effect, HandlerFuture, Owner, RegisteredTool, ResourceClaims, ToolDescriptor,
     ToolHandler,
 };
 use crate::environments::{Environments, part};
 use crate::probe::FnProbe;
-use crate::result::{Status, ToolResult};
+use crate::variants::RouteTraits;
 
 /// The toolset of both tools.
 pub const TOOLSET: &str = "web";
@@ -25,10 +25,6 @@ pub const DEFAULT_RESULTS: usize = 5;
 pub const MAX_URLS: usize = 5;
 /// Bounds of the per-page character budget.
 pub const CHAR_LIMIT_RANGE: (usize, usize) = (2_000, 500_000);
-
-/// Markdown images: `![alt](src)`.
-static IMAGE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"!\[([^\]]*)\]\([^)]*\)").expect("valid image pattern"));
 
 struct SearchHandler(Arc<Environments>);
 struct ExtractHandler(Arc<Environments>);
@@ -59,7 +55,9 @@ pub fn tools(environments: &Arc<Environments>) -> Vec<RegisteredTool> {
             Owner::Builtin,
             Arc::new(SearchHandler(Arc::clone(environments))),
         )
-        .with_probe(probe(Capability::Search, "web.search_backend")),
+        .with_probe(probe(Capability::Search, "web.search_backend"))
+        .with_route_check(Arc::new(native_route))
+        .with_parameters(Arc::new(native_parameters)),
         RegisteredTool::new(
             extract_descriptor(),
             Owner::Builtin,
@@ -83,7 +81,9 @@ impl ToolHandler for SearchHandler {
                 .and_then(|n| usize::try_from(n).ok())
                 .unwrap_or(DEFAULT_RESULTS)
                 .clamp(1, MAX_RESULTS);
-            Ok(web.search(query, limit).await)
+            let result = web.search(query, limit).await;
+            crate::usage::record(web.usage.as_ref(), context, "web_search", &result);
+            Ok(result)
         })
     }
 }
@@ -106,101 +106,57 @@ impl ToolHandler for ExtractHandler {
                 .get("char_limit")
                 .and_then(Value::as_u64)
                 .and_then(|n| usize::try_from(n).ok());
-            Ok(web.extract(&urls, char_limit).await)
+            let result = web.extract(&urls, char_limit).await;
+            crate::usage::record(web.usage.as_ref(), context, "web_extract", &result);
+            Ok(result)
         })
     }
 }
 
-impl WebSession {
-    /// Runs one search.
-    pub async fn search(&self, query: &str, limit: usize) -> ToolResult {
-        let backend = match &self.search {
-            Ok(backend) => backend,
-            Err(why) => return ToolResult::error(format!("web_search unavailable: {why}")),
-        };
-        match backend.search(query, limit).await {
-            Ok(hits) => {
-                let results: Vec<Value> = hits
-                    .into_iter()
-                    .take(limit)
-                    .enumerate()
-                    .map(|(index, hit)| {
-                        json!({"title": hit.title, "url": hit.url, "snippet": hit.snippet, "position": index + 1})
-                    })
-                    .collect();
-                ToolResult::ok(json!({"results": results, "backend": backend.id()}).to_string())
-            }
-            Err(why) => ToolResult::error(format!("web_search failed ({}): {why}", backend.id())),
-        }
-    }
+/// The stored text format.
+pub(crate) const FORMAT: &str = "markdown";
 
-    /// Extracts each URL; one failing URL never fails the others.
-    pub async fn extract(&self, urls: &[String], char_limit: Option<usize>) -> ToolResult {
-        let backend = match &self.extract {
-            Ok(backend) => backend,
-            Err(why) => return ToolResult::error(format!("web_extract unavailable: {why}")),
-        };
-        let budget = char_limit
-            .unwrap_or_else(|| {
-                usize::try_from(self.config.extract_char_limit).unwrap_or(usize::MAX)
-            })
-            .clamp(CHAR_LIMIT_RANGE.0, CHAR_LIMIT_RANGE.1);
-        let mut results = Vec::with_capacity(urls.len());
-        for url in urls {
-            results.push(self.extract_one(backend.as_ref(), url, budget).await);
-        }
-        let any_ok = results.iter().any(|r| r["status"] == "ok");
-        let status = if any_ok { Status::Ok } else { Status::Error };
-        ToolResult::text(
-            status,
-            json!({"results": results, "backend": backend.id()}).to_string(),
-        )
-    }
+/// The backend that hands web search to the model provider.
+pub const OPENAI_NATIVE: &str = "openai-native";
 
-    async fn extract_one(
-        &self,
-        backend: &dyn super::WebBackend,
-        url: &str,
-        budget: usize,
-    ) -> Value {
-        if let Err(err) = self.fetcher.check(url).await {
-            return json!({"url": url, "status": "blocked", "error": err.message()});
-        }
-        let call = backend.extract(url);
-        let outcome = match self.extract_timeout() {
-            Some(limit) => tokio::time::timeout(limit, call).await.ok(),
-            None => Some(call.await),
-        };
-        match outcome {
-            None => json!({"url": url, "status": "timeout", "error": format!(
-                "no answer within {} s (web.extract_timeout_secs)", self.config.extract_timeout_secs)}),
-            Some(Err(why)) => json!({"url": url, "status": "error", "error": format!(
-                "web_extract failed ({}): {why}", backend.id())}),
-            Some(Ok(page)) => self.page_entry(backend.id(), url, &page, budget),
-        }
-    }
+/// The provider whose Responses route runs `openai-native` searches.
+pub const NATIVE_PROVIDER: &str = "openai-codex";
 
-    /// The entry of an extracted page: whole within `budget`, else the
-    /// head/tail window over the full text stored on disk.
-    fn page_entry(&self, backend: &str, url: &str, page: &super::Page, budget: usize) -> Value {
-        let text = IMAGE.replace_all(&page.markdown, "[IMAGE: $1]");
-        let content = if text.chars().count() <= budget {
-            text.into_owned()
-        } else {
-            match self.full_text.save(url, FORMAT, backend, &text) {
-                Ok(stored) => window(&text, budget, &stored),
-                Err(err) => {
-                    return json!({"url": url, "status": "error", "error": format!(
-                        "web_extract could not store the full text: {err}")});
-                }
-            }
-        };
-        json!({"url": url, "title": page.title, "content": content, "status": "ok"})
+/// The schema marker the Responses wire turns into the provider-executed
+/// web search tool.
+pub const PROVIDER_EXECUTED: &str = "x-provider-executed";
+
+fn native(config: &Config) -> bool {
+    super::select::configured(&config.web, Capability::Search) == OPENAI_NATIVE
+}
+
+/// `openai-native` works only on an `openai-codex` Responses route; no
+/// other backend is substituted (spec: web-and-media-tools, Built-in web
+/// backends with capability flags).
+fn native_route(config: &Config, route: &RouteTraits) -> Result<(), String> {
+    if !native(config) {
+        return Ok(());
+    }
+    let codex = route.provider.as_deref() == Some(NATIVE_PROVIDER)
+        && route.wire_format == Some(WireFormat::Responses);
+    if codex {
+        Ok(())
+    } else {
+        Err(format!(
+            "web.search_backend 'openai-native' needs the {NATIVE_PROVIDER} Responses route as the main model route"
+        ))
     }
 }
 
-/// The stored text format.
-const FORMAT: &str = "markdown";
+/// On its route, `openai-native` replaces the client-side definition one
+/// for one: the Responses wire sends the provider's own web search tool.
+fn native_parameters(parameters: &Value, config: &Config) -> Value {
+    if native(config) {
+        json!({"type": "object", PROVIDER_EXECUTED: "web_search"})
+    } else {
+        parameters.clone()
+    }
+}
 
 fn search_descriptor() -> ToolDescriptor {
     let mut d = ToolDescriptor::new(

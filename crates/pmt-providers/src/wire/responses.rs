@@ -8,6 +8,10 @@ use crate::event::{Normalizer, StopReason, UsageReport};
 use crate::request::{Message, Part, Request, Role};
 use crate::sse::SseEvent;
 
+/// The schema key marking a tool the provider executes (spec:
+/// web-and-media-tools, `openai-native`).
+pub(crate) const PROVIDER_EXECUTED: &str = "x-provider-executed";
+
 pub(super) fn encode(request: &Request, options: &EncodeOptions<'_>) -> Value {
     let mut input = Vec::new();
     // The compaction item stands for the history before it.
@@ -27,7 +31,12 @@ pub(super) fn encode(request: &Request, options: &EncodeOptions<'_>) -> Value {
         let tools = request
             .tools
             .iter()
-            .map(|t| json!({"type": "function", "name": t.name, "description": t.description, "parameters": t.parameters}))
+            .map(|t| match t.parameters.get(PROVIDER_EXECUTED).and_then(Value::as_str) {
+                // A tool the provider runs itself (`openai-native` web
+                // search) replaces the function definition one for one.
+                Some(kind) => json!({"type": kind}),
+                None => json!({"type": "function", "name": t.name, "description": t.description, "parameters": t.parameters}),
+            })
             .collect();
         body.insert("tools".into(), Value::Array(tools));
     }
@@ -153,4 +162,38 @@ fn failure(data: &Value) -> ProviderError {
         classify_stream_error(&text),
         body_message(&json!({"error": error}).to_string()),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::request::Tool;
+
+    #[test]
+    fn a_provider_executed_tool_replaces_its_function_definition() {
+        let request = Request {
+            model: "gpt-5-codex".into(),
+            tools: vec![
+                Tool {
+                    name: "web_search".into(),
+                    description: "Search the web.".into(),
+                    parameters: json!({"type": "object", PROVIDER_EXECUTED: "web_search"}),
+                },
+                Tool {
+                    name: "read_file".into(),
+                    description: "Read.".into(),
+                    parameters: json!({"type": "object"}),
+                },
+            ],
+            ..Request::default()
+        };
+        let options = EncodeOptions {
+            cache_key: None,
+            compaction: None,
+        };
+        let body = encode(&request, &options);
+        assert_eq!(body["tools"][0], json!({"type": "web_search"}));
+        assert_eq!(body["tools"][1]["type"], "function");
+        assert_eq!(body["tools"][1]["name"], "read_file");
+    }
 }

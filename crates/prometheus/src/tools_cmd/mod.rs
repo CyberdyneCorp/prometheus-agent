@@ -75,6 +75,7 @@ pub fn builtin_tools(home: &Path) -> Vec<RegisteredTool> {
     ));
     tools.push(pmt_memory::tool::registered());
     tools.push(crate::connectors_host::registered_tool());
+    tools.extend(pmt_media::tools(&pmt_media::MediaSessions::process()));
     tools
 }
 
@@ -162,7 +163,51 @@ pub fn base_registry(scope: &ProfileScope) -> Result<ToolRegistry, Error> {
         scope.name().as_str(),
         Arc::new(Builtins::standard(builtin_tools(scope.home()))?),
     )
-    .with_platforms(plugin_platforms.iter().map(String::as_str)))
+    .with_platforms(plugin_platforms.iter().map(String::as_str))
+    .with_secret_presence(presence(scope)))
+}
+
+/// The web and media categories of `scope` as `tools explain` and `doctor`
+/// show them.
+#[must_use]
+pub fn media_categories(
+    scope: &ProfileScope,
+    registry: &ToolRegistry,
+) -> Option<Vec<pmt_media::explain::CategoryView>> {
+    let launcher = crate::chat::session::media::launcher(scope);
+    let setup = pmt_media::explain::inspection_setup(
+        crate::chat::session::media::credentials(scope),
+        scope.dir(),
+        Some(launcher),
+    )?;
+    let presence = registry.secret_presence();
+    Some(pmt_media::explain::categories(setup, presence.as_ref()))
+}
+
+/// Which credentials the profile holds, as availability probes ask: a
+/// secret by name, or `signin:<provider>` for a usable sign-in (the tool
+/// gateway's self-hosted token stands for the Nous sign-in).
+#[must_use]
+pub fn presence(scope: &ProfileScope) -> pmt_tools::probe::SecretPresence {
+    let secrets = scope.secrets().clone();
+    let gateway_token = scope.config().tool_gateway.token_secret.clone();
+    Arc::new(move |name: &str| {
+        let Some(provider) = name.strip_prefix("signin:") else {
+            return secrets.resolve(name).is_ok();
+        };
+        if provider == "nous"
+            && gateway_token
+                .as_ref()
+                .is_some_and(|t| secrets.resolve(&t.0).is_ok())
+        {
+            return true;
+        }
+        let extras = pmt_providers::auth::Credentials::new(secrets.store().clone());
+        pmt_providers::resolve::CredentialExtras::subscription(&extras, provider)
+            .ok()
+            .flatten()
+            .is_some()
+    })
 }
 
 /// The tools `names` select (composites expanded), for checking that a
@@ -204,6 +249,9 @@ pub struct Inventory<'a> {
     pub capabilities: &'a CapabilitySet,
     /// Availability probe cache.
     pub probes: &'a ProbeCache,
+    /// The profile (web and media categories); `None` in listings built
+    /// without one.
+    pub scope: Option<&'a ProfileScope>,
 }
 
 impl Inventory<'_> {
@@ -473,15 +521,13 @@ where
     let config = scope.config();
     block_on(async {
         crate::mcp_host::discover(&scope, false).await;
-        let secrets = scope.secrets().clone();
         let (registry, extensions) = profile_registry(&scope)?;
-        let registry =
-            registry.with_secret_presence(Arc::new(move |name| secrets.resolve(name).is_ok()));
         let grants =
             SessionGrants::new(baseline(&config.security), GrantsFile::of(scope.profile()));
         let capabilities = grants.capabilities(&Subject::Profile)?;
         let probes = ProbeCache::new();
         let inventory = Inventory {
+            scope: Some(&scope),
             registry: &registry,
             extensions: &extensions,
             config,

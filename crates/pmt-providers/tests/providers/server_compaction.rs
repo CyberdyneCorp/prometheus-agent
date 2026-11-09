@@ -44,7 +44,7 @@ async fn a_supporting_route_sends_the_setting_and_the_item_and_returns_the_new_i
         .respond_with(sse("responses_compaction.sse"))
         .mount(&server)
         .await;
-    let (body, events) = sent(&server, "resp").await;
+    let (body, events) = Box::pin(sent(&server, "resp")).await;
     assert_eq!(
         body["context_management"],
         json!([{"type": "compaction", "compact_threshold": 5000}])
@@ -65,7 +65,7 @@ async fn a_route_without_support_sends_neither() {
         .respond_with(sse("responses_compaction.sse"))
         .mount(&server)
         .await;
-    let (body, _) = sent(&server, "plain").await;
+    let (body, _) = Box::pin(sent(&server, "plain")).await;
     assert!(body.get("context_management").is_none(), "{body}");
     assert!(!body.to_string().contains("enc_OLD"), "{body}");
 }

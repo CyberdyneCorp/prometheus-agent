@@ -77,6 +77,8 @@ impl ModelFamily {
 /// The main-route properties a variant is chosen by.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RouteTraits {
+    /// The route's provider id (`None`: unknown).
+    pub provider: Option<String>,
     /// The route's wire format (`None`: unknown).
     pub wire_format: Option<WireFormat>,
     /// The model's family.
@@ -93,6 +95,7 @@ impl RouteTraits {
     #[must_use]
     pub fn of(provider: &str, model: &str, wire_format: WireFormat) -> Self {
         Self {
+            provider: Some(provider.to_owned()),
             wire_format: Some(wire_format),
             family: ModelFamily::of(provider, model),
             auxiliary: BTreeSet::new(),

@@ -3375,3 +3375,50 @@ capabilities = [
 
 [mixture-of-agents."MoA preserves the session prompt cache"]
 "Returning from MoA replays the prefix" = ["crates/pmt-agent/tests/turn/moa.rs::returning_from_a_preset_replays_the_same_system_prompt_and_tools"]
+
+# Group 49: web and media tools.
+[web-and-media-tools."Built-in web backends with capability flags"]
+"Search-only backend for extract" = ["crates/pmt-tools/tests/web_backends.rs::a_search_only_backend_leaves_extract_unavailable", "crates/pmt-tools/tests/web_backends.rs::ddgs_is_keyless_and_reads_html_results"]
+"openai-native on a non-Codex route" = ["crates/pmt-tools/tests/web_backends.rs::openai_native_needs_the_codex_responses_route_and_nothing_replaces_it", "crates/pmt-providers/src/wire/responses.rs::a_provider_executed_tool_replaces_its_function_definition"]
+
+[web-and-media-tools."Keyless web search rotation is explicit opt-in"]
+"Default install does not rotate silently" = ["crates/pmt-tools/tests/web_backends.rs::a_default_install_never_reaches_a_keyless_vendor"]
+"Opt-in rescue is one-shot" = ["crates/pmt-tools/tests/web_backends.rs::opt_in_rescue_answers_once_per_call_and_never_skips_the_keyed_backend", "crates/pmt-tools/tests/web_backends.rs::the_keyless_ring_rotates_past_rate_limits"]
+
+[web-and-media-tools."Web result caching"]
+"Subagent fan-out shares one search" = ["crates/pmt-tools/tests/web_backends.rs::subagents_issuing_the_same_search_at_once_share_one_request"]
+"Preview deploy stays live" = ["crates/pmt-tools/tests/web_backends.rs::an_exempt_preview_host_is_extracted_live_every_time", "crates/pmt-tools/src/web/cache.rs::local_private_and_exempt_hosts_are_never_cached"]
+
+[web-and-media-tools."x_search tool"]
+"Future window refused locally" = ["crates/pmt-media/tests/media.rs::a_future_x_search_window_is_refused_without_a_request", "crates/pmt-media/src/x_search.rs::a_future_window_is_refused_locally"]
+"Uncited filtered answer is degraded" = ["crates/pmt-media/tests/media.rs::an_uncited_filtered_answer_is_degraded_and_the_key_wins_over_the_sign_in"]
+
+[web-and-media-tools."video_analyze tool"]
+"Oversized video" = ["crates/pmt-media/tests/media.rs::an_oversized_video_is_refused_before_any_provider_call"]
+
+[web-and-media-tools."image_generate tool"]
+"Editing advertised only when supported" = ["crates/pmt-media/tests/media.rs::editing_is_advertised_only_when_the_model_edits"]
+"Result is media" = ["crates/pmt-media/tests/media.rs::the_default_provider_and_model_make_a_stored_media_file"]
+
+[web-and-media-tools."Built-in image generation providers and models"]
+"Default provider and model" = ["crates/pmt-media/tests/media.rs::the_default_provider_and_model_make_a_stored_media_file"]
+"Custom OpenAI-compatible endpoint" = ["crates/pmt-media/tests/media.rs::a_custom_openai_compatible_endpoint_gets_the_model_verbatim_without_quality", "crates/pmt-config/src/media_check.rs::an_unknown_image_model_lists_the_valid_ids"]
+
+[web-and-media-tools."text_to_speech tool and delivery"]
+"Long text is chunked" = ["crates/pmt-media/tests/speech.rs::long_text_goes_out_in_ordered_chunks_and_comes_back_as_one_file", "crates/pmt-media/src/speech/chunk.rs::ten_thousand_characters_under_a_4096_cap_make_three_ordered_chunks"]
+"Telegram bubble" = ["crates/pmt-media/tests/speech.rs::a_telegram_session_gets_an_opus_voice_note_from_mp3_speech", "crates/pmt-gateway/tests/messaging/media.rs::mp3_voice_attachments_are_converted_for_voice_bubbles_or_sent_as_audio"]
+
+[web-and-media-tools."Built-in text-to-speech providers"]
+"Zero-config speech" = ["crates/pmt-media/tests/speech.rs::zero_config_speech_uses_edge_and_aria"]
+"Invalid cap override" = ["crates/pmt-config/src/media_check.rs::a_tts_cap_override_must_be_a_positive_integer"]
+
+[web-and-media-tools."Built-in speech-to-text providers and resolution"]
+"Explicit provider is strict" = ["crates/pmt-media/tests/speech.rs::an_explicit_stt_provider_is_strict"]
+"Unset provider picks local first" = ["crates/pmt-media/tests/speech.rs::an_unset_stt_provider_picks_local_whisper_first"]
+
+[web-and-media-tools."Command-template speech providers"]
+"Paths with spaces" = ["crates/pmt-media/tests/speech.rs::a_command_provider_receives_paths_with_spaces_as_one_argument", "crates/pmt-media/src/speech/command.rs::values_are_quoted_for_their_context"]
+"Built-in name wins" = ["crates/pmt-media/tests/speech.rs::a_built_in_stt_name_wins_over_a_same_named_command"]
+
+[web-and-media-tools."Media tool credentials and billing are explicit"]
+"Subscription-billed image" = ["crates/pmt-media/tests/media.rs::a_subscription_billed_image_records_its_billing_source"]

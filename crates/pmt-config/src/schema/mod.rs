@@ -31,6 +31,7 @@ mod hooks;
 mod interface;
 mod lsp;
 mod mcp;
+mod media;
 mod moa;
 mod models;
 mod operations;
@@ -84,6 +85,12 @@ pub use mcp::{
     McpRedirectHost, McpSamplingConfig, McpServerConfig, McpServerModeConfig, McpToolFilter,
     McpTransport, McpTrust,
 };
+pub use media::{
+    CommandSttConfig, CommandTtsConfig, EdgeTtsConfig, ElevenLabsSttConfig, ElevenLabsTtsConfig,
+    GeminiTtsConfig, ImageGenConfig, ImageOpenAiConfig, LocalSttConfig, OpenAiTtsConfig,
+    SpeechProviderType, SttConfig, SttVendorConfig, TranscriptFormat, TtsConfig, TtsOutputFormat,
+    VoiceModelConfig, WhisperCppConfig, WhisperModel, XSearchConfig, XaiTtsConfig,
+};
 pub use moa::{
     DEFAULT_PRESET, MoaConfig, MoaFanout, MoaPreset, MoaPrivacyFilter, MoaSlot, TRACE_DIR,
 };
@@ -115,10 +122,11 @@ pub use state::{
 pub use tool_gateway::{ToolGatewayConfig, ToolProviderConfig};
 pub use tools::{
     ApprovalMode, ApprovalsConfig, BrowserConfig, ContainerConfig, DegradedMode, DialogPolicy,
-    FilesConfig, FirecrawlConfig, KeylessConfig, ModalConfig, ModalMode, ResultBudget,
-    SearxngConfig, SingularityConfig, SnapshotConfig, SnapshotTerminal, SshConfig, SurfaceToolsets,
-    TerminalConfig, ToolListing, ToolOutputConfig, ToolSearchConfig, ToolSearchMode, ToolsConfig,
-    ToolsetsConfig, UnattendedApproval, WebConfig, WindowsShell,
+    FilesConfig, FirecrawlConfig, KeylessConfig, ModalConfig, ModalMode, ProviderTier,
+    ResultBudget, SearxngConfig, SingularityConfig, SnapshotConfig, SnapshotTerminal, SshConfig,
+    SurfaceToolsets, TerminalConfig, ToolListing, ToolOutputConfig, ToolSearchConfig,
+    ToolSearchMode, ToolsConfig, ToolsetsConfig, UnattendedApproval, WebConfig, WebXaiConfig,
+    WindowsShell,
 };
 pub use webhook::{
     FilterFile, FilterPath, FilterPattern, FilterValue, FilterValues, WebhookFilter, WebhookFilters,
@@ -178,8 +186,8 @@ pub struct Config {
     pub goals: GoalsConfig,
     /// `/heartbeat` bounds.
     pub heartbeat: HeartbeatConfig,
-    /// Image generation's provider selection.
-    pub image_gen: ToolProviderConfig,
+    /// Image generation (`image_generate`).
+    pub image_gen: ImageGenConfig,
     /// Shell hooks and outbound webhooks.
     pub hooks: HooksConfig,
     /// Structured log files.
@@ -234,8 +242,8 @@ pub struct Config {
     pub security: SecurityConfig,
     /// Session storage limits and retention.
     pub sessions: SessionsConfig,
-    /// Speech-to-text's provider selection.
-    pub stt: ToolProviderConfig,
+    /// Speech-to-text providers.
+    pub stt: SttConfig,
     /// Skills discovery and authoring.
     pub skills: SkillsConfig,
     /// Per-profile state snapshots.
@@ -256,8 +264,8 @@ pub struct Config {
     pub tools: ToolsConfig,
     /// Per-surface toolset defaults.
     pub toolsets: ToolsetsConfig,
-    /// Text-to-speech's provider selection.
-    pub tts: ToolProviderConfig,
+    /// Text-to-speech (`text_to_speech`) providers.
+    pub tts: TtsConfig,
     /// Interactive interface selection.
     pub ui: UiConfig,
     /// The credential vault.
@@ -268,6 +276,8 @@ pub struct Config {
     pub vision: VisionConfig,
     /// Web tools.
     pub web: WebConfig,
+    /// The `x_search` tool.
+    pub x_search: XSearchConfig,
     /// Git worktrees: creation, the stale-tree sweep and archives.
     pub worktrees: WorktreesConfig,
 }
@@ -297,7 +307,7 @@ impl Default for Config {
             gateway: GatewayConfig::default(),
             goals: GoalsConfig::default(),
             heartbeat: HeartbeatConfig::default(),
-            image_gen: ToolProviderConfig::default(),
+            image_gen: ImageGenConfig::default(),
             hooks: HooksConfig::default(),
             logging: LoggingConfig::default(),
             loops: LoopsConfig::default(),
@@ -323,7 +333,7 @@ impl Default for Config {
             secrets: SecretsConfig::default(),
             security: SecurityConfig::default(),
             sessions: SessionsConfig::default(),
-            stt: ToolProviderConfig::default(),
+            stt: SttConfig::default(),
             skills: SkillsConfig::default(),
             snapshots: SnapshotsConfig::default(),
             storage: StorageConfig::default(),
@@ -334,12 +344,13 @@ impl Default for Config {
             tool_output: ToolOutputConfig::default(),
             tools: ToolsConfig::default(),
             toolsets: ToolsetsConfig::default(),
-            tts: ToolProviderConfig::default(),
+            tts: TtsConfig::default(),
             ui: UiConfig::default(),
             vault: VaultConfig::default(),
             video_gen: ToolProviderConfig::default(),
             vision: VisionConfig::default(),
             web: WebConfig::default(),
+            x_search: XSearchConfig::default(),
             worktrees: WorktreesConfig::default(),
         }
     }
