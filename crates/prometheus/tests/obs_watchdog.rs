@@ -57,7 +57,8 @@ fn a_stalled_runtime_is_dumped_marked_degraded_and_exits_75() {
     assert!(dump.contains("open spans"), "{dump}");
     // Every thread, also the watchdog's own (it never enters a span), and
     // the tasks blocking the workers, running where they were spawned.
-    assert!(dump.contains("\"liveness-watchdog\""), "{dump}");
+    // (Linux truncates thread names to 15 bytes; this one fits.)
+    assert!(dump.contains("\"pmt-watchdog\""), "{dump}");
     assert!(
         dump.lines().any(|l| l.contains("async task")
             && l.contains("watchdog.rs")

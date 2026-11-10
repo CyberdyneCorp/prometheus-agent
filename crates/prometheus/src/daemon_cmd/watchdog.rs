@@ -48,7 +48,7 @@ pub(super) fn start(
             stop: Arc::clone(&stop),
         };
         let _ = std::thread::Builder::new()
-            .name("liveness-watchdog".to_owned())
+            .name("pmt-watchdog".to_owned())
             .spawn(move || watch.run());
     }
     Guard(stop)
