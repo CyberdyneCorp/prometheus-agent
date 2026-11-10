@@ -94,6 +94,9 @@ impl Dispatcher {
                     }
                     let permit = permits.acquire_owned().await.ok();
                     let executed = this.execute(&call, &cancel, agent.as_ref()).await;
+                    this.setup
+                        .observer
+                        .tool_executed(&call.call_id, &executed.result);
                     drop(permit);
                     let _ = done.send(true);
                     executed

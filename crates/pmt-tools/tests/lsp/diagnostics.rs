@@ -53,8 +53,10 @@ async fn a_patch_reports_only_the_undefined_name_it_introduced() {
         text.contains("ERROR [2:1] \"foo\" is not defined [undefined] (pyright)"),
         "{result}\n{text}"
     );
+    // Match the quoted name: a late verdict carries a path label, and a
+    // temp path (macOS `/var/folders/...`) can contain the bare word.
     assert!(
-        !text.contains("old"),
+        !text.contains("\"old\""),
         "pre-existing diagnostics are not reported: {text}"
     );
     assert_eq!(result["lint"]["status"], "ok");

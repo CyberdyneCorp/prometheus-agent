@@ -4,7 +4,8 @@
 //! `observability.trajectories.retention_secs` ago (0 keeps them forever)
 //! and records `trajectory_purged_at` on the session. Trajectories whose
 //! session no longer exists (deleted or pruned) go too, once the file is a
-//! day old, so a deletion never leaves a transcript copy behind.
+//! day old, so a deletion never leaves a transcript copy behind. MoA
+//! traces (`moa-traces/<session>.jsonl`) follow the same rules.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -38,12 +39,37 @@ pub struct Swept {
 ///
 /// Store and file errors.
 pub fn daily(store: &Store, scope: &ProfileScope) -> Result<Option<Swept>, Error> {
-    let config = scope.config();
-    if !store.maintenance(&config.sessions)?.ran {
+    if !store.maintenance(&scope.config().sessions)?.ran {
         return Ok(None);
     }
+    profile(store, scope, Timestamp::now()).map(Some)
+}
+
+/// The sweep of the scope's profile as of `now`: its trajectories, then
+/// its MoA traces (spec: mixture-of-agents, MoA traces) and session
+/// recordings (spec: replay-and-evaluation, Session recordings), which go
+/// with their session's trajectory or with the session itself.
+///
+/// # Errors
+///
+/// Store errors; `trajectory.io` when a file cannot be removed.
+pub fn profile(store: &Store, scope: &ProfileScope, now: Timestamp) -> Result<Swept, Error> {
+    let config = scope.config();
     let retention = config.observability.trajectories.retention_secs;
-    sweep(store, &scope.path(files::DIR), retention, Timestamp::now()).map(Some)
+    let mut swept = sweep(store, &scope.path(files::DIR), retention, now)?;
+    // MoA traces and session recordings go with their session's trajectory
+    // or with the session itself.
+    let traces = config.moa.trace_dir(scope.dir());
+    let recordings = scope.path(crate::recording::DIR);
+    for dir in [&traces, &recordings] {
+        for id in &swept.purged {
+            files::remove(dir, &id.to_string()).map_err(|err| {
+                Error::io_doing(&codes::TRAJECTORY_IO, "cannot remove", dir, &err)
+            })?;
+        }
+        swept.orphans.extend(remove_orphans(store, dir, now)?);
+    }
+    Ok(swept)
 }
 
 /// Deletes the trajectories in `dir` that retention (`retention_secs`, 0 =

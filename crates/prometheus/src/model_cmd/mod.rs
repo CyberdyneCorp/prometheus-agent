@@ -110,6 +110,10 @@ impl Models {
     /// catalog answers instead), else the catalog's listing or built-in
     /// entries.
     pub(crate) fn model_ids(&self, provider: &Provider) -> Vec<String> {
+        if provider.id() == pmt_providers::moa::PROVIDER_ID {
+            // The Mixture of Agents provider's models are the presets.
+            return self.scope.config().moa.names();
+        }
         match crate::plugins_host::providers::list_models(&self.plugin_providers, provider.id()) {
             Some(Ok(listed)) => listed,
             Some(Err(reason)) => {
@@ -165,7 +169,8 @@ pub(crate) fn client(config: &Config) -> Result<reqwest::Client, Error> {
         extra_ca_file: config.network.extra_ca_file.as_ref().map(Into::into),
         proxy: config.network.proxy.clone(),
     };
-    pmt_net::client_builder(&policy)?
+    // Model servers on this machine are never reached through the proxy.
+    pmt_net::client_builder_loopback_direct(&policy)?
         .timeout(Duration::from_secs(15))
         .build()
         .map_err(|e| {
@@ -187,7 +192,8 @@ pub(crate) async fn validate(
     let route = resolver
         .resolve_target(target, &mut Trace::default())
         .await?;
-    let (meta, _) = catalog.metadata_at(&route.provider, &route.model, Some(&route.base_url));
+    let acting = route.acting();
+    let (meta, _) = catalog.metadata_at(&acting.provider, &acting.model, Some(&acting.base_url));
     let needs = Needs {
         tools: true,
         ..Needs::default()

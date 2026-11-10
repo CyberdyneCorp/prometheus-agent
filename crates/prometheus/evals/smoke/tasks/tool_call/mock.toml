@@ -1,0 +1,13 @@
+[[rule]]
+step = 0
+[[rule.tool_calls]]
+name = "read_file"
+arguments = { path = "README.md" }
+
+[[rule]]
+tool_result = "Total: 85.15"
+text = "Total: 85.15"
+
+[[rule]]
+repeat = true
+text = "unexpected"

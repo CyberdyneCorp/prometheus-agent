@@ -56,6 +56,26 @@ impl Price {
     fn reasoning_rate(&self) -> f64 {
         self.reasoning.unwrap_or(self.output)
     }
+
+    /// The rates of a call made on `service_tier` (spec: model-providers,
+    /// Fast mode service tier): OpenAI priority processing bills twice the
+    /// standard rates, Anthropic fast mode six times; other tiers bill the
+    /// standard rates.
+    #[must_use]
+    pub fn on_tier(self, service_tier: Option<&str>) -> Self {
+        let factor = match service_tier {
+            Some("priority") => 2.0,
+            Some("fast") => 6.0,
+            _ => return self,
+        };
+        Self {
+            input: self.input * factor,
+            output: self.output * factor,
+            cache_read: self.cache_read * factor,
+            cache_write: self.cache_write * factor,
+            reasoning: self.reasoning.map(|r| r * factor),
+        }
+    }
 }
 
 impl From<&ModelPrice> for Price {
@@ -172,6 +192,17 @@ mod tests {
             cache_write: 3.75,
             reasoning: Some(20.0),
         }
+    }
+
+    #[test]
+    fn a_priority_tier_call_is_priced_at_the_tier_rates() {
+        let standard = price().cost(&tokens());
+        let priority = price().on_tier(Some("priority")).cost(&tokens());
+        assert!((priority - 2.0 * standard).abs() < 1e-9);
+        let fast = price().on_tier(Some("fast")).cost(&tokens());
+        assert!((fast - 6.0 * standard).abs() < 1e-9);
+        assert_eq!(price().on_tier(None), price());
+        assert_eq!(price().on_tier(Some("flex")), price());
     }
 
     fn billing<'a>(tokens: &'a Tokens, source: &'a str, reported: Option<f64>) -> Billing<'a> {

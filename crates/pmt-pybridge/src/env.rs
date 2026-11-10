@@ -245,7 +245,7 @@ pub fn ensure(
     std::fs::create_dir_all(root).map_err(|e| io(root, e))?;
     let guard_path = root.join(format!(".{name}.lock"));
     let guard = std::fs::File::create(&guard_path).map_err(|e| io(&guard_path, e))?;
-    guard.lock().map_err(|e| io(&guard_path, e))?;
+    pmt_core::file_lock::lock(&guard).map_err(|e| io(&guard_path, e))?;
     if let Some(done) = existing(root, name, lock, python) {
         return Ok(done);
     }

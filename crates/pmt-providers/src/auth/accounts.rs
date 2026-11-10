@@ -16,16 +16,19 @@ use pmt_core::error::Error;
 
 use super::borrowed::Borrowed;
 use super::credentials::{Credentials, Status, reauth_required};
+use super::mint::Minter;
 use super::refresh::{EARLY, Refresher};
 use super::token::RefreshError;
 use crate::caller::{CredentialHooks, Recovery};
 use crate::classify::{ErrorClass, ProviderError};
 use crate::pool::{self, PoolState};
+use crate::quota::{self, Probe, QuotaTracker};
 use crate::registry::{Provider, ProviderRegistry};
 use crate::resolve::{
     BoxFuture, Credential, CredentialExtras, CredentialSource, Route, SecretSource, SignedIn,
     benched, request_key,
 };
+use crate::spend::SpendCaps;
 
 /// One profile's credentials.
 pub struct Accounts {
@@ -35,6 +38,11 @@ pub struct Accounts {
     state: Option<Arc<dyn PoolState>>,
     borrowed: Borrowed,
     refresher: Option<Refresher>,
+    spend: Option<SpendCaps>,
+    quota: Option<QuotaTracker>,
+    minter: Option<Minter>,
+    detector: Option<crate::detect::Detector>,
+    local_runtime: Option<Arc<dyn crate::local_runtime::LocalRuntime>>,
 }
 
 impl std::fmt::Debug for Accounts {
@@ -62,7 +70,57 @@ impl Accounts {
             state: None,
             borrowed: Borrowed::none(),
             refresher: None,
+            spend: None,
+            quota: None,
+            minter: None,
+            detector: None,
+            local_runtime: None,
         }
+    }
+
+    /// Serves `llamacpp` routes without a `base_url` from `runtime`.
+    #[must_use]
+    pub fn with_local_runtime(
+        mut self,
+        runtime: Arc<dyn crate::local_runtime::LocalRuntime>,
+    ) -> Self {
+        self.local_runtime = Some(runtime);
+        self
+    }
+
+    /// Probes multi-region endpoints (`zai`) with `detector`.
+    #[must_use]
+    pub fn with_detector(mut self, detector: crate::detect::Detector) -> Self {
+        self.detector = Some(detector);
+        self
+    }
+
+    /// Mints short-lived credentials (`key_cmd`, `token_mint`) with
+    /// `minter`.
+    #[must_use]
+    pub fn with_minter(mut self, minter: Minter) -> Self {
+        self.minter = Some(minter);
+        self
+    }
+
+    /// Refuses requests to a provider whose spend cap is reached.
+    #[must_use]
+    pub fn with_spend_caps(mut self, spend: SpendCaps) -> Self {
+        self.spend = Some(spend);
+        self
+    }
+
+    /// Probes subscription quotas and benches exhausted credentials.
+    #[must_use]
+    pub fn with_quota(mut self, quota: QuotaTracker) -> Self {
+        self.quota = Some(quota);
+        self
+    }
+
+    /// The quota tracker, when quotas are probed.
+    #[must_use]
+    pub fn quota(&self) -> Option<&QuotaTracker> {
+        self.quota.as_ref()
     }
 
     /// Request counts and benches in `state` (`state.db`).
@@ -153,6 +211,7 @@ impl Accounts {
         if let Some(id) = route.credential.state_id()
             && let Some(until) = self.benched_until(provider.id(), &id, now)?
             && !matches!(route.credential.source, CredentialSource::Pool { .. })
+            && !self.quota_bench(provider.id(), &id)
         {
             return Err(benched(provider.id(), until));
         }
@@ -165,7 +224,10 @@ impl Accounts {
                     provider,
                     &route.base_url,
                 )? {
-                    Ok(Some(key)) => Ok(key),
+                    Ok(Some(key)) => {
+                        self.refuse_dead_key(provider, &key)?;
+                        Ok(key)
+                    }
                     Ok(None) => Ok(route.credential.clone()),
                     Err(until) => Err(benched(provider.id(), until)),
                 }
@@ -184,7 +246,18 @@ impl Accounts {
                     None => Err(reauth_required(provider.id(), &format!("borrowed:{cli}"))),
                 }
             }
-            CredentialSource::Flag | CredentialSource::Secret { .. } | CredentialSource::None => {
+            CredentialSource::Minted { .. } => match &self.minter {
+                Some(minter) => Ok(route
+                    .credential
+                    .clone()
+                    .with_value(minter.token(provider, &*self.secrets).await?)),
+                None => Ok(route.credential.clone()),
+            },
+            CredentialSource::Secret { .. } => {
+                self.refuse_dead_key(provider, &route.credential)?;
+                Ok(route.credential.clone())
+            }
+            CredentialSource::Flag | CredentialSource::External { .. } | CredentialSource::None => {
                 Ok(route.credential.clone())
             }
         }
@@ -296,6 +369,92 @@ impl Accounts {
         }
     }
 
+    /// `auth.reauth_required` for a minted key (an OpenRouter OAuth key)
+    /// that a provider refused for good.
+    fn refuse_dead_key(&self, provider: &Provider, key: &Credential) -> Result<(), Error> {
+        let (Some(state), Some(id)) = (&self.state, key.state_id()) else {
+            return Ok(());
+        };
+        match state.key_origin(provider.id(), &id)? {
+            Some((_, true)) => Err(reauth_required(provider.id(), &key_label(key))),
+            _ => Ok(()),
+        }
+    }
+
+    /// After HTTP 401 on a minted key: no refresh token exists, so it is
+    /// dead until the user signs in again.
+    fn kill_minted_key(&self, provider: &Provider, key: &Credential) -> Option<Recovery> {
+        let state = self.state.as_ref()?;
+        let id = key.state_id()?;
+        let (source, _) = state.key_origin(provider.id(), &id).ok()??;
+        if let Err(err) = state.mark_key_dead(provider.id(), &id) {
+            tracing::warn!(error = %err, "cannot mark a minted key dead");
+        }
+        tracing::warn!(provider = provider.id(), credential = %id, source, "minted API key refused; marked dead");
+        let error = reauth_required(provider.id(), &key_label(key));
+        Some(Recovery::Fail(ProviderError::refused(
+            ErrorClass::Auth,
+            &error,
+        )))
+    }
+
+    /// Whether `id` is benched for an exhausted quota window, which the
+    /// quota check (probing again at most once a minute) clears early.
+    fn quota_bench(&self, provider: &str, id: &str) -> bool {
+        self.quota.is_some()
+            && self.state.as_ref().is_some_and(|state| {
+                state.states(provider).is_ok_and(|states| {
+                    states.iter().any(|s| {
+                        s.credential == id && s.bench_reason.as_deref() == Some(quota::BENCH_REASON)
+                    })
+                })
+            })
+    }
+
+    /// Checks a subscription credential's quota before its request: an
+    /// exhausted window benches it until the reset (and refuses the
+    /// request); a restored quota clears a quota bench.
+    async fn check_quota(
+        &self,
+        provider: &Provider,
+        route: &Route,
+        credential: &Credential,
+    ) -> Result<(), Error> {
+        let (Some(tracker), Some(state)) = (&self.quota, &self.state) else {
+            return Ok(());
+        };
+        let (true, Some(id), Some(token)) = (
+            credential.is_subscription(),
+            credential.state_id(),
+            credential.value(),
+        ) else {
+            return Ok(());
+        };
+        let probe = Probe {
+            provider: provider.id(),
+            credential: &id,
+            base_url: &route.base_url,
+            token,
+            account_id: credential.account_id(),
+        };
+        let Some(snapshot) = tracker.current(probe).await else {
+            return Ok(());
+        };
+        let now = Timestamp::now();
+        if let Some(until) = snapshot.exhausted_until(now) {
+            state.bench(provider.id(), &id, Some(until), Some(quota::BENCH_REASON))?;
+            return Err(benched(provider.id(), until).with_hint(format!(
+                "the subscription's quota is used up until {}: {}",
+                until.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                snapshot.describe()
+            )));
+        }
+        if self.quota_bench(provider.id(), &id) {
+            state.bench(provider.id(), &id, None, None)?;
+        }
+        Ok(())
+    }
+
     fn record_use(&self, provider: &str, credential: &Credential) {
         let (Some(state), Some(id)) = (&self.state, credential.state_id()) else {
             return;
@@ -303,6 +462,19 @@ impl Accounts {
         if let Err(err) = state.record_use(provider, &id, Timestamp::now()) {
             tracing::warn!(error = %err, "cannot count a credential request");
         }
+    }
+}
+
+/// The label `auth status` shows for a key credential.
+fn key_label(key: &Credential) -> String {
+    match &key.source {
+        CredentialSource::Pool {
+            label: Some(label), ..
+        } => label.clone(),
+        CredentialSource::Secret { name } | CredentialSource::Pool { secret: name, .. } => {
+            name.clone()
+        }
+        _ => key.describe(),
     }
 }
 
@@ -340,6 +512,24 @@ impl CredentialExtras for Accounts {
     fn pool_state(&self) -> Option<&dyn PoolState> {
         self.state()
     }
+
+    fn detector(&self) -> Option<&crate::detect::Detector> {
+        self.detector.as_ref()
+    }
+
+    fn local_runtime(&self) -> Option<&dyn crate::local_runtime::LocalRuntime> {
+        self.local_runtime.as_deref()
+    }
+
+    fn mint<'a>(
+        &'a self,
+        provider: &'a Provider,
+    ) -> BoxFuture<'a, Option<Result<pmt_core::secret::SecretString, Error>>> {
+        Box::pin(async move {
+            let minter = self.minter.as_ref()?;
+            Some(minter.token(provider, &*self.secrets).await)
+        })
+    }
 }
 
 impl CredentialHooks for Accounts {
@@ -348,8 +538,16 @@ impl CredentialHooks for Accounts {
             let Ok(provider) = self.registry.lookup(&route.provider) else {
                 return Ok(route.clone());
             };
+            if let Some(spend) = &self.spend {
+                spend
+                    .check(provider, Timestamp::now())
+                    .map_err(|e| ProviderError::refused(ErrorClass::Billing, &e))?;
+            }
             let credential = self
                 .credential_for(provider, route)
+                .await
+                .map_err(|e| refusal(&e))?;
+            self.check_quota(provider, route, &credential)
                 .await
                 .map_err(|e| refusal(&e))?;
             self.record_use(provider.id(), &credential);
@@ -375,6 +573,24 @@ impl CredentialHooks for Accounts {
             };
             if may_recover && error.status == Some(401) && route.credential.is_subscription() {
                 return self.recover(provider, route).await;
+            }
+            if error.status == Some(401)
+                && matches!(
+                    route.credential.source,
+                    CredentialSource::Secret { .. } | CredentialSource::Pool { .. }
+                )
+                && let Some(recovery) = self.kill_minted_key(provider, &route.credential)
+            {
+                return recovery;
+            }
+            if let (true, CredentialSource::Minted { .. }, Some(minter)) = (
+                may_recover && error.status == Some(401),
+                &route.credential.source,
+                &self.minter,
+            ) {
+                // The token was revoked: mint a new one and send once more.
+                minter.invalidate(provider.id());
+                return Recovery::RetryNow;
             }
             if let Some(id) = route.credential.state_id() {
                 self.bench(provider, &id, error, Timestamp::now());

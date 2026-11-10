@@ -75,7 +75,8 @@ pub fn run(args: &DemoArgs, launch: &LaunchEnv) -> Result<u8, Error> {
 
 /// Whether this platform has an OS sandbox backend (pmt-sandbox: Linux,
 /// macOS, Windows).
-const HAS_OS_SANDBOX: bool = cfg!(any(target_os = "linux", target_os = "macos", windows));
+pub(crate) const HAS_OS_SANDBOX: bool =
+    cfg!(any(target_os = "linux", target_os = "macos", windows));
 
 /// On a platform without an OS sandbox (Android/Termux), commands only run
 /// with `security.sandbox.allow_degraded = ["all"]`. The demo's own
@@ -106,11 +107,17 @@ struct Session {
 /// language server.
 const OFFLINE: &str = "lsp.enabled=false";
 
+/// The demo stores and serves its model calls through the model-call cache
+/// of its own profile (spec: replay-and-evaluation, Content-addressed
+/// model-call cache: the demo defaults to `read_write`).
+const CACHED: &str = "replay.cache.mode=read_write";
+
 /// Runs the scenario's one turn in the demo's home.
 fn run_session(place: &Place, launch: &LaunchEnv) -> Result<Session, Error> {
     let home = place.home();
     let mut set = unconfined_override();
     set.push(OFFLINE.to_owned());
+    set.push(CACHED.to_owned());
     let ctx = Context {
         home_flag: Some(&home),
         launch,
@@ -129,6 +136,7 @@ fn run_session(place: &Place, launch: &LaunchEnv) -> Result<Session, Error> {
         interactive: false,
         yolo: false,
         cwd: place.repository(),
+        cwd_fallback: false,
         skills: Vec::new(),
         pass_session_id: false,
         // Nothing from the machine shapes the prompt: the demo is the same
@@ -139,6 +147,7 @@ fn run_session(place: &Place, launch: &LaunchEnv) -> Result<Session, Error> {
         ignore_rules: false,
         egress: crate::egress::Overrides::default(),
         cron: None,
+        replay: None,
     };
     let factory = Factory::new(scope, launch, &flags, None, options)?;
     crate::model_cmd::block_on(session(factory, &flags))?

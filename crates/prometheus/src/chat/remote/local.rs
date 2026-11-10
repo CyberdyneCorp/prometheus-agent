@@ -91,6 +91,10 @@ impl Chat<'_, '_> {
     async fn local(&mut self, name: &str, args: &str) -> Result<Option<Flow>, Error> {
         let text = match name {
             "exit" => return Ok(Some(Flow::Exit)),
+            "voice" => {
+                self.voice_command(args).await;
+                return Ok(Some(Flow::Continue));
+            }
             "handoff" => {
                 let scope = self.start.scope;
                 let handed = crate::chat::handoff::handoff(

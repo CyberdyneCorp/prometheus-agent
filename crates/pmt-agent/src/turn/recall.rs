@@ -53,7 +53,7 @@ impl Turn<'_> {
         let Some(memory) = self.agent.setup.memory.clone() else {
             return;
         };
-        let Some(recalled) = memory.begin_turn(text) else {
+        let Some(recalled) = memory.begin_turn(text).await else {
             return;
         };
         self.ephemeral = Some(Ephemeral {

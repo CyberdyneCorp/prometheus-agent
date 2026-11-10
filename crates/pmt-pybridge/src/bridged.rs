@@ -529,3 +529,36 @@ impl pmt_plugins::events::EventSink for BridgedEvents {
         }
     }
 }
+
+/// A Hermes `MemoryProvider` the plugin registered, called in its sidecar
+/// (spec: python-bridge, Scope of hosted code).
+pub struct BridgedMemory {
+    supervisor: Arc<Supervisor>,
+    name: String,
+}
+
+impl BridgedMemory {
+    /// Provider `name` of `supervisor`'s plugin.
+    #[must_use]
+    pub fn new(supervisor: Arc<Supervisor>, name: String) -> Self {
+        Self { supervisor, name }
+    }
+}
+
+impl pmt_plugins::memory::MemoryCalls for BridgedMemory {
+    fn call(
+        &self,
+        method: &str,
+        args: &Value,
+        timeout: Option<std::time::Duration>,
+    ) -> Result<Result<Value, String>, Error> {
+        let timeout = timeout.unwrap_or_else(|| self.supervisor.settings().call_timeout);
+        let params =
+            json!({"kind": "memory", "provider": self.name, "method": method, "args": args});
+        match self.supervisor.call("provider.call", &params, timeout) {
+            Ok(answer) => Ok(Ok(answer)),
+            Err(CallError::Remote { message, .. }) => Ok(Err(message)),
+            Err(other) => Err(other.into_error()),
+        }
+    }
+}

@@ -142,8 +142,14 @@ pub(crate) async fn mock_model(profile: &Profile, script: &str) -> Arc<Recording
     let catalog = Arc::new(Catalog::new(&config, None));
     let secrets: Arc<dyn SecretSource> = Arc::new(BTreeMap::<String, SecretString>::new());
     let mock = Arc::new(Mock::new(Script::parse(script, "test.toml").unwrap()));
+    let prices: Arc<dyn pmt_obs::usage::Prices> = catalog.clone();
+    // Calls reach the usage ledger (a review's calls carry its purpose).
     let caller = ModelCaller::new(pmt_net::client(&pmt_net::OutboundPolicy::default()).unwrap())
-        .with_mock(mock);
+        .with_mock(mock)
+        .with_recorder(Arc::new(pmt_obs::usage::UsageRecorder::new(
+            profile.store.clone(),
+            prices,
+        )));
     let setup = ProviderSetup {
         config,
         registry,
@@ -155,6 +161,7 @@ pub(crate) async fn mock_model(profile: &Profile, script: &str) -> Arc<Recording
         catalog,
         health: Arc::new(Healthy),
         ad_hoc: None,
+        metered_confirm: None,
     };
     let target = Target {
         provider: "mock".into(),

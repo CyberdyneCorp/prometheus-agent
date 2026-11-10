@@ -17,6 +17,14 @@ use pmt_core::secret::SecretString;
 use super::input::Event;
 use super::prompts::{self, Pending};
 use super::{Flow, Repl};
+
+/// What a turn of the line interface runs.
+pub(super) enum Work {
+    /// A new turn of this input.
+    Input(TurnInput),
+    /// A turn a crash left unfinished: resumed (`true`) or closed.
+    Resume(pmt_agent::turn::Unfinished, bool),
+}
 use crate::chat::session::Live;
 use crate::chat::theme::Role;
 use crate::slash::{BusyPolicy, Resolution, Surface};
@@ -37,22 +45,40 @@ impl Repl {
     }
 
     /// Runs one turn of `input` to its end, then shows the outcome.
-    pub(super) async fn run_input(&mut self, mut input: TurnInput) {
+    pub(super) async fn run_input(&mut self, input: TurnInput) {
+        self.run_work(Work::Input(input)).await;
+    }
+
+    /// Runs a new turn, or resumes (or closes) one a crash left
+    /// unfinished, to its end, then shows the outcome.
+    pub(super) async fn run_work(&mut self, work: Work) {
         let Some(live) = self.live.take() else {
             return;
         };
-        let origin = input.origin.clone();
+        let origin = match &work {
+            Work::Input(input) => input.origin.clone(),
+            Work::Resume(..) => None,
+        };
         if let Err(err) = pmt_core::pause::check(live.scope.home()) {
             self.error(&err);
             self.live = Some(live);
             return;
         }
-        if let Some(note) = live.skills.change_note() {
-            input.additions.push(note);
-        }
+        let work = match work {
+            Work::Input(mut input) => {
+                if let Some(note) = live.skills.change_note() {
+                    input.additions.push(note);
+                }
+                Work::Input(input)
+            }
+            resume @ Work::Resume(..) => resume,
+        };
         live.record.turn();
         let mut options = TurnOptions::new(&CancelToken::new());
         options.run_budget = self.start.run_budget;
+        if let Some(mouth) = &self.mouth {
+            options.deltas = Arc::new(super::voice::Spoken(Arc::clone(mouth)));
+        }
         let interrupt = options.interrupt.clone();
         let prompt = self.prompt();
         self.input.request(&prompt);
@@ -61,10 +87,20 @@ impl Repl {
         let started = std::time::Instant::now();
         let result = {
             // Boxed: the turn's state machine is large.
-            let turn = Box::pin(
-                live.agent
-                    .run_turn(Some(&live.scope), live.id, input, options),
-            );
+            let turn = Box::pin(async {
+                match work {
+                    Work::Input(input) => {
+                        live.agent
+                            .run_turn(Some(&live.scope), live.id, input, options)
+                            .await
+                    }
+                    Work::Resume(unfinished, resume) => {
+                        live.agent
+                            .resume_turn(Some(&live.scope), unfinished, resume, options)
+                            .await
+                    }
+                }
+            });
             Box::pin(self.busy(turn, &live, &interrupt)).await
         };
         self.input.set_busy(false);
@@ -172,6 +208,8 @@ impl Repl {
                 }
             }
             Event::SuspendRefused => self.notice("cannot suspend while the agent is working"),
+            // Voice records between turns only.
+            Event::Record => {}
             Event::Compose(_) => {
                 self.notice("/prompt is unavailable while the agent is working; use /stop first");
             }
@@ -278,7 +316,21 @@ impl Repl {
                 let value = (!line.is_empty()).then(|| SecretString::new(line));
                 let _ = reply.send(value);
             }
-            Pending::Confirm { .. } => {}
+            Pending::Confirm { .. } | Pending::Resume(_) => {}
+            Pending::Autoprune => {
+                let answer = super::super::autoprune::Answer::parse(line)
+                    .unwrap_or(super::super::autoprune::Answer::Later);
+                let store = &self.factory.store;
+                match super::super::autoprune::apply(
+                    &self.factory.scope,
+                    store,
+                    answer,
+                    jiff::Timestamp::now(),
+                ) {
+                    Ok(text) => self.notice(&text),
+                    Err(err) => self.error(&err),
+                }
+            }
         }
     }
 
@@ -313,41 +365,10 @@ impl Repl {
         if let Some(err) = &result.error {
             self.error(err);
         }
-        if live.memory.end_turn() {
-            self.spawn_memory_review(live);
-        }
-        self.skill_nudge(live, &result).await;
+        crate::chat::reviews::after_turn(&self.factory, live, &result).await;
         if self.factory.scope.config().display.bell_on_complete {
             self.input.print("\x07");
         }
-    }
-
-    /// Runs the background memory review the session is due for.
-    fn spawn_memory_review(&self, live: &Live) {
-        let store = Arc::clone(&self.factory.store);
-        let child = match pmt_agent::review::child_session(&store, live.id) {
-            Ok(child) => child,
-            Err(err) => {
-                tracing::warn!(error = %err, "memory review skipped");
-                return;
-            }
-        };
-        let review = pmt_memory::review::ReviewRun {
-            parent: Arc::clone(&live.memory),
-            session: live.id,
-            child,
-            model: Arc::clone(&live.model) as _,
-            focus: None,
-            suggestions: Some(crate::cron_host::inbox(
-                &self.factory.scope,
-                Arc::clone(&self.factory.store),
-            )),
-        };
-        tokio::spawn(async move {
-            if let Err(err) = pmt_memory::review::run(review).await {
-                tracing::warn!(error = %err, "memory review failed");
-            }
-        });
     }
 
     /// Answers a pending prompt from an idle line; a confirmation runs or
@@ -355,6 +376,11 @@ impl Repl {
     pub(super) async fn answer(&mut self, pending: Pending, line: &str) -> Flow {
         match pending {
             Pending::Confirm { line: command } => self.confirmed(&command, line).await,
+            Pending::Resume(unfinished) => {
+                let yes = matches!(line.trim().to_lowercase().as_str(), "y" | "yes");
+                self.run_work(Work::Resume(unfinished, yes)).await;
+                Flow::Continue
+            }
             other => {
                 self.answer_now(other, line);
                 Flow::Continue
@@ -378,5 +404,57 @@ async fn recv<T>(rx: &mut Option<tokio::sync::mpsc::UnboundedReceiver<T>>) -> Op
     match rx {
         Some(rx) => rx.recv().await,
         None => std::future::pending().await,
+    }
+}
+
+impl Repl {
+    /// A resumed session whose last turn a crash left unfinished: resumed,
+    /// closed or offered, by `agent.resume_on_crash` (spec:
+    /// agent-turn-loop, Crash resume mid-tool-batch).
+    pub(super) async fn offer_resume(&mut self) {
+        use pmt_config::schema::ResumeOnCrash;
+        let Some(live) = &self.live else {
+            return;
+        };
+        let unfinished = match live.agent.unfinished_turn() {
+            Ok(Some(unfinished)) => unfinished,
+            Ok(None) => return,
+            Err(err) => return self.error(&err),
+        };
+        let tools = unfinished.interrupted_tools();
+        let running = if tools.is_empty() {
+            String::new()
+        } else {
+            format!(" while {} ran", tools.join(", "))
+        };
+        self.notice(&format!(
+            "The last turn of this session stopped when the process ended{running}."
+        ));
+        match self.factory.scope.config().agent.resume_on_crash {
+            ResumeOnCrash::Auto => self.run_work(Work::Resume(unfinished, true)).await,
+            ResumeOnCrash::Never => self.run_work(Work::Resume(unfinished, false)).await,
+            ResumeOnCrash::Ask => self.ask(Pending::Resume(unfinished)),
+        }
+    }
+
+    /// The low-disk prune prompt, when it is due (spec: session-storage,
+    /// Low-disk prune prompt).
+    pub(super) fn offer_autoprune(&mut self) {
+        if self.pending.is_some() {
+            return;
+        }
+        let due = super::super::autoprune::due(
+            &self.factory.scope,
+            &self.factory.store,
+            jiff::Timestamp::now(),
+        );
+        match due {
+            Ok(true) => {
+                self.notice(super::super::autoprune::QUESTION);
+                self.ask(Pending::Autoprune);
+            }
+            Ok(false) => {}
+            Err(err) => tracing::warn!(error = %err, "low-disk check skipped"),
+        }
     }
 }

@@ -15,6 +15,10 @@ pub struct SetupArgs {
     /// Clear the onboarding state (offered setup, shown tips, tour steps).
     #[arg(long, conflicts_with_all = ["section", "non_interactive"])]
     pub reset_onboarding: bool,
+    /// Sign in to the Nous Portal, make `nous` the main provider and offer
+    /// to route every tool category through its tool gateway.
+    #[arg(long, conflicts_with_all = ["section", "non_interactive", "reset_onboarding"])]
+    pub portal: bool,
 }
 
 /// Sections of `prometheus setup`.

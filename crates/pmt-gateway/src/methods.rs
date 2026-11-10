@@ -40,8 +40,11 @@ pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
         .register::<c::SessionAttach, _, _>(catalog, attach)?
         .register::<c::SessionResume, _, _>(catalog, resume)?
         .register::<c::SessionInterrupt, _, _>(catalog, interrupt)?
+        .register::<c::SessionSteer, _, _>(catalog, steer)?
         .register::<c::SessionResolve, _, _>(catalog, resolve)?
         .register::<c::SessionFork, _, _>(catalog, fork)?
+        .register::<c::SessionTree, _, _>(catalog, tree)?
+        .register::<c::SessionSiblings, _, _>(catalog, siblings)?
         .register::<c::SessionDetach, _, _>(catalog, detach)?
         .register::<c::SessionListing, _, _>(catalog, list)?
         .register::<c::SessionEventsSince, _, _>(catalog, events_since)?
@@ -59,6 +62,9 @@ pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
         .register::<c::ApprovalRespond, _, _>(catalog, approval_respond)?;
     crate::discovery::register(router, catalog)?;
     crate::vault::register(router, catalog)?;
+    crate::moa::register(router, catalog)?;
+    crate::local::register(router, catalog)?;
+    crate::upkeep::register(router, catalog)?;
     crate::worktree::register(router, catalog)?;
     crate::messaging::methods::register(router, catalog)?;
     // `rpc.hello` runs in the read loop (it must come first), but it is
@@ -283,6 +289,16 @@ async fn interrupt(call: Call, params: c::SessionRef) -> Result<c::Ack, RpcError
     Ok(c::Ack::YES)
 }
 
+async fn steer(call: Call, params: c::SteerParams) -> Result<c::Ack, RpcError> {
+    let profile = attached_profile(&call, &params.session_id, Need::Driver)?;
+    call.server
+        .host()
+        .steer_session(&profile, params)
+        .await
+        .map_err(|e| rpc(&e))?;
+    Ok(c::Ack::YES)
+}
+
 async fn resolve(call: Call, params: c::ResolveParams) -> Result<c::SessionRef, RpcError> {
     let profile = profile_for(&call, params.profile.as_deref())?;
     let found = call
@@ -305,6 +321,27 @@ async fn fork(call: Call, params: c::ForkParams) -> Result<c::SessionRef, RpcErr
         .map_err(|e| rpc(&e))?;
     call.server.hub().register(&forked.session_id, &profile);
     Ok(forked)
+}
+
+async fn tree(call: Call, params: c::SessionRef) -> Result<c::Lineage, RpcError> {
+    lineage(call, params, false).await
+}
+
+async fn siblings(call: Call, params: c::SessionRef) -> Result<c::Lineage, RpcError> {
+    lineage(call, params, true).await
+}
+
+async fn lineage(
+    call: Call,
+    params: c::SessionRef,
+    siblings: bool,
+) -> Result<c::Lineage, RpcError> {
+    let profile = attached_profile(&call, &params.session_id, Need::Attached)?;
+    call.server
+        .host()
+        .lineage(&profile, &params.session_id, siblings)
+        .await
+        .map_err(|e| rpc(&e))
 }
 
 async fn detach(call: Call, params: c::SessionRef) -> Result<c::Ack, RpcError> {

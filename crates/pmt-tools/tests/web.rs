@@ -300,7 +300,7 @@ async fn a_long_page_is_windowed_deterministically_over_a_stored_full_text() {
     let url = vec!["https://public.test/long".to_owned()];
     let first = web.extract(&url, None).await;
     let second = web.extract(&url, None).await;
-    assert_eq!(first, second);
+    assert_eq!(first.text_content(), second.text_content());
     let reply = body(&first);
     let content = reply["results"][0]["content"].as_str().unwrap();
     let chars = content.chars().count();
@@ -310,10 +310,9 @@ async fn a_long_page_is_windowed_deterministically_over_a_stored_full_text() {
     let stored = profile.join("cache").join("web");
     let file = std::fs::read_dir(&stored)
         .unwrap()
-        .next()
-        .unwrap()
-        .unwrap()
-        .path();
+        .map(|entry| entry.unwrap().path())
+        .find(|path| path.extension().is_some_and(|e| e == "md"))
+        .unwrap();
     assert!(footer.contains(&file.display().to_string()), "{footer}");
     assert!(footer.contains("read_file(path="), "{footer}");
     assert_eq!(std::fs::read_to_string(&file).unwrap(), long_page());

@@ -15,7 +15,7 @@ use super::index::Format;
 /// # Errors
 ///
 /// A one-line reason when the archive is unreadable.
-pub(super) fn unpack(archive: &Path, format: Format, dest: &Path) -> Result<(), String> {
+pub fn unpack(archive: &Path, format: Format, dest: &Path) -> Result<(), String> {
     let file = File::open(archive).map_err(|e| e.to_string())?;
     match format {
         Format::TarGz => {

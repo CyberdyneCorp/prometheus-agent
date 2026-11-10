@@ -267,6 +267,19 @@ fn register(
         Arc::clone(supervisor),
         Arc::clone(&plugin.grants),
     )));
+    // A Hermes memory provider is reached by its plugin's id
+    // (`memory.provider`); a plugin registers at most one.
+    if let Some(name) = registrations.memory_providers.first() {
+        loaded
+            .memory_providers
+            .push(pmt_plugins::memory::ExternalMemory {
+                plugin: supervisor.plugin().to_owned(),
+                calls: Arc::new(pmt_pybridge::bridged::BridgedMemory::new(
+                    Arc::clone(supervisor),
+                    name.clone(),
+                )),
+            });
+    }
     Ok(notes)
 }
 

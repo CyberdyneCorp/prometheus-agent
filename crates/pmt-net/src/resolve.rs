@@ -107,6 +107,8 @@ impl reqwest::dns::Resolve for OutboundResolver {
         let resolver = self.clone();
         Box::pin(async move {
             let addrs = resolver.resolve_checked(name.as_str()).await?;
+            // With `force_ipv4` only IPv4 is left and nothing is raced.
+            let addrs = crate::eyeballs::order(addrs, crate::eyeballs::answers).await;
             // Port 0 is replaced by the URL's port.
             let addrs: reqwest::dns::Addrs =
                 Box::new(addrs.into_iter().map(|ip| SocketAddr::new(ip, 0)));

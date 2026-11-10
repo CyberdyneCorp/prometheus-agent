@@ -2992,6 +2992,7 @@ dependencies = [
  "nix 0.31.3",
  "proptest",
  "regex",
+ "rustix",
  "serde",
  "serde_json",
  "sha2 0.11.1",
@@ -3050,6 +3051,17 @@ dependencies = [
 [[package]]
 name = "pmt-eval"
 version = "0.1.0"
+dependencies = [
+ "jiff",
+ "pmt-core",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "similar",
+ "tar",
+ "tempfile",
+ "zstd",
+]
 
 [[package]]
 name = "pmt-evolve"
@@ -3059,7 +3071,6 @@ version = "0.1.0"
 name = "pmt-gateway"
 version = "0.1.0"
 dependencies = [
- "base64 0.23.1",
  "bytes",
  "futures-util",
  "getrandom 0.4.3",
@@ -3081,7 +3092,6 @@ dependencies = [
  "sysinfo",
  "tempfile",
  "tokio",
- "tokio-rustls",
  "tokio-tungstenite",
  "tokio-util",
  "toml",
@@ -3092,6 +3102,29 @@ dependencies = [
 [[package]]
 name = "pmt-kanban"
 version = "0.1.0"
+
+[[package]]
+name = "pmt-local"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "jiff",
+ "percent-encoding",
+ "pmt-config",
+ "pmt-core",
+ "pmt-net",
+ "pmt-update",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sysinfo",
+ "tar",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "ulid",
+ "wiremock",
+]
 
 [[package]]
 name = "pmt-mcp"
@@ -3120,6 +3153,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "pmt-media"
+version = "0.1.0"
+dependencies = [
+ "base64 0.23.1",
+ "futures-util",
+ "image",
+ "jiff",
+ "nix 0.31.3",
+ "pmt-config",
+ "pmt-core",
+ "pmt-net",
+ "pmt-providers",
+ "pmt-tools",
+ "rcgen",
+ "regex",
+ "reqwest",
+ "rustls",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tempfile",
+ "tokio",
+ "tokio-rustls",
+ "tokio-tungstenite",
+ "tracing",
+ "ulid",
+ "url",
+ "wiremock",
+]
+
+[[package]]
 name = "pmt-memory"
 version = "0.1.0"
 dependencies = [
@@ -3137,6 +3201,7 @@ dependencies = [
  "serde",
  "serde_json",
  "similar",
+ "sysinfo",
  "tempfile",
  "tokio",
  "tracing",
@@ -3179,6 +3244,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "sha2 0.11.1",
  "tempfile",
  "tokio",
  "toml",
@@ -3223,9 +3289,12 @@ name = "pmt-providers"
 version = "0.1.0"
 dependencies = [
  "base64 0.23.1",
+ "crc32fast",
  "fastrand",
+ "futures-util",
  "getrandom 0.4.3",
  "jiff",
+ "percent-encoding",
  "pmt-config",
  "pmt-core",
  "pmt-net",
@@ -3233,8 +3302,10 @@ dependencies = [
  "pmt-store",
  "regex",
  "reqwest",
+ "ring",
  "serde",
  "serde_json",
+ "sha1",
  "sha2 0.11.1",
  "tempfile",
  "tokio",
@@ -3244,6 +3315,7 @@ dependencies = [
  "ulid",
  "url",
  "wiremock",
+ "zstd",
 ]
 
 [[package]]
@@ -3464,6 +3536,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pmt-voice"
+version = "0.1.0"
+dependencies = [
+ "pmt-config",
+ "tempfile",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "pmt-web"
 version = "0.1.0"
 
@@ -3574,6 +3656,8 @@ dependencies = [
  "crossterm",
  "expectrl",
  "flate2",
+ "ignore",
+ "image",
  "jiff",
  "minisign",
  "nix 0.31.3",
@@ -3593,8 +3677,11 @@ dependencies = [
  "pmt-core",
  "pmt-cron",
  "pmt-delegation",
+ "pmt-eval",
  "pmt-gateway",
+ "pmt-local",
  "pmt-mcp",
+ "pmt-media",
  "pmt-memory",
  "pmt-net",
  "pmt-obs",
@@ -3609,6 +3696,7 @@ dependencies = [
  "pmt-tui",
  "pmt-update",
  "pmt-vault",
+ "pmt-voice",
  "pmt-worktrees",
  "pulldown-cmark",
  "qrcode",
@@ -3625,6 +3713,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.11.1",
+ "sysinfo",
  "tar",
  "tempfile",
  "tokio",
@@ -4006,9 +4095,9 @@ dependencies = [
 
 [[package]]
 name = "rmcp"
-version = "3.8.0"
+version = "3.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8be15815186873ea063bf005011d16c356804973489e40c39116ae3a2878d1f"
+checksum = "d24a7e92f4bcaa36b97fa93c4fa7ca8f3e669eced949345b3462dba333c7f909"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -4027,6 +4116,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "sha2 0.11.1",
  "sse-stream",
  "thiserror",
  "tokio",

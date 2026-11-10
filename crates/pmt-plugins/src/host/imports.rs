@@ -123,6 +123,9 @@ fn state_error(error: StateError) -> HostError {
 
 impl types::Host for HostState {}
 
+// Record-only interface of the memory-provider world.
+impl super::bindings::prometheus::memory_provider::types::Host for HostState {}
+
 /// Outside a `run-cli` call there is no terminal: writes are dropped.
 impl console::Host for HostState {
     fn write_stdout(&mut self, bytes: Vec<u8>) {

@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 use jiff::Timestamp;
 use pmt_config::schema::MemoryConfig;
 use pmt_core::error::{Error, codes};
-use pmt_store::{MemoryPending, MemoryTarget, Store};
+use pmt_store::{Author, MemoryPending, MemoryTarget, Store};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -81,6 +81,10 @@ fn refused(message: String) -> Error {
 /// written); store errors.
 pub fn write(store: &Store, ctx: &Context, commit: &[Op], stage: &[Op]) -> Result<Written, Error> {
     store.memory_batch(Some(ctx.target), |b| {
+        b.author = Some(Author {
+            origin: ctx.origin,
+            session: ctx.session.clone(),
+        });
         let mut entries = b.entries.clone();
         let applied = batch::apply(&mut entries, commit, ctx).map_err(refused)?;
         let mut written = Written {
@@ -171,6 +175,10 @@ pub fn approve(store: &Store, config: &MemoryConfig, id: &str) -> Result<Written
             }
         }
         let ctx = context(config, target, pending.origin, pending.session_id.clone());
+        b.author = Some(Author {
+            origin: pending.origin,
+            session: pending.session_id.clone(),
+        });
         let mut entries = b.entries.clone();
         let applied = batch::apply(&mut entries, &operations(&pending)?, &ctx).map_err(refused)?;
         b.entries = entries;

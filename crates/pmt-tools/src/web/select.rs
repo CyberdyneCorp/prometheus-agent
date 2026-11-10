@@ -5,7 +5,8 @@
 //! `web.backend`, which wins over `auto`. `auto` walks a fixed order and
 //! takes the first backend whose credentials are present; `xai` and
 //! `openai-native` are never in that order, so a stray xAI key never
-//! reroutes web search.
+//! reroutes web search. A sign-in is asked of the same presence check
+//! as `signin:<provider>` ([`crate::probe::signin`]).
 
 use pmt_config::schema::WebConfig;
 
@@ -13,10 +14,24 @@ use super::Capability;
 use super::backend::FIRECRAWL_SECRET;
 
 /// Backend ids this build implements.
-pub const BACKENDS: &[&str] = &["firecrawl", "searxng"];
+pub const BACKENDS: &[&str] = &[
+    "firecrawl",
+    "searxng",
+    "tavily",
+    "exa",
+    "parallel",
+    "keenable",
+    "perplexity",
+    "brave-free",
+    "ddgs",
+    "xai",
+    "openai-native",
+    "nous",
+    "keyless",
+];
 
-/// The `auto` order of the spec. Entries this build does not implement
-/// are skipped (they arrive with the M2 backend list).
+/// The `auto` order of the spec (`xai` and `openai-native` never appear,
+/// `keyless` only when `web.keyless.enabled`).
 pub const AUTO_ORDER: &[&str] = &[
     "tavily",
     "perplexity",
@@ -30,7 +45,7 @@ pub const AUTO_ORDER: &[&str] = &[
 ];
 
 /// Backends that only search.
-const SEARCH_ONLY: &[&str] = &["searxng", "brave-free", "xai", "openai-native"];
+pub const SEARCH_ONLY: &[&str] = &["searxng", "brave-free", "ddgs", "xai", "openai-native"];
 
 /// The reason the web tools give when nothing resolves.
 pub const NOTHING_CONFIGURED: &str = "no web backend configured";
@@ -65,10 +80,24 @@ pub fn resolve(
         // unregistered: never another backend in its place.
         return Err(not_installed(capability, id));
     };
+    // An explicit choice is honoured: a missing key fails the call naming
+    // it, never another backend. Only a missing instance URL is fatal.
     if known == "searxng" && config.searxng.url.is_none() {
         return Err("backend 'searxng' needs web.searxng.url".to_owned());
     }
     Ok(known)
+}
+
+/// The secret a keyed backend reads.
+#[must_use]
+pub fn secret_of(id: &str) -> Option<&'static str> {
+    if id == "firecrawl" {
+        return Some(FIRECRAWL_SECRET);
+    }
+    super::vendors::KEYED
+        .iter()
+        .find(|spec| spec.id == id)
+        .and_then(|spec| spec.secret)
 }
 
 /// The error of a backend name nothing provides (neither this build nor
@@ -101,6 +130,7 @@ fn auto(
 ) -> Option<&'static str> {
     AUTO_ORDER.iter().copied().find(|id| {
         BACKENDS.contains(id)
+            && (*id != super::keyless::KEYLESS || config.keyless.enabled)
             && !(capability == Capability::Extract && SEARCH_ONLY.contains(id))
             && credentials_present(id, config, has_secret)
     })
@@ -111,7 +141,12 @@ fn credentials_present(id: &str, config: &WebConfig, has_secret: HasSecret<'_>) 
     match id {
         "firecrawl" => config.firecrawl.base_url.is_some() || has_secret(FIRECRAWL_SECRET),
         "searxng" => config.searxng.url.is_some(),
-        _ => false,
+        "nous" => has_secret(&crate::probe::signin("nous")),
+        "xai" => has_secret("XAI_API_KEY") || has_secret(&crate::probe::signin("xai-oauth")),
+        // Named explicitly, the ring is the choice; `auto` reaches it only
+        // when enabled ([`auto`]).
+        "keyless" | "ddgs" | "openai-native" => true,
+        other => secret_of(other).is_some_and(has_secret),
     }
 }
 
@@ -143,12 +178,10 @@ mod tests {
             resolve(&config, Capability::Extract, &none),
             Err("backend 'searxng' is search-only; set web.extract_backend".into())
         );
+        // An explicit keyed backend is honoured without its key (the call
+        // names the missing key).
         config.search_backend = Some("tavily".into());
-        assert!(
-            resolve(&config, Capability::Search, &none)
-                .unwrap_err()
-                .contains("tavily")
-        );
+        assert_eq!(resolve(&config, Capability::Search, &none), Ok("tavily"));
     }
 
     #[test]
@@ -202,12 +235,14 @@ mod tests {
             resolve(&config, Capability::Extract, &firecrawl),
             Ok("firecrawl")
         );
-        // Keyless is reached only when enabled, and is not built in M1.
+        // Keyless is reached only when enabled.
         config.searxng.url = None;
-        config.keyless.enabled = true;
         assert_eq!(
             resolve(&config, Capability::Search, &none),
             Err(NOTHING_CONFIGURED.into())
         );
+        config.keyless.enabled = true;
+        assert_eq!(resolve(&config, Capability::Search, &none), Ok("keyless"));
+        assert_eq!(resolve(&config, Capability::Extract, &none), Ok("keyless"));
     }
 }

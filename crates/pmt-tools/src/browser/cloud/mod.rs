@@ -106,9 +106,15 @@ pub const MANIFESTS: &[Manifest] = &[
 /// The provider served by a signed-in subscription.
 pub const SUBSCRIPTION: &str = "subscription";
 
-/// The manifest of provider `id`.
+/// The subscription provider's own name, an alias of [`SUBSCRIPTION`]
+/// (spec: model-providers, Subscription tool gateway routing: a
+/// category's selection names the provider id).
+pub const NOUS: &str = "nous";
+
+/// The manifest of provider `id` (`nous` is the subscription one).
 #[must_use]
 pub fn manifest(id: &str) -> Option<&'static Manifest> {
+    let id = if id == NOUS { SUBSCRIPTION } else { id };
     MANIFESTS.iter().find(|m| m.id == id)
 }
 
@@ -150,10 +156,10 @@ pub fn first_party(
         "firecrawl".to_owned(),
         Arc::new(Firecrawl::new(Arc::clone(client), Arc::clone(secrets))),
     );
-    providers.insert(
-        SUBSCRIPTION.to_owned(),
-        Arc::new(Subscription::new(Arc::clone(client), token)),
-    );
+    let subscription: Arc<dyn CloudProvider> =
+        Arc::new(Subscription::new(Arc::clone(client), token));
+    providers.insert(NOUS.to_owned(), Arc::clone(&subscription));
+    providers.insert(SUBSCRIPTION.to_owned(), subscription);
     providers
 }
 

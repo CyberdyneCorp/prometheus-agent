@@ -215,8 +215,9 @@ async fn conversation() -> Vec<u8> {
 
 #[tokio::test]
 async fn two_runs_of_the_same_script_stream_byte_identical_events() {
-    let first = conversation().await;
-    let second = conversation().await;
+    // Boxed: the conversation holds a whole `Config`.
+    let first = Box::pin(conversation()).await;
+    let second = Box::pin(conversation()).await;
     assert_eq!(first, second);
     let text = String::from_utf8(first).unwrap();
     for expected in [

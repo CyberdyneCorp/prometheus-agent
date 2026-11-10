@@ -229,6 +229,8 @@ impl Host for FakeHost {
                 tokens: 10,
                 context_window: None,
                 cost_usd: None,
+                billing_source: None,
+                subscription: None,
             })
         })
     }

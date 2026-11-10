@@ -1,0 +1,1 @@
+set = ['approvals.mode="smart"', 'auxiliary.approval.provider="mock"', 'auxiliary.approval.model="mock"']

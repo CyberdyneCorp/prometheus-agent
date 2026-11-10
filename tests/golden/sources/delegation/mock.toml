@@ -1,0 +1,21 @@
+[[rule]]
+user = "Check the README"
+text = "README checked: total 85.15"
+repeat = true
+
+[[rule]]
+user = "Count the entries"
+text = "One entry."
+repeat = true
+
+[[rule]]
+user = "review the ledger"
+step = 0
+[[rule.tool_calls]]
+name = "delegate_task"
+arguments = { tasks = [{ goal = "Check the README" }, { goal = "Count the entries" }] }
+
+[[rule]]
+tool_result_regex = "(?s).*"
+text = "Both subagents finished: total 85.15, one entry."
+repeat = true

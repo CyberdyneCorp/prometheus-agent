@@ -137,9 +137,16 @@ async fn a_user_data_dir_keeps_the_profile_between_browsers() {
     let page = site().await;
     let manager = fixture.manager();
     let exec = fixture.exec(&manager, false);
+    // The page's write reaches the browser's storage backend over its own
+    // channel, after `js` returns; the browser is closed only once that
+    // backend holds the item, so the close has it to flush.
     let store = format!(
-        "new_tab('{}'); wait_for_load(); js(\"localStorage.setItem('kept', 'yes')\")",
-        page.uri()
+        "import time\n\
+         new_tab('{uri}'); wait_for_load(); js(\"localStorage.setItem('kept', 'yes')\")\n\
+         storage = {{'storageId': {{'securityOrigin': '{uri}', 'isLocalStorage': True}}}}\n\
+         while ['kept', 'yes'] not in cdp('DOMStorage.getDOMStorageItems', storage)['entries']:\n    \
+         time.sleep(0.05)",
+        uri = page.uri()
     );
     let (result, body) = run(&exec, &store).await;
     assert_eq!(result.status, Status::Ok, "{body}");

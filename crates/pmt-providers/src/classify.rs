@@ -61,6 +61,28 @@ impl ErrorClass {
         }
     }
 
+    /// Every class.
+    pub const ALL: [Self; 12] = [
+        Self::Auth,
+        Self::Entitlement,
+        Self::Billing,
+        Self::RateLimit,
+        Self::Overloaded,
+        Self::ServerError,
+        Self::Timeout,
+        Self::Network,
+        Self::ContextOverflow,
+        Self::ContentFilter,
+        Self::InvalidRequest,
+        Self::Config,
+    ];
+
+    /// The class named `name` ([`Self::as_str`]).
+    #[must_use]
+    pub fn parse(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|c| c.as_str() == name)
+    }
+
     /// Retried on the same route.
     #[must_use]
     pub const fn is_retryable(self) -> bool {
@@ -298,6 +320,13 @@ impl ProviderError {
     /// token (spec: model-providers, Anthropic Claude Max sign-in).
     #[must_use]
     pub fn to_route_error(&self, route: &crate::resolve::Route) -> Error {
+        if self.class == ErrorClass::Network && route.local {
+            // A local server on the Windows side of WSL2 NAT networking.
+            let advice = crate::wsl::detect().and_then(|w| crate::wsl::advice(&w, &route.base_url));
+            if let Some(advice) = advice {
+                return self.to_error(&route.provider).with_hint(advice);
+            }
+        }
         if self.refusal.is_some() || !self.refuses_plan() {
             return self.to_error(&route.provider);
         }
@@ -324,7 +353,10 @@ impl ProviderError {
 /// `auth.plan_not_eligible` for sign-in `label` of `provider`.
 #[must_use]
 pub fn plan_not_eligible(provider: &str, label: &str, detail: &str) -> Error {
-    let command = format!("prometheus auth add {provider} --type api_key");
+    let command = match key_counterpart(provider) {
+        Some(keyed) => format!("prometheus auth add {keyed}"),
+        None => format!("prometheus auth add {provider} --type api_key"),
+    };
     Error::new(
         &codes::AUTH_PLAN_NOT_ELIGIBLE,
         format!(
@@ -332,6 +364,18 @@ pub fn plan_not_eligible(provider: &str, label: &str, detail: &str) -> Error {
         ),
     )
     .with_hint(command)
+}
+
+/// The API-key provider of a sign-in-only subscription provider (an xAI
+/// subscription without API access falls back to an `XAI_API_KEY`).
+fn key_counterpart(provider: &str) -> Option<&'static str> {
+    match provider {
+        "xai-oauth" => Some("xai"),
+        "qwen-oauth" => Some("alibaba"),
+        "minimax-oauth" => Some("minimax"),
+        "openai-codex" => Some("openai-api"),
+        _ => None,
+    }
 }
 
 const ENTITLEMENT: &[&str] = &[

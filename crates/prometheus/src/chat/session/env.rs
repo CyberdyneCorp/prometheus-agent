@@ -51,6 +51,8 @@ pub struct EnvInputs<'a> {
     pub browser: Option<&'a Shared>,
     /// The session's model accepts images (browser screenshots).
     pub image_input: bool,
+    /// The session's `vision_analyze`.
+    pub vision: &'a super::vision::Vision,
     /// Where finished `notify_on_complete` background processes go.
     pub completions: Option<tokio::sync::mpsc::UnboundedSender<Notice>>,
     /// Provider objects of the profile's plugins (web backends by name).
@@ -79,6 +81,10 @@ pub struct EnvInputs<'a> {
     /// `prometheus` in the channel's `bin/` and edits the job's notepad
     /// through `PMT_CRON_NOTEPAD`.
     pub cron_notepad: Option<&'a Path>,
+    /// The session store (media blobs, the tool usage ledger).
+    pub store: &'a Arc<pmt_store::Store>,
+    /// The session's stored row.
+    pub session: &'a pmt_store::Session,
 }
 
 /// `browser_vault`'s masked prompt over a skill secret prompt (the CLI's
@@ -133,6 +139,8 @@ pub struct Attached {
     pub previewer: Option<Previewer>,
     /// The session's allowed hardening downgrades (sandbox, browser).
     pub downgrades: super::downgrades::Downgrades,
+    /// The session's media tools (detached when dropped).
+    pub media: Option<pmt_media::Attachment>,
 }
 
 /// The parts a session runs commands with.
@@ -186,17 +194,7 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         .and_then(|(sandbox, env)| browser_exec(inputs, sandbox, env, &scratch));
     let downgrades = downgrades(inputs, process.as_ref(), browser.as_deref());
     let child_env = process.as_ref().map(|(_, env)| env.clone());
-    let commands = process.and_then(|(sandbox, env)| {
-        let config = scope.config();
-        pmt_tools::terminal::doctor::local_shell(&config.terminal, inputs.launch, &sandbox)
-            .inspect_err(|err| tracing::warn!(error = %err, "terminal unavailable this session"))
-            .ok()
-            .map(|shell| Commands {
-                sandbox,
-                env,
-                shell,
-            })
-    });
+    let commands = process.and_then(|(sandbox, env)| commands(inputs, sandbox, env));
     let previewer = commands.as_ref().and_then(|c| previewer(inputs, &paths, c));
     let remote = remote(inputs, user_home.as_deref());
     let snapshots = inputs
@@ -225,24 +223,27 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         .map(|r| remote_parts(inputs, r, terminal.as_ref()))
         .unwrap_or_default();
     let lsp = super::lsp::diagnostics(inputs, remote.as_ref(), child_env.as_ref(), proxy.as_ref());
+    let (web, vision, fetcher) = network_tools(inputs);
+    let files = files(
+        inputs,
+        places,
+        user_home,
+        policy,
+        file_backend,
+        snapshots.as_ref(),
+        lsp.as_ref(),
+    );
     let env = SessionEnv {
-        files: Some(Arc::new(files(
-            inputs,
-            places,
-            user_home,
-            policy,
-            file_backend,
-            snapshots.as_ref(),
-            lsp.as_ref(),
-        ))),
+        files: Some(Arc::new(files)),
         lsp,
         terminal: terminal.clone(),
-        web: web(scope, &inputs.providers, &inputs.plugin_call, inputs.egress).map(Arc::new),
-        vision: None,
+        web,
+        vision,
         vault: browser.as_ref().map(|browser| vault(inputs, browser)),
         browser: browser.clone(),
     };
     Ok(Attached {
+        media: media(inputs, commands.as_ref(), fetcher),
         attachment: Environments::process().attach(inputs.session_id, env),
         browser,
         terminal,
@@ -255,6 +256,20 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         previewer,
         downgrades,
     })
+}
+
+/// The session's command parts: its sandbox and child environment with
+/// the local shell, when one resolves.
+fn commands(inputs: &EnvInputs<'_>, sandbox: Arc<Sandbox>, env: ChildEnv) -> Option<Commands> {
+    let config = inputs.scope.config();
+    pmt_tools::terminal::doctor::local_shell(&config.terminal, inputs.launch, &sandbox)
+        .inspect_err(|err| tracing::warn!(error = %err, "terminal unavailable this session"))
+        .ok()
+        .map(|shell| Commands {
+            sandbox,
+            env,
+            shell,
+        })
 }
 
 /// The session's allowed hardening downgrades (its sandbox's, its local
@@ -517,34 +532,95 @@ fn terminal(
     })
 }
 
-/// The web tools, when the profile can build an outbound client; a
-/// backend id this build does not implement may name a plugin's provider.
-fn web(
-    scope: &ProfileScope,
-    providers: &pmt_plugins::providers::ProviderRegistry,
-    call: &pmt_plugins::host::CallInfo,
-    egress: &crate::egress::SessionEgress,
-) -> Option<WebSession> {
+/// The web tools, `vision_analyze` and the fetcher they share.
+type NetworkTools = (
+    Option<Arc<WebSession>>,
+    Option<Arc<pmt_tools::vision::VisionSession>>,
+    Option<Arc<pmt_net::fetch::Fetcher>>,
+);
+
+/// The session's media tools, downloading under its URL policy.
+fn media(
+    inputs: &EnvInputs<'_>,
+    commands: Option<&Commands>,
+    fetcher: Option<Arc<pmt_net::fetch::Fetcher>>,
+) -> Option<pmt_media::Attachment> {
+    super::media::attach(super::media::MediaInputs {
+        scope: inputs.scope,
+        store: inputs.store,
+        session: inputs.session.id,
+        surface: super::media::surface_of(inputs.session),
+        cwd: inputs.cwd,
+        commands,
+        fetcher: fetcher.map(|f| Arc::new(f.for_requester("media"))),
+        video: inputs.vision.video(),
+        plugins: super::media_plugins::PluginMedia::shared(
+            inputs.providers.clone(),
+            inputs.plugin_call.clone(),
+        ),
+    })
+}
+
+/// The web tools and `vision_analyze`, sharing one fetcher (one
+/// connection pool) under the session's URL policy, and that fetcher.
+fn network_tools(inputs: &EnvInputs<'_>) -> NetworkTools {
+    let fetcher = fetcher(inputs.scope, inputs.egress, "web");
+    let web = web(inputs, fetcher.clone());
+    let vision = vision(inputs, fetcher.as_deref());
+    (web.map(Arc::new), vision, fetcher)
+}
+
+/// `vision_analyze` of the session: downloads under its URL policy,
+/// returned images kept with the profile's attachments.
+fn vision(
+    inputs: &EnvInputs<'_>,
+    web: Option<&pmt_net::fetch::Fetcher>,
+) -> Option<Arc<pmt_tools::vision::VisionSession>> {
+    inputs.vision.session(
+        || web.map(|web| Arc::new(web.for_requester("vision"))),
+        inputs.scope.dir().join("cache").join("media"),
+    )
+}
+
+/// The profile's outbound network settings.
+fn outbound(scope: &ProfileScope) -> OutboundPolicy {
     let config = scope.config();
-    let policy = OutboundPolicy {
+    OutboundPolicy {
         force_ipv4: config.network.force_ipv4,
         extra_ca_file: config.network.extra_ca_file.as_ref().map(Into::into),
         proxy: config.network.proxy.clone(),
-    };
-    let client = pmt_net::client(&policy).ok()?;
-    let destinations = crate::egress::destinations(&config.security.egress).ok()?;
-    let fetcher = Arc::new(
-        pmt_net::fetch::Fetcher::new(&policy, destinations)
-            .ok()?
-            .with_hosts(
-                Arc::clone(&egress.hosts),
-                "web",
-                Some(Arc::clone(&egress.observer)),
-            ),
-    );
+    }
+}
+
+/// A fetcher under the session's URL policy and egress hosts; `tool`
+/// names the tools in its refusals.
+fn fetcher(
+    scope: &ProfileScope,
+    egress: &crate::egress::SessionEgress,
+    tool: &'static str,
+) -> Option<Arc<pmt_net::fetch::Fetcher>> {
+    let destinations = crate::egress::destinations(&scope.config().security.egress).ok()?;
+    let fetcher = pmt_net::fetch::Fetcher::new(&outbound(scope), destinations).ok()?;
+    Some(Arc::new(fetcher.with_hosts(
+        Arc::clone(&egress.hosts),
+        tool,
+        Some(Arc::clone(&egress.observer)),
+    )))
+}
+
+/// The web tools, when the profile can build an outbound client; a
+/// backend id this build does not implement may name a plugin's provider.
+fn web(
+    inputs: &EnvInputs<'_>,
+    fetcher: Option<Arc<pmt_net::fetch::Fetcher>>,
+) -> Option<WebSession> {
+    let scope = inputs.scope;
+    let config = scope.config();
+    let client = pmt_net::client(&outbound(scope)).ok()?;
     let secrets = scope.secrets().clone();
     let lookup: pmt_tools::web::SecretLookup =
         Arc::new(move |name: &str| secrets.resolve(name).ok());
+    let (providers, call) = (&inputs.providers, &inputs.plugin_call);
     let plugins = |capability, id: &str| {
         let category = match capability {
             pmt_tools::web::Capability::Search => Category::WebSearch,
@@ -552,14 +628,18 @@ fn web(
         };
         providers.web_backend(category, id, call).ok()
     };
-    Some(WebSession::from_config_with(
-        &config.web,
+    let mut deps = pmt_tools::web::WebDeps::new(
         &client,
-        fetcher,
+        fetcher?,
         &lookup,
         FullTextStore::for_profile(scope.dir()),
-        &plugins,
-    ))
+    );
+    deps.plugins = &plugins;
+    let (gateway, xai) = super::media::web_credentials(scope);
+    deps.gateway = gateway;
+    deps.xai = xai;
+    deps.usage = Some(super::media::usage_sink(inputs.store, inputs.session.id));
+    Some(WebSession::build(&config.web, deps))
 }
 
 /// The session's `browser_exec`, when the profile has browser tools.

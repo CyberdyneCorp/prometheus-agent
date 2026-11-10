@@ -9,6 +9,7 @@
 
 pub mod args;
 pub mod attach;
+pub mod autoprune;
 pub mod commands;
 pub mod display;
 pub mod handoff;
@@ -18,12 +19,14 @@ pub mod recap;
 pub mod remote;
 pub mod repl;
 pub mod resume;
+pub mod reviews;
 pub mod session;
 pub(crate) mod signals;
 pub mod status_bar;
 pub mod terminal;
 pub mod theme;
 pub mod usage_file;
+pub mod voice;
 pub mod worktree;
 
 use std::path::{Path, PathBuf};
@@ -288,6 +291,7 @@ fn session_options(args: &ChatArgs, mode: Mode) -> Result<Options, Error> {
         interactive: mode == Mode::Line,
         yolo: args.yolo,
         cwd: current_dir()?,
+        cwd_fallback: false,
         skills: args.skills.clone(),
         pass_session_id: args.pass_session_id,
         no_context_files: args.no_context_files,
@@ -298,6 +302,7 @@ fn session_options(args: &ChatArgs, mode: Mode) -> Result<Options, Error> {
         }),
         egress: args.egress_overrides(),
         cron: None,
+        replay: None,
     })
 }
 
@@ -432,6 +437,12 @@ async fn start(
                 ..TurnInput::text(first.text.unwrap_or_default())
             };
             let status = oneshot::run(&live, input, ui.json, run_budget).await;
+            let mode = factory.scope.config().memory.review_mode;
+            if let Ok(Some(line)) =
+                pmt_memory::journal::summary(&factory.store, mode, &live.id.to_string())
+            {
+                eprintln!("{line}");
+            }
             live.close(&factory.store, end_reason(status)).await;
             Ok(status)
         }
@@ -445,7 +456,8 @@ async fn start(
                 run_budget,
                 terminal,
             };
-            repl::run(factory, live, asks, start, ui).await
+            // Boxed: the REPL future holds every command's and turn's.
+            Box::pin(repl::run(factory, live, asks, start, ui)).await
         }
     }
 }

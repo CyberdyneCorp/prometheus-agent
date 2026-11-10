@@ -1,0 +1,2 @@
+# A plain chat: one question, one answer, no tools.
+prompts = ["hello"]

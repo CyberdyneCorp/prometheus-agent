@@ -77,6 +77,10 @@ pub const FILES: &[(&str, &str)] = &[
         include_str!("../python/hermes_api/hermes_cli/__init__.py"),
     ),
     (
+        "hermes_api/hermes_cli/auth_oauth_pkce_plugin.py",
+        include_str!("../python/hermes_api/hermes_cli/auth_oauth_pkce_plugin.py"),
+    ),
+    (
         "hermes_api/hermes_cli/version_info.py",
         include_str!("../python/hermes_api/hermes_cli/version_info.py"),
     ),
@@ -107,6 +111,10 @@ pub const FILES: &[(&str, &str)] = &[
     (
         "prometheus_bridge/imports.py",
         include_str!("../python/prometheus_bridge/imports.py"),
+    ),
+    (
+        "prometheus_bridge/memory.py",
+        include_str!("../python/prometheus_bridge/memory.py"),
     ),
     (
         "prometheus_bridge/sidecar.py",

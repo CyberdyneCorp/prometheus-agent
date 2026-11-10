@@ -55,6 +55,12 @@ pub trait WebBackend: Send + Sync {
     fn search<'a>(&'a self, query: &'a str, limit: usize) -> WebFuture<'a, Vec<Hit>>;
     /// Extracts one page.
     fn extract<'a>(&'a self, url: &'a str) -> WebFuture<'a, Page>;
+    /// How its calls bill (spec: web-and-media-tools, Media tool
+    /// credentials and billing are explicit): `api_key:<id>` unless the
+    /// backend says otherwise.
+    fn billing_source(&self) -> String {
+        format!("api_key:{}", self.id())
+    }
 }
 
 /// Firecrawl (hosted or self-hosted): search and extract.
@@ -111,6 +117,14 @@ impl WebBackend for Firecrawl {
         "firecrawl"
     }
 
+    fn billing_source(&self) -> String {
+        if self.self_hosted && (self.secrets)(FIRECRAWL_SECRET).is_none() {
+            "local".to_owned()
+        } else {
+            "api_key:firecrawl".to_owned()
+        }
+    }
+
     fn can_extract(&self) -> bool {
         true
     }
@@ -160,6 +174,11 @@ impl WebBackend for Searxng {
         "searxng"
     }
 
+    /// A self-hosted instance bills nobody.
+    fn billing_source(&self) -> String {
+        "local".to_owned()
+    }
+
     fn can_extract(&self) -> bool {
         false
     }
@@ -181,7 +200,7 @@ impl WebBackend for Searxng {
     }
 }
 
-async fn json_reply(sent: reqwest::Result<reqwest::Response>) -> Result<Value, String> {
+pub(crate) async fn json_reply(sent: reqwest::Result<reqwest::Response>) -> Result<Value, String> {
     let response = sent.map_err(|err| without_url(&err))?;
     let status = response.status();
     if !status.is_success() {
@@ -192,7 +211,7 @@ async fn json_reply(sent: reqwest::Result<reqwest::Response>) -> Result<Value, S
 }
 
 /// A transport error without its URL (which may carry a query string).
-fn without_url(err: &reqwest::Error) -> String {
+pub(crate) fn without_url(err: &reqwest::Error) -> String {
     let kind = if err.is_timeout() {
         "timed out"
     } else if err.is_connect() {
@@ -203,7 +222,7 @@ fn without_url(err: &reqwest::Error) -> String {
     kind.to_owned()
 }
 
-fn hits(list: Option<&Value>, snippet_key: &str) -> Vec<Hit> {
+pub(crate) fn hits(list: Option<&Value>, snippet_key: &str) -> Vec<Hit> {
     list.and_then(Value::as_array)
         .map(|items| {
             items
@@ -219,6 +238,6 @@ fn hits(list: Option<&Value>, snippet_key: &str) -> Vec<Hit> {
         .unwrap_or_default()
 }
 
-fn string(value: Option<&Value>) -> String {
+pub(crate) fn string(value: Option<&Value>) -> String {
     value.and_then(Value::as_str).unwrap_or_default().to_owned()
 }

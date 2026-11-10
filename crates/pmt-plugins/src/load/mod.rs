@@ -156,6 +156,8 @@ pub struct Loaded {
     pub bus: Option<Arc<Bus>>,
     /// Tools of plugins hosted outside this process (python bridge).
     pub tool_sources: Vec<Arc<dyn crate::backend::ToolSource>>,
+    /// Memory providers of plugins hosted outside this process.
+    pub memory_providers: Vec<crate::memory::ExternalMemory>,
 }
 
 impl Loaded {
@@ -171,6 +173,7 @@ impl Loaded {
             surfaces: Surfaces::default(),
             bus: None,
             tool_sources: Vec::new(),
+            memory_providers: Vec::new(),
         }
     }
 

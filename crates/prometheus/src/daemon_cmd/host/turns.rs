@@ -29,6 +29,7 @@ use pmt_store::EndReason;
 use tracing::Instrument as _;
 
 use super::automation::Follow;
+use super::crash::AfterCrash;
 use super::{DaemonHost, Loaded, Profile, finished, session_id, setup};
 
 /// An input waiting for its turn.
@@ -40,6 +41,9 @@ pub(super) struct Queued {
     /// A messaging conversation's lane submitted it: the lane takes the
     /// turn's automation boundary once it delivered the answer.
     pub(super) from_lane: bool,
+    /// Instead of `input`: a turn a crash left unfinished, resumed or
+    /// closed (`Ask`: as the session's clients answer).
+    pub(super) resume: Option<(pmt_agent::turn::Unfinished, AfterCrash)>,
 }
 
 impl DaemonHost {
@@ -68,6 +72,10 @@ impl DaemonHost {
                 notice: Some(Self::confirm_cron(profile, &session, &link, confirmation)),
             });
         }
+        let submitted = (params.text.as_str(), &author);
+        if let Some(resumed) = self.resume_submitted(profile, (id, &session), submitted, &link) {
+            return resumed;
+        }
         let mut input = setup::input(&session.factory, &session.live, &params).await?;
         input.prefix.clone_from(&author.prefix);
         input.origin.clone_from(&author.origin);
@@ -88,6 +96,7 @@ impl DaemonHost {
             link,
             // The lane is the gateway's only submitter.
             from_lane: author.client_kind == "gateway",
+            resume: None,
         };
         let turn_id = job.turn_id.clone();
         let admission = {
@@ -144,7 +153,7 @@ impl DaemonHost {
     /// Runs `job`, then every input queued behind it, on a task of its
     /// own; the session is idle again once the queue is empty (and a
     /// one-shot session ended).
-    fn start(
+    pub(super) fn start(
         &self,
         profile: Arc<Profile>,
         id: SessionId,
@@ -367,6 +376,7 @@ fn automated(wakeup: pmt_automation::arbiter::Wakeup, link: Link) -> Queued {
         run_budget: None,
         link,
         from_lane: false,
+        resume: None,
     }
 }
 
@@ -409,21 +419,41 @@ async fn run_one(
     let scope = session.live.config.get();
     let mut options = TurnOptions::new(&CancelToken::new());
     options.run_budget = job.run_budget.map(Duration::from_secs);
-    if job.link.streams() {
-        options.deltas = Arc::new(crate::daemon_cmd::turn::DeltasToLink(job.link.clone()));
-    }
+    options.deltas = Arc::new(crate::daemon_cmd::turn::DeltasToLink {
+        link: job.link.clone(),
+        turn_id: job.turn_id.clone(),
+    });
     *session.interrupt.lock().expect("interrupt poisoned") = Some(options.interrupt.clone());
     let origin = job
         .input
         .origin
         .as_deref()
         .and_then(pmt_automation::Kind::parse);
-    let outcome = session
-        .live
-        .agent
-        .run_turn(Some(&scope), id, job.input, options)
-        .await;
+    let agent = &session.live.agent;
+    // Gateway session hygiene: an inbound message of a session grown near
+    // its window is answered after a compaction, not into an overflow.
+    if job.from_lane
+        && job.resume.is_none()
+        && let Err(err) = agent.gateway_hygiene(&scope).await
+    {
+        tracing::warn!(session = %id, error = %err, "gateway session hygiene failed");
+    }
+    let outcome = match job.resume {
+        Some((unfinished, choice)) => {
+            let resume = super::crash::decide(&job.link, &unfinished, choice).await;
+            agent
+                .resume_turn(Some(&scope), unfinished, resume, options)
+                .await
+        }
+        None => agent.run_turn(Some(&scope), id, job.input, options).await,
+    };
     session.interrupt.lock().expect("interrupt poisoned").take();
+    // A `/model --once` or `/moa` route ends with its turn, whatever the
+    // turn's outcome (spec: mixture-of-agents, One-shot /moa command).
+    session.live.model.end_turn();
+    if let Ok(result) = &outcome {
+        crate::chat::reviews::after_turn(&session.factory, &session.live, result).await;
+    }
     let end = super::automation::TurnEnd {
         origin,
         reply: outcome

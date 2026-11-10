@@ -17,7 +17,15 @@ use super::cdp::Cdp;
 use super::session::BrowserSession;
 
 /// Domains whose commands go to the current tab, not the browser.
-const PAGE_DOMAINS: &[&str] = &["Page", "Runtime", "DOM", "Emulation", "Input", "Network"];
+const PAGE_DOMAINS: &[&str] = &[
+    "Page",
+    "Runtime",
+    "DOM",
+    "DOMStorage",
+    "Emulation",
+    "Input",
+    "Network",
+];
 /// Methods `cdp()` never sends.
 const REFUSED: &[&str] = &["Browser.close", "Browser.crash"];
 /// Characters of page text `page_info` returns.

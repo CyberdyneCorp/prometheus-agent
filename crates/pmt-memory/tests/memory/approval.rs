@@ -70,9 +70,15 @@ async fn approval_stages_without_a_person_and_a_stale_patch_is_refused() {
         profile.store.memory_entry(&id).unwrap().unwrap().content,
         "B"
     );
-    let reply = slash::run(&profile.store, config, "pending").unwrap();
+    let reply = slash::run(&profile.store, config, None, "pending").unwrap();
     assert!(reply.text.contains(&pending_id), "{}", reply.text);
-    slash::run(&profile.store, config, &format!("reject {pending_id}")).unwrap();
+    slash::run(
+        &profile.store,
+        config,
+        None,
+        &format!("reject {pending_id}"),
+    )
+    .unwrap();
     assert!(profile.store.memory_pending().unwrap().is_empty());
 }
 
@@ -91,6 +97,7 @@ async fn approve_applies_a_staged_add_and_inline_answers_decide() {
     let reply = slash::run(
         &profile.store,
         &profile.scope.config().memory,
+        None,
         &format!("approve {pending_id}"),
     )
     .unwrap();
@@ -179,6 +186,8 @@ async fn the_background_review_runs_in_a_child_session_and_never_deletes() {
         model,
         focus: None,
         suggestions: None,
+        parent_tools: None,
+        digest: false,
     })
     .await
     .unwrap();
@@ -228,6 +237,8 @@ async fn a_focused_review_reports_its_memory_changes() {
         model,
         focus: Some("time zones".to_owned()),
         suggestions: None,
+        parent_tools: None,
+        digest: false,
     })
     .await
     .unwrap();

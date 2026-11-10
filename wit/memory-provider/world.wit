@@ -1,20 +1,88 @@
-/// An external memory provider (spec: memory).
+/// An external memory provider (spec: memory, External memory provider
+/// contract). The host runs the built-in store plus at most one provider
+/// per profile; every call is isolated (an error or trap is logged and never
+/// blocks the turn), `prefetch` is bounded by
+/// `memory.provider_prefetch_timeout_ms`, and `sync-turn`,
+/// `queue-prefetch` and `on-memory-write` run on one serialized background
+/// queue per session. Everything the provider receives has already passed
+/// secret redaction. An instance is bound to the profile it was
+/// initialized for and only ever receives that profile's calls.
+///
+/// `plugin` holds the required functions; `hooks` the optional ones. A
+/// provider that does not export `hooks` gets no-ops for all of them.
 package prometheus:memory-provider@1.0.0;
 
-interface plugin {
-    record recalled {
-        text: string,
-        score: f32,
+interface types {
+    /// The session a provider instance serves.
+    record session-info {
+        session-id: string,
+        profile: string,
+        platform: string,
     }
 
-    /// The block added to the frozen system prompt at session start.
+    /// A tool the provider offers (`parameters` is a JSON Schema).
+    record tool-spec {
+        name: string,
+        description: string,
+        parameters: string,
+    }
+
+    /// One setting `prometheus memory setup` asks for. A `secret` field is
+    /// written to the profile's secrets store, any other to
+    /// `memory.providers.<id>.<key>` in `config.toml`.
+    record config-field {
+        key: string,
+        description: string,
+        secret: bool,
+        required: bool,
+        default-value: option<string>,
+    }
+}
+
+interface plugin {
+    use types.{session-info, tool-spec};
+
+    /// The provider's display name.
+    name: func() -> string;
+    /// Whether the provider can run (no network calls here).
+    is-available: func() -> bool;
+    /// Binds the instance to its session and profile.
+    initialize: func(session: session-info) -> result<_, string>;
+    /// Tools exposed with the `memory` toolset, fixed at session start.
+    tool-schemas: func() -> list<tool-spec>;
+}
+
+interface hooks {
+    use types.{session-info, config-field};
+
+    /// Rendered once into the session prompt after the built-in memory
+    /// blocks.
     system-prompt-block: func() -> option<string>;
-    recall: func(query: string, limit: u32) -> result<list<recalled>, string>;
-    /// Called after each completed turn.
+    /// Recall for this turn's (redacted) user text.
+    prefetch: func(query: string) -> result<option<string>, string>;
+    /// Prepares recall for a likely next query (background queue).
+    queue-prefetch: func(query: string) -> result<_, string>;
+    /// A completed turn (background queue).
     sync-turn: func(user: string, assistant: string) -> result<_, string>;
+    /// One call of a tool from `tool-schemas` (`arguments` is JSON).
+    handle-tool-call: func(name: string, arguments: string) -> result<string, string>;
+    on-turn-start: func(text: string) -> result<_, string>;
+    on-session-end: func() -> result<_, string>;
+    on-session-switch: func(session: session-info) -> result<_, string>;
+    /// The messages about to be summarized (a JSON list); `true` confirms
+    /// the checkpoint.
+    on-pre-compress: func(messages: string) -> result<bool, string>;
+    on-delegation: func(task: string) -> result<_, string>;
+    /// One committed built-in memory operation (background queue).
+    on-memory-write: func(action: string, target: string, entry-id: string, content: string, previous-content: option<string>) -> result<_, string>;
+    config-schema: func() -> list<config-field>;
+    post-setup: func() -> result<_, string>;
+    recall-status: func() -> option<string>;
+    unavailable-reason: func() -> option<string>;
 }
 
 world memory-provider {
     include prometheus:host/imports@1.0.0;
     export plugin;
+    export hooks;
 }

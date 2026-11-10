@@ -205,7 +205,7 @@ mod tests {
             &lines,
             &items,
         )
-        .document(None);
+        .document(None, None);
         assert!(doc.contains("## Goal\nS1 goal"));
         assert!(doc.contains("## Decisions\nUse JWT."));
         assert!(doc.contains("- [pruned tool result] terminal({}) -> 900 chars, ref 0123456789ab"));

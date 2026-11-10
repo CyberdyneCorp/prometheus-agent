@@ -15,7 +15,7 @@ use toml_edit::DocumentMut;
 
 use crate::layers::{Layered, Overrides, typed_value};
 use crate::migrate::{self, Migrated};
-use crate::schema::FallbackEntry;
+use crate::schema::{FallbackEntry, MoaPreset};
 use crate::{backups, catalog, edit, parse};
 
 /// A profile's `config.toml` with its backup directory.
@@ -157,6 +157,66 @@ impl ConfigFile {
             edit::set_fallback_chain(doc, chain);
             Ok(())
         })
+    }
+
+    /// Sets `[models."<model_key>"] accept_data_use = true` (a model key
+    /// holds dots and slashes, so it is not a dotted `set` key).
+    ///
+    /// # Errors
+    ///
+    /// The file's own errors and validation of the result.
+    pub fn accept_data_use(&self, model_key: &str) -> Result<(), Error> {
+        crate::managed::check_writable("models")?;
+        self.modify(|doc| {
+            let models = doc
+                .entry("models")
+                .or_insert_with(|| toml_edit::Item::Table(toml_edit::Table::new()));
+            let Some(models) = models.as_table_like_mut() else {
+                return Err(Error::new(
+                    &codes::CONFIG_INVALID,
+                    "[models] is not a table",
+                ));
+            };
+            let entry = models
+                .entry(model_key)
+                .or_insert(toml_edit::Item::Table(toml_edit::Table::new()));
+            let Some(route) = entry.as_table_like_mut() else {
+                return Err(Error::new(
+                    &codes::CONFIG_INVALID,
+                    format!("[models.\"{model_key}\"] is an alias string, not a table"),
+                ));
+            };
+            route.insert("accept_data_use", toml_edit::value(true));
+            Ok(())
+        })
+    }
+
+    /// Writes preset `name` as `[moa.presets.<name>]` (spec:
+    /// mixture-of-agents, Preset management commands).
+    ///
+    /// # Errors
+    ///
+    /// A managed lock on `moa.presets`, the file's own errors and
+    /// validation of the result (a recursive or empty preset, exit 78).
+    pub fn put_moa_preset(&self, name: &str, preset: &MoaPreset) -> Result<(), Error> {
+        crate::managed::check_writable("moa.presets")?;
+        self.modify(|doc| crate::moa_edit::set(doc, name, preset))
+    }
+
+    /// Removes `[moa.presets.<name>]`; whether it was defined.
+    ///
+    /// # Errors
+    ///
+    /// A managed lock on `moa.presets`, the file's own errors and
+    /// validation of the result.
+    pub fn remove_moa_preset(&self, name: &str) -> Result<bool, Error> {
+        crate::managed::check_writable("moa.presets")?;
+        let mut removed = false;
+        self.modify(|doc| {
+            removed = crate::moa_edit::remove(doc, name);
+            Ok(())
+        })?;
+        Ok(removed)
     }
 
     /// `config unset`: removes `key` so its default applies; returns

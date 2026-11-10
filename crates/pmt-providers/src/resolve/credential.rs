@@ -129,6 +129,28 @@ pub trait CredentialExtras: Send + Sync {
     fn pool_state(&self) -> Option<&dyn PoolState> {
         None
     }
+
+    /// Probes the endpoints of multi-region key providers; `None`: the
+    /// provider default is used without probing.
+    fn detector(&self) -> Option<&crate::detect::Detector> {
+        None
+    }
+
+    /// The local-models runtime `llamacpp` routes without a `base_url`
+    /// use; `None`: such routes fail with `provider.local_runtime_down`.
+    fn local_runtime(&self) -> Option<&dyn crate::local_runtime::LocalRuntime> {
+        None
+    }
+
+    /// The current minted token of `provider` (resolution needs it before
+    /// any request to read an Azure AI Foundry deployment's metadata);
+    /// `None` when nothing here mints.
+    fn mint<'a>(
+        &'a self,
+        _provider: &'a Provider,
+    ) -> super::BoxFuture<'a, Option<Result<SecretString, Error>>> {
+        Box::pin(async { None })
+    }
 }
 
 /// No pools and no sign-ins.
@@ -171,6 +193,18 @@ pub enum CredentialSource {
     Secret {
         /// Its name.
         name: String,
+    },
+    /// A short-lived token minted per use (`key_cmd`, `token_mint`); its
+    /// value is filled in before each request.
+    Minted {
+        /// Provider id.
+        provider: String,
+    },
+    /// An `external_process` provider's agent CLI, signed in on its own
+    /// (no token passes through Prometheus).
+    External {
+        /// Provider id.
+        provider: String,
     },
     /// No credential (`auth = "none"`).
     None,
@@ -266,7 +300,10 @@ impl Credential {
             CredentialSource::Secret { name } => Some(pool::secret_id(name)),
             CredentialSource::Subscription { label, .. } => Some(pool::subscription_id(label)),
             CredentialSource::Borrowed { cli, .. } => Some(pool::borrowed_id(cli)),
-            CredentialSource::Flag | CredentialSource::None => None,
+            CredentialSource::Minted { .. } => Some("minted".to_owned()),
+            CredentialSource::Flag | CredentialSource::External { .. } | CredentialSource::None => {
+                None
+            }
         }
     }
 
@@ -287,6 +324,8 @@ impl Credential {
                 format!("subscription:{provider}/borrowed:{cli}")
             }
             CredentialSource::Secret { name } => format!("secret:{name}"),
+            CredentialSource::Minted { provider } => format!("minted:{provider}"),
+            CredentialSource::External { provider } => format!("external:{provider}"),
             CredentialSource::None => "none".to_owned(),
         }
     }
@@ -312,6 +351,9 @@ impl Credential {
             | CredentialSource::Secret { .. } => {
                 format!("api_key:{provider}")
             }
+            CredentialSource::Minted { .. } => format!("api_key:{provider}/minted"),
+            // The agent CLI bills its own sign-in.
+            CredentialSource::External { .. } => format!("subscription:{provider}/external"),
             CredentialSource::None if local => "local".to_owned(),
             CredentialSource::None => format!("keyless:{provider}"),
         }
@@ -357,10 +399,10 @@ pub(super) fn resolve(
     explicit: Option<&str>,
 ) -> Result<Credential, Error> {
     let id = provider.id();
-    if let Some(key) = resolver.ad_hoc.as_ref().and_then(|a| a.key_for(base_url)) {
-        return Ok(Credential::new(CredentialSource::Flag, Some(key.clone())));
-    }
     let host = host_of(base_url).unwrap_or_default();
+    if let Some(early) = launch_or_minted(resolver, provider, base_url, &host, explicit) {
+        return early;
+    }
     let now = Timestamp::now();
     let states = match resolver.extras.pool_state() {
         Some(state) => state.states(id)?,
@@ -377,7 +419,8 @@ pub(super) fn resolve(
         explicit,
         &mut seen,
     )?;
-    let key = pick_key(provider, keys, &states, now, &mut seen);
+    let priority = pool::priority(resolver.extras.pool_state(), id);
+    let key = pick_key(provider, keys, &states, &priority, now, &mut seen);
     if let Some(pooled) = key
         .as_ref()
         .filter(|k| matches!(k.source, CredentialSource::Pool { .. }))
@@ -410,6 +453,60 @@ pub(super) fn resolve(
     Err(unusable(resolver, id, &host, &names, &seen)?)
 }
 
+/// A key given for this launch, else a minted credential; `None` when
+/// the provider's stored credentials decide.
+fn launch_or_minted(
+    resolver: &Resolver<'_>,
+    provider: &Provider,
+    base_url: &str,
+    host: &str,
+    explicit: Option<&str>,
+) -> Option<Result<Credential, Error>> {
+    if let Some(key) = resolver.ad_hoc.as_ref().and_then(|a| a.key_for(base_url)) {
+        return Some(Ok(Credential::new(
+            CredentialSource::Flag,
+            Some(key.clone()),
+        )));
+    }
+    (explicit.is_none() && mints(provider)).then(|| minted(provider, host))
+}
+
+/// Whether `provider`'s credential is minted per use (spec:
+/// model-providers, Minted short-lived credentials).
+fn mints(provider: &Provider) -> bool {
+    provider.settings().key_cmd.is_some()
+        || matches!(
+            provider.auth(),
+            ProviderAuth::TokenMint | ProviderAuth::AwsChain | ProviderAuth::EntraId
+        )
+}
+
+/// The minted credential of `provider`, bound to its key hosts like a
+/// key (the token itself is minted before each request).
+fn minted(provider: &Provider, host: &str) -> Result<Credential, Error> {
+    let hosts = provider.key_hosts();
+    if hosts.iter().any(|pattern| host_matches(pattern, host)) {
+        return Ok(Credential::new(
+            CredentialSource::Minted {
+                provider: provider.id().to_owned(),
+            },
+            None,
+        ));
+    }
+    Err(Error::new(
+        &codes::PROVIDER_MISSING_CREDENTIAL,
+        format!(
+            "the minted credential of provider '{}' may not be sent to {host} (bound to {})",
+            provider.id(),
+            hosts.join(", ")
+        ),
+    )
+    .with_hint(format!(
+        "add the host to providers.{}.key_hosts if it is the provider's endpoint",
+        provider.id()
+    )))
+}
+
 /// The provider's keys that are set and bound to `host` (or only the
 /// `explicit` secret), in pool order.
 fn bound_keys(
@@ -424,6 +521,7 @@ fn bound_keys(
         Some(name) => vec![pool::Member {
             label: name.to_owned(),
             secret: name.to_owned(),
+            seeded: false,
             pooled: true,
         }],
         None => pool::key_members(provider, &secrets.names()?),
@@ -469,9 +567,10 @@ pub(crate) fn request_key(
     };
     let mut seen = Seen::default();
     let keys = bound_keys(registry, secrets, provider, &host, None, &mut seen)?;
+    let priority = pool::priority(state, provider.id());
     Ok(
         match (
-            pick_key(provider, keys, &states, now, &mut seen),
+            pick_key(provider, keys, &states, &priority, now, &mut seen),
             seen.benched,
         ) {
             (Some(key), _) => Ok(Some(key)),
@@ -481,31 +580,36 @@ pub(crate) fn request_key(
     )
 }
 
-/// One key: by `pool_strategy` among the pool keys (a `pool:` credential
-/// when there are two or more), else the first alternative secret name
-/// that is not benched.
+/// One key: by `pool_strategy` among the pooled keys in priority order
+/// (`auth priority`), skipping benched ones (a `pool:` credential when
+/// there are two or more), else the first alternative that is not
+/// benched.
 fn pick_key(
     provider: &Provider,
     keys: Vec<(pool::Member, SecretString)>,
     states: &[CredentialState],
+    priority: &[String],
     now: Timestamp,
     seen: &mut Seen,
 ) -> Option<Credential> {
-    let ids: Vec<String> = keys
-        .iter()
-        .map(|(m, _)| pool::secret_id(&m.secret))
+    let mut keys: Vec<(pool::Member, SecretString, String)> = keys
+        .into_iter()
+        .map(|(m, v)| {
+            let id = pool::secret_id(&m.secret);
+            (m, v, id)
+        })
         .collect();
-    for id in &ids {
+    pool::prioritize(&mut keys, priority, |(_, _, id)| id.as_str());
+    for (_, _, id) in &keys {
         if let Some(until) = pool::benched_until(states, id, now) {
             seen.bench(until);
         }
     }
-    let (pooled, alternates): (Vec<_>, Vec<_>) =
-        keys.into_iter().zip(ids).partition(|((m, _), _)| m.pooled);
-    let pool_ids: Vec<String> = pooled.iter().map(|(_, id)| id.clone()).collect();
+    let (pooled, alternates): (Vec<_>, Vec<_>) = keys.into_iter().partition(|(m, _, _)| m.pooled);
+    let ids: Vec<String> = pooled.iter().map(|(_, _, id)| id.clone()).collect();
     let several = pooled.len() > 1;
-    if let Some(index) = pool::select(provider.settings().pool_strategy, &pool_ids, states, now) {
-        let ((member, value), _) = pooled.into_iter().nth(index)?;
+    if let Some(index) = pool::select(provider.settings().pool_strategy, &ids, states, now) {
+        let (member, value, _) = pooled.into_iter().nth(index)?;
         let source = if several {
             CredentialSource::Pool {
                 provider: provider.id().to_owned(),
@@ -520,9 +624,9 @@ fn pick_key(
         };
         return Some(Credential::new(source, Some(value)));
     }
-    let ((member, value), _) = alternates
+    let (member, value, _) = alternates
         .into_iter()
-        .find(|(_, id)| pool::benched_until(states, id, now).is_none())?;
+        .find(|(_, _, id)| pool::benched_until(states, id, now).is_none())?;
     let source = CredentialSource::Secret {
         name: member.secret,
     };

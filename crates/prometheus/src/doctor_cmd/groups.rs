@@ -429,6 +429,13 @@ pub(super) async fn providers(inputs: &Inputs<'_>) -> Result<Vec<Check>, Error> 
         }
         checks.push(check);
     }
+    checks.extend(retired_models(inputs));
+    checks.extend(super::aws::checks(inputs).await);
+    checks.extend(super::media::checks(inputs));
+    let local = super::wsl::local_endpoints(inputs.scope);
+    checks.extend(
+        super::wsl::checks(pmt_providers::wsl::detect(), &local, super::wsl::answers).await,
+    );
     for (provider, host, port) in super::system::provider_endpoints(inputs.scope) {
         checks.push(if inputs.online {
             reach(&provider, &host, port).await
@@ -442,6 +449,40 @@ pub(super) async fn providers(inputs: &Inputs<'_>) -> Result<Vec<Check>, Error> 
         });
     }
     Ok(checks)
+}
+
+/// Config keys and cron job pins naming a deprecated or retired model
+/// (spec: configuration-and-profiles, Retired model rewrite): `warn` with
+/// the rewrite command as remedy.
+fn retired_models(inputs: &Inputs<'_>) -> Vec<Check> {
+    let config = inputs.scope.config();
+    let Ok(registry) = pmt_providers::ProviderRegistry::for_profile(config, Vec::new()) else {
+        return Vec::new();
+    };
+    // The store group reports a store that does not open.
+    let jobs = pmt_store::Store::open(inputs.scope)
+        .and_then(|store| crate::cron_host::retired::scan(config, &registry, &store))
+        .unwrap_or_default();
+    pmt_providers::retirement::scan(config, &registry)
+        .findings
+        .into_iter()
+        .chain(jobs.into_iter().map(|j| j.pin.finding))
+        .map(|f| {
+            let to = f.to.unwrap_or_else(|| "<no replacement known>".to_owned());
+            Check::new(
+                "providers",
+                "retired_model",
+                Status::Warn,
+                format!(
+                    "{}: {} is {} (replacement: {to})",
+                    f.key,
+                    f.from,
+                    f.status.as_str()
+                ),
+            )
+            .with_hint("prometheus config fix-models --apply")
+        })
+        .collect()
 }
 
 async fn reach(provider: &str, host: &str, port: u16) -> Check {

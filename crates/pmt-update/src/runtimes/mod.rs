@@ -18,7 +18,7 @@
 //! matched the index pinned in this binary ([`index`]), so a crash leaves
 //! a partial download or a staging directory, never a half runtime.
 
-mod extract;
+pub mod extract;
 pub mod gc;
 pub mod index;
 pub mod install;
@@ -369,7 +369,11 @@ fn relative_name(root: &Path, path: &Path) -> String {
 }
 
 /// Lower-case hex SHA-256 of a file, streamed.
-pub(crate) fn hash_file(path: &Path) -> std::io::Result<String> {
+///
+/// # Errors
+///
+/// The read error.
+pub fn hash_file(path: &Path) -> std::io::Result<String> {
     use std::io::Read as _;
     let mut hasher = Sha256::new();
     let mut file = std::fs::File::open(path)?;

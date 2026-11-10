@@ -90,7 +90,12 @@ wire format, `env_vars` the secret names and its base URL the key hosts.
 `providers.base.ProviderProfile` mirrors Hermes field for field (with
 `LazyHeaders`, `OMIT_TEMPERATURE` and `hermes_cli.version_info.hermes_user_agent`),
 so the plugins Hermes ships, such as `nvidia`, `gmi` or `xiaomi`, load
-unchanged. Prometheus sends and streams every request itself; the
+unchanged. A sign-in declared with `hermes_cli.auth_oauth_pkce_plugin`
+becomes the host's browser PKCE sign-in (`prometheus auth add <name>
+--type oauth`); the sidecar never sees the verifier, `state` or tokens, so
+a config with a `token_request` broker (Solstice's) is refused at load.
+`ProviderProfile.process_command` only suggests the agent CLI of an `external_process`
+profile; the user names it in `providers.<id>.command`. Prometheus sends and streams every request itself; the
 profile's hooks run in the sidecar: headers (`client_headers` or
 `default_headers`, `request_headers`, `extra_headers` extras), the body
 (`prepare_messages`, `default_max_tokens` / `get_max_tokens` when the

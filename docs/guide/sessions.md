@@ -58,6 +58,15 @@ cost totals for the session and for its whole lineage, counting
 continuations, forks and delegated children under their root. All of them
 accept `--json`.
 
+`sessions fork <ref> [--at <message>] [--title T]` starts a new session
+from the active messages up to and including `<message>` (default: the
+last one). The copies get new ids and an `origin_message_id` back to the
+original; the fork is titled `<title> #<n>` unless you give one, and the
+original session is unchanged. `sessions siblings <ref>` lists the other
+children of the session's parent. Clients of the daemon get the same
+operations as `session.fork`, `session.tree` and `session.siblings` (see
+the [RPC reference](../reference/rpc.md)).
+
 `rename`, `pin`, `unpin`, `archive` and `unarchive` change a session.
 Titles are unique per profile and at most 100 characters; a pinned session
 is never pruned.
@@ -72,6 +81,11 @@ Type text and press Enter to narrow the list to matching titles and
 full-text hits (each query narrows again),
 type a row number to resume that session in the chat, or press Enter to
 leave. It needs a terminal (exit 2 otherwise; use `sessions list`).
+
+`prometheus sessions resume <session>` (id, id prefix or title) opens
+that session in the chat, like `chat -r`. A turn the process stopped
+during is resumed, closed or offered as
+[Turns › Crash resume](turns.md#crash-resume) describes.
 
 ## Searching
 
@@ -137,6 +151,26 @@ credential (API keys, tokens, private keys) with `[REDACTED]`:
 $ prometheus sessions export --all --format md --redact
 ```
 
+`--with-blobs` (JSONL) also embeds the files the messages reference, such
+as attachments, base64 encoded, so the export is complete on another
+machine.
+
+`sessions import FILE` reads a JSONL export into the current profile. The
+whole file is checked first (header, every record, at most 500 sessions,
+50000 messages and 256 MiB) and then written in one transaction: an import
+either writes every session, message and usage row or none. Embedded blobs
+are files, written just before that transaction; when it fails they stay
+unreferenced until the store's periodic maintenance collects unreferenced
+blobs. Ids the profile already has are
+refused with `import.id_collision`, which lists them; `--remap-ids` gives
+every session, message and usage row a new id instead, keeping forks and
+continuations linked to their parents inside the file. An imported title
+that is already taken gets the next free `#<n>`.
+
+For example, to move a session to the `work` profile, export it by id or
+title (`sessions export <ref> --with-blobs -o atlas.jsonl`) and run
+`prometheus --profile work sessions import atlas.jsonl`.
+
 Inside a session, `/save [json|md|html] [file] [redact]` writes the current
 session to `file`, or to `<cwd>/<title>-<YYYYMMDD-HHMM>.<ext>`, redacted
 when `redact` is given. A bare `/save` prints its usage.
@@ -186,11 +220,50 @@ $ prometheus config get sessions.retention_secs
 7776000
 ```
 
+When the disk holding `state.db` runs low (less than
+`sessions.low_disk_bytes` free, 1 GiB by default) and pruning is off, an
+interactive start (the line interface, or the TUI on a card above its
+composer, where Enter alone means `later`) offers auto-prune once a day at
+most: `on` sets
+`sessions.retention_secs` to 90 days, `off` never asks again and `later`
+asks again after a week. `/autoprune [on|off|later|status]` does the same
+from any chat; `status` prints the retention, the store's size and the
+free space.
+
 Resuming is refused for lineages with more than
 `sessions.max_resume_messages` active messages (default 20000; compact with
 `/compress` or fork instead), and exports held in memory (dashboard, RPC)
 stop at `sessions.max_export_messages`; `sessions export -o FILE` streams
 any size.
+
+## Maintenance
+
+- `sessions refresh-prompts [<ref>...|--all]` marks sessions so their next
+  turn rebuilds the stored system prompt from the profile as it is now
+  (identity, skills index, tools, memory snapshot). The transcript is
+  kept, and the turn records one `prompt.rebuilt` event with reason
+  `refresh-prompts`.
+- `sessions retitle [<ref>...|--all|--auto-only]` asks the `title`
+  auxiliary route (default: the main model) for new titles. A title you
+  set is never changed; `--auto-only` limits it to sessions that already
+  have an automatic title.
+- `sessions recover [-o FILE] [--yes]` copies every readable row of
+  `state.db` into a new clean store, `state.recovered-<time>.db` beside it,
+  rebuilds the search indexes and reports rows recovered and lost per
+  table. It replaces `state.db` after you confirm (or with `--yes`),
+  keeping the original as `state.db.pre-recover`; with `-o` it only writes
+  the copy. It needs the store closed and exits 75 naming the process
+  that holds it (a daemon or a chat).
+- `sessions journal-mode <wal|delete>` switches the store's journal mode
+  offline, for filesystems without shared-memory support. The choice is
+  recorded in the store and applied on every open, over
+  `storage.journal_mode`. It also needs the store closed.
+
+Attachments (images you attach, and files received on messaging
+platforms) are stored in the profile's blob store. With
+`attachments.storage = "workspace"` a copy of each attached file is also
+written to `<cwd>/.prometheus/attachments/<session_id>/`, so tools can
+read it by path; the blob store stays the reference.
 
 ## Safety nets
 

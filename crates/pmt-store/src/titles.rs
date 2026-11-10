@@ -125,6 +125,18 @@ pub(crate) fn inherited(
     }
 }
 
+/// Whether a session has `title`.
+pub(crate) fn in_use(conn: &Connection, title: &str) -> Result<bool, Error> {
+    conn.prepare_cached("SELECT 1 FROM sessions WHERE title = ?1")
+        .and_then(|mut stmt| stmt.exists([title]))
+        .map_err(sql)
+}
+
+/// The next free `<title> #<n>` (an imported title already in use).
+pub(crate) fn next_free(conn: &Connection, title: &str) -> Result<String, Error> {
+    next_numbered(conn, title)
+}
+
 /// Fails when another session (other than `except`) has `title`.
 pub(crate) fn ensure_unused(
     conn: &Connection,
@@ -187,6 +199,36 @@ impl Store {
                     title,
                     title.as_ref().map(|_| source.as_str())
                 ],
+            )
+            .map_err(sql)?;
+            Ok(TitleWrite::Written)
+        })
+    }
+
+    /// Replaces an automatic title with `title` from the title model
+    /// (`sessions retitle`): a session titled by the user is never touched,
+    /// and a title another session holds gets the next free `#<n>`.
+    ///
+    /// # Errors
+    ///
+    /// `store.title_too_long`, `session.not_found`, `store.sqlite`.
+    pub fn retitle(&self, id: SessionId, title: &str) -> Result<TitleWrite, Error> {
+        let Some(title) = sanitize(title)? else {
+            return Ok(TitleWrite::Kept);
+        };
+        self.write(|tx| {
+            let current = sessions::load(tx, id)?.ok_or_else(|| sessions::not_found(id))?;
+            if current.title_source == Some(TitleSource::User) {
+                return Ok(TitleWrite::Kept);
+            }
+            let title = if ensure_unused(tx, &title, Some(id)).is_err() {
+                next_numbered(tx, &title)?
+            } else {
+                title.clone()
+            };
+            tx.execute(
+                "UPDATE sessions SET title = ?2, title_source = 'llm' WHERE id = ?1",
+                params![id.to_string(), title],
             )
             .map_err(sql)?;
             Ok(TitleWrite::Written)

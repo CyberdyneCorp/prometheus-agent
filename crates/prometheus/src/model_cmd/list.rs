@@ -8,9 +8,10 @@
 use std::fmt::Write as _;
 
 use pmt_core::error::Error;
+use pmt_providers::Route;
 use pmt_providers::metadata::{modelsdev, window};
 use pmt_providers::registry::{Origin, Provider};
-use pmt_providers::resolve::{Target, Trace};
+use pmt_providers::resolve::{CredentialExtras as _, CredentialSource, Target, Trace};
 use serde::Serialize;
 
 use super::{Models, block_on, client};
@@ -38,8 +39,32 @@ pub(super) fn run(
     };
     if refresh {
         block_on(refresh_all(&models, &chosen))??;
+    } else if provider.is_some() && chosen.iter().any(|p| scoped_unlisted(&models, p)) {
+        // A region's or resource's own catalog (Bedrock, Azure AI Foundry)
+        // has no built-in entries: list it on first use.
+        block_on(refresh_listings(&models, &chosen))??;
     }
     list_models(ctx, &models, &chosen)
+}
+
+/// Lists `provider`'s region or resource catalog when none is cached
+/// (best effort: a failure is reported and the built-in entries stay),
+/// so pickers offer Bedrock's models and a Foundry resource's
+/// deployments.
+pub(super) fn list_scoped(models: &Models, provider: &Provider) {
+    if scoped_unlisted(models, provider)
+        && let Ok(Err(err)) = block_on(refresh_listings(models, &[provider]))
+    {
+        eprintln!("warning: {}: {}", provider.id(), err.message());
+    }
+}
+
+/// A provider whose models only its live listing knows (Bedrock's region,
+/// an Azure AI Foundry resource's deployments) and that has none cached.
+fn scoped_unlisted(models: &Models, provider: &Provider) -> bool {
+    let scoped = pmt_providers::aws::is_bedrock(provider)
+        || provider.descriptor().wire_need == pmt_providers::descriptor::WireNeed::Detected;
+    scoped && provider.supports_model_listing() && !models.catalog.has_listing(provider.id())
 }
 
 #[derive(Serialize)]
@@ -112,10 +137,24 @@ fn list_providers(ctx: &Context<'_>, models: &Models) -> Result<u8, Error> {
     print_raw(&text)
 }
 
-/// Fetches each provider's listing (best effort: a provider without a
-/// usable credential or endpoint is reported and skipped) and the
-/// models.dev catalog.
+/// Fetches each provider's listing and the models.dev catalog.
 async fn refresh_all(models: &Models, chosen: &[&Provider]) -> Result<(), Error> {
+    refresh_listings(models, chosen).await?;
+    let client = client(models.scope.config())?;
+    if let Err(err) = models
+        .catalog
+        .refresh_models_dev(&client, modelsdev::URL)
+        .await
+    {
+        eprintln!("warning: {}", err.message());
+    }
+    Ok(())
+}
+
+/// Fetches each provider's listing (best effort: a provider without a
+/// usable credential or endpoint is reported and skipped). A minted
+/// credential (AWS chain, Entra ID, Vertex) is minted first.
+async fn refresh_listings(models: &Models, chosen: &[&Provider]) -> Result<(), Error> {
     let config = models.scope.config();
     let client = client(config)?;
     let resolver = models.resolver(config, None);
@@ -130,26 +169,36 @@ async fn refresh_all(models: &Models, chosen: &[&Provider]) -> Result<(), Error>
             .resolve_target(&target, &mut Trace::default())
             .await
         {
-            Ok(route) => {
-                models
-                    .catalog
-                    .refresh(&client, provider, route.credential.value(), now)
-                    .await
-            }
+            Ok(route) => match minted(models, provider, route).await {
+                Ok(route) => {
+                    models
+                        .catalog
+                        .refresh_route(&client, provider, &route, now)
+                        .await
+                }
+                Err(err) => Err(err),
+            },
             Err(err) => Err(err),
         };
         if let Err(err) = refreshed {
             eprintln!("warning: {}: {}", provider.id(), err.message());
         }
     }
-    if let Err(err) = models
-        .catalog
-        .refresh_models_dev(&client, modelsdev::URL)
-        .await
-    {
-        eprintln!("warning: {}", err.message());
-    }
     Ok(())
+}
+
+/// `route` with its minted credential's current value.
+async fn minted(models: &Models, provider: &Provider, route: Route) -> Result<Route, Error> {
+    if !matches!(route.credential.source, CredentialSource::Minted { .. }) {
+        return Ok(route);
+    }
+    match models.accounts.mint(provider).await {
+        Some(token) => Ok(Route {
+            credential: route.credential.clone().with_value(token?),
+            ..route
+        }),
+        None => Ok(route),
+    }
 }
 
 // The flags are the metadata's own capability fields.
@@ -164,6 +213,9 @@ struct ModelRow {
     supports_vision: bool,
     supports_reasoning: bool,
     current: bool,
+    /// `deprecated` or `retired` per the retirement table.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    retirement: Option<&'static str>,
     /// The window as shown (`200000 (pinned)`).
     #[serde(skip)]
     shown: String,
@@ -182,7 +234,10 @@ fn list_models(ctx: &Context<'_>, models: &Models, chosen: &[&Provider]) -> Resu
             let (meta, _) = models
                 .catalog
                 .metadata_at(provider.id(), &model, provider.base_url());
+            let retirement = pmt_providers::retirement::lookup(config, provider.id(), &model)
+                .map(|entry| entry.status.as_str());
             rows.push(ModelRow {
+                retirement,
                 shown: window::label(meta.context_window, meta.context_source),
                 current: current_provider == Some(provider.id())
                     && config.model.default.as_deref() == Some(model.as_str()),
@@ -213,12 +268,14 @@ fn list_models(ctx: &Context<'_>, models: &Models, chosen: &[&Provider]) -> Resu
         }
         let _ = writeln!(
             text,
-            "{} {}/{}  ctx {}  {}",
+            "{} {}/{}  ctx {}  {}{}",
             if row.current { "*" } else { " " },
             row.provider,
             row.model,
             row.shown,
-            flags.join(",")
+            flags.join(","),
+            row.retirement
+                .map_or_else(String::new, |s| format!("  [{s}]"))
         );
     }
     if rows.is_empty() {

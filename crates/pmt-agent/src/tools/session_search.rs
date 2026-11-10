@@ -69,6 +69,8 @@ struct Args {
     session_id: Option<String>,
     around_message_id: Option<String>,
     window: Option<u64>,
+    #[serde(rename = "ref")]
+    reference: Option<String>,
 }
 
 impl SessionSearch {
@@ -95,6 +97,9 @@ impl SessionSearch {
             Ok(args) => args,
             Err(err) => return ToolResult::error(format!("invalid session_search call: {err}")),
         };
+        if let Some(reference) = &args.reference {
+            return self.original(reference);
+        }
         let outcome = match (&args.session_id, &args.around_message_id) {
             (Some(session), Some(message)) => self.window(session, message, args.window),
             (None, None) => self.search(&args).await,
@@ -103,6 +108,18 @@ impl SessionSearch {
         match outcome {
             Ok(reply) => ToolResult::ok(capped(reply)),
             Err(message) => ToolResult::error(message),
+        }
+    }
+
+    /// The original of a pruned tool result of this session, within the
+    /// normal tool-result size budget (the dispatcher applies it).
+    fn original(&self, reference: &str) -> ToolResult {
+        match self.store.pruned_original(self.session, reference.trim()) {
+            Ok(Some(bytes)) => ToolResult::ok(String::from_utf8_lossy(&bytes).into_owned()),
+            Ok(None) => ToolResult::error(format!(
+                "no pruned tool result with ref {reference} in this session"
+            )),
+            Err(err) => ToolResult::error(err.message().to_owned()),
         }
     }
 

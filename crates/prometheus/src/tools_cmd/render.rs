@@ -133,6 +133,10 @@ pub struct Explanation {
     /// none resolves.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub backend: Option<String>,
+    /// A web or media tool's category: resolved provider, billing source
+    /// and availability.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub media: Option<pmt_media::explain::CategoryView>,
 }
 
 /// Explains `name`.
@@ -173,7 +177,15 @@ pub async fn explain(inv: &Inventory<'_>, name: &str) -> Result<Explanation, Err
         approval_mode: inv.config.approvals.mode,
         approval_rules: approval_rules(tool, inv.config),
         backend: web_backend(inv, name),
+        media: media_category(inv, name),
     })
+}
+
+/// The web or media category view of `name` (spec: web-and-media-tools,
+/// Media tool credentials and billing are explicit).
+fn media_category(inv: &Inventory<'_>, name: &str) -> Option<pmt_media::explain::CategoryView> {
+    let views = crate::tools_cmd::media_categories(inv.scope?, inv.registry)?;
+    pmt_media::explain::of_tool(&views, name).cloned()
 }
 
 /// The resolved backend of a web tool, or `unavailable:<reason>`.
@@ -307,6 +319,15 @@ pub fn render_explain(e: &Explanation) -> String {
     }
     if let Some(backend) = &e.backend {
         let _ = writeln!(out, "backend = {backend}");
+    }
+    if let Some(media) = &e.media {
+        let _ = writeln!(
+            out,
+            "provider = {}\nbilling_source = {}\navailability = {}",
+            media.provider.as_deref().unwrap_or("-"),
+            media.billing_source.as_deref().unwrap_or("-"),
+            media.availability
+        );
     }
     out.push_str("approval rules:\n");
     for rule in &e.approval_rules {

@@ -160,6 +160,48 @@ pub trait Host: Send + Sync + 'static {
         })
     }
 
+    /// One `local.*` method for `profile` (spec: local-models, Local
+    /// models command). Hosts without a home on disk do not serve them.
+    ///
+    /// # Errors
+    ///
+    /// `rpc.not_served`; the matching `prometheus local` command's errors.
+    fn local<'a>(
+        &'a self,
+        profile: &'a str,
+        request: crate::local::LocalRequest,
+    ) -> HostFuture<'a, pmt_rpc::contracts::LocalReply> {
+        let _ = (profile, request);
+        Box::pin(async {
+            Err(Error::new(
+                &pmt_core::error::codes::RPC_NOT_SERVED,
+                "this host has no local models runtime",
+            ))
+        })
+    }
+
+    /// The Mixture of Agents presets of `profile` after `change` (`None`
+    /// only reads): `moa.presets.*`. Hosts without profiles on disk
+    /// refuse.
+    ///
+    /// # Errors
+    ///
+    /// `rpc.not_served`; the change's refusal (`config.invalid`,
+    /// `moa.default_preset_protected`, `moa.preset_not_found`).
+    fn moa_presets<'a>(
+        &'a self,
+        profile: &'a str,
+        change: Option<crate::moa::Change>,
+    ) -> HostFuture<'a, pmt_rpc::contracts::MoaPresetList> {
+        let _ = (profile, change);
+        Box::pin(async {
+            Err(Error::new(
+                &pmt_core::error::codes::RPC_NOT_SERVED,
+                "this host has no Mixture of Agents presets",
+            ))
+        })
+    }
+
     /// The credential vault of `profile` and its scope (`vault.*`). Hosts
     /// without profiles on disk refuse.
     ///
@@ -185,6 +227,49 @@ pub trait Host: Send + Sync + 'static {
         Err(Error::new(
             &pmt_core::error::codes::RPC_NOT_SERVED,
             "this host runs no language servers",
+        ))
+    }
+
+    /// The one-line summary of the agent's memory changes in a session
+    /// (`memory.summary`), when there is one to show. Hosts without a
+    /// memory journal have none.
+    ///
+    /// # Errors
+    ///
+    /// Profile and store errors.
+    fn memory_summary(&self, profile: &str, session_id: &str) -> Result<Option<String>, Error> {
+        let _ = (profile, session_id);
+        Ok(None)
+    }
+
+    /// The low-disk prune question for an interactive client's startup
+    /// (`autoprune.offer`), when it is due; asking counts as the day's
+    /// check. Hosts without a store on disk never ask.
+    ///
+    /// # Errors
+    ///
+    /// Profile and store errors.
+    fn autoprune_offer(&self, profile: &str) -> Result<Option<String>, Error> {
+        let _ = profile;
+        Ok(None)
+    }
+
+    /// The learning journey of `profile` (`journey.list`), nodes created
+    /// at or after `since` when given.
+    ///
+    /// # Errors
+    ///
+    /// `rpc.not_served` on hosts without a store; `cli.usage` for a
+    /// `since` that does not read; profile and store errors.
+    fn journey(
+        &self,
+        profile: &str,
+        since: Option<&str>,
+    ) -> Result<pmt_rpc::contracts::JourneyList, Error> {
+        let _ = (profile, since);
+        Err(Error::new(
+            &pmt_core::error::codes::RPC_NOT_SERVED,
+            "this host keeps no learning journey",
         ))
     }
 
@@ -223,12 +308,45 @@ pub trait Host: Send + Sync + 'static {
     /// when none runs.
     fn interrupt<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()>;
 
+    /// Steers the session's running turn (spec: agent-turn-loop,
+    /// Structured steering); with no turn running the steer opens the next
+    /// user message.
+    fn steer_session<'a>(
+        &'a self,
+        profile: &'a str,
+        params: pmt_rpc::contracts::SteerParams,
+    ) -> HostFuture<'a, ()> {
+        let _ = (profile, params);
+        Box::pin(async {
+            Err(Error::new(
+                &pmt_core::error::codes::RPC_NOT_SERVED,
+                "this host cannot steer sessions",
+            ))
+        })
+    }
+
     /// The session a chat's `-r`/`-c` reference names.
     fn resolve<'a>(&'a self, profile: &'a str, params: ResolveParams)
     -> HostFuture<'a, SessionRef>;
 
     /// Forks a session (the parent is unchanged).
     fn fork<'a>(&'a self, profile: &'a str, params: ForkParams) -> HostFuture<'a, SessionRef>;
+
+    /// The descendants (`siblings = false`) or the siblings of a session
+    /// (`session.tree` / `session.siblings`).
+    fn lineage<'a>(
+        &'a self,
+        _profile: &'a str,
+        _session_id: &'a str,
+        _siblings: bool,
+    ) -> HostFuture<'a, pmt_rpc::contracts::Lineage> {
+        Box::pin(async {
+            Err(Error::new(
+                &pmt_core::error::codes::RPC_NOT_SERVED,
+                "this host does not serve session lineage",
+            ))
+        })
+    }
 
     /// The session's slash commands, with their disposition for `client`
     /// (`commands.catalog`). Never changes the live session.

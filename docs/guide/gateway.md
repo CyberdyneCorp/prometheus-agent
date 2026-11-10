@@ -341,8 +341,12 @@ What the gateway does for every adapter:
   workspace, the media cache or the blob store; anything else is withheld
   with a note.
 - Voice notes are transcribed with the profile's speech provider
-  (`gateway.voice`); replies are spoken back to voice notes by default
-  (`reply_mode = "mirror"`).
+  (`gateway.voice`; a note over the provider's upload limit is
+  re-encoded, else split at pauses); replies are spoken back to voice
+  notes by default (`reply_mode = "mirror"`). `/voice on|tts|off|status`
+  sets this per chat and is kept across restarts (see
+  [Voice mode](voice.md)); a platform without voice bubbles gets the
+  spoken reply as an audio file.
 - Approval cards show the tool, the exact action, the session's working
   directory, the risk reasons and when the request expires (unanswered,
   it is denied). They use buttons where the platform has them (signed
@@ -490,9 +494,15 @@ and its source, for example "steer (platform override)".
 - **`/retry`, `/discard` after a restart.** A turn a crash interrupted is
   `resume_pending`: new messages wait behind it, in order, until `/retry`
   runs it again (then the waiting messages) or `/discard` drops it (its
-  partial transcript stays) and runs them now. After
+  partial transcript stays) and runs them now. With the default
+  `agent.resume_on_crash = "ask"`, `/retry` resumes the turn from its
+  journal: finished tool results are reused and a call cut short gets an
+  "outcome unknown" result instead of running again. After
   `gateway.sessions.resume_pending_ttl_secs` (default 86400) it is dropped
-  automatically.
+  automatically. With `agent.resume_on_crash = "auto"` there is no hold:
+  the gateway resumes the journaled turn at startup ("resuming where it
+  stopped"), messages wait behind it, and its answer reaches the chat; the
+  restart still counts toward stuck-loop suspension.
 - **Stall watchdog.** A turn with no model output, tool progress or tool
   result for `gateway.session_stall_timeout_secs` (default 900; `0` turns
   it off) gets one `No progress for <n> min; send /stop to cancel` notice;

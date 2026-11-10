@@ -27,8 +27,14 @@ pub struct ExportOptions<'a> {
     pub format: ExportFormat,
     /// Include rewound and compacted messages.
     pub include_inactive: bool,
+    /// Embed the blobs messages reference (JSONL only): one `blob_ref`
+    /// record per reference and one base64 `blob` record per blob.
+    pub with_blobs: bool,
     /// Scrub secrets before writing.
     pub redactor: Option<&'a Redactor>,
+    /// The profile's MoA traces directory (JSONL only): one `moa_trace`
+    /// record per traced MoA call of the session.
+    pub moa_traces: Option<&'a std::path::Path>,
 }
 
 /// The file extension of a format.
@@ -167,10 +173,19 @@ pub fn export(
         ExportFormat::Html => sink.put(HTML_HEAD)?,
         _ => {}
     }
+    let mut written_blobs = std::collections::BTreeSet::new();
     for id in sessions {
         let session = store.session(*id)?;
         match options.format {
-            ExportFormat::Jsonl => jsonl(store, &session, visibility, &mut sink)?,
+            ExportFormat::Jsonl => {
+                jsonl(store, &session, visibility, &mut sink)?;
+                if let Some(dir) = options.moa_traces {
+                    moa_traces(dir, &session, &mut sink)?;
+                }
+                if options.with_blobs {
+                    blobs(store, &session, &mut written_blobs, &mut sink)?;
+                }
+            }
             ExportFormat::Md => markdown(store, &session, visibility, &mut sink)?,
             ExportFormat::Html => html(store, &session, visibility, &mut sink)?,
             ExportFormat::Prompts => prompts(store, &session, visibility, &mut sink)?,
@@ -203,6 +218,59 @@ fn jsonl(
         "lineage_kind": session.lineage_kind.map(pmt_store::LineageKind::as_str),
         "root_session_id": session.root_session_id.to_string(),
     }))
+}
+
+/// The `moa_trace` records of `session` (spec: mixture-of-agents, MoA
+/// traces): its trace file's lines, as written.
+fn moa_traces(dir: &std::path::Path, session: &Session, sink: &mut Sink<'_>) -> Result<(), Error> {
+    let path = dir.join(format!("{}.jsonl", session.id));
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return Ok(());
+    };
+    for record in text
+        .lines()
+        .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+    {
+        sink.line(&json!({"type": "moa_trace", "trace": record}))?;
+    }
+    Ok(())
+}
+
+/// The `blob_ref` records of `session` and a `blob` record for each blob
+/// not written yet in this file.
+fn blobs(
+    store: &Store,
+    session: &Session,
+    written: &mut std::collections::BTreeSet<String>,
+    sink: &mut Sink<'_>,
+) -> Result<(), Error> {
+    use base64::Engine as _;
+    for (message, blob) in store.message_blob_refs(session.id)? {
+        let sha = blob.sha256().to_owned();
+        if written.insert(sha.clone()) {
+            let data = base64::engine::general_purpose::STANDARD.encode(store.get_blob(&blob)?);
+            sink.line(&json!({"type": "blob", "sha256": sha, "data": data}))?;
+        }
+        sink.line(&json!({
+            "type": "blob_ref",
+            "session_id": session.id.to_string(),
+            "message_id": message.to_string(),
+            "sha256": sha,
+        }))?;
+    }
+    for blob in store.session_blob_refs(session.id)? {
+        let sha = blob.sha256().to_owned();
+        if written.insert(sha.clone()) {
+            let data = base64::engine::general_purpose::STANDARD.encode(store.get_blob(&blob)?);
+            sink.line(&json!({"type": "blob", "sha256": sha, "data": data}))?;
+        }
+        sink.line(&json!({
+            "type": "blob_ref",
+            "session_id": session.id.to_string(),
+            "sha256": sha,
+        }))?;
+    }
+    Ok(())
 }
 
 fn title(session: &Session) -> String {

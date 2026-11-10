@@ -64,6 +64,8 @@ impl DaemonHost {
             interactive: true,
             yolo: setup.yolo,
             cwd: key.0.clone(),
+            // No recorded or given working directory: the profile's own.
+            cwd_fallback: key.0 == profile.scope().dir().join("workspace"),
             skills: setup.skills.clone(),
             pass_session_id: setup.pass_session_id,
             no_context_files: setup.no_context_files,
@@ -73,6 +75,7 @@ impl DaemonHost {
             // A client narrows or extends it with `egress.set`.
             egress: crate::egress::Overrides::default(),
             cron: None,
+            replay: None,
         };
         let ad_hoc = setup
             .base_url
@@ -193,9 +196,16 @@ pub(super) async fn input(
         }
     }
     held.extend(attach::prepare(factory, live, &files).await?);
+    let mut text = params.text.clone();
+    for path in &params.files {
+        if let Some(copy) = attach::keep_file(factory, live, Path::new(path))? {
+            // The note names the workspace copy tools should read.
+            text = text.replace(path.as_str(), &copy.to_string_lossy());
+        }
+    }
     Ok(TurnInput {
         images: held,
-        ..TurnInput::text(params.text.clone())
+        ..TurnInput::text(text)
     })
 }
 

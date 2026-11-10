@@ -9,10 +9,10 @@
 
 use std::collections::BTreeMap;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// Why the model stopped.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StopReason {
     /// The answer is complete.
@@ -29,7 +29,7 @@ pub enum StopReason {
 
 /// Token usage of one call. `input_tokens` excludes cached input;
 /// `reasoning_tokens` are part of `output_tokens`.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 pub struct Usage {
     /// Uncached input tokens.
     pub input_tokens: u64,
@@ -60,7 +60,7 @@ impl Usage {
 }
 
 /// One normalised stream event.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StreamEvent {
     /// Answer text.
@@ -99,6 +99,12 @@ pub enum StreamEvent {
         name: String,
         /// Arguments as canonical JSON text (the raw text when not JSON).
         arguments: String,
+    },
+    /// An opaque server-side compaction item (Responses wire), to be sent
+    /// back in place of the history it covers.
+    CompactionItem {
+        /// The item as the provider returned it.
+        item: serde_json::Value,
     },
     /// Token usage (exactly one, before `stop`).
     Usage {
@@ -212,6 +218,10 @@ impl Normalizer {
         }
     }
 
+    pub(crate) fn compaction_item(&mut self, item: serde_json::Value) {
+        self.out.push(StreamEvent::CompactionItem { item });
+    }
+
     pub(crate) fn usage(&mut self, report: UsageReport) {
         let u = &mut self.usage;
         let keep = |slot: &mut u64, value: Option<u64>| {
@@ -248,6 +258,21 @@ impl Normalizer {
         self.out.push(StreamEvent::Usage { usage: self.usage });
         self.out.push(StreamEvent::Stop { stop_reason });
         self.finished = true;
+    }
+
+    /// Re-emits recorded events as they are (a served response); `stop`
+    /// finishes the stream.
+    pub(crate) fn replay(&mut self, events: Vec<StreamEvent>) {
+        for event in events {
+            if self.finished {
+                return;
+            }
+            if let StreamEvent::Usage { usage } = &event {
+                self.usage = *usage;
+            }
+            self.finished = matches!(event, StreamEvent::Stop { .. });
+            self.out.push(event);
+        }
     }
 
     pub(crate) fn is_finished(&self) -> bool {
@@ -295,6 +320,7 @@ mod tests {
                 StreamEvent::Usage { .. } => "usage",
                 StreamEvent::Stop { .. } => "stop",
                 StreamEvent::ReasoningDelta { .. } => "reasoning",
+                StreamEvent::CompactionItem { .. } => "compaction",
             })
             .collect();
         assert_eq!(

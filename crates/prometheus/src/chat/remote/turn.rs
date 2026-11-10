@@ -6,8 +6,8 @@ use pmt_core::error::{Error, codes};
 use pmt_rpc::RpcError;
 use pmt_rpc::client::{ServerCall, error_of};
 use pmt_rpc::contracts::{
-    Admission, Envelope, PromptImage, PromptSubmit, SessionInterrupt, SessionRef, SubmitParams,
-    TurnFinished,
+    ASSISTANT_DELTA, Admission, Envelope, PromptImage, PromptSubmit, SessionInterrupt, SessionRef,
+    SubmitParams, TurnFinished,
 };
 use pmt_tools::approval::printable;
 use serde_json::{Value, json};
@@ -86,6 +86,7 @@ pub(super) async fn run(
         session_id: attached.session.clone(),
         text: prompt.text,
         images: prompt.images,
+        files: Vec::new(),
         run_budget_secs: attached.run_budget,
         input_id: None,
         author: None,
@@ -163,6 +164,11 @@ fn on_event(
     asking: &mut Option<Asking>,
 ) -> Option<TurnFinished> {
     match event.event.as_str() {
+        "session.event"
+            if event.data["type"] == ASSISTANT_DELTA && event.data["turn_id"] == turn_id =>
+        {
+            out.delta(event.data["payload"]["text"].as_str().unwrap_or_default());
+        }
         "session.event" => render::event(out, &event.data),
         "turn.finished" => {
             let finished: TurnFinished = serde_json::from_value(event.data.clone()).ok()?;
@@ -265,6 +271,8 @@ fn on_line(
             lines.queue.push_back(format!("/prompt {buffer}"));
             return asking;
         }
+        // Voice records between turns only.
+        Typed::Record => return asking,
         Typed::Interrupt | Typed::Eof => {
             lines.closed = true;
             if let Some(open) = asking {

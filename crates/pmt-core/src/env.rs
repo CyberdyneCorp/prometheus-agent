@@ -53,6 +53,11 @@ const TEST_ADAPTER_DIR: &str = "PMT_TEST_ADAPTER_DIR";
 /// instead of touching the real service manager (a test seam; release
 /// builds ignore it).
 const TEST_SERVICE_DIR: &str = "PMT_TEST_SERVICE_DIR";
+/// Debug builds: a directory of recorded audio standing in for the
+/// microphone and speakers of voice mode (`pmt_voice::fixture`), so the
+/// test suite can hold voice conversations without a sound card (a test
+/// seam; release builds ignore it).
+const TEST_AUDIO_DIR: &str = "PMT_TEST_AUDIO_DIR";
 const RUST_LOG: &str = "RUST_LOG";
 /// The notepad channel file of the scheduled run whose terminal started
 /// this process (spec: scheduled-jobs, Per-job notepad): the run's sandbox
@@ -146,6 +151,7 @@ pub struct LaunchEnv {
     test_battery: Option<String>,
     test_adapter_dir: Option<PathBuf>,
     test_service_dir: Option<PathBuf>,
+    test_audio_dir: Option<PathBuf>,
     cron_notepad: Option<PathBuf>,
 }
 
@@ -196,6 +202,7 @@ impl LaunchEnv {
                 Var::TestBattery => env.test_battery = env.unicode(name, value),
                 Var::TestAdapterDir => env.test_adapter_dir = non_blank(value).map(PathBuf::from),
                 Var::TestServiceDir => env.test_service_dir = non_blank(value).map(PathBuf::from),
+                Var::TestAudioDir => env.test_audio_dir = non_blank(value).map(PathBuf::from),
                 Var::CronNotepad => env.cron_notepad = non_blank(value).map(PathBuf::from),
                 Var::PmtLog => pmt_log = env.unicode(name, value),
                 Var::RustLog => rust_log = env.unicode(name, value),
@@ -262,6 +269,14 @@ impl LaunchEnv {
         self.test_service_dir.as_ref()
     }
 
+    /// Debug builds: `PMT_TEST_AUDIO_DIR`, recorded audio standing in for
+    /// voice mode's microphone and speakers. Always `None` in release
+    /// builds.
+    #[must_use]
+    pub fn test_audio_dir(&self) -> Option<&PathBuf> {
+        self.test_audio_dir.as_ref()
+    }
+
     /// Debug builds: `PMT_TEST_BATTERY`, the battery the status bar
     /// reports instead of the machine's. Always `None` in release builds.
     #[must_use]
@@ -315,6 +330,22 @@ impl LaunchEnv {
         self.secrets
             .get(&format!("{SECRET_PREFIX}{name}"))
             .or_else(|| self.secrets.get(name))
+    }
+
+    /// This environment with exactly `secrets` (secret name to value)
+    /// instead of the ones the process was launched with: a replay runs
+    /// with placeholders, or with only the secrets it may use, and never
+    /// sees the rest.
+    #[must_use]
+    pub fn with_secrets(
+        mut self,
+        secrets: impl IntoIterator<Item = (String, SecretString)>,
+    ) -> Self {
+        self.secrets = secrets
+            .into_iter()
+            .map(|(name, value)| (format!("{SECRET_PREFIX}{name}"), value))
+            .collect();
+        self
     }
 
     /// Every environment-supplied secret, keyed by variable name (for
@@ -389,6 +420,7 @@ enum Var {
     TestBattery,
     TestAdapterDir,
     TestServiceDir,
+    TestAudioDir,
     CronNotepad,
     Secret,
     Ignored(Option<String>),
@@ -419,6 +451,7 @@ fn classify(name: &str, policy: &EnvPolicy<'_>) -> Var {
         TEST_BATTERY if cfg!(debug_assertions) => return Var::TestBattery,
         TEST_ADAPTER_DIR if cfg!(debug_assertions) => return Var::TestAdapterDir,
         TEST_SERVICE_DIR if cfg!(debug_assertions) => return Var::TestServiceDir,
+        TEST_AUDIO_DIR if cfg!(debug_assertions) => return Var::TestAudioDir,
         CRON_NOTEPAD => return Var::CronNotepad,
         _ => {}
     }

@@ -21,12 +21,16 @@ pub mod codex;
 pub mod credentials;
 pub mod device;
 mod extras;
+pub mod gateway;
 pub mod jwt;
 pub mod loopback;
+pub mod mint;
+pub mod openrouter;
 pub mod pkce;
 pub mod refresh;
 pub mod spec;
 pub mod token;
+pub mod tools;
 
 use pmt_config::schema::LoginFlow;
 use pmt_core::error::{Error, codes};

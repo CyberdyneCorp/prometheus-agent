@@ -1,0 +1,3 @@
+# A provider error the same-route retry recovers from.
+prompt = "are you there?"
+files = ["README.md"]

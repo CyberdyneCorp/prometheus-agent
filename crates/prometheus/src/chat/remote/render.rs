@@ -23,6 +23,9 @@ pub(super) trait Out {
     fn ask(&self, text: &str);
     /// The assistant's final answer.
     fn answer(&self, text: &str);
+    /// A piece of the answer while the turn generates it (the whole
+    /// answer still comes through [`Out::answer`]).
+    fn delta(&self, _text: &str) {}
     /// An error.
     fn error(&self, err: &Error);
 }
@@ -81,7 +84,13 @@ pub(super) fn event(out: &dyn Out, data: &Value) {
             "[background] {}",
             data["payload"]["text"].as_str().unwrap_or_default()
         )),
-        _ => {}
+        Some(kind) => {
+            if let Some(line) = crate::chat::session::progress::context_line(kind, &data["payload"])
+            {
+                out.notice(&line);
+            }
+        }
+        None => {}
     }
 }
 

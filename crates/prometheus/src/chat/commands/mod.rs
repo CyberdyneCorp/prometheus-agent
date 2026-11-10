@@ -5,20 +5,27 @@
 //! client drives. What only changes a client's display or which session
 //! it drives stays with that client.
 
+mod account;
 mod agents;
 mod background;
 mod blueprint;
 mod browser;
+mod context;
 pub mod cron;
 mod delegation;
+mod fast;
 pub mod files;
 pub mod info;
+mod local;
 mod mcp;
+mod moa;
 pub(crate) mod plugins;
+mod provider;
 pub(crate) mod quick;
 mod refine;
 mod review;
 pub(crate) mod session;
+mod side;
 mod suggestions;
 pub mod worktree;
 
@@ -74,9 +81,17 @@ pub enum Reply {
 pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, Error>> {
     let text = match name {
         "learn" => return Some(learn(ctx, args)),
+        "init" => return Some(Ok(Reply::Send(pmt_agent::init::input(args)))),
         "retry" => return Some(retry(ctx)),
+        "moa" => return Some(moa::moa(ctx, args).await),
         "help" => Ok(ctx.registry.help(ctx.surface).trim_end().to_owned()),
-        "usage" => session::usage(ctx),
+        "btw" => side::btw(ctx, args),
+        "autoprune" => crate::chat::autoprune::command(ctx.scope, &ctx.factory.store, args),
+        "usage" => account::usage(ctx, args).await,
+        "login" => account::login(ctx, args),
+        "subscription" => account::subscription(ctx).await,
+        "topup" => account::topup(ctx).await,
+        "context" => context::context(ctx, args).await,
         "budget" => budget(ctx, args),
         "title" => title(ctx, args),
         "save" => crate::slash_handlers::save(
@@ -117,8 +132,13 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         })),
         "rewind" => session::rewind(ctx, args),
         "compress" => session::compress(ctx, args).await,
+        "pin" => session::pin(ctx, args),
+        "unpin" => session::unpin(ctx, args),
         "model" => session::model(ctx, args).await,
+        "provider" => provider::provider(ctx, args).await,
         "reasoning" => session::reasoning(ctx, args).await,
+        "fast" => fast::fast(ctx, args).await,
+        "local" => local::local(ctx, args).await,
         "tools" => session::tools(ctx, args).await,
         "plugins" => plugins::plugins(ctx, args).await,
         "mcp" => mcp::mcp(ctx, args).await,
@@ -148,13 +168,27 @@ fn state_command(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<String,
             }
             reply.text
         }),
-        "memory" => pmt_memory::slash::run(&ctx.factory.store, &ctx.scope.config().memory, args)
-            .map(|reply| {
-                if reply.rebuild_now {
-                    live.agent.rebuild_prompt(Rebuild::Now("memory".to_owned()));
-                }
-                reply.text
-            }),
+        "memory" => pmt_memory::slash::run(
+            &ctx.factory.store,
+            &ctx.scope.config().memory,
+            Some(&live.id.to_string()),
+            args,
+        )
+        .map(|reply| {
+            if reply.rebuild_now {
+                live.agent.rebuild_prompt(Rebuild::Now("memory".to_owned()));
+            }
+            reply.text
+        }),
+        "journey" => crate::journey_cmd::slash::run(
+            ctx.scope,
+            &ctx.factory.store,
+            ctx.factory
+                .launch()
+                .user_home()
+                .map(std::path::PathBuf::as_path),
+            args,
+        ),
         "personality" => crate::slash_handlers::personality(ctx.scope, args).map(|(text, now)| {
             if let Some(name) = now {
                 live.agent.apply_personality_now(&name);

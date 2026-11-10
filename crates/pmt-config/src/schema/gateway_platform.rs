@@ -80,6 +80,10 @@ pub struct PlatformConfig {
     /// The secret holding the adapter's credential (never the value).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub token_secret: Option<SecretName>,
+    /// Memory change notices on this platform (overrides
+    /// `memory.notifications`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_notifications: Option<crate::schema::MemoryNotifications>,
     /// The adapter's own settings, validated against the schema it
     /// publishes (`prometheus gateway platforms` lists the adapters).
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]

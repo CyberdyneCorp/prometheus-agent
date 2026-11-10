@@ -39,19 +39,28 @@ pub mod gateway;
 mod index;
 pub mod inspect;
 pub mod integrity;
+pub mod journal;
 pub mod leases;
 pub mod listing;
 pub mod location;
 pub mod mcp_spend;
 pub mod memory;
+pub mod memory_index;
+pub mod memory_revisions;
 pub mod messages;
 mod migrate;
 pub mod model;
 pub mod model_context;
 pub mod onboarding;
+pub mod pins;
+pub mod portable;
+pub mod prefill;
+pub mod prefs;
 pub mod process_receipts;
 pub mod prompts;
+pub mod provider_state;
 pub mod rebind;
+pub mod recover;
 pub mod retention;
 pub mod rewind;
 pub mod search;
@@ -74,15 +83,19 @@ pub use contention::WriteClass;
 pub use delete::Deleted;
 pub use index::DOCTOR_GROUP;
 pub use integrity::{QuarantineReport, quarantine_reports};
+pub use journal::{JournalKind, JournalRecord};
 pub use leases::{Acquire, Holder, Lease, LeaseKind};
 pub use listing::ListOptions;
 pub use location::StoreLocation;
 pub use memory::{MemoryBatch, MemoryEntry, MemoryPending};
+pub use memory_revisions::{Author, Operation, Revision, RevisionFilter};
 pub use messages::{Message, NewMessage, Visibility};
 pub use model::{
     Archived, CostStatus, EndReason, LineageKind, MemoryKind, MemoryOrigin, MemoryStatus,
     MemoryTarget, MemoryTier, Origin, Role, Source, TitleSource,
 };
+pub use pins::Pin;
+pub use prefill::SessionPrefill;
 pub use process_receipts::ProcessReceipt;
 pub use prompts::{PromptTier, SessionPrompt};
 pub use retention::Maintenance;
@@ -101,7 +114,7 @@ pub use usage_query::UsageFilter;
 /// The newest `state.db` schema version this build reads and writes
 /// (`store_meta.schema_version`); every embedded migration bumps it, and a
 /// newer store opens read-only. Reported by `prometheus version --json`.
-pub const SCHEMA_VERSION: u32 = 27;
+pub const SCHEMA_VERSION: u32 = 34;
 
 #[cfg(test)]
 mod tests {

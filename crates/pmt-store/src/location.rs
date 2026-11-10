@@ -38,6 +38,14 @@ impl StoreLocation {
         }
     }
 
+    /// The same store files with the database at `database` (offline
+    /// recovery writes a new store next to the original).
+    #[must_use]
+    pub(crate) fn with_database(mut self, database: &Path) -> Self {
+        self.database = database.to_path_buf();
+        self
+    }
+
     /// `<profile>/state.db`.
     #[must_use]
     pub fn database(&self) -> &Path {

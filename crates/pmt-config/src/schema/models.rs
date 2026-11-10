@@ -28,6 +28,11 @@ pub struct ModelConfig {
     /// Smallest context window (tokens) a session may start with.
     #[schemars(range(min = 16_000))]
     pub min_context_window: u64,
+    /// Absolute path of the Codex CLI the Codex app-server runtime runs;
+    /// unset finds `codex` on `PATH`, in the user-local bin directories
+    /// and the vendor's install prefixes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub codex_bin: Option<String>,
 }
 
 impl Default for ModelConfig {
@@ -40,6 +45,7 @@ impl Default for ModelConfig {
                 .map(str::to_owned)
                 .to_vec(),
             min_context_window: 64_000,
+            codex_bin: None,
         }
     }
 }
@@ -71,7 +77,7 @@ pub struct AliasRoute {
 }
 
 /// One `[providers.<id>]` override of a built-in or custom provider.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct ProviderConfig {
     /// `false` makes every request to this provider fail with
@@ -104,6 +110,11 @@ pub struct ProviderConfig {
     /// provider default (false for custom providers).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub supports_prompt_cache: Option<bool>,
+    /// Whether the provider compacts context server-side on the Responses
+    /// wire (`compression.responses_native`); unset uses the provider
+    /// default (false for custom providers).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_server_compaction: Option<bool>,
     /// Name of the secret holding this provider's key.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub key_secret: Option<SecretName>,
@@ -137,6 +148,47 @@ pub struct ProviderConfig {
     /// Script file of the built-in `mock` provider.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub script: Option<String>,
+    /// A helper command whose stdout is this provider's credential: one
+    /// bare token, or JSON with `access_token` and optional `expires_in`
+    /// (seconds). The token is cached until 60 s before it expires (3000 s
+    /// when no expiry is given) and minted again after an HTTP 401.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key_cmd: Option<String>,
+    /// Google Cloud project of a `vertex` provider.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+    /// Cloud region: of a `vertex` provider (`us-central1`), or of a
+    /// `bedrock` provider (`eu-west-1`; `us-east-1` when unset).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub region: Option<String>,
+    /// The shared AWS profile (`~/.aws/config`, `~/.aws/credentials`) the
+    /// `bedrock` credential chain reads; `default` when unset.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aws_profile: Option<String>,
+    /// The agent CLI an `auth = "external_process"` provider drives over
+    /// the Agent Client Protocol (`claude`), found by the executable
+    /// lookup.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    /// Arguments of `command`.
+    pub args: Vec<String>,
+    /// Absolute path of the agent CLI (one executable, never parsed as a
+    /// shell command); wins over finding `command` by name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub command_path: Option<String>,
+    /// Spend cap per calendar day (UTC) in USD; once the profile's usage
+    /// ledger reaches it the provider is unavailable until the next day.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.0))]
+    pub daily_budget_usd: Option<f64>,
+    /// Spend cap per calendar month (UTC) in USD.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.0))]
+    pub monthly_budget_usd: Option<f64>,
+    /// Ask (interactive sessions) or fail the turn (non-interactive ones)
+    /// before a fallback moves the session from a subscription of this
+    /// provider to a pay-per-token credential.
+    pub confirm_metered_fallback: bool,
 }
 
 impl Default for ProviderConfig {
@@ -151,6 +203,7 @@ impl Default for ProviderConfig {
             models_url: None,
             supports_model_listing: None,
             supports_prompt_cache: None,
+            supports_server_compaction: None,
             key_secret: None,
             key_hosts: Vec::new(),
             prefer_credential: PreferCredential::Subscription,
@@ -163,6 +216,16 @@ impl Default for ProviderConfig {
             plan_notes: None,
             oauth: None,
             script: None,
+            key_cmd: None,
+            project: None,
+            region: None,
+            aws_profile: None,
+            command: None,
+            args: Vec::new(),
+            command_path: None,
+            daily_budget_usd: None,
+            monthly_budget_usd: None,
+            confirm_metered_fallback: false,
         }
     }
 }
@@ -206,6 +269,9 @@ pub enum ProviderAuth {
     ExternalProcess,
     /// The AWS credential chain.
     AwsChain,
+    /// A Microsoft Entra ID bearer token minted from the Azure CLI login
+    /// or a managed identity (`azure-foundry`).
+    EntraId,
     /// No credential (local servers).
     None,
 }
@@ -220,6 +286,7 @@ impl ProviderAuth {
             Self::TokenMint => "token_mint",
             Self::ExternalProcess => "external_process",
             Self::AwsChain => "aws_chain",
+            Self::EntraId => "entra_id",
             Self::None => "none",
         }
     }
@@ -355,6 +422,15 @@ pub struct ModelRoute {
     /// Prices per million tokens (USD).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub price: Option<ModelPrice>,
+    /// Replacement (`<provider>/<model>`) of this deprecated or retired
+    /// model, over the built-in retirement table's.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replacement: Option<String>,
+    /// Accept the data-use terms of a model that trains on prompts and
+    /// outputs (Meta AI contributor-tier models); without it such a model
+    /// is never selected without a confirmation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accept_data_use: Option<bool>,
 }
 
 /// Per-million-token prices in USD.
@@ -388,6 +464,10 @@ pub struct AuxiliaryConfig {
     /// Same-route retries of a retryable auxiliary failure.
     #[schemars(range(min = 0, max = 6))]
     pub transient_retries: u32,
+    /// Auxiliary calls in flight at once across the profile's sessions;
+    /// further calls wait.
+    #[schemars(range(min = 1))]
+    pub max_concurrency: u32,
     /// Context compression summaries.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub compression: Option<AuxiliaryTask>,
@@ -430,6 +510,7 @@ impl Default for AuxiliaryConfig {
     fn default() -> Self {
         Self {
             transient_retries: 2,
+            max_concurrency: 8,
             compression: None,
             title: None,
             vision: None,
@@ -464,6 +545,15 @@ pub struct AuxiliaryTask {
     /// Fallback routes (`"<provider>/<model>"`); `[]` disables fallback.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fallback_chain: Option<Vec<String>>,
+    /// This task's calls in flight at once (within
+    /// `auxiliary.max_concurrency`); unset is only the profile cap.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 1))]
+    pub max_concurrency: Option<u32>,
+    /// Fields merged into this task's request body after the wire format
+    /// mapping (one level deep), e.g. an OpenRouter `provider` block.
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub extra_body: BTreeMap<String, serde_json::Value>,
 }
 
 /// The `[fallback]` section.
@@ -502,6 +592,31 @@ pub struct FallbackEntry {
     /// Name of the secret this entry uses instead of the provider's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub credential: Option<SecretName>,
+}
+
+/// The `[routing]` section (spec: model-providers, Provider health
+/// scoring).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+#[schemars(extend("x-apply" = "next_session"))]
+pub struct RoutingConfig {
+    /// Calls per (provider, model, credential) a health score is computed
+    /// over.
+    #[schemars(range(min = 1, max = 500))]
+    pub health_window: u32,
+    /// Half-life (seconds) of the decay of an idle route's health score
+    /// toward 1.0.
+    #[schemars(range(min = 1))]
+    pub health_half_life_secs: u64,
+}
+
+impl Default for RoutingConfig {
+    fn default() -> Self {
+        Self {
+            health_window: 50,
+            health_half_life_secs: 1800,
+        }
+    }
 }
 
 /// The `[auth]` section.

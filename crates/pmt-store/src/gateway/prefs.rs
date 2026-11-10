@@ -2,7 +2,8 @@
 //! gateway, Adapter operations from chat; Runtime metadata footer;
 //! Interactive model picker and chat model override): adapters an admin
 //! paused, and per-chat preferences (the footer toggle, the model new
-//! sessions of the chat use).
+//! sessions of the chat use, the `/voice` reply mode; voice-mode, Gateway
+//! per-chat voice reply command).
 
 use jiff::Timestamp;
 use pmt_core::error::Error;
@@ -30,6 +31,9 @@ pub struct ChatPrefs {
     pub footer: Option<bool>,
     /// `/model` override for new sessions (`provider:model`).
     pub model: Option<String>,
+    /// `/voice` reply mode (`mirror`, `always`, `off`); `None` follows
+    /// `gateway.voice.reply_mode`.
+    pub voice: Option<String>,
 }
 
 impl Store {
@@ -101,13 +105,14 @@ impl Store {
     pub fn chat_prefs(&self, platform: &str, chat_id: &str) -> Result<ChatPrefs, Error> {
         let found = self.read(|conn| {
             conn.query_row(
-                "SELECT footer, model FROM gateway_chat_prefs \
+                "SELECT footer, model, voice FROM gateway_chat_prefs \
                  WHERE platform = ?1 AND chat_id = ?2",
                 [platform, chat_id],
                 |row| {
                     Ok(ChatPrefs {
                         footer: row.get::<_, Option<i64>>(0)?.map(|f| f != 0),
                         model: row.get(1)?,
+                        voice: row.get(2)?,
                     })
                 },
             )
@@ -148,6 +153,24 @@ impl Store {
         self.upsert_pref(platform, chat_id, "model", &value)
     }
 
+    /// Stores a chat's `/voice` reply mode (`None` follows the
+    /// configuration).
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`.
+    pub fn set_chat_voice(
+        &self,
+        platform: &str,
+        chat_id: &str,
+        mode: Option<&str>,
+    ) -> Result<(), Error> {
+        let value = mode.map_or(rusqlite::types::Value::Null, |m| {
+            rusqlite::types::Value::Text(m.to_owned())
+        });
+        self.upsert_pref(platform, chat_id, "voice", &value)
+    }
+
     fn upsert_pref(
         &self,
         platform: &str,
@@ -155,7 +178,7 @@ impl Store {
         column: &'static str,
         value: &rusqlite::types::Value,
     ) -> Result<(), Error> {
-        // `column` is one of two literals above, never input.
+        // `column` is one of the literals above, never input.
         let statement = format!(
             "INSERT INTO gateway_chat_prefs (platform, chat_id, {column}, updated_at) \
              VALUES (?1, ?2, ?3, ?4) ON CONFLICT (platform, chat_id) \
@@ -217,6 +240,14 @@ mod tests {
         store.set_chat_model("telegram", "42", None).unwrap();
         let prefs = store.chat_prefs("telegram", "42").unwrap();
         assert_eq!((prefs.footer, prefs.model), (Some(true), None));
+        store
+            .set_chat_voice("telegram", "42", Some("always"))
+            .unwrap();
+        let prefs = store.chat_prefs("telegram", "42").unwrap();
+        assert_eq!(
+            (prefs.footer, prefs.voice.as_deref()),
+            (Some(true), Some("always"))
+        );
         assert_eq!(
             store.chat_prefs("slack", "x").unwrap(),
             super::ChatPrefs::default()

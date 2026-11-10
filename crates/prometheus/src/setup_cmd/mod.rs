@@ -92,6 +92,9 @@ pub(crate) fn io_error(err: &io::Error) -> Error {
 /// `setup.missing_value` (78) in a non-interactive run; configuration,
 /// secrets and sign-in errors.
 pub fn run(args: &SetupArgs, ctx: &Context<'_>) -> Result<u8, Error> {
+    if args.portal {
+        return crate::portal_cmd::setup(ctx);
+    }
     if args.reset_onboarding {
         let scope = ctx.scope()?;
         let removed = pmt_store::Store::open(&scope)?.reset_onboarding()?;

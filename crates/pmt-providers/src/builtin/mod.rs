@@ -6,7 +6,7 @@
 
 use pmt_config::schema::{LoginFlow, ProviderAuth, WireFormat};
 
-use crate::descriptor::{Descriptor, HostRule, WireNeed};
+use crate::descriptor::{AccountUrls, BundledWire, Descriptor, HostRule, ModelWire, WireNeed};
 
 /// A wire format beyond the native one (const-friendly [`WireNeed`]).
 #[derive(Clone, Copy)]
@@ -15,6 +15,7 @@ enum Need {
     PerModel,
     Detected,
     Mock,
+    Bundled(BundledWire),
     Plugin {
         wire: &'static str,
         plugin: &'static str,
@@ -159,7 +160,6 @@ const fn need(mut row: Row, need: Need) -> Row {
     row
 }
 
-const GEMINI_HINT: &str = "until the bundled plugin ships, use Gemini's OpenAI-compatible endpoint: prometheus config set providers.gemini.base_url https://generativelanguage.googleapis.com/v1beta/openai";
 const COPILOT_HINT: &str = "prometheus plugins install github-copilot";
 
 /// Claude subscription caveats (spec: model-providers, Plan caveats shown
@@ -173,6 +173,25 @@ const ANTHROPIC_NOTES: &[&str] = &[
 const CODEX_NOTES: &[&str] = &[
     "Needs a ChatGPT Plus, Pro, Business, Edu or Enterprise plan; requests count against the plan's Codex usage limits.",
     "Signing in here starts a separate session; importing a Codex CLI sign-in (prometheus auth import codex-cli) shares one rotating refresh token with that CLI.",
+];
+
+/// SuperGrok / X Premium+ caveats.
+const XAI_NOTES: &[&str] = &[
+    "Needs a SuperGrok or X Premium+ subscription; a tier without API access is refused after sign-in. Use an API key instead: prometheus auth add xai",
+    "xAI-backed tools (speech, images, video, transcription, X search) whose provider is xai bill the same subscription.",
+];
+
+/// Nous Portal caveats.
+const NOUS_NOTES: &[&str] = &[
+    "One Nous Portal sign-in serves every portal model and the tools whose provider is nous (web search, image generation, speech, browser).",
+];
+
+/// Portal sign-ins that are not API keys.
+const QWEN_NOTES: &[&str] = &[
+    "Qwen Portal sign-in bills the portal account; DashScope API keys stay with the alibaba provider.",
+];
+const MINIMAX_NOTES: &[&str] = &[
+    "MiniMax portal sign-in bills the portal account; MiniMax API keys stay with the minimax and minimax-cn providers.",
 ];
 
 const ROWS: &[Row] = &[
@@ -222,18 +241,21 @@ const ROWS: &[Row] = &[
         ),
         CODEX_NOTES,
     ),
-    flows(
-        model(
-            key(
-                "nous",
-                &["nous-portal", "nousresearch"],
-                &["NOUS_API_KEY"],
-                "https://inference-api.nousresearch.com/v1",
-                ChatCompletions,
+    notes(
+        flows(
+            model(
+                key(
+                    "nous",
+                    &["nous-portal", "nousresearch"],
+                    &["NOUS_API_KEY"],
+                    "https://inference-api.nousresearch.com/v1",
+                    ChatCompletions,
+                ),
+                "Hermes-4-405B",
             ),
-            "Hermes-4-405B",
+            &[Device],
         ),
-        &[Device],
+        NOUS_NOTES,
     ),
     cached(model(
         key(
@@ -245,12 +267,15 @@ const ROWS: &[Row] = &[
         ),
         "grok-4",
     )),
-    signin(
-        "xai-oauth",
-        &["grok-oauth", "x-ai-oauth", "xai-grok-oauth"],
-        "https://api.x.ai/v1",
-        Responses,
-        &[Browser],
+    notes(
+        signin(
+            "xai-oauth",
+            &["grok-oauth", "x-ai-oauth", "xai-grok-oauth"],
+            "https://api.x.ai/v1",
+            Responses,
+            &[Browser],
+        ),
+        XAI_NOTES,
     ),
     key(
         "router",
@@ -355,12 +380,15 @@ const ROWS: &[Row] = &[
         "https://api.minimaxi.com/anthropic",
         AnthropicMessages,
     ),
-    signin(
-        "minimax-oauth",
-        &["minimax-portal", "minimax-global"],
-        "https://api.minimax.io/anthropic",
-        AnthropicMessages,
-        &[Browser],
+    notes(
+        signin(
+            "minimax-oauth",
+            &["minimax-portal", "minimax-global"],
+            "https://api.minimax.io/anthropic",
+            AnthropicMessages,
+            &[Browser],
+        ),
+        MINIMAX_NOTES,
     ),
     key(
         "alibaba",
@@ -411,12 +439,15 @@ const ROWS: &[Row] = &[
         "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
         ChatCompletions,
     ),
-    signin(
-        "qwen-oauth",
-        &["qwen", "qwen-portal", "qwen-cli"],
-        "https://portal.qwen.ai/v1",
-        ChatCompletions,
-        &[Browser],
+    notes(
+        signin(
+            "qwen-oauth",
+            &["qwen", "qwen-portal", "qwen-cli"],
+            "https://portal.qwen.ai/v1",
+            ChatCompletions,
+            &[Browser],
+        ),
+        QWEN_NOTES,
     ),
     key(
         "kilocode",
@@ -505,16 +536,13 @@ const ROWS: &[Row] = &[
             "https://generativelanguage.googleapis.com/v1beta",
             ChatCompletions,
         ),
-        Need::Plugin {
-            wire: "gemini_native",
-            plugin: "gemini",
-            hint: GEMINI_HINT,
-        },
+        Need::Bundled(BundledWire::GeminiNative),
     ),
     Row {
         id: "vertex",
         aliases: &["google-vertex", "vertex-ai", "gcp-vertex"],
         endpoint_note: Some("computed from project and region"),
+        extra_hosts: &["*.googleapis.com"],
         auth: TokenMint,
         ..BASE
     },
@@ -522,13 +550,9 @@ const ROWS: &[Row] = &[
         id: "bedrock",
         aliases: &["aws", "aws-bedrock", "amazon-bedrock"],
         endpoint_note: Some("https://bedrock-runtime.<region>.amazonaws.com"),
-        need: Need::Plugin {
-            wire: "bedrock_converse",
-            plugin: "bedrock",
-            hint: "the bundled bedrock provider plugin is not part of this build yet",
-        },
+        need: Need::Bundled(BundledWire::BedrockConverse),
+        extra_hosts: &["*.amazonaws.com"],
         auth: AwsChain,
-        listing: false,
         ..BASE
     },
     Row {
@@ -677,12 +701,14 @@ const ROWS: &[Row] = &[
 ];
 
 /// Every secret name a built-in provider reads: the provider-native
-/// environment variables the launch environment treats as secrets.
+/// environment variables the launch environment treats as secrets
+/// (including the AWS credential chain's).
 #[must_use]
 pub fn secret_names() -> Vec<&'static str> {
     let mut names: Vec<&'static str> = ROWS
         .iter()
         .flat_map(|r| r.secrets.iter().copied())
+        .chain(crate::aws::chain::SECRET_NAMES.iter().copied())
         .collect();
     names.sort_unstable();
     names.dedup();
@@ -707,20 +733,85 @@ fn descriptor(row: &Row) -> Descriptor {
     d.keyless_on_loopback = row.keyless_on_loopback;
     d.hidden = row.hidden;
     d.supports_prompt_cache = row.prompt_cache;
+    // OpenAI's own Responses endpoint compacts server-side.
+    d.supports_server_compaction = row.id == "openai-api";
     d.supports_model_listing = row.listing;
     d.default_model = row.default_model.map(str::to_owned);
     d.endpoint_note = row.endpoint_note.map(str::to_owned);
     d.wire_need = wire_need(row.need);
-    if row.id == "gemini" {
+    per_provider(&mut d);
+    d
+}
+
+/// Rules only one provider has.
+fn per_provider(d: &mut Descriptor) {
+    match d.id.as_str() {
         // Gemini's OpenAI-compatible endpoint (`.../openai`) speaks Chat
         // Completions natively.
-        d.host_rules.push(HostRule {
-            host: None,
-            path_suffixes: vec!["/openai".to_owned()],
-            wire_format: ChatCompletions,
-        });
+        "gemini" => {
+            d.host_rules.push(HostRule {
+                host: None,
+                path_suffixes: vec!["/openai".to_owned()],
+                wire_format: ChatCompletions,
+            });
+            d.key_header = Some("x-goog-api-key".to_owned());
+        }
+        "azure-foundry" => d.key_header = Some("api-key".to_owned()),
+        // A Kimi Code key (`sk-kimi-`) is served at api.kimi.com/coding over
+        // Anthropic Messages (spec: model-providers, Endpoint
+        // auto-detection for multi-region key providers).
+        "kimi-coding" => d.host_rules.push(HostRule {
+            host: Some(crate::detect::KIMI_CODING_HOST.to_owned()),
+            path_suffixes: vec!["/coding".to_owned()],
+            wire_format: AnthropicMessages,
+        }),
+        "opencode-zen" => {
+            d.session_affinity_header = Some(OPENCODE_AFFINITY.to_owned());
+            d.model_wire_formats =
+                model_wires(&[("claude-*", AnthropicMessages), ("gpt-*", Responses)]);
+        }
+        "nous" => {
+            d.account_urls = urls(
+                "https://portal.nousresearch.com/plans",
+                Some("https://portal.nousresearch.com/billing"),
+            );
+        }
+        "openai-codex" => d.account_urls = urls("https://chatgpt.com/#pricing", None),
+        "anthropic" => {
+            d.account_urls = urls(
+                "https://claude.ai/upgrade",
+                Some("https://claude.ai/settings/billing"),
+            );
+        }
+        "xai-oauth" => d.account_urls = urls("https://grok.com/plans", None),
+        "opencode-go" => {
+            d.session_affinity_header = Some(OPENCODE_AFFINITY.to_owned());
+            d.model_wire_formats = model_wires(&[
+                ("minimax*", AnthropicMessages),
+                ("qwen*", AnthropicMessages),
+            ]);
+        }
+        _ => {}
     }
-    d
+}
+
+fn urls(plan: &str, billing: Option<&str>) -> AccountUrls {
+    AccountUrls {
+        plan: Some(plan.to_owned()),
+        billing: billing.map(str::to_owned),
+    }
+}
+
+/// The per-conversation routing header of `OpenCode`.
+const OPENCODE_AFFINITY: &str = "x-opencode-session";
+
+fn model_wires(rows: &[(&str, WireFormat)]) -> Vec<ModelWire> {
+    rows.iter()
+        .map(|(pattern, wire_format)| ModelWire {
+            pattern: (*pattern).to_owned(),
+            wire_format: *wire_format,
+        })
+        .collect()
 }
 
 fn wire_need(need: Need) -> WireNeed {
@@ -729,6 +820,7 @@ fn wire_need(need: Need) -> WireNeed {
         Need::PerModel => WireNeed::PerModel,
         Need::Detected => WireNeed::Detected,
         Need::Mock => WireNeed::Mock,
+        Need::Bundled(wire) => WireNeed::Bundled(wire),
         Need::Plugin { wire, plugin, hint } => WireNeed::Plugin {
             wire: wire.to_owned(),
             plugin: plugin.to_owned(),

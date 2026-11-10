@@ -11,6 +11,7 @@ pub mod caller;
 mod fetch;
 mod inbox;
 pub mod notepad;
+pub mod retired;
 mod script;
 pub mod tool;
 

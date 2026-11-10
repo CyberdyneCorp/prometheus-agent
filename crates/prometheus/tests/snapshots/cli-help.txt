@@ -11,6 +11,7 @@ Commands:
   config       Read, change, validate and explain the profile's config.toml
   secrets      Store, list and remove the profile's secrets (values never on the command line)
   skills       List, inspect, enable, lint and maintain the profile's skills and skill bundles
+  journey      The skills and memories the agent learned, as a timeline; list, delete, edit [aliases: learning, memory-graph]
   memory       Inspect, edit, export and import what the agent remembers (built-in memory)
   grants       List and revoke the profile's permanent capability grants and approvals
   browser      Browser sessions: status, and closing the real browser whose profile real-profile browsing copies
@@ -20,6 +21,8 @@ Commands:
   vault        The credential vault: logins, cards and addresses the browser fills by handle
   security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one
+  replay       Session recordings: export one, replay it (detecting divergence), or re-record it with this build
+  cache        The model-call cache: stats, prune, clear
   files        Undo a session's file changes, roll a workspace back to a checkpoint, and manage the file snapshot store
   verify       Detect a project's build/test/start recipe and run it
   snapshots    Snapshot and restore the selected profile's critical state
@@ -31,13 +34,17 @@ Commands:
   demo         Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
   trajectory   Render the recorded trajectory of a session
   model        Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
+  providers    Provider routing state: per-route health scores
+  moa          List, create, update and delete Mixture of Agents presets (`[moa.presets.<name>]`)
+  local        Local models: the llama.cpp engine, the hardware-priced catalog, downloads, the model library and the managed llama-server
   fallback     List and edit the profile's fallback chain (`[[fallback.chain]]`)
-  auth         Add, list and remove provider API keys and subscription sign-ins
+  auth         Add, list and remove provider API keys and subscription sign-ins (an interactive manager without a subcommand on a terminal)
   tools        List the profile's tools and explain one (exposure, capabilities, approvals)
   toolsets     List toolsets and show the tools a toolset resolves to
   approvals    Check how the approval gate treats a command, without running it
   update       Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
   pause        Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
+  portal       The Nous Portal subscription and its tool gateway routing
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`

@@ -29,6 +29,7 @@ fn inputs(profile: &Profile, cwd: &Path) -> PromptInputs {
         platform: "cli".into(),
         registered_hint: None,
         cwd: Some(cwd.to_path_buf()),
+        cwd_fallback: false,
         no_context_files: false,
         model: "mock".into(),
         context_window: Some(128_000),
@@ -218,4 +219,44 @@ async fn a_hung_context_file_is_skipped_after_the_timeout() {
     );
     let system = crate::support::system_text(&model.requests()[0]);
     assert!(system.contains("fallback rules"), "{system}");
+}
+
+#[test]
+fn a_fallback_cwd_inside_the_source_tree_loads_no_project_context() {
+    // Integration-test scratch space lives under this checkout's target/.
+    let inside = Path::new(env!("CARGO_TARGET_TMPDIR")).join("install-tree-fallback");
+    write(&inside.join("AGENTS.md"), "Prometheus's own rules.");
+    let profile = Profile::new("");
+    let mut given = inputs(&profile, &inside);
+    let explicit = prompt::build(&given).unwrap();
+    assert!(
+        explicit
+            .context_files
+            .iter()
+            .any(|f| f.ends_with("AGENTS.md")),
+        "an explicit cwd loads its context: {:?}",
+        explicit.context_files
+    );
+    given.cwd_fallback = true;
+    let fallback = prompt::build(&given).unwrap();
+    assert!(
+        fallback.context_files.is_empty(),
+        "{:?}",
+        fallback.context_files
+    );
+    assert!(
+        fallback
+            .prompt
+            .sections()
+            .iter()
+            .all(|s| s.layer != Layer::ProjectContext)
+    );
+
+    // A fallback outside the installation still loads its project.
+    let elsewhere = repo(&profile);
+    write(&elsewhere.join("AGENTS.md"), "Use tabs.");
+    let mut outside = inputs(&profile, &elsewhere);
+    outside.cwd_fallback = true;
+    assert!(context(&profile, &elsewhere).is_some());
+    assert!(!prompt::build(&outside).unwrap().context_files.is_empty());
 }

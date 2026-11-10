@@ -11,3 +11,11 @@ browser = { max-threads = 2 }
 [[profile.default.overrides]]
 filter = "package(pmt-tools) & binary(browser)"
 test-group = "browser"
+
+# The real-pyright LSP test downloads pyright from the npm registry on
+# first use (CI sets PMT_TEST_LSP=require). A registry or network hiccup
+# is not a product failure: retry it, and report it as flaky when a retry
+# passes.
+[[profile.default.overrides]]
+filter = "package(pmt-tools) & binary(lsp) & test(pyright_reports_an_undefined_name_after_a_patch)"
+retries = 2

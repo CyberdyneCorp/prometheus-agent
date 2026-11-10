@@ -6,11 +6,20 @@
 //! `resume_pending` (its chat is told once how to run it again), a session
 //! interrupted by too many consecutive restarts is suspended, and a send
 //! that was in flight becomes `unknown` (never resent automatically).
+//!
+//! A profile with `agent.resume_on_crash = "auto"` does not ask: a turn
+//! whose journal is unfinished is resumed at startup as a turn of its
+//! chat's lane, which delivers the answer like any reply (spec:
+//! agent-turn-loop, Crash resume mid-tool-batch). The restart still
+//! counts toward stuck-loop suspension, and a suspended session is never
+//! resumed.
 
 use std::io;
 use std::path::{Path, PathBuf};
 
+use pmt_config::schema::ResumeOnCrash;
 use pmt_core::error::{Error, codes};
+use pmt_core::id::SessionId;
 use pmt_store::gateway::outbox::{NewOutbound, OutboundKind};
 
 use super::Shared;
@@ -21,6 +30,14 @@ pub const CLEAN_SHUTDOWN: &str = "clean_shutdown";
 /// What an interrupted conversation is told after a restart.
 pub const RESTARTED: &str = "The agent restarted while working on your last message. \
     Reply /retry to run it again.";
+
+/// What a chat is told when its interrupted turn resumes by itself.
+pub const RESUMING: &str = "The agent restarted while working on your last message; \
+    resuming where it stopped.";
+
+/// The `origin` of the lane turn that resumes an interrupted one: the
+/// host resumes the session's unfinished turn instead of storing input.
+pub const RESUME_ORIGIN: &str = "resume";
 
 fn marker(home: &Path) -> PathBuf {
     home.join("run").join(CLEAN_SHUTDOWN)
@@ -54,10 +71,11 @@ pub(crate) fn write_marker(home: &Path) {
     }
 }
 
-/// Recovers `profile` after an unclean stop.
-pub(crate) fn recover(shared: &Shared, profile: &str) {
+/// Recovers `profile` after an unclean stop; the sessions whose turns
+/// resume by themselves (`agent.resume_on_crash = "auto"`).
+pub(crate) fn recover(shared: &Shared, profile: &str) -> Vec<SessionId> {
     let (Some(store), Some(scope)) = (shared.store(profile), shared.agents.scope(profile)) else {
-        return;
+        return Vec::new();
     };
     match store.abandon_in_flight() {
         Ok(0) => {}
@@ -72,9 +90,11 @@ pub(crate) fn recover(shared: &Shared, profile: &str) {
         Ok(found) => found,
         Err(err) => {
             tracing::error!(profile, "turn recovery failed: {err}");
-            return;
+            return Vec::new();
         }
     };
+    let auto = scope.config().agent.resume_on_crash == ResumeOnCrash::Auto;
+    let mut resumes = Vec::new();
     for turn in interrupted {
         if turn.suspended {
             tracing::warn!(
@@ -86,6 +106,10 @@ pub(crate) fn recover(shared: &Shared, profile: &str) {
         let Some(route) = turn.route else {
             continue;
         };
+        if auto && !turn.suspended && resumes_by_itself(&store, turn.session_id) {
+            resumes.push(turn.session_id);
+            continue;
+        }
         let restarts = store
             .routed_session(turn.session_id)
             .ok()
@@ -106,4 +130,24 @@ pub(crate) fn recover(shared: &Shared, profile: &str) {
         };
         shared.deliver(profile, &notice);
     }
+    resumes
+}
+
+/// Whether `session`'s turn resumes without asking: its journal holds an
+/// unfinished turn (one that crashed before its first journal record has
+/// nothing to resume, so its chat is asked as usual) and its hold is
+/// lifted.
+fn resumes_by_itself(store: &pmt_store::Store, session: SessionId) -> bool {
+    match store.unfinished_turn(session) {
+        Ok(Some(_)) => {}
+        Ok(None) => return false,
+        Err(err) => {
+            tracing::warn!(%session, "turn journal unreadable: {err}");
+            return false;
+        }
+    }
+    store.discard_resume(session).unwrap_or_else(|err| {
+        tracing::warn!(%session, "the interrupted turn stays held: {err}");
+        false
+    })
 }

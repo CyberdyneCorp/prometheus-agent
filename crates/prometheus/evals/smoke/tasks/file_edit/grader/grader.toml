@@ -1,0 +1,3 @@
+type = "exact"
+of = "file:README.md"
+expect = "# Ledger\nTotal: 90.00"

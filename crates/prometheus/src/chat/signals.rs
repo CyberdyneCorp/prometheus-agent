@@ -1,6 +1,8 @@
 //! SIGINT and SIGTERM while a non-interactive run works: the turn is
 //! stopped (its partial transcript kept) and the process exits 130 or 143
-//! (spec: cli, Stable exit codes).
+//! (spec: cli, Stable exit codes). On Windows, Ctrl+C and Ctrl+Break are
+//! the interrupt (130): Ctrl+Break is the one console event a parent can
+//! send to a single child (the smoke suite's interrupt task does).
 //!
 //! The listeners are installed once, before the turn starts, and live as
 //! long as the run: a listener made per wait would leave the default
@@ -12,7 +14,10 @@ pub(crate) struct Signals {
     #[cfg(unix)]
     listeners: Option<(tokio::signal::unix::Signal, tokio::signal::unix::Signal)>,
     #[cfg(windows)]
-    listener: Option<tokio::signal::windows::CtrlC>,
+    listeners: Option<(
+        tokio::signal::windows::CtrlC,
+        tokio::signal::windows::CtrlBreak,
+    )>,
 }
 
 impl Signals {
@@ -27,12 +32,13 @@ impl Signals {
         Self { listeners }
     }
 
-    /// Installs the Ctrl-C listener (inside the Tokio runtime).
+    /// Installs the Ctrl+C and Ctrl+Break listeners (inside the Tokio
+    /// runtime).
     #[cfg(windows)]
     pub(crate) fn listen() -> Self {
-        Self {
-            listener: tokio::signal::windows::ctrl_c().ok(),
-        }
+        use tokio::signal::windows::{ctrl_break, ctrl_c};
+        let listeners = ctrl_c().and_then(|c| Ok((c, ctrl_break()?))).ok();
+        Self { listeners }
     }
 
     /// The exit status of the next SIGINT (130) or SIGTERM (143).
@@ -47,13 +53,17 @@ impl Signals {
         }
     }
 
-    /// The exit status of the next Ctrl-C (130).
+    /// The exit status of the next Ctrl+C or Ctrl+Break (130).
     #[cfg(windows)]
     pub(crate) async fn next(&mut self) -> u8 {
-        let Some(listener) = self.listener.as_mut() else {
+        let Some((c, brk)) = self.listeners.as_mut() else {
             return std::future::pending().await;
         };
-        if listener.recv().await.is_none() {
+        let received = tokio::select! {
+            got = c.recv() => got,
+            got = brk.recv() => got,
+        };
+        if received.is_none() {
             return std::future::pending().await;
         }
         pmt_core::exit::INTERRUPTED

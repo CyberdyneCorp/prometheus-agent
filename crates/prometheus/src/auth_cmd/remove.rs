@@ -75,7 +75,7 @@ pub(super) fn run(ctx: &Context<'_>, name: &str, which: &str) -> Result<u8, Erro
 }
 
 /// The row named by label, else by 1-based position.
-fn pick<'a>(rows: &'a [Row], which: &str) -> Option<&'a Row> {
+pub(super) fn pick<'a>(rows: &'a [Row], which: &str) -> Option<&'a Row> {
     rows.iter().find(|r| r.label == which).or_else(|| {
         let index: usize = which.parse().ok()?;
         rows.get(index.checked_sub(1)?)
@@ -99,7 +99,7 @@ fn remove_key(profile: &Profile, row: &Row) -> Result<(), Error> {
 
 /// Revokes the sign-in's refresh token where the provider allows it; a
 /// failure is reported and the local copy is deleted anyway.
-fn revoke(
+pub(super) fn revoke(
     profile: &Profile,
     provider: &pmt_providers::registry::Provider,
     sub: &pmt_providers::auth::Subscription,

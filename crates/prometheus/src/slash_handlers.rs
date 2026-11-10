@@ -144,10 +144,13 @@ pub fn save(
     let redactor = redact
         .then(|| crate::sessions_cmd::redactor(scope))
         .transpose()?;
+    let traces = scope.config().moa.trace_dir(scope.dir());
     let options = ExportOptions {
         format,
         include_inactive: false,
+        with_blobs: false,
         redactor: redactor.as_ref(),
+        moa_traces: Some(&traces),
     };
     let io_error = |e: &std::io::Error| {
         Error::new(
@@ -285,7 +288,7 @@ pub fn session_usage(store: &Store, session: SessionId) -> Result<String, Error>
     let hit_rate = t
         .cache_hit_rate()
         .map_or_else(|| "—".to_owned(), |rate| format!("{:.0}%", rate * 100.0));
-    Ok(format!(
+    let mut text = format!(
         "calls {}  input {}  cache read {}  cache write {}  output {}  cost {}\ncache hit rate {hit_rate}",
         totals.calls,
         t.input,
@@ -293,7 +296,38 @@ pub fn session_usage(store: &Store, session: SessionId) -> Result<String, Error>
         t.cache_write,
         t.output,
         pmt_obs::usage::format_total_cost(&totals)
-    ))
+    );
+    if let Some(billing) = billing_lines(store, session)? {
+        text.push('\n');
+        text.push_str(&billing);
+    }
+    Ok(text)
+}
+
+/// The billing source of `session`'s latest model call and, for a
+/// subscription, its plan and quota (spec: model-providers, Billing source
+/// transparency; Subscription plan and quota visibility).
+///
+/// # Errors
+///
+/// Store errors.
+pub fn billing_lines(store: &Store, session: SessionId) -> Result<Option<String>, Error> {
+    let Some(last) = store.usage_events(session)?.pop() else {
+        return Ok(None);
+    };
+    let mut text = format!("billing {}", last.billing_source);
+    if let Some((reported, quota)) =
+        pmt_providers::quota::for_session(store, &last.provider, &last.billing_source)
+    {
+        let line = match (quota, reported) {
+            (Some(quota), _) => format!("quota: {}", quota.describe()),
+            (None, true) => "quota: not fetched yet".to_owned(),
+            (None, false) => pmt_providers::quota::NOT_REPORTED.to_owned(),
+        };
+        text.push('\n');
+        text.push_str(&line);
+    }
+    Ok(Some(text))
 }
 
 /// Usage of `/personality` (surfaces cli, tui, desktop, gateway).

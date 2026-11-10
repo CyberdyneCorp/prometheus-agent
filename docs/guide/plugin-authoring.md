@@ -286,6 +286,26 @@ search, text-to-speech...) that config selects by name, such as
 (`id`, `wire_format`, `base_url`, `secret_names`, `key_hosts`, ...), and
 `headers`/`prepare-request` shape each request the host sends.
 
+A model provider that signs in with OAuth declares the sign-in as data:
+an `oauth` object in its descriptor with `client_id`, `authorize_url`,
+`token_url` and optionally `scopes`, `allowed_hosts` (default: the
+authorize URL's host and its subdomains), `redirect_port` (0 picks a free
+one), `redirect_path` and `authorize_params`. `prometheus auth add <id>
+--type oauth` then runs the browser PKCE flow in the host, which keeps the
+verifier, `state` and every token in the profile's secrets store and
+signs each request itself. `prepare-request` receives only an opaque
+handle naming the credential in the body field `prometheus_credential`
+(`subscription:<id>/<label>`), removed before the request is sent. A
+Python model-provider plugin declares the same sign-in through Hermes's
+`hermes_cli.auth_oauth_pkce_plugin` (`OAuthPKCEConfig`,
+`pkce_auth_handler`, `pkce_refresh_credential`); a `token_request` broker
+is refused at load, since it would receive the verifier.
+
+A descriptor may instead name an agent CLI with `command`: the provider
+becomes `external_process`, but the host launches only what the user
+configures in `providers.<id>.command` (the plugin's value is shown as the
+suggestion).
+
 A plugin that needs another declares `requires_plugins = ["other"]`; it
 loads after it, and not at all when `other` is missing, disabled or failed.
 
@@ -295,6 +315,14 @@ each `[[automation_blueprints]]` table (`key`, `title`, `description`,
 `<plugin>:<key>` while the plugin is enabled. A Python plugin calls
 `ctx.register_automation_blueprint(key, title=..., schedule=..., prompt=...,
 slots=[...])` instead.
+
+A `memory-provider` plugin exports `plugin` (`name`, `is-available`,
+`initialize`, `tool-schemas`) and optionally `hooks` (`prefetch`,
+`sync-turn`, `on-memory-write`, `on-pre-compress`, `config-schema` and the
+rest; without `hooks` each is a no-op). The host bounds, isolates, redacts
+and queues every call; see the Memory guide. A `context-engine` plugin
+exports `initialize`, `compact`, `select`, `tool-schemas` and
+`handle-tool-call`.
 
 ## Limits worth designing for
 

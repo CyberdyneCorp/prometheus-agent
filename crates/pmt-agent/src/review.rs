@@ -37,6 +37,29 @@ pub fn excerpt(store: &Store, session: SessionId) -> Result<String, Error> {
     Ok(parts.join("\n\n"))
 }
 
+/// Every user and assistant text of `session`'s active transcript,
+/// oldest first (a review on the session's own model replays all of it).
+///
+/// # Errors
+///
+/// Store errors.
+pub fn transcript(store: &Store, session: SessionId) -> Result<String, Error> {
+    let rows = store.messages(session, Visibility::Active)?;
+    Ok(rows
+        .iter()
+        .filter_map(|row| {
+            let label = match row.role {
+                Role::User => "user",
+                Role::Assistant => "assistant",
+                _ => return None,
+            };
+            let text = row.content.as_deref().filter(|t| !t.trim().is_empty())?;
+            Some(format!("{label}: {text}"))
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n"))
+}
+
 /// Creates a review's hidden child session (tagged `tool`, so listings and
 /// continue pickers skip it).
 ///

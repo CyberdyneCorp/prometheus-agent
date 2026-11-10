@@ -8,6 +8,7 @@
 //! how images reach the model and [`compress`] context compression.
 
 pub mod compress;
+pub mod init;
 pub mod prompt;
 pub mod references;
 pub mod review;

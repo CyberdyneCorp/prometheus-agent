@@ -120,7 +120,13 @@ impl Repl {
             "resume" => self.resume(args).await,
             "prompt" => return self.compose(args).await,
             "snapshot" => self.snapshot(args).await,
-            "retry" | "learn" | "tools" | "model" => return self.session_reply(name, args).await,
+            "voice" => {
+                self.voice_command(args).await;
+                return Flow::Continue;
+            }
+            "retry" | "learn" | "tools" | "model" | "moa" => {
+                return self.session_reply(name, args).await;
+            }
             _ => {
                 let Some(live) = self.live.take() else {
                     return Flow::Continue;
@@ -205,7 +211,7 @@ impl Repl {
             "battery" => self.status_bar.battery_command(&self.factory.scope, args),
             other => match commands::run(&self.ctx(live), other, args).await {
                 Some(Ok(Reply::Text(text))) => Ok(text),
-                // Only `/learn` and `/retry` send, and they run with the
+                // Only `/learn`, `/retry` and `/moa` send, and they run with the
                 // session in place (`session_reply`).
                 Some(Ok(Reply::Send(_))) => Ok(String::new()),
                 Some(Err(err)) => Err(err),

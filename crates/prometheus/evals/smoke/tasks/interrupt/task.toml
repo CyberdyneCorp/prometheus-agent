@@ -1,0 +1,4 @@
+# An interrupt during a model call (SIGINT; Ctrl+Break on Windows) stops
+# the turn: the run exits 130.
+prompt = "count slowly"
+files = ["README.md"]

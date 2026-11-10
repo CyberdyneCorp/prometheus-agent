@@ -284,3 +284,20 @@ PNG, JPEG, GIF and WebP inline: an SVG is rasterized to PNG, and an image
 that cannot be converted becomes a short note instead of failing the
 request. The choice is made when a message is first sent and never
 changes for it, so the cached prompt prefix stays the same.
+
+**Size, repeats and replay.** An image embedded as pixels that is larger
+than `vision.embed_target_bytes` (default 262,144 bytes, clamped to
+65,536..4,194,304) or wider than 1,568 pixels is sent as a JPEG that fits;
+the conversion is deterministic, so a replayed image is byte-identical to
+its first send. [`vision_analyze`](../reference/tools.md#vision_analyze)
+embeds the same image (region crops included; local paths by their
+resolved path) at most `vision.max_calls_per_image` times per session
+(unset: 3 in a delegated subagent, unlimited for the main agent; `0` is
+unlimited) and then answers `vision_analyze refused: this image has
+already been loaded into context <n> time(s)`. Requests are rebuilt from
+the stored conversation, also after a resume or a daemon restart: the
+images of the current message are always sent, and of the older ones
+only the newest `vision.replay_recent_images` (default 3; `0` disables)
+are sent again in their original messages. Older images retire in batches
+of that size, so an earlier message changes at most once per batch, and
+show as `[image]`.

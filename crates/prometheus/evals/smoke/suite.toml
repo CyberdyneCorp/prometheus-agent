@@ -1,0 +1,9 @@
+# The built-in smoke suite (spec: replay-and-evaluation, Built-in smoke
+# suite): offline tasks on the mock provider, one per core capability,
+# each graded exactly. `cargo xtask smoke` runs it in CI; from M3 on,
+# `prometheus eval run smoke` scores the same suite.
+name = "smoke"
+version = "1"
+domain = "agent-core"
+default_timeout_secs = 60
+default_toolsets = []

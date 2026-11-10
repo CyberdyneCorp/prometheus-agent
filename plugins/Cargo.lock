@@ -538,6 +538,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "testing-engine"
+version = "0.1.0"
+dependencies = [
+ "wit-bindgen",
+]
+
+[[package]]
 name = "testing-hooks"
 version = "0.1.0"
 dependencies = [
@@ -547,6 +554,13 @@ dependencies = [
 
 [[package]]
 name = "testing-legacy-hook"
+version = "0.1.0"
+dependencies = [
+ "wit-bindgen",
+]
+
+[[package]]
+name = "testing-memory"
 version = "0.1.0"
 dependencies = [
  "wit-bindgen",

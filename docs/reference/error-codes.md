@@ -118,6 +118,9 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `store.replaced` | `conflict` | 75 | `state.db` was replaced (restored or copied over) while it was open; the write was refused and the file left untouched. Restart the process to open the new file. |
 | `store.corrupt` | `io` | 74 | `state.db` reported structural corruption; writes stopped. The next start quarantines the file and salvages every readable row (see `prometheus doctor`). |
 | `store.rewind_target_invalid` | `invalid_input` | 65 | Rewind targets an active user message of the session; the given message is missing, inactive or not a user message. |
+| `import.id_collision` | `conflict` | 75 | A session, message or usage id of the import file already exists in this profile; nothing was imported. Rerun with `--remap-ids` to import under new ids. |
+| `import.invalid` | `invalid_input` | 65 | The import file is not a valid `prometheus.sessions` version 1 export (or a record in it is malformed); nothing was imported. |
+| `import.too_large` | `invalid_input` | 65 | The import file holds more than 500 sessions, 50000 messages or 256 MiB; nothing was imported. Export fewer sessions per file. |
 | `store.fork_target_invalid` | `invalid_input` | 65 | `session.fork` names an `at_message_id` that is not an active message of the forked session. |
 | `store.rewind_conflict` | `conflict` | 75 | The messages the rewind or restore expected changed in the meantime; nothing changed. Look at the transcript again and retry. |
 | `session.in_use` | `conflict` | 75 | A live turn lease or compaction lock is held on the session; retry when the turn or compaction finished. |
@@ -143,6 +146,9 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `turn.context_exhausted` | `provider` | 69 | The request exceeds the model's context window and could not be compacted; start a new session or use a model with a larger window. |
 | `turn.guardrail_stop` | `cancelled` | 130 | The model kept repeating a failing or unproductive tool call; see `tool_loop_guardrails` to tune the thresholds. |
 | `turn.empty_steer` | `usage` | 2 | A steer message needs text; empty or whitespace-only steers are rejected. |
+| `turn.crashed` | `internal` | 70 | The process stopped while this turn ran; set `agent.resume_on_crash` to `auto` or `ask` to continue such turns from their journal. |
+| `compression.pin_limit` | `usage` | 2 | Pinned messages are copied into every compaction summary; unpin one with `/unpin <message-id>` or raise `compression.pinned_max_tokens`. |
+| `compression.pin_unknown` | `not_found` | 66 | `/pin` takes `last` or the id (or a unique id prefix) of a user or assistant message of this session; `/unpin` takes a pinned one. |
 | `personality.unknown` | `usage` | 2 | `agent.personality` and `/personality` take `none`, a built-in personality or a key of `[agent.personalities]`. |
 | `prompt.unknown_platform` | `usage` | 2 | `--platform` takes a surface with a built-in platform hint (cli, tui, desktop, telegram, discord, ...). |
 | `config.timezone` | `config` | 78 | `cron.timezone` must be an IANA time zone name such as `Europe/Lisbon`. |
@@ -177,6 +183,7 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `provider.disabled` | `config` | 78 | The requested or fallback provider has `providers.<id>.enabled = false`; nothing else was resolved. |
 | `provider.not_configured` | `config` | 78 | No provider is configured, no provider secret is stored, no sign-in exists and no configured local endpoint answers. Run `prometheus model` or `prometheus auth add <provider>`. |
 | `provider.missing_base_url` | `config` | 78 | A provider that needs an endpoint (local servers, `custom`) has no `providers.<id>.base_url` and its default loopback endpoint, if any, does not answer; the request is never sent to another provider. |
+| `provider.local_runtime_down` | `unavailable` | 69 | A `llamacpp` route without `base_url` found no llama-server (none detected, none recorded, and the managed runtime is off or not installed); the request is never sent to another provider. |
 | `provider.missing_credential` | `auth` | 78 | The provider needs a credential but none is stored whose bound hosts (`key_hosts`) include the request's host; store one with `prometheus secrets set <NAME>`. |
 | `provider.invalid_descriptor` | `config` | 78 | A provider descriptor (a `[providers.<id>]` block or a plugin's) misses a required field or holds an invalid value. |
 | `provider.auth_failed` | `auth` | 78 | The provider rejected the credential (`auth`) or the account's plan is not entitled to the API (`entitlement`). |
@@ -185,7 +192,15 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `model.not_selected` | `config` | 78 | No model id was given (`--model`, `model.default`) and the provider has no default model. |
 | `model.capability_missing` | `config` | 78 | The route's model lacks a capability the request needs (tool calling, image input, or a context window large enough for the request). |
 | `model.context_too_small` | `config` | 78 | The resolved model's context window is below `model.min_context_window`; if the window is larger, set `[models."<provider>/<model>"] context_window`. |
-| `provider.plugin_unavailable` | `config` | 78 | The provider speaks a wire format that only a provider plugin implements (`gemini_native`, `bedrock_converse`, bridged plugins such as `github-copilot`) or is a virtual provider of a capability this build does not include (`moa`); the message names what is missing. |
+| `model.data_use_unconfirmed` | `permission_denied` | 77 | The model trains on the prompts and outputs sent to it (Meta AI contributor-tier models) and its data-use terms were not accepted: confirm on a terminal, or set `[models."<provider>/<model>"] accept_data_use = true`; nothing was selected or written (`prometheus model set` exits 4). |
+| `model.retired` | `config` | 78 | The model is marked `retired` in the model catalog's retirement table, so no new session may start on it; the message names its replacement. `prometheus config fix-models --apply` rewrites every config key and cron job pin that names it. |
+| `provider.budget_exhausted` | `budget_exceeded` | 3 | The provider's `providers.<id>.daily_budget_usd` or `monthly_budget_usd` is used up in the profile's usage ledger, so no request was sent to it; the fallback chain applies, and the cap frees at the start of the next day or month. |
+| `provider.external_cli_missing` | `unavailable` | 69 | A provider with `auth = "external_process"` drives an installed agent CLI (`providers.<id>.command`), and the executable lookup did not find it; install it or set the command to its full path. |
+| `provider.metered_fallback_refused` | `auth` | 78 | `providers.<id>.confirm_metered_fallback = true` and the fallback would move the session from a subscription to a pay-per-token credential, which the user declined or which a non-interactive run cannot confirm; the turn failed instead. |
+| `provider.plugin_unavailable` | `config` | 78 | The provider speaks a wire format that only a provider plugin that is not installed implements (bridged plugins such as `github-copilot` and `solstice`) or is a virtual provider of a capability this build does not include; the message names what is missing. |
+| `model.unknown` | `config` | 78 | The provider has no model of that name: for the Mixture of Agents provider `moa`, the name is not a configured preset (`[moa.presets.<name>]` or the built-in `default`); the message lists the preset names. |
+| `moa.default_preset_protected` | `tool` | 1 | `prometheus moa delete` named the preset `moa.default_preset` selects; set another default first (`prometheus config set moa.default_preset <name>`). Exit 1. |
+| `moa.preset_not_found` | `not_found` | 66 | No `[moa.presets.<name>]` of that name is configured (the built-in `default` preset cannot be deleted, only redefined); `prometheus moa list` shows the presets. |
 | `model.not_configured` | `config` | 78 | The profile names no model and no provider, and no `--model`, `--provider` or `--base-url` was given, so a chat has nothing to talk to. Run `prometheus setup model` (or `prometheus model`). |
 | `chat.nothing_to_continue` | `not_found` | 66 | `-c`, `-c <name>` or `--resume latest` found no CLI session in the directory (or none in the named lineage); start a new chat instead. |
 | `chat.import_unavailable` | `unavailable` | 69 | `--resume @claude-code` and `--resume @codex` import that agent's most recent log through the migration importer, which arrives with M2; resume a Prometheus session instead. |
@@ -210,6 +225,9 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `fallback.not_found` | `not_found` | 66 | `prometheus fallback remove` named an index or `<provider>/<model>` that is not in the chain. |
 | `reasoning.invalid` | `config` | 78 | An `[agent.reasoning_overrides]` value or `[agent.reasoning_tiers]` target is neither a reasoning level (none, minimal, low, medium, high, xhigh, max, ultra) nor a tier name of `[agent.reasoning_tiers]`. |
 | `local.server_probe` | `unavailable` | 69 | A local inference server (LM Studio, Ollama, llama.cpp, vLLM, SGLang) did not serve a model listing at the given root or at `<root>/v1`. |
+| `local.not_found` | `not_found` | 66 | No model of the local library, catalog entry or download job has this name; `prometheus local catalog` and `prometheus local jobs` list them. |
+| `local.busy` | `conflict` | 75 | Another Prometheus process is downloading this job; wait for it, or pause it there. |
+| `local.digest_mismatch` | `io` | 74 | An engine archive or model file differs from its pinned size or SHA-256; the file was deleted and nothing was installed. |
 | `mock.script_missing` | `not_found` | 66 | The script of the built-in `mock` provider (`--mock-script` or `providers.mock.script`) does not exist or cannot be read. |
 | `mock.script_invalid` | `config` | 78 | The script of the built-in `mock` provider is not valid TOML or holds an invalid rule (an unknown field, a bad regex, a fault combined with fields it does not take); the message names the file and the rule. |
 | `auth.key_on_argv` | `usage` | 2 | `prometheus auth add` received an extra argument; API keys are read only from the hidden prompt or stdin, so they never appear in shell history or process listings. |
@@ -270,6 +288,11 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `update.backup_failed` | `io` | 74 | The pre-update backup (`update.pre_update_backup`, `--backup`) could not be written, usually because the home volume is full; the update stopped before the swap (exit 73) and the installed binary is unchanged. Free space, or rerun with `--no-backup`. |
 | `demo.output_not_empty` | `usage` | 2 | `prometheus demo --output DIR` names a directory that is not empty; the demo only runs in a new or empty directory, so it never removes files it did not create. |
 | `demo.io` | `io` | 74 | `prometheus demo` could not create its directory, home, ledger repository or mock script. |
+| `replay.integrity` | `invalid_input` | 65 | A member of the `.pmtrec` recording is missing, unlisted or no longer matches the sha256 its manifest records (the message names it); the recording was changed after export and is not replayed. |
+| `replay.malformed` | `invalid_input` | 65 | The file is not a `.pmtrec` recording this build reads: not a zstd-compressed tar, no `manifest.json`, a newer `format_version`, or a member that does not parse. |
+| `replay.not_recorded` | `not_found` | 66 | The session has no recording under `<profile>/recordings/` (it ran with `observability.trajectories.enabled = false`, before recordings existed, or retention removed it), so it cannot be exported or replayed. |
+| `replay.diverged` | `conflict` | 75 | During a replay a model request or tool call differed from the recording at the same step; the report names the step and shows a diff. Rerun with `--on-divergence continue` to fall through to the live provider and tools. |
+| `replay.io` | `io` | 74 | A `.pmtrec` recording or a replay's output directory could not be written or read. |
 | `runtime.unknown` | `usage` | 2 | The name is not a runtime of this build's pinned runtime index; `prometheus runtimes list` shows the pinned names. |
 | `runtime.unsupported` | `unavailable` | 69 | The pinned runtime index has no archive of this runtime for this host's OS, architecture and C library. |
 | `runtime.digest_mismatch` | `permission_denied` | 77 | The downloaded archive's size or SHA-256 differs from the digest pinned in this binary (a corrupted download, or a mirror serving other bytes); the download was deleted and nothing was installed. |
@@ -305,7 +328,6 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `cron.invalid_job` | `invalid_input` | 65 | The job has nothing to run, `no_agent` without a script, a script outside `<profile>/scripts`, an unknown skill, toolset, delivery target, model or provider, or a field out of range; nothing was saved. |
 | `cron.prompt_rejected` | `permission_denied` | 77 | The job's prompt holds an injection or concealment directive, a secret-exfiltration pattern or invisible Unicode; the message names the rule and nothing was saved. |
 | `cron.confirmation` | `permission_denied` | 77 | Saving a job (or a changed schedule) needs a confirmation: answer `y` on a terminal or pass `--yes`; the command exits 4 and nothing was saved. |
-| `cron.replay_unavailable` | `unavailable` | 69 | Replaying a run against its recorded model responses needs the model-call cache and the replay provider, which this build does not have yet; `prometheus cron replay <run> --live` re-runs the recorded inputs against the current provider instead. |
 | `cron.invalid_state` | `invalid_input` | 65 | The operation does not apply in the job's state (for example resuming a one-shot job whose time has passed); the message says how to change it. |
 | `cron.incident_not_found` | `not_found` | 66 | No failure incident of the profile has that id; `prometheus cron incidents` lists them. |
 | `cron.invalid_workdir` | `usage` | 2 | A job's `workdir` must be an absolute path to an existing directory, and one set through the `cronjob` tool must lie inside the calling session's workspace; nothing was saved. |

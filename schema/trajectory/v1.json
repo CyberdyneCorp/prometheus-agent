@@ -354,6 +354,24 @@
                   "null"
                 ]
               },
+              "compaction_trigger_tokens": {
+                "description": "The session's compaction trigger in tokens.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "context_tokens": {
+                "description": "The context size after the turn (the provider's count plus the rows\nadded since), for the context pressure gauge.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
               "iterations": {
                 "description": "Loop iterations run.",
                 "format": "uint32",
@@ -1112,6 +1130,46 @@
       "if": {
         "properties": {
           "type": {
+            "const": "compression.started"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`compression.started`: a compaction begins writing its summary\n(`attempt` 1), or writes it again after the quality check (`attempt` 2).",
+            "properties": {
+              "attempt": {
+                "description": "The summary attempt, from 1.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "tokens_before": {
+                "description": "Context tokens before.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "trigger": {
+                "description": "`manual`, `turn_start`, `idle`, `gateway_hygiene`...",
+                "type": "string"
+              }
+            },
+            "required": [
+              "trigger",
+              "attempt",
+              "tokens_before"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
             "const": "compression.committed"
           }
         }
@@ -1304,6 +1362,13 @@
                 "description": "Route given up (`provider/model`).",
                 "type": "string"
               },
+              "from_billing": {
+                "description": "The given-up route's `billing_source`.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
               "reason": {
                 "description": "Why.",
                 "type": "string"
@@ -1311,6 +1376,13 @@
               "to": {
                 "description": "Route now used.",
                 "type": "string"
+              },
+              "to_billing": {
+                "description": "The new route's `billing_source`.",
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             },
             "required": [
@@ -2180,6 +2252,7 @@
     "subagent.spawned",
     "subagent.progress",
     "subagent.finished",
+    "compression.started",
     "compression.committed",
     "compression.failed",
     "prompt.rebuilt",

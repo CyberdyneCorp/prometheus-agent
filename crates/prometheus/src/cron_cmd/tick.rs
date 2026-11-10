@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use jiff::Timestamp;
-use pmt_core::error::{Error, codes};
+use pmt_core::error::Error;
 use pmt_cron::ops;
 use pmt_store::cron::{CronLease, RunRow};
 use pmt_store::leases::Holder;
@@ -66,11 +66,7 @@ pub(super) fn replay(env: &Env<'_>, id: &str, live: bool, deliver: bool) -> Resu
         .cron_run(id)?
         .ok_or_else(|| pmt_store::cron::runs::run_not_found(id))?;
     if !live {
-        return Err(Error::new(
-            &codes::CRON_REPLAY_UNAVAILABLE,
-            "deterministic replay needs the model-call cache and the replay provider, which this build does not have yet",
-        )
-        .with_hint("`prometheus cron replay <run> --live` re-runs the recorded inputs against the current provider"));
+        return crate::replay::run::cron(&env.scope, &env.store, env.ctx.launch, &original);
     }
     let job = ops::find(&env.store, &original.job_id)?;
     let runner = env.runner();

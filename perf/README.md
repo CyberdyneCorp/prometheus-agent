@@ -134,6 +134,26 @@ median), peak RSS moved 9.49 -> 10.48 MiB and the chat prompt 33.59 ->
 role, and the client and server share the model types. Measured by CI run
 41757484815.
 
+Local models (m2-models-media, group 48: the llama.cpp engine index, the
+hardware-priced catalog, resumable downloads, the model library, the managed
+`llama-server` and the `local` commands and RPC methods) took the stripped
+binary on the reference runner from 79.22 to 80.19 MiB, over the 80 MiB
+absolute budget (CI run 42621963414); no new third-party crate came with
+it. The release profile now optimizes for size (`opt-level = "s"`) instead
+of speed: with fat LTO the stripped binary went from 63.17 to 45.29 MiB on
+macOS (-28%), while the `--version` median (4.59 -> 4.34 ms), the chat
+prompt median (129.50 -> 130.65 ms on that machine) and peak RSS (11.42 ->
+10.95 MiB) stayed put. Per-crate `opt-level = "s"` had not helped (above);
+the whole-profile setting does, because the LTO pass optimizes the single
+merged unit at the profile's level. The cost is throughput in CPU-bound
+code (Cranelift compiling a plugin, hashing a download), which is small next
+to the network and model latency a turn waits on; startup and RSS, the
+budgeted quantities, do not regress. On the reference runner (CI run
+42636959071) the stripped binary went from 74.69 MiB on the base branch
+(speed-optimized) to 53.87 MiB with this branch's code included, with the
+`--version` median at 3.57 -> 3.90 ms (inside the 1 ms floor), the chat
+prompt median at 39.62 -> 39.35 ms and peak RSS at 12.11 -> 12.42 MiB.
+
 The checked-in `perf/baseline.json` starts empty; it holds entries only when
 someone records them deliberately with `--update-baseline`.
 

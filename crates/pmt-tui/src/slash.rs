@@ -42,6 +42,8 @@ pub enum Local {
     TerminalSetup,
     /// Continue the session in a chat and leave (`/handoff <platform>`).
     Handoff,
+    /// Voice mode: `/voice [on|off|tts|status]` (recorded and spoken here).
+    Voice,
 }
 
 /// One client-local command: its name, other names and `/help` line.
@@ -166,6 +168,12 @@ pub const LOCAL: &[LocalCommand] = &[
         name: "handoff",
         aliases: &[],
         description: "continue this session in a chat: /handoff <platform>[:<chat>[:<thread>]]",
+    },
+    LocalCommand {
+        command: Local::Voice,
+        name: "voice",
+        aliases: &[],
+        description: "voice mode: /voice [on|off|tts|status]; the record key talks",
     },
 ];
 

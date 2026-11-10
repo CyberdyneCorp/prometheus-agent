@@ -7,6 +7,7 @@ pub mod args;
 
 pub(crate) mod edit;
 mod explain;
+mod fix_models;
 
 use std::fmt::Write as _;
 
@@ -45,6 +46,7 @@ pub fn run(command: &ConfigCommand, ctx: &Context<'_>) -> Result<u8, Error> {
             (Some(key), _) => explain::key(&ctx.scope()?, key, ctx.json),
             (None, _) => explain::changed(&ctx.scope()?, ctx.json),
         },
+        ConfigCommand::FixModels { apply, no_backup } => fix_models::run(ctx, *apply, *no_backup),
         ConfigCommand::Schema => print_raw(&catalog::pretty(catalog::schema())),
         ConfigCommand::Docs => print_raw(&reference::render(
             catalog::schema(),
@@ -198,6 +200,8 @@ fn validate(ctx: &Context<'_>) -> Result<u8, Error> {
     // plugin providers included).
     let (providers, _) = crate::plugins_host::providers::registry(&scope, scope.config())?;
     pmt_providers::fallback::chain(scope.config(), &providers)?;
+    // MoA slots name registry providers too (built-in, custom, plugin).
+    pmt_providers::moa::validate(scope.config(), &providers)?;
     // Model aliases name registry providers; reasoning overrides name
     // levels or tiers.
     for (name, alias) in &scope.config().model.aliases {
@@ -211,9 +215,12 @@ fn validate(ctx: &Context<'_>) -> Result<u8, Error> {
         })?;
     }
     pmt_providers::reasoning::check(&scope.config().agent)?;
-    // Context engines are a registry too: plugin engines arrive with the
-    // plugin host (M2), so M1 knows the built-in engine only.
-    pmt_agent::compress::engine::select(&scope.config().context, &[])?;
+    // Context engines are a registry too: built-in plus the loaded
+    // plugins' engines.
+    let plugins =
+        crate::plugins_host::for_session(&scope, &std::env::current_dir().unwrap_or_default());
+    crate::memory_provider::check_plugins(&scope.config().memory, &plugins)?;
+    crate::context_engine::select(&scope.config().context, &plugins)?;
     if !ctx.json {
         eprintln!("{} is valid", file.path().display());
     }

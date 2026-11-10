@@ -30,7 +30,7 @@ error, `3` a budget ran out before a final answer, `4` a tool call needed
 an approval nobody could give (`approvals.single_query_mode = "deny"`, the
 default; `--approvals off` or `"approve"` lets it run), `66` a missing
 `--prompt-file` or nothing to continue, `78` no model configured, `130`
-SIGINT and `143` SIGTERM. `--query`, `--prompt-file` and `-z <prompt>`
+SIGINT (on Windows Ctrl+C or Ctrl+Break) and `143` SIGTERM. `--query`, `--prompt-file` and `-z <prompt>`
 exclude each other.
 
 ```console
@@ -209,7 +209,10 @@ On messaging surfaces `/sessions all` is reserved for admins.
 `/retry` sends the last message again with its attachments; the answer
 and everything after the message leave the active transcript (a soft
 delete, so `sessions rewind` can bring them back). While a turn runs it
-stops the turn first; with no message it prints `nothing to retry`.
+stops the turn first; with no message it prints `nothing to retry`. On
+a daemon session whose last turn a crash left unfinished, `/retry`
+resumes that turn from its journal instead (see
+[crash resume](turns.md#crash-resume)).
 `/queue <prompt>` (alias `/q`) runs a prompt after the current turn (at
 once when idle); `/queue list`, `/queue edit <n> <text>`, `/queue rm
 <n>`, `/queue move <a> <b>`, `/queue clear` and `/queue add <text>`

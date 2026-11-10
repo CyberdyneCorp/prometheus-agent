@@ -1,0 +1,13 @@
+[[rule]]
+step = 0
+[[rule.tool_calls]]
+name = "memory"
+arguments = { target = "user", operations = [{ action = "add", content = "Prefers CSV exports." }] }
+
+[[rule]]
+tool_result = "\"success\":true"
+text = "Remembered."
+
+[[rule]]
+repeat = true
+text = "unexpected"

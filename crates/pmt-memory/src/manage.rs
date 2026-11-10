@@ -190,6 +190,7 @@ pub fn apply_edit(
         })?;
     }
     store.memory_batch(None, |b| {
+        b.author = Some(pmt_store::Author::user());
         let plan = edit_ops(&b.entries, targets, sections)?;
         let mut entries = b.entries.clone();
         let mut summary = Summary::default();
@@ -340,6 +341,10 @@ pub fn import(
         .collect();
     let skipped = summary.secrets_skipped;
     store.memory_batch(None, |b| {
+        b.author = Some(pmt_store::Author {
+            origin: MemoryOrigin::Import,
+            session: None,
+        });
         let mut summary = Summary {
             secrets_skipped: skipped,
             ..Summary::default()

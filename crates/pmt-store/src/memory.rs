@@ -17,6 +17,7 @@ use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
 use serde_json::Value;
 
 use crate::error::{corrupt, sql};
+use crate::memory_revisions::{self, Author};
 use crate::model::{MemoryKind, MemoryOrigin, MemoryStatus, MemoryTarget, MemoryTier};
 use crate::sessions::now_ms;
 use crate::store::Store;
@@ -86,6 +87,10 @@ pub struct MemoryBatch {
     /// Staged changes to drop in the same transaction (approved or
     /// rejected).
     pub resolve: Vec<String>,
+    /// Who makes this batch's changes: each one is journaled under it
+    /// (`memory_revisions`). `None` only for bookkeeping that is not a
+    /// memory change (scan verdicts).
+    pub author: Option<Author>,
 }
 
 const COLUMNS: &str = "id, target, kind, tier, content, pinned, status, expires_at, created_at, \
@@ -317,9 +322,14 @@ impl Store {
                 pending: load_pending(tx)?,
                 stage: Vec::new(),
                 resolve: Vec::new(),
+                author: None,
             };
             let value = work(&mut batch)?;
             write_difference(tx, &before, &batch)?;
+            crate::memory_index::reindex(tx, &before, &batch.entries)?;
+            if let Some(author) = &batch.author {
+                memory_revisions::journal(tx, author, &before, &batch.entries)?;
+            }
             Ok(value)
         })
     }

@@ -1,0 +1,3 @@
+# A delegation to two subagents, exported with their sessions.
+prompts = ["review the ledger"]
+lineage = true

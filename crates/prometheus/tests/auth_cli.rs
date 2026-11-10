@@ -5,9 +5,8 @@
 
 mod common;
 
-use std::io::{BufRead as _, BufReader, Read as _, Write as _};
 use std::path::{Path, PathBuf};
-use std::process::{Output, Stdio};
+use std::process::Output;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -15,7 +14,7 @@ use serde_json::{Value, json};
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use common::{command, ok, run, run_with_stdin, stderr, stdout, temp_home};
+use common::{browser_sign_in, command, ok, run, run_with_stdin, stderr, stdout, temp_home};
 
 const OPENAI_KEY: &str = "sk-proj-abcdefghijklmnop0123456789";
 const REFRESH: &str = "rt-chatgpt-refresh-0123456789abcdef";
@@ -181,51 +180,6 @@ fn caveat_text_comes_from_data() {
     let text = stdout(&run(home.path(), &["auth", "status", "anthropic"]));
     assert!(text.contains("note: Custom note"), "{text}");
     assert!(!text.contains("Claude Pro"), "{text}");
-}
-
-/// Runs a browser sign-in: reads stderr until the authorization URL,
-/// answers its callback like the browser would, and returns stderr.
-fn browser_sign_in(cmd: &mut std::process::Command) -> (Option<i32>, String) {
-    let mut child = cmd
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    let mut lines = BufReader::new(child.stderr.take().unwrap()).lines();
-    let mut seen = String::new();
-    let mut url = None;
-    for line in lines.by_ref() {
-        let line = line.unwrap();
-        seen.push_str(&line);
-        seen.push('\n');
-        if seen.contains("Open this URL") && line.starts_with("  http") {
-            url = Some(line.trim().to_owned());
-        }
-        if line.starts_with("Waiting for the callback") {
-            break;
-        }
-    }
-    let url = url::Url::parse(&url.unwrap_or_else(|| panic!("no URL in:\n{seen}"))).unwrap();
-    let query: std::collections::BTreeMap<String, String> =
-        url.query_pairs().into_owned().collect();
-    let redirect = url::Url::parse(&query["redirect_uri"]).unwrap();
-    let mut stream = std::net::TcpStream::connect(("127.0.0.1", redirect.port().unwrap())).unwrap();
-    write!(
-        stream,
-        "GET {}?code=browser-code&state={} HTTP/1.1\r\nhost: localhost\r\n\r\n",
-        redirect.path(),
-        query["state"]
-    )
-    .unwrap();
-    let mut answer = String::new();
-    stream.read_to_string(&mut answer).unwrap();
-    assert!(answer.starts_with("HTTP/1.1 200"), "{answer}");
-    for line in lines {
-        seen.push_str(&line.unwrap());
-        seen.push('\n');
-    }
-    (child.wait().unwrap().code(), seen)
 }
 
 async fn token_endpoint(server: &MockServer, access: &str) {

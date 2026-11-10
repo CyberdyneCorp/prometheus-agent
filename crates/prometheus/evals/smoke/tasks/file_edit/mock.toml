@@ -1,0 +1,15 @@
+[[rule]]
+step = 0
+[[rule.tool_calls]]
+name = "read_file"
+arguments = { path = "README.md" }
+
+[[rule]]
+step = 1
+[[rule.tool_calls]]
+name = "patch"
+arguments = { path = "README.md", old_string = "Total: 85.15", new_string = "Total: 90.00" }
+
+[[rule]]
+repeat = true
+text = "Updated the total."

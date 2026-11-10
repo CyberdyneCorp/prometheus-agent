@@ -16,6 +16,7 @@ pub mod install;
 pub mod load;
 pub mod manifest;
 pub mod mcp_catalog;
+pub mod memory;
 pub mod package;
 pub mod providers;
 pub mod python;

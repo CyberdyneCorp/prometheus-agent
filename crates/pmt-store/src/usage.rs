@@ -261,44 +261,7 @@ impl Store {
     /// `store.sqlite`.
     pub fn record_usage(&self, event: &UsageEvent) -> Result<(), Error> {
         let profile = self.profile_name().to_owned();
-        self.write(|tx| {
-            let session = sessions::load(tx, event.session_id)?
-                .ok_or_else(|| sessions::not_found(event.session_id))?;
-            tx.execute(
-                "INSERT INTO usage_ledger (call_id, ts, profile, session_id, root_session_id, \
-                 turn_id, parent_call_id, purpose, purpose_detail, provider, model, service_tier, \
-                 input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, \
-                 reasoning_tokens, cost_usd, cost_status, billing_source, request_hash, cache_hit) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, \
-                 ?17, ?18, ?19, ?20, ?21, ?22)",
-                params![
-                    event.call_id,
-                    event.ts.as_millisecond(),
-                    profile,
-                    event.session_id.to_string(),
-                    session.root_session_id.to_string(),
-                    event.turn_id,
-                    event.parent_call_id,
-                    event.purpose,
-                    event.purpose_detail,
-                    event.provider,
-                    event.model,
-                    event.service_tier,
-                    count(event.tokens.input),
-                    count(event.tokens.output),
-                    count(event.tokens.cache_read),
-                    count(event.tokens.cache_write),
-                    count(event.tokens.reasoning),
-                    event.cost_usd,
-                    event.cost_status.as_str(),
-                    event.billing_source,
-                    event.request_hash,
-                    event.cache_hit,
-                ],
-            )
-            .map(drop)
-            .map_err(sql)
-        })
+        self.write(|tx| insert(tx, &profile, event))
     }
 
     /// Sums the ledger rows of `scope`.
@@ -323,4 +286,45 @@ impl Store {
             }
         })
     }
+}
+
+/// Appends `event` to the ledger in `tx`; its `root_session_id` is the
+/// session's root.
+pub(crate) fn insert(tx: &Connection, profile: &str, event: &UsageEvent) -> Result<(), Error> {
+    let session = sessions::load(tx, event.session_id)?
+        .ok_or_else(|| sessions::not_found(event.session_id))?;
+    tx.execute(
+        "INSERT INTO usage_ledger (call_id, ts, profile, session_id, root_session_id, \
+         turn_id, parent_call_id, purpose, purpose_detail, provider, model, service_tier, \
+         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, \
+         reasoning_tokens, cost_usd, cost_status, billing_source, request_hash, cache_hit) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, \
+         ?17, ?18, ?19, ?20, ?21, ?22)",
+        params![
+            event.call_id,
+            event.ts.as_millisecond(),
+            profile,
+            event.session_id.to_string(),
+            session.root_session_id.to_string(),
+            event.turn_id,
+            event.parent_call_id,
+            event.purpose,
+            event.purpose_detail,
+            event.provider,
+            event.model,
+            event.service_tier,
+            count(event.tokens.input),
+            count(event.tokens.output),
+            count(event.tokens.cache_read),
+            count(event.tokens.cache_write),
+            count(event.tokens.reasoning),
+            event.cost_usd,
+            event.cost_status.as_str(),
+            event.billing_source,
+            event.request_hash,
+            event.cache_hit,
+        ],
+    )
+    .map(drop)
+    .map_err(sql)
 }

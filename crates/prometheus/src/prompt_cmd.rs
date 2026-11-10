@@ -113,6 +113,7 @@ async fn measure<'a>(
         platform: args.platform.clone(),
         registered_hint: None,
         cwd: std::env::current_dir().ok(),
+        cwd_fallback: false,
         no_context_files: false,
         model: model.clone(),
         context_window: Some(meta.context_window),

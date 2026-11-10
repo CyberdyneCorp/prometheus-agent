@@ -394,6 +394,36 @@
       ],
       "type": "object"
     },
+    "AutopruneOffer": {
+      "additionalProperties": false,
+      "description": "`autoprune.offer` result.",
+      "properties": {
+        "question": {
+          "default": null,
+          "description": "The question to ask (`on`, `off` or `later`, answered with\n`/autoprune <answer>`), when it is due; `null` otherwise. A\nnon-null answer counts as today's check.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "AutopruneOfferParams": {
+      "additionalProperties": false,
+      "description": "`autoprune.offer` params.",
+      "properties": {
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "BannerInfo": {
       "additionalProperties": false,
       "description": "`session.banner` result: what the TUI's startup banner lists.",
@@ -1027,6 +1057,13 @@
       "additionalProperties": false,
       "description": "`session.context_usage` result.",
       "properties": {
+        "billing_source": {
+          "description": "The current route's `billing_source` (`subscription:<provider>/<label>`,\n`api_key:<provider>[/<label>]`, `local`...), when the session is\nloaded.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "context_window": {
           "description": "The model's context window, when known.",
           "format": "uint64",
@@ -1044,6 +1081,17 @@
             "number",
             "null"
           ]
+        },
+        "subscription": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SubscriptionStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The subscription the current route bills, when it is one."
         },
         "tokens": {
           "description": "Estimated tokens of the active context.",
@@ -1645,6 +1693,206 @@
       ],
       "type": "object"
     },
+    "JourneyList": {
+      "additionalProperties": false,
+      "description": "`journey.list` result.",
+      "properties": {
+        "nodes": {
+          "description": "The nodes, oldest first.",
+          "items": {
+            "$ref": "#/$defs/JourneyNode"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "nodes"
+      ],
+      "type": "object"
+    },
+    "JourneyListParams": {
+      "additionalProperties": false,
+      "description": "`journey.list` params.",
+      "properties": {
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "since": {
+          "default": null,
+          "description": "Only nodes created at or after this: a duration back from now\n(`2h`, `3d`, `1w`), a date (`2026-11-01`) or a timestamp.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "JourneyNode": {
+      "additionalProperties": false,
+      "description": "One learned skill or memory entry.",
+      "properties": {
+        "created_at": {
+          "description": "When it was learned (RFC 3339).",
+          "type": "string"
+        },
+        "id": {
+          "description": "`skill:<name>` for a skill, the entry id (`m_...`) for memory.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "`skill` or `memory`.",
+          "type": "string"
+        },
+        "origin": {
+          "description": "Who created it: a skill's `user`, `agent`, `hub` or `bundled` (a\nused bundled skill); an entry's `user`, `agent`,\n`background_review`, `provider`, `consolidation` or `import`.",
+          "type": "string"
+        },
+        "title": {
+          "description": "The skill's name or the entry's text (one line, shortened).",
+          "type": "string"
+        },
+        "updated_at": {
+          "description": "When it last changed (RFC 3339).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "title",
+        "created_at",
+        "updated_at",
+        "origin"
+      ],
+      "type": "object"
+    },
+    "Lineage": {
+      "additionalProperties": false,
+      "description": "`session.tree` / `session.siblings` result.",
+      "properties": {
+        "nodes": {
+          "description": "The related sessions, by depth then age.",
+          "items": {
+            "$ref": "#/$defs/LineageNode"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "nodes"
+      ],
+      "type": "object"
+    },
+    "LineageNode": {
+      "additionalProperties": false,
+      "description": "One related session in `session.tree` / `session.siblings`.",
+      "properties": {
+        "depth": {
+          "description": "Distance from the asked session (its children are 1).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "description": "How it relates to the parent: `fork`, `compression`, `delegate`,\n`reset`, `import` or `background`.",
+          "type": "string"
+        },
+        "parent_session_id": {
+          "description": "Its parent.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        },
+        "title": {
+          "default": null,
+          "description": "Its title.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "session_id",
+        "parent_session_id",
+        "kind",
+        "depth"
+      ],
+      "type": "object"
+    },
+    "LocalParams": {
+      "additionalProperties": false,
+      "description": "Params of every `local.*` method; each uses the fields its command\ntakes (`model` for pull, rm and use; `job` for pause and resume;\n`query` for search; `path` for add).",
+      "properties": {
+        "job": {
+          "default": null,
+          "description": "A download job id.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "default": null,
+          "description": "Catalog or library id, or `owner/repo[:quant]` for `local.pull`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "default": null,
+          "description": "A `.gguf` file on the daemon's machine.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted); `local.use`\nsets its model.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "query": {
+          "default": null,
+          "description": "Search words.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "LocalReply": {
+      "additionalProperties": false,
+      "description": "Result of every `local.*` method.",
+      "properties": {
+        "data": {
+          "default": null,
+          "description": "The command's `--json` document (without `schema`), or `null`."
+        },
+        "message": {
+          "description": "What happened, in one line.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "type": "object"
+    },
     "LspServerStatus": {
       "additionalProperties": false,
       "description": "One running language server.",
@@ -1748,6 +1996,263 @@
         "name",
         "state",
         "tools"
+      ],
+      "type": "object"
+    },
+    "MemorySummary": {
+      "additionalProperties": false,
+      "description": "`memory.summary` result.",
+      "properties": {
+        "line": {
+          "default": null,
+          "description": "`Memory: +<added> ~<patched> -<removed> (review with /memory\nreview)` when the agent changed memory in the session and\n`memory.review_mode` is not `off`; `null` otherwise.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "MoaPresetInfo": {
+      "additionalProperties": false,
+      "description": "One preset as editors show it.",
+      "properties": {
+        "aggregator": {
+          "$ref": "#/$defs/MoaSlotInfo",
+          "description": "The model that acts with the tools and is billed."
+        },
+        "aggregator_temperature": {
+          "default": null,
+          "description": "Temperature sent to the aggregator.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "billing_notice": {
+          "default": null,
+          "description": "`Aggregator is on <provider>; ...` when it bills another provider\nthan `model.provider`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "builtin": {
+          "description": "The built-in `default`, not redefined in `config.toml`.",
+          "type": "boolean"
+        },
+        "default": {
+          "description": "It is `moa.default_preset` (cannot be deleted).",
+          "type": "boolean"
+        },
+        "enabled": {
+          "description": "`false`: the aggregator runs alone.",
+          "type": "boolean"
+        },
+        "fanout": {
+          "description": "When the advisors run (`user_turn`, `per_iteration`, `every_n:N`).",
+          "type": "string"
+        },
+        "name": {
+          "description": "The preset name (`/model <name>`, `moa/<name>`).",
+          "type": "string"
+        },
+        "reference_temperature": {
+          "default": null,
+          "description": "Temperature sent to the references.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "references": {
+          "description": "The advisors.",
+          "items": {
+            "$ref": "#/$defs/MoaSlotInfo"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "default",
+        "builtin",
+        "enabled",
+        "aggregator",
+        "references",
+        "fanout"
+      ],
+      "type": "object"
+    },
+    "MoaPresetInput": {
+      "additionalProperties": false,
+      "description": "A preset to write.",
+      "properties": {
+        "aggregator": {
+          "$ref": "#/$defs/MoaSlotInfo",
+          "description": "The aggregator (never `moa`)."
+        },
+        "aggregator_temperature": {
+          "default": null,
+          "description": "Temperature sent to the aggregator (0.0-2.0).",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "enabled": {
+          "default": null,
+          "description": "Whether the references run (default `true`).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "fanout": {
+          "default": null,
+          "description": "The cadence (default `user_turn`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reference_temperature": {
+          "default": null,
+          "description": "Temperature sent to the references (0.0-2.0).",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "references": {
+          "description": "The advisors (at least one).",
+          "items": {
+            "$ref": "#/$defs/MoaSlotInfo"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "references",
+        "aggregator"
+      ],
+      "type": "object"
+    },
+    "MoaPresetList": {
+      "additionalProperties": false,
+      "description": "`moa.presets.list` (and `put`, `delete`) result.",
+      "properties": {
+        "default_preset": {
+          "description": "`moa.default_preset`.",
+          "type": "string"
+        },
+        "presets": {
+          "description": "Every preset, sorted by name.",
+          "items": {
+            "$ref": "#/$defs/MoaPresetInfo"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "default_preset",
+        "presets"
+      ],
+      "type": "object"
+    },
+    "MoaPresetsDeleteParams": {
+      "additionalProperties": false,
+      "description": "`moa.presets.delete` params.",
+      "properties": {
+        "name": {
+          "description": "The preset name (never `moa.default_preset`).",
+          "type": "string"
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "MoaPresetsListParams": {
+      "additionalProperties": false,
+      "description": "`moa.presets.list` params.",
+      "properties": {
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "MoaPresetsPutParams": {
+      "additionalProperties": false,
+      "description": "`moa.presets.put` params.",
+      "properties": {
+        "name": {
+          "description": "The preset name.",
+          "type": "string"
+        },
+        "preset": {
+          "$ref": "#/$defs/MoaPresetInput",
+          "description": "The preset."
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "preset"
+      ],
+      "type": "object"
+    },
+    "MoaSlotInfo": {
+      "additionalProperties": false,
+      "description": "One preset slot.",
+      "properties": {
+        "model": {
+          "description": "Model id.",
+          "type": "string"
+        },
+        "provider": {
+          "description": "Provider id.",
+          "type": "string"
+        },
+        "reasoning_effort": {
+          "default": null,
+          "description": "`none`...`ultra`, when set.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "provider",
+        "model"
       ],
       "type": "object"
     },
@@ -1930,6 +2435,69 @@
           "type": "object"
         }
       ]
+    },
+    "QuotaStatus": {
+      "additionalProperties": false,
+      "description": "A subscription's plan and quota windows.",
+      "properties": {
+        "plan": {
+          "default": null,
+          "description": "The plan label.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reported": {
+          "description": "The provider reports quota data.",
+          "type": "boolean"
+        },
+        "text": {
+          "description": "One line for a status display (`quota: not reported by provider`).",
+          "type": "string"
+        },
+        "windows": {
+          "default": [],
+          "description": "The quota windows.",
+          "items": {
+            "$ref": "#/$defs/QuotaWindow"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "reported",
+        "text"
+      ],
+      "type": "object"
+    },
+    "QuotaWindow": {
+      "additionalProperties": false,
+      "description": "One quota window.",
+      "properties": {
+        "name": {
+          "description": "`5h`, `weekly`...",
+          "type": "string"
+        },
+        "resets_at": {
+          "default": null,
+          "description": "When it resets (RFC 3339).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "used_percent": {
+          "description": "Used share, 0-100.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "used_percent"
+      ],
+      "type": "object"
     },
     "RequestCancel": {
       "additionalProperties": false,
@@ -2390,6 +2958,50 @@
       ],
       "type": "object"
     },
+    "SteerKind": {
+      "description": "How a steer is delivered.",
+      "oneOf": [
+        {
+          "const": "note",
+          "description": "Inserted before the next model request.",
+          "type": "string"
+        },
+        {
+          "const": "redirect",
+          "description": "Running cooperative tools yield; inserted as a real user message.",
+          "type": "string"
+        },
+        {
+          "const": "wrap_up",
+          "description": "The current tool batch finishes, then one toolless request ends\nthe turn as `completed`.",
+          "type": "string"
+        }
+      ]
+    },
+    "SteerParams": {
+      "additionalProperties": false,
+      "description": "`session.steer` params.",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/SteerKind",
+          "default": "note",
+          "description": "How it is delivered (default `note`)."
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        },
+        "text": {
+          "description": "The steer; empty or whitespace-only text is refused (`empty steer`).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "text"
+      ],
+      "type": "object"
+    },
     "SubagentList": {
       "additionalProperties": false,
       "description": "`subagent.list` result.",
@@ -2446,6 +3058,14 @@
         "author": {
           "default": null,
           "description": "Never accepted: the gateway stamps every input's author from the\nconnection, so a client-supplied one is refused with `-32002\nrpc.forged_author`."
+        },
+        "files": {
+          "default": [],
+          "description": "Other files received with it (absolute paths on the daemon's\nmachine): kept in the session's blob store and, with\n`attachments.storage = \"workspace\"`, copied into the workspace.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "images": {
           "default": [],
@@ -2511,6 +3131,20 @@
       },
       "required": [
         "turn_id"
+      ],
+      "type": "object"
+    },
+    "SubscriptionStatus": {
+      "additionalProperties": false,
+      "description": "A subscription's status in `session.context_usage`.",
+      "properties": {
+        "quota": {
+          "$ref": "#/$defs/QuotaStatus",
+          "description": "Its plan and quota windows."
+        }
+      },
+      "required": [
+        "quota"
       ],
       "type": "object"
     },
@@ -3447,6 +4081,16 @@
       },
       "since": "1.0"
     },
+    "autoprune.offer": {
+      "owner": "session-storage",
+      "params": {
+        "$ref": "#/$defs/AutopruneOfferParams"
+      },
+      "result": {
+        "$ref": "#/$defs/AutopruneOffer"
+      },
+      "since": "1.0"
+    },
     "bot.chat.ensure": {
       "declared": false,
       "owner": "bot-mode",
@@ -3706,8 +4350,153 @@
       "since": "1.0"
     },
     "journey.list": {
-      "declared": false,
       "owner": "memory",
+      "params": {
+        "$ref": "#/$defs/JourneyListParams"
+      },
+      "result": {
+        "$ref": "#/$defs/JourneyList"
+      },
+      "since": "1.0"
+    },
+    "local.add": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
+      },
+      "since": "1.0"
+    },
+    "local.catalog": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
+      },
+      "since": "1.0"
+    },
+    "local.install": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
+      },
+      "since": "1.0"
+    },
+    "local.jobs": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
+      },
+      "since": "1.0"
+    },
+    "local.pause": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
+      },
+      "since": "1.0"
+    },
+    "local.pull": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
+      },
+      "since": "1.0"
+    },
+    "local.resume": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
+      },
+      "since": "1.0"
+    },
+    "local.rm": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
+      },
+      "since": "1.0"
+    },
+    "local.search": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
+      },
+      "since": "1.0"
+    },
+    "local.start": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
+      },
+      "since": "1.0"
+    },
+    "local.status": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
+      },
+      "since": "1.0"
+    },
+    "local.stop": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
+      },
+      "since": "1.0"
+    },
+    "local.update": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
+      },
+      "since": "1.0"
+    },
+    "local.use": {
+      "owner": "local-models",
+      "params": {
+        "$ref": "#/$defs/LocalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LocalReply"
+      },
       "since": "1.0"
     },
     "lsp.status": {
@@ -3720,19 +4509,44 @@
       },
       "since": "1.0"
     },
+    "memory.summary": {
+      "owner": "memory",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/MemorySummary"
+      },
+      "since": "1.0"
+    },
     "moa.presets.delete": {
-      "declared": false,
       "owner": "mixture-of-agents",
+      "params": {
+        "$ref": "#/$defs/MoaPresetsDeleteParams"
+      },
+      "result": {
+        "$ref": "#/$defs/MoaPresetList"
+      },
       "since": "1.0"
     },
     "moa.presets.list": {
-      "declared": false,
       "owner": "mixture-of-agents",
+      "params": {
+        "$ref": "#/$defs/MoaPresetsListParams"
+      },
+      "result": {
+        "$ref": "#/$defs/MoaPresetList"
+      },
       "since": "1.0"
     },
     "moa.presets.put": {
-      "declared": false,
       "owner": "mixture-of-agents",
+      "params": {
+        "$ref": "#/$defs/MoaPresetsPutParams"
+      },
+      "result": {
+        "$ref": "#/$defs/MoaPresetList"
+      },
       "since": "1.0"
     },
     "model.options": {
@@ -3923,6 +4737,26 @@
       },
       "since": "1.0"
     },
+    "session.siblings": {
+      "owner": "session-storage",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/Lineage"
+      },
+      "since": "1.0"
+    },
+    "session.steer": {
+      "owner": "agent-turn-loop",
+      "params": {
+        "$ref": "#/$defs/SteerParams"
+      },
+      "result": {
+        "$ref": "#/$defs/Ack"
+      },
+      "since": "1.0"
+    },
     "session.transcript": {
       "long": true,
       "owner": "workspace-architecture",
@@ -3931,6 +4765,16 @@
       },
       "result": {
         "$ref": "#/$defs/Transcript"
+      },
+      "since": "1.0"
+    },
+    "session.tree": {
+      "owner": "session-storage",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/Lineage"
       },
       "since": "1.0"
     },

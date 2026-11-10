@@ -186,6 +186,7 @@ impl Lane {
             tracing::warn!("the replaced session did not end: {err}");
             return;
         }
+        self.say_memory_summary(old);
         let payload = json!({
             "session_id": old,
             "platform": routing.platform,
@@ -227,18 +228,7 @@ impl Lane {
             prefix: self.model_prefix(&session, pending.sent_at),
             origin,
         };
-        let params = SubmitParams {
-            session_id: session.clone(),
-            text: pending.text.clone(),
-            images: pending
-                .images
-                .iter()
-                .map(|p| PromptImage::Path(p.clone()))
-                .collect(),
-            run_budget_secs: None,
-            input_id: None,
-            author: None,
-        };
+        let params = submit_params(&session, &pending);
         let link = self.link(&session, &pending.routing, pending.voice);
         self.shared
             .options
@@ -533,4 +523,21 @@ pub(crate) fn stamp(at: Timestamp, zone: &jiff::tz::TimeZone) -> String {
         at.to_zoned(zone.clone())
             .strftime("%a %Y-%m-%d %H:%M:%S %Z")
     )
+}
+
+/// The `prompt.submit` of `pending` in `session`.
+fn submit_params(session: &str, pending: &Pending) -> SubmitParams {
+    SubmitParams {
+        session_id: session.to_owned(),
+        text: pending.text.clone(),
+        images: pending
+            .images
+            .iter()
+            .map(|p| PromptImage::Path(p.clone()))
+            .collect(),
+        files: pending.files.clone(),
+        run_budget_secs: None,
+        input_id: None,
+        author: None,
+    }
 }

@@ -48,12 +48,43 @@ pub struct AuxCaller {
     recorder: Option<Arc<UsageRecorder>>,
     events: Option<Arc<dyn AuxEvents>>,
     hooks: Option<Arc<dyn CredentialHooks>>,
+    limits: Option<Arc<super::limits::AuxLimits>>,
 }
 
 impl std::fmt::Debug for AuxCaller {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AuxCaller").finish_non_exhaustive()
     }
+}
+
+/// `request` with the task's `extra_body` merged one level into the
+/// encoded body (after the route's own fields, like any `extra_body`).
+fn with_extra_body(
+    request: &Request,
+    extra: Option<&Arc<serde_json::Map<String, serde_json::Value>>>,
+) -> Request {
+    let mut request = request.clone();
+    let Some(extra) = extra else {
+        return request;
+    };
+    let mut overrides = request
+        .body_overrides
+        .as_deref()
+        .cloned()
+        .unwrap_or_default();
+    let merged = match overrides.remove(crate::request::EXTRA_BODY) {
+        Some(serde_json::Value::Object(mut mine)) => {
+            mine.extend(extra.iter().map(|(k, v)| (k.clone(), v.clone())));
+            mine
+        }
+        _ => (**extra).clone(),
+    };
+    overrides.insert(
+        crate::request::EXTRA_BODY.to_owned(),
+        serde_json::Value::Object(merged),
+    );
+    request.body_overrides = Some(Arc::new(overrides));
+    request
 }
 
 /// One attempt's outcome.
@@ -71,7 +102,16 @@ impl AuxCaller {
             recorder: None,
             events: None,
             hooks: None,
+            limits: None,
         }
+    }
+
+    /// Waits for a slot of `limits` before each call (the profile's
+    /// auxiliary concurrency caps).
+    #[must_use]
+    pub fn with_limits(mut self, limits: Arc<super::limits::AuxLimits>) -> Self {
+        self.limits = Some(limits);
+        self
     }
 
     /// Runs `hooks` around every request (pools, benches, refresh), as
@@ -79,6 +119,15 @@ impl AuxCaller {
     #[must_use]
     pub fn with_credentials(mut self, hooks: Arc<dyn CredentialHooks>) -> Self {
         self.hooks = Some(hooks);
+        self
+    }
+
+    /// Tags every request of a session bound in `conversations` with its
+    /// conversation's affinity header on routes whose provider routes by
+    /// one.
+    #[must_use]
+    pub fn with_conversations(mut self, conversations: crate::transport::Conversations) -> Self {
+        self.sender = self.sender.with_conversations(conversations);
         self
     }
 
@@ -95,6 +144,13 @@ impl AuxCaller {
     #[must_use]
     pub fn with_mock(mut self, mock: Arc<Mock>) -> Self {
         self.sender = self.sender.with_mock(mock);
+        self
+    }
+
+    /// Runs `calls` around every call (replay, cache, recording).
+    #[must_use]
+    pub fn with_calls(mut self, calls: Arc<crate::calls::Calls>) -> Self {
+        self.sender = self.sender.with_calls(calls);
         self
     }
 
@@ -125,6 +181,11 @@ impl AuxCaller {
         request: &Request,
         ctx: &CallContext,
     ) -> Result<AuxResponse, Error> {
+        let _slot = match &self.limits {
+            Some(limits) => Some(limits.acquire(aux.task, aux.max_concurrency).await),
+            None => None,
+        };
+        let request = &with_extra_body(request, aux.extra_body.as_ref());
         let mut ctx = ctx.clone();
         ctx.purpose = aux.task.purpose();
         let policy = RetryPolicy {
@@ -172,10 +233,16 @@ impl AuxCaller {
         call_id: &str,
     ) -> Attempt {
         let run = async {
-            let (mut stream, route) =
-                send_once(&self.sender, self.hooks.as_deref(), &aux.route, request)
-                    .await
-                    .map_err(|e| (e, None))?;
+            let session = Some(ctx.session_id);
+            let (mut stream, route) = send_once(
+                &self.sender,
+                self.hooks.as_deref(),
+                &aux.route,
+                request,
+                session,
+            )
+            .await
+            .map_err(|e| (e, None))?;
             if let Some(recorder) = &self.recorder {
                 let pending = Pending::new(recorder.clone(), &route, request, ctx);
                 stream.record_with(pending.with_call_id(call_id));

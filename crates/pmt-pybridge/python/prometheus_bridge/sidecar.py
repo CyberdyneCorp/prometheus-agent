@@ -10,7 +10,7 @@ import sys
 import threading
 import traceback
 
-from . import PROTOCOL_VERSION, cli, context, hooks, imports, state, typed
+from . import PROTOCOL_VERSION, cli, context, hooks, imports, memory, state, typed
 from .wire import FrameTooLarge, Wire
 
 # pmt_pybridge::limits::MEMORY_EXIT
@@ -253,7 +253,30 @@ def _profile(profile):
                     if getattr(type(profile), h, None) is not getattr(ProviderProfile, h, None)]
     if getattr(profile, "classify_api_error", None):
         out["hooks"].append("classify_api_error")
+    if getattr(profile, "process_command", ""):
+        out["process_command"] = profile.process_command
+    out.update(_oauth(profile))
     return out
+
+
+def _oauth(profile):
+    """The PKCE sign-in a profile declares through ``hermes_cli.auth_oauth_pkce_plugin``, as the
+    descriptor's public ``oauth`` metadata; the host runs the flow."""
+    from hermes_cli.auth_oauth_pkce_plugin import CONFIG_ATTR
+
+    cfg = getattr(profile.auth_handler, CONFIG_ATTR, None) or getattr(profile.refresh_credential, CONFIG_ATTR, None)
+    if cfg is None:
+        return {}
+    if cfg.token_request is not None:
+        return {"oauth_refused": f"provider '{profile.name}': a token_request broker would receive the PKCE "
+                                 "verifier; the Prometheus host runs the token exchange itself"}
+    params = dict(cfg.extra_authorize_params)
+    if cfg.audience:
+        params.setdefault("audience", cfg.audience)
+    return {"oauth": {"client_id": cfg.client_id, "authorize_url": cfg.authorize_url, "token_url": cfg.token_url,
+                      "scopes": list(cfg.scopes), "allowed_hosts": list(cfg.allowed_hosts),
+                      "redirect_port": int(cfg.redirect_port), "redirect_path": cfg.redirect_path,
+                      "authorize_params": params}}
 
 
 def _tool(_, params):
@@ -320,6 +343,11 @@ def _provider(_, params):
     args = params.get("args") or {}
     if kind == "model":
         return _model_hook(state.REGISTRY["providers"][name], method, args)
+    if kind == "memory":
+        target = state.REGISTRY["memory_providers"].get(name)
+        if target is None:
+            raise Failure(PLUGIN_ERROR, f"memory provider '{name}' is not registered by plugin '{state.PLUGIN_ID}'")
+        return memory.call(target, method, args)
     target = state.REGISTRY["provider_objects"].get(kind, {}).get(name)
     if target is None:
         raise Failure(PLUGIN_ERROR, f"{kind} provider '{name}' is not registered by plugin '{state.PLUGIN_ID}'")

@@ -70,7 +70,7 @@ pub(super) enum Follow {
 }
 
 /// Shows `text` on the session's clients as a `command.notice` event.
-fn notice(link: &Link, text: &str) {
+pub(super) fn notice(link: &Link, text: &str) {
     link.emit::<SessionEvent>(&serde_json::json!({
         "type": COMMAND_NOTICE,
         "ts": jiff::Timestamp::now().to_string(),
@@ -384,6 +384,7 @@ impl DaemonHost {
             run_budget: None,
             link,
             from_lane: false,
+            resume: None,
         };
         Self::start_with(
             Arc::clone(&self.turns),
@@ -486,12 +487,11 @@ async fn profile_loop(host: Arc<DaemonHost>, profile: Arc<Profile>) {
                 continue;
             };
             if at <= automation::now_ms() {
-                host.fire(&profile, id)
-                    .instrument(super::session_span(
-                        profile.scope().name().as_str(),
-                        &id.to_string(),
-                    ))
-                    .await;
+                Box::pin(host.fire(&profile, id).instrument(super::session_span(
+                    profile.scope().name().as_str(),
+                    &id.to_string(),
+                )))
+                .await;
                 earliest = Some(earliest.map_or(at, |e| e.min(at)));
                 continue;
             }

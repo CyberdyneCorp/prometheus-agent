@@ -311,6 +311,17 @@ pub type ExposedNames = std::collections::BTreeSet<String>;
 pub type ParametersRewriter =
     Arc<dyn Fn(&serde_json::Value, &pmt_config::schema::Config) -> serde_json::Value + Send + Sync>;
 
+/// Rewrites a tool's description from the profile's configuration (what a
+/// configured provider or model can do), before the session rewriter.
+pub type DescriptionByConfig =
+    Arc<dyn Fn(&str, &pmt_config::schema::Config) -> String + Send + Sync>;
+
+/// Whether a tool works on the session's main route under the profile's
+/// configuration; `Err` is the `unavailable:<reason>` of the surface
+/// (a provider-executed tool needs the provider's own route).
+pub type RouteCheck =
+    Arc<dyn Fn(&pmt_config::schema::Config, &RouteTraits) -> Result<(), String> + Send + Sync>;
+
 /// A descriptor with its executor, availability probe and description
 /// rewriter: one registry entry.
 #[derive(Clone)]
@@ -329,6 +340,10 @@ pub struct RegisteredTool {
     pub parameters: Option<ParametersRewriter>,
     /// Picks the advertised schema variant for the session's route.
     pub variants: Option<VariantPicker>,
+    /// Configuration-time description rewriter.
+    pub describe: Option<DescriptionByConfig>,
+    /// Route-dependent availability.
+    pub route_check: Option<RouteCheck>,
     /// A per-call approval rule (an MCP tool's cost against its spend
     /// limit), checked by the approval gate after the hooks'.
     pub guard: Option<CallGuard>,
@@ -366,6 +381,8 @@ impl RegisteredTool {
             rewriter: None,
             parameters: None,
             variants: None,
+            describe: None,
+            route_check: None,
             guard: None,
             provenance: None,
         }
@@ -382,9 +399,25 @@ impl RegisteredTool {
             rewriter: None,
             parameters: None,
             variants: None,
+            describe: None,
+            route_check: None,
             guard: None,
             provenance: None,
         }
+    }
+
+    /// Describes the tool from the profile's configuration.
+    #[must_use]
+    pub fn with_description(mut self, describe: DescriptionByConfig) -> Self {
+        self.describe = Some(describe);
+        self
+    }
+
+    /// Makes the tool available only on routes `check` accepts.
+    #[must_use]
+    pub fn with_route_check(mut self, check: RouteCheck) -> Self {
+        self.route_check = Some(check);
+        self
     }
 
     /// Adds an availability probe.
@@ -454,9 +487,13 @@ impl RegisteredTool {
             None => (None, None, None),
         };
         let parameters = parameters.unwrap_or_else(|| self.descriptor.parameters.clone());
+        let description = description.unwrap_or_else(|| self.descriptor.description.clone());
         Advertised {
             variant: name,
-            description: description.unwrap_or_else(|| self.descriptor.description.clone()),
+            description: match &self.describe {
+                Some(describe) => describe(&description, config),
+                None => description,
+            },
             parameters: match &self.parameters {
                 Some(rewrite) => rewrite(&parameters, config),
                 None => parameters,

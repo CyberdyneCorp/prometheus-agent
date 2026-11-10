@@ -33,8 +33,10 @@ pub struct Listener {
 pub struct Expect<'a> {
     /// The callback path.
     pub path: &'a str,
-    /// The `state` of the authorization request.
-    pub state: &'a str,
+    /// The `state` of the authorization request; `None` when the provider
+    /// echoes no `state` and the path itself carries a random nonce
+    /// (OpenRouter).
+    pub state: Option<&'a str>,
 }
 
 /// How one request was answered.
@@ -173,7 +175,13 @@ fn path_of(target: &str) -> &str {
 
 /// The verdict on request target `target`.
 fn judge(target: &str, expect: &Expect<'_>) -> Verdict {
-    if path_of(target) != expect.path {
+    let path = path_of(target);
+    let on_path = match expect.state {
+        Some(_) => path == expect.path,
+        // The path is the secret: compare it in constant time.
+        None => constant_time_eq(path.as_bytes(), expect.path.as_bytes()),
+    };
+    if !on_path {
         return Verdict::Ignored;
     }
     let query = target.split_once('?').map_or("", |(_, q)| q);
@@ -190,7 +198,12 @@ fn judge(target: &str, expect: &Expect<'_>) -> Verdict {
             _ => {}
         }
     }
-    let genuine = state.is_some_and(|s| constant_time_eq(s.as_bytes(), expect.state.as_bytes()));
+    let genuine = match expect.state {
+        Some(expected) => {
+            state.is_some_and(|s| constant_time_eq(s.as_bytes(), expected.as_bytes()))
+        }
+        None => true,
+    };
     if !genuine {
         return Verdict::Ignored;
     }
@@ -207,7 +220,7 @@ mod tests {
 
     const EXPECT: Expect<'static> = Expect {
         path: "/callback",
-        state: "s3cr3t",
+        state: Some("s3cr3t"),
     };
 
     #[test]

@@ -191,6 +191,22 @@ pub struct Request {
     /// (spec: subagent-delegation, Child request overrides and direct
     /// endpoints). See [`apply_overrides`].
     pub body_overrides: Option<std::sync::Arc<serde_json::Map<String, Value>>>,
+    /// Server-side compaction (spec: context-compression, Server-side
+    /// Responses compaction): sent only on a route that supports it.
+    pub server_compaction: Option<ServerCompaction>,
+    /// The fast mode tier this request asks for (spec: model-providers,
+    /// Fast mode service tier): sent only on a route that has one.
+    pub speed: Option<crate::fast::Speed>,
+}
+
+/// The server-side compaction of one Responses request.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ServerCompaction {
+    /// The provider compacts once the input reaches this many tokens.
+    pub threshold: u64,
+    /// The opaque compaction item of an earlier response, sent first in
+    /// place of the history it covers (already left out of `messages`).
+    pub item: Option<Value>,
 }
 
 /// The key of [`Request::body_overrides`] merged one level deep.
@@ -274,38 +290,12 @@ impl Request {
         (chars as u64).div_ceil(4)
     }
 
-    /// The content address of the request (design D10): SHA-256 over the
-    /// canonical request sent to `provider`/`model` (the route's, which
-    /// replace `self.model`), excluding transport fields, streaming flags
-    /// and cache markers.
-    ///
-    /// # Panics
-    ///
-    /// Never: the canonical form holds only plain data.
+    /// The content address of the request sent on `route` (design D10;
+    /// see [`crate::canonical`]): SHA-256 over the canonical request,
+    /// excluding transport fields, streaming flags and cache markers.
     #[must_use]
-    pub fn hash(&self, provider: &str, model: &str) -> String {
-        #[derive(Serialize)]
-        struct Canonical<'a> {
-            provider: &'a str,
-            model: &'a str,
-            system: &'a [SystemBlock],
-            messages: &'a [Message],
-            tools: &'a [Tool],
-            max_output_tokens: Option<u64>,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            reasoning: Option<&'static str>,
-        }
-        let canonical = Canonical {
-            provider,
-            model,
-            system: &self.system,
-            messages: &self.messages,
-            tools: &self.tools,
-            max_output_tokens: self.max_output_tokens,
-            reasoning: self.reasoning.map(ReasoningLevel::as_str),
-        };
-        let bytes = serde_json::to_vec(&canonical).expect("plain data serializes");
-        format!("sha256:{}", hex(&Sha256::digest(bytes)))
+    pub fn hash(&self, route: &crate::resolve::Route) -> String {
+        crate::canonical::hash(self, &crate::canonical::CallTarget::of(route))
     }
 }
 
@@ -364,19 +354,26 @@ mod tests {
 
     #[test]
     fn hash_ignores_cache_markers_and_depends_on_content_and_route() {
+        use crate::canonical::{CallTarget, hash};
+        let at = |provider, model| CallTarget {
+            provider,
+            wire: "responses",
+            model,
+            extra: None,
+        };
         let mut a = Request {
             model: "m".into(),
             messages: vec![Message::text(Role::User, "hi")],
             ..Request::default()
         };
-        let base = a.hash("p", "m");
+        let base = hash(&a, &at("p", "m"));
         a.messages[0].cache_breakpoint = true;
         a.cache.key = Some("k".into());
-        assert_eq!(a.hash("p", "m"), base);
-        assert_ne!(a.hash("q", "m"), base);
-        assert_ne!(a.hash("p", "n"), base);
+        assert_eq!(hash(&a, &at("p", "m")), base);
+        assert_ne!(hash(&a, &at("q", "m")), base);
+        assert_ne!(hash(&a, &at("p", "n")), base);
         a.messages.push(Message::text(Role::Assistant, "yo"));
-        assert_ne!(a.hash("p", "m"), base);
+        assert_ne!(hash(&a, &at("p", "m")), base);
     }
 
     #[test]

@@ -42,6 +42,14 @@ pub(super) fn interactive(ctx: &Context<'_>, wizard: &mut Wizard<'_>) -> Result<
             super::write_changed(&models.scope, &[("model.provider", provider.to_owned())])?;
             wizard.say(&format!("signed in; model.provider = \"{provider}\""))
         }
+        Some(Picked::Local) => {
+            match crate::local_cmd::quickstart::run(ctx, &mut wizard.input, &mut wizard.out)? {
+                Some(model) => {
+                    crate::model_cmd::set_model(ctx, &format!("llamacpp/{model}")).map(drop)
+                }
+                None => wizard.say("no local model set up; model unchanged"),
+            }
+        }
         Some(Picked::Model(reference)) => {
             let provider = reference.split('/').next().unwrap_or_default();
             ensure_key(&models, provider, wizard)?;

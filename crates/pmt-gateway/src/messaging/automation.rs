@@ -94,6 +94,21 @@ impl Gateway {
         Admission::Accepted
     }
 
+    /// Resumes the turn a restart interrupted in the conversation of
+    /// `session_id` as its lane's turn, so the answer reaches the chat
+    /// (spec: messaging-gateway, Crash recovery and clean shutdown marker).
+    pub(super) fn resume_interrupted(&self, profile: &str, session_id: &str) {
+        let resume = Automated {
+            origin: super::RESUME_ORIGIN.to_owned(),
+            text: String::new(),
+            notice: Some(super::RESUMING.to_owned()),
+            started: None,
+        };
+        if self.automate(profile, session_id, resume) == Admission::Dropped {
+            tracing::warn!(profile, session_id, "the interrupted turn was not resumed");
+        }
+    }
+
     /// Says `text` in the chat of `session_id` (a status line such as
     /// `Goal achieved`); nothing when the session is no conversation's.
     pub fn say_in_session(&self, profile: &str, session_id: &str, text: &str) {

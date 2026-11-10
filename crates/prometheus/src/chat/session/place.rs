@@ -37,6 +37,8 @@ pub struct At<'a> {
     pub hosts: Option<Arc<pmt_net::egress::HostPolicy>>,
     /// The running session's refusal sink (`None`: a new one).
     pub denials: Option<Denials>,
+    /// The session's `vision_analyze`.
+    pub vision: super::vision::Vision,
 }
 
 impl<'a> At<'a> {
@@ -48,6 +50,7 @@ impl<'a> At<'a> {
             clients,
             hosts: None,
             denials: None,
+            vision: super::vision::Vision::Off,
         }
     }
 }
@@ -63,6 +66,8 @@ pub(super) struct Environment {
     /// A moved session's own egress registration and child proxy (the
     /// first environment's stay with the session).
     egress: Option<crate::egress::Running>,
+    /// The media tools' session (rebuilt with the new workspace).
+    _media: Option<pmt_media::Attachment>,
     // Dropped last: detaches the environment from the process table.
     _attachment: Attachment,
 }
@@ -80,6 +85,7 @@ impl Environment {
             worktree: attached.worktree,
             denials: attached.denials,
             egress: None,
+            _media: attached.media,
             _attachment: attached.attachment,
         };
         (environment, attached.egress, attached.downgrades)
@@ -223,6 +229,15 @@ impl Live {
         let session = factory.store.session(self.id)?;
         let target = self.model.target();
         let denials = self.place.denials();
+        let video = pmt_media::MediaSessions::process()
+            .session(&self.id.to_string())
+            .and_then(|media| media.setup().video.clone());
+        let vision = pmt_tools::environments::Environments::process()
+            .session(&self.id.to_string())
+            .and_then(|env| env.vision.clone())
+            .map_or(super::vision::Vision::Off, |kept| {
+                super::vision::Vision::Kept(kept, video)
+            });
         if let Some(old) = self.place.take() {
             if let Some(browser) = &old.browser {
                 browser.close_session(&self.id.to_string()).await;
@@ -237,6 +252,7 @@ impl Live {
             clients: self.clients.as_ref(),
             hosts: Some(Arc::clone(&self.egress.hosts)),
             denials,
+            vision,
         };
         let attached = factory.environment(
             &session,

@@ -709,6 +709,18 @@ pub struct WebConfig {
     pub firecrawl: FirecrawlConfig,
     /// The `searxng` backend (search only).
     pub searxng: SearxngConfig,
+    /// The `xai` search backend (xAI Responses built-in web search).
+    pub xai: WebXaiConfig,
+    /// Pins a vendor's anonymous (`free`) or keyed (`paid`) endpoint in the
+    /// keyless ring (`paid` without its key removes the vendor).
+    pub provider_tier: BTreeMap<String, ProviderTier>,
+    /// Serve repeat searches and extractions from a cache.
+    pub cache_enabled: bool,
+    /// How long a cached result is served (clamped to 60..86,400).
+    pub cache_ttl_secs: u64,
+    /// Hosts never cached (exact, `*.` wildcard or domain suffix), beside
+    /// local, private and single-label hosts which never are.
+    pub cache_exempt_hosts: Vec<String>,
 }
 
 impl Default for WebConfig {
@@ -722,8 +734,51 @@ impl Default for WebConfig {
             keyless: KeylessConfig::default(),
             firecrawl: FirecrawlConfig::default(),
             searxng: SearxngConfig::default(),
+            xai: WebXaiConfig::default(),
+            provider_tier: BTreeMap::new(),
+            cache_enabled: true,
+            cache_ttl_secs: 1_200,
+            cache_exempt_hosts: Vec::new(),
         }
     }
+}
+
+/// `[web.xai]`: the xAI web search backend.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct WebXaiConfig {
+    /// The model running the search.
+    pub model: String,
+    /// Only these domains (at most 5; not with `excluded_domains`).
+    #[schemars(length(max = 5))]
+    pub allowed_domains: Vec<String>,
+    /// Never these domains (at most 5; not with `allowed_domains`).
+    #[schemars(length(max = 5))]
+    pub excluded_domains: Vec<String>,
+    /// Bound on one search.
+    #[schemars(range(min = 1))]
+    pub timeout_secs: u64,
+}
+
+impl Default for WebXaiConfig {
+    fn default() -> Self {
+        Self {
+            model: "grok-4.5".to_owned(),
+            allowed_domains: Vec::new(),
+            excluded_domains: Vec::new(),
+            timeout_secs: 90,
+        }
+    }
+}
+
+/// A keyless vendor's endpoint tier.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderTier {
+    /// The anonymous free tier.
+    Free,
+    /// The keyed endpoint (the vendor's key must be set).
+    Paid,
 }
 
 /// The `[web.firecrawl]` section.
@@ -752,4 +807,7 @@ pub struct SearxngConfig {
 pub struct KeylessConfig {
     /// Allow keyless web search as the last `auto` choice.
     pub enabled: bool,
+    /// Retry one failed call of a keyed backend once on the keyless ring
+    /// (only with `enabled`); the next call still tries the keyed backend.
+    pub rescue: bool,
 }

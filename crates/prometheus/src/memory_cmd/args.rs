@@ -59,6 +59,23 @@ pub enum FormatArg {
     Jsonl,
 }
 
+/// Who made a memory change.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum OriginArg {
+    /// The user (CLI, edit, revert).
+    User,
+    /// The agent's `memory` tool.
+    Agent,
+    /// A background memory review.
+    BackgroundReview,
+    /// An external memory provider.
+    Provider,
+    /// A consolidation pass.
+    Consolidation,
+    /// An import.
+    Import,
+}
+
 /// `prometheus memory` subcommands.
 #[derive(Debug, Subcommand)]
 pub enum MemoryCommand {
@@ -154,6 +171,44 @@ pub enum MemoryCommand {
         /// The pending id, or `all`.
         id: String,
     },
+    /// List memory revisions, oldest first.
+    Log {
+        /// After this revision, or within this duration (2h, 3d, 1w).
+        #[arg(long)]
+        since: Option<String>,
+        /// Only this origin.
+        #[arg(long)]
+        origin: Option<OriginArg>,
+    },
+    /// Show memory changes as a unified diff per entry.
+    Diff {
+        /// After this revision, or within this duration (2h, 3d, 1w).
+        #[arg(long, conflicts_with = "session")]
+        since: Option<String>,
+        /// Only the changes of this session.
+        #[arg(long)]
+        session: Option<String>,
+    },
+    /// Undo a revision (recorded as a new revision with origin user).
+    Revert {
+        /// The revision number (see `memory log`).
+        rev: i64,
+    },
+    /// Rank archival entries for a query as recall would.
+    Search {
+        /// The query.
+        query: String,
+        /// Show each score's parts.
+        #[arg(long)]
+        explain: bool,
+    },
+    /// Set up an external memory provider: its settings go to config.toml, its secrets to the secrets store; takes effect from the next session.
+    Setup {
+        /// The provider plugin (default: memory.provider).
+        provider: Option<String>,
+    },
+    /// Use built-in memory only (memory.provider = "builtin").
+    Off,
     /// Delete every entry of a store.
     Reset {
         /// Which store.

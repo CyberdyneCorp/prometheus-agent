@@ -18,7 +18,7 @@ mod fault;
 mod feed;
 mod script;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use pmt_config::Config;
@@ -32,7 +32,7 @@ use script::{Answer, Response, Rule};
 
 use crate::classify::{ErrorClass, ProviderError};
 use crate::metadata::{ContextSource, DEFAULT_CONTEXT_WINDOW, ModelMetadata};
-use crate::request::{Part, Request, Role};
+use crate::request::{Message, Part, Request, Role};
 use crate::resolve::Route;
 
 /// The provider id.
@@ -58,6 +58,7 @@ pub fn metadata() -> ModelMetadata {
     ModelMetadata {
         supports_vision: true,
         supports_reasoning: true,
+        trains_on_data: false,
         context_source: ContextSource::Builtin,
         price: Some(Price::default()),
         context_window: DEFAULT_CONTEXT_WINDOW,
@@ -100,12 +101,7 @@ impl Mock {
         config: &Config,
         profile_dir: &Path,
     ) -> Result<Self, Error> {
-        let configured = config
-            .providers
-            .get(PROVIDER_ID)
-            .and_then(|p| p.script.as_deref())
-            .map(|path| profile_dir.join(path));
-        match flag.map(Path::to_path_buf).or(configured) {
+        match script_path(flag, config, profile_dir) {
             Some(path) => Script::load(&path).map(Self::new),
             None => Ok(Self::echo()),
         }
@@ -168,7 +164,8 @@ struct Call<'a> {
     step: usize,
     model: &'a str,
     user: Option<String>,
-    tool_result: Option<&'a str>,
+    /// The latest batch of tool results, in call order.
+    tool_results: Vec<&'a str>,
     /// The offered tool array as JSON.
     tools: String,
 }
@@ -195,17 +192,12 @@ impl<'a> Call<'a> {
                     .collect();
                 (!texts.is_empty()).then(|| texts.join("\n"))
             });
-        let tool_result = messages.iter().rev().find_map(|m| {
-            m.parts.iter().rev().find_map(|p| match p {
-                Part::ToolResult { content, .. } => Some(content.as_str()),
-                _ => None,
-            })
-        });
+        let tool_results = latest_batch(messages);
         Self {
             step,
             model: &route.model,
             user,
-            tool_result,
+            tool_results,
             tools: serde_json::to_string(&request.tools).unwrap_or_default(),
         }
     }
@@ -218,10 +210,49 @@ impl<'a> Call<'a> {
                 .as_ref()
                 .is_none_or(|t| self.user.as_deref().is_some_and(|u| t.matches(u)))
             && m.tool_result
-                .as_ref()
-                .is_none_or(|t| self.tool_result.is_some_and(|r| t.matches(r)))
+                .iter()
+                .all(|t| self.tool_results.iter().any(|r| t.matches(r)))
             && m.tools.as_ref().is_none_or(|t| t.matches(&self.tools))
     }
+}
+
+/// The results of the latest tool-call batch: the tool results of the
+/// last messages that carry any, in order. Every result counts, so a rule
+/// can require the whole batch (a parallel dispatch that loses or fails
+/// one call misses it).
+fn latest_batch(messages: &[Message]) -> Vec<&str> {
+    let mut batch: Vec<Vec<&str>> = messages
+        .iter()
+        .rev()
+        .map(tool_results)
+        .skip_while(Vec::is_empty)
+        .take_while(|r| !r.is_empty())
+        .collect();
+    batch.reverse();
+    batch.concat()
+}
+
+fn tool_results(message: &Message) -> Vec<&str> {
+    message
+        .parts
+        .iter()
+        .filter_map(|p| match p {
+            Part::ToolResult { content, .. } => Some(content.as_str()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The script a session's mock routes play: `--mock-script`, else
+/// `providers.mock.script` (relative to the profile directory).
+#[must_use]
+pub fn script_path(flag: Option<&Path>, config: &Config, profile_dir: &Path) -> Option<PathBuf> {
+    let configured = config
+        .providers
+        .get(PROVIDER_ID)
+        .and_then(|p| p.script.as_deref())
+        .map(|path| profile_dir.join(path));
+    flag.map(Path::to_path_buf).or(configured)
 }
 
 #[cfg(test)]

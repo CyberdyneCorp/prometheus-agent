@@ -283,8 +283,7 @@ fn lock(path: &Path) -> Result<std::fs::File, Error> {
         .write(true)
         .open(path)
         .map_err(|e| Error::io(&codes::RUNTIME_IO, path, &e))?;
-    file.lock()
-        .map_err(|e| Error::io(&codes::RUNTIME_IO, path, &e))?;
+    pmt_core::file_lock::lock(&file).map_err(|e| Error::io(&codes::RUNTIME_IO, path, &e))?;
     Ok(file)
 }
 

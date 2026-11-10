@@ -19,10 +19,10 @@ mod progress;
 mod prompts;
 pub mod queue;
 mod quick;
-mod refine;
 mod sessions;
 pub mod shell;
 mod turn;
+mod voice;
 
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -108,6 +108,11 @@ struct Repl {
     /// The automated turn the next idle boundary runs (a goal
     /// continuation or a reserved timer wakeup).
     wakeup: Option<crate::automation::boundary::Reserved>,
+    /// `/voice` and the voice conversations of this terminal.
+    voice: crate::chat::voice::VoiceClient,
+    /// Speaks the reply of the turn being run (a voice turn with spoken
+    /// replies on).
+    mouth: Option<Arc<pmt_voice::speaker::Mouth>>,
 }
 
 /// The memory approver of an interactive session and the REPL's end of
@@ -201,8 +206,12 @@ pub async fn run(
         cwd: factory.options.cwd.clone(),
         redactor: factory.redactor().clone(),
         vim_mode: config.display.vim_mode,
+        record_key: input::editor_key(&config.voice.record_key.0),
     })?;
     let (posted, to_post) = mpsc::unbounded_channel();
+    let factory_scope = factory.scope.clone();
+    let factory_cwd = factory.options.cwd.clone();
+    let launch = factory.launch().clone();
     let mut repl = Repl {
         factory,
         live: None,
@@ -229,6 +238,8 @@ pub async fn run(
         running: false,
         status_bar,
         wakeup: None,
+        voice: crate::chat::voice::VoiceClient::new(&factory_scope, &launch, &factory_cwd, "cli"),
+        mouth: None,
     };
     repl.attach(live);
     let notices = print_notices(asks.notices, repl.input.printer());
@@ -239,7 +250,10 @@ pub async fn run(
     repl.banner();
     if repl.start.resumed {
         repl.recap();
+        repl.memory_summary(repl.live().id);
+        Box::pin(repl.offer_resume()).await;
     }
+    repl.offer_autoprune();
     repl.spacer();
     let status = Box::pin(repl.main_loop()).await;
     notices.abort();
@@ -259,14 +273,14 @@ impl Repl {
             let flow = match self.queue.pop_front() {
                 Some(line) => {
                     self.drop_wakeup();
-                    self.idle_line(line).await
+                    Box::pin(self.idle_line(line)).await
                 }
                 None => match self.wakeup.take() {
                     Some(reserved) => {
                         self.automated(reserved).await;
                         Flow::Continue
                     }
-                    None => self.idle_event().await,
+                    None => Box::pin(self.idle_event()).await,
                 },
             };
             if flow == Flow::Exit {
@@ -302,7 +316,7 @@ impl Repl {
         match event {
             Event::Line(line) => {
                 self.last_interrupt = None;
-                self.idle_line(line).await
+                Box::pin(self.idle_line(line)).await
             }
             Event::Interrupt => self.idle_interrupt(),
             Event::Eof => Flow::Exit,
@@ -310,7 +324,11 @@ impl Repl {
                 self.last_interrupt = None;
                 self.compose(&buffer).await
             }
-            Event::SuspendRefused => Flow::Continue,
+            Event::Record if self.voice.mode.on => {
+                self.last_interrupt = None;
+                Box::pin(self.talk()).await
+            }
+            Event::SuspendRefused | Event::Record => Flow::Continue,
         }
     }
 
@@ -338,7 +356,7 @@ impl Repl {
     /// One line typed while no turn runs.
     async fn idle_line(&mut self, line: String) -> Flow {
         if let Some(pending) = self.pending.take() {
-            return self.answer(pending, &line).await;
+            return Box::pin(self.answer(pending, &line)).await;
         }
         let trimmed = line.trim();
         if trimmed.is_empty() {
@@ -355,7 +373,7 @@ impl Repl {
             return Flow::Continue;
         }
         if trimmed.starts_with('/') {
-            return self.slash(trimmed.to_owned()).await;
+            return Box::pin(self.slash(trimmed.to_owned())).await;
         }
         if trimmed.starts_with('!') {
             self.shell_escape(trimmed).await;
@@ -401,6 +419,12 @@ impl Repl {
         self.approvals = live.approvals.take();
         self.clarify = live.clarify.take();
         self.progress = live.progress.take();
+        // Memory notices come between turns too (a background review):
+        // the idle loop shows what is posted.
+        live.memory
+            .setup()
+            .notices
+            .bind(Arc::new(Posted(self.posted.clone())));
         for notice in std::mem::take(&mut live.notices) {
             self.notice(&notice);
         }
@@ -415,7 +439,20 @@ impl Repl {
     /// Ends the current session.
     async fn finish(&mut self, reason: EndReason) {
         if let Some(live) = self.live.take() {
+            self.memory_summary(live.id);
             live.close(&self.factory.store, reason).await;
+        }
+    }
+
+    /// `Memory: +a ~p -r (review with /memory review)` when the agent
+    /// changed memory in session `id` (spec: memory, Reviewable memory
+    /// changes per session): at the end and on resume.
+    pub(super) fn memory_summary(&self, id: pmt_core::id::SessionId) {
+        let mode = self.factory.scope.config().memory.review_mode;
+        match pmt_memory::journal::summary(&self.factory.store, mode, &id.to_string()) {
+            Ok(Some(line)) => self.notice(&line),
+            Ok(None) => {}
+            Err(err) => tracing::warn!(error = %err, "memory review summary skipped"),
         }
     }
 
@@ -526,5 +563,14 @@ impl Repl {
     fn error(&self, err: &Error) {
         let text = crate::output::render_error(err, false);
         self.say(Role::Error, text.trim_end());
+    }
+}
+
+/// Memory notices of the line interface's session, shown by its loop.
+struct Posted(mpsc::UnboundedSender<String>);
+
+impl pmt_memory::notices::NoticeSink for Posted {
+    fn show(&self, text: String) {
+        let _ = self.0.send(text);
     }
 }

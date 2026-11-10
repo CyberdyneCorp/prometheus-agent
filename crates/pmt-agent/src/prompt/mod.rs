@@ -12,10 +12,15 @@
 //! turns replay the stored bytes.
 
 pub mod blocks;
+pub mod coding;
 pub mod context;
 pub mod frozen;
+pub mod install_tree;
+pub mod inventory;
 pub mod personality;
+pub mod pins;
 pub mod platform;
+pub mod prefill;
 pub mod scan;
 pub mod size;
 
@@ -253,6 +258,8 @@ pub struct PromptInputs {
     pub registered_hint: Option<String>,
     /// The working directory (project context, runtime block).
     pub cwd: Option<PathBuf>,
+    /// `cwd` was chosen by fallback rather than configured or given.
+    pub cwd_fallback: bool,
     /// `--no-context-files`.
     pub no_context_files: bool,
     /// The model the prompt is built for.
@@ -355,7 +362,14 @@ pub fn build(inputs: &PromptInputs) -> Result<Built, Error> {
 /// tagging; per session, so in the session tier), then the start time and
 /// the shown id.
 fn session_info(inputs: &PromptInputs, shown_id: Option<SessionId>) -> String {
-    let info = blocks::session_info(inputs.started_at, shown_id);
+    let mut info = blocks::session_info(inputs.started_at, shown_id);
+    let agent = &inputs.config.agent;
+    if coding::applies(agent, &inputs.platform, inputs.cwd.as_deref()) {
+        info = format!(
+            "{}{SEPARATOR}{info}",
+            coding::block(agent, inputs.cwd.as_deref())
+        );
+    }
     if inputs.tool_names.is_empty() {
         return info;
     }
@@ -377,6 +391,14 @@ fn project_context(inputs: &PromptInputs) -> context::Loaded {
         return context::Loaded::default();
     };
     if !prompt.load_context_files || inputs.no_context_files {
+        return context::Loaded::default();
+    }
+    if inputs.cwd_fallback && install_tree::contains(&install_tree::roots(), cwd) {
+        tracing::warn!(
+            cwd = %cwd.display(),
+            "the working directory is a fallback inside the Prometheus installation or source tree: \
+             project context files are not loaded; set terminal.cwd to your project"
+        );
         return context::Loaded::default();
     }
     context::load(

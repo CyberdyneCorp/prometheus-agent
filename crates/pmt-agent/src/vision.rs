@@ -110,3 +110,16 @@ pub async fn image_part(
         }
     }
 }
+
+/// Tells session `session`'s `vision_analyze` which images the user
+/// message being sent carries in pixels (by file name), so it answers
+/// that they are already in context instead of loading them again.
+pub fn mark_attached(session: &str, images: &[crate::turn::transcript::ImageRef]) {
+    let vision = pmt_tools::environments::Environments::process()
+        .session(session)
+        .and_then(|env| env.vision.clone());
+    if let Some(vision) = vision {
+        let native = images.iter().filter(|i| i.description.is_none());
+        vision.set_current_attachments(native.map(|i| i.name.clone()).collect());
+    }
+}

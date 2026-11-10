@@ -89,3 +89,34 @@ fn zero_retention_keeps_trajectories_but_deleted_sessions_lose_theirs() {
     let swept = sweep(&store, &dir, 0, jiff::Timestamp::now()).unwrap();
     assert!(swept.orphans.is_empty());
 }
+
+/// MoA traces go with their session's trajectory, and with a deleted
+/// session (spec: mixture-of-agents, MoA traces).
+#[test]
+fn moa_traces_follow_their_sessions_trajectory() {
+    let home = tempfile::tempdir().unwrap();
+    let scope = scope(home.path());
+    let store = Store::open(&scope).unwrap();
+    let dir = scope.path(files::DIR);
+    let traces = scope.path(pmt_config::schema::TRACE_DIR);
+    std::fs::create_dir_all(&traces).unwrap();
+    let old = session(&store, &dir, true);
+    let deleted = session(&store, &dir, true);
+    let kept = session(&store, &dir, false);
+    for id in [old, deleted, kept] {
+        std::fs::write(files::plain(&traces, &id.to_string()), "{}\n").unwrap();
+    }
+    store.delete_session(deleted, false).unwrap();
+
+    let in_91_days = jiff::Timestamp::now() + Duration::from_hours(91 * 24);
+    let swept = pmt_obs::trajectory::retention::profile(&store, &scope, in_91_days).unwrap();
+
+    assert_eq!(swept.purged, [old]);
+    assert!(!files::plain(&traces, &old.to_string()).exists());
+    assert!(
+        swept
+            .orphans
+            .contains(&files::plain(&traces, &deleted.to_string()))
+    );
+    assert!(files::plain(&traces, &kept.to_string()).exists());
+}

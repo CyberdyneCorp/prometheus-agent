@@ -29,7 +29,7 @@ use super::run::{Ending, Turn};
 use crate::compress::compactor::{Compactor, Outcome, Run, Status};
 use crate::compress::decision::{self, Blocked, Decision, Gate, Measure};
 use crate::compress::manual::Manual;
-use crate::compress::threshold::{ModelWindow, trigger_tokens};
+use crate::compress::threshold::{ModelWindow, trigger_tokens_for};
 use crate::compress::{Trigger, rows_tokens};
 use crate::prompt::frozen::{Frozen, Rebuild};
 
@@ -57,9 +57,16 @@ pub(super) struct UsageMemory {
     /// The persisted breaker state may await a judgement (set at start and
     /// after each commit).
     pub(super) judge: bool,
+    /// The proactive prune waits until the context reaches this size again.
+    pub(super) proactive_rearm: Option<u64>,
 }
 
 impl UsageMemory {
+    /// The reported context size and the rows it covered.
+    pub(super) fn reported(&self) -> Option<(u64, usize)> {
+        self.anchor.map(|a| (a.tokens, a.rows))
+    }
+
     pub(super) fn new() -> Self {
         Self {
             judge: true,
@@ -69,7 +76,7 @@ impl UsageMemory {
 }
 
 /// The main model's window on `route`.
-fn window(route: &RouteInfo) -> ModelWindow {
+pub(super) fn window(route: &RouteInfo) -> ModelWindow {
     let context_window = route.context_window.unwrap_or(FALLBACK_WINDOW);
     ModelWindow {
         context_window,
@@ -78,16 +85,21 @@ fn window(route: &RouteInfo) -> ModelWindow {
 }
 
 impl Agent {
-    fn trigger_tokens(&self, config: &pmt_config::Config, route: &RouteInfo) -> u64 {
+    pub(super) fn trigger_tokens(&self, config: &pmt_config::Config, route: &RouteInfo) -> u64 {
         let compressor = self
             .setup
             .summarizer
             .as_ref()
             .and_then(|s| s.context_window());
-        trigger_tokens(&config.compression, window(route), compressor)
+        trigger_tokens_for(
+            &config.compression,
+            (&route.provider, &route.model),
+            window(route),
+            compressor,
+        )
     }
 
-    fn compactor<'a>(
+    pub(super) fn compactor<'a>(
         &'a self,
         config: &'a pmt_config::Config,
         turn: Option<&'a str>,
@@ -97,8 +109,11 @@ impl Agent {
             session: self.setup.session,
             config: &config.compression,
             summarizer: self.setup.summarizer.as_deref(),
+            engine: self.setup.context_engine.as_deref(),
             events: &*self.setup.events,
             turn,
+            memory: self.setup.memory.as_deref(),
+            require_checkpoint: config.memory.require_checkpoint,
         }
     }
 
@@ -146,7 +161,7 @@ impl Agent {
     }
 
     /// After a commit: the reported usage no longer describes the rows.
-    fn committed(&self) {
+    pub(super) fn committed(&self) {
         let mut memory = self.usage_memory();
         memory.anchor = None;
         memory.judge = true;
@@ -183,8 +198,10 @@ impl Turn<'_> {
         let rows = setup.store.messages(setup.session, Visibility::Active)?;
         let threshold = self.agent.trigger_tokens(self.config, route);
         let omits = self.agent.usage_memory().omits_usage;
-        let tokens = match decision::gate(self.measure(&rows, estimate), omits, threshold) {
-            Gate::Send | Gate::MeasureFirst => return Ok(()),
+        let measure = self.measure(&rows, estimate);
+        let tokens = match decision::gate(measure, omits, threshold) {
+            Gate::Send => return self.below_trigger(frozen, route, measure, omits).await,
+            Gate::MeasureFirst => return Ok(()),
             Gate::Evaluate(tokens) => tokens,
         };
         let state = setup.store.compression_state(setup.session)?;
@@ -201,7 +218,7 @@ impl Turn<'_> {
     }
 
     /// One counted attempt; a commit refreezes `frozen`.
-    async fn attempt(
+    pub(super) async fn attempt(
         &mut self,
         trigger: Trigger,
         frozen: &mut Frozen,
@@ -215,10 +232,11 @@ impl Turn<'_> {
         );
         run.context_tokens = tokens;
         let turn = self.id.to_string();
+        let prepared = self.agent.take_prepared();
         let outcome = self
             .agent
             .compactor(self.config, Some(&turn))
-            .compact(&run)
+            .compact_with(&run, prepared)
             .await?;
         if outcome.status != Status::LockSkipped {
             self.compression_attempts += 1;

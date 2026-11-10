@@ -25,8 +25,23 @@ pub struct Recalled {
 pub trait MemoryPort: Send + Sync {
     /// A new user turn with `text`: resets per-turn state and returns this
     /// turn's recall, if any.
-    fn begin_turn(&self, text: &str) -> Option<Recalled>;
+    fn begin_turn<'a>(&'a self, text: &'a str) -> BoxFuture<'a, Option<Recalled>>;
 
     /// Runs one `memory` tool call.
     fn call(&self, arguments: Value) -> BoxFuture<'_, ToolResult>;
+
+    /// A turn completed with `reply` to the user's `text` (an external
+    /// provider syncs it in the background).
+    fn turn_completed(&self, text: &str, reply: &str) {
+        let _ = (text, reply);
+    }
+
+    /// The pre-compress checkpoint over `messages` (a JSON list of the rows
+    /// about to be summarized): `None` without an external provider, else
+    /// whether it confirmed the checkpoint (spec: memory, Pre-compress
+    /// checkpoint).
+    fn checkpoint<'a>(&'a self, messages: &'a str) -> BoxFuture<'a, Option<bool>> {
+        let _ = messages;
+        Box::pin(async { None })
+    }
 }

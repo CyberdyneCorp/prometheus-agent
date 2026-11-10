@@ -52,6 +52,7 @@ impl Lane {
             origin: Origin::Queued,
             text: automated.text,
             images: Vec::new(),
+            files: Vec::new(),
             routing: self.routing.clone(),
             reply_to: None,
             voice: false,

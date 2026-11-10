@@ -50,6 +50,17 @@ pub struct RouteInfo {
     pub max_output_tokens: Option<u64>,
     /// The route's wire format.
     pub wire_format: WireFormat,
+    /// The route's `billing_source` (spec: model-providers, Billing source
+    /// transparency).
+    pub billing_source: String,
+    /// The route compacts context server-side (spec: context-compression,
+    /// Server-side Responses compaction).
+    pub server_compaction: bool,
+    /// A local inference server (memory reviews may wait for an idle
+    /// machine).
+    pub local: bool,
+    /// The route has a fast mode priority tier.
+    pub fast_tier: bool,
 }
 
 /// One tool call the model asked for.
@@ -80,6 +91,11 @@ pub struct ModelReply {
     pub record: Option<ModelCall>,
     /// Fallback activations on the way (`provider.fallback` events).
     pub fallbacks: Vec<ProviderFallback>,
+    /// The server-side compaction item the response returned.
+    pub compaction_item: Option<serde_json::Value>,
+    /// The advisor blocks a Mixture of Agents call shows (spec:
+    /// mixture-of-agents, Privacy filter for advisor outputs).
+    pub advisors: Vec<String>,
 }
 
 impl ModelReply {
@@ -168,6 +184,10 @@ pub struct ProviderSetup {
     pub health: Arc<dyn RouteHealth>,
     /// The launch-only endpoint, if any.
     pub ad_hoc: Option<AdHoc>,
+    /// Asks before a fallback from a subscription to a metered credential
+    /// (`providers.<id>.confirm_metered_fallback`); `None` refuses such a
+    /// move (non-interactive sessions).
+    pub metered_confirm: Option<Arc<dyn pmt_providers::fallback::MeteredConfirm>>,
 }
 
 impl ProviderSetup {
@@ -258,6 +278,7 @@ impl ProviderModel {
     /// supports. A bad override was refused by config validation, so it
     /// sends no control here rather than failing the call.
     fn with_effort(&self, request: &Request, route: &Route) -> Request {
+        let route = route.acting();
         let (meta, _) =
             self.setup
                 .catalog
@@ -291,12 +312,31 @@ impl ProviderModel {
         caller: ModelCaller,
         primary: &Target,
     ) -> Result<Self, Error> {
+        let chain = fallback::chain(&setup.config, &setup.registry)?;
+        Self::start_with_chain(setup, caller, primary, chain).await
+    }
+
+    /// Resolves the session's `primary` route with its own fallback
+    /// `chain` (see `fallback::scoped_chain` for pinned owners).
+    ///
+    /// # Errors
+    ///
+    /// Resolution failures of the primary.
+    pub async fn start_with_chain(
+        setup: ProviderSetup,
+        caller: ModelCaller,
+        primary: &Target,
+        chain: Vec<Target>,
+    ) -> Result<Self, Error> {
+        pmt_providers::moa::validate(&setup.config, &setup.registry)?;
         let route = setup
             .resolver()
             .resolve_target(primary, &mut Trace::default())
             .await?;
-        let chain = fallback::chain(&setup.config, &setup.registry)?;
-        let state = Fallback::new(route, chain, setup.config.fallback.min_health);
+        let mut state = Fallback::new(route, chain, setup.config.fallback.min_health);
+        if let Some(confirm) = &setup.metered_confirm {
+            state = state.with_metered_confirm(Arc::clone(confirm));
+        }
         Ok(Self::new(setup, caller, state))
     }
 
@@ -313,26 +353,27 @@ impl ProviderModel {
         caller: ModelCaller,
         primary: &Target,
     ) -> Result<Self, Error> {
-        let route = setup
-            .resolver()
-            .resolve_target(primary, &mut Trace::default())
-            .await?;
-        let state = Fallback::new(route, Vec::new(), setup.config.fallback.min_health);
-        Ok(Self::new(setup, caller, state))
+        Self::start_with_chain(setup, caller, primary, Vec::new()).await
     }
 
     fn info(&self, route: &Route) -> RouteInfo {
+        // A MoA preset reports its aggregator's window and price.
+        let acting = route.acting();
         let (meta, _) =
             self.setup
                 .catalog
-                .metadata_at(&route.provider, &route.model, Some(&route.base_url));
+                .metadata_at(&acting.provider, &acting.model, Some(&acting.base_url));
         RouteInfo {
             provider: route.provider.clone(),
             model: route.model.clone(),
-            price: self.setup.catalog.price(&route.provider, &route.model),
+            price: self.setup.catalog.price(&acting.provider, &acting.model),
             context_window: Some(meta.context_window),
             max_output_tokens: meta.max_output_tokens,
             wire_format: route.wire_format,
+            billing_source: route.billing_source(),
+            server_compaction: route.supports_server_compaction,
+            local: route.local,
+            fast_tier: route.fast_tier.is_some(),
         }
     }
 
@@ -374,6 +415,7 @@ impl ProviderModel {
         let mut stream = called.stream;
         let mut reply = ModelReply {
             fallbacks,
+            advisors: called.advice,
             ..ModelReply::default()
         };
         let mut reasoning = String::new();
@@ -461,6 +503,7 @@ fn intake(
             arguments,
         }),
         StreamEvent::Usage { usage } => reply.usage = usage,
+        StreamEvent::CompactionItem { item } => reply.compaction_item = Some(item),
         StreamEvent::Stop { stop_reason } => reply.stop = Some(stop_reason),
         StreamEvent::ToolCallStart { .. } | StreamEvent::ToolCallDelta { .. } => {}
     }

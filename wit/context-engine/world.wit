@@ -1,11 +1,29 @@
-/// A context engine replacing built-in compression (spec:
-/// context-compression). Messages are the JSON transcript form.
+/// A context engine replacing built-in compaction (spec:
+/// context-compression, Context engine selection; memory, Context engine
+/// selection). Messages are JSON lists of `{"id", "role", "content"}`.
+///
+/// The host validates every compaction result before committing it, and a
+/// per-request selection replaces only the outgoing request, never the
+/// stored transcript. An engine that fails `initialize` leaves its session
+/// on the built-in engine.
 package prometheus:context-engine@1.0.0;
 
 interface plugin {
-    should-compress: func(prompt-tokens: u64, context-window: u64) -> bool;
-    /// Returns the compressed transcript (JSON list of messages).
-    compress: func(messages: string, budget-tokens: u64) -> result<string, string>;
+    /// A tool the engine offers with the `context_engine` toolset.
+    record tool-spec {
+        name: string,
+        description: string,
+        parameters: string,
+    }
+
+    initialize: func(session-id: string, profile: string) -> result<_, string>;
+    /// The compacted transcript as a JSON list whose items are either
+    /// `{"keep": "<message id>"}` or a new `{"role", "content"}` row.
+    compact: func(messages: string) -> result<string, string>;
+    /// The ids of the messages the next request sends; `none` sends all.
+    select: func(messages: string, budget-tokens: u64) -> result<option<list<string>>, string>;
+    tool-schemas: func() -> list<tool-spec>;
+    handle-tool-call: func(name: string, arguments: string) -> result<string, string>;
 }
 
 world context-engine {

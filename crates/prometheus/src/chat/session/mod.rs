@@ -13,12 +13,16 @@ pub mod cron;
 pub mod delegation;
 pub mod documents;
 pub mod downgrades;
+mod embed;
 pub mod env;
 mod guardian;
 pub mod judge;
 mod lifecycle;
 mod lsp;
 mod mcp;
+pub mod media;
+pub mod media_plugins;
+mod memory;
 pub mod modal;
 pub mod model;
 mod opening;
@@ -28,12 +32,14 @@ pub mod processes;
 pub mod progress;
 pub mod python;
 pub mod serve;
+pub mod side;
 pub mod skills;
 pub mod snapshots;
 pub mod sudo;
 pub mod summarize;
 mod tool_state;
 pub mod tools;
+pub mod vision;
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -52,7 +58,7 @@ use pmt_core::error::Error;
 use pmt_core::human::Surface;
 use pmt_core::id::SessionId;
 use pmt_core::secret::Redactor;
-use pmt_memory::session::{Approver, MemorySession, MemorySetup};
+use pmt_memory::session::{Approver, MemorySession};
 use pmt_obs::trajectory::events::Event;
 use pmt_obs::trajectory::payload::{SessionEnd, SessionStart};
 use pmt_obs::trajectory::writer::{Emit, TrajectoryWriter};
@@ -82,6 +88,9 @@ pub struct Options {
     pub yolo: bool,
     /// The session's working directory.
     pub cwd: PathBuf,
+    /// `cwd` is a fallback, not configured or given (spec: agent-turn-loop,
+    /// Install-tree context suppression).
+    pub cwd_fallback: bool,
     /// `-s/--skills`.
     pub skills: Vec<String>,
     /// `--pass-session-id`.
@@ -99,6 +108,8 @@ pub struct Options {
     pub egress: crate::egress::Overrides,
     /// A scheduled run's session (spec: scheduled-jobs).
     pub cron: Option<cron::CronRun>,
+    /// A replay's recorded tool results and prompts.
+    pub replay: Option<Arc<crate::replay::Hooks>>,
 }
 
 /// The clients of one daemon session: they see its events and answer its
@@ -238,6 +249,8 @@ pub struct Live {
     /// The session's subagent delegation (`/stop all`, close, `/agents`).
     pub delegation: Option<Arc<pmt_delegation::host::Delegator>>,
     _skills: pmt_skills::session::Attachment,
+    /// Binds the session's provider affinity value while it is open.
+    _conversation: pmt_providers::transport::Binding,
 }
 
 impl Factory {
@@ -276,11 +289,12 @@ impl Factory {
         // Settings only a session acts on fail here, before any turn
         // (spec: execution-environments, Typed backend registry and
         // selection; memory, Context engine selection).
-        pmt_agent::compress::engine::select(&config.context, &[])?;
         let user_home = launch.user_home().map(PathBuf::as_path);
         let plugins = crate::plugins_host::for_session(&scope, &options.cwd);
+        crate::context_engine::select(&config.context, &plugins)?;
         backend::registry(&plugins, &pmt_plugins::host::CallInfo::default())
             .select(&config.terminal.backend)?;
+        crate::memory_provider::check_plugins(&config.memory, &plugins)?;
         let models = Models::open(&scope, &store, user_home, flags, ad_hoc)?.with_plugins(
             &scope,
             &plugins,
@@ -451,6 +465,11 @@ impl Factory {
     /// Asks `approver` before memory changes that need approval.
     #[must_use]
     pub fn with_memory_approver(mut self, approver: Arc<dyn Approver>) -> Self {
+        // The same yes/no line confirms a move from a subscription to a
+        // metered credential (`confirm_metered_fallback`).
+        self.models = self
+            .models
+            .with_metered_confirm(Arc::new(model::AskMetered(Arc::clone(&approver))));
         self.approver = Some(approver);
         self
     }
@@ -536,22 +555,23 @@ impl Factory {
         let model = self.model_for(target, child).await?;
         self.maintain();
         let session = self.session_row(id, target)?;
+        let conversation = self.models.bind_conversation(&session);
         self.discover_mcp().await;
         let (registry, selection, session_surface) = self.selection_for(&session, child)?;
         let inline_shell = Arc::new(skills::DeferredShell::default());
-        let skills = self.session_skills(id, &selection, &inline_shell, clients.as_ref());
+        let announce = memory::notices_for(&self.scope, &session);
+        let skills =
+            self.session_skills(id, &selection, (&inline_shell, &announce), clients.as_ref());
         let attached = SkillSessions::process().attach(&id.to_string(), Arc::clone(&skills));
         let capabilities = self.capabilities_for(id, &skills, child)?;
         let current = SharedScope::new(self.scope_for(child));
-        let environment = self.environment(
-            &session,
-            target,
-            &capabilities,
-            &current,
-            &skills,
-            &place::At::open(&self.options.cwd, clients.as_ref()),
-        )?;
-        let memory = Arc::new(MemorySession::new(self.memory_setup(id)?));
+        let vision = self.vision_plan(id, target, child.is_some()).await;
+        let at = place::At::open(&self.options.cwd, clients.as_ref());
+        let at = place::At { vision, ..at };
+        let environment =
+            self.environment(&session, target, &capabilities, &current, &skills, &at)?;
+        media::prime(&id.to_string()).await;
+        let memory = self.memory_for(id, &model, announce).await?;
         let summarizer = self.models.summarizer(&model, id);
         let cards = shows_cards(self.options.interactive, &session_surface);
         let delegation = self.delegation_for(
@@ -567,7 +587,7 @@ impl Factory {
         skills::bind_shell(&inline_shell, environment.commands.as_ref(), &gate.gate);
         let ports = (&gate.gate, &agent_tools, &model);
         let built = (registry, selection, &capabilities);
-        let tool_state = self.tool_state(id, built, ports).await?;
+        let tool_state = Box::pin(self.tool_state(id, built, ports)).await?;
         let tool_port = tool_state.tools();
         delegation.parent_is(&tool_port, &capabilities, &gate.gate);
         let trajectory = self.trajectory(&session)?;
@@ -626,6 +646,7 @@ impl Factory {
             downgrades,
             delegation: delegation.delegator(),
             _skills: attached,
+            _conversation: conversation,
         };
         live.emit_start(&session, target).await;
         Ok(live)
@@ -840,6 +861,7 @@ impl Factory {
             redactor: self.redactor.clone(),
             browser: self.browser(),
             image_input: self.image_input(target),
+            vision: &at.vision,
             completions: clients
                 .and_then(|c| c.completions.clone())
                 .or_else(|| self.notices.clone()),
@@ -854,6 +876,8 @@ impl Factory {
             input_roots: input_roots(&self.scope, skills),
             automatic_trust: automatic_trust(session),
             cron_notepad: cron.and_then(|c| c.notepad.as_deref()),
+            store: &self.store,
+            session,
         })?;
         // Skills pass their declared secrets to the terminal.
         if let Some(terminal) = &environment.terminal {
@@ -995,7 +1019,7 @@ impl Factory {
         &self,
         id: SessionId,
         selection: &Selection,
-        inline_shell: &Arc<skills::DeferredShell>,
+        (inline_shell, announce): (&Arc<skills::DeferredShell>, &pmt_memory::notices::Notices),
         clients: Option<&Clients>,
     ) -> SessionSetup {
         let mut setup =
@@ -1005,7 +1029,9 @@ impl Factory {
         setup.view = skills::view(selection);
         setup.plugins = self.plugins.current().skill_dirs();
         let (plugins, call) = (self.plugins.clone(), self.plugin_call(id));
+        let announce = announce.clone();
         setup.lifecycle = Some(Arc::new(move |skill: &str, action: &str| {
+            announce.skill(skill, action);
             plugins.observe(
                 call.clone(),
                 "on_skill_lifecycle",
@@ -1017,25 +1043,6 @@ impl Factory {
             .map(|c| Arc::clone(&c.secrets))
             .or_else(|| self.secret_prompt.clone());
         setup
-    }
-
-    fn memory_setup(&self, id: SessionId) -> Result<MemorySetup, Error> {
-        let mut setup = MemorySetup::new(
-            self.scope.clone(),
-            Arc::clone(&self.store),
-            Some(id),
-            Source::Cli,
-        );
-        setup.redactor = self.redactor.clone();
-        setup.approver.clone_from(&self.approver);
-        let prior = self
-            .store
-            .messages(id, pmt_store::Visibility::Active)?
-            .iter()
-            .filter(|m| m.role == pmt_store::Role::User)
-            .count();
-        setup.prior_user_turns = u32::try_from(prior).unwrap_or(u32::MAX);
-        Ok(setup)
     }
 
     /// The session's tools, built from `registry` and `selection` for the
@@ -1050,7 +1057,7 @@ impl Factory {
         (registry, selection, capabilities): (Arc<ToolRegistry>, Selection, &CapabilitySet),
         (gate, agent, model): (&Arc<CommandGate>, &Arc<AgentTools>, &Arc<SwitchableModel>),
     ) -> Result<Arc<ToolState>, Error> {
-        let route = tools::route_traits(model.as_ref()).await;
+        let route = Box::pin(tools::session_route(model.as_ref(), id)).await;
         let inputs = tool_state::Inputs {
             scope: self.scope.clone(),
             store: Arc::clone(&self.store),
@@ -1115,6 +1122,7 @@ impl Factory {
         notices: &mut Vec<String>,
     ) -> PromptSetup {
         let mut prompt = PromptSetup::new("cli", Some(self.options.cwd.clone()));
+        prompt.cwd_fallback = self.options.cwd_fallback;
         prompt.no_context_files = self.options.no_context_files;
         prompt.pass_session_id = self.options.pass_session_id;
         prompt.started_at = Timestamp::now();
@@ -1385,6 +1393,7 @@ impl Live {
     /// is written to the session's own profile store at every call, so
     /// nothing is left to flush.
     pub async fn unload(self) {
+        crate::memory_provider::forget(&self.id.to_string());
         if let Some(browser) = &self.place.browser() {
             browser.close_session(&self.id.to_string()).await;
         }
@@ -1408,6 +1417,7 @@ impl Live {
             delegation.close();
         }
         pmt_tools::code_exec::kernel::close_session(&self.id.to_string());
+        crate::memory_provider::close(&self.id.to_string()).await;
         self.emit(Event::SessionEnd(SessionEnd {
             reason: reason.as_str().to_owned(),
         }))

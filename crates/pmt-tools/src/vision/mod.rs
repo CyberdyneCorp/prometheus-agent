@@ -8,6 +8,7 @@
 //! results carry images) and its `vision` auxiliary route, which the turn
 //! loop provides as a [`Describer`].
 
+pub mod budget;
 pub mod image;
 pub mod routing;
 pub mod tool;
@@ -44,12 +45,19 @@ pub struct VisionSetup {
     pub fetcher: Arc<Fetcher>,
     /// Where images attached to tool results are written.
     pub media_dir: PathBuf,
+    /// `vision.embed_target_bytes`, clamped ([`budget::clamp_target`]).
+    pub embed_target: u64,
+    /// Embeds of one image per session ([`budget::per_image_cap`]);
+    /// `None` is unlimited.
+    pub per_image_cap: Option<u32>,
 }
 
 /// One session's vision state.
 pub struct VisionSession {
     setup: VisionSetup,
     attached: Mutex<Vec<String>>,
+    /// Embeds so far per image (resolved path, URL or data digest).
+    loads: Mutex<std::collections::HashMap<String, u32>>,
 }
 
 /// The reason `vision_analyze` gives without any route.
@@ -62,6 +70,7 @@ impl VisionSession {
         Self {
             setup,
             attached: Mutex::default(),
+            loads: Mutex::default(),
         }
     }
 
@@ -69,6 +78,17 @@ impl VisionSession {
     /// sees); the turn loop sets them when a user message is sent.
     pub fn set_current_attachments(&self, references: Vec<String>) {
         *self.attached.lock().unwrap_or_else(PoisonError::into_inner) = references;
+    }
+
+    /// Counts one embed of the image `key`; `Err(previous)` past the cap.
+    fn count_load(&self, key: String) -> Result<(), u32> {
+        let mut loads = self.loads.lock().unwrap_or_else(PoisonError::into_inner);
+        let seen = loads.entry(key).or_insert(0);
+        if self.setup.per_image_cap.is_some_and(|cap| *seen >= cap) {
+            return Err(*seen);
+        }
+        *seen += 1;
+        Ok(())
     }
 
     fn is_attached(&self, reference: &str) -> bool {

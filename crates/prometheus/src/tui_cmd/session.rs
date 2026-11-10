@@ -7,8 +7,8 @@
 use pmt_rpc::RpcError;
 use pmt_rpc::client::ServerCall;
 use pmt_rpc::contracts::{
-    Admission, COMMAND_NOTICE, Dispatched, Envelope, ModelOptionsList, PROCESS_NOTICE,
-    SessionContextUsage, SessionRef, TurnFinished,
+    ASSISTANT_DELTA, Admission, COMMAND_NOTICE, Dispatched, Envelope, ModelOptionsList,
+    PROCESS_NOTICE, SessionContextUsage, SessionRef, TurnFinished,
 };
 use pmt_tui::app::Card;
 use pmt_tui::transcript::Kind;
@@ -122,6 +122,7 @@ impl Tui<'_> {
                 self.app.transcript.push(Kind::Assistant, text("text"));
             }
             Some("tool.call") => self.app.transcript.push(Kind::Tool, text("tool")),
+            Some(ASSISTANT_DELTA) => self.voice_delta(data),
             Some(COMMAND_NOTICE) => self.notice(text("text")),
             Some(PROCESS_NOTICE) => self.notice(format!("[background] {}", text("text"))),
             Some(kind @ ("subagent.spawned" | "subagent.progress" | "subagent.finished")) => {
@@ -129,7 +130,14 @@ impl Tui<'_> {
                     self.notice(line);
                 }
             }
-            _ => {}
+            Some(kind) => {
+                if let Some(line) =
+                    crate::chat::session::progress::context_line(kind, &data["payload"])
+                {
+                    self.notice(line);
+                }
+            }
+            None => {}
         }
     }
 
@@ -143,6 +151,7 @@ impl Tui<'_> {
             ));
             return;
         }
+        self.voice_turn_finished(finished);
         if let Some(answer) = &finished.final_response
             && self.app.transcript.last_answer() != Some(answer.as_str())
         {
@@ -182,7 +191,8 @@ impl Tui<'_> {
             .asking
             .front()
             .map(|a| card(a, asked, typed))
-            .or_else(|| self.setup_card());
+            .or_else(|| self.setup_card())
+            .or_else(|| self.prune_card());
     }
 
     fn withdraw(&mut self, data: &Value, why: &str) {
@@ -245,11 +255,16 @@ impl Tui<'_> {
                 if let Some(notice) = submitted.notice {
                     self.notice(notice);
                 }
+                let runs = matches!(submitted.admission, Admission::Started | Admission::Queued);
+                self.voice_admitted(runs.then_some(submitted.turn_id.as_str()));
                 self.admitted(&session, &submitted.turn_id, submitted.admission);
             }
-            Done::Submitted(Err(err))
-            | Done::Dispatched(Err(err))
-            | Done::Switched(Err(err), _) => {
+            Done::Submitted(Err(err)) => {
+                self.voice_admitted(None);
+                self.error(&err);
+            }
+            Done::Voice(ask) => self.on_voice(ask),
+            Done::Dispatched(Err(err)) | Done::Switched(Err(err), _) => {
                 self.error(&err);
             }
             Done::Dispatched(Ok(dispatched)) => self.dispatched(dispatched),
@@ -259,6 +274,8 @@ impl Tui<'_> {
                     self.app.status.context_window = usage.context_window;
                 }
                 self.app.status.cost_usd = usage.cost_usd;
+                self.app.status.billing.clone_from(&usage.billing_source);
+                self.app.status.quota = usage.subscription.as_ref().map(|s| s.quota.text.clone());
             }
             Done::Models(models) => {
                 if !models.models.is_empty() {
@@ -279,6 +296,8 @@ impl Tui<'_> {
                 self.reload().await;
                 let shown = self.link.session.clone();
                 self.notice(format!("session {shown}"));
+                // `/resume` of a stored session; a new or forked one has none.
+                self.memory_summary(&shown).await;
                 if let Some(prompt) = prompt {
                     self.submit(prompt, Vec::new());
                 }

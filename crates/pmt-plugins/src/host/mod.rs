@@ -25,6 +25,7 @@ use pmt_config::schema::PluginsWasmConfig;
 use pmt_core::error::{Error, codes};
 use wasmtime::component::Component;
 
+pub use bindings::exports::prometheus::context_engine::plugin as context_engine_world;
 pub use bindings::exports::prometheus::delegation_router::plugin as delegation_router_world;
 pub use bindings::exports::prometheus::hook::extensions as extensions_world;
 pub use bindings::exports::prometheus::hook::plugin as hook_world;
@@ -32,8 +33,9 @@ pub use bindings::exports::prometheus::hook::surfaces as surfaces_world;
 pub use bindings::exports::prometheus::provider::plugin as provider_world;
 pub use bindings::exports::prometheus::terminal_backend::plugin as terminal_backend_world;
 pub use bindings::exports::prometheus::tool::plugin as tool_world;
+pub use bindings::prometheus::memory_provider::types as memory_provider_types;
 pub use imports::{CallInfo, Console, Context};
-pub use instance::Instance;
+pub use instance::{Instance, MemoryWrite};
 
 /// How often the epoch advances; a call overruns its deadline by at most
 /// about one tick plus scheduling.

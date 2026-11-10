@@ -180,6 +180,16 @@ impl DaemonHost {
                 });
             }
         }
+        // The Mixture of Agents provider's models are its presets.
+        for id in crate::model_cmd::picker::preset_ids(scope.config()) {
+            if !models.iter().any(|m| m.id == id) {
+                models.push(ModelOption {
+                    id,
+                    provider: pmt_providers::moa::PROVIDER_ID.to_owned(),
+                    context_window: None,
+                });
+            }
+        }
         Ok(ModelOptions {
             current: current.map(|c| c.id),
             models,

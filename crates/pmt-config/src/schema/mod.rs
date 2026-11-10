@@ -31,22 +31,28 @@ mod hooks;
 mod interface;
 mod lsp;
 mod mcp;
+mod media;
+mod moa;
 mod models;
 mod operations;
 mod plugins;
+mod provider_routing;
 mod python_bridge;
+mod replay;
 mod state;
+mod tool_gateway;
 mod tools;
+mod voice;
 mod webhook;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 pub use agent::{
-    AgentConfig, CompressionConfig, ContextConfig, ContinuationMode, EmptyResponseGuard,
-    GuardrailThresholds, ImageInputMode, IntentContinuation, LoopCaps, PlatformHint,
-    PromptCacheConfig, PromptCacheTtl, PromptConfig, ReasoningLevel, TailMode, ToolLoopGuardrails,
-    VisionConfig,
+    AgentConfig, AutoMode, CodingContext, CompressionConfig, ContextConfig, ContinuationMode,
+    EmptyResponseGuard, GuardrailThresholds, ImageInputMode, IntentContinuation, LoopCaps,
+    PlatformHint, PromptCacheConfig, PromptCacheTtl, PromptConfig, ReasoningLevel, ResumeOnCrash,
+    TailMode, ToolLoopGuardrails, VerifyOnStop, VisionConfig,
 };
 pub use automation::{GoalsConfig, HeartbeatConfig, LoopsConfig};
 pub use connectors::{ConnectorsConfig, DEFAULT_CONNECTOR_GATEWAY};
@@ -81,10 +87,19 @@ pub use mcp::{
     McpRedirectHost, McpSamplingConfig, McpServerConfig, McpServerModeConfig, McpToolFilter,
     McpTransport, McpTrust,
 };
+pub use media::{
+    CommandSttConfig, CommandTtsConfig, EdgeTtsConfig, ElevenLabsSttConfig, ElevenLabsTtsConfig,
+    GeminiTtsConfig, ImageGenConfig, ImageOpenAiConfig, LocalSttConfig, OpenAiTtsConfig,
+    SpeechProviderType, SttConfig, SttVendorConfig, TranscriptFormat, TtsConfig, TtsOutputFormat,
+    VoiceModelConfig, WhisperCppConfig, WhisperModel, XSearchConfig, XaiTtsConfig,
+};
+pub use moa::{
+    DEFAULT_PRESET, MoaConfig, MoaFanout, MoaPreset, MoaPrivacyFilter, MoaSlot, TRACE_DIR,
+};
 pub use models::{
     AliasRoute, AuthConfig, AuxiliaryConfig, AuxiliaryTask, FallbackConfig, FallbackEntry,
     LoginFlow, ModelAlias, ModelConfig, ModelEntry, ModelPrice, ModelRoute, OAuthEndpoints,
-    PoolStrategy, PreferCredential, ProviderAuth, ProviderConfig, WireFormat,
+    PoolStrategy, PreferCredential, ProviderAuth, ProviderConfig, RoutingConfig, WireFormat,
 };
 pub use operations::{
     BudgetsConfig, DegradedFeature, EgressConfig, EgressMode, GatewayHealthConfig, LogLevel,
@@ -96,18 +111,27 @@ pub use plugins::{
     DEFAULT_CATALOG_URL, GuidanceMode, PluginsConfig, PluginsWasmConfig, SecurityGuidanceConfig,
     SignaturePolicy, TransportFallback,
 };
+pub use provider_routing::{
+    DEFAULT_MIN_CODING_SCORE, DataCollection, FastMode, OpenRouterConfig, ProviderRoutingConfig,
+    RoutingPrefs, RoutingSort,
+};
 pub use python_bridge::{PYTHON_VERSIONS, PythonBridgeConfig, PythonVersion};
+pub use replay::{CacheMode, DEFAULT_NAMESPACE, ModelCallCacheConfig, ReplayConfig};
 pub use state::{
-    JournalMode, MemoryConfig, MemoryReviewMode, RecallConfig, SessionsConfig, SkillsConfig,
+    AttachmentStorage, AttachmentsConfig, JournalMode, MemoryConfig, MemoryNotifications,
+    MemoryReviewConfig, MemoryReviewMode, RecallConfig, ReviewDefer, SessionsConfig, SkillsConfig,
     SnapshotsConfig, StorageConfig,
 };
+pub use tool_gateway::{ToolGatewayConfig, ToolProviderConfig};
 pub use tools::{
     ApprovalMode, ApprovalsConfig, BrowserConfig, ContainerConfig, DegradedMode, DialogPolicy,
-    FilesConfig, FirecrawlConfig, KeylessConfig, ModalConfig, ModalMode, ResultBudget,
-    SearxngConfig, SingularityConfig, SnapshotConfig, SnapshotTerminal, SshConfig, SurfaceToolsets,
-    TerminalConfig, ToolListing, ToolOutputConfig, ToolSearchConfig, ToolSearchMode, ToolsConfig,
-    ToolsetsConfig, UnattendedApproval, WebConfig, WindowsShell,
+    FilesConfig, FirecrawlConfig, KeylessConfig, ModalConfig, ModalMode, ProviderTier,
+    ResultBudget, SearxngConfig, SingularityConfig, SnapshotConfig, SnapshotTerminal, SshConfig,
+    SurfaceToolsets, TerminalConfig, ToolListing, ToolOutputConfig, ToolSearchConfig,
+    ToolSearchMode, ToolsConfig, ToolsetsConfig, UnattendedApproval, WebConfig, WebXaiConfig,
+    WindowsShell,
 };
+pub use voice::VoiceModeConfig;
 pub use webhook::{
     FilterFile, FilterPath, FilterPattern, FilterValue, FilterValues, WebhookFilter, WebhookFilters,
 };
@@ -128,6 +152,8 @@ pub struct Config {
     pub agent: AgentConfig,
     /// Approval modes for dangerous tool calls.
     pub approvals: ApprovalsConfig,
+    /// Where received attachments are kept.
+    pub attachments: AttachmentsConfig,
     /// Sign-in behaviour.
     pub auth: AuthConfig,
     /// Side-model (auxiliary) task routing.
@@ -164,6 +190,8 @@ pub struct Config {
     pub goals: GoalsConfig,
     /// `/heartbeat` bounds.
     pub heartbeat: HeartbeatConfig,
+    /// Image generation (`image_generate`).
+    pub image_gen: ImageGenConfig,
     /// Shell hooks and outbound webhooks.
     pub hooks: HooksConfig,
     /// Structured log files.
@@ -178,6 +206,8 @@ pub struct Config {
     pub mcp_server: McpServerModeConfig,
     /// Built-in memory.
     pub memory: MemoryConfig,
+    /// Mixture of Agents presets.
+    pub moa: MoaConfig,
     /// The main model and provider.
     pub model: ModelConfig,
     /// Model aliases and metadata overrides, keyed by name or
@@ -188,6 +218,8 @@ pub struct Config {
     pub network: NetworkConfig,
     /// Trajectories.
     pub observability: ObservabilityConfig,
+    /// OpenRouter-only request settings.
+    pub openrouter: OpenRouterConfig,
     /// Plugin enablement, hook bounds and WASM limits.
     pub plugins: PluginsConfig,
     /// System prompt assembly.
@@ -198,18 +230,26 @@ pub struct Config {
     pub prompt_cache: PromptCacheConfig,
     /// PII redaction.
     pub privacy: PrivacyConfig,
+    /// OpenRouter upstream provider routing preferences.
+    pub provider_routing: ProviderRoutingConfig,
     /// Per-provider overrides, keyed by provider id.
     #[schemars(extend("x-apply" = "next_session"))]
     pub providers: std::collections::BTreeMap<String, ProviderConfig>,
     /// User slash commands (`/<name>`), keyed by name.
     #[schemars(extend("x-apply" = "live"))]
     pub quick_commands: std::collections::BTreeMap<String, QuickCommand>,
+    /// The model-call cache.
+    pub replay: ReplayConfig,
+    /// Provider health scoring.
+    pub routing: RoutingConfig,
     /// Secrets store backend.
     pub secrets: SecretsConfig,
     /// Capabilities, sandbox, egress and redaction.
     pub security: SecurityConfig,
     /// Session storage limits and retention.
     pub sessions: SessionsConfig,
+    /// Speech-to-text providers.
+    pub stt: SttConfig,
     /// Skills discovery and authoring.
     pub skills: SkillsConfig,
     /// Per-profile state snapshots.
@@ -220,6 +260,8 @@ pub struct Config {
     pub telemetry: TelemetryConfig,
     /// The terminal tool and its backends.
     pub terminal: TerminalConfig,
+    /// The subscription tool gateway.
+    pub tool_gateway: ToolGatewayConfig,
     /// Tool loop guardrails.
     pub tool_loop_guardrails: ToolLoopGuardrails,
     /// Terminal tool output shaping.
@@ -228,14 +270,22 @@ pub struct Config {
     pub tools: ToolsConfig,
     /// Per-surface toolset defaults.
     pub toolsets: ToolsetsConfig,
+    /// Text-to-speech (`text_to_speech`) providers.
+    pub tts: TtsConfig,
     /// Interactive interface selection.
     pub ui: UiConfig,
     /// The credential vault.
     pub vault: VaultConfig,
+    /// Voice conversations on the CLI, TUI and desktop.
+    pub voice: VoiceModeConfig,
+    /// Video generation's provider selection.
+    pub video_gen: ToolProviderConfig,
     /// Image input routing.
     pub vision: VisionConfig,
     /// Web tools.
     pub web: WebConfig,
+    /// The `x_search` tool.
+    pub x_search: XSearchConfig,
     /// Git worktrees: creation, the stale-tree sweep and archives.
     pub worktrees: WorktreesConfig,
 }
@@ -246,6 +296,7 @@ impl Default for Config {
             schema_version: SCHEMA_VERSION,
             agent: AgentConfig::default(),
             approvals: ApprovalsConfig::default(),
+            attachments: AttachmentsConfig::default(),
             auth: AuthConfig::default(),
             auxiliary: AuxiliaryConfig::default(),
             browser: BrowserConfig::default(),
@@ -264,6 +315,7 @@ impl Default for Config {
             gateway: GatewayConfig::default(),
             goals: GoalsConfig::default(),
             heartbeat: HeartbeatConfig::default(),
+            image_gen: ImageGenConfig::default(),
             hooks: HooksConfig::default(),
             logging: LoggingConfig::default(),
             loops: LoopsConfig::default(),
@@ -271,33 +323,44 @@ impl Default for Config {
             mcp: McpConfig::default(),
             mcp_server: McpServerModeConfig::default(),
             memory: MemoryConfig::default(),
+            moa: MoaConfig::default(),
             model: ModelConfig::default(),
             models: std::collections::BTreeMap::new(),
             network: NetworkConfig::default(),
             observability: ObservabilityConfig::default(),
+            openrouter: OpenRouterConfig::default(),
             plugins: PluginsConfig::default(),
             prompt: PromptConfig::default(),
             python_bridge: PythonBridgeConfig::default(),
             prompt_cache: PromptCacheConfig::default(),
             privacy: PrivacyConfig::default(),
+            provider_routing: ProviderRoutingConfig::default(),
             providers: std::collections::BTreeMap::new(),
             quick_commands: std::collections::BTreeMap::new(),
+            replay: ReplayConfig::default(),
+            routing: RoutingConfig::default(),
             secrets: SecretsConfig::default(),
             security: SecurityConfig::default(),
             sessions: SessionsConfig::default(),
+            stt: SttConfig::default(),
             skills: SkillsConfig::default(),
             snapshots: SnapshotsConfig::default(),
             storage: StorageConfig::default(),
             telemetry: TelemetryConfig::default(),
             terminal: TerminalConfig::default(),
+            tool_gateway: ToolGatewayConfig::default(),
             tool_loop_guardrails: ToolLoopGuardrails::default(),
             tool_output: ToolOutputConfig::default(),
             tools: ToolsConfig::default(),
             toolsets: ToolsetsConfig::default(),
+            tts: TtsConfig::default(),
             ui: UiConfig::default(),
             vault: VaultConfig::default(),
+            voice: VoiceModeConfig::default(),
+            video_gen: ToolProviderConfig::default(),
             vision: VisionConfig::default(),
             web: WebConfig::default(),
+            x_search: XSearchConfig::default(),
             worktrees: WorktreesConfig::default(),
         }
     }

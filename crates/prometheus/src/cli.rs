@@ -120,6 +120,9 @@ pub enum Command {
         #[command(subcommand)]
         command: SkillsCommand,
     },
+    /// The skills and memories the agent learned, as a timeline; list, delete, edit.
+    #[command(visible_aliases = ["learning", "memory-graph"])]
+    Journey(crate::journey_cmd::JourneyArgs),
     /// Inspect, edit, export and import what the agent remembers (built-in memory).
     Memory {
         /// The memory subcommand.
@@ -179,6 +182,19 @@ pub enum Command {
         #[command(subcommand)]
         command: BackupCommand,
     },
+    /// Session recordings: export one, replay it (detecting divergence),
+    /// or re-record it with this build.
+    Replay {
+        /// The replay subcommand.
+        #[command(subcommand)]
+        command: crate::replay_cmd::ReplayCommand,
+    },
+    /// The model-call cache: stats, prune, clear.
+    Cache {
+        /// The cache subcommand.
+        #[command(subcommand)]
+        command: crate::cache_cmd::CacheCommand,
+    },
     /// Undo a session's file changes, roll a workspace back to a
     /// checkpoint, and manage the file snapshot store.
     Files {
@@ -232,17 +248,38 @@ pub enum Command {
         #[command(subcommand)]
         command: Option<ModelCommand>,
     },
+    /// Provider routing state: per-route health scores.
+    Providers {
+        /// The providers subcommand.
+        #[command(subcommand)]
+        command: crate::providers_cmd::ProvidersCommand,
+    },
+    /// List, create, update and delete Mixture of Agents presets
+    /// (`[moa.presets.<name>]`).
+    Moa {
+        /// The moa subcommand.
+        #[command(subcommand)]
+        command: crate::moa_cmd::MoaCommand,
+    },
+    /// Local models: the llama.cpp engine, the hardware-priced catalog,
+    /// downloads, the model library and the managed llama-server.
+    Local {
+        /// The local subcommand.
+        #[command(subcommand)]
+        command: crate::local_cmd::LocalCommand,
+    },
     /// List and edit the profile's fallback chain (`[[fallback.chain]]`).
     Fallback {
         /// The fallback subcommand.
         #[command(subcommand)]
         command: FallbackCommand,
     },
-    /// Add, list and remove provider API keys and subscription sign-ins.
+    /// Add, list and remove provider API keys and subscription sign-ins
+    /// (an interactive manager without a subcommand on a terminal).
     Auth {
         /// The auth subcommand.
         #[command(subcommand)]
-        command: AuthCommand,
+        command: Option<AuthCommand>,
     },
     /// List the profile's tools and explain one (exposure, capabilities, approvals).
     Tools {
@@ -268,6 +305,12 @@ pub enum Command {
     /// Emergency pause: no new turns or scheduled jobs on any profile of
     /// this home until `pause off` (running turns finish).
     Pause(crate::pause_cmd::PauseArgs),
+    /// The Nous Portal subscription and its tool gateway routing.
+    Portal {
+        /// The portal subcommand.
+        #[command(subcommand)]
+        command: crate::portal_cmd::PortalCommand,
+    },
     /// Run, start, stop and inspect the gateway daemon that owns this
     /// home's sessions (one per home; clients attach to it).
     #[cfg(feature = "gateway")]
@@ -370,6 +413,12 @@ pub enum Command {
     /// (run by `prometheus update` on the staged binary).
     #[command(hide = true)]
     SelfTest,
+    /// Run the bundled `smoke` eval suite with this binary on the mock
+    /// provider, offline, in a scratch directory of its own; exit 1 when a
+    /// task misses its grade. CI's per-target smoke run; `prometheus eval
+    /// run smoke` scores the same suite from M3.
+    #[command(name = "smoke-suite", hide = true)]
+    SmokeSuite(SmokeSuiteArgs),
     /// List, install, verify and collect the managed runtimes (Node,
     /// CPython, uv, Chromium) shared by every profile.
     Runtimes {
@@ -425,6 +474,20 @@ pub struct DemoArgs {
     pub output: Option<PathBuf>,
     /// Keep the directory afterwards.
     #[arg(long, help = "Keep the demo's home and repository afterwards")]
+    pub keep: bool,
+}
+
+/// `prometheus smoke-suite` flags.
+#[derive(Debug, Clone, Args)]
+pub struct SmokeSuiteArgs {
+    /// Directory to run in (created when missing; must be empty).
+    #[arg(long, value_name = "DIR")]
+    #[arg(
+        help = "Run in DIR, which must be empty or missing (default: a fresh temporary directory)"
+    )]
+    pub output: Option<PathBuf>,
+    /// Keep the directory afterwards.
+    #[arg(long, help = "Keep every task's home and workspace afterwards")]
     pub keep: bool,
 }
 
@@ -621,6 +684,9 @@ pub enum UsageBy {
     Day,
     /// Profile.
     Profile,
+    /// Billing source (`subscription:<provider>/<label>`,
+    /// `api_key:<provider>/<label>`, `local`...).
+    Billing,
 }
 
 fn component_values() -> clap::builder::PossibleValuesParser {

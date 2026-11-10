@@ -80,14 +80,34 @@ survive restarts. A key that fails is **benched** and skipped:
 The same-route retry of the failed request already takes the next key.
 When every credential of a provider is benched, requests fail with
 `auth.credentials_benched` (exit 69), or the fallback chain takes over.
-The provider's other secret names (a shared key next to a plan key) are
-not pool members: they are alternatives, used in order when no pool key
-is usable. `auth remove` deletes a key:
+The pool is seeded from the provider's secrets: the first of its secret
+names that is set and that name's numbered siblings (`OPENROUTER_API_KEY_2`,
+`OPENROUTER_API_KEY_3`...), plus the keys `prometheus auth add --label`
+stored. `auth list --json` shows each key's `pool` origin, `seeded` or
+`added`; a seeded key leaves the pool when its secret disappears, an added
+one stays until `auth remove`. The provider's later secret names (a shared
+key next to a plan key) and their siblings are alternatives, used in order
+when no pool key is usable, so the first name present supplies the
+credential. A `[providers.<custom>]` endpoint pools `key_secret` and its
+numbered siblings the same way. Delegated children and auxiliary calls on
+the same provider draw from the same pool and see the same benches.
 
-```console
-$ prometheus auth remove openrouter work
-removed api_key 'work' of openrouter
+Maintenance commands (`auth list` and `auth status` are peeks: they never
+refresh, rotate or bench anything):
+
+```sh
+prometheus auth priority openrouter work 0      # fill_first takes 'work' first
+prometheus auth add openrouter --label spare --priority 1
+prometheus auth reset openrouter                # clear every bench and cooldown
+prometheus auth refresh openai-codex            # refresh sign-in tokens now
+prometheus auth logout openai-codex             # remove every sign-in of the provider
+prometheus auth remove openrouter work          # removed api_key 'work' of openrouter
 ```
+
+A reset reaches running sessions (a gateway too) on their next request:
+benches live in `state.db`, which every request reads. `prometheus auth`
+without a subcommand on a terminal opens a small manager for the same
+commands; off a terminal it lists the credentials.
 
 ## Subscription sign-ins
 
@@ -181,3 +201,196 @@ $ prometheus config set auth.adopt_external_logins false
 $ prometheus config get auth.adopt_external_logins
 false
 ```
+
+## Agent CLIs over ACP
+
+A provider with `auth = "external_process"` drives an installed agent CLI
+over the Agent Client Protocol, with that CLI's own sign-in; no token
+passes through Prometheus and the ledger records the calls as
+`subscription:<id>/external`:
+
+```toml
+[providers.agent-cli]
+auth = "external_process"
+command = "claude-code-acp"   # found on PATH, then ~/.local/bin, ~/bin, npm, bun, cargo bins
+args = []
+# command_path = "/opt/tools/claude-code-acp"   # one absolute executable, wins over `command`
+```
+
+The lookup of `command` searches `PATH`, the user-local bin directories and
+then the vendor's documented install prefixes (`~/.claude/local`,
+`~/.codex/bin`, Homebrew and `/usr/local/bin`), so a gateway service, cron
+run or desktop launch with a bare `PATH` finds the same CLI an interactive
+shell does. `command_path` is used as is and never split or run through a
+shell. The Codex CLI of the Codex app-server runtime is found the same way,
+or pinned with `model.codex_bin`.
+
+Each model call starts the CLI in the Prometheus process's working directory, opens one ACP
+session and sends the conversation as one prompt; the CLI's message and
+thought chunks stream back as the answer and its reasoning. The CLI runs
+its own tools: every permission it asks for is answered `cancelled` and
+no file system or terminal access is offered, so it acts only within its
+own configuration. A CLI found nowhere fails the session with
+`provider.external_cli_missing` naming the command.
+
+
+## Account usage and subscription commands
+
+`prometheus auth usage [--provider ID] [--json]` shows a subscription's plan
+and usage windows without starting a session (the configured provider by
+default). The JSON document is `{provider, source, title, plan, fetched_at,
+windows: [{label, used_percent, resets_at, detail}], details,
+unavailable_reason}`; its keys only ever grow. Without a sign-in, a usage
+endpoint or an answer it prints why on stderr and exits 1.
+
+In a chat:
+
+- `/usage` adds the account block, the session's duration and its current
+  context window use to the token and cost totals; `/usage reset` redeems a
+  banked usage limit reset of a ChatGPT plan after asking (`/usage reset
+  --force` skips the question).
+- `/login [provider]` (default `nous`) runs the device-code sign-in off-turn:
+  the code and the outcome arrive as messages while the session goes on. On
+  the gateway it only runs in a direct message; a group or channel is told
+  to DM the bot.
+- `/subscription` (alias `/upgrade`) shows the plan and where to change it;
+  `/topup` shows the prepaid balance where the provider reports one and the
+  billing page. Providers without such pages answer `not available for
+  <provider>`.
+
+## Subscription tool gateway
+
+Each tool category has one selection key. Setting it to `nous` sends the
+category through the Nous Portal tool gateway with the portal sign-in, and
+the calls bill `subscription:nous/<label>`:
+
+| Category | Key |
+|---|---|
+| web search, web extract | `web.search_backend`, `web.extract_backend` (else `web.backend`) |
+| image / video generation | `image_gen.provider`, `video_gen.provider` |
+| speech | `tts.provider`, `stt.provider` |
+| cloud browser | `browser.provider` |
+| managed remote sandbox | `terminal.backend` (`nous` is Modal in managed mode) |
+
+A stored selection always wins, whatever keys exist: `image_gen.provider =
+"nous"` uses the gateway even with a `FAL_KEY`, and `image_gen.provider =
+"fal"` without `FAL_KEY` fails naming `image_gen.provider` instead of
+falling over to the gateway. Only a category never configured is detected
+(its vendor's key, else the signed-in portal). A self-hosted gateway is set
+with `[tool_gateway] domain`, `scheme` and per-label `urls.<label>`, its
+user token in the secret `tool_gateway.token_secret` names. A gateway call
+after the subscription lapsed fails with `auth.plan_not_eligible` pointing
+at the portal.
+
+```sh
+prometheus setup --portal          # sign in, make nous the main provider, offer to route every category
+prometheus portal status           # sign-in, plan and per-category routing
+prometheus portal tools --route image_generation --route tts
+prometheus portal open             # the portal's plan page
+```
+
+## Endpoints found from the key
+
+Some providers serve one key on several endpoints. With no
+`providers.<id>.base_url` set:
+
+- `zai`: the first session probes Z.AI's four endpoints (international and
+  mainland, general and coding plan) in parallel with a 1-token request and
+  keeps the highest-priority one that accepts the key. The winner is
+  remembered in `state.db` under a hash of the key (never the key itself),
+  so later sessions do not probe; a key no endpoint accepts is not probed
+  again for 5 minutes and uses the default endpoint meanwhile.
+- `kimi-coding`: a Kimi Code key (`sk-kimi-...`) goes to
+  `https://api.kimi.com/coding` over Anthropic Messages; any other key to
+  Moonshot's default endpoint.
+
+An explicit `base_url` always wins. `prometheus model explain` shows how the
+endpoint was found.
+
+## Per-conversation routing headers and per-model wire formats
+
+`opencode-zen` and `opencode-go` route a conversation to one backend by the
+`x-opencode-session` header. Prometheus sends it on the main and auxiliary
+calls of a conversation, with a stable hash of the root session id (a
+kanban worker uses its task id). Both providers also choose the wire format
+per model: on `opencode-go` MiniMax and Qwen models speak Anthropic
+Messages and the others Chat Completions; on `opencode-zen` Claude models
+speak Anthropic Messages and GPT models Responses. The choice is made again
+on every resume and model switch. A model id ending `-vision` takes images.
+
+## OpenRouter routing preferences
+
+`[provider_routing]` becomes the `provider` object of requests to
+`openrouter` (and only there):
+
+```toml
+[provider_routing]
+sort = "throughput"          # price | throughput | latency
+only = ["anthropic", "google-vertex"]
+data_collection = "deny"
+
+[provider_routing.models."anthropic/claude-sonnet-4.5"]
+sort = "latency"             # replaces the section's sort for this model
+```
+
+Per-model tables match case-insensitively with separators ignored and
+follow the current route, fallback entries, cron jobs and delegated
+children included. A `:nitro` model suffix sorts by throughput and
+`:floor` by price. The `openrouter/pareto-code` router gets
+`plugins = [{id = "pareto-router", min_coding_score = 0.65}]` from
+`openrouter.min_coding_score`; set it to `""` to send no block.
+
+## Fast mode
+
+`/fast [normal|fast|auto|cold|ultrafast|status] [--global]` asks the
+provider's priority tier: OpenAI priority processing (`service_tier =
+"priority"`) or Anthropic fast mode. `fast` and `ultrafast` ask on every
+request, `auto` only within the first `agent.fast_auto_secs` (60) of each
+turn, and `cold` only within that window of a session's first turn.
+`--global` saves the mode as `agent.fast_mode`. A route without such a tier
+(a relay, another provider) is sent unchanged and the session is told once.
+Each ledger row records the `service_tier` it asked for and is priced at
+that tier's rates (twice the standard rates for OpenAI priority, six times
+for Anthropic fast mode) unless the provider reports the cost itself.
+
+## Auxiliary concurrency and request fields
+
+At most `auxiliary.max_concurrency` (8) auxiliary calls of a profile are in
+flight at once across its sessions, and at most `[auxiliary.<task>]
+max_concurrency` of one task; the rest wait. `[auxiliary.<task>]
+extra_body` is merged into that task's request body after the wire
+mapping, for example an OpenRouter routing block for compression only:
+
+```toml
+[auxiliary.compression]
+max_concurrency = 2
+[auxiliary.compression.extra_body.provider]
+sort = "price"
+```
+
+## Local servers from WSL2
+
+Under WSL2's default NAT networking a server listening on Windows (Ollama,
+LM Studio) is not on the Linux loopback. When a local provider's loopback
+endpoint does not answer there, `prometheus doctor` warns
+(`wsl2_loopback`) and the session error's hint suggests enabling mirrored
+networking (`networkingMode=mirrored` in `.wslconfig`) or pointing the
+provider at the Windows host address from the default route.
+
+## Models that train on your data
+
+Meta AI's contributor-tier models (`meta-ai/muse-spark-*-contributor`)
+train on the prompts, files and outputs sent to them. Such a model is never
+selected until its data-use terms are accepted: `prometheus model set` asks
+on a terminal (yes writes `[models."<provider>/<model>"] accept_data_use =
+true`); without a terminal it exits 4 naming the terms and writes nothing.
+Every other way to reach the model (`/model`, the picker, a fallback,
+auxiliary or mixture slot) is refused with `model.data_use_unconfirmed`
+until the terms are accepted.
+
+## Outbound IPv6 and IPv4
+
+Every outbound connection to a dual-stack host tries IPv6 first and IPv4
+250 ms later; whichever answers first is used, so a blackholed IPv6 route
+costs a quarter second, not a timeout. `network.force_ipv4 = true` makes no
+IPv6 attempt at all.

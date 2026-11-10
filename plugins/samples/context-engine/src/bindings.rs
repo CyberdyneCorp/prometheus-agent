@@ -2607,30 +2607,90 @@ pub mod exports {
                 #[doc(hidden)]
                 static __FORCE_SECTION_REF: fn() = super::super::super::super::__link_custom_section_describing_imports;
                 use super::super::super::super::_rt;
-                #[doc(hidden)]
-                #[allow(non_snake_case)]
-                pub unsafe fn _export_should_compress_cabi<T: Guest>(
-                    arg0: i64,
-                    arg1: i64,
-                ) -> i32 {
-                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
-                    let result0 = T::should_compress(arg0 as u64, arg1 as u64);
-                    match result0 {
-                        true => 1,
-                        false => 0,
+                /// A tool the engine offers with the `context_engine` toolset.
+                #[derive(Clone)]
+                pub struct ToolSpec {
+                    pub name: _rt::String,
+                    pub description: _rt::String,
+                    pub parameters: _rt::String,
+                }
+                impl ::core::fmt::Debug for ToolSpec {
+                    fn fmt(
+                        &self,
+                        f: &mut ::core::fmt::Formatter<'_>,
+                    ) -> ::core::fmt::Result {
+                        f.debug_struct("ToolSpec")
+                            .field("name", &self.name)
+                            .field("description", &self.description)
+                            .field("parameters", &self.parameters)
+                            .finish()
                     }
                 }
                 #[doc(hidden)]
                 #[allow(non_snake_case)]
-                pub unsafe fn _export_compress_cabi<T: Guest>(
+                pub unsafe fn _export_initialize_cabi<T: Guest>(
                     arg0: *mut u8,
                     arg1: usize,
-                    arg2: i64,
+                    arg2: *mut u8,
+                    arg3: usize,
                 ) -> *mut u8 {
                     #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
                     let len0 = arg1;
                     let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
-                    let result1 = T::compress(_rt::string_lift(bytes0), arg2 as u64);
+                    let len1 = arg3;
+                    let bytes1 = _rt::Vec::from_raw_parts(arg2.cast(), len1, len1);
+                    let result2 = T::initialize(
+                        _rt::string_lift(bytes0),
+                        _rt::string_lift(bytes1),
+                    );
+                    let ptr3 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result2 {
+                        Ok(_) => {
+                            *ptr3.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr3.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec4 = (e.into_bytes()).into_boxed_slice();
+                            let ptr4 = vec4.as_ptr().cast::<u8>();
+                            let len4 = vec4.len();
+                            ::core::mem::forget(vec4);
+                            *ptr3
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len4;
+                            *ptr3
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr4.cast_mut();
+                        }
+                    };
+                    ptr3
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_initialize<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_compact_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let result1 = T::compact(_rt::string_lift(bytes0));
                     let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
                     match result1 {
                         Ok(e) => {
@@ -2664,7 +2724,313 @@ pub mod exports {
                 }
                 #[doc(hidden)]
                 #[allow(non_snake_case)]
-                pub unsafe fn __post_return_compress<T: Guest>(arg0: *mut u8) {
+                pub unsafe fn __post_return_compact<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                        _ => {
+                            let l3 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l4 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l3, l4, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_select_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let result1 = T::select(_rt::string_lift(bytes0), arg2 as u64);
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(e) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                            match e {
+                                Some(e) => {
+                                    *ptr2
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (1i32) as u8;
+                                    let vec4 = e;
+                                    let len4 = vec4.len();
+                                    let layout4 = _rt::alloc::Layout::from_size_align_unchecked(
+                                        vec4.len() * (2 * ::core::mem::size_of::<*const u8>()),
+                                        ::core::mem::size_of::<*const u8>(),
+                                    );
+                                    let result4 = if layout4.size() != 0 {
+                                        let ptr = _rt::alloc::alloc(layout4).cast::<u8>();
+                                        if ptr.is_null() {
+                                            _rt::alloc::handle_alloc_error(layout4);
+                                        }
+                                        ptr
+                                    } else {
+                                        ::core::ptr::null_mut()
+                                    };
+                                    for (i, e) in vec4.into_iter().enumerate() {
+                                        let base = result4
+                                            .add(i * (2 * ::core::mem::size_of::<*const u8>()));
+                                        {
+                                            let vec3 = (e.into_bytes()).into_boxed_slice();
+                                            let ptr3 = vec3.as_ptr().cast::<u8>();
+                                            let len3 = vec3.len();
+                                            ::core::mem::forget(vec3);
+                                            *base
+                                                .add(::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>() = len3;
+                                            *base.add(0).cast::<*mut u8>() = ptr3.cast_mut();
+                                        }
+                                    }
+                                    *ptr2
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len4;
+                                    *ptr2
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = result4;
+                                }
+                                None => {
+                                    *ptr2
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (0i32) as u8;
+                                }
+                            };
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec5 = (e.into_bytes()).into_boxed_slice();
+                            let ptr5 = vec5.as_ptr().cast::<u8>();
+                            let len5 = vec5.len();
+                            ::core::mem::forget(vec5);
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len5;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr5.cast_mut();
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_select<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {
+                            let l1 = i32::from(
+                                *arg0.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                            );
+                            match l1 {
+                                0 => {}
+                                _ => {
+                                    let l2 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l3 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    let base6 = l2;
+                                    let len6 = l3;
+                                    for i in 0..len6 {
+                                        let base = base6
+                                            .add(i * (2 * ::core::mem::size_of::<*const u8>()));
+                                        {
+                                            let l4 = *base.add(0).cast::<*mut u8>();
+                                            let l5 = *base
+                                                .add(::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            _rt::cabi_dealloc(l4, l5, 1);
+                                        }
+                                    }
+                                    _rt::cabi_dealloc(
+                                        base6,
+                                        len6 * (2 * ::core::mem::size_of::<*const u8>()),
+                                        ::core::mem::size_of::<*const u8>(),
+                                    );
+                                }
+                            }
+                        }
+                        _ => {
+                            let l7 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l8 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l7, l8, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_tool_schemas_cabi<T: Guest>() -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let result0 = T::tool_schemas();
+                    let ptr1 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    let vec6 = result0;
+                    let len6 = vec6.len();
+                    let layout6 = _rt::alloc::Layout::from_size_align_unchecked(
+                        vec6.len() * (6 * ::core::mem::size_of::<*const u8>()),
+                        ::core::mem::size_of::<*const u8>(),
+                    );
+                    let result6 = if layout6.size() != 0 {
+                        let ptr = _rt::alloc::alloc(layout6).cast::<u8>();
+                        if ptr.is_null() {
+                            _rt::alloc::handle_alloc_error(layout6);
+                        }
+                        ptr
+                    } else {
+                        ::core::ptr::null_mut()
+                    };
+                    for (i, e) in vec6.into_iter().enumerate() {
+                        let base = result6
+                            .add(i * (6 * ::core::mem::size_of::<*const u8>()));
+                        {
+                            let ToolSpec {
+                                name: name2,
+                                description: description2,
+                                parameters: parameters2,
+                            } = e;
+                            let vec3 = (name2.into_bytes()).into_boxed_slice();
+                            let ptr3 = vec3.as_ptr().cast::<u8>();
+                            let len3 = vec3.len();
+                            ::core::mem::forget(vec3);
+                            *base
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len3;
+                            *base.add(0).cast::<*mut u8>() = ptr3.cast_mut();
+                            let vec4 = (description2.into_bytes()).into_boxed_slice();
+                            let ptr4 = vec4.as_ptr().cast::<u8>();
+                            let len4 = vec4.len();
+                            ::core::mem::forget(vec4);
+                            *base
+                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len4;
+                            *base
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr4.cast_mut();
+                            let vec5 = (parameters2.into_bytes()).into_boxed_slice();
+                            let ptr5 = vec5.as_ptr().cast::<u8>();
+                            let len5 = vec5.len();
+                            ::core::mem::forget(vec5);
+                            *base
+                                .add(5 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len5;
+                            *base
+                                .add(4 * ::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr5.cast_mut();
+                        }
+                    }
+                    *ptr1.add(::core::mem::size_of::<*const u8>()).cast::<usize>() = len6;
+                    *ptr1.add(0).cast::<*mut u8>() = result6;
+                    ptr1
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_tool_schemas<T: Guest>(arg0: *mut u8) {
+                    let l0 = *arg0.add(0).cast::<*mut u8>();
+                    let l1 = *arg0
+                        .add(::core::mem::size_of::<*const u8>())
+                        .cast::<usize>();
+                    let base8 = l0;
+                    let len8 = l1;
+                    for i in 0..len8 {
+                        let base = base8
+                            .add(i * (6 * ::core::mem::size_of::<*const u8>()));
+                        {
+                            let l2 = *base.add(0).cast::<*mut u8>();
+                            let l3 = *base
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l2, l3, 1);
+                            let l4 = *base
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l5 = *base
+                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l4, l5, 1);
+                            let l6 = *base
+                                .add(4 * ::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l7 = *base
+                                .add(5 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l6, l7, 1);
+                        }
+                    }
+                    _rt::cabi_dealloc(
+                        base8,
+                        len8 * (6 * ::core::mem::size_of::<*const u8>()),
+                        ::core::mem::size_of::<*const u8>(),
+                    );
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_handle_tool_call_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: *mut u8,
+                    arg3: usize,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let len1 = arg3;
+                    let bytes1 = _rt::Vec::from_raw_parts(arg2.cast(), len1, len1);
+                    let result2 = T::handle_tool_call(
+                        _rt::string_lift(bytes0),
+                        _rt::string_lift(bytes1),
+                    );
+                    let ptr3 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result2 {
+                        Ok(e) => {
+                            *ptr3.add(0).cast::<u8>() = (0i32) as u8;
+                            let vec4 = (e.into_bytes()).into_boxed_slice();
+                            let ptr4 = vec4.as_ptr().cast::<u8>();
+                            let len4 = vec4.len();
+                            ::core::mem::forget(vec4);
+                            *ptr3
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len4;
+                            *ptr3
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr4.cast_mut();
+                        }
+                        Err(e) => {
+                            *ptr3.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec5 = (e.into_bytes()).into_boxed_slice();
+                            let ptr5 = vec5.as_ptr().cast::<u8>();
+                            let len5 = vec5.len();
+                            ::core::mem::forget(vec5);
+                            *ptr3
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len5;
+                            *ptr3
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr5.cast_mut();
+                        }
+                    };
+                    ptr3
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_handle_tool_call<T: Guest>(arg0: *mut u8) {
                     let l0 = i32::from(*arg0.add(0).cast::<u8>());
                     match l0 {
                         0 => {
@@ -2688,31 +3054,73 @@ pub mod exports {
                     }
                 }
                 pub trait Guest {
-                    fn should_compress(prompt_tokens: u64, context_window: u64) -> bool;
-                    /// Returns the compressed transcript (JSON list of messages).
-                    fn compress(
+                    fn initialize(
+                        session_id: _rt::String,
+                        profile: _rt::String,
+                    ) -> Result<(), _rt::String>;
+                    /// The compacted transcript as a JSON list whose items are either
+                    /// `{"keep": "<message id>"}` or a new `{"role", "content"}` row.
+                    fn compact(
+                        messages: _rt::String,
+                    ) -> Result<_rt::String, _rt::String>;
+                    /// The ids of the messages the next request sends; `none` sends all.
+                    fn select(
                         messages: _rt::String,
                         budget_tokens: u64,
+                    ) -> Result<Option<_rt::Vec<_rt::String>>, _rt::String>;
+                    fn tool_schemas() -> _rt::Vec<ToolSpec>;
+                    fn handle_tool_call(
+                        name: _rt::String,
+                        arguments: _rt::String,
                     ) -> Result<_rt::String, _rt::String>;
                 }
                 #[doc(hidden)]
                 macro_rules! __export_prometheus_context_engine_plugin_1_0_0_cabi {
                     ($ty:ident with_types_in $($path_to_types:tt)*) => {
                         const _ : () = { #[unsafe (export_name =
-                        "prometheus:context-engine/plugin@1.0.0#should-compress")] unsafe
-                        extern "C" fn export_should_compress(arg0 : i64, arg1 : i64,) ->
-                        i32 { unsafe { $($path_to_types)*::
-                        _export_should_compress_cabi::<$ty > (arg0, arg1) } } #[unsafe
+                        "prometheus:context-engine/plugin@1.0.0#initialize")] unsafe
+                        extern "C" fn export_initialize(arg0 : * mut u8, arg1 : usize,
+                        arg2 : * mut u8, arg3 : usize,) -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_initialize_cabi::<$ty > (arg0, arg1,
+                        arg2, arg3) } } #[unsafe (export_name =
+                        "cabi_post_prometheus:context-engine/plugin@1.0.0#initialize")]
+                        unsafe extern "C" fn _post_return_initialize(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*:: __post_return_initialize::<$ty >
+                        (arg0) } } #[unsafe (export_name =
+                        "prometheus:context-engine/plugin@1.0.0#compact")] unsafe extern
+                        "C" fn export_compact(arg0 : * mut u8, arg1 : usize,) -> * mut u8
+                        { unsafe { $($path_to_types)*:: _export_compact_cabi::<$ty >
+                        (arg0, arg1) } } #[unsafe (export_name =
+                        "cabi_post_prometheus:context-engine/plugin@1.0.0#compact")]
+                        unsafe extern "C" fn _post_return_compact(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*:: __post_return_compact::<$ty >
+                        (arg0) } } #[unsafe (export_name =
+                        "prometheus:context-engine/plugin@1.0.0#select")] unsafe extern
+                        "C" fn export_select(arg0 : * mut u8, arg1 : usize, arg2 : i64,)
+                        -> * mut u8 { unsafe { $($path_to_types)*::
+                        _export_select_cabi::<$ty > (arg0, arg1, arg2) } } #[unsafe
                         (export_name =
-                        "prometheus:context-engine/plugin@1.0.0#compress")] unsafe extern
-                        "C" fn export_compress(arg0 : * mut u8, arg1 : usize, arg2 :
-                        i64,) -> * mut u8 { unsafe { $($path_to_types)*::
-                        _export_compress_cabi::<$ty > (arg0, arg1, arg2) } } #[unsafe
-                        (export_name =
-                        "cabi_post_prometheus:context-engine/plugin@1.0.0#compress")]
-                        unsafe extern "C" fn _post_return_compress(arg0 : * mut u8,) {
-                        unsafe { $($path_to_types)*:: __post_return_compress::<$ty >
-                        (arg0) } } };
+                        "cabi_post_prometheus:context-engine/plugin@1.0.0#select")]
+                        unsafe extern "C" fn _post_return_select(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*:: __post_return_select::<$ty > (arg0)
+                        } } #[unsafe (export_name =
+                        "prometheus:context-engine/plugin@1.0.0#tool-schemas")] unsafe
+                        extern "C" fn export_tool_schemas() -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_tool_schemas_cabi::<$ty > () } }
+                        #[unsafe (export_name =
+                        "cabi_post_prometheus:context-engine/plugin@1.0.0#tool-schemas")]
+                        unsafe extern "C" fn _post_return_tool_schemas(arg0 : * mut u8,)
+                        { unsafe { $($path_to_types)*:: __post_return_tool_schemas::<$ty
+                        > (arg0) } } #[unsafe (export_name =
+                        "prometheus:context-engine/plugin@1.0.0#handle-tool-call")]
+                        unsafe extern "C" fn export_handle_tool_call(arg0 : * mut u8,
+                        arg1 : usize, arg2 : * mut u8, arg3 : usize,) -> * mut u8 {
+                        unsafe { $($path_to_types)*:: _export_handle_tool_call_cabi::<$ty
+                        > (arg0, arg1, arg2, arg3) } } #[unsafe (export_name =
+                        "cabi_post_prometheus:context-engine/plugin@1.0.0#handle-tool-call")]
+                        unsafe extern "C" fn _post_return_handle_tool_call(arg0 : * mut
+                        u8,) { unsafe { $($path_to_types)*::
+                        __post_return_handle_tool_call::<$ty > (arg0) } } };
                     };
                 }
                 #[doc(hidden)]
@@ -2722,10 +3130,10 @@ pub mod exports {
                 struct _RetArea(
                     [::core::mem::MaybeUninit<
                         u8,
-                    >; 3 * ::core::mem::size_of::<*const u8>()],
+                    >; 4 * ::core::mem::size_of::<*const u8>()],
                 );
                 static mut _RET_AREA: _RetArea = _RetArea(
-                    [::core::mem::MaybeUninit::uninit(); 3
+                    [::core::mem::MaybeUninit::uninit(); 4
                         * ::core::mem::size_of::<*const u8>()],
                 );
             }
@@ -2861,8 +3269,8 @@ pub(crate) use __export_context_engine_impl as export;
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 1700] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\x9f\x0c\x01A\x02\x01\
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 1844] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xaf\x0d\x01A\x02\x01\
 A\x17\x01B\x04\x01m\x05\x05trace\x05debug\x04info\x04warn\x05error\x04\0\x05leve\
 l\x03\0\0\x01@\x02\x05level\x01\x07messages\x01\0\x04\0\x03log\x01\x02\x03\0\x19\
 prometheus:host/log@1.0.0\x05\0\x01B\x02\x01q\x03\x06denied\x01s\0\x07invalid\x01\
@@ -2896,12 +3304,15 @@ keys\0\x03\x04\0\x03get\x01\x04\x01j\0\x01\x01\x01@\x02\x03keys\x05values\0\x05\
 \0\x03set\x01\x06\x03\0\x1cprometheus:host/config@1.0.0\x05\x09\x01B\x05\x01ks\x01\
 r\x04\x0asession-id\0\x07profiles\x07surfaces\x03cwd\0\x04\0\x04info\x03\0\x01\x01\
 @\0\0\x02\x04\0\x07current\x01\x03\x03\0\x1dprometheus:host/session@1.0.0\x05\x0a\
-\x01B\x05\x01@\x02\x0dprompt-tokensw\x0econtext-windoww\0\x7f\x04\0\x0fshould-co\
-mpress\x01\0\x01j\x01s\x01s\x01@\x02\x08messagess\x0dbudget-tokensw\0\x01\x04\0\x08\
-compress\x01\x02\x04\0&prometheus:context-engine/plugin@1.0.0\x05\x0b\x04\0.prom\
-etheus:context-engine/context-engine@1.0.0\x04\0\x0b\x14\x01\0\x0econtext-engine\
-\x03\0\0\0G\x09producers\x01\x0cprocessed-by\x02\x0dwit-component\x070.227.1\x10\
-wit-bindgen-rust\x060.41.0";
+\x01B\x12\x01r\x03\x04names\x0bdescriptions\x0aparameterss\x04\0\x09tool-spec\x03\
+\0\0\x01j\0\x01s\x01@\x02\x0asession-ids\x07profiles\0\x02\x04\0\x0ainitialize\x01\
+\x03\x01j\x01s\x01s\x01@\x01\x08messagess\0\x04\x04\0\x07compact\x01\x05\x01ps\x01\
+k\x06\x01j\x01\x07\x01s\x01@\x02\x08messagess\x0dbudget-tokensw\0\x08\x04\0\x06s\
+elect\x01\x09\x01p\x01\x01@\0\0\x0a\x04\0\x0ctool-schemas\x01\x0b\x01@\x02\x04na\
+mes\x09argumentss\0\x04\x04\0\x10handle-tool-call\x01\x0c\x04\0&prometheus:conte\
+xt-engine/plugin@1.0.0\x05\x0b\x04\0.prometheus:context-engine/context-engine@1.\
+0.0\x04\0\x0b\x14\x01\0\x0econtext-engine\x03\0\0\0G\x09producers\x01\x0cprocess\
+ed-by\x02\x0dwit-component\x070.227.1\x10wit-bindgen-rust\x060.41.0";
 #[inline(never)]
 #[doc(hidden)]
 pub fn __link_custom_section_describing_imports() {

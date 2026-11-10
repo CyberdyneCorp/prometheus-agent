@@ -1,0 +1,12 @@
+[[rule]]
+step = 0
+[[rule.tool_calls]]
+name = "read_file"
+arguments = { path = "README.md" }
+[[rule.tool_calls]]
+name = "search_files"
+arguments = { pattern = "Total" }
+
+[[rule]]
+step = 1
+text = "The ledger totals 85.15."

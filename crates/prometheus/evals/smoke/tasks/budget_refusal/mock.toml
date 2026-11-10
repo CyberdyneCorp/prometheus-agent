@@ -1,0 +1,9 @@
+[[rule]]
+step = 0
+[[rule.tool_calls]]
+name = "read_file"
+arguments = { path = "README.md" }
+
+[[rule]]
+repeat = true
+text = "Done."

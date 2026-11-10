@@ -25,6 +25,12 @@ Every key `<PROMETHEUS_HOME>/daemon.toml` accepts: machine-wide settings shared 
 | `gateway.relay.token_secret` | string | `"PMT_RELAY_TOKEN"` | a secret name | `restart` | The secret holding the gateway credential `prometheus gateway enroll` obtained (never the value). |
 | `gateway.relay.url` | string | unset | any | `restart` | The connector's WebSocket URL (`wss://`; `ws://` only to a loopback host). Unset: no relay. |
 | `gateway.relay.wake_url` | string | unset | any | `restart` | An `https://` URL the connector calls to wake a scaled-to-zero host. |
+| `local_runtime.backend` | one of "auto", "cuda", "metal", "vulkan", "hip", "cpu" | `"auto"` | `"auto"`, `"cuda"`, `"metal"`, `"vulkan"`, `"hip"`, `"cpu"` | `restart` | The engine build: `auto` picks one from the probed hardware. |
+| `local_runtime.detect_ports` | array of integer | `[]` | any | `restart` | Ports probed for a user-run llama-server besides 8080. |
+| `local_runtime.enabled` | boolean | `false` | any | `restart` | Let Prometheus start and supervise a `llama-server` when a session needs one. `false` (the default) only detects a running server. |
+| `local_runtime.idle_unload_secs` | integer | `900` | ≥ 0 | `restart` | Seconds without a request after which a resident model is unloaded (it is reloaded by the next request). |
+| `local_runtime.models_max` | integer | `4` | 1 to 16 | `restart` | Models kept resident at once. |
+| `local_runtime.port` | integer | `0` | 0 to 65535 | `restart` | Loopback port of the managed server; `0` picks a free one at start. |
 | `process.nofile_soft_limit` | integer | `4096` | ≥ 0 | `restart` | Open-file soft limit every process raises itself to at startup on POSIX hosts, capped by the hard limit and never lowering a higher limit; children inherit it. `0` disables the raise. |
 | `runtimes.allow_lazy_install` | boolean | `true` | any | `restart` | Install a missing pinned runtime the first time a tool needs it (asking first on an interactive terminal). `false` makes the tool fail with a `prometheus runtimes install <name>` hint instead. |
 | `runtimes.exclude` | array of string | `[]` | any | `restart` | Runtimes nothing may install: not lazily, not `prometheus runtimes install`, not the pin refresh after an update. `install.sh --without <name>` records names here. |

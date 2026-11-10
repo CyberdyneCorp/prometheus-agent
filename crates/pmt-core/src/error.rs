@@ -359,6 +359,15 @@ error_codes! {
     /// A rewind target is missing or not a user message.
     STORE_REWIND_TARGET_INVALID = ("store.rewind_target_invalid", InvalidInput,
         "Rewind targets an active user message of the session; the given message is missing, inactive or not a user message.");
+    /// `sessions import` found ids the profile already has.
+    IMPORT_ID_COLLISION = ("import.id_collision", Conflict,
+        "A session, message or usage id of the import file already exists in this profile; nothing was imported. Rerun with `--remap-ids` to import under new ids.");
+    /// `sessions import` read a file that is not a valid export.
+    IMPORT_INVALID = ("import.invalid", InvalidInput,
+        "The import file is not a valid `prometheus.sessions` version 1 export (or a record in it is malformed); nothing was imported.");
+    /// `sessions import` read a file over the import bounds.
+    IMPORT_TOO_LARGE = ("import.too_large", InvalidInput,
+        "The import file holds more than 500 sessions, 50000 messages or 256 MiB; nothing was imported. Export fewer sessions per file.");
     /// The fork point is not an active message of the session.
     STORE_FORK_TARGET_INVALID = ("store.fork_target_invalid", InvalidInput,
         "`session.fork` names an `at_message_id` that is not an active message of the forked session.");
@@ -434,6 +443,15 @@ error_codes! {
     /// A steer message without text.
     TURN_EMPTY_STEER = ("turn.empty_steer", Usage,
         "A steer message needs text; empty or whitespace-only steers are rejected.");
+    /// A turn the process stopped during was closed instead of resumed.
+    TURN_CRASHED = ("turn.crashed", Internal,
+        "The process stopped while this turn ran; set `agent.resume_on_crash` to `auto` or `ask` to continue such turns from their journal.");
+    /// A `/pin` would make pinned content exceed its budget.
+    COMPRESSION_PIN_LIMIT = ("compression.pin_limit", Usage,
+        "Pinned messages are copied into every compaction summary; unpin one with `/unpin <message-id>` or raise `compression.pinned_max_tokens`.");
+    /// `/pin` or `/unpin` named no message of the session.
+    COMPRESSION_PIN_UNKNOWN = ("compression.pin_unknown", NotFound,
+        "`/pin` takes `last` or the id (or a unique id prefix) of a user or assistant message of this session; `/unpin` takes a pinned one.");
     /// An unknown personality name.
     PERSONALITY_UNKNOWN = ("personality.unknown", Usage,
         "`agent.personality` and `/personality` take `none`, a built-in personality or a key of `[agent.personalities]`.");
@@ -536,6 +554,9 @@ error_codes! {
     /// A local-server provider has no endpoint.
     PROVIDER_MISSING_BASE_URL = ("provider.missing_base_url", Config,
         "A provider that needs an endpoint (local servers, `custom`) has no `providers.<id>.base_url` and its default loopback endpoint, if any, does not answer; the request is never sent to another provider.");
+    /// A `llamacpp` route found no reachable local model server.
+    PROVIDER_LOCAL_RUNTIME_DOWN = ("provider.local_runtime_down", Unavailable,
+        "A `llamacpp` route without `base_url` found no llama-server (none detected, none recorded, and the managed runtime is off or not installed); the request is never sent to another provider.");
     /// No credential may be sent to the provider's host.
     PROVIDER_MISSING_CREDENTIAL = ("provider.missing_credential", Auth,
         "The provider needs a credential but none is stored whose bound hosts (`key_hosts`) include the request's host; store one with `prometheus secrets set <NAME>`.");
@@ -560,9 +581,34 @@ error_codes! {
     /// The model's context window is below `model.min_context_window`.
     MODEL_CONTEXT_TOO_SMALL = ("model.context_too_small", Config,
         "The resolved model's context window is below `model.min_context_window`; if the window is larger, set `[models.\"<provider>/<model>\"] context_window`.");
+    /// A model that trains on prompts was selected without accepting its
+    /// data-use terms.
+    MODEL_DATA_USE_UNCONFIRMED = ("model.data_use_unconfirmed", PermissionDenied,
+        "The model trains on the prompts and outputs sent to it (Meta AI contributor-tier models) and its data-use terms were not accepted: confirm on a terminal, or set `[models.\"<provider>/<model>\"] accept_data_use = true`; nothing was selected or written (`prometheus model set` exits 4).");
+    /// The model is retired.
+    MODEL_RETIRED = ("model.retired", Config,
+        "The model is marked `retired` in the model catalog's retirement table, so no new session may start on it; the message names its replacement. `prometheus config fix-models --apply` rewrites every config key and cron job pin that names it.");
+    /// A provider's spend cap is reached.
+    PROVIDER_BUDGET_EXHAUSTED = ("provider.budget_exhausted", BudgetExceeded,
+        "The provider's `providers.<id>.daily_budget_usd` or `monthly_budget_usd` is used up in the profile's usage ledger, so no request was sent to it; the fallback chain applies, and the cap frees at the start of the next day or month.");
+    /// The agent CLI an `external_process` provider drives is not installed.
+    PROVIDER_EXTERNAL_CLI_MISSING = ("provider.external_cli_missing", Unavailable,
+        "A provider with `auth = \"external_process\"` drives an installed agent CLI (`providers.<id>.command`), and the executable lookup did not find it; install it or set the command to its full path.");
+    /// A move from a subscription to a metered credential was not confirmed.
+    PROVIDER_METERED_FALLBACK_REFUSED = ("provider.metered_fallback_refused", Auth,
+        "`providers.<id>.confirm_metered_fallback = true` and the fallback would move the session from a subscription to a pay-per-token credential, which the user declined or which a non-interactive run cannot confirm; the turn failed instead.");
     /// The provider's wire format is implemented by a plugin that is not installed.
     PROVIDER_PLUGIN_UNAVAILABLE = ("provider.plugin_unavailable", Config,
-        "The provider speaks a wire format that only a provider plugin implements (`gemini_native`, `bedrock_converse`, bridged plugins such as `github-copilot`) or is a virtual provider of a capability this build does not include (`moa`); the message names what is missing.");
+        "The provider speaks a wire format that only a provider plugin that is not installed implements (bridged plugins such as `github-copilot` and `solstice`) or is a virtual provider of a capability this build does not include; the message names what is missing.");
+    /// A virtual provider was asked for a model it does not have.
+    MODEL_UNKNOWN = ("model.unknown", Config,
+        "The provider has no model of that name: for the Mixture of Agents provider `moa`, the name is not a configured preset (`[moa.presets.<name>]` or the built-in `default`); the message lists the preset names.");
+    /// `moa delete` named the profile's default preset.
+    MOA_DEFAULT_PRESET_PROTECTED = ("moa.default_preset_protected", Tool,
+        "`prometheus moa delete` named the preset `moa.default_preset` selects; set another default first (`prometheus config set moa.default_preset <name>`). Exit 1.");
+    /// `moa delete` named no configured preset.
+    MOA_PRESET_NOT_FOUND = ("moa.preset_not_found", NotFound,
+        "No `[moa.presets.<name>]` of that name is configured (the built-in `default` preset cannot be deleted, only redefined); `prometheus moa list` shows the presets.");
     /// No model, provider or launch endpoint is configured.
     MODEL_NOT_CONFIGURED = ("model.not_configured", Config,
         "The profile names no model and no provider, and no `--model`, `--provider` or `--base-url` was given, so a chat has nothing to talk to. Run `prometheus setup model` (or `prometheus model`).");
@@ -635,6 +681,15 @@ error_codes! {
     /// A local inference server answered unexpectedly.
     LOCAL_SERVER_PROBE = ("local.server_probe", Unavailable,
         "A local inference server (LM Studio, Ollama, llama.cpp, vLLM, SGLang) did not serve a model listing at the given root or at `<root>/v1`.");
+    /// A local model or download job does not exist.
+    LOCAL_NOT_FOUND = ("local.not_found", NotFound,
+        "No model of the local library, catalog entry or download job has this name; `prometheus local catalog` and `prometheus local jobs` list them.");
+    /// Another process is running this local-models download job.
+    LOCAL_BUSY = ("local.busy", Conflict,
+        "Another Prometheus process is downloading this job; wait for it, or pause it there.");
+    /// A local-models download does not match its pinned size or SHA-256.
+    LOCAL_DIGEST_MISMATCH = ("local.digest_mismatch", Io,
+        "An engine archive or model file differs from its pinned size or SHA-256; the file was deleted and nothing was installed.");
     /// The mock provider's script cannot be read.
     MOCK_SCRIPT_MISSING = ("mock.script_missing", NotFound,
         "The script of the built-in `mock` provider (`--mock-script` or `providers.mock.script`) does not exist or cannot be read.");
@@ -815,6 +870,21 @@ error_codes! {
     /// The demo could not write its directory.
     DEMO_IO = ("demo.io", Io,
         "`prometheus demo` could not create its directory, home, ledger repository or mock script.");
+    /// A recording's members do not match its manifest.
+    REPLAY_INTEGRITY = ("replay.integrity", InvalidInput,
+        "A member of the `.pmtrec` recording is missing, unlisted or no longer matches the sha256 its manifest records (the message names it); the recording was changed after export and is not replayed.");
+    /// A recording cannot be read.
+    REPLAY_MALFORMED = ("replay.malformed", InvalidInput,
+        "The file is not a `.pmtrec` recording this build reads: not a zstd-compressed tar, no `manifest.json`, a newer `format_version`, or a member that does not parse.");
+    /// A session has no recording to export or replay.
+    REPLAY_NOT_RECORDED = ("replay.not_recorded", NotFound,
+        "The session has no recording under `<profile>/recordings/` (it ran with `observability.trajectories.enabled = false`, before recordings existed, or retention removed it), so it cannot be exported or replayed.");
+    /// A replay met a call its recording does not have.
+    REPLAY_DIVERGED = ("replay.diverged", Conflict,
+        "During a replay a model request or tool call differed from the recording at the same step; the report names the step and shows a diff. Rerun with `--on-divergence continue` to fall through to the live provider and tools.");
+    /// A recording could not be written or read from disk.
+    REPLAY_IO = ("replay.io", Io,
+        "A `.pmtrec` recording or a replay's output directory could not be written or read.");
     /// A runtime name is not in the pinned runtime index.
     RUNTIME_UNKNOWN = ("runtime.unknown", Usage,
         "The name is not a runtime of this build's pinned runtime index; `prometheus runtimes list` shows the pinned names.");
@@ -920,9 +990,6 @@ error_codes! {
     /// A job create or edit was not confirmed.
     CRON_CONFIRMATION = ("cron.confirmation", PermissionDenied,
         "Saving a job (or a changed schedule) needs a confirmation: answer `y` on a terminal or pass `--yes`; the command exits 4 and nothing was saved.");
-    /// Deterministic replay of a run is not available.
-    CRON_REPLAY_UNAVAILABLE = ("cron.replay_unavailable", Unavailable,
-        "Replaying a run against its recorded model responses needs the model-call cache and the replay provider, which this build does not have yet; `prometheus cron replay <run> --live` re-runs the recorded inputs against the current provider instead.");
     /// A lifecycle operation does not apply to the job.
     CRON_INVALID_STATE = ("cron.invalid_state", InvalidInput,
         "The operation does not apply in the job's state (for example resuming a one-shot job whose time has passed); the message says how to change it.");

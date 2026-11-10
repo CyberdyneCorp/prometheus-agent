@@ -31,6 +31,8 @@ pub enum Rebuild {
     Compaction,
     /// The user applied a deferred change now (`personality --now`...).
     Now(String),
+    /// `prometheus sessions refresh-prompts` marked the session.
+    Refresh,
 }
 
 impl Rebuild {
@@ -43,6 +45,7 @@ impl Rebuild {
             Self::ModelChanged => "model_changed".to_owned(),
             Self::Compaction => "compaction".to_owned(),
             Self::Now(what) => format!("{what} --now"),
+            Self::Refresh => "refresh-prompts".to_owned(),
         }
     }
 }
@@ -103,6 +106,9 @@ pub fn stored(
             Rebuild::NewSession
         }));
     };
+    if store.prompt_refresh_pending(session)? {
+        return Ok(Err(Rebuild::Refresh));
+    }
     if prompt.provider.as_deref() != Some(provider) || prompt.model.as_deref() != Some(model) {
         return Ok(Err(Rebuild::ModelChanged));
     }

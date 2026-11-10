@@ -32,7 +32,13 @@ async fn a_mid_session_write_keeps_the_prompt_and_compaction_picks_it_up() {
     add(&profile.memory(session), "memory", "Repo uses just.").await;
     let model = mock_model(&profile, ADD_SCRIPT).await;
     let run = agent(&profile, session, model.clone());
-    run.turn(&profile, "hello there, how are you").await;
+    // The host only commits a compaction smaller than its input, so the
+    // summarized exchanges must outweigh the summary that replaces them.
+    let opening = format!(
+        "hello there, how are you? {}",
+        "Some background on the project we are working on today. ".repeat(24)
+    );
+    run.turn(&profile, &opening).await;
     let hash = profile
         .store
         .session_prompt(session)
@@ -89,12 +95,18 @@ async fn memory_reload_now_rebuilds_with_reason_memory_now() {
     let run = agent(&profile, session, model.clone());
     run.turn(&profile, "first question here").await;
     add(&run.memory, "user", "Likes tea.").await;
-    let reply =
-        pmt_memory::slash::run(&profile.store, &profile.scope.config().memory, "reload").unwrap();
+    let reply = pmt_memory::slash::run(
+        &profile.store,
+        &profile.scope.config().memory,
+        None,
+        "reload",
+    )
+    .unwrap();
     assert!(!reply.rebuild_now && reply.text.contains("next session"));
     let reply = pmt_memory::slash::run(
         &profile.store,
         &profile.scope.config().memory,
+        None,
         "reload --now",
     )
     .unwrap();

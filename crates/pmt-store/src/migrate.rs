@@ -197,6 +197,48 @@ pub(crate) const MIGRATIONS: &[Migration] = &[
         sql: include_str!("schema/v27.sql"),
         rebuilds_tables: false,
     },
+    Migration {
+        version: 28,
+        min_read_version: 23,
+        sql: include_str!("schema/v28.sql"),
+        rebuilds_tables: false,
+    },
+    Migration {
+        version: 29,
+        min_read_version: 23,
+        sql: include_str!("schema/v29.sql"),
+        rebuilds_tables: false,
+    },
+    Migration {
+        version: 30,
+        min_read_version: 23,
+        sql: include_str!("schema/v30.sql"),
+        rebuilds_tables: false,
+    },
+    Migration {
+        version: 31,
+        min_read_version: 23,
+        sql: include_str!("schema/v31.sql"),
+        rebuilds_tables: false,
+    },
+    Migration {
+        version: 32,
+        min_read_version: 23,
+        sql: include_str!("schema/v32.sql"),
+        rebuilds_tables: false,
+    },
+    Migration {
+        version: 33,
+        min_read_version: 23,
+        sql: include_str!("schema/v33.sql"),
+        rebuilds_tables: false,
+    },
+    Migration {
+        version: 34,
+        min_read_version: 23,
+        sql: include_str!("schema/v34.sql"),
+        rebuilds_tables: false,
+    },
 ];
 
 /// Pre-migration copies kept in `<profile>/backups/state/`.

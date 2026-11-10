@@ -12,6 +12,7 @@
 //! (never `model.call`) and ledger rows under `auxiliary.<task>`.
 
 mod call;
+pub mod limits;
 
 use std::time::Duration;
 
@@ -150,6 +151,10 @@ pub struct AuxRoute {
     /// Same-route retries of a retryable failure
     /// (`auxiliary.transient_retries`).
     pub retries: u32,
+    /// `[auxiliary.<task>] extra_body`, merged into the encoded body.
+    pub extra_body: Option<std::sync::Arc<serde_json::Map<String, serde_json::Value>>>,
+    /// `[auxiliary.<task>] max_concurrency`.
+    pub max_concurrency: Option<u32>,
 }
 
 /// The session state auxiliary routing reads.
@@ -215,6 +220,10 @@ pub async fn resolve(
         source,
         timeout,
         retries: config.transient_retries,
+        extra_body: settings
+            .filter(|s| !s.extra_body.is_empty())
+            .map(|s| std::sync::Arc::new(s.extra_body.clone().into_iter().collect())),
+        max_concurrency: settings.and_then(|s| s.max_concurrency),
     }))
 }
 

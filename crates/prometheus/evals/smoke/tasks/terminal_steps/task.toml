@@ -1,0 +1,3 @@
+# Two terminal commands, the second after the first one"s output.
+prompt = "run both steps"
+files = ["README.md"]

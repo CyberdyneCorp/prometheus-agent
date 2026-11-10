@@ -368,6 +368,10 @@ impl Agents for DaemonHost {
         })
     }
 
+    fn speech(&self, profile: &str) -> Option<Arc<dyn pmt_gateway::messaging::voice::Speech>> {
+        super::speech::of_profile(&self.scope(profile)?)
+    }
+
     fn model_choices(&self, profile: &str) -> Vec<ModelChoice> {
         let Ok(profile) = self.profile(profile) else {
             return Vec::new();

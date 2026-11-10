@@ -50,10 +50,12 @@ impl Factory {
         let (registry, _) = self.session_registry()?;
         let selection = exposed(&registry, &self.scope.config().mcp_server.expose_toolsets)?;
         let inline_shell = Arc::new(skills::DeferredShell::default());
+        // `mcp serve` shows no memory notices: its caller is another agent.
+        let quiet = pmt_memory::notices::Notices::new(pmt_config::schema::MemoryNotifications::Off);
         let skills = Arc::new(SkillsSession::new(self.skills_setup(
             id,
             &selection,
-            &inline_shell,
+            (&inline_shell, &quiet),
             None,
         )));
         let attached = pmt_skills::session::SkillSessions::process()
@@ -72,6 +74,7 @@ impl Factory {
             &skills,
             &super::place::At::open(&self.options.cwd, None),
         )?;
+        super::media::prime(&id.to_string()).await;
         let gate = self.gate(id, None, None)?.gate;
         // No one can answer a prompt: a call that needs approval is denied.
         let mut approvals = self.scope.config().approvals.clone();

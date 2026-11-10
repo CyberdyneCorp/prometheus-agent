@@ -148,6 +148,16 @@ impl TodoList {
         json!({"revision": self.revision, "todos": self.items})
     }
 
+    /// The text of every pending and in-progress item, in list order.
+    #[must_use]
+    pub fn open_items(&self) -> Vec<String> {
+        self.items
+            .iter()
+            .filter(|item| item.status.open())
+            .map(|item| item.content.clone())
+            .collect()
+    }
+
     /// The text re-injected after compaction: pending and in-progress items
     /// plus the parents of open subtasks, in list order; `None` when
     /// nothing is open.

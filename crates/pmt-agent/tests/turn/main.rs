@@ -3,12 +3,20 @@
 
 mod budgets;
 mod cache;
+mod compaction_notices;
+mod compaction_upgrades;
 mod compression;
 mod context;
 mod exits;
+mod fast_mode;
 mod guardrails;
+mod hints;
 mod hooks;
 mod images;
+mod init;
+mod journal;
+mod moa;
+mod prefill;
 mod prompt;
 mod reasoning;
 mod recovery;
@@ -16,4 +24,6 @@ mod references;
 mod session_tools;
 mod size;
 mod steering;
+mod structured;
 mod support;
+mod verify;

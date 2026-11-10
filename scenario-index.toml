@@ -1691,6 +1691,7 @@ capabilities = [
 
 [messaging-gateway."Crash recovery and clean shutdown marker"]
 "Timed-out drain" = ["crates/pmt-gateway/tests/messaging/recovery.rs::a_clean_stop_skips_recovery_and_a_timed_out_drain_does_not", "crates/prometheus/tests/gateway_daemon.rs::a_daemon_killed_mid_turn_recovers_the_conversation"]
+"Automatic crash resume in a chat" = ["crates/prometheus/tests/crash_resume_gateway.rs::under_auto_a_restart_resumes_the_turn_and_the_chat_gets_its_answer_once"]
 
 [messaging-gateway."Stuck-loop suspension"]
 "Third restart suspends" = ["crates/pmt-gateway/tests/messaging/recovery.rs::the_third_restart_during_a_turn_suspends_the_session", "crates/pmt-store/tests/store/gateway.rs::the_third_restart_during_a_turn_suspends_the_session"]
@@ -2089,7 +2090,7 @@ capabilities = [
 "Disabling a plugin hides its skills next session" = ["crates/prometheus/tests/plugins_session.rs::sections_and_skills_join_sessions_started_while_the_plugin_is_enabled"]
 
 [plugin-system."Provider-object plugins fail closed when unregistered"]
-"Missing image provider does not fall back" = { tests = ["crates/pmt-plugins/tests/extensions.rs::missing_provider_does_not_fall_back_and_a_registered_one_answers", "crates/pmt-tools/src/web/select.rs::an_unknown_backend_is_not_installed_and_never_replaced"], note = "the image generation tool is task 49.2; until it lands the scenario is checked on the provider registry every category resolves through, and on the web tools, whose backend selection uses it" }
+"Missing image provider does not fall back" = { tests = ["crates/pmt-media/tests/plugins.rs::names_no_plugin_registered_still_fail_closed", "crates/pmt-media/tests/media.rs::an_unknown_image_provider_fails_closed", "crates/pmt-media/tests/plugins.rs::a_plugin_image_provider_makes_a_stored_media_file_billed_as_reported", "crates/prometheus/tests/python_bridge.rs::bridged_image_and_speech_providers_serve_their_tools_in_a_session", "crates/prometheus/tests/python_bridge.rs::a_bridged_transcription_provider_transcribes_voice_input", "crates/pmt-plugins/tests/extensions.rs::missing_provider_does_not_fall_back_and_a_registered_one_answers", "crates/pmt-tools/src/web/select.rs::an_unknown_backend_is_not_installed_and_never_replaced"], note = "fal is a built-in image provider in this build, so the scenario is checked with a name no plugin registers (image_gen, tts and stt alike); a name a bridged plugin registers serves image_generate, text_to_speech and transcription" }
 
 [plugin-system."Load order, dependencies and deadline"]
 "Cycle refuses only its members" = ["crates/pmt-plugins/src/load/order.rs::cycle_refuses_only_its_members", "crates/pmt-plugins/tests/loading.rs::a_cycle_refuses_only_its_members_and_dependencies_load_first", "crates/pmt-plugins/tests/loading.rs::a_plugin_overrunning_the_load_deadline_is_skipped_and_others_load"]
@@ -2286,7 +2287,7 @@ capabilities = [
 
 # Group 33 (python bridge)
 [python-bridge."Scope of hosted code"]
-"Memory provider runs in a sidecar" = { deferred = "needs the memory.provider contract (44.9)" }
+"Memory provider runs in a sidecar" = ["crates/prometheus/tests/python_bridge.rs::a_hermes_memory_provider_runs_in_a_sidecar"]
 
 [plugin-system."Python plugins route through the bridge"]
 "Hermes plugin is hosted out-of-process" = ["crates/prometheus/tests/python_bridge.rs::a_hermes_tool_plugin_works_unchanged"]
@@ -2832,7 +2833,7 @@ capabilities = [
 
 [scheduled-jobs."Run replay (upgrade)"]
 "Compare against current harness" = ["crates/prometheus/tests/cron_cli.rs::a_live_replay_reruns_the_inputs_and_diffs_the_outputs"]
-"Deterministic replay" = { deferred = "needs the model-call cache and replay provider of group 51 (task 51.2 owns it)" }
+"Deterministic replay" = ["crates/prometheus/tests/cron_cli.rs::a_deterministic_replay_matches_without_a_request_or_a_delivery"]
 
 [scheduled-jobs."Lifecycle operations"]
 "Run-now is synchronous by default" = ["crates/prometheus/tests/cron_cli.rs::run_now_executes_a_paused_job_in_the_foreground_and_keeps_it_paused", "crates/pmt-cron/tests/exec.rs::a_manual_run_of_a_paused_job_keeps_it_paused"]
@@ -2878,7 +2879,7 @@ capabilities = [
 "Laptop wakes before Wi-Fi" = ["crates/pmt-cron/tests/failures.rs::an_unreachable_model_is_re_run_without_a_failure_notice", "crates/prometheus/tests/cron_upgrades.rs::an_unreachable_provider_schedules_a_re_run", "crates/prometheus/src/cron_host/agent.rs::failures_before_the_model_are_classified"]
 
 [scheduled-jobs."Hold through a closed provider usage window"]
-"Sub-hourly job does not alert every tick" = { tests = ["crates/pmt-cron/tests/failures.rs::a_closed_usage_window_holds_the_job_with_one_notice", "crates/prometheus/tests/cron_upgrades.rs::a_benched_provider_holds_a_sub_hourly_job"], note = "the provider's signal is `auth.credentials_benched` (every credential benched until a reset instant, carried as the error's typed `BenchEnd` source) raised before any request with no fallback chain; the scripted test drives the 5-hour schedule" }
+"Sub-hourly job does not alert every tick" = { tests = ["crates/pmt-cron/tests/failures.rs::a_closed_usage_window_holds_the_job_with_one_notice", "crates/prometheus/tests/cron_upgrades.rs::a_benched_provider_holds_a_sub_hourly_job", "crates/prometheus/tests/cron_upgrades.rs::a_pinned_job_is_held_despite_the_profile_fallback_chain"], note = "the provider's signal is `auth.credentials_benched` (every credential benched until a reset instant, carried as the error's typed `BenchEnd` source) raised before any request with no usable fallback chain (none configured, or the job is pinned so the profile chain is not its own); the scripted test drives the 5-hour schedule" }
 
 [scheduled-jobs."Failure incidents with alert-once and acknowledge"]
 "Same error alerts once" = ["crates/pmt-cron/tests/failures.rs::the_same_error_alerts_once"]
@@ -3006,3 +3007,478 @@ capabilities = [
 
 [session-automation."Automation is distinct from kanban and cron"]
 "Goal does not touch the board" = { tests = ["crates/prometheus/tests/automation_line.rs::a_goal_continues_on_the_judges_word_until_it_is_achieved"], note = "kanban boards are M3 (kanban); the test sets and completes a goal and checks the home's kanban directory and the scheduled jobs are unchanged" }
+
+# Group 45 (subscription providers and routing).
+[configuration-and-profiles."Retired model rewrite"]
+"Dry run by default" = ["crates/prometheus/tests/model_retirement.rs::fix_models_is_a_dry_run_by_default", "crates/prometheus/tests/model_retirement.rs::fix_models_apply_rewrites_every_slot_after_a_backup", "crates/prometheus/tests/model_retirement.rs::fix_models_covers_the_cron_default_and_pinned_jobs"]
+
+[model-providers."Plugin OAuth and external-process providers"]
+"Missing external CLI" = ["crates/prometheus/tests/provider_routing_cli.rs::a_session_on_a_missing_agent_cli_names_it", "crates/pmt-providers/tests/providers/external.rs::a_missing_agent_cli_fails_the_route_naming_it", "crates/pmt-providers/tests/providers/external.rs::an_agent_cli_answers_over_acp_with_its_own_sign_in"]
+"Plugin cannot read the PKCE verifier" = { tests = ["crates/prometheus/tests/plugins_providers.rs::a_plugin_sign_in_runs_in_the_host_and_the_plugin_gets_only_a_handle", "crates/prometheus/tests/python_bridge.rs::a_declared_pkce_sign_in_becomes_the_hosts_and_a_broker_is_refused"], note = "the sample WASM provider plugin declares the sign-in; its prepare-request copies everything it receives into the sent body, which holds the opaque `prometheus_credential` handle and none of the verifier, state, code or tokens" }
+
+[model-providers."Model retirement table"]
+"Retired default model" = ["crates/prometheus/tests/model_retirement.rs::a_retired_default_model_refuses_a_chat_naming_its_replacement", "crates/pmt-providers/src/retirement/mod.rs::retired_ids_are_refused_naming_the_replacement_and_the_rewrite"]
+
+[model-providers."Provider registry changes apply at session boundaries"]
+"Plugin edited while a session runs" = ["crates/prometheus/tests/provider_registry_reload.rs::plugin_edited_while_a_session_runs"]
+
+[model-providers."Minted short-lived credentials"]
+"Re-mint on mid-session 401" = ["crates/pmt-providers/tests/providers/minting.rs::re_mint_on_mid_session_401"]
+"Ambiguous helper output rejected" = ["crates/pmt-providers/tests/providers/minting.rs::ambiguous_helper_output_rejected", "crates/pmt-providers/src/auth/mint.rs::helper_output_is_one_token_or_json"]
+
+[model-providers."OpenRouter OAuth key minting"]
+"Wrong callback path ignored" = ["crates/pmt-providers/tests/providers/portals.rs::wrong_callback_path_ignored"]
+
+[model-providers."xAI SuperGrok sign-in"]
+"Tier restriction after sign-in" = ["crates/pmt-providers/tests/providers/portals.rs::tier_restriction_after_sign_in"]
+"Tools share the subscription" = { tests = ["crates/pmt-providers/tests/providers/portals.rs::tools_share_the_xai_subscription", "crates/pmt-providers/src/auth/tools.rs::tools_share_the_subscription"], note = "xAI-backed tools take their credential and billing label from auth::tools::tool_credential (proved here); the x_search tool itself arrives with task 49.1" }
+
+[model-providers."Nous Portal subscription sign-in"]
+"One sign-in serves models and tools" = { tests = ["crates/pmt-providers/tests/providers/portals.rs::one_sign_in_serves_models_and_tools", "crates/pmt-providers/src/auth/tools.rs::nous_tools_follow_their_settings"], note = "the chat call and the credential a web.search_backend = \"nous\" search uses both bill subscription:nous/<label>; the nous web backend itself arrives with task 49.1" }
+
+[model-providers."Qwen Portal and MiniMax portal sign-in"]
+"Portal and API-key providers stay separate" = ["crates/pmt-providers/tests/providers/portals.rs::portal_and_api_key_providers_stay_separate"]
+
+[model-providers."Subscription plan and quota visibility (upgrade)"]
+"Codex quota shown" = ["crates/prometheus/tests/provider_routing_cli.rs::codex_quota_shown"]
+"Exhausted quota benched until reset" = ["crates/pmt-providers/tests/providers/routing.rs::exhausted_quota_benched_until_reset", "crates/pmt-providers/tests/providers/routing.rs::a_quota_restored_early_clears_the_bench"]
+
+[model-providers."Billing source transparency (upgrade)"]
+"Fallback from subscription to API key is announced" = ["crates/pmt-providers/tests/providers/routing.rs::fallback_from_subscription_to_api_key_is_announced", "crates/prometheus/src/chat/session/progress.rs::a_billing_change_names_both_sources", "crates/pmt-providers/tests/providers/routing.rs::a_gated_metered_fallback_needs_confirmation"]
+"Ledger distinguishes subscription calls" = ["crates/prometheus/tests/provider_routing_cli.rs::ledger_distinguishes_subscription_calls"]
+
+[model-providers."Scoped fallback chains for pinned owners"]
+"Pinned cron job" = ["crates/prometheus/tests/cron_upgrades.rs::a_pinned_job_does_not_inherit_the_profile_fallback_chain", "crates/pmt-providers/tests/providers/routing.rs::pinned_cron_job_gets_no_inherited_chain"]
+
+[model-providers."Provider health scoring (upgrade)"]
+"Repeated overloads lower the score" = ["crates/prometheus/tests/provider_routing_cli.rs::repeated_overloads_lower_the_score", "crates/pmt-providers/tests/providers/routing.rs::repeated_overloads_lower_the_score"]
+"Idle provider recovers" = ["crates/pmt-providers/tests/providers/routing.rs::idle_provider_recovers"]
+
+[model-providers."Provider spend caps (upgrade)"]
+"Monthly cap reached falls back" = ["crates/pmt-providers/tests/providers/routing.rs::monthly_cap_reached_falls_back", "crates/pmt-providers/tests/providers/routing.rs::the_eighty_percent_warning_is_emitted_once_per_period"]
+
+# Group 44 (turn loop, compression, memory and storage upgrades).
+[agent-turn-loop."Budget checkpoint notice"]
+"Ratio crossed" = ["crates/pmt-agent/tests/turn/structured.rs::the_budget_checkpoint_rides_the_newest_unsent_tool_result_once", "crates/pmt-agent/tests/turn/structured.rs::no_checkpoint_without_the_ratio_or_for_unlimited_budgets"]
+
+[agent-turn-loop."Structured steering (upgrade)"]
+"Note during a tool batch" = ["crates/pmt-agent/tests/turn/steering.rs::a_steer_is_a_new_row_after_the_last_tool_result", "crates/pmt-agent/tests/turn/structured.rs::a_redirect_makes_running_tools_yield_and_is_a_real_user_message"]
+"Wrap-up" = ["crates/pmt-agent/tests/turn/structured.rs::a_wrap_up_steer_ends_the_turn_with_one_toolless_request"]
+
+[agent-turn-loop."Install-tree context suppression"]
+"Desktop fallback cwd" = ["crates/pmt-agent/tests/turn/context.rs::a_fallback_cwd_inside_the_source_tree_loads_no_project_context"]
+
+[agent-turn-loop."Subdirectory hints ride tool results"]
+"Reading a subpackage" = ["crates/pmt-agent/tests/turn/hints.rs::reading_a_subpackage_appends_its_agents_file_to_that_result_once", "crates/pmt-agent/tests/turn/hints.rs::paths_outside_the_working_tree_bring_no_hint"]
+
+[agent-turn-loop."Deterministic turn journal (upgrade)"]
+"Journal order" = ["crates/pmt-agent/tests/turn/journal.rs::a_turn_with_one_tool_call_journals_every_step_in_order", "crates/pmt-store/tests/store/journal.rs::only_the_newest_turn_is_kept_and_an_unfinished_one_is_reported"]
+
+[agent-turn-loop."Crash resume mid-tool-batch (upgrade)"]
+"Crash during a terminal command" = ["crates/prometheus/tests/crash_resume.rs::a_crash_during_a_terminal_command_resumes_with_the_read_reused_and_the_command_unknown", "crates/prometheus/tests/crash_resume.rs::the_daemon_resumes_a_crashed_turn_when_the_session_loads", "crates/prometheus/tests/crash_resume.rs::the_daemon_asks_and_resumes_a_crashed_turn_on_yes", "crates/prometheus/tests/crash_resume.rs::the_daemon_closes_a_crashed_turn_when_the_user_declines", "crates/prometheus/tests/crash_resume_gateway.rs::retry_after_a_restart_resumes_the_turn_from_its_journal", "crates/prometheus/tests/crash_resume_gateway.rs::under_auto_a_restart_resumes_the_turn_and_the_chat_gets_its_answer_once", "crates/pmt-agent/tests/turn/journal.rs::declining_closes_the_turn_as_crashed_with_a_boundary_row", "crates/pmt-agent/tests/turn/journal.rs::a_new_message_closes_a_crashed_turn_first"]
+"Idempotent call re-run" = ["crates/pmt-agent/tests/turn/journal.rs::resuming_reuses_finished_results_reruns_safe_calls_and_marks_the_rest_unknown"]
+
+[agent-turn-loop."Side questions with /btw"]
+"Busy session" = ["crates/prometheus/tests/side_questions.rs::a_side_question_is_answered_while_the_turn_runs_and_never_stored", "crates/prometheus/tests/side_questions_gateway.rs::a_side_answer_reaches_the_chat_while_the_turn_runs_and_is_never_stored"]
+
+[agent-turn-loop."Project instructions bootstrap with /init"]
+"Existing file preserved" = ["crates/pmt-agent/tests/turn/init.rs::an_existing_agents_file_keeps_the_users_sections"]
+
+[agent-turn-loop."Prefill messages"]
+"Frozen at start" = ["crates/pmt-agent/tests/turn/prefill.rs::prefill_is_frozen_at_session_start_and_never_stored", "crates/pmt-agent/tests/turn/prefill.rs::a_prefill_with_another_role_fails_the_session_start"]
+
+[agent-turn-loop."Verify-on-stop"]
+"Unverified edit nudged" = ["crates/pmt-agent/tests/turn/verify.rs::an_unverified_edit_is_nudged_and_the_turn_goes_on", "crates/pmt-agent/tests/turn/verify.rs::a_check_after_the_last_edit_is_evidence", "crates/pmt-agent/tests/turn/verify.rs::off_by_default_and_no_ledger_then"]
+"Docs-only edits pass" = ["crates/pmt-agent/tests/turn/verify.rs::docs_only_edits_pass_without_a_nudge"]
+
+[agent-turn-loop."Coding posture and standing coding instructions"]
+"Messaging unaffected" = ["crates/pmt-agent/tests/turn/verify.rs::messaging_sessions_get_no_coding_brief"]
+
+[agent-turn-loop."Image budgets and replay"]
+"Resume replays recent images" = ["crates/pmt-agent/tests/turn/images.rs::a_resumed_session_replays_its_photo_byte_identically", "crates/pmt-agent/tests/turn/images.rs::older_images_retire_in_batches_and_the_current_message_keeps_its_own"]
+
+[web-and-media-tools."Image embed budget, per-image cap and replay"]
+"Cap inside a subagent" = ["crates/prometheus/tests/vision_session.rs::a_delegated_child_is_refused_on_its_fourth_load_of_one_image", "crates/prometheus/tests/vision_session.rs::the_main_agent_follows_the_configured_cap_and_embed_target", "crates/pmt-agent/tests/vision.rs::a_delegated_child_embeds_one_image_at_most_three_times", "crates/pmt-agent/tests/vision.rs::an_oversized_native_image_is_embedded_as_a_fitting_jpeg"]
+"Resume replays images" = ["crates/pmt-agent/tests/turn/images.rs::a_resumed_session_replays_its_photo_byte_identically"]
+
+[context-compression."Per-model threshold overrides"]
+"Longest key wins" = ["crates/pmt-agent/src/compress/threshold.rs::the_longest_matching_key_wins_and_a_provider_key_beats_a_bare_one"]
+
+[context-compression."Pruned content is retrievable by the agent (upgrade)"]
+"Agent needs an old log" = ["crates/pmt-agent/tests/turn/compression.rs::a_pruned_tool_result_is_read_back_by_its_ref"]
+
+[context-compression."Engine output is validated by the host"]
+"Plugin engine breaks alternation" = ["crates/pmt-agent/tests/turn/compaction_upgrades.rs::a_plugin_engine_breaking_alternation_leaves_the_transcript_unchanged", "crates/pmt-agent/src/compress/validate.rs::two_adjacent_assistant_rows_are_refused"]
+
+[context-compression."Gateway session hygiene"]
+"Overnight growth" = ["crates/pmt-agent/tests/turn/compaction_upgrades.rs::gateway_hygiene_compacts_a_session_near_its_window_before_the_turn", "crates/prometheus/tests/gateway_daemon.rs::an_inbound_message_on_a_session_near_its_window_is_compacted_first", "crates/pmt-agent/src/compress/hygiene.rs::hygiene_table"]
+
+[context-compression."Summary quality check (upgrade)"]
+"Summary forgot a file" = ["crates/pmt-agent/tests/turn/compaction_upgrades.rs::a_file_the_summary_forgot_is_preserved_and_the_coverage_recorded"]
+"Open todos survive verbatim" = ["crates/pmt-agent/tests/turn/compaction_upgrades.rs::open_todos_are_kept_verbatim_in_the_summary"]
+
+[context-compression."Pinned messages survive compaction (upgrade)"]
+"Pinned requirement kept" = ["crates/pmt-agent/tests/turn/compaction_upgrades.rs::a_pinned_message_is_in_the_summary_after_three_compactions"]
+
+[context-compression."Opt-in micro-compaction"]
+"Off by default" = ["crates/pmt-agent/tests/turn/compaction_upgrades.rs::micro_compaction_is_off_by_default"]
+"User messages preserved" = ["crates/pmt-agent/tests/turn/compaction_upgrades.rs::micro_compaction_folds_one_exchange_per_turn_and_keeps_every_user_message"]
+
+[context-compression."Prepared-ahead summaries"]
+"Prepared summary adopted" = ["crates/pmt-agent/tests/turn/compaction_upgrades.rs::a_summary_prepared_near_the_trigger_is_adopted_without_another_call"]
+
+[context-compression."Opt-in proactive prune"]
+"Disabled by default" = ["crates/pmt-agent/tests/turn/compaction_upgrades.rs::no_proactive_prune_runs_by_default"]
+
+# Group 44.7: idle compaction, progress notices and the pressure gauge,
+# server-side Responses compaction, the context window view.
+[context-compression."Idle compaction"]
+"Return after a long pause" = ["crates/pmt-agent/tests/turn/compaction_notices.rs::a_turn_after_a_long_pause_compacts_with_trigger_idle_before_its_model_call", "crates/prometheus/tests/gateway_compaction.rs::progress_notices_announce_the_idle_compaction", "crates/pmt-agent/src/turn/idle.rs::idle_needs_the_whole_period"]
+"Small context skipped" = ["crates/pmt-agent/tests/turn/compaction_notices.rs::a_small_context_is_not_compacted_after_a_pause"]
+
+[context-compression."Compaction progress notices and context pressure gauge"]
+"Silent on chat by default" = ["crates/prometheus/tests/gateway_compaction.rs::an_automatic_compaction_posts_nothing_to_the_chat_by_default", "crates/pmt-core/src/context_pressure.rs::manual_runs_and_unknown_events_get_no_notice"]
+"Gauge crossing" = ["crates/prometheus/tests/context_window.rs::a_turn_past_sixty_percent_of_the_trigger_prints_the_gauge", "crates/pmt-agent/tests/turn/compaction_notices.rs::each_turn_reports_its_context_pressure_and_no_request_carries_it", "crates/pmt-gateway/tests/messaging/display.rs::context_pressure_is_told_once_per_level_crossing", "crates/pmt-core/src/context_pressure.rs::the_gauge_fills_one_cell_per_five_percent"]
+
+[context-compression."Server-side Responses compaction (opt-in)"]
+"Compaction item replayed" = ["crates/prometheus/tests/context_window.rs::the_compaction_item_is_replayed_and_the_transcript_keeps_every_message", "crates/pmt-agent/tests/turn/compaction_notices.rs::the_stored_compaction_item_replaces_the_history_it_covers", "crates/pmt-providers/tests/providers/server_compaction.rs::a_supporting_route_sends_the_setting_and_the_item_and_returns_the_new_item"]
+
+[context-compression."Context window view"]
+"Why is my file ignored" = ["crates/prometheus/tests/context_window.rs::context_shows_the_loaded_and_the_shadowed_file_without_a_model_call", "crates/pmt-agent/src/turn/window_render.rs::the_grid_is_five_rows_of_twenty_cells"]
+
+# Group 44.8: memory revision journal, per-session review, semantic recall.
+[memory."Memory revision journal (upgrade)"]
+"Revert an agent mistake" = ["crates/pmt-memory/tests/memory/journal.rs::reverting_an_agent_patch_restores_the_entry_as_a_new_user_revision", "crates/prometheus/tests/memory_journal.rs::an_agent_mistake_is_summarized_at_session_end_and_reverted_by_the_user"]
+
+[memory."Reviewable memory changes per session (upgrade)"]
+"Session end shows a summary" = ["crates/pmt-memory/tests/memory/journal.rs::a_session_that_changed_memory_gets_a_one_line_summary", "crates/prometheus/tests/memory_journal.rs::an_agent_mistake_is_summarized_at_session_end_and_reverted_by_the_user", "crates/prometheus/tests/tui_upkeep.rs::the_tui_shows_the_memory_summary_when_a_session_ends_and_when_it_is_resumed", "crates/prometheus/tests/memory_review_daemon.rs::an_attached_one_shot_chat_prints_the_summary_as_its_session_ends", "crates/prometheus/tests/memory_review_daemon.rs::a_messaging_chat_is_told_the_summary_at_new_and_at_resume"]
+
+[memory."Semantic recall (upgrade)"]
+"Paraphrase is recalled with embeddings" = ["crates/pmt-memory/tests/memory/journal.rs::a_paraphrase_is_recalled_with_embeddings", "crates/prometheus/tests/memory_journal.rs::memory_search_ranks_a_paraphrase_with_the_configured_embedding_model"]
+
+# Group 44.9: external memory provider contract and context-engine plugins.
+[memory."External memory provider contract"]
+"Unknown provider is a config error" = ["crates/prometheus/tests/memory_provider.rs::an_unknown_provider_fails_validation_naming_the_key"]
+
+[memory."One external provider, isolated and bounded"]
+"Slow provider does not stall the turn" = ["crates/prometheus/tests/memory_provider.rs::a_slow_prefetch_is_cut_at_its_bound_and_the_turn_goes_on"]
+
+[memory."Provider tools and prompt block gating"]
+"Provider cannot shadow a core tool" = ["crates/prometheus/tests/memory_provider.rs::a_provider_tool_named_like_a_core_tool_is_refused_and_reported", "crates/prometheus/tests/memory_provider.rs::provider_recall_and_prompt_block_reach_the_model"]
+
+[memory."Provider egress redaction and write mirroring"]
+"API key in a turn is redacted for the provider" = ["crates/prometheus/tests/memory_provider.rs::a_synced_turn_reaches_the_provider_redacted_and_the_transcript_keeps_it", "crates/pmt-memory/src/provider/egress.rs::credentials_are_redacted_and_scaffolding_dropped"]
+
+[memory."Profile-bound providers"]
+"Multi-profile gateway keeps providers apart" = ["crates/prometheus/tests/memory_provider.rs::only_the_writing_profiles_provider_hears_the_write"]
+
+[memory."Pre-compress checkpoint"]
+"Required checkpoint failure keeps history" = ["crates/prometheus/tests/memory_provider.rs::a_failed_required_checkpoint_keeps_the_transcript_and_warns"]
+
+[memory."Unavailable or disabled provider degrades loudly once"]
+"Disabled provider warns once" = ["crates/prometheus/tests/memory_provider.rs::a_disabled_provider_warns_once_and_sessions_use_built_in_memory"]
+
+[memory."Provider setup writes secrets and settings to the right stores"]
+"Non-secret field never lands in secrets" = ["crates/prometheus/tests/memory_provider.rs::setup_writes_the_secret_to_the_store_and_the_setting_to_config"]
+
+[memory."Context engine selection"]
+"Engine selection never rewrites stored history" = { tests = ["crates/prometheus/tests/memory_provider.rs::a_plugin_engines_selection_shapes_only_the_request", "crates/prometheus/tests/memory_provider.rs::an_engine_that_fails_to_start_leaves_the_session_on_the_built_in_engine"], note = "the second test covers the requirement's initialize-failure clause: the session falls back to the built-in engine (the whole history is sent) with one WARN" }
+
+# Group 44.10: learning journey, per-turn memory notifications, provider
+# recall budget, background review controls.
+[memory."Learning journey timeline"]
+"JSON nodes" = ["crates/prometheus/tests/journey.rs::json_nodes_hold_the_learned_skill_and_both_entries", "crates/prometheus/tests/journey.rs::a_chat_and_a_daemon_client_see_the_same_journey"]
+
+[memory."Journey pruning and editing"]
+"Delete a memory node" = ["crates/prometheus/tests/journey.rs::deleting_a_memory_node_is_a_revertible_user_revision", "crates/prometheus/tests/journey.rs::deleting_without_yes_off_a_terminal_exits_4"]
+
+[memory."Per-turn memory notifications"]
+"Verbose preview" = ["crates/prometheus/tests/memory_notices.rs::a_chat_receives_the_preview_of_a_background_reviews_change", "crates/prometheus/tests/memory_notices.rs::each_mode_announces_what_it_promises"]
+"Staged change not announced" = ["crates/prometheus/tests/memory_notices.rs::a_staged_review_proposal_is_not_announced"]
+
+[memory."External provider recall budget and spill"]
+"Spill to file" = ["crates/prometheus/tests/memory_provider.rs::oversized_provider_recall_spills_to_a_file_under_cache", "crates/pmt-memory/src/provider/spill.rs::small_recall_passes_whole_and_large_recall_is_cut"]
+
+[memory."Background review controls"]
+"Input budget stops the review" = ["crates/pmt-memory/tests/memory/review_controls.rs::the_review_stops_before_the_call_that_would_pass_its_input_budget", "crates/pmt-memory/src/review_controls.rs::the_budget_follows_the_window_and_zero_is_unlimited"]
+"Extra tool must exist on the parent" = ["crates/pmt-memory/tests/memory/review_controls.rs::an_extra_tool_the_parent_lacks_is_not_offered"]
+
+# Group 44.11: session forking API, portable export and import.
+[session-storage."Session forking API (upgrade)"]
+"Fork from an earlier message" = ["crates/prometheus/tests/session_portable.rs::a_fork_keeps_the_messages_up_to_the_chosen_one_and_the_tree_lists_it", "crates/prometheus/tests/session_portable.rs::the_daemon_serves_tree_and_siblings_over_rpc"]
+"Tree lists forks and continuations" = ["crates/prometheus/tests/session_portable.rs::a_fork_keeps_the_messages_up_to_the_chosen_one_and_the_tree_lists_it"]
+
+[session-storage."Portable export and import"]
+"Collision without remap" = ["crates/prometheus/tests/session_portable.rs::an_export_round_trips_between_two_homes_with_its_blobs"]
+
+# Group 44.12: offline recovery, journal mode, prompt refresh, retitling,
+# low-disk prompt, attachment storage.
+[session-storage."Offline recovery and journal mode"]
+"Recover refused while open" = ["crates/prometheus/tests/session_maintenance.rs::recover_is_refused_while_a_daemon_serves_the_profile"]
+
+[session-storage."Prompt refresh and retitling"]
+"User titles kept" = ["crates/prometheus/tests/session_maintenance.rs::retitle_keeps_user_titles_and_renames_automatic_ones"]
+
+[session-storage."Low-disk prune prompt"]
+"Later postpones a week" = ["crates/prometheus/tests/session_maintenance.rs::the_low_disk_prompt_answered_later_waits_a_week", "crates/prometheus/tests/tui_upkeep.rs::the_tui_prune_question_answered_later_asks_again_after_a_week"]
+
+[session-storage."Attachment storage location"]
+"Workspace copy" = ["crates/prometheus/tests/session_maintenance.rs::a_workspace_attachment_is_copied_beside_the_blob", "crates/prometheus/tests/session_maintenance.rs::a_file_received_by_the_daemon_is_kept_in_the_blob_store_and_the_workspace"]
+
+# Group 46.1: endpoint detection, session affinity and per-model wires,
+# OpenRouter routing preferences, fast mode, outbound IPv4 preference.
+[model-providers."Endpoint auto-detection for multi-region key providers"]
+"Coding-plan key lands on the coding endpoint" = ["crates/pmt-providers/tests/providers/request_controls.rs::a_coding_plan_key_lands_on_the_coding_endpoint_and_is_not_probed_again"]
+"Failed probes are not repeated immediately" = ["crates/pmt-providers/tests/providers/request_controls.rs::a_rejected_key_is_probed_once_within_the_ttl_and_uses_the_default", "crates/pmt-providers/src/detect.rs::a_failure_is_remembered_for_its_ttl_only"]
+
+[model-providers."Session affinity headers and per-model wire routing"]
+"Affinity header stable within a conversation" = ["crates/pmt-providers/tests/providers/request_controls.rs::main_and_auxiliary_calls_of_a_conversation_share_one_affinity_value", "crates/prometheus/tests/provider_affinity_daemon.rs::daemon_sessions_sharing_a_factory_keep_their_own_affinity_value"]
+"Per-model wire format on resume" = ["crates/pmt-providers/tests/providers/request_controls.rs::opencode_go_serves_minimax_over_anthropic_messages_on_every_resolution"]
+
+[model-providers."OpenRouter provider routing preferences"]
+"Routing ignored for other providers" = ["crates/pmt-providers/tests/providers/request_controls.rs::routing_preferences_are_sent_to_openrouter_only", "crates/pmt-providers/src/upstream.rs::preferences_map_to_the_provider_object_on_openrouter_only"]
+"Pareto score sent only for the router model" = ["crates/pmt-providers/tests/providers/request_controls.rs::the_pareto_block_rides_only_the_router_model", "crates/pmt-providers/src/upstream.rs::the_pareto_block_needs_the_router_model_and_a_score"]
+
+[model-providers."Fast mode service tier"]
+"Auto window" = ["crates/pmt-agent/tests/turn/fast_mode.rs::auto_asks_the_priority_tier_only_within_the_first_minute_of_the_turn", "crates/pmt-providers/src/fast.rs::auto_asks_only_within_the_window_of_each_turn"]
+
+[model-providers."Outbound IPv4 preference"]
+"Blackholed IPv6 falls back quickly" = ["crates/pmt-net/src/eyeballs.rs::ipv4_starts_250_ms_after_a_silent_ipv6_attempt_and_leads", "crates/pmt-net/tests/ipv6.rs::a_blackholed_ipv6_address_falls_back_to_ipv4_quickly"]
+
+# Group 46.3: pool maintenance, seeding and sharing, agent CLI lookup,
+# auxiliary concurrency, WSL2 diagnostics.
+[model-providers."Credential pool maintenance commands"]
+"Reset reaches a running session" = ["crates/pmt-providers/tests/providers/pool_seeding.rs::a_reset_in_state_db_reaches_a_running_session_on_its_next_request", "crates/prometheus/tests/auth_pool_cli.rs::reset_clears_a_bench_in_state_db_and_status_lists_it_ok"]
+"Status is a peek" = ["crates/prometheus/tests/auth_pool_cli.rs::status_reports_an_expiring_token_without_refreshing_it"]
+
+[model-providers."Credential pool seeding, custom endpoint pools and child sharing"]
+"Numbered siblings join the pool" = ["crates/prometheus/tests/auth_pool_cli.rs::numbered_siblings_are_seeded_members_and_auth_add_keys_are_added", "crates/pmt-providers/src/pool/tests.rs::every_secret_name_and_its_numbered_siblings_seed_the_pool"]
+"Child sees parent's bench" = ["crates/pmt-providers/tests/providers/pool_seeding.rs::a_delegated_child_skips_the_member_its_parent_benched"]
+
+[model-providers."External agent CLI executable resolution"]
+"Service launch with bare PATH" = ["crates/pmt-providers/tests/providers/external.rs::a_bare_service_path_still_finds_the_user_local_and_vendor_installs"]
+
+[model-providers."Auxiliary concurrency and request overrides"]
+"Compression concurrency capped" = ["crates/pmt-providers/tests/providers/auxiliary.rs::compression_calls_wait_for_the_task_cap_and_carry_the_task_extra_body", "crates/pmt-providers/src/auxiliary/limits.rs::the_task_cap_and_the_profile_cap_both_hold"]
+
+[model-providers."WSL2 local endpoint diagnostics"]
+"Windows-hosted Ollama unreachable from WSL2" = ["crates/prometheus/src/doctor_cmd/wsl.rs::an_unreachable_loopback_server_under_wsl2_nat_is_a_warn_with_the_host_ip", "crates/pmt-providers/src/wsl.rs::advice_names_mirrored_networking_and_the_host_for_loopback_only"]
+
+# Group 46.4: account usage, subscription account commands, tool gateway.
+[model-providers."Account usage windows command"]
+"JSON for scripts" = ["crates/prometheus/tests/account_cli.rs::usage_json_carries_the_plans_two_windows", "crates/pmt-providers/src/account.rs::windows_keep_their_percent_and_reset"]
+"Nothing to report" = ["crates/prometheus/tests/account_cli.rs::a_provider_without_a_usage_endpoint_exits_1_naming_it"]
+
+[model-providers."Subscription account commands"]
+"Login refused in a group" = ["crates/pmt-gateway/tests/messaging/pause.rs::login_in_a_group_is_refused_and_points_to_a_direct_message"]
+
+[model-providers."Subscription tool gateway routing"]
+"Stored selection wins over a present key" = ["crates/pmt-providers/tests/providers/tool_gateway.rs::a_stored_nous_selection_goes_through_the_gateway_despite_a_vendor_key"]
+"Selected vendor without key" = ["crates/pmt-providers/tests/providers/tool_gateway.rs::a_selected_vendor_without_its_key_fails_naming_the_selection", "crates/prometheus/tests/account_cli.rs::portal_tools_routes_categories_through_the_gateway"]
+
+# Group 46.2: data-use confirmation for training-flagged models.
+[model-providers."Data-use confirmation for training-flagged models"]
+"Non-interactive selection refused" = ["crates/prometheus/tests/data_use_cli.rs::a_training_flagged_model_is_refused_without_a_terminal_and_config_is_untouched", "crates/pmt-providers/src/datause.rs::contributor_models_need_accepted_terms"]
+
+# Group 46.2: bundled Gemini native and Bedrock providers, Azure AI Foundry.
+[model-providers."Gemini native and AWS Bedrock providers"]
+"Bedrock inference profile selected" = ["crates/pmt-providers/tests/providers/bundled.rs::bedrock_inference_profile_selected", "crates/prometheus/tests/bedrock_cli.rs::model_list_shows_the_regions_profiles_and_models_with_windows"]
+"No AWS credentials" = ["crates/prometheus/tests/bedrock_cli.rs::a_session_without_aws_credentials_exits_78_naming_the_chain", "crates/pmt-providers/tests/providers/bundled.rs::no_aws_credentials_fail_naming_the_chain"]
+
+[model-providers."Azure AI Foundry provider"]
+"Keyless Entra ID access" = ["crates/pmt-providers/tests/providers/azure.rs::keyless_entra_id_access_from_a_managed_identity", "crates/pmt-providers/tests/providers/azure.rs::keyless_entra_id_access_from_the_azure_cli_login", "crates/prometheus/tests/azure_cli.rs::a_session_uses_the_azure_cli_login_without_a_key"]
+"Claude deployment uses Anthropic wire" = ["crates/pmt-providers/tests/providers/azure.rs::claude_deployment_uses_anthropic_wire", "crates/pmt-providers/src/azure.rs::claude_deployments_use_anthropic_messages"]
+
+# Group 47: Mixture of Agents.
+[local-models."Local runtime configuration"]
+"Invalid backend" = ["crates/pmt-config/src/daemon_local.rs::an_invalid_backend_lists_the_accepted_ones_and_exits_78", "crates/prometheus/tests/local_cli.rs::an_invalid_backend_is_refused_listing_the_accepted_ones_with_exit_78"]
+"Detection-only default" = ["crates/pmt-local/tests/local/server.rs::the_default_config_only_detects_and_fails_with_local_runtime_down", "crates/prometheus/tests/local_cli.rs::a_down_server_fails_with_local_runtime_down_and_never_reaches_openrouter"]
+
+[local-models."Hash-pinned engine installation"]
+"Corrupted archive rejected" = ["crates/pmt-local/tests/local/engine.rs::a_corrupted_archive_is_deleted_nothing_is_installed_and_it_exits_74"]
+"HIP on macOS refused" = ["crates/pmt-local/tests/local/engine.rs::hip_on_macos_is_refused_with_69_before_any_request", "crates/prometheus/tests/local_cli.rs::hip_on_macos_is_refused_with_69_before_any_network_request"]
+
+[local-models."Backend auto-selection"]
+"AMD GPU on Linux" = ["crates/pmt-local/src/backend.rs::an_amd_gpu_on_linux_selects_vulkan", "crates/prometheus/tests/local_cli.rs::an_amd_gpu_on_linux_installs_the_vulkan_build"]
+
+[local-models."Hardware-priced model catalog"]
+"Catalog on an 8 GB GPU" = ["crates/prometheus/tests/local_cli.rs::the_catalog_on_an_8_gb_gpu_prices_every_entry_and_offers_nothing_below_4_bits", "crates/pmt-local/src/catalog/price.rs::an_8_gb_gpu_spills_or_refuses_a_35b_model_and_never_goes_below_4_bits"]
+
+[local-models."Resumable, verifiable downloads"]
+"Resume after interruption" = ["crates/pmt-local/tests/local/downloads.rs::a_resumed_download_requests_only_the_missing_bytes_and_starts_at_60_percent"]
+"Interrupted download not usable" = ["crates/pmt-local/tests/local/downloads.rs::an_interrupted_download_is_partial_and_not_usable"]
+
+[local-models."Model library"]
+"Linked file not deleted" = ["crates/pmt-local/tests/local/library.rs::removing_a_linked_model_leaves_the_users_file_in_place", "crates/prometheus/tests/local_cli.rs::a_linked_file_survives_removing_its_library_entry"]
+
+[local-models."Managed server lifecycle"]
+"Second process reuses the server" = ["crates/prometheus/tests/local_cli.rs::a_second_process_reuses_the_recorded_server", "crates/pmt-local/tests/local/server.rs::a_second_client_reuses_the_recorded_server"]
+"Idle model unloaded" = ["crates/pmt-local/tests/local/server.rs::an_idle_model_is_unloaded_and_reloaded_by_the_next_request"]
+
+[local-models."External llama-server detection"]
+"User-run server preferred" = ["crates/pmt-local/tests/local/server.rs::a_user_run_server_on_a_detect_port_is_preferred_over_starting_one"]
+
+[local-models."Local runtime errors"]
+"Server down with a remote key present" = ["crates/prometheus/tests/local_cli.rs::a_down_server_fails_with_local_runtime_down_and_never_reaches_openrouter"]
+
+[local-models."Local models command"]
+"Ctrl+C pauses a pull" = ["crates/prometheus/tests/local_cli.rs::ctrl_c_pauses_a_pull_and_jobs_lists_it_as_paused"]
+
+[local-models."Local inference stays local"]
+"Offline chat" = ["crates/prometheus/tests/local_cli.rs::an_offline_turn_on_llamacpp_completes_and_is_billed_local_at_zero"]
+
+[mixture-of-agents."MoA virtual provider and presets"]
+"Preset selectable as a model" = ["crates/pmt-providers/src/switch/tests.rs::a_preset_is_selectable_as_a_model_of_the_moa_provider"]
+"Bare preset name" = ["crates/pmt-providers/src/switch/tests.rs::a_bare_preset_name_selects_the_preset"]
+"Unknown preset" = ["crates/pmt-providers/tests/providers/moa.rs::an_unknown_preset_lists_the_configured_ones"]
+
+[mixture-of-agents."Preset validation"]
+"Recursive aggregator refused" = ["crates/pmt-config/src/moa_check.rs::a_recursive_aggregator_is_refused_naming_the_key"]
+"Temperature omitted by default" = ["crates/pmt-providers/tests/providers/moa.rs::references_never_see_tools_or_the_system_prompt", "crates/pmt-providers/tests/providers/moa.rs::a_set_temperature_is_sent_and_a_disabled_preset_calls_the_aggregator_alone"]
+
+[mixture-of-agents."MoA call procedure"]
+"References never see tools" = ["crates/pmt-providers/tests/providers/moa.rs::references_never_see_tools_or_the_system_prompt"]
+"Aggregator tool call executed" = ["crates/pmt-agent/tests/turn/moa.rs::the_aggregators_tool_call_runs_and_the_next_iteration_follows_the_fanout"]
+
+[mixture-of-agents."Cache-safe guidance injection"]
+"Prefix preserved across iterations" = ["crates/pmt-providers/tests/providers/moa.rs::the_second_aggregator_request_keeps_the_first_ones_prefix"]
+
+[mixture-of-agents."Strict-alternation recovery"]
+"Merge remembered per destination" = ["crates/pmt-providers/tests/providers/moa.rs::an_alternating_destination_is_merged_for_the_rest_of_the_session"]
+
+[mixture-of-agents."Advisor cadence"]
+"Every third iteration" = ["crates/pmt-providers/tests/providers/moa.rs::every_third_iteration_runs_the_references_and_every_request_has_guidance", "crates/pmt-providers/src/moa/cadence.rs::every_third_iteration_runs_on_one_three_and_six"]
+"Malformed fanout" = ["crates/pmt-providers/tests/providers/moa.rs::a_malformed_fanout_warns_naming_the_preset_and_runs_once_per_turn"]
+
+[mixture-of-agents."Reference failures are non-fatal"]
+"One advisor missing credentials" = ["crates/pmt-providers/tests/providers/moa.rs::an_advisor_without_credentials_becomes_a_note"]
+
+[mixture-of-agents."Privacy filter for advisor outputs"]
+"Display-only redaction" = ["crates/pmt-providers/tests/providers/moa_accounting.rs::display_redaction_leaves_the_aggregator_the_raw_text", "crates/pmt-providers/src/moa/privacy.rs::display_redacts_contacts_and_secrets_but_not_identifiers"]
+"SHA untouched" = ["crates/pmt-providers/tests/providers/moa_accounting.rs::the_full_filter_redacts_guidance_but_not_a_commit_sha"]
+
+[mixture-of-agents."MoA traces"]
+"Trace written" = ["crates/pmt-providers/tests/providers/moa_accounting.rs::a_trace_record_lists_every_slot_with_usage"]
+
+[mixture-of-agents."MoA billing and accounting"]
+"Ledger rows per slot" = ["crates/pmt-providers/tests/providers/moa_accounting.rs::every_slot_is_its_own_ledger_row", "crates/prometheus/tests/moa_cli.rs::a_moa_turn_bills_every_slot_to_its_own_model"]
+
+[mixture-of-agents."MoA as a fallback entry"]
+"Preset activated on primary failure" = ["crates/pmt-providers/tests/providers/moa_accounting.rs::a_preset_in_the_chain_takes_over_from_an_overloaded_primary"]
+
+[mixture-of-agents."One-shot /moa command"]
+"Route restored after one turn" = ["crates/prometheus/tests/moa_cli.rs::moa_runs_one_turn_on_the_default_preset_then_the_route_goes_back", "crates/prometheus/tests/moa_cli.rs::moa_in_a_daemon_session_returns_to_the_route_after_its_turn"]
+
+[mixture-of-agents."Preset management commands"]
+"Deleting the default preset refused" = ["crates/prometheus/tests/moa_cli.rs::deleting_the_default_preset_is_refused_with_exit_1"]
+"Presets in every picker" = ["crates/prometheus/src/model_cmd/picker.rs::a_mixture_of_agents_row_lists_every_preset"]
+
+[mixture-of-agents."MoA preserves the session prompt cache"]
+"Returning from MoA replays the prefix" = ["crates/pmt-agent/tests/turn/moa.rs::returning_from_a_preset_replays_the_same_system_prompt_and_tools"]
+
+# Group 49: web and media tools.
+[web-and-media-tools."Built-in web backends with capability flags"]
+"Search-only backend for extract" = ["crates/pmt-tools/tests/web_backends.rs::a_search_only_backend_leaves_extract_unavailable", "crates/pmt-tools/tests/web_backends.rs::ddgs_is_keyless_and_reads_html_results"]
+"openai-native on a non-Codex route" = ["crates/pmt-tools/tests/web_backends.rs::openai_native_needs_the_codex_responses_route_and_nothing_replaces_it", "crates/pmt-providers/src/wire/responses.rs::a_provider_executed_tool_replaces_its_function_definition"]
+
+[web-and-media-tools."Keyless web search rotation is explicit opt-in"]
+"Default install does not rotate silently" = ["crates/pmt-tools/tests/web_backends.rs::a_default_install_never_reaches_a_keyless_vendor"]
+"Opt-in rescue is one-shot" = ["crates/pmt-tools/tests/web_backends.rs::opt_in_rescue_answers_once_per_call_and_never_skips_the_keyed_backend", "crates/pmt-tools/tests/web_backends.rs::the_keyless_ring_rotates_past_rate_limits"]
+
+[web-and-media-tools."Web result caching"]
+"Subagent fan-out shares one search" = ["crates/pmt-tools/tests/web_backends.rs::subagents_issuing_the_same_search_at_once_share_one_request"]
+"Preview deploy stays live" = ["crates/pmt-tools/tests/web_backends.rs::an_exempt_preview_host_is_extracted_live_every_time", "crates/pmt-tools/src/web/cache.rs::local_private_and_exempt_hosts_are_never_cached"]
+
+[web-and-media-tools."x_search tool"]
+"Future window refused locally" = ["crates/pmt-media/tests/media.rs::a_future_x_search_window_is_refused_without_a_request", "crates/pmt-media/src/x_search.rs::a_future_window_is_refused_locally"]
+"Uncited filtered answer is degraded" = ["crates/pmt-media/tests/media.rs::an_uncited_filtered_answer_is_degraded_and_the_key_wins_over_the_sign_in"]
+
+[web-and-media-tools."video_analyze tool"]
+"Oversized video" = ["crates/pmt-media/tests/media.rs::an_oversized_video_is_refused_before_any_provider_call"]
+
+[web-and-media-tools."image_generate tool"]
+"Editing advertised only when supported" = ["crates/pmt-media/tests/media.rs::editing_is_advertised_only_when_the_model_edits"]
+"Result is media" = ["crates/pmt-media/tests/media.rs::the_default_provider_and_model_make_a_stored_media_file"]
+
+[web-and-media-tools."Built-in image generation providers and models"]
+"Default provider and model" = ["crates/pmt-media/tests/media.rs::the_default_provider_and_model_make_a_stored_media_file"]
+"Custom OpenAI-compatible endpoint" = ["crates/pmt-media/tests/media.rs::a_custom_openai_compatible_endpoint_gets_the_model_verbatim_without_quality", "crates/pmt-config/src/media_check.rs::an_unknown_image_model_lists_the_valid_ids"]
+
+[web-and-media-tools."text_to_speech tool and delivery"]
+"Long text is chunked" = ["crates/pmt-media/tests/speech.rs::long_text_goes_out_in_ordered_chunks_and_comes_back_as_one_file", "crates/pmt-media/src/speech/chunk.rs::ten_thousand_characters_under_a_4096_cap_make_three_ordered_chunks"]
+"Telegram bubble" = ["crates/pmt-media/tests/speech.rs::a_telegram_session_gets_an_opus_voice_note_from_mp3_speech", "crates/pmt-gateway/tests/messaging/media.rs::mp3_voice_attachments_are_converted_for_voice_bubbles_or_sent_as_audio"]
+
+[web-and-media-tools."Built-in text-to-speech providers"]
+"Zero-config speech" = ["crates/pmt-media/tests/speech.rs::zero_config_speech_uses_edge_and_aria"]
+"Invalid cap override" = ["crates/pmt-config/src/media_check.rs::a_tts_cap_override_must_be_a_positive_integer"]
+
+[web-and-media-tools."Built-in speech-to-text providers and resolution"]
+"Explicit provider is strict" = ["crates/pmt-media/tests/speech.rs::an_explicit_stt_provider_is_strict"]
+"Unset provider picks local first" = ["crates/pmt-media/tests/speech.rs::an_unset_stt_provider_picks_local_whisper_first"]
+
+[web-and-media-tools."Command-template speech providers"]
+"Paths with spaces" = ["crates/pmt-media/tests/speech.rs::a_command_provider_receives_paths_with_spaces_as_one_argument", "crates/pmt-media/src/speech/command.rs::posix_values_are_quoted_for_their_context", "crates/pmt-media/src/speech/command.rs::powershell_values_are_literal_in_every_context", "crates/pmt-media/src/speech/command.rs::cmd_values_keep_metacharacters_and_percent_literal"]
+"Built-in name wins" = ["crates/pmt-media/tests/speech.rs::a_built_in_stt_name_wins_over_a_same_named_command"]
+
+[web-and-media-tools."Media tool credentials and billing are explicit"]
+"Subscription-billed image" = ["crates/pmt-media/tests/media.rs::a_subscription_billed_image_records_its_billing_source"]
+
+# Group 50 (voice mode)
+
+[voice-mode."Voice mode toggle and commands"]
+"Enable without a microphone" = ["crates/pmt-voice/src/mode.rs::enabling_without_a_microphone_is_refused", "crates/prometheus/tests/voice_line.rs::voice_mode_needs_a_microphone_and_its_status_names_the_providers"]
+"Status lists providers" = ["crates/pmt-voice/src/mode.rs::status_lists_the_providers", "crates/prometheus/tests/voice_line.rs::voice_mode_needs_a_microphone_and_its_status_names_the_providers"]
+
+[voice-mode."Push-to-talk recording and continuous loop"]
+"Continuous conversation" = ["crates/pmt-voice/tests/voice.rs::the_conversation_continues_without_a_key_press", "crates/prometheus/tests/voice_line.rs::a_spoken_question_is_answered_aloud_and_listening_resumes_until_silence", "crates/prometheus/tests/voice_line.rs::an_attached_line_interface_speaks_the_first_sentence_while_the_reply_generates", "crates/prometheus/tests/voice_line.rs::the_tui_speaks_the_first_sentence_while_the_reply_generates"]
+"Silence ends the loop" = ["crates/pmt-voice/tests/voice.rs::three_quiet_recordings_end_the_loop", "crates/prometheus/tests/voice_line.rs::a_spoken_question_is_answered_aloud_and_listening_resumes_until_silence"]
+
+[voice-mode."Two-stage silence detection"]
+"Pause between syllables" = ["crates/pmt-voice/tests/voice.rs::a_pause_between_words_keeps_the_recording_going", "crates/pmt-voice/src/vad.rs::dips_under_200_ms_do_not_break_confirmation"]
+"Nobody speaks" = ["crates/pmt-voice/tests/voice.rs::nobody_speaking_ends_the_recording_and_submits_nothing"]
+
+[voice-mode."Spoken and typed stop phrases"]
+"Partial match is a request" = ["crates/pmt-voice/tests/voice.rs::a_request_starting_with_a_stop_word_is_sent_and_a_stop_phrase_ends", "crates/pmt-voice/src/filter.rs::only_a_whole_utterance_is_a_stop_phrase"]
+"Typed stop outside voice" = ["crates/prometheus/tests/voice_line.rs::a_spoken_question_is_answered_aloud_and_listening_resumes_until_silence", "crates/pmt-voice/tests/voice.rs::a_typed_stop_phrase_ends_an_active_conversation_and_other_lines_are_typed_input"]
+
+[voice-mode."Transcription hallucination filter"]
+"Phantom outro dropped" = ["crates/pmt-voice/tests/voice.rs::a_phantom_outro_counts_as_no_speech", "crates/pmt-voice/src/filter.rs::phantom_outros_and_repetitions_are_hallucinations"]
+
+[voice-mode."Sentence-streamed spoken replies"]
+"First sentence plays early" = ["crates/pmt-voice/tests/voice.rs::the_first_sentence_plays_before_the_rest_is_generated", "crates/pmt-media/tests/voice_mode.rs::openai_speech_streams_raw_pcm", "crates/prometheus/tests/voice_line.rs::an_attached_line_interface_speaks_the_first_sentence_while_the_reply_generates", "crates/prometheus/tests/voice_line.rs::the_tui_speaks_the_first_sentence_while_the_reply_generates"]
+"Code is not read aloud" = ["crates/pmt-voice/tests/voice.rs::a_fenced_code_block_is_not_read_aloud", "crates/pmt-voice/src/speakable.rs::markdown_and_emoji_are_not_spoken"]
+
+[voice-mode."Long recordings and provider upload limits"]
+"Long voice note split" = { tests = ["crates/pmt-media/tests/voice_mode.rs::a_long_voice_note_is_split_at_pauses_and_transcribed_as_one", "crates/pmt-media/src/speech/fit.rs::cuts_land_in_the_pauses"], note = "scaled down: a two-hour note at 100 samples a second against Mistral's 3,600 s limit stands for the 90-minute 60 MB note against a 25 MB limit; gateway voice notes reach the same MediaSession::transcribe" }
+
+[voice-mode."Gateway per-chat voice reply command"]
+"Persisted chat voice mode" = ["crates/pmt-gateway/tests/messaging/media.rs::a_chats_voice_choice_survives_a_restart"]
+
+# Group 51 (replay and the model-call cache)
+
+[replay-and-evaluation."Canonical request hash"]
+"Cache markers do not change the hash" = ["crates/pmt-providers/tests/providers/call_cache.rs::cache_markers_do_not_change_the_hash", "crates/pmt-providers/src/request.rs::hash_ignores_cache_markers_and_depends_on_content_and_route"]
+
+[replay-and-evaluation."Content-addressed model-call cache"]
+"Resumed evaluation makes no new calls" = { tests = ["crates/pmt-providers/tests/providers/call_cache.rs::a_repeated_call_is_served_from_the_cache_without_reaching_the_provider"], note = "`prometheus eval run` arrives in M3; the rerun of the same request with read_write caching reaches no provider and its ledger row is a cache hit at zero cost" }
+
+[replay-and-evaluation."Cache administration and limits"]
+"Errors are not cached" = ["crates/pmt-providers/tests/providers/call_cache.rs::errors_are_not_cached", "crates/prometheus/tests/replay_cli.rs::the_cache_commands_report_and_remove_entries", "crates/pmt-providers/tests/providers/call_cache.rs::the_least_recently_used_entries_are_evicted_above_the_limit"]
+
+[replay-and-evaluation."Session recordings"]
+"Recording without workspace contents" = ["crates/prometheus/tests/replay_cli.rs::a_recording_without_workspace_lists_files_with_hashes_and_no_contents"]
+
+[replay-and-evaluation."Replay modes"]
+"Tampered recording" = ["crates/prometheus/tests/replay_cli.rs::a_tampered_recording_is_refused_with_exit_65", "crates/pmt-eval/src/recording.rs::a_written_recording_reads_back_and_a_changed_hash_is_named"]
+
+[replay-and-evaluation."Divergence detection"]
+"Prompt change detected" = ["crates/prometheus/tests/replay_cli.rs::a_changed_tool_guidance_layer_diverges_at_the_first_model_call_with_a_diff"]
+
+[replay-and-evaluation."Replay has no side effects"]
+"Recorded message send is not re-sent" = ["crates/prometheus/tests/replay_cli.rs::a_strict_replay_serves_recorded_side_effects_without_running_them"]
+
+[replay-and-evaluation."Golden recording regression gate"]
+"Unintended prompt drift" = ["crates/prometheus/tests/replay_cli.rs::the_golden_gate_names_each_recording_a_layer_reorder_breaks"]
+
+[replay-and-evaluation."Built-in smoke suite"]
+"Regression in tool dispatch" = ["crates/prometheus/tests/smoke_suite.rs::a_broken_parallel_dispatch_misses_the_smoke_grade"]

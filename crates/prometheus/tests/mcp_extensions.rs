@@ -792,14 +792,22 @@ fn a_tool_list_change_reaches_the_session_at_its_compaction_boundary() {
 
     let home = mock_home();
     fx_with(home.path(), "");
+    // The host commits a compaction only when it shrinks the context, so
+    // the summarized exchanges carry a long answer.
+    let padding = "The release notes cover the storage layer in detail. ".repeat(40);
     let script = script(
         home.path(),
-        r#"
+        &format!(
+            r#"
 [[rule]]
 user = "go"
 [[rule.tool_calls]]
 name = "mcp__fx__change_tools"
-arguments = {}
+arguments = {{}}
+
+[[rule]]
+user = "background"
+text = "BACKGROUND NOTED. {padding}"
 
 [[rule]]
 user = "probe"
@@ -815,7 +823,8 @@ repeat = true
 [[rule]]
 text = "fine"
 repeat = true
-"#,
+"#
+        ),
     );
     let mut p = spawn(home.path(), &["--mock-script", &script]);
     prompt(&mut p);
@@ -825,6 +834,9 @@ repeat = true
     if !String::from_utf8_lossy(answered.before()).contains(notice) {
         p.expect(notice).unwrap();
     }
+    p.send_line("background").unwrap();
+    p.expect("BACKGROUND NOTED.").unwrap();
+    prompt(&mut p);
     // The registry moved on, the session's array did not.
     p.send_line("probe").unwrap();
     p.expect("OLD TOOLS ONLY").unwrap();

@@ -77,11 +77,35 @@ pub(super) async fn compress(ctx: &Ctx<'_>, args: &str) -> Result<String, Error>
     let manual = pmt_agent::compress::manual::parse(args)?;
     let live = ctx.live;
     let outcome = live.agent.compress(&live.config.get(), &manual).await?;
-    Ok(format!(
+    let mut said = format!(
         "compress: {:?}, context {} -> {} tokens",
         outcome.status, outcome.tokens_before, outcome.tokens_after
     )
-    .to_lowercase())
+    .to_lowercase();
+    if let Some(failure) = &outcome.failure {
+        let _ = write!(said, " ({}: {})", failure.kind.as_str(), failure.message);
+    }
+    Ok(said)
+}
+
+/// `/pin [<message-id>|last]`: keeps a message's text in every later
+/// compaction summary (spec: context-compression, Pinned messages survive
+/// compaction).
+pub(super) fn pin(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
+    let max = ctx.live.config.get().config().compression.pinned_max_tokens;
+    let pinned = pmt_agent::compress::pins::pin(&ctx.factory.store, ctx.live.id, args, max)?;
+    let first = pinned.text.lines().next().unwrap_or_default();
+    let preview: String = first.chars().take(60).collect();
+    Ok(format!("pinned {}: {preview}", pinned.id))
+}
+
+/// `/unpin <message-id>`.
+pub(super) fn unpin(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
+    if args.trim().is_empty() {
+        return Err(Error::new(&codes::CLI_USAGE, "usage: /unpin <message-id>"));
+    }
+    let id = pmt_agent::compress::pins::unpin(&ctx.factory.store, ctx.live.id, args)?;
+    Ok(format!("unpinned {id}"))
 }
 
 /// `/model [<ref>] [...]`: shows the route or switches it from the next
@@ -223,6 +247,9 @@ pub(super) fn usage(ctx: &Ctx<'_>) -> Result<String, Error> {
     if budgets != "no budgets set" {
         let _ = write!(text, "\n{budgets}");
     }
+    if let Some(billing) = crate::slash_handlers::billing_lines(store, id)? {
+        let _ = write!(text, "\n{billing}");
+    }
     Ok(text)
 }
 
@@ -294,7 +321,10 @@ fn authored(message: &pmt_store::Message) -> bool {
 }
 
 /// The last user message as it was sent: its text and images.
-fn last_user_input(factory: &Factory, id: SessionId) -> Result<Option<TurnInput>, Error> {
+pub(crate) fn last_user_input(
+    factory: &Factory,
+    id: SessionId,
+) -> Result<Option<TurnInput>, Error> {
     let Some((message_id, text)) = user_messages(factory, id)?.pop() else {
         return Ok(None);
     };

@@ -160,6 +160,18 @@ export interface AutomationStatePayload {
   status: string;
 }
 
+/** `autoprune.offer` result. */
+export interface AutopruneOffer {
+  /** The question to ask (`on`, `off` or `later`, answered with `/autoprune <answer>`), when it is due; `null` otherwise. A non-null answer counts as today's check. */
+  question?: string | null;
+}
+
+/** `autoprune.offer` params. */
+export interface AutopruneOfferParams {
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+}
+
 /** `session.banner` result: what the TUI's startup banner lists. */
 export interface BannerInfo {
   /** The degraded marker while the session runs below full hardening, for example `sandbox: partial:landlock_net` (spec: security-boundaries, Hardening downgrades are never silent). */
@@ -370,10 +382,14 @@ export interface ConfigValue {
 
 /** `session.context_usage` result. */
 export interface ContextUsage {
+  /** The current route's `billing_source` (`subscription:<provider>/<label>`, `api_key:<provider>[/<label>]`, `local`...), when the session is loaded. */
+  billing_source?: string | null;
   /** The model's context window, when known. */
   context_window?: number | null;
   /** The session's cost so far in the usage ledger's currency (USD), priced calls only. */
   cost_usd?: number | null;
+  /** The subscription the current route bills, when it is one. */
+  subscription?: SubscriptionStatus | null;
   /** Estimated tokens of the active context. */
   tokens: number;
 }
@@ -568,6 +584,78 @@ export interface HelloResult {
   server_version: string;
 }
 
+/** `journey.list` result. */
+export interface JourneyList {
+  /** The nodes, oldest first. */
+  nodes: Array<JourneyNode>;
+}
+
+/** `journey.list` params. */
+export interface JourneyListParams {
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+  /** Only nodes created at or after this: a duration back from now (`2h`, `3d`, `1w`), a date (`2026-11-01`) or a timestamp. */
+  since?: string | null;
+}
+
+/** One learned skill or memory entry. */
+export interface JourneyNode {
+  /** When it was learned (RFC 3339). */
+  created_at: string;
+  /** `skill:<name>` for a skill, the entry id (`m_...`) for memory. */
+  id: string;
+  /** `skill` or `memory`. */
+  kind: string;
+  /** Who created it: a skill's `user`, `agent`, `hub` or `bundled` (a used bundled skill); an entry's `user`, `agent`, `background_review`, `provider`, `consolidation` or `import`. */
+  origin: string;
+  /** The skill's name or the entry's text (one line, shortened). */
+  title: string;
+  /** When it last changed (RFC 3339). */
+  updated_at: string;
+}
+
+/** `session.tree` / `session.siblings` result. */
+export interface Lineage {
+  /** The related sessions, by depth then age. */
+  nodes: Array<LineageNode>;
+}
+
+/** One related session in `session.tree` / `session.siblings`. */
+export interface LineageNode {
+  /** Distance from the asked session (its children are 1). */
+  depth: number;
+  /** How it relates to the parent: `fork`, `compression`, `delegate`, `reset`, `import` or `background`. */
+  kind: string;
+  /** Its parent. */
+  parent_session_id: string;
+  /** The session. */
+  session_id: string;
+  /** Its title. */
+  title?: string | null;
+}
+
+/** Params of every `local.*` method; each uses the fields its command takes (`model` for pull, rm and use; `job` for pause and resume; `query` for search; `path` for add). */
+export interface LocalParams {
+  /** A download job id. */
+  job?: string | null;
+  /** Catalog or library id, or `owner/repo[:quant]` for `local.pull`. */
+  model?: string | null;
+  /** A `.gguf` file on the daemon's machine. */
+  path?: string | null;
+  /** The profile (the connection's only one when omitted); `local.use` sets its model. */
+  profile?: string | null;
+  /** Search words. */
+  query?: string | null;
+}
+
+/** Result of every `local.*` method. */
+export interface LocalReply {
+  /** The command's `--json` document (without `schema`), or `null`. */
+  data?: unknown;
+  /** What happened, in one line. */
+  message: string;
+}
+
 /** One running language server. */
 export interface LspServerStatus {
   /** The server id (`pyright`, `rust-analyzer`...). */
@@ -606,6 +694,94 @@ export interface McpServerState {
   state: string;
   /** The tools it contributes. */
   tools: number;
+}
+
+/** `memory.summary` result. */
+export interface MemorySummary {
+  /** `Memory: +<added> ~<patched> -<removed> (review with /memory review)` when the agent changed memory in the session and `memory.review_mode` is not `off`; `null` otherwise. */
+  line?: string | null;
+}
+
+/** One preset as editors show it. */
+export interface MoaPresetInfo {
+  /** The model that acts with the tools and is billed. */
+  aggregator: MoaSlotInfo;
+  /** Temperature sent to the aggregator. */
+  aggregator_temperature?: number | null;
+  /** `Aggregator is on <provider>; ...` when it bills another provider than `model.provider`. */
+  billing_notice?: string | null;
+  /** The built-in `default`, not redefined in `config.toml`. */
+  builtin: boolean;
+  /** It is `moa.default_preset` (cannot be deleted). */
+  default: boolean;
+  /** `false`: the aggregator runs alone. */
+  enabled: boolean;
+  /** When the advisors run (`user_turn`, `per_iteration`, `every_n:N`). */
+  fanout: string;
+  /** The preset name (`/model <name>`, `moa/<name>`). */
+  name: string;
+  /** Temperature sent to the references. */
+  reference_temperature?: number | null;
+  /** The advisors. */
+  references: Array<MoaSlotInfo>;
+}
+
+/** A preset to write. */
+export interface MoaPresetInput {
+  /** The aggregator (never `moa`). */
+  aggregator: MoaSlotInfo;
+  /** Temperature sent to the aggregator (0.0-2.0). */
+  aggregator_temperature?: number | null;
+  /** Whether the references run (default `true`). */
+  enabled?: boolean | null;
+  /** The cadence (default `user_turn`). */
+  fanout?: string | null;
+  /** Temperature sent to the references (0.0-2.0). */
+  reference_temperature?: number | null;
+  /** The advisors (at least one). */
+  references: Array<MoaSlotInfo>;
+}
+
+/** `moa.presets.list` (and `put`, `delete`) result. */
+export interface MoaPresetList {
+  /** `moa.default_preset`. */
+  default_preset: string;
+  /** Every preset, sorted by name. */
+  presets: Array<MoaPresetInfo>;
+}
+
+/** `moa.presets.delete` params. */
+export interface MoaPresetsDeleteParams {
+  /** The preset name (never `moa.default_preset`). */
+  name: string;
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+}
+
+/** `moa.presets.list` params. */
+export interface MoaPresetsListParams {
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+}
+
+/** `moa.presets.put` params. */
+export interface MoaPresetsPutParams {
+  /** The preset name. */
+  name: string;
+  /** The preset. */
+  preset: MoaPresetInput;
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+}
+
+/** One preset slot. */
+export interface MoaSlotInfo {
+  /** Model id. */
+  model: string;
+  /** Provider id. */
+  provider: string;
+  /** `none`...`ultra`, when set. */
+  reasoning_effort?: string | null;
 }
 
 /** One `model.options` entry. */
@@ -670,6 +846,28 @@ export type PromptImage = {
 } | {
   blob: string;
 };
+
+/** A subscription's plan and quota windows. */
+export interface QuotaStatus {
+  /** The plan label. */
+  plan?: string | null;
+  /** The provider reports quota data. */
+  reported: boolean;
+  /** One line for a status display (`quota: not reported by provider`). */
+  text: string;
+  /** The quota windows. */
+  windows?: Array<QuotaWindow>;
+}
+
+/** One quota window. */
+export interface QuotaWindow {
+  /** `5h`, `weekly`... */
+  name: string;
+  /** When it resets (RFC 3339). */
+  resets_at?: string | null;
+  /** Used share, 0-100. */
+  used_percent: number;
+}
 
 /** `request.cancel` payload: a server request timed out or was cancelled. */
 export interface RequestCancel {
@@ -820,6 +1018,19 @@ export interface SessionSummary {
   title?: string | null;
 }
 
+/** How a steer is delivered. */
+export type SteerKind = "note" | "redirect" | "wrap_up";
+
+/** `session.steer` params. */
+export interface SteerParams {
+  /** How it is delivered (default `note`). */
+  kind?: SteerKind;
+  /** The session. */
+  session_id: string;
+  /** The steer; empty or whitespace-only text is refused (`empty steer`). */
+  text: string;
+}
+
 /** `subagent.list` result. */
 export interface SubagentList {
   /** The session's children, oldest first. */
@@ -842,6 +1053,8 @@ export interface SubagentSummary {
 export interface SubmitParams {
   /** Never accepted: the gateway stamps every input's author from the connection, so a client-supplied one is refused with `-32002 rpc.forged_author`. */
   author?: unknown;
+  /** Other files received with it (absolute paths on the daemon's machine): kept in the session's blob store and, with `attachments.storage = "workspace"`, copied into the workspace. */
+  files?: Array<string>;
   /** Images that go with it. */
   images?: Array<PromptImage>;
   /** The client's id of this input: a resend with the same id returns the original admission instead of running a second turn. */
@@ -862,6 +1075,12 @@ export interface Submitted {
   notice?: string | null;
   /** The admission id: the turn that runs the input (for a steered input, the running turn it joined). */
   turn_id: string;
+}
+
+/** A subscription's status in `session.context_usage`. */
+export interface SubscriptionStatus {
+  /** Its plan and quota windows. */
+  quota: QuotaStatus;
 }
 
 /** `sudo.request` result. */
@@ -1156,6 +1375,7 @@ export interface WorktreeStatus {
 
 export interface Methods {
   "approval.respond": { params: ApprovalRespondParams; result: Ack };
+  "autoprune.offer": { params: AutopruneOfferParams; result: AutopruneOffer };
   "command.dispatch": { params: DispatchParams; result: Dispatched };
   "commands.catalog": { params: SessionRef; result: CommandCatalog };
   "complete.path": { params: CompleteParams; result: Completions };
@@ -1166,7 +1386,26 @@ export interface Methods {
   "egress.set": { params: EgressSetParams; result: EgressState };
   "files.rollback": { params: FilesRollbackParams; result: FilesRolledBack };
   "files.undo": { params: FilesUndoParams; result: FilesUndone };
+  "journey.list": { params: JourneyListParams; result: JourneyList };
+  "local.add": { params: LocalParams; result: LocalReply };
+  "local.catalog": { params: LocalParams; result: LocalReply };
+  "local.install": { params: LocalParams; result: LocalReply };
+  "local.jobs": { params: LocalParams; result: LocalReply };
+  "local.pause": { params: LocalParams; result: LocalReply };
+  "local.pull": { params: LocalParams; result: LocalReply };
+  "local.resume": { params: LocalParams; result: LocalReply };
+  "local.rm": { params: LocalParams; result: LocalReply };
+  "local.search": { params: LocalParams; result: LocalReply };
+  "local.start": { params: LocalParams; result: LocalReply };
+  "local.status": { params: LocalParams; result: LocalReply };
+  "local.stop": { params: LocalParams; result: LocalReply };
+  "local.update": { params: LocalParams; result: LocalReply };
+  "local.use": { params: LocalParams; result: LocalReply };
   "lsp.status": { params: LspStatusParams; result: LspStatus };
+  "memory.summary": { params: SessionRef; result: MemorySummary };
+  "moa.presets.delete": { params: MoaPresetsDeleteParams; result: MoaPresetList };
+  "moa.presets.list": { params: MoaPresetsListParams; result: MoaPresetList };
+  "moa.presets.put": { params: MoaPresetsPutParams; result: MoaPresetList };
   "model.options": { params: SessionRef; result: ModelOptions };
   "pairing.approve": { params: PairingApproveParams; result: PairingApproved };
   "prompt.submit": { params: SubmitParams; result: Submitted };
@@ -1184,7 +1423,10 @@ export interface Methods {
   "session.list": { params: SessionListParams; result: SessionList };
   "session.resolve": { params: ResolveParams; result: SessionRef };
   "session.resume": { params: ResumeParams; result: Attached };
+  "session.siblings": { params: SessionRef; result: Lineage };
+  "session.steer": { params: SteerParams; result: Ack };
   "session.transcript": { params: SessionRef; result: Transcript };
+  "session.tree": { params: SessionRef; result: Lineage };
   "subagent.list": { params: SessionRef; result: SubagentList };
   "vault.add": { params: VaultAddParams; result: VaultItem };
   "vault.list": { params: VaultListParams; result: VaultItems };
@@ -1244,10 +1486,6 @@ export const UNDECLARED = [
   "harness.diff",
   "harness.log",
   "harness.rollback",
-  "journey.list",
-  "moa.presets.delete",
-  "moa.presets.list",
-  "moa.presets.put",
   "screen.handback",
   "screen.takeover",
   "subagent.subscribe",

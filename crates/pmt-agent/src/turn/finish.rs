@@ -32,8 +32,22 @@ impl Turn<'_> {
         if let (true, Some(frozen)) = (ending.handoff, frozen) {
             ending.final_response = self.handoff(frozen).await?;
         }
+        if let (ExitReason::Completed, Some(reply), Some(memory)) = (
+            ending.reason,
+            ending.final_response.as_deref(),
+            self.agent.setup.memory.as_deref(),
+        ) {
+            memory.turn_completed(&self.user_text, reply);
+        }
         if frozen.is_some() {
             self.close_failed(&ending)?;
+            self.journal(
+                &pmt_store::JournalRecord::new(
+                    self.id.as_str(),
+                    pmt_store::JournalKind::TurnFinished,
+                )
+                .with_data(ending.reason.as_str()),
+            )?;
         }
         if self.options.interrupt.is_hard() {
             self.agent.steers.discard();
@@ -59,11 +73,14 @@ impl Turn<'_> {
             .usage_totals(UsageScope::Session(setup.session))
             .ok()
             .and_then(|totals| totals.tokens.cache_hit_rate());
+        let (context_tokens, compaction_trigger_tokens) = self.pressure().await;
         self.emit(Event::TurnEnd(TurnEnd {
             reason: ending.reason.as_str().to_owned(),
             iterations: self.iterations.used(),
             usage: usage_payload(&self.usage),
             cache_hit_rate,
+            context_tokens,
+            compaction_trigger_tokens,
         }))
         .await;
         Ok(TurnResult {
@@ -83,6 +100,27 @@ impl Turn<'_> {
     /// limit and the budget check, but recorded like every call.
     async fn handoff(&mut self, frozen: &Frozen) -> Result<Option<String>, Error> {
         self.append(&transcript::notice_row(HANDOFF_NOTICE, "budget_handoff"))?;
+        self.toolless_final(frozen).await
+    }
+
+    /// A `wrap_up` steer was delivered: one toolless request for the final
+    /// response, and the turn ends `completed` (spec: agent-turn-loop,
+    /// Structured steering).
+    pub(super) async fn wrap_up_final(&mut self, frozen: &Frozen) -> Result<Ending, Error> {
+        let text = self.toolless_final(frozen).await?;
+        if text.is_none()
+            && let Some(stopped) = self.stopped()
+        {
+            return Ok(stopped);
+        }
+        let mut end = Ending::new(ExitReason::Completed);
+        end.final_response = text;
+        Ok(end)
+    }
+
+    /// Asks for a final answer without tools (one retry of an empty
+    /// reply); `None` when interrupted, failed or still empty.
+    async fn toolless_final(&mut self, frozen: &Frozen) -> Result<Option<String>, Error> {
         for _ in 0..HANDOFF_ATTEMPTS {
             let route = self.agent.setup.model.route().await;
             let request = self.request(frozen, &route, false)?;
@@ -106,7 +144,7 @@ impl Turn<'_> {
     /// message never merges into the failed request (not for an overflow,
     /// which compaction handles). Once written, the last row is an
     /// assistant row, so a second call writes nothing.
-    fn close_failed(&mut self, ending: &Ending) -> Result<(), Error> {
+    pub(super) fn close_failed(&mut self, ending: &Ending) -> Result<(), Error> {
         let open = matches!(self.last_role, Some(Role::User | Role::Tool));
         if ending.reason == ExitReason::Completed
             || ending.reason == ExitReason::ContextExhausted

@@ -1,0 +1,3 @@
+# A dangerous command the smart approval guardian denies; the turn goes on.
+prompts = ["clean up"]
+set = ['approvals.mode="smart"', 'auxiliary.approval.provider="mock"', 'auxiliary.approval.model="mock"']

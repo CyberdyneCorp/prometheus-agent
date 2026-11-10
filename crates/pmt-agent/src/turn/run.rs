@@ -17,7 +17,7 @@ use pmt_core::id::MessageId;
 use pmt_obs::trajectory::events::Event;
 use pmt_obs::trajectory::payload::{MessageText, Reasoning, TurnStart, Usage};
 use pmt_providers::request::{CacheControl, Request};
-use pmt_store::{NewMessage, Role, Visibility};
+use pmt_store::{JournalKind, NewMessage, Role, Visibility};
 use tokio::time::Instant;
 
 use super::events;
@@ -150,6 +150,12 @@ pub(super) async fn run(
     let mut turn = Turn::new(agent, scope.config(), id, options);
     turn.notices = notices;
     let result = turn.run(input).await;
+    if result
+        .as_ref()
+        .is_ok_and(|r| r.exit_reason == ExitReason::Completed)
+    {
+        agent.after_completed_turn(scope.config()).await;
+    }
     drop(refresher);
     if let Err(err) = setup.store.release_lease(&lease) {
         tracing::warn!(error = %err, "turn lease could not be released; it lapses at its expiry");
@@ -181,6 +187,11 @@ pub(super) struct Turn<'a> {
     pub(super) id: TurnId,
     pub(super) options: TurnOptions,
     pub(super) started_at: Timestamp,
+    /// When the turn started (the fast mode window).
+    pub(super) started: Instant,
+    /// Messages the session held before this turn (`cold` fast mode asks
+    /// only on a session's first turn).
+    pub(super) prior_rows: usize,
     /// `None` without a run budget: the clock is then never read.
     pub(super) clock: Option<RunClock>,
     pub(super) iterations: IterationBudget,
@@ -188,6 +199,10 @@ pub(super) struct Turn<'a> {
     pub(super) appended: Vec<MessageId>,
     /// The role of the newest row this turn stored.
     pub(super) last_role: Option<Role>,
+    /// This turn's user row (its images are always sent).
+    pub(super) user_row: Option<MessageId>,
+    /// This turn's user text (what an external memory provider syncs).
+    pub(super) user_text: String,
     pub(super) notices: Vec<String>,
     pub(super) guard: LoopGuard,
     /// Empty replies retried in the current streak.
@@ -196,12 +211,19 @@ pub(super) struct Turn<'a> {
     nudges: u32,
     /// The run-budget wrap-up notice was sent.
     pub(super) wrap_up_sent: bool,
+    /// The budget checkpoint notice was sent.
+    pub(super) checkpoint_sent: bool,
     /// The label of the next compression check.
     pub(super) next_trigger: Trigger,
     /// Compaction attempts this turn.
     pub(super) compression_attempts: u32,
     /// Active rows the latest request was built from.
     pub(super) request_rows: usize,
+    /// The last row a server-side compaction item of the latest request
+    /// would cover.
+    pub(super) covers: Option<MessageId>,
+    /// The rows a context engine chose for the next request (`None`: all).
+    pub(super) selected: Option<std::collections::HashSet<MessageId>>,
     /// This turn's recall block (wire only).
     pub(super) ephemeral: Option<super::recall::Ephemeral>,
     /// The delta sink the plugin hooks watch (`None` without hooks).
@@ -210,12 +232,19 @@ pub(super) struct Turn<'a> {
     pub(super) held: bool,
     /// Files edited this turn (`pre_verify`).
     pub(super) edited: std::collections::BTreeSet<String>,
-    /// `pre_verify` continuations made this turn.
+    /// `pre_verify` and verify-on-stop continuations made this turn.
     pub(super) verify_nudges: u32,
+    /// Edits not verified since (verify-on-stop).
+    pub(super) evidence: super::verify::Evidence,
 }
 
 impl<'a> Turn<'a> {
-    fn new(agent: &'a Agent, config: &'a Config, id: TurnId, options: TurnOptions) -> Self {
+    pub(super) fn new(
+        agent: &'a Agent,
+        config: &'a Config,
+        id: TurnId,
+        options: TurnOptions,
+    ) -> Self {
         let budget = options
             .run_budget
             .or(config.agent.run_budget_secs.map(Duration::from_secs));
@@ -233,34 +262,52 @@ impl<'a> Turn<'a> {
             }),
             options,
             started_at: Timestamp::now(),
+            started: Instant::now(),
+            prior_rows: 0,
             iterations: IterationBudget::new(max),
             usage: TurnUsage::default(),
             appended: Vec::new(),
             last_role: None,
+            user_row: None,
+            user_text: String::new(),
             notices: Vec::new(),
             guard: LoopGuard::new(&config.tool_loop_guardrails, agent.setup.interactive),
             empty_streak: 0,
             nudges: 0,
             wrap_up_sent: false,
+            checkpoint_sent: false,
             next_trigger: Trigger::TurnStart,
             compression_attempts: 0,
             request_rows: 0,
+            covers: None,
+            selected: None,
             ephemeral: None,
             stream: None,
             held: false,
             edited: std::collections::BTreeSet::new(),
             verify_nudges: 0,
+            evidence: super::verify::Evidence::default(),
         }
     }
 
     async fn run(mut self, input: TurnInput) -> Result<TurnResult, Error> {
         let setup = &self.agent.setup;
+        let init = crate::init::is_init(&input)
+            .then(|| self.init_snapshot())
+            .flatten();
+        self.close_unfinished().await?;
+        self.prior_rows = setup
+            .store
+            .messages(setup.session, Visibility::Active)?
+            .len();
+        self.load_prefill()?;
+        self.journal_kind(JournalKind::TurnStarted)?;
         setup.model.start_turn().await;
         self.start_stream();
         let route = setup.model.route().await;
         let mut frozen = self.freeze(&route).await?;
         let text = match self.agent.steers.take() {
-            Some(steer) => format!("{steer}\n\n{}", input.text),
+            Some(steer) => format!("{}\n\n{}", steer.text, input.text),
             None => input.text,
         };
         let mut row = transcript::user_row(
@@ -279,8 +326,12 @@ impl<'a> Turn<'a> {
                 row.metadata = Some(metadata);
             }
         }
+        crate::vision::mark_attached(&setup.session.to_string(), &input.images);
         let message_id = row.id;
+        self.user_row = Some(message_id);
+        self.user_text.clone_from(&text);
         let wire = row.content.clone().unwrap_or_default();
+        let last_activity = self.last_activity()?;
         self.append(&row)?;
         self.emit(Event::TurnStart(TurnStart {
             message_id: Some(message_id.to_string()),
@@ -293,20 +344,53 @@ impl<'a> Turn<'a> {
         .await;
         self.recall(&text, &wire).await;
         self.hook_context(&text, &wire).await;
+        self.idle_compaction(&mut frozen, &route, last_activity)
+            .await?;
         let ending = self.iterate(&mut frozen).await?;
+        if let Some((path, before)) = init {
+            self.keep_user_sections(&path, &before);
+        }
         self.finish(ending, Some(&frozen)).await
     }
 
-    async fn iterate(&mut self, frozen: &mut Frozen) -> Result<Ending, Error> {
+    /// `AGENTS.md` before an `/init` turn: its path and text.
+    fn init_snapshot(&self) -> Option<(std::path::PathBuf, String)> {
+        let cwd = self.agent.setup.prompt.cwd.as_deref()?;
+        let path = crate::init::agents_file(cwd);
+        let before = std::fs::read_to_string(&path).ok()?;
+        Some((path, before))
+    }
+
+    /// Appends back the user sections an `/init` turn dropped.
+    fn keep_user_sections(&mut self, path: &std::path::Path, before: &str) {
+        let after = std::fs::read_to_string(path).unwrap_or_default();
+        let Some(merged) = crate::init::restore(before, &after) else {
+            return;
+        };
+        match std::fs::write(path, merged) {
+            Ok(()) => self.notices.push(format!(
+                "kept your sections of {} that the update dropped",
+                path.display()
+            )),
+            Err(err) => {
+                tracing::warn!(error = %err, path = %path.display(), "AGENTS.md sections not restored");
+            }
+        }
+    }
+
+    pub(super) async fn iterate(&mut self, frozen: &mut Frozen) -> Result<Ending, Error> {
         loop {
             if let Some(end) = self.stopped() {
                 return Ok(end);
             }
+            if self.deliver_steers()? {
+                return self.wrap_up_final(frozen).await;
+            }
             if !self.iterations.consume() {
                 return Ok(Ending::new(ExitReason::IterationLimit));
             }
-            self.deliver_steers()?;
             let route = self.agent.setup.model.route().await;
+            self.select_context(&route).await?;
             let estimate = self.request(frozen, &route, true)?.estimated_tokens();
             self.preflight(frozen, &route, estimate).await?;
             let request = self.request(frozen, &route, true)?;
@@ -339,8 +423,12 @@ impl<'a> Turn<'a> {
         request: &Request,
         route: &RouteInfo,
     ) -> Result<Sent, Error> {
+        self.journal_request(request)?;
         match self.call(request).await {
-            Ok(reply) => Ok(Sent::Reply(Box::new(reply))),
+            Ok(reply) => {
+                self.journal_kind(JournalKind::ResponseReceived)?;
+                Ok(Sent::Reply(Box::new(reply)))
+            }
             Err(end) if end.reason == ExitReason::ContextExhausted => {
                 Ok(match self.overflow(frozen, route).await? {
                     None => {
@@ -423,8 +511,10 @@ impl<'a> Turn<'a> {
         if let Some(findings) = self.agent.setup.tools.settle().await {
             return Some((findings, "lsp_diagnostics"));
         }
-        let message = self.verify_nudge(reply, route).await?;
-        Some((message, "pre_verify"))
+        if let Some(message) = self.verify_nudge(reply, route).await {
+            return Some((message, "pre_verify"));
+        }
+        self.verify_on_stop().map(|m| (m, "verify_on_stop"))
     }
 
     /// The interrupt and run-budget check at the top of an iteration.
@@ -446,15 +536,27 @@ impl<'a> Turn<'a> {
         with_tools: bool,
     ) -> Result<Request, Error> {
         let setup = &self.agent.setup;
-        let rows = setup.store.messages(setup.session, Visibility::Active)?;
+        let mut rows = setup.store.messages(setup.session, Visibility::Active)?;
         self.request_rows = rows.len();
+        if let Some(keep) = &self.selected {
+            let current = self.user_row;
+            rows.retain(|r| keep.contains(&r.id) || Some(r.id) == current);
+        }
+        let vision = &self.config.vision;
+        let replay = super::replay::Replay::of(
+            &rows,
+            vision.replay_recent_images,
+            self.user_row,
+            vision.embed_target_bytes,
+        );
         let mut cache =
             CacheControl::for_session(&self.config.prompt_cache, &setup.session.to_string());
         cache.ttl = self.agent.cache_ttl(&self.config.prompt_cache, route);
+        let (server_compaction, from) = self.server_compaction(route, &rows);
         let mut request = Request {
             model: route.model.clone(),
             system: system_blocks(&frozen.tiers),
-            messages: repair::wire_with(&rows, &|row| image_parts(&setup.store, row)),
+            messages: repair::wire_with(&rows[from..], &|row| replay.parts(&setup.store, row)),
             tools: if with_tools {
                 frozen.tools.clone()
             } else {
@@ -464,9 +566,15 @@ impl<'a> Turn<'a> {
             cache,
             reasoning: None,
             body_overrides: None,
+            server_compaction,
+            speed: None,
         };
+        request.speed = self.speed(route);
         if let Some(ephemeral) = &mut self.ephemeral {
             ephemeral.attach(&mut request.messages);
+        }
+        if let Some(prefill) = self.agent.prefill_messages() {
+            request.messages.splice(0..0, prefill.iter().cloned());
         }
         breakpoints::plan(&mut request, route.wire_format);
         Ok(request)
@@ -506,6 +614,7 @@ impl<'a> Turn<'a> {
         for fallback in &reply.fallbacks {
             self.emit(Event::ProviderFallback(fallback.clone())).await;
         }
+        self.notices.extend(reply.advisors.iter().cloned());
         let cost = reply.record.as_ref().and_then(|r| r.cost_usd);
         self.usage.add(&reply.usage, cost);
         self.observe(reply)?;
@@ -518,6 +627,7 @@ impl<'a> Turn<'a> {
     /// Stores the assistant row and emits its events.
     pub(super) async fn keep_reply(&mut self, reply: &ModelReply) -> Result<(), Error> {
         let mut row = transcript::assistant_row(reply);
+        self.keep_compaction_item(reply, &mut row)?;
         let interim = !reply.tool_calls.is_empty() && !reply.text.is_empty();
         if interim {
             self.observe_hook("on_interim_message", [("text", reply.text.clone().into())]);
@@ -526,7 +636,10 @@ impl<'a> Turn<'a> {
         // never shown: only the hook's final reply reaches the person.
         let hidden = interim && self.held;
         if hidden {
-            row.metadata = Some(serde_json::json!({ "hidden": true, "kind": "interim" }));
+            let mut metadata = row.metadata.take().unwrap_or_else(|| serde_json::json!({}));
+            metadata["hidden"] = true.into();
+            metadata["kind"] = "interim".into();
+            row.metadata = Some(metadata);
         }
         let id = row.id.to_string();
         self.append(&row)?;
@@ -545,6 +658,36 @@ impl<'a> Turn<'a> {
             }))
             .await;
         }
+        Ok(())
+    }
+
+    /// Freezes the prefill messages at the session's start (its first
+    /// turn), or restores the frozen ones (spec: agent-turn-loop, Prefill
+    /// messages).
+    pub(super) fn load_prefill(&self) -> Result<(), Error> {
+        let setup = &self.agent.setup;
+        let frozen = match setup.store.prefill(setup.session)? {
+            Some(frozen) => Some(frozen),
+            None => match &self.config.prompt.prefill_messages_file {
+                Some(file)
+                    if setup
+                        .store
+                        .messages(setup.session, Visibility::All)?
+                        .is_empty() =>
+                {
+                    let read = crate::prompt::prefill::read(setup.scope.dir(), file)?;
+                    setup.store.save_prefill(setup.session, &read)?;
+                    Some(read)
+                }
+                _ => None,
+            },
+        };
+        *self
+            .agent
+            .prefill
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) =
+            frozen.map(|p| std::sync::Arc::new(crate::prompt::prefill::messages(&p)));
         Ok(())
     }
 
@@ -580,39 +723,4 @@ pub(super) fn usage_payload(usage: &TurnUsage) -> Usage {
         .into(),
         cost_usd: usage.cost_usd,
     }
-}
-
-/// The images `row` stored, as request parts (pixels or descriptions). An image whose
-/// blob is gone becomes a note, so it cannot fail the request.
-fn image_parts(
-    store: &pmt_store::Store,
-    row: &pmt_store::Message,
-) -> Vec<pmt_providers::request::Part> {
-    use pmt_providers::request::Part;
-    use pmt_tools::vision::routing::{Inline, inline};
-    transcript::images_of(row)
-        .into_iter()
-        .map(|image| {
-            if let Some(description) = &image.description {
-                return Part::Text {
-                    text: format!("[image {}: {description}]", image.name),
-                };
-            }
-            let bytes = pmt_store::BlobRef::parse(&image.blob)
-                .ok_or_else(|| "bad blob key".to_owned())
-                .and_then(|blob| store.get_blob(&blob).map_err(|e| e.to_string()));
-            let data = bytes.and_then(pmt_tools::vision::ImageData::sniff);
-            match data.map(|data| inline(data, &image.name)) {
-                Ok(Inline::Image(image)) => Part::Image {
-                    data: image.base64(),
-                    media_type: image.mime,
-                    is_url: false,
-                },
-                Ok(Inline::Note(note)) => Part::Text { text: note },
-                Err(why) => Part::Text {
-                    text: format!("[image {} is unavailable: {why}]", image.name),
-                },
-            }
-        })
-        .collect()
 }

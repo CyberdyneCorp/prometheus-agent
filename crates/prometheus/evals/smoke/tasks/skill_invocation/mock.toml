@@ -1,0 +1,13 @@
+[[rule]]
+step = 0
+[[rule.tool_calls]]
+name = "skill_view"
+arguments = { name = "prometheus-agent" }
+
+[[rule]]
+tool_result = "prometheus"
+text = "Loaded the prometheus-agent skill."
+
+[[rule]]
+repeat = true
+text = "unexpected"

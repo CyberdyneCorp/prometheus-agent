@@ -60,7 +60,7 @@ impl UpdateLock {
             Err(e) => return Err(Error::io(&codes::UPDATE_FAILED, &path, &e)),
         };
         let holder_path = dir.join(HOLDER_FILE);
-        match file.try_lock() {
+        match pmt_core::file_lock::try_lock(&file) {
             Ok(()) => {}
             Err(TryLockError::WouldBlock) => return Err(held(&holder_path)),
             Err(TryLockError::Error(e)) => return Err(Error::io(&codes::UPDATE_FAILED, &path, &e)),

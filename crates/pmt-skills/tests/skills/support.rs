@@ -300,6 +300,7 @@ pub(crate) async fn mock_model(profile: &Profile, script: &str) -> Arc<ProviderM
         catalog,
         health: Arc::new(Healthy),
         ad_hoc: None,
+        metered_confirm: None,
     };
     let target = Target {
         provider: "mock".into(),

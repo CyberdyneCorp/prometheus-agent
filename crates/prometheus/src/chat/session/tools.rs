@@ -227,6 +227,24 @@ pub async fn route_traits(model: &dyn pmt_agent::turn::model::ModelPort) -> Rout
         .with_context_window(route.context_window)
 }
 
+/// [`route_traits`] with the auxiliary capabilities session `id` reaches
+/// (`video`: its `vision` route takes video, so `video_analyze` works).
+pub async fn session_route(
+    model: &dyn pmt_agent::turn::model::ModelPort,
+    id: pmt_core::id::SessionId,
+) -> RouteTraits {
+    let mut traits = route_traits(model).await;
+    let video = pmt_media::MediaSessions::process()
+        .session(&id.to_string())
+        .is_some_and(|media| media.setup().video.is_some());
+    if video {
+        traits
+            .auxiliary
+            .insert(pmt_media::video::VIDEO_AUX.to_owned());
+    }
+    traits
+}
+
 /// What one surface build needs.
 pub struct SurfaceInputsOwned<'a> {
     /// The profile.
@@ -351,6 +369,11 @@ pub struct SwappableTools {
     announcement: std::sync::Mutex<Option<String>>,
     /// The session's form of `delegate_task` (fixed at creation).
     delegation: std::sync::OnceLock<pmt_delegation::shape::Shape>,
+    /// Where each call's result goes into the session's recording.
+    recording: std::sync::OnceLock<(Arc<pmt_obs::recording::Writer>, String)>,
+    /// A replay's recorded results (spec: replay-and-evaluation, Replay
+    /// modes).
+    replay: std::sync::OnceLock<Arc<dyn crate::replay::ToolReplay>>,
 }
 
 impl SwappableTools {
@@ -361,6 +384,57 @@ impl SwappableTools {
             current: RwLock::new(tools),
             announcement: std::sync::Mutex::default(),
             delegation: std::sync::OnceLock::new(),
+            recording: std::sync::OnceLock::new(),
+            replay: std::sync::OnceLock::new(),
+        }
+    }
+
+    /// Keeps every call's result in `session`'s recording.
+    pub fn record_into(&self, writer: Arc<pmt_obs::recording::Writer>, session: &str) {
+        let _ = self.recording.set((writer, session.to_owned()));
+    }
+
+    /// Answers calls from `replay` (a recorded result, or a live run).
+    pub fn replay_from(&self, replay: Arc<dyn crate::replay::ToolReplay>) {
+        let _ = self.replay.set(replay);
+    }
+
+    /// Runs one batch: replayed calls are answered from the recording,
+    /// the rest run on the current tools; every result is recorded.
+    async fn run_batch(
+        &self,
+        calls: &[RequestedCall],
+        turn_id: &str,
+        cancel: &CancelToken,
+        journal: Option<Arc<dyn pmt_agent::turn::CallJournal>>,
+    ) -> ToolBatch {
+        let tools = self.tools();
+        let batch = match self.replay.get() {
+            Some(replay) => {
+                replayed(replay.as_ref(), &tools, (calls, turn_id), cancel, journal).await
+            }
+            None => run_on(&tools, calls, turn_id, cancel, journal).await,
+        };
+        self.record(calls, &batch);
+        self.with_announcement(batch)
+    }
+
+    fn record(&self, calls: &[RequestedCall], batch: &ToolBatch) {
+        let Some((writer, session)) = self.recording.get() else {
+            return;
+        };
+        for (call, outcome) in calls.iter().zip(&batch.outcomes) {
+            writer.tool(
+                session,
+                &pmt_obs::recording::Tool {
+                    ts: jiff::Timestamp::now().to_string(),
+                    call_id: call.id.clone(),
+                    name: call.name.clone(),
+                    arguments: serde_json::from_str(&call.arguments)
+                        .unwrap_or_else(|_| serde_json::Value::String(call.arguments.clone())),
+                    result: serde_json::to_value(&outcome.result).unwrap_or_default(),
+                },
+            );
         }
     }
 
@@ -385,11 +459,31 @@ impl SwappableTools {
     fn tools(&self) -> Arc<SessionTools> {
         Arc::clone(&self.current.read().unwrap_or_else(PoisonError::into_inner))
     }
+
+    /// Puts a pending toolset announcement before the batch's first result.
+    fn with_announcement(&self, mut batch: ToolBatch) -> ToolBatch {
+        if let Some(first) = batch.outcomes.first_mut()
+            && let Some(note) = self
+                .announcement
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .take()
+        {
+            first
+                .result
+                .content
+                .insert(0, pmt_tools::result::Content::Text { text: note });
+        }
+        batch
+    }
 }
 
 impl ToolPort for SwappableTools {
     fn definitions(&self) -> Vec<Tool> {
         let mut tools = self.tools().definitions();
+        if let Some(replay) = self.replay.get() {
+            tools = replay_definitions(tools, replay.recorded_tools());
+        }
         let shape = self.delegation.get().copied().unwrap_or_default();
         for tool in &mut tools {
             if pmt_delegation::shape::Shape::applies_to(&tool.name) {
@@ -403,33 +497,123 @@ impl ToolPort for SwappableTools {
         self.tools().idempotent(name)
     }
 
+    fn toolset_of(&self, name: &str) -> Option<(String, bool)> {
+        self.tools().toolset_of(name)
+    }
+
     fn run<'a>(
         &'a self,
         calls: &'a [RequestedCall],
         turn_id: &'a str,
         cancel: &'a CancelToken,
     ) -> BoxFuture<'a, ToolBatch> {
-        let tools = self.tools();
-        Box::pin(async move {
-            let mut batch = tools.run(calls, turn_id, cancel).await;
-            if let Some(first) = batch.outcomes.first_mut()
-                && let Some(note) = self
-                    .announcement
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .take()
-            {
-                first
-                    .result
-                    .content
-                    .insert(0, pmt_tools::result::Content::Text { text: note });
-            }
-            batch
-        })
+        Box::pin(self.run_batch(calls, turn_id, cancel, None))
+    }
+
+    fn run_journaled<'a>(
+        &'a self,
+        calls: &'a [RequestedCall],
+        turn_id: &'a str,
+        cancel: &'a CancelToken,
+        journal: Arc<dyn pmt_agent::turn::CallJournal>,
+    ) -> BoxFuture<'a, ToolBatch> {
+        Box::pin(self.run_batch(calls, turn_id, cancel, Some(journal)))
+    }
+
+    fn declared(&self, name: &str) -> Option<pmt_agent::turn::Declared> {
+        self.tools().declared(name)
     }
 
     fn settle(&self) -> BoxFuture<'_, Option<String>> {
         let tools = self.tools();
         Box::pin(async move { tools.settle().await })
     }
+}
+
+/// `calls` on `tools`, journaled when there is a journal.
+async fn run_on(
+    tools: &SessionTools,
+    calls: &[RequestedCall],
+    turn_id: &str,
+    cancel: &CancelToken,
+    journal: Option<Arc<dyn pmt_agent::turn::CallJournal>>,
+) -> ToolBatch {
+    match journal {
+        Some(journal) => tools.run_journaled(calls, turn_id, cancel, journal).await,
+        None => tools.run(calls, turn_id, cancel).await,
+    }
+}
+
+/// A replayed batch: recorded results where the replay has them, the
+/// other calls run on `tools`; the plan is the one `tools` would run by.
+async fn replayed(
+    replay: &dyn crate::replay::ToolReplay,
+    tools: &SessionTools,
+    (calls, turn_id): (&[RequestedCall], &str),
+    cancel: &CancelToken,
+    journal: Option<Arc<dyn pmt_agent::turn::CallJournal>>,
+) -> ToolBatch {
+    use crate::replay::ToolAnswer;
+    let answers: Vec<ToolAnswer> = calls.iter().map(|call| replay.answer(call)).collect();
+    let live: Vec<RequestedCall> = calls
+        .iter()
+        .zip(&answers)
+        .filter(|(_, answer)| matches!(answer, ToolAnswer::Live))
+        .map(|(call, _)| call.clone())
+        .collect();
+    let mut ran = if live.is_empty() {
+        Vec::new()
+    } else {
+        run_on(tools, &live, turn_id, cancel, journal.clone())
+            .await
+            .outcomes
+    }
+    .into_iter();
+    let outcomes = calls
+        .iter()
+        .zip(answers)
+        .map(|(call, answer)| match answer {
+            ToolAnswer::Serve(result) => {
+                if let Some(journal) = &journal {
+                    journal.started(&call.id);
+                    journal.finished(&call.id, &result);
+                }
+                pmt_agent::turn::tools::ToolOutcome {
+                    result,
+                    duration_ms: 0,
+                }
+            }
+            ToolAnswer::Live => ran
+                .next()
+                .unwrap_or_else(|| pmt_agent::turn::tools::ToolOutcome {
+                    result: pmt_tools::ToolResult::error("the call did not run"),
+                    duration_ms: 0,
+                }),
+        })
+        .collect();
+    ToolBatch {
+        outcomes,
+        plan: Some(tools.plan(calls, turn_id)),
+    }
+}
+
+/// A replay offers the tools its recording offered, in recorded order:
+/// this build's schema of each where it has the tool (a schema change is
+/// what a replay must catch), the recorded one where it does not (plugin
+/// and MCP tools a replay starts without). The session's own selection
+/// (a scheduled run's toolsets, its memory mode) is the recording's.
+fn replay_definitions(current: Vec<Tool>, recorded: Vec<Tool>) -> Vec<Tool> {
+    if recorded.is_empty() {
+        return current;
+    }
+    recorded
+        .into_iter()
+        .map(|tool| {
+            current
+                .iter()
+                .find(|t| t.name == tool.name)
+                .cloned()
+                .unwrap_or(tool)
+        })
+        .collect()
 }

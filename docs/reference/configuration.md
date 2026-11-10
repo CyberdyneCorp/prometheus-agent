@@ -10,8 +10,13 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 |---|---|---|---|---|---|
 | `agent.api_max_retries` | integer | `3` | 1 to 10 | `next_session` | Attempts per model call before the fallback chain is consulted. |
 | `agent.auto_recovery_cycles` | integer | `5` | ≥ 0 | `next_session` | Extra wait-and-retry cycles after retries and fallbacks are spent on a transient failure with nothing streamed; `0` disables. |
+| `agent.budget_warning_ratio` | number | unset | > 0.0, < 1.0 | `next_session` | Share of the most-constrained budget at which a one-time `[budget checkpoint]` notice rides the newest tool result; unset is off. |
 | `agent.clarify_timeout_secs` | integer | `3600` | ≥ 0 | `next_session` | How long the `clarify` tool waits for an answer. |
+| `agent.coding_context` | one of "auto", "on", "off" | `"auto"` | `"auto"`, `"on"`, `"off"` | `next_session` | The coding brief and workspace snapshot in the session tier. |
+| `agent.coding_instructions` | string | `""` | any | `next_session` | Standing instructions appended to the coding brief. |
 | `agent.empty_response_guard.cost_threshold_usd` | number | `0.25` | ≥ 0.0 | `next_session` | Estimated input cost (USD) of one empty attempt at which the retry budget drops to one. |
+| `agent.fast_auto_secs` | integer | `60` | ≥ 1 | `next_session` | The window (seconds from the start of a turn) `auto` and `cold` fast modes ask the priority tier in. |
+| `agent.fast_mode` | one of "normal", "fast", "auto", "cold", "ultrafast" | `"normal"` | `"normal"`, `"fast"`, `"auto"`, `"cold"`, `"ultrafast"` | `next_session` | When requests ask the provider's priority tier (`/fast`): OpenAI priority processing, Anthropic fast mode; ignored, with a one-time notice, on routes without such a tier. |
 | `agent.intent_continuation` | one of "auto" or boolean or array of string | `"auto"` | any | `next_session` | Nudge a model that announces an action without calling a tool: `"auto"` (Responses-wire models only), `true`, `false` or a list of model-name substrings. |
 | `agent.max_iterations` | integer | `500` | 0 to 100000 | `next_session` | Maximum model calls per turn; `0` means unlimited. |
 | `agent.max_verify_nudges` | integer | `3` | 0 to 100 | `next_session` | Most consecutive verification nudges (`pre_verify` hook continuations) in one turn; after that the turn finishes. |
@@ -20,8 +25,11 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `agent.reasoning_effort` | one of "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra" | unset | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`, `"ultra"` | `next_session` | Reasoning effort; unset means `medium`. |
 | `agent.reasoning_overrides` | table | `{}` | any | `next_session` | Per-model reasoning overrides: model id to a level or a tier name of `[agent.reasoning_tiers]`. |
 | `agent.reasoning_tiers` | table | `{}` | any | `next_session` | Provider-specific tier names mapped to a level, for example `ultra = "max"`. |
+| `agent.resume_on_crash` | one of "ask", "auto", "never" | `"ask"` | `"ask"`, `"auto"`, `"never"` | `next_session` | What happens to a turn a crash left unfinished. |
 | `agent.run_budget_secs` | integer | unset | ≥ 0 | `next_session` | Optional per-turn wall-clock budget; unset means no budget. |
 | `agent.tool_concurrency` | integer | `8` | 1 to 64 | `next_session` | Tool calls of one batch that may run at once. |
+| `agent.verify_guidance` | boolean | `true` | any | `next_session` | Append clean-diff guidance to the verification nudge. |
+| `agent.verify_on_stop` | boolean or one of "auto" | `false` | any | `next_session` | Refuse a final answer after unverified code edits: `true`, `false` or `"auto"` (on for CLI, TUI, desktop, ACP and API callers). |
 | `approvals.cron_mode` | one of "deny", "approve" | `"deny"` | `"deny"`, `"approve"` | `live` | Decision for approvals in cron jobs. |
 | `approvals.denial_breaker_threshold` | integer | `3` | ≥ 0 | `live` | In `smart` mode, after this many consecutive denials by the approval guardian the denial tells the model to stop trying variations (`0` disables); a human approval resets the count. |
 | `approvals.deny` | array of string | `[]` | any | `live` | Command patterns that are always blocked. |
@@ -29,53 +37,79 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `approvals.single_query_mode` | one of "deny", "approve" | `"deny"` | `"deny"`, `"approve"` | `live` | Decision for approvals in single-query (`-q`) runs. |
 | `approvals.timeout_secs` | integer | `300` | ≥ 0 | `live` | Unanswered approvals are denied after this long. |
 | `approvals.unattended_mode` | one of "deny", "approve" | `"deny"` | `"deny"`, `"approve"` | `live` | Decision for approvals in other unattended sessions. |
+| `attachments.storage` | one of "blobs", "workspace" | `"blobs"` | `"blobs"`, `"workspace"` | `next_session` | Where received attachments are kept. |
 | `auth.adopt_external_logins` | boolean | `true` | any | `next_session` | Use an existing Claude Code or Codex CLI sign-in when the profile holds no credential of its own. |
+| `auxiliary.approval.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.approval.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.approval.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.approval.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.approval.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.approval.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.compression.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.compression.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.compression.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.compression.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.compression.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.compression.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.curator.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.curator.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.curator.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.curator.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.curator.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.curator.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.evolution.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.evolution.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.evolution.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.evolution.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.evolution.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.evolution.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.goal_judge.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.goal_judge.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.goal_judge.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.goal_judge.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.goal_judge.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.goal_judge.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.max_concurrency` | integer | `8` | ≥ 1 | `next_session` | Auxiliary calls in flight at once across the profile's sessions; further calls wait. |
+| `auxiliary.memory.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.memory.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.memory.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.memory.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.memory.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.memory.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.side_question.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.side_question.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.side_question.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.side_question.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.side_question.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.side_question.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.skill_review.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.skill_review.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.skill_review.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.skill_review.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.skill_review.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.skill_review.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.title.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.title.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.title.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.title.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.title.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.title.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.transient_retries` | integer | `2` | 0 to 6 | `next_session` | Same-route retries of a retryable auxiliary failure. |
+| `auxiliary.vision.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.vision.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.vision.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.vision.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.vision.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.vision.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.voice_chat.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.voice_chat.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.voice_chat.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.voice_chat.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.voice_chat.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.voice_chat.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.web_extract.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.web_extract.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.web_extract.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.web_extract.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.web_extract.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.web_extract.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
@@ -114,15 +148,20 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `code_execution.timeout_secs` | integer | `300` | 1 to 86400 | `next_session` | Seconds one execution may run. |
 | `compression.abort_on_summary_failure` | boolean | `false` | any | `next_session` | End the turn when the summary cannot be produced. |
 | `compression.enabled` | boolean | `true` | any | `next_session` | Compact the context automatically. |
+| `compression.idle_compact_after_secs` | integer | `0` | ≥ 0 | `next_session` | Compact (trigger `idle`) before the first model call of a turn that starts after this many seconds without activity; `0` is off. |
 | `compression.max_attempts` | integer | `3` | 1 to 10 | `next_session` | Compaction attempts per turn. |
 | `compression.micro_compact` | boolean | `false` | any | `next_session` | Compact tool results between turns. |
 | `compression.micro_compact_every_n_turns` | integer | `1` | ≥ 1 | `next_session` | Turns between micro-compactions. |
 | `compression.min_tail_user_messages` | integer | `1` | ≥ 0 | `next_session` | User messages always kept in the tail. |
+| `compression.model_thresholds` | table | `{}` | any | `next_session` | Per-model base thresholds: a model-name substring or `"<provider>:<substring>"`; the longest match wins. |
 | `compression.pinned_max_tokens` | integer | `8000` | ≥ 0 | `next_session` | Token cap for pinned content carried across compactions. |
 | `compression.prepare_ahead` | boolean | `false` | any | `next_session` | Prepare the next summary ahead of the trigger. |
 | `compression.proactive_prune_tokens` | integer | `0` | ≥ 0 | `next_session` | Prune old tool output above this many tokens; `0` is off. |
+| `compression.progress_notices` | boolean | `false` | any | `next_session` | Show routine automatic compaction statuses on messaging platforms (failures and manual `/compress` feedback always show). |
 | `compression.protect_first_n` | integer | `3` | ≥ 0 | `next_session` | Non-system messages protected at the head of the first compaction. |
 | `compression.quality_min_coverage` | number | `0.8` | 0.0 to 1.0 | `next_session` | Minimum coverage a summary must reach. |
+| `compression.responses_compact_threshold_tokens` | integer | `0` | ≥ 0 | `next_session` | Server-side compaction threshold in tokens; `0` is the local trigger minus 8192 (200000 when no local trigger is known). |
+| `compression.responses_native` | boolean | `false` | any | `next_session` | Ask a supporting Responses route to compact server-side and replay its compaction item. |
 | `compression.summary_max_tokens` | integer | `10000` | ≥ 0 | `next_session` | Summary length cap in tokens. |
 | `compression.summary_timeout_secs` | integer | `120` | ≥ 0 | `next_session` | Time allowed for one summary call. |
 | `compression.tail_mode` | one of "lean", "ratio" | `"lean"` | `"lean"`, `"ratio"` | `next_session` | How much recent conversation is kept verbatim. |
@@ -302,6 +341,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.platforms.<name>.human_delay_ms` | array | unset | any | `next_session` | A uniformly random delay `[min, max]` in milliseconds before each outbound part. Unset: none. |
 | `gateway.platforms.<name>.max_body_bytes` | integer | unset | 1024 to 16777216 | `next_session` | Largest request body a webhook route reads (`webhook` only), in bytes; larger requests are answered 413 unread. Unset: 1048576. |
 | `gateway.platforms.<name>.max_message_length` | integer | unset | ≥ 16 | `next_session` | Lowers the adapter's message length limit (in its own unit); it can never raise it. |
+| `gateway.platforms.<name>.memory_notifications` | one of "off", "on", "verbose" | unset | `"off"`, `"on"`, `"verbose"` | `next_session` | Memory change notices on this platform (overrides `memory.notifications`). |
 | `gateway.platforms.<name>.options` | table | unset | any | `next_session` | The adapter's own settings, validated against the schema it publishes (`prometheus gateway platforms` lists the adapters). |
 | `gateway.platforms.<name>.proxy_url` | string | unset | any | `next_session` | The proxy this adapter's outbound HTTP and WebSocket traffic uses (`http://`, `https://` or `socks5://`, without a password; a URL with credentials goes in a secret named by `proxy_url_secret`). Unset: `gateway.proxy_url`. |
 | `gateway.platforms.<name>.proxy_url_secret` | string | unset | a secret name | `next_session` | The secret holding this adapter's proxy URL when it carries credentials. |
@@ -369,6 +409,13 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `heartbeat.min_interval_secs` | integer | `60` | 1 to 86400 | `live` | Shortest `/heartbeat every` interval (seconds). |
 | `hooks.auto_accept` | boolean | `false` | any | `next_session` | Run shell hooks nobody approved yet without asking (as `--accept-hooks` does for one run); every hook still runs in the session's sandbox. |
 | `hooks.outbound` | array of table | `[]` | any | `next_session` | Outbound webhooks: hook events sent as HTTPS `POST` requests. |
+| `image_gen.max_parallel_requests` | integer | `4` | ≥ 1 | `next_session` | Generations of one tool-call batch running at once (at most `agent.tool_concurrency`). |
+| `image_gen.model` | string | unset | any | `next_session` | The model (unset: the provider's default). The agent never picks it. |
+| `image_gen.openai.base_url` | string | unset | any | `next_session` | An OpenAI-compatible endpoint (`.../v1`); unset is OpenAI's API. |
+| `image_gen.openai.key_secret` | string | unset | a secret name | `next_session` | The secret holding the key (default `OPENAI_API_KEY`). |
+| `image_gen.openai.model` | string | unset | any | `next_session` | The model on this endpoint (wins over `image_gen.model`); an id outside the catalog is sent verbatim, without `quality`. |
+| `image_gen.openai.provider` | string | unset | any | `next_session` | A configured custom provider (`[providers.<id>]`) whose endpoint and key are used instead. |
+| `image_gen.provider` | string | unset | any | `next_session` | The provider generating images: `fal` (default), `openai`, `openai-codex`, `openrouter`, `xai`, `krea`, `meta-ai`, `deepinfra`, `nous` (the subscription tool gateway) or a plugin's; unset picks one by the keys present. |
 | `logging.level` | one of "error", "warn", "info", "debug", "trace" | `"info"` | `"error"`, `"warn"`, `"info"`, `"debug"`, `"trace"` | `restart` | Log level; `PMT_LOG` or `RUST_LOG` override it. |
 | `loops.max_ticks` | integer | `100` | 0 to 100000 | `live` | Wakeups after which a loop pauses (`0` = unlimited). |
 | `loops.min_interval_secs` | integer | `30` | 1 to 86400 | `live` | Shortest fixed interval a loop may use (seconds). |
@@ -449,15 +496,42 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `memory.archival_max_entries` | integer | `10000` | ≥ 0 | `next_session` | Archival entries kept per target. |
 | `memory.memory_char_limit` | integer | `2200` | ≥ 0 | `next_session` | Character budget of core memory entries. |
 | `memory.memory_enabled` | boolean | `true` | any | `next_session` | The agent memory store. |
+| `memory.notifications` | one of "off", "on", "verbose" | `"on"` | `"off"`, `"on"`, `"verbose"` | `next_session` | Notices after a memory change commits: `off`, `on` or `verbose`. |
 | `memory.nudge_interval` | integer | `10` | ≥ 0 | `next_session` | User turns without a memory call before a background review; `0` disables. |
+| `memory.provider` | string | `"builtin"` | any | `next_session` | The external memory provider: `builtin` (none) or the id of an installed `memory-provider` plugin. |
+| `memory.provider_prefetch_timeout_ms` | integer | `8000` | ≥ 1 | `next_session` | Time a provider's `prefetch` may take before the turn goes on without its recall. |
+| `memory.provider_recall_max_chars` | integer | `100000` | ≥ 0 | `next_session` | Character bound of a provider's recall per turn. |
+| `memory.provider_recall_spill` | boolean | `false` | any | `next_session` | Spill oversized provider recall to a file under `cache/` (a preview and the path stay in the fence) instead of truncating it. |
+| `memory.providers` | table | unset | any | `next_session` | Each provider's own non-secret settings (`memory.providers.<id>.*`; its secrets live in the profile's secrets store). |
+| `memory.recall.embedding_model` | string | unset | any | `next_session` | Embedding model (`provider/model` or a model on the main route's provider) for hybrid semantic recall; unset ranks lexically (BM25). |
 | `memory.recall.max_chars` | integer | `1500` | ≥ 0 | `next_session` | Character cap of recalled content per turn. |
+| `memory.recall.min_score` | number | `0.35` | 0.0 to 1.0 | `next_session` | Hybrid recall drops entries scoring below this. |
 | `memory.recall.top_k` | integer | `5` | ≥ 0 | `next_session` | Archival entries recalled per turn. |
+| `memory.require_checkpoint` | boolean | `false` | any | `next_session` | Abort a compaction when no provider confirms its pre-compress checkpoint. |
+| `memory.review.defer` | one of "auto", "never" | `"auto"` | `"auto"`, `"never"` | `next_session` | `auto` queues reviews on a managed local model until the machine is idle; `never` runs them at once. |
+| `memory.review.defer_max_age_secs` | integer | `1800` | ≥ 0 | `next_session` | A deferred review older than this runs anyway. |
+| `memory.review.enabled` | boolean | `true` | any | `next_session` | Run automatic post-turn reviews (`/refine` works either way). |
+| `memory.review.extra_tools` | array of string | `[]` | any | `next_session` | Tools added to the review's allow-list when the parent session has them. |
+| `memory.review.max_input_tokens` | integer | unset | any | `next_session` | Replayed input tokens one review may send in total; unset is 75% of the review model's window (at most 600000, 120000 when the window is unknown); 0 or negative is unlimited. |
 | `memory.review_mode` | one of "summary", "off", "require" | `"summary"` | `"summary"`, `"off"`, `"require"` | `next_session` | How agent memory changes are reviewed. |
 | `memory.user_char_limit` | integer | `1375` | ≥ 0 | `next_session` | Character budget of core user-profile entries. |
 | `memory.user_profile_enabled` | boolean | `true` | any | `next_session` | The user profile store. |
 | `memory.write_approval` | boolean | `false` | any | `next_session` | Approve every memory write. |
+| `moa.default_preset` | string | `"default"` | any | `next_session` | The preset `/moa` runs and `moa configure` edits by default. |
+| `moa.presets.<name>.aggregator.model` | string | unset | any | `next_session` | Model id at that provider. |
+| `moa.presets.<name>.aggregator.provider` | string | unset | any | `next_session` | Provider id or alias (never `moa`: presets do not nest). |
+| `moa.presets.<name>.aggregator.reasoning_effort` | one of "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra" | unset | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`, `"ultra"` | `next_session` | Reasoning effort sent to this slot; unset uses the model's default. |
+| `moa.presets.<name>.aggregator_temperature` | number | unset | 0.0 to 2.0 | `next_session` | Temperature sent to the aggregator (0.0-2.0); unset sends none. |
+| `moa.presets.<name>.enabled` | boolean | `true` | any | `next_session` | `false` calls the aggregator alone, as a plain model. |
+| `moa.presets.<name>.fanout` | string or table | `"user_turn"` | any | `next_session` | When the references run within a turn. |
+| `moa.presets.<name>.reference_models` | array of table | unset | any | `next_session` | The advisors, run concurrently without tools (at least one). |
+| `moa.presets.<name>.reference_temperature` | number | unset | 0.0 to 2.0 | `next_session` | Temperature sent to the references (0.0-2.0); unset sends none. |
+| `moa.privacy_filter` | one of "", "display", "full" | `""` | `""`, `"display"`, `"full"` | `next_session` | Redact advisor text: `""` (off), `display` (shown blocks and traces) or `full` (also the aggregator's guidance). |
+| `moa.save_traces` | boolean | `false` | any | `next_session` | Append one JSONL record per MoA call to `moa-traces/<session>.jsonl`. |
+| `moa.trace_dir` | string | unset | any | `next_session` | Where traces go instead of `<profile>/moa-traces`. |
 | `model.aliases` | table | `{}` | any | `next_session` | User model aliases: a name (matched case-insensitively) for a `"<provider>/<model>"` string or a route table. Usable wherever a model is named (`/model`, `prometheus model set`, fallback and auxiliary slots). |
 | `model.auto_order` | array of string | `["anthropic","openai","openrouter","google","nous"]` | any | `next_session` | Provider order tried by `auto` among providers with a stored secret. |
+| `model.codex_bin` | string | unset | any | `next_session` | Absolute path of the Codex CLI the Codex app-server runtime runs; unset finds `codex` on `PATH`, in the user-local bin directories and the vendor's install prefixes. |
 | `model.default` | string | unset | any | `next_session` | Default model id (or a `[model.aliases]` name). |
 | `model.min_context_window` | integer | `64000` | ≥ 16000 | `next_session` | Smallest context window (tokens) a session may start with. |
 | `model.provider` | string | unset | any | `next_session` | Provider id or alias; unset means `auto`. |
@@ -471,6 +545,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `observability.trajectories.enabled` | boolean | `true` | any | `next_session` | Record trajectories for sessions started from now on. |
 | `observability.trajectories.max_bytes_per_session` | integer | `268435456` | ≥ 0 | `next_session` | Stop recording payload bodies of a session beyond this size. |
 | `observability.trajectories.retention_secs` | integer | `7776000` | ≥ 0 | `next_session` | Delete unpinned trajectories older than this; `0` keeps forever. |
+| `openrouter.min_coding_score` | number or string | `0.65` | any | `next_session` | Lowest coding score the `openrouter/pareto-code` router may pick a model below (0.0-1.0); an empty string sends no `pareto-router` plugin block. |
 | `plugins.approval_transport` | string | `""` | any | `next_session` | The plugin approval transport that presents approval requests, `<plugin_id>:<name>`; empty asks on the session's own surface. |
 | `plugins.approval_transport_fallback` | one of "deny", "builtin" | `"deny"` | `"deny"`, `"builtin"` | `next_session` | What a failing, timed-out, unbound or missing approval transport leads to: `deny` the request, or ask on the session's own surface (`builtin`). |
 | `plugins.catalog_url` | string | `"https://raw.githubusercontent.com/CyberdyneCorp/prometheus-agent/main/crates/pmt-plugins/catalog/catalog.json"` | any | `next_session` | Where the signed live plugin catalog is fetched from (cached 6 hours under the profile's `cache/`); empty uses only the catalog embedded in the binary. |
@@ -496,18 +571,39 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `prompt.load_identity` | boolean | `true` | any | `next_session` | Load the identity file `SOUL.md`. |
 | `prompt.platform_hints.<name>.append` | string | unset | any | `next_session` | Appended after the (possibly replaced) hint. |
 | `prompt.platform_hints.<name>.replace` | string | unset | any | `next_session` | Replaces the built-in hint. |
+| `prompt.prefill_messages_file` | string | unset | any | `next_session` | A JSON file of `{role, content}` few-shot messages (roles `user` and `assistant`) inserted after the system prompt, frozen at session start. |
 | `prompt_cache.ttl` | one of "5m", "1h", "auto", "off" | `"5m"` | `"5m"`, `"1h"`, `"auto"`, `"off"` | `next_session` | Provider prompt-cache lifetime. |
+| `provider_routing.data_collection` | one of "allow", "deny" | unset | `"allow"`, `"deny"` | `next_session` | Whether upstream providers that store or train on prompts may serve. |
+| `provider_routing.ignore` | array of string | `[]` | any | `next_session` | These upstream providers never serve. |
+| `provider_routing.models.<name>.data_collection` | one of "allow", "deny" | unset | `"allow"`, `"deny"` | `next_session` | Whether upstream providers that store or train on prompts may serve. |
+| `provider_routing.models.<name>.ignore` | array of string | `[]` | any | `next_session` | These upstream providers never serve. |
+| `provider_routing.models.<name>.only` | array of string | `[]` | any | `next_session` | Only these upstream providers may serve. |
+| `provider_routing.models.<name>.order` | array of string | `[]` | any | `next_session` | Upstream providers tried first, in this order. |
+| `provider_routing.models.<name>.require_parameters` | boolean | unset | any | `next_session` | Only upstream providers that support every request parameter. |
+| `provider_routing.models.<name>.sort` | one of "price", "throughput", "latency" | unset | `"price"`, `"throughput"`, `"latency"` | `next_session` | Order upstream providers by price, throughput or latency. |
+| `provider_routing.only` | array of string | `[]` | any | `next_session` | Only these upstream providers may serve. |
+| `provider_routing.order` | array of string | `[]` | any | `next_session` | Upstream providers tried first, in this order. |
+| `provider_routing.require_parameters` | boolean | unset | any | `next_session` | Only upstream providers that support every request parameter. |
+| `provider_routing.sort` | one of "price", "throughput", "latency" | unset | `"price"`, `"throughput"`, `"latency"` | `next_session` | Order upstream providers by price, throughput or latency. |
 | `providers.<name>.aliases` | array of string | `[]` | any | `next_session` | Extra names a custom provider answers to. |
 | `providers.<name>.allow_insecure_http` | boolean | `false` | any | `next_session` | Allow a plain `http://` base URL on a public host (plain HTTP to loopback and private-network hosts is always allowed). |
-| `providers.<name>.auth` | one of "api_key", "oauth", "token_mint", "external_process", "aws_chain", "none" | unset | `"api_key"`, `"oauth"`, `"token_mint"`, `"external_process"`, `"aws_chain"`, `"none"` | `next_session` | Credential kind of a custom provider; unset uses the built-in provider's, or `api_key` when `key_secret` is set and `none` otherwise. |
+| `providers.<name>.args` | array of string | `[]` | any | `next_session` | Arguments of `command`. |
+| `providers.<name>.auth` | one of "api_key", "oauth", "token_mint", "external_process", "aws_chain", "entra_id", "none" | unset | `"api_key"`, `"oauth"`, `"token_mint"`, `"external_process"`, `"aws_chain"`, `"entra_id"`, `"none"` | `next_session` | Credential kind of a custom provider; unset uses the built-in provider's, or `api_key` when `key_secret` is set and `none` otherwise. |
+| `providers.<name>.aws_profile` | string | unset | any | `next_session` | The shared AWS profile (`~/.aws/config`, `~/.aws/credentials`) the `bedrock` credential chain reads; `default` when unset. |
 | `providers.<name>.base_url` | string | unset | any | `next_session` | API base URL. |
 | `providers.<name>.catalog_ttl_secs` | integer | `86400` | ≥ 0 | `next_session` | Lifetime of the cached live model listing. |
+| `providers.<name>.command` | string | unset | any | `next_session` | The agent CLI an `auth = "external_process"` provider drives over the Agent Client Protocol (`claude`), found by the executable lookup. |
+| `providers.<name>.command_path` | string | unset | any | `next_session` | Absolute path of the agent CLI (one executable, never parsed as a shell command); wins over finding `command` by name. |
+| `providers.<name>.confirm_metered_fallback` | boolean | `false` | any | `next_session` | Ask (interactive sessions) or fail the turn (non-interactive ones) before a fallback moves the session from a subscription of this provider to a pay-per-token credential. |
+| `providers.<name>.daily_budget_usd` | number | unset | ≥ 0.0 | `next_session` | Spend cap per calendar day (UTC) in USD; once the profile's usage ledger reaches it the provider is unavailable until the next day. |
 | `providers.<name>.enabled` | boolean | `true` | any | `next_session` | `false` makes every request to this provider fail with `provider.disabled`. |
+| `providers.<name>.key_cmd` | string | unset | any | `next_session` | A helper command whose stdout is this provider's credential: one bare token, or JSON with `access_token` and optional `expires_in` (seconds). The token is cached until 60 s before it expires (3000 s when no expiry is given) and minted again after an HTTP 401. |
 | `providers.<name>.key_hosts` | array of string | `[]` | any | `next_session` | Hostnames the provider's secret may be sent to (exact, or a leading `*.` wildcard). |
 | `providers.<name>.key_secret` | string | unset | a secret name | `next_session` | Name of the secret holding this provider's key. |
 | `providers.<name>.login_flow` | one of "device", "browser" | unset | `"device"`, `"browser"` | `next_session` | Sign-in flow for OAuth providers; unset uses the provider default. |
 | `providers.<name>.max_retries` | integer | `2` | 0 to 6 | `next_session` | Same-route retries of a retryable failure. |
 | `providers.<name>.models_url` | string | unset | any | `next_session` | Model listing URL; unset is `<base_url>/models`. |
+| `providers.<name>.monthly_budget_usd` | number | unset | ≥ 0.0 | `next_session` | Spend cap per calendar month (UTC) in USD. |
 | `providers.<name>.oauth.allowed_hosts` | array | unset | any | `next_session` | Hosts the sign-in endpoints may be on (exact, or a leading `*.`). |
 | `providers.<name>.oauth.authorize_url` | string | unset | any | `next_session` | Authorization endpoint of the browser (PKCE) flow. |
 | `providers.<name>.oauth.client_id` | string | unset | any | `next_session` | The OAuth client id. |
@@ -522,11 +618,14 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `providers.<name>.plan_notes` | array | unset | any | `next_session` | Eligibility and billing notes shown before sign-in and by `auth status`; replaces the provider's built-in notes. |
 | `providers.<name>.pool_strategy` | one of "fill_first", "round_robin", "random", "least_used" | `"fill_first"` | `"fill_first"`, `"round_robin"`, `"random"`, `"least_used"` | `next_session` | Credential pool selection. |
 | `providers.<name>.prefer_credential` | one of "subscription", "api_key" | `"subscription"` | `"subscription"`, `"api_key"` | `next_session` | Which credential wins when both exist. |
+| `providers.<name>.project` | string | unset | any | `next_session` | Google Cloud project of a `vertex` provider. |
+| `providers.<name>.region` | string | unset | any | `next_session` | Cloud region: of a `vertex` provider (`us-central1`), or of a `bedrock` provider (`eu-west-1`; `us-east-1` when unset). |
 | `providers.<name>.request_timeout_secs` | integer | `600` | ≥ 0 | `next_session` | Per-request timeout. |
 | `providers.<name>.script` | string | unset | any | `next_session` | Script file of the built-in `mock` provider. |
 | `providers.<name>.stream_idle_timeout_secs` | integer | `120` | ≥ 0 | `next_session` | Longest gap between stream events. |
 | `providers.<name>.supports_model_listing` | boolean | unset | any | `next_session` | Whether the provider lists its models; unset uses the provider default (true for custom providers). |
 | `providers.<name>.supports_prompt_cache` | boolean | unset | any | `next_session` | Whether the provider honours a prompt cache key; unset uses the provider default (false for custom providers). |
+| `providers.<name>.supports_server_compaction` | boolean | unset | any | `next_session` | Whether the provider compacts context server-side on the Responses wire (`compression.responses_native`); unset uses the provider default (false for custom providers). |
 | `providers.<name>.wire_format` | one of "chat_completions", "responses", "anthropic_messages" | unset | `"chat_completions"`, `"responses"`, `"anthropic_messages"` | `next_session` | Wire format; wins over host rules and the provider's own format. |
 | `python_bridge.allow_unbounded_requirements` | boolean | `false` | any | `next_session` | Accept requirements without an upper bound (`requests>=2`); by default they are refused so an install never picks up a new major. |
 | `python_bridge.call_timeout_ms` | integer | `30000` | 1 to 3600000 | `next_session` | Bound on one call into a sidecar (hook calls use `plugins.hook_timeout_ms`). |
@@ -538,6 +637,11 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `quick_commands.<name>.target` | string | unset | any | `live` | The slash command an `alias` runs (with or without the leading `/`); the user's arguments are appended. |
 | `quick_commands.<name>.timeout_secs` | integer | `30` | 1 to 3600 | `live` | An `exec` command is killed after this many seconds. |
 | `quick_commands.<name>.type` | one of "alias", "exec" | unset | `"alias"`, `"exec"` | `live` | `alias` re-dispatches `target`; `exec` runs `command` in the local sandbox. |
+| `replay.cache.max_bytes` | integer | `4294967296` | ≥ 1 | `next_session` | Least-recently-used entries are evicted above this size. |
+| `replay.cache.mode` | one of "off", "read", "write", "read_write" | `"off"` | `"off"`, `"read"`, `"write"`, `"read_write"` | `next_session` | `off`, `read` (serve stored responses), `write` (store new ones) or `read_write`. Off for interactive sessions; the offline demo (and eval runs) use `read_write`. |
+| `replay.cache.namespace` | string | `"default"` | any | `next_session` | Entries of different namespaces never serve each other. |
+| `routing.health_half_life_secs` | integer | `1800` | ≥ 1 | `next_session` | Half-life (seconds) of the decay of an idle route's health score toward 1.0. |
+| `routing.health_window` | integer | `50` | 1 to 500 | `next_session` | Calls per (provider, model, credential) a health score is computed over. |
 | `schema_version` | integer | `1` | ≥ 0 | `restart` | Version of this file's schema; older files are migrated forward and a newer one is refused. |
 | `secrets.backend` | one of "file", "keychain" | `"file"` | `"file"`, `"keychain"` | `restart` | Where this profile's secrets are stored. |
 | `secrets.command.argv` | array of string | `[]` | any | `restart` | The helper's program and arguments (no shell). |
@@ -558,6 +662,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `security.sandbox.allow_degraded` | array of one of "landlock", "landlock_net", "seccomp", "seatbelt", "appcontainer", "no_new_privileges", "read_only_rootfs", "cap_drop", "chromium_sandbox", "web_security", "all" | `[]` | any | `next_session` | Hardening features that may be missing; anything else missing refuses to run. |
 | `security.sandbox.mode` | one of "enforce", "off" | `"enforce"` | `"enforce"`, `"off"` | `next_session` | Sandbox mode; `off` needs `allow_degraded` to name `all`. |
 | `sessions.auto_archive_secs` | integer | `604800` | ≥ 0 | `live` | Archive lineage tips idle for this long. |
+| `sessions.low_disk_bytes` | integer | `1073741824` | ≥ 0 | `live` | Below this many free bytes on the store's volume an interactive start offers to turn on auto-prune (when `retention_secs = 0`). |
 | `sessions.max_export_messages` | integer | `20000` | ≥ 0 | `live` | Refuse in-memory exports with more messages. |
 | `sessions.max_resume_messages` | integer | `20000` | ≥ 0 | `live` | Refuse to resume a lineage with more messages; `0` disables. |
 | `sessions.retention_secs` | integer | `0` | ≥ 0 | `live` | Prune ended sessions inactive for longer than this; `0` never prunes. |
@@ -578,6 +683,48 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `skills.write_approval` | boolean | `false` | any | `next_session` | Stage skill writes as pending for review. |
 | `snapshots.keep` | integer | `20` | ≥ 0 | `live` | Manual snapshots kept per profile. |
 | `storage.journal_mode` | one of "wal", "delete" | `"wal"` | `"wal"`, `"delete"` | `restart` | `state.db` journal mode; `delete` only for filesystems without WAL support. |
+| `stt.cloud_trim_keep_ms` | integer | `300` | ≥ 0 | `next_session` | Silence kept of each trimmed pause. |
+| `stt.cloud_trim_silence` | boolean | `true` | any | `next_session` | Trim long silences before a cloud upload. |
+| `stt.cloud_trim_threshold_db` | integer | `-40` | -90 to 0 | `next_session` | Level below which audio counts as silence, in dBFS. |
+| `stt.deepinfra.language` | string | unset | any | `next_session` | Spoken language (unset: `stt.language`). |
+| `stt.deepinfra.model` | string | unset | any | `next_session` | The model (unset: the provider's default). |
+| `stt.deepinfra.timeout_secs` | integer | unset | ≥ 1 | `next_session` | Bound on one request (unset: the provider's default). |
+| `stt.elevenlabs.diarize` | boolean | `false` | any | `next_session` | Label speakers. |
+| `stt.elevenlabs.language` | string | unset | any | `next_session` | Spoken language (unset: `stt.language`). |
+| `stt.elevenlabs.model` | string | unset | any | `next_session` | The model (default `scribe_v2`). |
+| `stt.elevenlabs.tag_audio_events` | boolean | `false` | any | `next_session` | Tag non-speech events (`(laughter)`). |
+| `stt.groq.language` | string | unset | any | `next_session` | Spoken language (unset: `stt.language`). |
+| `stt.groq.model` | string | unset | any | `next_session` | The model (unset: the provider's default). |
+| `stt.groq.timeout_secs` | integer | unset | ≥ 1 | `next_session` | Bound on one request (unset: the provider's default). |
+| `stt.language` | string | `"en"` | any | `next_session` | Spoken language (empty: detect); a provider's own `language` wins. |
+| `stt.local.language` | string | unset | any | `next_session` | Spoken language (unset: `stt.language`). |
+| `stt.local.model` | one of "tiny", "base", "small", "medium", "large-v3", "turbo" | `"base"` | `"tiny"`, `"base"`, `"small"`, `"medium"`, `"large-v3"`, `"turbo"` | `next_session` | The model size. |
+| `stt.local.unload_after_idle_secs` | integer | `0` | ≥ 0 | `next_session` | Unload the model after this idle time (`0`: never). |
+| `stt.local.vad` | boolean | `true` | any | `next_session` | Voice-activity filtering. |
+| `stt.local.vad_min_silence_ms` | integer | `500` | ≥ 0 | `next_session` | Shortest silence the voice-activity filter splits on. |
+| `stt.mistral.language` | string | unset | any | `next_session` | Spoken language (unset: `stt.language`). |
+| `stt.mistral.model` | string | unset | any | `next_session` | The model (unset: the provider's default). |
+| `stt.mistral.timeout_secs` | integer | unset | ≥ 1 | `next_session` | Bound on one request (unset: the provider's default). |
+| `stt.nous.language` | string | unset | any | `next_session` | Spoken language (unset: `stt.language`). |
+| `stt.nous.model` | string | unset | any | `next_session` | The model (unset: the provider's default). |
+| `stt.nous.timeout_secs` | integer | unset | ≥ 1 | `next_session` | Bound on one request (unset: the provider's default). |
+| `stt.openai.language` | string | unset | any | `next_session` | Spoken language (unset: `stt.language`). |
+| `stt.openai.model` | string | unset | any | `next_session` | The model (unset: the provider's default). |
+| `stt.openai.timeout_secs` | integer | unset | ≥ 1 | `next_session` | Bound on one request (unset: the provider's default). |
+| `stt.provider` | string | unset | any | `next_session` | The transcription provider: `local`, `whisper-cpp`, `groq`, `openai`, `mistral`, `xai`, `elevenlabs`, `deepinfra`, `nous`, a `[stt.providers.<name>]` command or a plugin's. Set: used strictly; unset: the first available, local engines first. |
+| `stt.providers.<name>.command` | string | `""` | any | `next_session` | The command: `{input_path}`, `{output_path}`, `{output_dir}`, `{format}`, `{language}` and `{model}` are replaced by values quoted for their position in the shell that runs it (the session's sh, bash or PowerShell; cmd.exe for voice messages on Windows); `{{` and `}}` are literal braces. The transcript is read from `{output_path}` when written, else stdout. |
+| `stt.providers.<name>.format` | one of "txt", "json", "srt", "vtt" | `"txt"` | `"txt"`, `"json"`, `"srt"`, `"vtt"` | `next_session` | The transcript format. |
+| `stt.providers.<name>.language` | string | unset | any | `next_session` | `{language}` (unset: `stt.language`). |
+| `stt.providers.<name>.model` | string | unset | any | `next_session` | `{model}`. |
+| `stt.providers.<name>.normalize` | boolean | `false` | any | `next_session` | Transcode the audio to 16 kHz mono first. |
+| `stt.providers.<name>.timeout_secs` | integer | `300` | ≥ 1 | `next_session` | Bound on one run. |
+| `stt.providers.<name>.type` | one of "command" | `"command"` | `"command"` | `next_session` | Always `command`. |
+| `stt.whisper_cpp.binary` | string | unset | any | `next_session` | The `whisper-cli` executable (unset: found on PATH). |
+| `stt.whisper_cpp.language` | string | unset | any | `next_session` | Spoken language (unset: `stt.language`). |
+| `stt.whisper_cpp.model` | string | unset | any | `next_session` | The GGML model file. |
+| `stt.xai.language` | string | unset | any | `next_session` | Spoken language (unset: `stt.language`). |
+| `stt.xai.model` | string | unset | any | `next_session` | The model (unset: the provider's default). |
+| `stt.xai.timeout_secs` | integer | unset | ≥ 1 | `next_session` | Bound on one request (unset: the provider's default). |
 | `telemetry.enabled` | boolean | `false` | any | `restart` | Send redacted aggregate counters. |
 | `telemetry.endpoint` | string | unset | any | `restart` | HTTPS endpoint (loopback HTTP allowed). |
 | `terminal.auto_source_bashrc` | boolean | `true` | any | `next_session` | Source `~/.bashrc` once when the shell is bash. |
@@ -618,6 +765,10 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `terminal.timeout_secs` | integer | `180` | ≥ 0 | `next_session` | Default foreground command timeout. |
 | `terminal.windows_bash_path` | string | unset | any | `next_session` | Git Bash path tried first by `windows_shell = "auto"`. |
 | `terminal.windows_shell` | one of "auto", "git-bash", "pwsh", "powershell" | `"auto"` | `"auto"`, `"git-bash"`, `"pwsh"`, `"powershell"` | `next_session` | Windows shell. |
+| `tool_gateway.domain` | string | `"nousresearch.com"` | any | `next_session` | Domain the gateways live under: `<label>-gateway.<domain>`. |
+| `tool_gateway.scheme` | string | `"https"` | any | `next_session` | URL scheme of the gateways (`https`; `http` only for a loopback or private self-hosted gateway). |
+| `tool_gateway.token_secret` | string | unset | a secret name | `next_session` | The secret holding a self-hosted gateway's user token; unset uses the subscription sign-in's token. |
+| `tool_gateway.urls` | table | `{}` | any | `next_session` | Per-label URL overrides (`web`, `image`, `video`, `tts`, `stt`, `browser`, `sandbox`, `connector`). |
 | `tool_loop_guardrails.hard_stop_after.exact_failure` | integer | unset | ≥ 1 | `next_session` | Same tool, same arguments, same error. |
 | `tool_loop_guardrails.hard_stop_after.idempotent_no_progress` | integer | unset | ≥ 1 | `next_session` | Idempotent calls returning identical results. |
 | `tool_loop_guardrails.hard_stop_after.same_tool_failure` | integer | unset | ≥ 1 | `next_session` | Failures of the same tool. |
@@ -652,6 +803,59 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `toolsets.surfaces.desktop` | array | unset | any | `next_session` | The desktop app (default `core`). |
 | `toolsets.surfaces.gateway` | table | unset | any | `next_session` | Messaging sessions per platform (`gateway.<platform>`, default `platform-<platform>`; `gateway.webhook` defaults to `webhook-safe`). |
 | `toolsets.surfaces.tui` | array | unset | any | `next_session` | The terminal UI (default `core`). |
+| `tts.deepinfra.max_text_length` | integer | unset | ≥ 1 | `next_session` | Characters per request (a positive integer; default by provider). |
+| `tts.deepinfra.model` | string | unset | any | `next_session` | The model. |
+| `tts.deepinfra.voice` | string | unset | any | `next_session` | The voice. |
+| `tts.edge.max_text_length` | integer | unset | ≥ 1 | `next_session` | Characters per request (a positive integer; default 5,000). |
+| `tts.edge.voice` | string | `"en-US-AriaNeural"` | any | `next_session` | The voice. |
+| `tts.elevenlabs.max_text_length` | integer | unset | ≥ 1 | `next_session` | Characters per request (a positive integer; default by model). |
+| `tts.elevenlabs.model_id` | string | `"eleven_multilingual_v2"` | any | `next_session` | The model; it decides the per-request cap. |
+| `tts.elevenlabs.voice_id` | string | `"pNInz6obpgDQGcFmaJgB"` | any | `next_session` | The voice (the tool's `voice` argument may pick another). |
+| `tts.gemini.audio_tags` | boolean | `false` | any | `next_session` | Keep inline audio tags (`[laughs]`) as performance directions. |
+| `tts.gemini.max_text_length` | integer | unset | ≥ 1 | `next_session` | Characters per request (a positive integer; default 32,000). |
+| `tts.gemini.model` | string | `"gemini-2.5-flash-preview-tts"` | any | `next_session` | The model. |
+| `tts.gemini.persona_prompt_file` | string | unset | any | `next_session` | A prompt file framing the text; `{transcript}` marks where it goes. |
+| `tts.gemini.voice` | string | `"Kore"` | any | `next_session` | The prebuilt voice. |
+| `tts.keep_warm_secs` | integer | `60` | ≥ 0 | `next_session` | Seconds a local engine stays loaded after the last surface released it (`0` unloads at once). |
+| `tts.kittentts.max_text_length` | integer | unset | ≥ 1 | `next_session` | Characters per request (a positive integer; default by provider). |
+| `tts.kittentts.model` | string | unset | any | `next_session` | The model. |
+| `tts.kittentts.voice` | string | unset | any | `next_session` | The voice. |
+| `tts.minimax.max_text_length` | integer | unset | ≥ 1 | `next_session` | Characters per request (a positive integer; default by provider). |
+| `tts.minimax.model` | string | unset | any | `next_session` | The model. |
+| `tts.minimax.voice` | string | unset | any | `next_session` | The voice. |
+| `tts.mistral.max_text_length` | integer | unset | ≥ 1 | `next_session` | Characters per request (a positive integer; default by provider). |
+| `tts.mistral.model` | string | unset | any | `next_session` | The model. |
+| `tts.mistral.voice` | string | unset | any | `next_session` | The voice. |
+| `tts.neutts.max_text_length` | integer | unset | ≥ 1 | `next_session` | Characters per request (a positive integer; default by provider). |
+| `tts.neutts.model` | string | unset | any | `next_session` | The model. |
+| `tts.neutts.voice` | string | unset | any | `next_session` | The voice. |
+| `tts.nous.max_text_length` | integer | unset | ≥ 1 | `next_session` | Characters per request (a positive integer; default by provider). |
+| `tts.nous.model` | string | unset | any | `next_session` | The model. |
+| `tts.nous.voice` | string | unset | any | `next_session` | The voice. |
+| `tts.openai.base_url` | string | unset | any | `next_session` | An OpenAI-compatible endpoint (`.../v1`); unset is OpenAI's API. |
+| `tts.openai.consent_attestation` | boolean | `false` | any | `next_session` | Confirms the operator may clone the configured custom voice. |
+| `tts.openai.max_text_length` | integer | unset | ≥ 1 | `next_session` | Characters per request (a positive integer; default 4,096). |
+| `tts.openai.model` | string | `"gpt-4o-mini-tts"` | any | `next_session` | The model. |
+| `tts.openai.speed` | number | unset | 0.25 to 4.0 | `next_session` | Speaking speed (0.25..4.0; the tool's `speed` argument wins). |
+| `tts.openai.voice` | string | `"alloy"` | any | `next_session` | The voice. |
+| `tts.piper.max_text_length` | integer | unset | ≥ 1 | `next_session` | Characters per request (a positive integer; default by provider). |
+| `tts.piper.model` | string | unset | any | `next_session` | The model. |
+| `tts.piper.voice` | string | unset | any | `next_session` | The voice. |
+| `tts.provider` | string | unset | any | `next_session` | The speech provider: `edge` (default, keyless), `elevenlabs`, `openai`, `gemini`, `xai`, `mistral`, `minimax`, `deepinfra`, `nous`, the local engines `piper`, `kittentts`, `neutts`, a `[tts.providers.<name>]` command or a plugin's. |
+| `tts.providers.<name>.command` | string | `""` | any | `next_session` | The command: `{input_path}` (alias `{text_path}`), `{output_path}`, `{format}`, `{voice}` and `{model}` are replaced by values quoted for their position in the shell that runs it (the session's sh, bash or PowerShell; cmd.exe for voice messages on Windows); `{{` and `}}` are literal braces. |
+| `tts.providers.<name>.max_text_length` | integer | `5000` | ≥ 1 | `next_session` | Characters per run; longer text is split. |
+| `tts.providers.<name>.model` | string | unset | any | `next_session` | `{model}`. |
+| `tts.providers.<name>.output_format` | one of "mp3", "wav", "ogg", "flac", "m4a", "aac", "amr", "opus" | `"mp3"` | `"mp3"`, `"wav"`, `"ogg"`, `"flac"`, `"m4a"`, `"aac"`, `"amr"`, `"opus"` | `next_session` | The format the command writes. |
+| `tts.providers.<name>.release_command` | string | unset | any | `next_session` | Run when the provider is released. |
+| `tts.providers.<name>.timeout_secs` | integer | `120` | ≥ 1 | `next_session` | Idle deadline: any output resets it. |
+| `tts.providers.<name>.type` | one of "command" | `"command"` | `"command"` | `next_session` | Always `command`. |
+| `tts.providers.<name>.voice` | string | unset | any | `next_session` | `{voice}`. |
+| `tts.providers.<name>.voice_compatible` | boolean | `false` | any | `next_session` | The output can be sent as a voice bubble as is. |
+| `tts.providers.<name>.warm_command` | string | unset | any | `next_session` | Run before first use (load a model). |
+| `tts.xai.language` | string | `"en"` | any | `next_session` | The language. |
+| `tts.xai.max_text_length` | integer | unset | ≥ 1 | `next_session` | Characters per request (a positive integer; default 15,000). |
+| `tts.xai.speed` | number | `1.0` | 0.7 to 1.5 | `next_session` | Speaking speed. |
+| `tts.xai.voice` | string | `"eve"` | any | `next_session` | The voice: a built-in name or a custom cloned voice id. |
 | `ui.composer.paste_collapse_chars` | integer | `2000` | ≥ 0 | `next_session` | A paste of at least this many characters collapses into a chip; `0` disables the character threshold. |
 | `ui.composer.paste_collapse_lines` | integer | `5` | ≥ 0 | `next_session` | A paste of at least this many lines collapses into a chip; `0` disables the line threshold. |
 | `ui.interface` | one of "tui", "line" | `"tui"` | `"tui"`, `"line"` | `next_session` | Interactive interface when stdin and stdout are terminals: the full-screen `tui` or the `line` CLI (`--tui`/`--line` override it). |
@@ -683,17 +887,44 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `vault.bitwarden.enabled` | boolean | `true` | any | `next_session` | Offer its logins when its CLI is installed and signed in. |
 | `vault.key_storage` | one of "file", "keychain" | `"file"` | `"file"`, `"keychain"` | `next_session` | Where a new vault's key is kept: `file` (`<profile>/vault/vault.key`) or `keychain` (the OS keychain; the file when none is reachable). `prometheus vault key migrate --to` moves an existing key. |
 | `vault.onepassword.enabled` | boolean | `true` | any | `next_session` | Offer its logins when its CLI is installed and signed in. |
+| `video_gen.provider` | string | unset | any | `next_session` | The provider serving the category (`nous` routes it through the subscription tool gateway); unset picks one automatically. |
+| `vision.embed_target_bytes` | integer | `262144` | ≥ 0 | `next_session` | Largest natively embedded image in bytes (clamped to 65,536..4,194,304); bigger or wider images are downscaled. |
 | `vision.image_input_mode` | one of "auto", "native", "text" | `"auto"` | `"auto"`, `"native"`, `"text"` | `next_session` | How images reach the model. |
+| `vision.max_calls_per_image` | integer | unset | ≥ 0 | `next_session` | Times one image may be embedded by `vision_analyze` per session; unset is 3 in delegated children and unlimited for the main agent, `0` is unlimited. |
+| `vision.replay_recent_images` | integer | `3` | ≥ 0 | `next_session` | Newest user images re-sent when history is rebuilt from storage; `0` disables. |
+| `voice.auto_tts` | boolean | `false` | any | `live` | Turn spoken replies on whenever voice mode starts. |
+| `voice.beep_enabled` | boolean | `true` | any | `live` | Play a start beep (880 Hz) and an end double beep (660 Hz) around each recording. |
+| `voice.hallucination_filter` | boolean | `true` | any | `live` | Drop transcripts that are known silence hallucinations ("thanks for watching", one phrase repeated). |
+| `voice.max_recording_secs` | integer | `120` | 5 to 600 | `live` | The longest recording; it stops there. |
+| `voice.no_speech_timeout_secs` | integer | `15` | ≥ 0 | `live` | A recording with no confirmed speech by then ends without being transcribed. |
+| `voice.record_key` | string | `"ctrl+b"` | any | `live` | The key that starts a recording in voice mode, and stops the continuous loop when pressed during one. |
+| `voice.silence_duration_ms` | integer | `3000` | ≥ 0 | `live` | Continuous quiet after confirmed speech that ends the recording. |
+| `voice.silence_threshold` | integer | `200` | 1 to 32767 | `live` | Input level (RMS, 0-32767) above which audio counts as speech. |
+| `voice.speech_confirm_ms` | integer | `300` | ≥ 0 | `live` | How long the level must stay above the threshold before speech is confirmed (dips shorter than 200 ms are tolerated). |
+| `voice.stop_phrases` | array of string | `["stop","never mind","goodbye","cancel","that's all"]` | any | `live` | Whole utterances that end the voice conversation instead of being sent (case and surrounding punctuation ignored); `[]` disables. |
 | `web.backend` | string | `"auto"` | any | `next_session` | Shared backend for web search and extract (`auto` picks the first with credentials). |
+| `web.cache_enabled` | boolean | `true` | any | `next_session` | Serve repeat searches and extractions from a cache. |
+| `web.cache_exempt_hosts` | array of string | `[]` | any | `next_session` | Hosts never cached (exact, `*.` wildcard or domain suffix), beside local, private and single-label hosts which never are. |
+| `web.cache_ttl_secs` | integer | `1200` | ≥ 0 | `next_session` | How long a cached result is served (clamped to 60..86,400). |
 | `web.extract_backend` | string | unset | any | `next_session` | Extract backend; unset uses `backend`. |
 | `web.extract_char_limit` | integer | `15000` | 2000 to 500000 | `next_session` | Characters per extracted page. |
 | `web.extract_timeout_secs` | integer | `120` | ≥ 0 | `next_session` | Bound on one extract dispatch. |
 | `web.firecrawl.base_url` | string | unset | any | `next_session` | Self-hosted Firecrawl base URL; unset is the hosted API (`https://api.firecrawl.dev`, secret `FIRECRAWL_API_KEY`). |
 | `web.keyless.enabled` | boolean | `false` | any | `next_session` | Allow keyless web search as the last `auto` choice. |
+| `web.keyless.rescue` | boolean | `false` | any | `next_session` | Retry one failed call of a keyed backend once on the keyless ring (only with `enabled`); the next call still tries the keyed backend. |
+| `web.provider_tier` | table | `{}` | any | `next_session` | Pins a vendor's anonymous (`free`) or keyed (`paid`) endpoint in the keyless ring (`paid` without its key removes the vendor). |
 | `web.search_backend` | string | unset | any | `next_session` | Search backend; unset uses `backend`. |
 | `web.searxng.url` | string | unset | any | `next_session` | Base URL of the SearXNG instance (its JSON output must be enabled); `searxng` is unavailable until it is set. |
+| `web.xai.allowed_domains` | array of string | `[]` | any | `next_session` | Only these domains (at most 5; not with `excluded_domains`). |
+| `web.xai.excluded_domains` | array of string | `[]` | any | `next_session` | Never these domains (at most 5; not with `allowed_domains`). |
+| `web.xai.model` | string | `"grok-4.5"` | any | `next_session` | The model running the search. |
+| `web.xai.timeout_secs` | integer | `90` | ≥ 1 | `next_session` | Bound on one search. |
 | `worktrees.archive_dirty` | boolean | `true` | any | `live` | Archive dirty or unpushed trees past their idle tier before removing them; `false` keeps such trees. |
 | `worktrees.archive_max_file_bytes` | integer | `52428800` | ≥ 0 | `live` | Untracked files larger than this keep a tree from the sweep (`keep-large-untracked`) and are left out of archives. |
 | `worktrees.archive_retention_secs` | integer | `2592000` | ≥ 0 | `live` | Seconds an archive is kept before the sweep deletes it (`0` = forever). |
 | `worktrees.max_total_bytes` | integer | `0` | ≥ 0 | `live` | Total bytes of trees above which the oldest idle ones past their tier are archived and removed first (`0` = off). |
 | `worktrees.sync_remote` | boolean | `true` | any | `live` | Fetch the default remote before creating a tree (a failed fetch falls back to the local tip). |
+| `x_search.model` | string | `"grok-4.5"` | any | `next_session` | The xAI model answering X searches. |
+| `x_search.reasoning_effort` | string | unset | any | `next_session` | Reasoning effort sent with each search (unset: the model's own). |
+| `x_search.retries` | integer | `2` | 0 to 10 | `next_session` | Retries on 5xx, read timeouts and connection errors (backoff of 1.5 s per attempt, capped at 5 s). |
+| `x_search.timeout_secs` | integer | `180` | ≥ 30 | `next_session` | Bound on one search request. |

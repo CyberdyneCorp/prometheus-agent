@@ -47,6 +47,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | Name | Owner | Since | Params | Result |
 |---|---|---|---|---|
 | `approval.respond` | `tool-system` | 1.0 | [`ApprovalRespondParams`](#approvalrespondparams) | [`Ack`](#ack) |
+| `autoprune.offer` | `session-storage` | 1.0 | [`AutopruneOfferParams`](#autopruneofferparams) | [`AutopruneOffer`](#autopruneoffer) |
 | `bot.chat.ensure` | `bot-mode` | 1.0 | not served yet | |
 | `bot.create` | `bot-mode` | 1.0 | not served yet | |
 | `bot.meta.get` | `bot-mode` | 1.0 | not served yet | |
@@ -88,11 +89,26 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `harness.diff` | `harness-evolution` | 1.0 | not served yet | |
 | `harness.log` | `harness-evolution` | 1.0 | not served yet | |
 | `harness.rollback` | `harness-evolution` | 1.0 | not served yet | |
-| `journey.list` | `memory` | 1.0 | not served yet | |
+| `journey.list` | `memory` | 1.0 | [`JourneyListParams`](#journeylistparams) | [`JourneyList`](#journeylist) |
+| `local.add` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
+| `local.catalog` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
+| `local.install` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
+| `local.jobs` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
+| `local.pause` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
+| `local.pull` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
+| `local.resume` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
+| `local.rm` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
+| `local.search` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
+| `local.start` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
+| `local.status` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
+| `local.stop` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
+| `local.update` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
+| `local.use` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
 | `lsp.status` | `lsp-diagnostics` | 1.0 | [`LspStatusParams`](#lspstatusparams) | [`LspStatus`](#lspstatus) |
-| `moa.presets.delete` | `mixture-of-agents` | 1.0 | not served yet | |
-| `moa.presets.list` | `mixture-of-agents` | 1.0 | not served yet | |
-| `moa.presets.put` | `mixture-of-agents` | 1.0 | not served yet | |
+| `memory.summary` | `memory` | 1.0 | [`SessionRef`](#sessionref) | [`MemorySummary`](#memorysummary) |
+| `moa.presets.delete` | `mixture-of-agents` | 1.0 | [`MoaPresetsDeleteParams`](#moapresetsdeleteparams) | [`MoaPresetList`](#moapresetlist) |
+| `moa.presets.list` | `mixture-of-agents` | 1.0 | [`MoaPresetsListParams`](#moapresetslistparams) | [`MoaPresetList`](#moapresetlist) |
+| `moa.presets.put` | `mixture-of-agents` | 1.0 | [`MoaPresetsPutParams`](#moapresetsputparams) | [`MoaPresetList`](#moapresetlist) |
 | `model.options` | `tui` | 1.0 | [`SessionRef`](#sessionref) | [`ModelOptions`](#modeloptions) |
 | `pairing.approve` | `messaging-gateway` | 1.0 | [`PairingApproveParams`](#pairingapproveparams) | [`PairingApproved`](#pairingapproved) |
 | `prompt.submit` | `workspace-architecture` | 1.0 | [`SubmitParams`](#submitparams) | [`Submitted`](#submitted) |
@@ -112,7 +128,10 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `session.list` | `workspace-architecture` | 1.0 | [`SessionListParams`](#sessionlistparams) | [`SessionList`](#sessionlist) |
 | `session.resolve` | `workspace-architecture` | 1.0 | [`ResolveParams`](#resolveparams) | [`SessionRef`](#sessionref) |
 | `session.resume` | `workspace-architecture` | 1.0 | [`ResumeParams`](#resumeparams) | [`Attached`](#attached) |
+| `session.siblings` | `session-storage` | 1.0 | [`SessionRef`](#sessionref) | [`Lineage`](#lineage) |
+| `session.steer` | `agent-turn-loop` | 1.0 | [`SteerParams`](#steerparams) | [`Ack`](#ack) |
 | `session.transcript` | `workspace-architecture` | 1.0 | [`SessionRef`](#sessionref) | [`Transcript`](#transcript) |
+| `session.tree` | `session-storage` | 1.0 | [`SessionRef`](#sessionref) | [`Lineage`](#lineage) |
 | `subagent.list` | `tui` | 1.0 | [`SessionRef`](#sessionref) | [`SubagentList`](#subagentlist) |
 | `subagent.subscribe` | `tui` | 1.0 | not served yet | |
 | `system.health` | `observability` | 1.0 | not served yet | |
@@ -285,6 +304,22 @@ One kind of a session's automation.
 | `row` | string or null | no | The live row as the CLI shows it (absent once removed). |
 | `session_id` | string | yes | The session. |
 | `status` | string | yes | `active`, `paused`, `done`, `parked`, or `none` once removed. |
+
+### `AutopruneOffer`
+
+`autoprune.offer` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `question` | string or null | no | The question to ask (`on`, `off` or `later`, answered with `/autoprune <answer>`), when it is due; `null` otherwise. A non-null answer counts as today's check. |
+
+### `AutopruneOfferParams`
+
+`autoprune.offer` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
 
 ### `BannerInfo`
 
@@ -512,8 +547,10 @@ One completion.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `billing_source` | string or null | no | The current route's `billing_source` (`subscription:<provider>/<label>`, `api_key:<provider>[/<label>]`, `local`...), when the session is loaded. |
 | `context_window` | integer or null | no | The model's context window, when known. |
 | `cost_usd` | number or null | no | The session's cost so far in the usage ledger's currency (USD), priced calls only. |
+| `subscription` | [`SubscriptionStatus`](#subscriptionstatus) or null | no | The subscription the current route bills, when it is one. |
 | `tokens` | integer | yes | Estimated tokens of the active context. |
 
 ### `Decision`
@@ -705,6 +742,77 @@ The system prompt a session froze on its first turn.
 | `protocol` | [`Version`](#version) | yes | The protocol the daemon speaks. |
 | `server_version` | string | yes | The daemon's semantic version. |
 
+### `JourneyList`
+
+`journey.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `nodes` | array of [`JourneyNode`](#journeynode) | yes | The nodes, oldest first. |
+
+### `JourneyListParams`
+
+`journey.list` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
+| `since` | string or null | no | Only nodes created at or after this: a duration back from now (`2h`, `3d`, `1w`), a date (`2026-11-01`) or a timestamp. |
+
+### `JourneyNode`
+
+One learned skill or memory entry.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `created_at` | string | yes | When it was learned (RFC 3339). |
+| `id` | string | yes | `skill:<name>` for a skill, the entry id (`m_...`) for memory. |
+| `kind` | string | yes | `skill` or `memory`. |
+| `origin` | string | yes | Who created it: a skill's `user`, `agent`, `hub` or `bundled` (a used bundled skill); an entry's `user`, `agent`, `background_review`, `provider`, `consolidation` or `import`. |
+| `title` | string | yes | The skill's name or the entry's text (one line, shortened). |
+| `updated_at` | string | yes | When it last changed (RFC 3339). |
+
+### `Lineage`
+
+`session.tree` / `session.siblings` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `nodes` | array of [`LineageNode`](#lineagenode) | yes | The related sessions, by depth then age. |
+
+### `LineageNode`
+
+One related session in `session.tree` / `session.siblings`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `depth` | integer | yes | Distance from the asked session (its children are 1). |
+| `kind` | string | yes | How it relates to the parent: `fork`, `compression`, `delegate`, `reset`, `import` or `background`. |
+| `parent_session_id` | string | yes | Its parent. |
+| `session_id` | string | yes | The session. |
+| `title` | string or null | no | Its title. |
+
+### `LocalParams`
+
+Params of every `local.*` method; each uses the fields its command takes (`model` for pull, rm and use; `job` for pause and resume; `query` for search; `path` for add).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `job` | string or null | no | A download job id. |
+| `model` | string or null | no | Catalog or library id, or `owner/repo[:quant]` for `local.pull`. |
+| `path` | string or null | no | A `.gguf` file on the daemon's machine. |
+| `profile` | string or null | no | The profile (the connection's only one when omitted); `local.use` sets its model. |
+| `query` | string or null | no | Search words. |
+
+### `LocalReply`
+
+Result of every `local.*` method.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `data` | any | no | The command's `--json` document (without `schema`), or `null`. |
+| `message` | string | yes | What happened, in one line. |
+
 ### `LspServerStatus`
 
 One running language server.
@@ -744,6 +852,90 @@ One MCP server of a session.
 | `name` | string | yes | Its configured name. |
 | `state` | string | yes | `ready`, `starting`, `failed` or `disabled`. |
 | `tools` | integer | yes | The tools it contributes. |
+
+### `MemorySummary`
+
+`memory.summary` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `line` | string or null | no | `Memory: +<added> ~<patched> -<removed> (review with /memory review)` when the agent changed memory in the session and `memory.review_mode` is not `off`; `null` otherwise. |
+
+### `MoaPresetInfo`
+
+One preset as editors show it.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `aggregator` | [`MoaSlotInfo`](#moaslotinfo) | yes | The model that acts with the tools and is billed. |
+| `aggregator_temperature` | number or null | no | Temperature sent to the aggregator. |
+| `billing_notice` | string or null | no | `Aggregator is on <provider>; ...` when it bills another provider than `model.provider`. |
+| `builtin` | boolean | yes | The built-in `default`, not redefined in `config.toml`. |
+| `default` | boolean | yes | It is `moa.default_preset` (cannot be deleted). |
+| `enabled` | boolean | yes | `false`: the aggregator runs alone. |
+| `fanout` | string | yes | When the advisors run (`user_turn`, `per_iteration`, `every_n:N`). |
+| `name` | string | yes | The preset name (`/model <name>`, `moa/<name>`). |
+| `reference_temperature` | number or null | no | Temperature sent to the references. |
+| `references` | array of [`MoaSlotInfo`](#moaslotinfo) | yes | The advisors. |
+
+### `MoaPresetInput`
+
+A preset to write.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `aggregator` | [`MoaSlotInfo`](#moaslotinfo) | yes | The aggregator (never `moa`). |
+| `aggregator_temperature` | number or null | no | Temperature sent to the aggregator (0.0-2.0). |
+| `enabled` | boolean or null | no | Whether the references run (default `true`). |
+| `fanout` | string or null | no | The cadence (default `user_turn`). |
+| `reference_temperature` | number or null | no | Temperature sent to the references (0.0-2.0). |
+| `references` | array of [`MoaSlotInfo`](#moaslotinfo) | yes | The advisors (at least one). |
+
+### `MoaPresetList`
+
+`moa.presets.list` (and `put`, `delete`) result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `default_preset` | string | yes | `moa.default_preset`. |
+| `presets` | array of [`MoaPresetInfo`](#moapresetinfo) | yes | Every preset, sorted by name. |
+
+### `MoaPresetsDeleteParams`
+
+`moa.presets.delete` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | The preset name (never `moa.default_preset`). |
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
+
+### `MoaPresetsListParams`
+
+`moa.presets.list` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
+
+### `MoaPresetsPutParams`
+
+`moa.presets.put` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | The preset name. |
+| `preset` | [`MoaPresetInput`](#moapresetinput) | yes | The preset. |
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
+
+### `MoaSlotInfo`
+
+One preset slot.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `model` | string | yes | Model id. |
+| `provider` | string | yes | Provider id. |
+| `reasoning_effort` | string or null | no | `none`...`ultra`, when set. |
 
 ### `ModelOption`
 
@@ -811,6 +1003,27 @@ An image attached to a prompt: a file the daemon reads (checked like `chat --ima
 |---|---|
 | `` | An absolute path on the daemon's machine. |
 | `` | A blob reference (`blob:sha256:<hex>`) of one of the session's earlier user messages. |
+
+### `QuotaStatus`
+
+A subscription's plan and quota windows.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `plan` | string or null | no | The plan label. |
+| `reported` | boolean | yes | The provider reports quota data. |
+| `text` | string | yes | One line for a status display (`quota: not reported by provider`). |
+| `windows` | array of [`QuotaWindow`](#quotawindow) | no | The quota windows. |
+
+### `QuotaWindow`
+
+One quota window.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | `5h`, `weekly`... |
+| `resets_at` | string or null | no | When it resets (RFC 3339). |
+| `used_percent` | number | yes | Used share, 0-100. |
 
 ### `RequestCancel`
 
@@ -959,6 +1172,26 @@ One listed session.
 | `started_at` | string | yes | When it started (RFC 3339). |
 | `title` | string or null | no | Its title, when it has one. |
 
+### `SteerKind`
+
+How a steer is delivered.
+
+| Value | Meaning |
+|---|---|
+| `note` | Inserted before the next model request. |
+| `redirect` | Running cooperative tools yield; inserted as a real user message. |
+| `wrap_up` | The current tool batch finishes, then one toolless request ends the turn as `completed`. |
+
+### `SteerParams`
+
+`session.steer` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `kind` | [`SteerKind`](#steerkind) | no | How it is delivered (default `note`). |
+| `session_id` | string | yes | The session. |
+| `text` | string | yes | The steer; empty or whitespace-only text is refused (`empty steer`). |
+
 ### `SubagentList`
 
 `subagent.list` result.
@@ -985,6 +1218,7 @@ One delegated child of a session.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `author` | any | no | Never accepted: the gateway stamps every input's author from the connection, so a client-supplied one is refused with `-32002 rpc.forged_author`. |
+| `files` | array of string | no | Other files received with it (absolute paths on the daemon's machine): kept in the session's blob store and, with `attachments.storage = "workspace"`, copied into the workspace. |
 | `images` | array of [`PromptImage`](#promptimage) | no | Images that go with it. |
 | `input_id` | string or null | no | The client's id of this input: a resend with the same id returns the original admission instead of running a second turn. |
 | `run_budget_secs` | integer or null | no | Wall-clock budget of this turn in seconds (`--run-budget`). |
@@ -1000,6 +1234,14 @@ One delegated child of a session.
 | `admission` | [`Admission`](#admission) | no | How the input was admitted. |
 | `notice` | string or null | no | What a `handled` input did, to show in place of a turn. |
 | `turn_id` | string | yes | The admission id: the turn that runs the input (for a steered input, the running turn it joined). |
+
+### `SubscriptionStatus`
+
+A subscription's status in `session.context_usage`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `quota` | [`QuotaStatus`](#quotastatus) | yes | Its plan and quota windows. |
 
 ### `SudoAnswer`
 

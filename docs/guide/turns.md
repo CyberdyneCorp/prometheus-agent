@@ -67,6 +67,82 @@ results it becomes a new message wrapped in
 steer opens your next message. An empty steer is refused with
 `empty steer`.
 
+`session.steer {session_id, text, kind}` takes one of three kinds:
+
+| Kind | Delivery |
+|---|---|
+| `note` (default) | Added before the next model request, as above. |
+| `redirect` | Running tools are asked to yield (cooperative tools stop early), then the text is added before the next request as a real user message (`kind=redirect`). |
+| `wrap_up` | The current tool batch finishes, then one request without tools asks for the final answer and the turn ends `completed`. |
+
+Several pending steers of different kinds share one message, each run of
+one kind under its own `kind=` wrapper.
+
+## Crash resume
+
+Every turn keeps a journal in `state.db`: `turn_started`, then
+`request_sent` (a hash of the request) and `response_received` per model
+call, `tool_started` (with the tool's declared effect and idempotence)
+before each tool call runs and `tool_finished` (its stored result) as soon
+as it is done, and `turn_finished`. Each record is committed before the
+step it announces begins.
+
+When a session whose last turn has no `turn_finished` is opened again
+(`prometheus sessions resume <session>`, `chat -r`, or the daemon loading
+it), `agent.resume_on_crash` decides:
+
+| Value | What happens |
+|---|---|
+| `ask` (default) | The line interface asks `resume the interrupted turn? [y/N]`. The daemon asks the attached TUI or desktop app the same question (`Resume` or `Close`); a message you send meanwhile waits behind the answer, and a question nobody answers closes the turn. In a messaging chat, the gateway's restart notice asks: `/retry` resumes the turn, `/discard` (or the hold expiring) closes it. |
+| `auto` | The turn is resumed. In a messaging chat the gateway resumes it when the daemon starts again (the chat is told it is resuming, no `/retry` needed) and sends the answer to the chat; a session the restart suspended is not resumed. |
+| `never` | The turn is closed. |
+
+Resuming reuses every finished tool result, runs calls that never
+started, runs a started-but-unfinished call again only when its tool
+declares `effect = "none"` or `idempotent = true`, and gives every other
+interrupted call the result `[prometheus] outcome unknown: the process
+stopped while '<tool>' was running. Verify its effect before retrying.`;
+then the turn goes on with the next model request. Closing (or sending a
+new message instead) answers the open calls the same way without running
+anything and ends the turn as `crashed` with a boundary message.
+
+## Side questions, /init and verification
+
+`/btw <question>` asks a side question about the conversation without
+adding anything to it: one call on the `side_question` auxiliary route
+(default: the session's model) over a snapshot of the transcript taken
+when you send it. It works while a turn runs, without interrupting it;
+the answer appears as `side answer: ...` (a separate message on
+messaging platforms). Neither the question nor the answer is stored, so
+the prompt cache is untouched.
+
+`/init [notes]` runs a normal turn that inspects the workspace with
+read-only tools (manifests, layout, toolchain, CI) and writes `AGENTS.md`
+at the workspace root, or merges its findings into the existing file;
+your notes are passed as emphasis. The write goes through the usual file
+approvals. Sections you wrote (`## ...`) are kept verbatim: one the
+update dropped is appended back. The new file is project context from
+your next session.
+
+**Verify-on-stop.** With `agent.verify_on_stop = true` (or `"auto"`: on
+for the CLI, TUI, desktop, ACP and API callers, off for messaging;
+default `false`), a turn that edited files other than documentation
+cannot end until a test, build, lint or type-check command ran after the
+last edit: the final answer gets a nudge, as a new message, to verify or
+explain why it cannot (the answer to that nudge stands unless the model
+edits again). `agent.max_verify_nudges` (default 3) bounds the nudges
+together with `pre_verify` hooks; `agent.verify_guidance` (default true)
+adds clean-diff advice. The evidence (edits and checks) is recorded in
+`state.db` only while the feature is on.
+
+**Coding posture.** Per `agent.coding_context` (`"auto"` by default: on
+for interactive CLI, TUI, desktop and ACP sessions in a code workspace, a
+git repository or a directory with a build manifest; `"on"`; `"off"`),
+the session block of the prompt gets a coding brief, a workspace snapshot
+(branch and number of dirty files) and your standing
+`agent.coding_instructions`. Messaging sessions never get it. Changes
+apply from the next session.
+
 ## Failures and retries
 
 Each model call is tried up to `agent.api_max_retries` times (default 3)
@@ -146,6 +222,14 @@ empty). Its text becomes the turn's answer and the exit reason stays the
 budget one. That summary request does not count against the iteration
 limit, but its tokens and cost are recorded like every other call.
 
+With `agent.budget_warning_ratio` set (strictly between 0 and 1; unset is
+off), the first tool round in which the most-constrained budget of the
+turn (iterations, the run budget, or a `budgets.*` limit) reaches that
+share gets `[budget checkpoint] used <used> of <max> <unit>` appended to
+its newest tool result, once per turn. Unlimited budgets never count, and
+the notice never goes into the system prompt or into anything already
+sent.
+
 Budgets are described in [Usage, costs and budgets](usage-and-budgets.md).
 A model without a known price under a USD budget is never called: the turn
 ends with `cost_budget_exhausted` and the error names the model.
@@ -203,6 +287,24 @@ first 70% and last 20% with a marker in between. A file that cannot be read
 within `prompt.context_file_read_timeout_secs` (default 5), for example on
 a hung network mount, is skipped with a warning.
 
+When a session's working directory was not configured or given (a daemon
+session without a recorded directory falls back to the profile's
+`workspace`) and that fallback lies inside the Prometheus installation or
+source tree, no project context is loaded and a warning advises setting
+`terminal.cwd`: Prometheus's own rules are never mistaken for your
+project's.
+
+**Subdirectory hints.** When a file tool
+([`read_file`](../reference/tools.md#read_file),
+[`write_file`](../reference/tools.md#write_file),
+[`patch`](../reference/tools.md#patch),
+[`search_files`](../reference/tools.md#search_files)) reaches into a subdirectory of the working tree
+whose `AGENTS.md` is not loaded yet, that file is appended to the tool's
+result under `[Subdirectory context: <path>]` (scanned like a context file,
+first 70% and last 20% kept past 32,000 characters). It never goes into the
+system prompt, each file is added once per session (also across restarts),
+and paths outside the working tree are ignored.
+
 ### Platform hints
 
 Each surface has a built-in hint. Change it per platform:
@@ -238,6 +340,16 @@ pirate
 session, `/personality none` clears it, and `--now` applies it to the
 running session (one prompt-cache break). Custom texts are checked like
 context files.
+
+### Prefill messages
+
+`prompt.prefill_messages_file` (relative to the profile directory) names
+a JSON array of `{"role": "user" | "assistant", "content": "..."}`
+few-shot messages sent right after the system prompt. A session reads the
+file once, at its start, and keeps those messages (with the file's path
+and hash) for its whole life: editing the file changes new sessions only.
+They are never stored as transcript messages. A missing or malformed
+file, or another role, fails the session start (exit 78).
 
 ### Session id
 

@@ -13,26 +13,39 @@
 pub mod breakpoints;
 mod budget;
 mod cache;
+mod checkpoint;
 mod compression;
 pub mod events;
 mod exit;
+pub mod fast;
 mod finish;
 mod guardrails;
 mod guards;
+mod hints;
+mod idle;
 pub mod interrupt;
 pub mod iteration;
+mod journal;
 pub mod lease;
 pub mod model;
 mod observe;
 mod recall;
 mod recovery;
 pub mod repair;
+mod replay;
+mod resume;
 mod round;
 mod run;
+mod selection;
+mod server_compaction;
 mod steer;
 mod system;
 pub mod tools;
 pub mod transcript;
+mod upkeep;
+mod verify;
+pub mod window;
+pub mod window_render;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
@@ -56,8 +69,10 @@ pub use interrupt::{Interrupt, Issuer};
 pub use iteration::IterationBudget;
 pub use lease::LeaseTiming;
 pub use model::{DeltaSink, ModelPort, NoDeltas, ProviderModel, ProviderSetup};
+pub use resume::{Unfinished, outcome_unknown};
 pub use round::WRAP_UP_NOTICE;
-pub use tools::{SessionTools, Timings, ToolBatch, ToolPort};
+pub use steer::SteerKind;
+pub use tools::{CallJournal, Declared, SessionTools, Timings, ToolBatch, ToolPort};
 
 use crate::compress::Summarizer;
 use crate::prompt::frozen::Rebuild;
@@ -75,6 +90,9 @@ pub struct PromptSetup {
     pub registered_hint: Option<String>,
     /// The session's working directory.
     pub cwd: Option<PathBuf>,
+    /// `cwd` was chosen by fallback rather than configured or given
+    /// (spec: agent-turn-loop, Install-tree context suppression).
+    pub cwd_fallback: bool,
     /// `--no-context-files`.
     pub no_context_files: bool,
     /// `--pass-session-id`.
@@ -101,6 +119,7 @@ impl PromptSetup {
             platform: platform.to_owned(),
             registered_hint: None,
             cwd,
+            cwd_fallback: false,
             no_context_files: false,
             pass_session_id: false,
             caller_system: None,
@@ -175,6 +194,15 @@ pub struct AgentSetup {
     /// surface frozen per session; MCP tool list changes respect the
     /// frozen surface).
     pub compaction_boundary: Option<Arc<dyn CompactionBoundary>>,
+    /// The plugin context engine `context.engine` names; `None` compacts
+    /// with the built-in engine.
+    pub context_engine: Option<Arc<dyn crate::compress::engine::ContextEngine>>,
+    /// Where each prompt build is kept for the session's recording (spec:
+    /// replay-and-evaluation, Session recordings).
+    pub recording: Option<Arc<pmt_obs::recording::Writer>>,
+    /// A replay's recorded prompts (spec: replay-and-evaluation,
+    /// Divergence detection).
+    pub prompt_pins: Option<Arc<dyn crate::prompt::pins::PromptPins>>,
 }
 
 /// What a session refreshes when a compaction commits. The prompt cache
@@ -317,6 +345,9 @@ impl AgentSetup {
             memory: None,
             turn_hooks: None,
             compaction_boundary: None,
+            context_engine: None,
+            recording: None,
+            prompt_pins: None,
         }
     }
 }
@@ -396,14 +427,26 @@ pub struct Agent {
     pending_rebuild: Mutex<Option<Rebuild>>,
     personality: Mutex<Option<String>>,
     steers: steer::Steers,
+    hints: hints::Hints,
+    prefill: Mutex<Option<Arc<Vec<pmt_providers::request::Message>>>>,
     /// The previous request's prefix (cache break detection).
     prefix: Mutex<Option<cache::Prefix>>,
     /// Reported usage, for the compression preflight.
     usage: Mutex<compression::UsageMemory>,
+    /// A summary written ahead of the compaction trigger.
+    prepared: Mutex<Option<crate::compress::prepared::Prepared>>,
+    /// Micro-compaction progress.
+    micro: Mutex<upkeep::MicroState>,
     /// The prompt-cache lifetime, resolved once per session.
     cache_ttl: OnceLock<CacheTtl>,
     /// The TTL lowering was logged.
     ttl_lowered: std::sync::atomic::AtomicBool,
+    /// A route without server-side compaction was logged.
+    server_compaction_logged: std::sync::atomic::AtomicBool,
+    /// The session's `/fast` mode, over `agent.fast_mode`.
+    fast: Mutex<Option<pmt_config::schema::FastMode>>,
+    /// A route without a fast tier was announced.
+    fast_noticed: std::sync::atomic::AtomicBool,
 }
 
 impl Agent {
@@ -420,10 +463,17 @@ impl Agent {
             pending_rebuild: Mutex::new(None),
             personality: Mutex::new(None),
             steers: steer::Steers::default(),
+            hints: hints::Hints::default(),
+            prefill: Mutex::new(None),
             prefix: Mutex::new(None),
             usage: Mutex::new(compression::UsageMemory::new()),
+            prepared: Mutex::new(None),
+            micro: Mutex::new(upkeep::MicroState::default()),
             cache_ttl: OnceLock::new(),
             ttl_lowered: std::sync::atomic::AtomicBool::new(false),
+            server_compaction_logged: std::sync::atomic::AtomicBool::new(false),
+            fast: Mutex::new(None),
+            fast_noticed: std::sync::atomic::AtomicBool::new(false),
         })
     }
 
@@ -460,7 +510,20 @@ impl Agent {
     ///
     /// `turn.empty_steer` (`empty steer`) for empty or whitespace text.
     pub fn steer(&self, text: &str) -> Result<(), Error> {
-        self.steers.push(text)
+        self.steers.push(text, SteerKind::Note)
+    }
+
+    /// Steers the running turn with `kind` (spec: agent-turn-loop,
+    /// Structured steering): a `note` is inserted before the next request,
+    /// a `redirect` asks the running tools to yield and becomes a real user
+    /// message, a `wrap_up` ends the turn after the current tool batch with
+    /// one toolless request.
+    ///
+    /// # Errors
+    ///
+    /// `turn.empty_steer` (`empty steer`) for empty or whitespace text.
+    pub fn steer_with(&self, text: &str, kind: SteerKind) -> Result<(), Error> {
+        self.steers.push(text, kind)
     }
 
     /// Takes the steers no turn delivered (a delegated child that ended
@@ -501,6 +564,13 @@ impl Agent {
         kept
     }
 
+    fn prefill_messages(&self) -> Option<Arc<Vec<pmt_providers::request::Message>>> {
+        self.prefill
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
     fn usage_memory(&self) -> MutexGuard<'_, compression::UsageMemory> {
         self.usage.lock().unwrap_or_else(PoisonError::into_inner)
     }
@@ -533,6 +603,16 @@ impl Agent {
         input: TurnInput,
         options: TurnOptions,
     ) -> Result<TurnResult, Error> {
+        let scope = self.check_scope(scope, session)?;
+        run::run(self, scope, input, options).await
+    }
+
+    /// `scope` when it is this agent's profile and `session` its session.
+    fn check_scope<'s>(
+        &self,
+        scope: Option<&'s ProfileScope>,
+        session: SessionId,
+    ) -> Result<&'s ProfileScope, Error> {
         let Some(scope) = scope else {
             return Err(Error::new(
                 &codes::TURN_SCOPE_REQUIRED,
@@ -550,6 +630,6 @@ impl Agent {
                 ),
             ));
         }
-        run::run(self, scope, input, options).await
+        Ok(scope)
     }
 }

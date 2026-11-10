@@ -32,6 +32,75 @@ pub fn client_builder(policy: &OutboundPolicy) -> Result<reqwest::ClientBuilder,
     client_builder_with_lookup(policy, Arc::new(SystemLookup))
 }
 
+/// [`client_builder`] whose `network.proxy` (or, without it, the proxy
+/// variables) never carries a request to a loopback host: model servers on this machine (llama.cpp, Ollama) are
+/// reached directly, so a prompt meant for them cannot leave the machine
+/// through the proxy (spec: local-models, Local inference stays local).
+/// Other callers keep proxying loopback, which is what a proxy set for
+/// them asks for.
+///
+/// # Errors
+///
+/// As [`client_builder`].
+pub fn client_builder_loopback_direct(
+    policy: &OutboundPolicy,
+) -> Result<reqwest::ClientBuilder, Error> {
+    let resolver = OutboundResolver {
+        lookup: Arc::new(SystemLookup),
+        force_ipv4: policy.force_ipv4,
+        destinations: None,
+    };
+    builder_with_identity(policy, resolver, None, Loopback::Direct)
+}
+
+/// Whether `network.proxy` carries loopback requests.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Loopback {
+    Proxied,
+    Direct,
+}
+
+/// The hosts [`Loopback::Direct`] exempts from the proxy.
+const LOOPBACK_HOSTS: &str = "localhost,127.0.0.0/8,::1";
+
+/// A `reqwest::Proxy` constructor for one scheme.
+type MakeProxy = fn(String) -> reqwest::Result<reqwest::Proxy>;
+
+/// The proxy variables (`HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, either
+/// case) with `NO_PROXY`, as reqwest reads them, except that a loopback
+/// host is never proxied (as Go's `net/http` does). Empty when none is set,
+/// which leaves reqwest's own lookup in place.
+fn env_proxies_except_loopback() -> Vec<reqwest::Proxy> {
+    let var = |name: &str| {
+        std::env::var(name)
+            .or_else(|_| std::env::var(name.to_lowercase()))
+            .ok()
+            .filter(|v| !v.is_empty())
+    };
+    let exempt = match var("NO_PROXY") {
+        Some(list) => format!("{LOOPBACK_HOSTS},{list}"),
+        None => LOOPBACK_HOSTS.to_owned(),
+    };
+    let schemes: [(&str, MakeProxy); 3] = [
+        ("HTTPS_PROXY", reqwest::Proxy::https),
+        ("HTTP_PROXY", reqwest::Proxy::http),
+        ("ALL_PROXY", reqwest::Proxy::all),
+    ];
+    schemes
+        .into_iter()
+        .filter_map(|(name, make)| {
+            let url = var(name)?;
+            match make(url) {
+                Ok(proxy) => Some(proxy.no_proxy(reqwest::NoProxy::from_string(&exempt))),
+                Err(err) => {
+                    tracing::warn!(component = "net", variable = name, error = %err, "ignored an invalid proxy variable");
+                    None
+                }
+            }
+        })
+        .collect()
+}
+
 /// [`client_builder`] with a substitute resolver, for tests.
 ///
 /// # Errors
@@ -65,13 +134,14 @@ pub(crate) fn base_builder(
     policy: &OutboundPolicy,
     resolver: OutboundResolver,
 ) -> Result<reqwest::ClientBuilder, Error> {
-    builder_with_identity(policy, resolver, None)
+    builder_with_identity(policy, resolver, None, Loopback::Proxied)
 }
 
 fn builder_with_identity(
     policy: &OutboundPolicy,
     resolver: OutboundResolver,
     identity: Option<crate::identity::ClientIdentity>,
+    loopback: Loopback,
 ) -> Result<reqwest::ClientBuilder, Error> {
     CLIENTS_BUILT.fetch_add(1, Ordering::Relaxed);
     tracing::debug!(component = "net", "outbound HTTP client configured");
@@ -87,7 +157,15 @@ fn builder_with_identity(
                 format!("network.proxy {url} is not a proxy URL: {e}"),
             )
         })?;
+        let proxy = match loopback {
+            Loopback::Proxied => proxy,
+            Loopback::Direct => proxy.no_proxy(reqwest::NoProxy::from_string(LOOPBACK_HOSTS)),
+        };
         builder = builder.proxy(proxy);
+    } else if loopback == Loopback::Direct {
+        for proxy in env_proxies_except_loopback() {
+            builder = builder.proxy(proxy);
+        }
     }
     Ok(if policy.force_ipv4 {
         // Also covers IPv6 literals in URLs, which skip name resolution:
@@ -123,7 +201,12 @@ pub fn client_with_identity(
         force_ipv4: policy.force_ipv4,
         destinations: None,
     };
-    build(builder_with_identity(policy, resolver, Some(identity))?)
+    build(builder_with_identity(
+        policy,
+        resolver,
+        Some(identity),
+        Loopback::Proxied,
+    )?)
 }
 
 /// Builds `builder`, mapping failure to `net.client_init`.

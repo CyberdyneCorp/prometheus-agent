@@ -15,6 +15,8 @@ mod automated;
 mod branch;
 mod clarify;
 mod commands;
+pub use commands::LOGIN_IN_DM;
+mod compaction;
 mod confirm;
 mod controls;
 mod history;
@@ -191,6 +193,8 @@ struct Pending {
     origin: Origin,
     text: String,
     images: Vec<String>,
+    /// Other received files (cached paths), kept by the session.
+    files: Vec<String>,
     routing: Routing,
     reply_to: Option<String>,
     /// The user spoke (the reply may be spoken back).
@@ -288,6 +292,9 @@ struct Lane {
     /// The automation origin of the turn being started (`goal`, `loop`,
     /// `heartbeat`).
     automating: Option<String>,
+    /// The context pressure level last seen, per session (one notice per
+    /// level crossing).
+    pressure_level: Option<(String, Option<pmt_core::context_pressure::Level>)>,
 }
 
 /// Hands an authorized event to its conversation's lane, starting it.
@@ -353,6 +360,7 @@ pub(crate) fn open(shared: &Arc<Shared>, key: &SessionKey, routing: &Routing) ->
         observed_since_turn: false,
         pickers: Vec::new(),
         automating: None,
+        pressure_level: None,
     };
     let span = tracing::info_span!(
         "conversation",
@@ -501,6 +509,7 @@ impl Lane {
             }
             Msg::Event { kind, payload } => {
                 self.hook_event(&kind, &payload).await;
+                self.compaction_event(&kind, &payload);
                 self.session_event(&kind, &payload).await;
             }
             Msg::Asked { id, method, params } => self.asked(id, &method, &params),
@@ -599,6 +608,7 @@ impl Lane {
             origin: Origin::Queued,
             text,
             images: Vec::new(),
+            files: Vec::new(),
             routing: self.routing.clone(),
             reply_to: None,
             voice: false,
@@ -616,6 +626,7 @@ impl Lane {
                 origin: Origin::Internal,
                 text: event.text,
                 images: Vec::new(),
+                files: Vec::new(),
                 routing: self.routing.clone(),
                 reply_to: None,
                 voice: false,

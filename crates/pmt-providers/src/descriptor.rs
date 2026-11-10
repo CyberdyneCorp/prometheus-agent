@@ -73,6 +73,11 @@ pub enum WireNeed {
     /// Detected from the endpoint's deployment metadata; `wire_format`
     /// until detected.
     Detected,
+    /// A non-native format of a first-party provider plugin bundled with
+    /// the binary (spec: model-providers, Gemini native and AWS Bedrock
+    /// providers): always available, unless config or a host rule chose
+    /// a native format instead.
+    Bundled(BundledWire),
     /// A non-native format only a provider plugin implements. Routing
     /// fails with `provider.plugin_unavailable` unless config or a host
     /// rule selects a native format.
@@ -94,6 +99,26 @@ pub enum WireNeed {
         /// The owning capability (`mixture-of-agents`).
         owner: String,
     },
+}
+
+/// The wire formats the bundled first-party provider plugins implement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BundledWire {
+    /// Google AI Studio `generateContent` / `streamGenerateContent`.
+    GeminiNative,
+    /// AWS Bedrock `Converse` / `ConverseStream`, signed with `SigV4`.
+    BedrockConverse,
+}
+
+impl BundledWire {
+    /// The name listings and traces show.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::GeminiNative => "gemini_native",
+            Self::BedrockConverse => "bedrock_converse",
+        }
+    }
 }
 
 /// One provider's static description. The flags are the descriptor
@@ -125,6 +150,10 @@ pub struct Descriptor {
     pub supports_model_listing: bool,
     /// Whether the provider honours a prompt cache key.
     pub supports_prompt_cache: bool,
+    /// Whether the provider compacts context server-side on the Responses
+    /// wire (a `context_management` compaction setting answered with an
+    /// opaque compaction item).
+    pub supports_server_compaction: bool,
     /// Hidden from pickers and listings.
     pub hidden: bool,
     /// A local inference server: the default endpoint is probed and the
@@ -144,6 +173,100 @@ pub struct Descriptor {
     /// No credential is needed when the configured endpoint is loopback
     /// (a hosted service with a local daemon).
     pub keyless_on_loopback: bool,
+    /// The OAuth PKCE sign-in a provider plugin declares (spec:
+    /// model-providers, Plugin OAuth and external-process providers): the
+    /// host runs it, so the plugin never sees the verifier or `state`.
+    pub oauth: Option<PluginOAuth>,
+    /// The agent CLI an `external_process` provider suggests. It is only
+    /// named in the hint: the host launches nothing a plugin chose, only
+    /// the `providers.<id>.command` the user configured.
+    pub command: Option<String>,
+    /// An opaque per-conversation header (spec: model-providers, Session
+    /// affinity headers and per-model wire routing) whose value is a
+    /// stable hash of the conversation, sent on main and auxiliary calls.
+    pub session_affinity_header: Option<String>,
+    /// Model id patterns mapped to the wire format serving them, first
+    /// match wins; models matching none use `wire_format`.
+    pub model_wire_formats: Vec<ModelWire>,
+    /// Where a subscription's plan and billing are managed (`/subscription`,
+    /// `/topup`).
+    pub account_urls: AccountUrls,
+    /// The header an API key is sent in instead of `Authorization: Bearer`
+    /// (`x-goog-api-key` for Gemini, `api-key` for Azure AI Foundry).
+    pub key_header: Option<String>,
+}
+
+/// A subscription provider's account pages.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AccountUrls {
+    /// Plan management (upgrade, downgrade).
+    pub plan: Option<String>,
+    /// Billing and prepaid balance top-up.
+    pub billing: Option<String>,
+}
+
+/// One `model_wire_formats` row: a case-insensitive model id pattern
+/// (`*` matches any run of characters) and its wire format.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelWire {
+    /// The pattern (`minimax*`, `claude-*`).
+    pub pattern: String,
+    /// The format of matching models.
+    pub wire_format: WireFormat,
+}
+
+impl ModelWire {
+    /// Whether `model` matches the pattern.
+    #[must_use]
+    pub fn matches(&self, model: &str) -> bool {
+        glob_matches(
+            &self.pattern.to_ascii_lowercase(),
+            &model.to_ascii_lowercase(),
+        )
+    }
+}
+
+/// `*`-only glob matching.
+fn glob_matches(pattern: &str, text: &str) -> bool {
+    let mut parts = pattern.split('*');
+    let first = parts.next().unwrap_or_default();
+    let Some(mut rest) = text.strip_prefix(first) else {
+        return false;
+    };
+    let tail: Vec<&str> = parts.collect();
+    let Some((last, middle)) = tail.split_last() else {
+        return rest.is_empty();
+    };
+    for part in middle {
+        let Some(at) = rest.find(part) else {
+            return false;
+        };
+        rest = &rest[at + part.len()..];
+    }
+    rest.ends_with(last)
+}
+
+/// A plugin's OAuth PKCE sign-in: a public client, its endpoints and the
+/// loopback redirect.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PluginOAuth {
+    /// The public client id (no secret: PKCE is the proof).
+    pub client_id: String,
+    /// Browser authorization endpoint.
+    pub authorize_url: String,
+    /// Token endpoint.
+    pub token_url: String,
+    /// Requested scopes.
+    pub scopes: Vec<String>,
+    /// Hosts the endpoints may be on; empty means the authorize URL's
+    /// host and its subdomains.
+    pub allowed_hosts: Vec<String>,
+    /// Fixed redirect port, or 0 for an OS-assigned one.
+    pub redirect_port: u16,
+    /// Redirect path (`/callback` when unset).
+    pub redirect_path: Option<String>,
+    /// Extra authorization request parameters.
+    pub authorize_params: Vec<(String, String)>,
 }
 
 impl Descriptor {
@@ -167,6 +290,7 @@ impl Descriptor {
             models_url: None,
             supports_model_listing: true,
             supports_prompt_cache: false,
+            supports_server_compaction: false,
             hidden: false,
             local: false,
             default_model: None,
@@ -175,7 +299,22 @@ impl Descriptor {
             wire_need: WireNeed::Native,
             endpoint_note: None,
             keyless_on_loopback: false,
+            oauth: None,
+            command: None,
+            session_affinity_header: None,
+            model_wire_formats: Vec::new(),
+            account_urls: AccountUrls::default(),
+            key_header: None,
         }
+    }
+
+    /// The wire format `model_wire_formats` maps `model` to, if any.
+    #[must_use]
+    pub fn model_wire(&self, model: &str) -> Option<WireFormat> {
+        self.model_wire_formats
+            .iter()
+            .find(|row| row.matches(model))
+            .map(|row| row.wire_format)
     }
 
     /// The wire format as listings show it: the native format, or
@@ -187,6 +326,7 @@ impl Descriptor {
             WireNeed::PerModel => "per-model",
             WireNeed::Detected => "auto-detected",
             WireNeed::Mock => "mock_script",
+            WireNeed::Bundled(wire) => wire.as_str(),
             WireNeed::Plugin { wire, .. } | WireNeed::Virtual { wire, .. } => wire,
         }
     }
@@ -314,6 +454,20 @@ mod tests {
         assert!(host_matches("*.example.com", "a.example.com"));
         assert!(!host_matches("*.example.com", "example.com"));
         assert!(!host_matches("*.example.com", "badexample.com"));
+    }
+
+    #[test]
+    fn model_wire_patterns_match_case_insensitively() {
+        let row = ModelWire {
+            pattern: "minimax*".to_owned(),
+            wire_format: WireFormat::AnthropicMessages,
+        };
+        assert!(row.matches("MiniMax-M2.5"));
+        assert!(!row.matches("glm-5"));
+        assert!(glob_matches("claude-*-vision", "claude-x-vision"));
+        assert!(!glob_matches("claude-*-vision", "claude-x"));
+        assert!(glob_matches("exact", "exact"));
+        assert!(!glob_matches("exact", "exactly"));
     }
 
     #[test]

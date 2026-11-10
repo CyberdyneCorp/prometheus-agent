@@ -1,0 +1,3 @@
+# A read, then a patch; graded on the edited file.
+prompt = "fix the total"
+files = ["README.md"]

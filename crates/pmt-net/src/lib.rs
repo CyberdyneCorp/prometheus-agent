@@ -10,7 +10,9 @@
 //!   wires but may never use;
 //! - [`listen`]: loopback-first listeners and the fail-closed dispatch gate
 //!   of external surfaces;
-//! - [`doctor`]: the `network` doctor group's IPv6 reachability check.
+//! - [`doctor`]: the `network` doctor group's IPv6 reachability check;
+//! - [`stream`]: raw TLS or plain byte streams (`WebSocket` connections), directly or
+//!   through a proxy tunnel.
 //!
 //! (specs: workspace-architecture, IPv6 reachability check and IPv4-only
 //! outbound; security-boundaries, Private and metadata destinations,
@@ -20,16 +22,21 @@
 pub mod destination;
 pub mod doctor;
 pub mod egress;
+pub mod eyeballs;
 pub mod fetch;
 pub mod http;
 pub mod identity;
 pub mod lazy;
 pub mod listen;
 pub mod resolve;
+pub mod stream;
 pub mod tls;
 
 pub use destination::{DestinationPolicy, PrivateGrant};
 pub use fetch::Fetcher;
-pub use http::{OutboundPolicy, client, client_builder, client_with_identity, clients_built};
+pub use http::{
+    OutboundPolicy, client, client_builder, client_builder_loopback_direct, client_with_identity,
+    clients_built,
+};
 pub use identity::ClientIdentity;
 pub use lazy::LazyClient;

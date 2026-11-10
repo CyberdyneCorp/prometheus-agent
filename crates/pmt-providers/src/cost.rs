@@ -46,6 +46,8 @@ pub struct CallContext {
     pub turn_id: Option<String>,
     /// Dotted purpose (`main`, `auxiliary.title`...).
     pub purpose: String,
+    /// Extra purpose detail (the MoA preset of `moa.*` calls).
+    pub purpose_detail: Option<String>,
     /// The call this one serves.
     pub parent_call_id: Option<String>,
     /// Caps implicit stream idle timeouts (a turn under a run budget).
@@ -60,6 +62,7 @@ impl CallContext {
             session_id,
             turn_id: None,
             purpose: purpose.to_owned(),
+            purpose_detail: None,
             parent_call_id: None,
             stale_cap: None,
         }
@@ -71,6 +74,9 @@ impl CallContext {
 pub(crate) struct Pending {
     recorder: Arc<UsageRecorder>,
     call: Call,
+    /// A call to the local-models runtime: its cost is exactly zero
+    /// (spec: local-models, Local inference stays local).
+    local_model: bool,
 }
 
 impl Pending {
@@ -83,9 +89,20 @@ impl Pending {
         let mut call = Call::new(ctx.session_id, &ctx.purpose, &route.provider, &route.model);
         call.turn_id.clone_from(&ctx.turn_id);
         call.parent_call_id.clone_from(&ctx.parent_call_id);
+        call.purpose_detail.clone_from(&ctx.purpose_detail);
         call.billing_source = route.billing_source();
-        call.request_hash = Some(request.hash(&route.provider, &route.model));
-        Self { recorder, call }
+        call.request_hash = Some(request.hash(route));
+        call.service_tier = request
+            .speed
+            .and(route.fast_tier)
+            .map(|tier| tier.label().to_owned());
+        let local_model = route.acting().provider == crate::local_runtime::PROVIDER_ID
+            && call.billing_source == "local";
+        Self {
+            recorder,
+            call,
+            local_model,
+        }
     }
 
     /// Uses `call_id` for the row (events emitted before the call ends
@@ -95,11 +112,17 @@ impl Pending {
         self
     }
 
-    /// Prices and appends the row for `usage`.
-    pub(crate) fn record(self, usage: &Usage) -> Result<UsageEvent, Error> {
+    /// Prices and appends the row for `usage`; a `served` response (from
+    /// a replay or the model-call cache) is a cache hit and costs nothing.
+    pub(crate) fn record(self, usage: &Usage, served: bool) -> Result<UsageEvent, Error> {
         let mut call = self.call;
         call.tokens = usage.tokens();
-        call.reported_usd = usage.cost_usd;
+        call.reported_usd = if served {
+            Some(0.0)
+        } else {
+            usage.cost_usd.or(self.local_model.then_some(0.0))
+        };
+        call.cache_hit = served;
         self.recorder.record(call)
     }
 }

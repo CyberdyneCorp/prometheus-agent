@@ -35,6 +35,15 @@ pub const FLAKE_GRACE: Duration = Duration::from_mins(1);
 /// value), for opt-in checks such as "is a search key configured".
 pub type SecretPresence = std::sync::Arc<dyn Fn(&str) -> bool + Send + Sync>;
 
+/// The presence name of a sign-in to `provider`: probes ask
+/// `has_secret(&signin("nous"))` whether the profile holds a usable sign-in
+/// (or a credential standing for one, such as a self-hosted tool gateway's
+/// token) without reading any token.
+#[must_use]
+pub fn signin(provider: &str) -> String {
+    format!("signin:{provider}")
+}
+
 /// What a probe may look at: the profile it answers for, its config and
 /// which secrets it holds.
 #[derive(Clone, Copy)]

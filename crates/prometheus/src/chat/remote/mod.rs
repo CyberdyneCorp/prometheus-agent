@@ -22,6 +22,7 @@ mod oneshot;
 mod open;
 mod render;
 pub(crate) mod turn;
+mod voice;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

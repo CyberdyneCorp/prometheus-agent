@@ -263,3 +263,39 @@ impl Store {
         Ok(sha.and_then(|sha| BlobRef::parse(&format!("blob:sha256:{sha}"))))
     }
 }
+
+impl Store {
+    /// The original a compaction of `session` pruned under the short ref
+    /// `prefix` (the first hex digits of its SHA-256), if this session
+    /// kept one (spec: context-compression, Pruned content is retrievable
+    /// by the agent).
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`; the blob's own read errors.
+    pub fn pruned_original(
+        &self,
+        session: SessionId,
+        prefix: &str,
+    ) -> Result<Option<Vec<u8>>, Error> {
+        if prefix.is_empty() || !prefix.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Ok(None);
+        }
+        let pattern = format!("{}%", prefix.to_ascii_lowercase());
+        let found: Option<String> = self.read(|conn| {
+            conn.query_row(
+                "SELECT r.sha256 FROM blob_refs r JOIN messages m ON m.id = r.owner_id \
+                 WHERE r.owner_kind = 'message' AND m.session_id = ?1 AND r.sha256 LIKE ?2 \
+                 LIMIT 1",
+                params![session.to_string(), pattern],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(sql)
+        })?;
+        match found.and_then(|sha| BlobRef::parse(&format!("blob:sha256:{sha}"))) {
+            Some(blob) => self.get_blob(&blob).map(Some),
+            None => Ok(None),
+        }
+    }
+}

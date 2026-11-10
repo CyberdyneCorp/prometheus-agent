@@ -160,6 +160,10 @@ impl ChildLauncher {
     }
 
     async fn open_child(&self, plan: &ChildPlan) -> Result<Arc<dyn ChildSession>, Error> {
+        // The parent's memory provider hears of the delegated task.
+        if let Some(provider) = crate::memory_provider::active(&plan.parent.to_string()) {
+            provider.delegation(provider.profile(), &plan.system);
+        }
         let (scope, profile_caps) = self.profile(plan.profile.as_deref())?;
         let parent_cwd = self.parent_cwd(plan.parent);
         let place = {

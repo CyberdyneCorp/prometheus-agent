@@ -84,7 +84,7 @@ pub async fn run(
     ));
     let expect = Expect {
         path: &spec.redirect.path,
-        state: state.expose(),
+        state: Some(state.expose()),
     };
     let code = listener
         .wait(&expect, Instant::now() + place.timeout)

@@ -16,8 +16,9 @@ use pmt_core::secret::SecretString;
 use pmt_gateway::Link;
 use pmt_obs::trajectory::writer::Emit;
 use pmt_rpc::contracts::{
-    ApprovalAsk, ApprovalFinding, ApprovalRequestParams, ClarifyAsk, ClarifyRequestParams,
-    Decision, SecretAsk, SecretRequestParams, SessionEvent, SudoAsk, SudoRequestParams,
+    ASSISTANT_DELTA, ApprovalAsk, ApprovalFinding, ApprovalRequestParams, ClarifyAsk,
+    ClarifyRequestParams, Decision, SecretAsk, SecretRequestParams, SessionEvent, SudoAsk,
+    SudoRequestParams,
 };
 use pmt_skills::secrets::SecretPrompt;
 use pmt_tools::approval::ApprovalRequest;
@@ -43,13 +44,32 @@ impl EventSink for ToClients {
     }
 }
 
-/// Streams a turn's answer text to the link (a messaging conversation
-/// that streams; spec: messaging-gateway, Streaming to platforms).
-pub(super) struct DeltasToLink(pub(super) Link);
+/// Streams a turn's answer text: to the attached clients as
+/// `assistant.delta` session events (a voice client speaks the reply while
+/// it generates; spec: voice-mode, Sentence-streamed spoken replies) and
+/// to the link's own receiver (a messaging conversation that streams;
+/// spec: messaging-gateway, Streaming to platforms).
+pub(super) struct DeltasToLink {
+    pub(super) link: Link,
+    /// The turn's id as `prompt.submit` answered it.
+    pub(super) turn_id: String,
+}
 
 impl pmt_agent::turn::DeltaSink for DeltasToLink {
     fn text(&self, text: &str) {
-        self.0.delta(text);
+        if text.is_empty() {
+            return;
+        }
+        let data = json!({
+            "type": ASSISTANT_DELTA,
+            "ts": jiff::Timestamp::now().to_string(),
+            "turn_id": self.turn_id,
+            "span_id": null,
+            "parent_span_id": null,
+            "payload": {"text": text},
+        });
+        self.link.emit::<SessionEvent>(&data);
+        self.link.delta(text);
     }
 }
 

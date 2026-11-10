@@ -1,0 +1,6 @@
+data: {"candidates":[{"content":{"role":"model","parts":[{"text":"The user wants the file.","thought":true}]},"index":0}],"usageMetadata":{"promptTokenCount":4216,"totalTokenCount":4216},"modelVersion":"gemini-2.5-pro"}
+
+data: {"candidates":[{"content":{"role":"model","parts":[{"text":"Reading the file."}]},"index":0}],"modelVersion":"gemini-2.5-pro"}
+
+data: {"candidates":[{"content":{"role":"model","parts":[{"functionCall":{"id":"toolu_01","name":"read_file","args":{"path":"src/main.rs","limit":50}}}]},"finishReason":"STOP","index":0}],"usageMetadata":{"promptTokenCount":4216,"cachedContentTokenCount":4096,"candidatesTokenCount":30,"thoughtsTokenCount":12,"totalTokenCount":4258},"modelVersion":"gemini-2.5-pro"}
+

@@ -33,8 +33,8 @@ const PROMPT: &str = "what does the note say?";
 
 /// The events of session `id`, without what may differ between two runs:
 /// ids, timestamps and durations, `payload.source`, and what the surface's
-/// system prompt changes (prompt and request hashes, token counts: each
-/// interface has its own platform hint).
+/// system prompt changes (prompt and request hashes, token counts and the
+/// `turn.end` context size: each interface has its own platform hint).
 fn normalized(home: &Path, id: &str) -> Vec<Value> {
     common::ok(&common::run(
         home,
@@ -62,7 +62,8 @@ fn strip(value: &mut Value) {
                     || key.ends_with("_at")
                     || key.ends_with("_ms")
                     || key.ends_with("_hash")
-                    || key == "tokens")
+                    || key == "tokens"
+                    || key == "context_tokens")
             });
             map.values_mut().for_each(strip);
         }

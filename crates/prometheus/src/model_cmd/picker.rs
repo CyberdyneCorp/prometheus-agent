@@ -18,6 +18,10 @@ use crate::prompt::{stdin_is_tty, stdout_is_tty};
 /// offers ChatGPT sign-in).
 pub(crate) const CHATGPT_CHOICE: &str = "ChatGPT or Codex subscription (sign in)";
 
+/// The picker's local models choice (spec: local-models, Local models
+/// command): the quickstart.
+pub(crate) const LOCAL_CHOICE: &str = "Local models (run on this machine)";
+
 /// What the picker returned.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Picked {
@@ -25,6 +29,8 @@ pub(crate) enum Picked {
     Model(String),
     /// Sign in to this provider, then make it the profile's provider.
     SignIn(&'static str),
+    /// Run the local models quickstart.
+    Local,
 }
 
 /// `prometheus model`: the picker, then `model set` with the choice; the
@@ -37,9 +43,19 @@ pub(super) fn run(ctx: &Context<'_>) -> Result<u8, Error> {
         ));
     }
     let models = Models::open(ctx)?;
-    match pick(&models, &mut io::stdin().lock(), &mut io::stderr(), true)? {
+    // The stdin lock is released before the quickstart reads stdin again.
+    let picked = pick(&models, &mut io::stdin().lock(), &mut io::stderr(), true)?;
+    match picked {
         None => print(&"no model chosen; nothing changed"),
         Some(Picked::Model(reference)) => set::run(ctx, &reference, None, None),
+        Some(Picked::Local) => {
+            let chosen =
+                crate::local_cmd::quickstart::run(ctx, &mut io::stdin().lock(), &mut io::stderr())?;
+            match chosen {
+                Some(model) => set::run(ctx, &format!("llamacpp/{model}"), None, None),
+                None => print(&"no local model set up; nothing changed"),
+            }
+        }
         Some(Picked::SignIn(provider)) => {
             crate::auth_cmd::sign_in_default(ctx, provider)?;
             models
@@ -93,29 +109,47 @@ pub(crate) fn pick(
     if offer_sign_in {
         names.push(CHATGPT_CHOICE.to_owned());
     }
-    names.extend(providers.iter().map(|p| {
-        let ready = if connected(models, p) {
-            "  (connected)"
-        } else {
-            ""
-        };
-        format!("{}{ready}", p.id())
-    }));
+    names.extend(providers.iter().map(|p| provider_label(models, p)));
+    if offer_sign_in {
+        names.push(LOCAL_CHOICE.to_owned());
+    }
     let Some(mut index) = ask(input, out, "provider", &names)? else {
         return Ok(None);
     };
     if offer_sign_in {
-        if index == 0 {
-            return Ok(Some(Picked::SignIn("openai-codex")));
+        // The sign-in comes first and the local models quickstart last.
+        match index {
+            0 => return Ok(Some(Picked::SignIn("openai-codex"))),
+            i if i == names.len() - 1 => return Ok(Some(Picked::Local)),
+            _ => index -= 1,
         }
-        index -= 1;
     }
     let provider = providers[index];
+    super::list::list_scoped(models, provider);
     let choices = models.model_ids(provider);
     let Some(model) = ask_or_type(input, out, "model", &choices)? else {
         return Ok(None);
     };
     Ok(Some(Picked::Model(format!("{}/{model}", provider.id()))))
+}
+
+/// A provider's picker row: its id (with the display name of the MoA
+/// provider) and whether it is connected.
+fn provider_label(models: &Models, provider: &Provider) -> String {
+    let ready = if connected(models, provider) {
+        "  (connected)"
+    } else {
+        ""
+    };
+    if provider.id() == pmt_providers::moa::PROVIDER_ID {
+        format!(
+            "{} ({}){ready}",
+            provider.id(),
+            pmt_providers::moa::DISPLAY_NAME
+        )
+    } else {
+        format!("{}{ready}", provider.id())
+    }
 }
 
 /// The connected providers and their picker models, for a chat's model
@@ -131,6 +165,18 @@ pub(crate) fn chat_choices(models: &Models) -> Vec<pmt_gateway::messaging::Model
             models: models.model_ids(p),
         })
         .filter(|c| !c.models.is_empty())
+        .collect()
+}
+
+/// `moa/<preset>` for every Mixture of Agents preset of `config`: the
+/// models of the `Mixture of Agents` provider row in the TUI and remote
+/// pickers (`model.options`).
+pub(crate) fn preset_ids(config: &pmt_config::Config) -> Vec<String> {
+    config
+        .moa
+        .names()
+        .into_iter()
+        .map(|name| format!("{}/{name}", pmt_providers::moa::PROVIDER_ID))
         .collect()
 }
 
@@ -151,7 +197,7 @@ fn connected(models: &Models, provider: &Provider) -> bool {
 
 /// Lists `items` numbered and reads a number or an item; `None` on an
 /// empty answer.
-fn ask(
+pub(crate) fn ask(
     input: &mut impl BufRead,
     out: &mut impl Write,
     what: &str,
@@ -225,6 +271,44 @@ mod tests {
 
     use super::*;
 
+    /// Scenario: Presets in every picker (spec: mixture-of-agents, Preset
+    /// management commands).
+    #[test]
+    fn a_mixture_of_agents_row_lists_every_preset() {
+        let target = concat!(env!("CARGO_MANIFEST_DIR"), "/../../target");
+        let dir = tempfile::tempdir_in(target).unwrap();
+        let home = Home::open(dir.path()).unwrap();
+        let profile = home.profile(&ProfileName::default_profile()).unwrap();
+        profile
+            .config_file()
+            .replace(
+                "schema_version = 1
+                 [moa.presets.review]
+reference_models = [{provider = \"mock\", model = \"a\"}]
+                 aggregator = {provider = \"mock\", model = \"b\"}
+",
+            )
+            .unwrap();
+        let scope = ProfileScope::open(profile, &Overrides::default(), Launch::Other).unwrap();
+        let models = Models::for_config(scope.clone(), scope.config(), None).unwrap();
+        // The CLI picker.
+        let mut out = Vec::new();
+        let picked = pick(&models, &mut "moa\n2\n".as_bytes(), &mut out, false).unwrap();
+        assert_eq!(picked, Some(Picked::Model("moa/review".to_owned())));
+        let shown = String::from_utf8(out).unwrap();
+        assert!(shown.contains("moa (Mixture of Agents)"), "{shown}");
+        assert!(
+            shown.contains("1) default") && shown.contains("2) review"),
+            "{shown}"
+        );
+        // The chat picker of the gateway.
+        let choices = chat_choices(&models);
+        let moa = choices.iter().find(|c| c.provider == "moa").unwrap();
+        assert_eq!(moa.models, ["default", "review"]);
+        // The TUI and remote pickers (`model.options`).
+        assert_eq!(preset_ids(scope.config()), ["moa/default", "moa/review"]);
+    }
+
     #[test]
     fn choosing_a_provider_then_a_listed_or_typed_model() {
         let target = concat!(env!("CARGO_MANIFEST_DIR"), "/../../target");
@@ -276,5 +360,11 @@ mod tests {
         );
         let second = pick(&models, &mut "2\n1\n".as_bytes(), &mut Vec::new(), true).unwrap();
         assert!(matches!(second, Some(Picked::Model(_))));
+        let local = pick(&models, &mut "Local\n".as_bytes(), &mut Vec::new(), true).unwrap();
+        assert_eq!(
+            local,
+            Some(Picked::Local),
+            "the local models quickstart is offered"
+        );
     }
 }

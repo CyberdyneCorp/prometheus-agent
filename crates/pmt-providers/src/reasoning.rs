@@ -203,6 +203,7 @@ mod tests {
     fn reasoning_model(max: Option<ReasoningLevel>) -> ModelMetadata {
         ModelMetadata {
             supports_reasoning: true,
+            trains_on_data: false,
             max_reasoning_effort: max,
             ..ModelMetadata::default()
         }

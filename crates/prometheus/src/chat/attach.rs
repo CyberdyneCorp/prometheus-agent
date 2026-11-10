@@ -10,6 +10,7 @@
 use std::path::{Path, PathBuf};
 
 use pmt_agent::turn::transcript::ImageRef;
+use pmt_config::schema::AttachmentStorage;
 use pmt_core::error::{Error, codes};
 use pmt_providers::resolve::Trace;
 use pmt_tools::vision::routing::{RoutingInputs, aux_explicit};
@@ -24,7 +25,7 @@ pub const MAX_BYTES: u64 = 20 * 1024 * 1024;
 const ACCEPTED: &[&str] = &["image/png", "image/jpeg", "image/gif", "image/webp"];
 
 /// What the owner of an attachment's blob reference is called.
-const OWNER: &str = "session_attachment";
+const OWNER: &str = pmt_store::portable::SESSION_ATTACHMENT;
 
 /// One checked image file.
 #[derive(Debug, Clone)]
@@ -72,6 +73,58 @@ pub fn load(path: &Path) -> Result<Image, Error> {
     })
 }
 
+/// Where `attachments.storage = "workspace"` copies a session's
+/// attachments: `<cwd>/.prometheus/attachments/<session_id>/`.
+#[must_use]
+pub fn workspace_dir(cwd: &Path, session: &str) -> PathBuf {
+    cwd.join(".prometheus").join("attachments").join(session)
+}
+
+/// Keeps a received non-image file (a messaging attachment) for `live`:
+/// stored in the blob store under the session, and copied into the
+/// workspace with `attachments.storage = "workspace"` (the copy's path is
+/// returned).
+///
+/// # Errors
+///
+/// `chat.image` when the file cannot be read or copied; store errors.
+pub fn keep_file(factory: &Factory, live: &Live, path: &Path) -> Result<Option<PathBuf>, Error> {
+    let bytes = std::fs::read(path).map_err(|e| Error::io(&codes::CHAT_IMAGE, path, &e))?;
+    let blob = factory.store.put_blob(&bytes)?;
+    factory
+        .store
+        .reference_blob(&blob, OWNER, &live.id.to_string())?;
+    if factory.scope.config().attachments.storage != AttachmentStorage::Workspace {
+        return Ok(None);
+    }
+    let name = path.file_name().map_or_else(
+        || "attachment".to_owned(),
+        |n| n.to_string_lossy().into_owned(),
+    );
+    workspace_copy(&live.cwd(), &live.id.to_string(), &name, &bytes).map(Some)
+}
+
+/// Copies `bytes` as `name` into the session's workspace attachment
+/// directory (the blob store stays the canonical reference); a name
+/// already taken gets a numbered prefix.
+fn workspace_copy(cwd: &Path, session: &str, name: &str, bytes: &[u8]) -> Result<PathBuf, Error> {
+    let dir = workspace_dir(cwd, session);
+    let fail = |e: std::io::Error| Error::io(&codes::CHAT_IMAGE, &dir, &e);
+    std::fs::create_dir_all(&dir).map_err(fail)?;
+    let safe: String = name
+        .chars()
+        .map(|c| if std::path::is_separator(c) { '_' } else { c })
+        .collect();
+    let mut path = dir.join(&safe);
+    let mut n = 1;
+    while path.exists() {
+        n += 1;
+        path = dir.join(format!("{n}-{safe}"));
+    }
+    std::fs::write(&path, bytes).map_err(fail)?;
+    Ok(path)
+}
+
 /// Stores `images` for `live`'s next message and decides their delivery.
 ///
 /// # Errors
@@ -116,6 +169,14 @@ pub async fn prepare(
         factory
             .store
             .reference_blob(&blob, OWNER, &live.id.to_string())?;
+        if config.attachments.storage == AttachmentStorage::Workspace {
+            workspace_copy(
+                &live.cwd(),
+                &live.id.to_string(),
+                &image.name,
+                &image.data.bytes,
+            )?;
+        }
         let description = match (&describer, delivery) {
             (_, Delivery::Native) => None,
             (None, Delivery::Text) => Some("no vision route can describe it".to_owned()),

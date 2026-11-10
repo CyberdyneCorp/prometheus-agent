@@ -93,6 +93,7 @@ async fn with<T>(config: &Config, body: impl AsyncFnOnce(&Inventory<'_>) -> T) -
     let probes = ProbeCache::new();
     let caps = no_network();
     let inventory = Inventory {
+        scope: None,
         registry: &registry,
         extensions: &[],
         config,

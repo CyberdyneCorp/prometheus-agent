@@ -63,6 +63,8 @@ async fn mock_describer() -> AuxDescriber {
         source: AuxSource::Config,
         timeout: Duration::from_secs(5),
         retries: 0,
+        extra_body: None,
+        max_concurrency: None,
     };
     let script = Script::parse(
         &format!("[[rule]]\ntext = \"{ANSWER}\"\nrepeat = true\n"),
@@ -123,6 +125,15 @@ fn session(
     tool_result_images: bool,
     describer: Option<Arc<dyn Describer>>,
 ) -> VisionSession {
+    session_capped(main_vision, tool_result_images, describer, None)
+}
+
+fn session_capped(
+    main_vision: bool,
+    tool_result_images: bool,
+    describer: Option<Arc<dyn Describer>>,
+    per_image_cap: Option<u32>,
+) -> VisionSession {
     VisionSession::new(VisionSetup {
         routing: RoutingInputs {
             mode: ImageInputMode::Auto,
@@ -133,6 +144,8 @@ fn session(
         describer,
         fetcher: fetcher(true),
         media_dir: temp_dir(),
+        embed_target: 262_144,
+        per_image_cap,
     })
 }
 
@@ -321,4 +334,65 @@ async fn an_svg_on_a_raster_only_route_is_sent_as_png() {
     };
     let note = image_part(broken, "broken.svg", Delivery::Native, None).await;
     assert!(matches!(note, Part::Text { ref text } if text.contains("broken.svg")));
+}
+
+/// Scenario: Cap inside a subagent (web-and-media-tools, Image embed
+/// budget, per-image cap and replay).
+#[tokio::test]
+async fn a_delegated_child_embeds_one_image_at_most_three_times() {
+    use pmt_tools::vision::budget::per_image_cap;
+    let child = session_capped(true, true, None, per_image_cap(None, true));
+    let image = data_url(&png(64, 64), "image/png");
+    for region in [None, Some([0, 0, 8, 8]), None] {
+        let result = child.analyze(None, &args(image.clone(), region)).await;
+        assert_eq!(result.status, Status::Ok, "{}", result.text_content());
+    }
+    let fourth = child.analyze(None, &args(image.clone(), None)).await;
+    assert_eq!(
+        fourth.text_content(),
+        "vision_analyze refused: this image has already been loaded into context 3 time(s)"
+    );
+    // Another image has its own count; the main agent is unlimited.
+    let other = child
+        .analyze(None, &args(data_url(&png(32, 32), "image/png"), None))
+        .await;
+    assert_eq!(other.status, Status::Ok);
+    let main = session_capped(true, true, None, per_image_cap(None, false));
+    for _ in 0..5 {
+        assert_eq!(
+            main.analyze(None, &args(image.clone(), None)).await.status,
+            Status::Ok
+        );
+    }
+}
+
+#[tokio::test]
+async fn an_oversized_native_image_is_embedded_as_a_fitting_jpeg() {
+    let native = session(true, true, None);
+    let big = noise_png(2_400, 900);
+    assert!(big.len() > 262_144);
+    let result = native
+        .analyze(None, &args(data_url(&big, "image/png"), None))
+        .await;
+    let Some(Content::Media { mime, path }) = result.content.get(1) else {
+        panic!("no image part: {:?}", result.content);
+    };
+    assert_eq!(mime, "image/jpeg");
+    let bytes = std::fs::read(path).unwrap();
+    assert!(bytes.len() <= 262_144);
+    assert!(image::load_from_memory(&bytes).unwrap().width() <= 1_568);
+}
+
+fn noise_png(width: u32, height: u32) -> Vec<u8> {
+    let mut seed = 11u32;
+    let image = image::RgbImage::from_fn(width, height, |_, _| {
+        seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+        let [a, b, c, _] = seed.to_le_bytes();
+        image::Rgb([a, b, c])
+    });
+    let mut out = Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgb8(image)
+        .write_to(&mut out, ImageFormat::Png)
+        .unwrap();
+    out.into_inner()
 }

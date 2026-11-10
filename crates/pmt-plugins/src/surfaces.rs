@@ -8,10 +8,10 @@
 
 use std::sync::Arc;
 
-use pmt_config::schema::WireFormat;
+use pmt_config::schema::{LoginFlow, ProviderAuth, WireFormat};
 use pmt_core::capability::{Capability, CapabilitySet, PluginRight};
-use pmt_providers::descriptor::Descriptor;
 use pmt_providers::descriptor::is_provider_id;
+use pmt_providers::descriptor::{Descriptor, PluginOAuth};
 use serde::Deserialize;
 
 use crate::backend::Backend;
@@ -308,6 +308,31 @@ struct RawDescriptor {
     models_url: Option<String>,
     #[serde(default)]
     supports_model_listing: bool,
+    /// An OAuth PKCE sign-in the host runs for the plugin.
+    oauth: Option<RawOAuth>,
+    /// `external_process`: the agent CLI the host drives over ACP once
+    /// the user names it in `providers.<id>.command` (only suggested here).
+    command: Option<String>,
+}
+
+/// A plugin's OAuth PKCE sign-in (spec: model-providers, Plugin OAuth and
+/// external-process providers): only public metadata; the host keeps the
+/// verifier, `state` and tokens.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawOAuth {
+    client_id: String,
+    authorize_url: String,
+    token_url: String,
+    #[serde(default)]
+    scopes: Vec<String>,
+    #[serde(default)]
+    allowed_hosts: Vec<String>,
+    #[serde(default)]
+    redirect_port: u16,
+    redirect_path: Option<String>,
+    #[serde(default)]
+    authorize_params: std::collections::BTreeMap<String, String>,
 }
 
 /// Parses and validates one descriptor a plugin registered.
@@ -327,6 +352,25 @@ pub fn parse_descriptor(text: &str) -> Result<Descriptor, String> {
     descriptor.default_model = raw.default_model;
     descriptor.models_url = raw.models_url;
     descriptor.supports_model_listing = raw.supports_model_listing;
+    if let Some(oauth) = raw.oauth {
+        descriptor.auth = ProviderAuth::Oauth;
+        descriptor.login_flows = vec![LoginFlow::Browser];
+        descriptor.oauth = Some(PluginOAuth {
+            client_id: oauth.client_id,
+            authorize_url: oauth.authorize_url,
+            token_url: oauth.token_url,
+            scopes: oauth.scopes,
+            allowed_hosts: oauth.allowed_hosts,
+            redirect_port: oauth.redirect_port,
+            redirect_path: oauth.redirect_path,
+            authorize_params: oauth.authorize_params.into_iter().collect(),
+        });
+    }
+    if raw.command.is_some() {
+        descriptor.auth = ProviderAuth::ExternalProcess;
+        descriptor.supports_model_listing = false;
+        descriptor.command = raw.command;
+    }
     descriptor.validate().map_err(|e| e.message().to_owned())?;
     Ok(descriptor)
 }

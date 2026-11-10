@@ -85,6 +85,8 @@ pub(super) enum Done {
     Close(String),
     /// `/handoff` answered: the line to print as the TUI leaves.
     HandedOff(Result<String, Error>),
+    /// Voice mode needs the screen (spec: voice-mode).
+    Voice(super::voice::Ask),
 }
 
 /// The TUI's state.
@@ -114,6 +116,8 @@ pub(super) struct Tui<'a> {
     pub(super) models: Vec<String>,
     /// `/terminal-setup` waiting for its confirmation.
     pub(super) setup: Option<Vec<super::terminal_setup::Target>>,
+    /// The low-disk prune question waiting for `on`, `off` or `later`.
+    pub(super) prune: bool,
     /// `/redraw`: clear the terminal before the next frame.
     pub(super) clear_next: bool,
     /// When a paste collapses into a chip.
@@ -128,6 +132,8 @@ pub(super) struct Tui<'a> {
     lost: Option<Lost>,
     /// The live subagent tree's lines (spawned, progress, finished).
     pub(super) subagents: pmt_core::subagent_tree::TreeLines,
+    /// `/voice` and the voice conversation of this terminal.
+    pub(super) voice: super::voice::Voice,
 }
 
 /// A server request on screen or waiting for it.
@@ -199,6 +205,10 @@ pub(super) async fn run(open: &Open<'_>, record: DaemonRecord) -> Result<Ending,
         tui.app.transcript.push(Kind::Notice, note);
     }
     tui.load_banner();
+    // A resumed session's summary; a new one has none.
+    let shown = tui.link.session.clone();
+    tui.memory_summary(&shown).await;
+    tui.offer_prune().await;
     if let Some(first) = &open.launch.first {
         tui.submit(first.clone(), open.launch.images.clone());
     }
@@ -209,6 +219,13 @@ pub(super) async fn run(open: &Open<'_>, record: DaemonRecord) -> Result<Ending,
     // Restore first: stopping the reader is bounded but may give up on it.
     drop(guard);
     keys.stop();
+    // The sessions end with the TUI (the daemon closes them once idle);
+    // one handed off to a chat or a signal's exit goes on elsewhere.
+    if matches!(ending, Ok(Ending::Quit | Ending::Update(_))) {
+        for line in super::upkeep::summaries(&tui.link).await {
+            println!("{line}");
+        }
+    }
     ending
 }
 
@@ -252,6 +269,7 @@ impl<'a> Tui<'a> {
             titles: HashMap::new(),
             models: Vec::new(),
             setup: None,
+            prune: false,
             clear_next: false,
             collapse: Collapse {
                 lines: composer.paste_collapse_lines,
@@ -262,6 +280,12 @@ impl<'a> Tui<'a> {
             panic_on_draw: open.panic_on_draw,
             lost: None,
             subagents: pmt_core::subagent_tree::TreeLines::default(),
+            voice: super::voice::Voice::new(crate::chat::voice::VoiceClient::new(
+                open.scope,
+                &open.env,
+                &open.launch.cwd,
+                "tui",
+            )),
         };
         tui.shown_changed();
         tui
@@ -407,6 +431,7 @@ impl<'a> Tui<'a> {
             session_id: session.clone(),
             text,
             images,
+            files: Vec::new(),
             run_budget_secs: self.open.launch.run_budget,
             input_id: Some(ulid::Ulid::generate().to_string()),
             author: None,

@@ -33,8 +33,12 @@ pub struct TargetStatus {
 /// The memory subsystem's state.
 #[derive(Debug, Clone, Serialize)]
 pub struct Status {
-    /// `builtin` (external providers arrive in M2).
-    pub provider: &'static str,
+    /// `memory.provider`: `builtin` or the external provider's id.
+    pub provider: String,
+    /// Provider tools refused at registration (a name another owner
+    /// holds), filled in by the caller that registers them.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub collisions: Vec<String>,
     /// Whether any built-in store is enabled.
     pub enabled: bool,
     /// Per target.
@@ -77,7 +81,8 @@ pub fn status(store: &Store, config: &MemoryConfig) -> Result<Status, Error> {
         })
         .collect();
     Ok(Status {
-        provider: "builtin",
+        provider: config.provider.clone(),
+        collisions: Vec::new(),
         enabled: !enabled.is_empty(),
         targets,
         pending: store.memory_pending()?.len(),
@@ -89,7 +94,11 @@ pub fn status(store: &Store, config: &MemoryConfig) -> Result<Status, Error> {
 pub fn render(status: &Status) -> String {
     let mut out = String::new();
     if status.enabled {
-        out.push_str("Built-in memory: enabled (provider: builtin)\n");
+        let _ = writeln!(
+            out,
+            "Built-in memory: enabled (provider: {})",
+            status.provider
+        );
     } else {
         out.push_str("Built-in memory is disabled (memory.memory_enabled = false, memory.user_profile_enabled = false); the memory tool is not offered.\n");
     }
@@ -118,6 +127,9 @@ pub fn render(status: &Status) -> String {
                 t.blocked
             );
         }
+    }
+    for collision in &status.collisions {
+        let _ = writeln!(out, "  provider tool refused: {collision}");
     }
     if status.pending > 0 {
         let _ = writeln!(

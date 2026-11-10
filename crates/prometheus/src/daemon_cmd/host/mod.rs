@@ -32,6 +32,7 @@ use super::turn::{SecretsToClients, SudoToClients, ToClients, approvals, clarify
 
 mod automation;
 mod commands;
+mod crash;
 mod cron;
 mod cron_admit;
 mod cron_continue;
@@ -44,6 +45,7 @@ mod notify;
 mod reload;
 mod send_tool;
 mod setup;
+mod speech;
 mod turns;
 mod worktrees;
 
@@ -80,6 +82,9 @@ struct Loaded {
     /// What the last turn's automation boundary left for the lane: status
     /// lines and a goal continuation.
     after: Mutex<pmt_gateway::messaging::automation::AfterTurn>,
+    /// The message a `/retry` of a crashed turn sent back: submitting it
+    /// resumes that turn instead of running it as new input.
+    retry: Mutex<Option<String>>,
 }
 
 impl Loaded {
@@ -328,6 +333,12 @@ impl DaemonHost {
             sudo,
         };
         let mut live = factory.open_with(id, &target, Some(clients)).await?;
+        live.memory.setup().notices.bind(notify::memory_sink(
+            chat.clone(),
+            profile.scope().name().to_string(),
+            id.to_string(),
+            link.clone(),
+        ));
         if let Some(effective) = self.effective(profile, &setup, &live.scope) {
             live.config.replace(effective);
         }
@@ -352,6 +363,7 @@ impl DaemonHost {
             oneshot,
             chat,
             after: Mutex::default(),
+            retry: Mutex::default(),
         });
         loaded.insert(id, Arc::clone(&session));
         if let Some(inbox) = &inbox {
@@ -359,6 +371,9 @@ impl DaemonHost {
         }
         if let Some(delegation) = delegation {
             delegations::deliver_owed(profile, &session, delegation);
+        }
+        if let Ok(owner) = self.profile(&profile.scope().name().to_string()) {
+            self.after_crash(owner, id, &session, link);
         }
         Ok(session)
     }
@@ -614,13 +629,17 @@ impl Host for DaemonHost {
                 .filter_map(|m| m.content.as_ref().map(String::len))
                 .sum();
             let loaded = profile.loaded.lock().await.get(&id).cloned();
-            let context_window = match loaded {
+            let route = match loaded {
                 Some(session) => {
                     use pmt_agent::turn::model::ModelPort as _;
-                    session.live.model.route().await.context_window
+                    Some(session.live.model.route().await)
                 }
                 None => None,
             };
+            let context_window = route.as_ref().and_then(|r| r.context_window);
+            let subscription = route
+                .as_ref()
+                .and_then(|r| crate::chat::session::model::subscription_status(&profile.store, r));
             let cost = profile
                 .store
                 .usage_totals(pmt_store::UsageScope::Session(id))?;
@@ -629,6 +648,8 @@ impl Host for DaemonHost {
                 tokens: u64::try_from(chars.div_ceil(4)).unwrap_or(u64::MAX),
                 context_window,
                 cost_usd: (cost.calls > cost.unpriced_calls).then_some(cost.cost_usd),
+                billing_source: route.map(|r| r.billing_source),
+                subscription,
             })
         })
     }
@@ -715,6 +736,29 @@ impl Host for DaemonHost {
         Ok(crate::lsp_cmd::status(&scope))
     }
 
+    fn memory_summary(&self, profile: &str, session: &str) -> Result<Option<String>, Error> {
+        let served = self.profile(profile)?;
+        let mode = served.scope().config().memory.review_mode;
+        pmt_memory::journal::summary(&served.store, mode, session)
+    }
+
+    fn journey(
+        &self,
+        profile: &str,
+        since: Option<&str>,
+    ) -> Result<pmt_rpc::contracts::JourneyList, Error> {
+        let served = self.profile(profile)?;
+        let home = self.launch.user_home().map(std::path::PathBuf::as_path);
+        crate::journey_cmd::listing(&served.scope(), &served.store, home, since)
+    }
+
+    fn autoprune_offer(&self, profile: &str) -> Result<Option<String>, Error> {
+        use crate::chat::autoprune;
+        let served = self.profile(profile)?;
+        let due = autoprune::due(&served.scope(), &served.store, jiff::Timestamp::now())?;
+        Ok(due.then(|| autoprune::QUESTION.to_owned()))
+    }
+
     fn cron_blueprints(&self, profile: &str) -> Result<pmt_rpc::contracts::BlueprintList, Error> {
         let scope = self.profile(profile)?.scope();
         Ok(crate::cron_host::blueprint_rpc::list(&scope, &self.launch))
@@ -728,6 +772,35 @@ impl Host for DaemonHost {
         let served = self.profile(profile)?;
         let store = Arc::clone(&served.store);
         crate::cron_host::blueprint_rpc::fill(&served.scope(), &self.launch, store, params)
+    }
+
+    fn local<'a>(
+        &'a self,
+        profile: &'a str,
+        request: pmt_gateway::local::LocalRequest,
+    ) -> HostFuture<'a, pmt_rpc::contracts::LocalReply> {
+        Box::pin(async move {
+            let profile = self.profile(profile)?;
+            crate::local_cmd::rpc::handle(&profile.scope(), request).await
+        })
+    }
+
+    fn moa_presets<'a>(
+        &'a self,
+        profile: &'a str,
+        change: Option<pmt_gateway::moa::Change>,
+    ) -> HostFuture<'a, pmt_rpc::contracts::MoaPresetList> {
+        Box::pin(async move {
+            let profile = self.profile(profile)?;
+            // Read what the CLI may have written a moment ago, and serve
+            // the result to new sessions at once.
+            self.check(&profile).await;
+            if let Some(change) = change {
+                crate::moa_cmd::rpc::apply(&profile.scope(), change)?;
+                self.check(&profile).await;
+            }
+            crate::moa_cmd::rpc::list(profile.scope().config())
+        })
     }
 
     fn vault(&self, profile: &str) -> Result<pmt_gateway::vault::VaultAccess, Error> {
@@ -872,6 +945,34 @@ impl Host for DaemonHost {
         })
     }
 
+    fn steer_session<'a>(
+        &'a self,
+        profile: &'a str,
+        params: pmt_rpc::contracts::SteerParams,
+    ) -> HostFuture<'a, ()> {
+        Box::pin(async move {
+            let profile = &self.profile(profile)?;
+            let id = self::session_id(&params.session_id)?;
+            let kind = {
+                use pmt_agent::turn::SteerKind as K;
+                use pmt_rpc::contracts::SteerKind as W;
+                match params.kind {
+                    W::Note => K::Note,
+                    W::Redirect => K::Redirect,
+                    W::WrapUp => K::WrapUp,
+                }
+            };
+            let session = profile.loaded.lock().await.get(&id).cloned();
+            let Some(session) = session else {
+                return Err(Error::new(
+                    &pmt_core::error::codes::SESSION_NOT_FOUND,
+                    format!("session {id} is not loaded"),
+                ));
+            };
+            session.live.agent.steer_with(&params.text, kind)
+        })
+    }
+
     fn resolve<'a>(
         &'a self,
         profile: &'a str,
@@ -917,6 +1018,34 @@ impl Host for DaemonHost {
             Ok(SessionRef {
                 session_id: fork.id.to_string(),
             })
+        })
+    }
+
+    fn lineage<'a>(
+        &'a self,
+        profile: &'a str,
+        session: &'a str,
+        siblings: bool,
+    ) -> HostFuture<'a, pmt_rpc::contracts::Lineage> {
+        Box::pin(async move {
+            let store = &self.profile(profile)?.store;
+            let id = session_id(session)?;
+            let nodes = if siblings {
+                store.siblings(id)?
+            } else {
+                store.tree(id)?
+            };
+            let nodes = nodes
+                .into_iter()
+                .map(|n| pmt_rpc::contracts::LineageNode {
+                    session_id: n.id.to_string(),
+                    parent_session_id: n.parent.to_string(),
+                    kind: n.kind.as_str().to_owned(),
+                    depth: n.depth,
+                    title: store.session(n.id).ok().and_then(|s| s.title),
+                })
+                .collect();
+            Ok(pmt_rpc::contracts::Lineage { nodes })
         })
     }
 

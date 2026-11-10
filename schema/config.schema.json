@@ -48,6 +48,16 @@
           "minimum": 0,
           "type": "integer"
         },
+        "budget_warning_ratio": {
+          "description": "Share of the most-constrained budget at which a one-time\n`[budget checkpoint]` notice rides the newest tool result; unset is\noff.",
+          "exclusiveMaximum": 1.0,
+          "exclusiveMinimum": 0.0,
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "clarify_timeout_secs": {
           "default": 3600,
           "description": "How long the `clarify` tool waits for an answer.",
@@ -55,12 +65,34 @@
           "minimum": 0,
           "type": "integer"
         },
+        "coding_context": {
+          "$ref": "#/$defs/CodingContext",
+          "default": "auto",
+          "description": "The coding brief and workspace snapshot in the session tier."
+        },
+        "coding_instructions": {
+          "default": "",
+          "description": "Standing instructions appended to the coding brief.",
+          "type": "string"
+        },
         "empty_response_guard": {
           "$ref": "#/$defs/EmptyResponseGuard",
           "default": {
             "cost_threshold_usd": 0.25
           },
           "description": "Empty-response retry guard."
+        },
+        "fast_auto_secs": {
+          "default": 60,
+          "description": "The window (seconds from the start of a turn) `auto` and `cold`\nfast modes ask the priority tier in.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "fast_mode": {
+          "$ref": "#/$defs/FastMode",
+          "default": "normal",
+          "description": "When requests ask the provider's priority tier (`/fast`): OpenAI\npriority processing, Anthropic fast mode; ignored, with a one-time\nnotice, on routes without such a tier."
         },
         "intent_continuation": {
           "$ref": "#/$defs/IntentContinuation",
@@ -123,6 +155,11 @@
           "description": "Provider-specific tier names mapped to a level, for example\n`ultra = \"max\"`.",
           "type": "object"
         },
+        "resume_on_crash": {
+          "$ref": "#/$defs/ResumeOnCrash",
+          "default": "ask",
+          "description": "What happens to a turn a crash left unfinished."
+        },
         "run_budget_secs": {
           "description": "Optional per-turn wall-clock budget; unset means no budget.",
           "format": "uint64",
@@ -139,6 +176,16 @@
           "maximum": 64,
           "minimum": 1,
           "type": "integer"
+        },
+        "verify_guidance": {
+          "default": true,
+          "description": "Append clean-diff guidance to the verification nudge.",
+          "type": "boolean"
+        },
+        "verify_on_stop": {
+          "$ref": "#/$defs/VerifyOnStop",
+          "default": false,
+          "description": "Refuse a final answer after unverified code edits: `true`, `false`\nor `\"auto\"` (on for CLI, TUI, desktop, ACP and API callers)."
         }
       },
       "type": "object",
@@ -271,6 +318,34 @@
       "type": "object",
       "x-apply": "live"
     },
+    "AttachmentStorage": {
+      "description": "Attachment storage locations.",
+      "oneOf": [
+        {
+          "const": "blobs",
+          "description": "The profile blob store only.",
+          "type": "string"
+        },
+        {
+          "const": "workspace",
+          "description": "The blob store plus a copy under\n`<cwd>/.prometheus/attachments/<session_id>/` for tools to read by\npath.",
+          "type": "string"
+        }
+      ]
+    },
+    "AttachmentsConfig": {
+      "additionalProperties": false,
+      "description": "The `[attachments]` section.",
+      "properties": {
+        "storage": {
+          "$ref": "#/$defs/AttachmentStorage",
+          "default": "blobs",
+          "description": "Where received attachments are kept."
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
     "AuthConfig": {
       "additionalProperties": false,
       "description": "The `[auth]` section.",
@@ -283,6 +358,16 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "AutoMode": {
+      "description": "The named `\"auto\"` mode of a switch.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Decided by the surface.",
+          "type": "string"
+        }
+      ]
     },
     "AutoResume": {
       "description": "What a TUI opens when nothing names a session.",
@@ -357,6 +442,13 @@
             }
           ],
           "description": "Goal judging (defaults to the main model)."
+        },
+        "max_concurrency": {
+          "default": 8,
+          "description": "Auxiliary calls in flight at once across the profile's sessions;\nfurther calls wait.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
         },
         "memory": {
           "anyOf": [
@@ -451,6 +543,11 @@
       "additionalProperties": false,
       "description": "One `[auxiliary.<task>]` table.",
       "properties": {
+        "extra_body": {
+          "additionalProperties": true,
+          "description": "Fields merged into this task's request body after the wire format\nmapping (one level deep), e.g. an OpenRouter `provider` block.",
+          "type": "object"
+        },
         "fallback_chain": {
           "description": "Fallback routes (`\"<provider>/<model>\"`); `[]` disables fallback.",
           "items": {
@@ -458,6 +555,15 @@
           },
           "type": [
             "array",
+            "null"
+          ]
+        },
+        "max_concurrency": {
+          "description": "This task's calls in flight at once (within\n`auxiliary.max_concurrency`); unset is only the profile cap.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": [
+            "integer",
             "null"
           ]
         },
@@ -787,6 +893,31 @@
         }
       ]
     },
+    "CacheMode": {
+      "description": "How model calls use the cache.",
+      "oneOf": [
+        {
+          "const": "off",
+          "description": "Neither read nor written.",
+          "type": "string"
+        },
+        {
+          "const": "read",
+          "description": "Stored responses are served; nothing new is stored.",
+          "type": "string"
+        },
+        {
+          "const": "write",
+          "description": "Successful responses are stored; nothing is served.",
+          "type": "string"
+        },
+        {
+          "const": "read_write",
+          "description": "Both.",
+          "type": "string"
+        }
+      ]
+    },
     "CapabilityText": {
       "description": "A capability string of the closed vocabulary (`pmt_core::capability`);\nvalidation refuses any other string with `unknown capability '<s>'`.",
       "type": "string",
@@ -1045,6 +1176,143 @@
         }
       ]
     },
+    "CodingContext": {
+      "description": "`agent.coding_context`.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "On for interactive sessions in a code workspace.",
+          "type": "string"
+        },
+        {
+          "const": "on",
+          "description": "Always on.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "Never.",
+          "type": "string"
+        }
+      ]
+    },
+    "CommandSttConfig": {
+      "additionalProperties": false,
+      "description": "`[stt.providers.<name>]`: a command that transcribes an audio file.",
+      "properties": {
+        "command": {
+          "default": "",
+          "description": "The command: `{input_path}`, `{output_path}`, `{output_dir}`,\n`{format}`, `{language}` and `{model}` are replaced by values quoted\nfor their position in the shell that runs it (the session's sh,\nbash or PowerShell; cmd.exe for voice messages on Windows); `{{` and\n`}}` are literal braces. The transcript is read\nfrom `{output_path}` when written, else stdout.",
+          "type": "string"
+        },
+        "format": {
+          "$ref": "#/$defs/TranscriptFormat",
+          "default": "txt",
+          "description": "The transcript format."
+        },
+        "language": {
+          "description": "`{language}` (unset: `stt.language`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "description": "`{model}`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "normalize": {
+          "default": false,
+          "description": "Transcode the audio to 16 kHz mono first.",
+          "type": "boolean"
+        },
+        "timeout_secs": {
+          "default": 300,
+          "description": "Bound on one run.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "type": {
+          "$ref": "#/$defs/SpeechProviderType",
+          "default": "command",
+          "description": "Always `command`."
+        }
+      },
+      "type": "object"
+    },
+    "CommandTtsConfig": {
+      "additionalProperties": false,
+      "description": "`[tts.providers.<name>]`: a command that turns a text file into audio.",
+      "properties": {
+        "command": {
+          "default": "",
+          "description": "The command: `{input_path}` (alias `{text_path}`), `{output_path}`,\n`{format}`, `{voice}` and `{model}` are replaced by values quoted\nfor their position in the shell that runs it (the session's sh,\nbash or PowerShell; cmd.exe for voice messages on Windows); `{{` and\n`}}` are literal braces.",
+          "type": "string"
+        },
+        "max_text_length": {
+          "default": 5000,
+          "description": "Characters per run; longer text is split.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "model": {
+          "description": "`{model}`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "output_format": {
+          "$ref": "#/$defs/TtsOutputFormat",
+          "default": "mp3",
+          "description": "The format the command writes."
+        },
+        "release_command": {
+          "description": "Run when the provider is released.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_secs": {
+          "default": 120,
+          "description": "Idle deadline: any output resets it.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "type": {
+          "$ref": "#/$defs/SpeechProviderType",
+          "default": "command",
+          "description": "Always `command`."
+        },
+        "voice": {
+          "description": "`{voice}`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "voice_compatible": {
+          "default": false,
+          "description": "The output can be sent as a voice bubble as is.",
+          "type": "boolean"
+        },
+        "warm_command": {
+          "description": "Run before first use (load a model).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "ComposerConfig": {
       "additionalProperties": false,
       "description": "The `[ui.composer]` section (spec: tui, Large pastes collapse into\nchips).",
@@ -1080,6 +1348,13 @@
           "description": "Compact the context automatically.",
           "type": "boolean"
         },
+        "idle_compact_after_secs": {
+          "default": 0,
+          "description": "Compact (trigger `idle`) before the first model call of a turn\nthat starts after this many seconds without activity; `0` is off.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
         "max_attempts": {
           "default": 3,
           "description": "Compaction attempts per turn.",
@@ -1107,6 +1382,16 @@
           "minimum": 0,
           "type": "integer"
         },
+        "model_thresholds": {
+          "additionalProperties": {
+            "exclusiveMaximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "type": "number"
+          },
+          "default": {},
+          "description": "Per-model base thresholds: a model-name substring or\n`\"<provider>:<substring>\"`; the longest match wins.",
+          "type": "object"
+        },
         "pinned_max_tokens": {
           "default": 8000,
           "description": "Token cap for pinned content carried across compactions.",
@@ -1126,6 +1411,11 @@
           "minimum": 0,
           "type": "integer"
         },
+        "progress_notices": {
+          "default": false,
+          "description": "Show routine automatic compaction statuses on messaging platforms\n(failures and manual `/compress` feedback always show).",
+          "type": "boolean"
+        },
         "protect_first_n": {
           "default": 3,
           "description": "Non-system messages protected at the head of the first compaction.",
@@ -1140,6 +1430,18 @@
           "maximum": 1.0,
           "minimum": 0.0,
           "type": "number"
+        },
+        "responses_compact_threshold_tokens": {
+          "default": 0,
+          "description": "Server-side compaction threshold in tokens; `0` is the local\ntrigger minus 8192 (200000 when no local trigger is known).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "responses_native": {
+          "default": false,
+          "description": "Ask a supporting Responses route to compact server-side and replay\nits compaction item.",
+          "type": "boolean"
         },
         "summary_max_tokens": {
           "default": 10000,
@@ -1537,6 +1839,21 @@
         {
           "const": "managed",
           "description": "An external managed scheduler; falls back to `builtin` with a\nwarning while it is unavailable.",
+          "type": "string"
+        }
+      ]
+    },
+    "DataCollection": {
+      "description": "Whether upstream providers that store or train on prompts may serve.",
+      "oneOf": [
+        {
+          "const": "allow",
+          "description": "Any provider.",
+          "type": "string"
+        },
+        {
+          "const": "deny",
+          "description": "Only providers that neither store nor train on prompts.",
           "type": "string"
         }
       ]
@@ -1971,6 +2288,27 @@
       "type": "object",
       "x-apply": "live"
     },
+    "EdgeTtsConfig": {
+      "additionalProperties": false,
+      "description": "`[tts.edge]`.",
+      "properties": {
+        "max_text_length": {
+          "description": "Characters per request (a positive integer; default 5,000).",
+          "format": "uint64",
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "voice": {
+          "default": "en-US-AriaNeural",
+          "description": "The voice.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "EgressConfig": {
       "additionalProperties": false,
       "description": "The `[security.egress]` section.",
@@ -2039,6 +2377,63 @@
           "type": "string"
         }
       ]
+    },
+    "ElevenLabsSttConfig": {
+      "additionalProperties": false,
+      "description": "`[stt.elevenlabs]`.",
+      "properties": {
+        "diarize": {
+          "default": false,
+          "description": "Label speakers.",
+          "type": "boolean"
+        },
+        "language": {
+          "description": "Spoken language (unset: `stt.language`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "description": "The model (default `scribe_v2`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tag_audio_events": {
+          "default": false,
+          "description": "Tag non-speech events (`(laughter)`).",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "ElevenLabsTtsConfig": {
+      "additionalProperties": false,
+      "description": "`[tts.elevenlabs]`.",
+      "properties": {
+        "max_text_length": {
+          "description": "Characters per request (a positive integer; default by model).",
+          "format": "uint64",
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "model_id": {
+          "default": "eleven_multilingual_v2",
+          "description": "The model; it decides the per-request cap.",
+          "type": "string"
+        },
+        "voice_id": {
+          "default": "pNInz6obpgDQGcFmaJgB",
+          "description": "The voice (the tool's `voice` argument may pick another).",
+          "type": "string"
+        }
+      },
+      "type": "object"
     },
     "EmptyResponseGuard": {
       "additionalProperties": false,
@@ -2114,6 +2509,36 @@
         "model"
       ],
       "type": "object"
+    },
+    "FastMode": {
+      "description": "`agent.fast_mode`: when requests ask the provider's priority tier.",
+      "oneOf": [
+        {
+          "const": "normal",
+          "description": "Never.",
+          "type": "string"
+        },
+        {
+          "const": "fast",
+          "description": "Every request.",
+          "type": "string"
+        },
+        {
+          "const": "auto",
+          "description": "Requests within the first `agent.fast_auto_secs` of each turn.",
+          "type": "string"
+        },
+        {
+          "const": "cold",
+          "description": "That window on the first turn of a session only.",
+          "type": "string"
+        },
+        {
+          "const": "ultrafast",
+          "description": "Every request, on the provider's fastest tier where one exists\n(otherwise as `fast`).",
+          "type": "string"
+        }
+      ]
     },
     "FilesConfig": {
       "additionalProperties": false,
@@ -2891,6 +3316,44 @@
       },
       "type": "object"
     },
+    "GeminiTtsConfig": {
+      "additionalProperties": false,
+      "description": "`[tts.gemini]`.",
+      "properties": {
+        "audio_tags": {
+          "default": false,
+          "description": "Keep inline audio tags (`[laughs]`) as performance directions.",
+          "type": "boolean"
+        },
+        "max_text_length": {
+          "description": "Characters per request (a positive integer; default 32,000).",
+          "format": "uint64",
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "model": {
+          "default": "gemini-2.5-flash-preview-tts",
+          "description": "The model.",
+          "type": "string"
+        },
+        "persona_prompt_file": {
+          "description": "A prompt file framing the text; `{transcript}` marks where it goes.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "voice": {
+          "default": "Kore",
+          "description": "The prebuilt voice.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "GoalsConfig": {
       "additionalProperties": false,
       "description": "The `[goals]` section: the `/goal` judge loop's bounds.",
@@ -3049,6 +3512,40 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "ImageGenConfig": {
+      "additionalProperties": false,
+      "description": "The `[image_gen]` section (the `image_generate` tool).",
+      "properties": {
+        "max_parallel_requests": {
+          "default": 4,
+          "description": "Generations of one tool-call batch running at once (at most\n`agent.tool_concurrency`).",
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "model": {
+          "description": "The model (unset: the provider's default). The agent never picks\nit.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "openai": {
+          "$ref": "#/$defs/ImageOpenAiConfig",
+          "default": {},
+          "description": "The `openai` provider's endpoint and credential."
+        },
+        "provider": {
+          "description": "The provider generating images: `fal` (default), `openai`,\n`openai-codex`, `openrouter`, `xai`, `krea`, `meta-ai`,\n`deepinfra`, `nous` (the subscription tool gateway) or a plugin's;\nunset picks one by the keys present.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
     "ImageInputMode": {
       "description": "Image input routing modes.",
       "oneOf": [
@@ -3068,6 +3565,45 @@
           "type": "string"
         }
       ]
+    },
+    "ImageOpenAiConfig": {
+      "additionalProperties": false,
+      "description": "`[image_gen.openai]`: the `openai` image provider's endpoint.",
+      "properties": {
+        "base_url": {
+          "description": "An OpenAI-compatible endpoint (`.../v1`); unset is OpenAI's API.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "key_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The secret holding the key (default `OPENAI_API_KEY`)."
+        },
+        "model": {
+          "description": "The model on this endpoint (wins over `image_gen.model`); an id\noutside the catalog is sent verbatim, without `quality`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provider": {
+          "description": "A configured custom provider (`[providers.<id>]`) whose endpoint\nand key are used instead.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
     },
     "IntentContinuation": {
       "anyOf": [
@@ -3132,6 +3668,49 @@
           "default": false,
           "description": "Allow keyless web search as the last `auto` choice.",
           "type": "boolean"
+        },
+        "rescue": {
+          "default": false,
+          "description": "Retry one failed call of a keyed backend once on the keyless ring\n(only with `enabled`); the next call still tries the keyed backend.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "LocalSttConfig": {
+      "additionalProperties": false,
+      "description": "`[stt.local]`: on-device Whisper.",
+      "properties": {
+        "language": {
+          "description": "Spoken language (unset: `stt.language`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "$ref": "#/$defs/WhisperModel",
+          "default": "base",
+          "description": "The model size."
+        },
+        "unload_after_idle_secs": {
+          "default": 0,
+          "description": "Unload the model after this idle time (`0`: never).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "vad": {
+          "default": true,
+          "description": "Voice-activity filtering.",
+          "type": "boolean"
+        },
+        "vad_min_silence_ms": {
+          "default": 500,
+          "description": "Shortest silence the voice-activity filter splits on.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
         }
       },
       "type": "object"
@@ -4101,6 +4680,11 @@
           "description": "The agent memory store.",
           "type": "boolean"
         },
+        "notifications": {
+          "$ref": "#/$defs/MemoryNotifications",
+          "default": "on",
+          "description": "Notices after a memory change commits: `off`, `on` or `verbose`."
+        },
         "nudge_interval": {
           "default": 10,
           "description": "User turns without a memory call before a background review; `0`\ndisables.",
@@ -4108,13 +4692,62 @@
           "minimum": 0,
           "type": "integer"
         },
+        "provider": {
+          "default": "builtin",
+          "description": "The external memory provider: `builtin` (none) or the id of an\ninstalled `memory-provider` plugin.",
+          "type": "string"
+        },
+        "provider_prefetch_timeout_ms": {
+          "default": 8000,
+          "description": "Time a provider's `prefetch` may take before the turn goes on\nwithout its recall.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "provider_recall_max_chars": {
+          "default": 100000,
+          "description": "Character bound of a provider's recall per turn.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "provider_recall_spill": {
+          "default": false,
+          "description": "Spill oversized provider recall to a file under `cache/` (a\npreview and the path stay in the fence) instead of truncating it.",
+          "type": "boolean"
+        },
+        "providers": {
+          "additionalProperties": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "description": "Each provider's own non-secret settings (`memory.providers.<id>.*`;\nits secrets live in the profile's secrets store).",
+          "type": "object"
+        },
         "recall": {
           "$ref": "#/$defs/RecallConfig",
           "default": {
+            "embedding_model": null,
             "max_chars": 1500,
+            "min_score": 0.35,
             "top_k": 5
           },
           "description": "Per-turn recall."
+        },
+        "require_checkpoint": {
+          "default": false,
+          "description": "Abort a compaction when no provider confirms its pre-compress\ncheckpoint.",
+          "type": "boolean"
+        },
+        "review": {
+          "$ref": "#/$defs/MemoryReviewConfig",
+          "default": {
+            "defer": "auto",
+            "defer_max_age_secs": 1800,
+            "enabled": true,
+            "extra_tools": []
+          },
+          "description": "The background memory review."
         },
         "review_mode": {
           "$ref": "#/$defs/MemoryReviewMode",
@@ -4141,6 +4774,66 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "MemoryNotifications": {
+      "description": "`memory.notifications`.",
+      "oneOf": [
+        {
+          "const": "off",
+          "description": "No notice.",
+          "type": "string"
+        },
+        {
+          "const": "on",
+          "description": "A generic line (`Memory updated`).",
+          "type": "string"
+        },
+        {
+          "const": "verbose",
+          "description": "The line plus a compact preview of the change.",
+          "type": "string"
+        }
+      ]
+    },
+    "MemoryReviewConfig": {
+      "additionalProperties": false,
+      "description": "The `[memory.review]` section.",
+      "properties": {
+        "defer": {
+          "$ref": "#/$defs/ReviewDefer",
+          "default": "auto",
+          "description": "`auto` queues reviews on a managed local model until the machine\nis idle; `never` runs them at once."
+        },
+        "defer_max_age_secs": {
+          "default": 1800,
+          "description": "A deferred review older than this runs anyway.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Run automatic post-turn reviews (`/refine` works either way).",
+          "type": "boolean"
+        },
+        "extra_tools": {
+          "default": [],
+          "description": "Tools added to the review's allow-list when the parent session has\nthem.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "max_input_tokens": {
+          "description": "Replayed input tokens one review may send in total; unset is 75%\nof the review model's window (at most 600000, 120000 when the\nwindow is unknown); 0 or negative is unlimited.",
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
     },
     "MemoryReviewMode": {
       "description": "Memory review modes.",
@@ -4172,6 +4865,176 @@
           "type": "boolean"
         }
       },
+      "type": "object"
+    },
+    "MoaConfig": {
+      "additionalProperties": false,
+      "description": "The `[moa]` section.",
+      "properties": {
+        "default_preset": {
+          "default": "default",
+          "description": "The preset `/moa` runs and `moa configure` edits by default.",
+          "type": "string"
+        },
+        "presets": {
+          "additionalProperties": {
+            "$ref": "#/$defs/MoaPreset"
+          },
+          "default": {},
+          "description": "Named presets; the built-in `default` exists unless redefined here.",
+          "type": "object"
+        },
+        "privacy_filter": {
+          "$ref": "#/$defs/MoaPrivacyFilter",
+          "default": "",
+          "description": "Redact advisor text: `\"\"` (off), `display` (shown blocks and\ntraces) or `full` (also the aggregator's guidance)."
+        },
+        "save_traces": {
+          "default": false,
+          "description": "Append one JSONL record per MoA call to `moa-traces/<session>.jsonl`.",
+          "type": "boolean"
+        },
+        "trace_dir": {
+          "description": "Where traces go instead of `<profile>/moa-traces`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "MoaFanout": {
+      "anyOf": [
+        {
+          "description": "`user_turn`, `per_iteration` or `every_n:N`.",
+          "type": "string"
+        },
+        {
+          "description": "`{ mode = \"every_n\", n = N }`.",
+          "properties": {
+            "mode": {
+              "description": "The cadence mode.",
+              "type": "string"
+            },
+            "n": {
+              "description": "Every how many iterations (`every_n`, N >= 2).",
+              "format": "int64",
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "When the references run (`fanout`): `user_turn`, `per_iteration`,\n`every_n:N`, or `{ mode = \"every_n\", n = N }`. Any other value warns\nonce and behaves as `user_turn`."
+    },
+    "MoaPreset": {
+      "additionalProperties": false,
+      "description": "One `[moa.presets.<name>]` preset.",
+      "properties": {
+        "aggregator": {
+          "$ref": "#/$defs/MoaSlot",
+          "description": "The model that reads the advisors' outputs and acts with the\nsession's tools; the whole tool loop is billed to it."
+        },
+        "aggregator_temperature": {
+          "description": "Temperature sent to the aggregator (0.0-2.0); unset sends none.",
+          "format": "double",
+          "maximum": 2.0,
+          "minimum": 0.0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "enabled": {
+          "default": true,
+          "description": "`false` calls the aggregator alone, as a plain model.",
+          "type": "boolean"
+        },
+        "fanout": {
+          "$ref": "#/$defs/MoaFanout",
+          "default": "user_turn",
+          "description": "When the references run within a turn."
+        },
+        "reference_models": {
+          "description": "The advisors, run concurrently without tools (at least one).",
+          "items": {
+            "$ref": "#/$defs/MoaSlot"
+          },
+          "type": "array"
+        },
+        "reference_temperature": {
+          "description": "Temperature sent to the references (0.0-2.0); unset sends none.",
+          "format": "double",
+          "maximum": 2.0,
+          "minimum": 0.0,
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "reference_models",
+        "aggregator"
+      ],
+      "type": "object"
+    },
+    "MoaPrivacyFilter": {
+      "description": "How advisor text is redacted (`moa.privacy_filter`).",
+      "oneOf": [
+        {
+          "const": "",
+          "description": "No redaction.",
+          "type": "string"
+        },
+        {
+          "const": "display",
+          "description": "Redact the advisor blocks shown to users and saved in traces; the\naggregator still reads the raw text.",
+          "type": "string"
+        },
+        {
+          "const": "full",
+          "description": "Also redact the guidance the aggregator reads.",
+          "type": "string"
+        }
+      ]
+    },
+    "MoaSlot": {
+      "additionalProperties": false,
+      "description": "One model slot of a preset.",
+      "properties": {
+        "model": {
+          "description": "Model id at that provider.",
+          "type": "string"
+        },
+        "provider": {
+          "description": "Provider id or alias (never `moa`: presets do not nest).",
+          "type": "string"
+        },
+        "reasoning_effort": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReasoningLevel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Reasoning effort sent to this slot; unset uses the model's default."
+        }
+      },
+      "required": [
+        "provider",
+        "model"
+      ],
       "type": "object"
     },
     "ModalConfig": {
@@ -4219,6 +5082,34 @@
       ],
       "description": "One `[model.aliases.<name>]` entry."
     },
+    "ModelCallCacheConfig": {
+      "additionalProperties": false,
+      "description": "The `[replay.cache]` section: model responses stored by request hash\nunder `<profile>/cache/model-calls/`.",
+      "properties": {
+        "max_bytes": {
+          "default": 4294967296,
+          "description": "Least-recently-used entries are evicted above this size.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "mode": {
+          "$ref": "#/$defs/CacheMode",
+          "default": "off",
+          "description": "`off`, `read` (serve stored responses), `write` (store new ones) or\n`read_write`. Off for interactive sessions; the offline demo (and\neval runs) use `read_write`."
+        },
+        "namespace": {
+          "default": "default",
+          "description": "Entries of different namespaces never serve each other.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.-]+$",
+          "type": "string"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
     "ModelConfig": {
       "additionalProperties": false,
       "description": "The `[model]` section.",
@@ -4244,6 +5135,13 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "codex_bin": {
+          "description": "Absolute path of the Codex CLI the Codex app-server runtime runs;\nunset finds `codex` on `PATH`, in the user-local bin directories\nand the vendor's install prefixes.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "default": {
           "description": "Default model id (or a `[model.aliases]` name).",
@@ -4331,6 +5229,13 @@
       "additionalProperties": false,
       "description": "A `[models.<name>]` table.",
       "properties": {
+        "accept_data_use": {
+          "description": "Accept the data-use terms of a model that trains on prompts and\noutputs (Meta AI contributor-tier models); without it such a model\nis never selected without a confirmation.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "base_url": {
           "description": "Base URL override.",
           "type": [
@@ -4398,6 +5303,13 @@
         },
         "provider": {
           "description": "Provider id.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "replacement": {
+          "description": "Replacement (`<provider>/<model>`) of this deprecated or retired\nmodel, over the built-in retirement table's.",
           "type": [
             "string",
             "null"
@@ -4587,6 +5499,67 @@
             "retention_secs": 7776000
           },
           "description": "Session trajectories."
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "OpenAiTtsConfig": {
+      "additionalProperties": false,
+      "description": "`[tts.openai]`.",
+      "properties": {
+        "base_url": {
+          "description": "An OpenAI-compatible endpoint (`.../v1`); unset is OpenAI's API.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "consent_attestation": {
+          "default": false,
+          "description": "Confirms the operator may clone the configured custom voice.",
+          "type": "boolean"
+        },
+        "max_text_length": {
+          "description": "Characters per request (a positive integer; default 4,096).",
+          "format": "uint64",
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "model": {
+          "default": "gpt-4o-mini-tts",
+          "description": "The model.",
+          "type": "string"
+        },
+        "speed": {
+          "description": "Speaking speed (0.25..4.0; the tool's `speed` argument wins).",
+          "format": "double",
+          "maximum": 4.0,
+          "minimum": 0.25,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "voice": {
+          "default": "alloy",
+          "description": "The voice.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "OpenRouterConfig": {
+      "additionalProperties": false,
+      "description": "The `[openrouter]` section.",
+      "properties": {
+        "min_coding_score": {
+          "$ref": "#/$defs/ScoreSchema",
+          "default": 0.65,
+          "description": "Lowest coding score the `openrouter/pareto-code` router may pick a\nmodel below (0.0-1.0); an empty string sends no `pareto-router`\nplugin block."
         }
       },
       "type": "object",
@@ -4892,6 +5865,17 @@
             "integer",
             "null"
           ]
+        },
+        "memory_notifications": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MemoryNotifications"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Memory change notices on this platform (overrides\n`memory.notifications`)."
         },
         "options": {
           "additionalProperties": true,
@@ -5581,6 +6565,13 @@
           "default": {},
           "description": "Per-platform hint overrides, keyed by platform.",
           "type": "object"
+        },
+        "prefill_messages_file": {
+          "description": "A JSON file of `{role, content}` few-shot messages (roles `user`\nand `assistant`) inserted after the system prompt, frozen at\nsession start.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "type": "object",
@@ -5615,6 +6606,11 @@
           "type": "string"
         },
         {
+          "const": "entra_id",
+          "description": "A Microsoft Entra ID bearer token minted from the Azure CLI login\nor a managed identity (`azure-foundry`).",
+          "type": "string"
+        },
+        {
           "const": "none",
           "description": "No credential (local servers).",
           "type": "string"
@@ -5638,6 +6634,14 @@
           "description": "Allow a plain `http://` base URL on a public host (plain HTTP to\nloopback and private-network hosts is always allowed).",
           "type": "boolean"
         },
+        "args": {
+          "default": [],
+          "description": "Arguments of `command`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "auth": {
           "anyOf": [
             {
@@ -5648,6 +6652,13 @@
             }
           ],
           "description": "Credential kind of a custom provider; unset uses the built-in\nprovider's, or `api_key` when `key_secret` is set and `none`\notherwise."
+        },
+        "aws_profile": {
+          "description": "The shared AWS profile (`~/.aws/config`, `~/.aws/credentials`) the\n`bedrock` credential chain reads; `default` when unset.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "base_url": {
           "description": "API base URL.",
@@ -5663,10 +6674,45 @@
           "minimum": 0,
           "type": "integer"
         },
+        "command": {
+          "description": "The agent CLI an `auth = \"external_process\"` provider drives over\nthe Agent Client Protocol (`claude`), found by the executable\nlookup.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "command_path": {
+          "description": "Absolute path of the agent CLI (one executable, never parsed as a\nshell command); wins over finding `command` by name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "confirm_metered_fallback": {
+          "default": false,
+          "description": "Ask (interactive sessions) or fail the turn (non-interactive ones)\nbefore a fallback moves the session from a subscription of this\nprovider to a pay-per-token credential.",
+          "type": "boolean"
+        },
+        "daily_budget_usd": {
+          "description": "Spend cap per calendar day (UTC) in USD; once the profile's usage\nledger reaches it the provider is unavailable until the next day.",
+          "format": "double",
+          "minimum": 0.0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "enabled": {
           "default": true,
           "description": "`false` makes every request to this provider fail with\n`provider.disabled`.",
           "type": "boolean"
+        },
+        "key_cmd": {
+          "description": "A helper command whose stdout is this provider's credential: one\nbare token, or JSON with `access_token` and optional `expires_in`\n(seconds). The token is cached until 60 s before it expires (3000 s\nwhen no expiry is given) and minted again after an HTTP 401.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "key_hosts": {
           "default": [],
@@ -5713,6 +6759,15 @@
             "null"
           ]
         },
+        "monthly_budget_usd": {
+          "description": "Spend cap per calendar month (UTC) in USD.",
+          "format": "double",
+          "minimum": 0.0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "oauth": {
           "anyOf": [
             {
@@ -5743,6 +6798,20 @@
           "$ref": "#/$defs/PreferCredential",
           "default": "subscription",
           "description": "Which credential wins when both exist."
+        },
+        "project": {
+          "description": "Google Cloud project of a `vertex` provider.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "region": {
+          "description": "Cloud region: of a `vertex` provider (`us-central1`), or of a\n`bedrock` provider (`eu-west-1`; `us-east-1` when unset).",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "request_timeout_secs": {
           "default": 600,
@@ -5779,6 +6848,13 @@
             "null"
           ]
         },
+        "supports_server_compaction": {
+          "description": "Whether the provider compacts context server-side on the Responses\nwire (`compression.responses_native`); unset uses the provider\ndefault (false for custom providers).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "wire_format": {
           "anyOf": [
             {
@@ -5792,6 +6868,90 @@
         }
       },
       "type": "object"
+    },
+    "ProviderRoutingConfig": {
+      "additionalProperties": false,
+      "description": "The `[provider_routing]` section: OpenRouter routing preferences sent\nonly on `openrouter` routes, with per-model overrides.",
+      "properties": {
+        "data_collection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DataCollection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Whether upstream providers that store or train on prompts may serve."
+        },
+        "ignore": {
+          "default": [],
+          "description": "These upstream providers never serve.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "models": {
+          "additionalProperties": {
+            "$ref": "#/$defs/RoutingPrefs"
+          },
+          "default": {},
+          "description": "Per-model overrides (`[provider_routing.models.\"<model>\"]`), matched\ncase-insensitively ignoring separators; each set field replaces the\nsection's.",
+          "type": "object"
+        },
+        "only": {
+          "default": [],
+          "description": "Only these upstream providers may serve.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "order": {
+          "default": [],
+          "description": "Upstream providers tried first, in this order.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "require_parameters": {
+          "description": "Only upstream providers that support every request parameter.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "sort": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoutingSort"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Order upstream providers by price, throughput or latency."
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "ProviderTier": {
+      "description": "A keyless vendor's endpoint tier.",
+      "oneOf": [
+        {
+          "const": "free",
+          "description": "The anonymous free tier.",
+          "type": "string"
+        },
+        {
+          "const": "paid",
+          "description": "The keyed endpoint (the vendor's key must be set).",
+          "type": "string"
+        }
+      ]
     },
     "PythonBridgeConfig": {
       "additionalProperties": false,
@@ -6047,12 +7207,28 @@
       "additionalProperties": false,
       "description": "The `[memory.recall]` section.",
       "properties": {
+        "embedding_model": {
+          "default": null,
+          "description": "Embedding model (`provider/model` or a model on the main route's\nprovider) for hybrid semantic recall; unset ranks lexically (BM25).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "max_chars": {
           "default": 1500,
           "description": "Character cap of recalled content per turn.",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
+        },
+        "min_score": {
+          "default": 0.35,
+          "description": "Hybrid recall drops entries scoring below this.",
+          "format": "double",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
         },
         "top_k": {
           "default": 5,
@@ -6063,6 +7239,23 @@
         }
       },
       "type": "object"
+    },
+    "ReplayConfig": {
+      "additionalProperties": false,
+      "description": "The `[replay]` section.",
+      "properties": {
+        "cache": {
+          "$ref": "#/$defs/ModelCallCacheConfig",
+          "default": {
+            "max_bytes": 4294967296,
+            "mode": "off",
+            "namespace": "default"
+          },
+          "description": "The content-addressed model-call cache."
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
     },
     "ReplyToMode": {
       "description": "Which parts of a reply quote the message they answer.",
@@ -6135,6 +7328,26 @@
         }
       ]
     },
+    "ResumeOnCrash": {
+      "description": "`agent.resume_on_crash`.",
+      "oneOf": [
+        {
+          "const": "ask",
+          "description": "Ask before resuming (non-interactive callers close the turn).",
+          "type": "string"
+        },
+        {
+          "const": "auto",
+          "description": "Resume without asking.",
+          "type": "string"
+        },
+        {
+          "const": "never",
+          "description": "Close the turn as `crashed`.",
+          "type": "string"
+        }
+      ]
+    },
     "ReviewConfig": {
       "additionalProperties": false,
       "description": "`[delegation.review]`.",
@@ -6155,6 +7368,124 @@
         }
       },
       "type": "object"
+    },
+    "ReviewDefer": {
+      "description": "When a background review whose route is a managed local model runs.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Queue it until the machine is idle.",
+          "type": "string"
+        },
+        {
+          "const": "never",
+          "description": "Run it at once.",
+          "type": "string"
+        }
+      ]
+    },
+    "RoutingConfig": {
+      "additionalProperties": false,
+      "description": "The `[routing]` section (spec: model-providers, Provider health\nscoring).",
+      "properties": {
+        "health_half_life_secs": {
+          "default": 1800,
+          "description": "Half-life (seconds) of the decay of an idle route's health score\ntoward 1.0.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "health_window": {
+          "default": 50,
+          "description": "Calls per (provider, model, credential) a health score is computed\nover.",
+          "format": "uint32",
+          "maximum": 500,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "RoutingPrefs": {
+      "additionalProperties": false,
+      "description": "OpenRouter's `provider` request object, as preferences.",
+      "properties": {
+        "data_collection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DataCollection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Whether upstream providers that store or train on prompts may serve."
+        },
+        "ignore": {
+          "default": [],
+          "description": "These upstream providers never serve.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "only": {
+          "default": [],
+          "description": "Only these upstream providers may serve.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "order": {
+          "default": [],
+          "description": "Upstream providers tried first, in this order.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "require_parameters": {
+          "description": "Only upstream providers that support every request parameter.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "sort": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoutingSort"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Order upstream providers by price, throughput or latency."
+        }
+      },
+      "type": "object"
+    },
+    "RoutingSort": {
+      "description": "How OpenRouter orders the upstream providers of a model.",
+      "oneOf": [
+        {
+          "const": "price",
+          "description": "Cheapest first.",
+          "type": "string"
+        },
+        {
+          "const": "throughput",
+          "description": "Highest tokens per second first.",
+          "type": "string"
+        },
+        {
+          "const": "latency",
+          "description": "Lowest time to first token first.",
+          "type": "string"
+        }
+      ]
     },
     "SandboxConfig": {
       "additionalProperties": false,
@@ -6190,6 +7521,23 @@
           "type": "string"
         }
       ]
+    },
+    "ScoreSchema": {
+      "anyOf": [
+        {
+          "description": "A score.",
+          "format": "double",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "description": "No score: the empty string.",
+          "maxLength": 0,
+          "type": "string"
+        }
+      ],
+      "description": "A score or the empty string (no score)."
     },
     "SearxngConfig": {
       "additionalProperties": false,
@@ -6377,6 +7725,13 @@
         "auto_archive_secs": {
           "default": 604800,
           "description": "Archive lineage tips idle for this long.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "low_disk_bytes": {
+          "default": 1073741824,
+          "description": "Below this many free bytes on the store's volume an interactive\nstart offers to turn on auto-prune (when `retention_secs = 0`).",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
@@ -6680,6 +8035,16 @@
       "type": "object",
       "x-apply": "live"
     },
+    "SpeechProviderType": {
+      "description": "The kind of a user-declared speech provider.",
+      "oneOf": [
+        {
+          "const": "command",
+          "description": "A shell command template.",
+          "type": "string"
+        }
+      ]
+    },
     "SshConfig": {
       "additionalProperties": false,
       "description": "The `[terminal.ssh]` section.",
@@ -6817,6 +8182,137 @@
           "$ref": "#/$defs/StreamTransport",
           "default": "auto",
           "description": "How a streamed draft reaches the platform."
+        }
+      },
+      "type": "object"
+    },
+    "SttConfig": {
+      "additionalProperties": false,
+      "description": "The `[stt]` section (speech-to-text for voice input).",
+      "properties": {
+        "cloud_trim_keep_ms": {
+          "default": 300,
+          "description": "Silence kept of each trimmed pause.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cloud_trim_silence": {
+          "default": true,
+          "description": "Trim long silences before a cloud upload.",
+          "type": "boolean"
+        },
+        "cloud_trim_threshold_db": {
+          "default": -40,
+          "description": "Level below which audio counts as silence, in dBFS.",
+          "format": "int32",
+          "maximum": 0,
+          "minimum": -90,
+          "type": "integer"
+        },
+        "deepinfra": {
+          "$ref": "#/$defs/SttVendorConfig",
+          "default": {},
+          "description": "`DeepInfra` (`DEEPINFRA_API_KEY`)."
+        },
+        "elevenlabs": {
+          "$ref": "#/$defs/ElevenLabsSttConfig",
+          "default": {
+            "diarize": false,
+            "tag_audio_events": false
+          },
+          "description": "`ElevenLabs` (`ELEVENLABS_API_KEY`; default `scribe_v2`)."
+        },
+        "groq": {
+          "$ref": "#/$defs/SttVendorConfig",
+          "default": {},
+          "description": "Groq (`GROQ_API_KEY`; default `whisper-large-v3-turbo`)."
+        },
+        "language": {
+          "default": "en",
+          "description": "Spoken language (empty: detect); a provider's own `language` wins.",
+          "type": "string"
+        },
+        "local": {
+          "$ref": "#/$defs/LocalSttConfig",
+          "default": {
+            "model": "base",
+            "unload_after_idle_secs": 0,
+            "vad": true,
+            "vad_min_silence_ms": 500
+          },
+          "description": "On-device Whisper."
+        },
+        "mistral": {
+          "$ref": "#/$defs/SttVendorConfig",
+          "default": {},
+          "description": "Mistral (`MISTRAL_API_KEY`; default `voxtral-mini-latest`)."
+        },
+        "nous": {
+          "$ref": "#/$defs/SttVendorConfig",
+          "default": {},
+          "description": "The subscription tool gateway."
+        },
+        "openai": {
+          "$ref": "#/$defs/SttVendorConfig",
+          "default": {},
+          "description": "`OpenAI` (`OPENAI_API_KEY`; default `whisper-1`, 60 s timeout)."
+        },
+        "provider": {
+          "description": "The transcription provider: `local`, `whisper-cpp`, `groq`,\n`openai`, `mistral`, `xai`, `elevenlabs`, `deepinfra`, `nous`, a\n`[stt.providers.<name>]` command or a plugin's. Set: used strictly;\nunset: the first available, local engines first.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "providers": {
+          "additionalProperties": {
+            "$ref": "#/$defs/CommandSttConfig"
+          },
+          "default": {},
+          "description": "User-declared command providers (a built-in name always wins).",
+          "type": "object"
+        },
+        "whisper_cpp": {
+          "$ref": "#/$defs/WhisperCppConfig",
+          "default": {},
+          "description": "whisper.cpp (`whisper-cli` on PATH or `binary`)."
+        },
+        "xai": {
+          "$ref": "#/$defs/SttVendorConfig",
+          "default": {},
+          "description": "xAI (`XAI_API_KEY`; default `grok-voice-transcribe-2.0`)."
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "SttVendorConfig": {
+      "additionalProperties": false,
+      "description": "A cloud transcription provider's model and language.",
+      "properties": {
+        "language": {
+          "description": "Spoken language (unset: `stt.language`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "description": "The model (unset: the provider's default).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_secs": {
+          "description": "Bound on one request (unset: the provider's default).",
+          "format": "uint64",
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       },
       "type": "object"
@@ -7096,6 +8592,43 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "ToolGatewayConfig": {
+      "additionalProperties": false,
+      "description": "The `[tool_gateway]` section: where a subscription's tool gateway\nanswers (Nous by default; a self-hosted one by `domain`, `scheme` or\nper-label `urls`).",
+      "properties": {
+        "domain": {
+          "default": "nousresearch.com",
+          "description": "Domain the gateways live under: `<label>-gateway.<domain>`.",
+          "type": "string"
+        },
+        "scheme": {
+          "default": "https",
+          "description": "URL scheme of the gateways (`https`; `http` only for a loopback or\nprivate self-hosted gateway).",
+          "type": "string"
+        },
+        "token_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The secret holding a self-hosted gateway's user token; unset uses\nthe subscription sign-in's token."
+        },
+        "urls": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Per-label URL overrides (`web`, `image`, `video`, `tts`, `stt`,\n`browser`, `sandbox`, `connector`).",
+          "type": "object"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
     "ToolListing": {
       "description": "`tools.tool_search.listing`.",
       "oneOf": [
@@ -7219,6 +8752,21 @@
           "type": "string"
         }
       ]
+    },
+    "ToolProviderConfig": {
+      "additionalProperties": false,
+      "description": "A media tool category's provider selection (`[image_gen]`,\n`[video_gen]`, `[tts]`, `[stt]`).",
+      "properties": {
+        "provider": {
+          "description": "The provider serving the category (`nous` routes it through the\nsubscription tool gateway); unset picks one automatically.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
     },
     "ToolSearchConfig": {
       "additionalProperties": false,
@@ -7401,6 +8949,31 @@
       },
       "type": "object"
     },
+    "TranscriptFormat": {
+      "description": "Transcript formats a STT command may write.",
+      "oneOf": [
+        {
+          "const": "txt",
+          "description": "Plain text.",
+          "type": "string"
+        },
+        {
+          "const": "json",
+          "description": "JSON with a `text` field.",
+          "type": "string"
+        },
+        {
+          "const": "srt",
+          "description": "`SubRip` subtitles.",
+          "type": "string"
+        },
+        {
+          "const": "vtt",
+          "description": "`WebVTT` subtitles.",
+          "type": "string"
+        }
+      ]
+    },
     "TransportFallback": {
       "description": "`plugins.approval_transport_fallback`.",
       "oneOf": [
@@ -7412,6 +8985,159 @@
         {
           "const": "builtin",
           "description": "Ask on the session's own surface.",
+          "type": "string"
+        }
+      ]
+    },
+    "TtsConfig": {
+      "additionalProperties": false,
+      "description": "The `[tts]` section (the `text_to_speech` tool and spoken replies).",
+      "properties": {
+        "deepinfra": {
+          "$ref": "#/$defs/VoiceModelConfig",
+          "default": {},
+          "description": "`DeepInfra` speech (`DEEPINFRA_API_KEY`)."
+        },
+        "edge": {
+          "$ref": "#/$defs/EdgeTtsConfig",
+          "default": {
+            "voice": "en-US-AriaNeural"
+          },
+          "description": "Microsoft Edge read-aloud voices (keyless)."
+        },
+        "elevenlabs": {
+          "$ref": "#/$defs/ElevenLabsTtsConfig",
+          "default": {
+            "model_id": "eleven_multilingual_v2",
+            "voice_id": "pNInz6obpgDQGcFmaJgB"
+          },
+          "description": "`ElevenLabs` (`ELEVENLABS_API_KEY`)."
+        },
+        "gemini": {
+          "$ref": "#/$defs/GeminiTtsConfig",
+          "default": {
+            "audio_tags": false,
+            "model": "gemini-2.5-flash-preview-tts",
+            "voice": "Kore"
+          },
+          "description": "Gemini speech (`GEMINI_API_KEY`)."
+        },
+        "keep_warm_secs": {
+          "default": 60,
+          "description": "Seconds a local engine stays loaded after the last surface released\nit (`0` unloads at once).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kittentts": {
+          "$ref": "#/$defs/VoiceModelConfig",
+          "default": {},
+          "description": "Local `KittenTTS`."
+        },
+        "minimax": {
+          "$ref": "#/$defs/VoiceModelConfig",
+          "default": {},
+          "description": "`MiniMax` speech (`MINIMAX_API_KEY`; default model `speech-02-hd`)."
+        },
+        "mistral": {
+          "$ref": "#/$defs/VoiceModelConfig",
+          "default": {},
+          "description": "Mistral Voxtral speech (`MISTRAL_API_KEY`; default model\n`voxtral-mini-tts-2603`)."
+        },
+        "neutts": {
+          "$ref": "#/$defs/VoiceModelConfig",
+          "default": {},
+          "description": "Local `NeuTTS`."
+        },
+        "nous": {
+          "$ref": "#/$defs/VoiceModelConfig",
+          "default": {},
+          "description": "The subscription tool gateway's speech."
+        },
+        "openai": {
+          "$ref": "#/$defs/OpenAiTtsConfig",
+          "default": {
+            "consent_attestation": false,
+            "model": "gpt-4o-mini-tts",
+            "voice": "alloy"
+          },
+          "description": "`OpenAI` speech (`OPENAI_API_KEY`)."
+        },
+        "piper": {
+          "$ref": "#/$defs/VoiceModelConfig",
+          "default": {},
+          "description": "Local Piper (default voice `en_US-lessac-medium`, downloaded on\nfirst use)."
+        },
+        "provider": {
+          "description": "The speech provider: `edge` (default, keyless), `elevenlabs`,\n`openai`, `gemini`, `xai`, `mistral`, `minimax`, `deepinfra`,\n`nous`, the local engines `piper`, `kittentts`, `neutts`, a\n`[tts.providers.<name>]` command or a plugin's.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "providers": {
+          "additionalProperties": {
+            "$ref": "#/$defs/CommandTtsConfig"
+          },
+          "default": {},
+          "description": "User-declared command providers, selectable by name (a built-in\nname always wins).",
+          "type": "object",
+          "x-apply": "next_session"
+        },
+        "xai": {
+          "$ref": "#/$defs/XaiTtsConfig",
+          "default": {
+            "language": "en",
+            "speed": 1.0,
+            "voice": "eve"
+          },
+          "description": "xAI speech (`XAI_API_KEY`)."
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "TtsOutputFormat": {
+      "description": "Audio formats a TTS command may write.",
+      "oneOf": [
+        {
+          "const": "mp3",
+          "description": "MP3.",
+          "type": "string"
+        },
+        {
+          "const": "wav",
+          "description": "WAV.",
+          "type": "string"
+        },
+        {
+          "const": "ogg",
+          "description": "Ogg (Opus or Vorbis).",
+          "type": "string"
+        },
+        {
+          "const": "flac",
+          "description": "FLAC.",
+          "type": "string"
+        },
+        {
+          "const": "m4a",
+          "description": "M4A (AAC).",
+          "type": "string"
+        },
+        {
+          "const": "aac",
+          "description": "Raw AAC.",
+          "type": "string"
+        },
+        {
+          "const": "amr",
+          "description": "AMR.",
+          "type": "string"
+        },
+        {
+          "const": "opus",
+          "description": "Opus.",
           "type": "string"
         }
       ]
@@ -7874,14 +9600,50 @@
       },
       "type": "object"
     },
+    "VerifyOnStop": {
+      "anyOf": [
+        {
+          "description": "Always on or always off.",
+          "type": "boolean"
+        },
+        {
+          "$ref": "#/$defs/AutoMode",
+          "description": "`\"auto\"`."
+        }
+      ],
+      "description": "`agent.verify_on_stop`: a switch or `\"auto\"`."
+    },
     "VisionConfig": {
       "additionalProperties": false,
       "description": "The `[vision]` section.",
       "properties": {
+        "embed_target_bytes": {
+          "default": 262144,
+          "description": "Largest natively embedded image in bytes (clamped to\n65,536..4,194,304); bigger or wider images are downscaled.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
         "image_input_mode": {
           "$ref": "#/$defs/ImageInputMode",
           "default": "auto",
           "description": "How images reach the model."
+        },
+        "max_calls_per_image": {
+          "description": "Times one image may be embedded by `vision_analyze` per session;\nunset is 3 in delegated children and unlimited for the main agent,\n`0` is unlimited.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "replay_recent_images": {
+          "default": 3,
+          "description": "Newest user images re-sent when history is rebuilt from storage;\n`0` disables.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
         }
       },
       "type": "object",
@@ -7905,6 +9667,115 @@
           "default": true,
           "description": "Transcribe inbound voice and audio clips with the profile's\nspeech-to-text provider.",
           "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "VoiceModeConfig": {
+      "additionalProperties": false,
+      "description": "The `[voice]` section.",
+      "properties": {
+        "auto_tts": {
+          "default": false,
+          "description": "Turn spoken replies on whenever voice mode starts.",
+          "type": "boolean"
+        },
+        "beep_enabled": {
+          "default": true,
+          "description": "Play a start beep (880 Hz) and an end double beep (660 Hz) around\neach recording.",
+          "type": "boolean"
+        },
+        "hallucination_filter": {
+          "default": true,
+          "description": "Drop transcripts that are known silence hallucinations (\"thanks\nfor watching\", one phrase repeated).",
+          "type": "boolean"
+        },
+        "max_recording_secs": {
+          "default": 120,
+          "description": "The longest recording; it stops there.",
+          "format": "uint64",
+          "maximum": 600,
+          "minimum": 5,
+          "type": "integer"
+        },
+        "no_speech_timeout_secs": {
+          "default": 15,
+          "description": "A recording with no confirmed speech by then ends without being\ntranscribed.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "record_key": {
+          "$ref": "#/$defs/KeyChord",
+          "default": "ctrl+b",
+          "description": "The key that starts a recording in voice mode, and stops the\ncontinuous loop when pressed during one."
+        },
+        "silence_duration_ms": {
+          "default": 3000,
+          "description": "Continuous quiet after confirmed speech that ends the recording.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "silence_threshold": {
+          "default": 200,
+          "description": "Input level (RMS, 0-32767) above which audio counts as speech.",
+          "format": "uint32",
+          "maximum": 32767,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "speech_confirm_ms": {
+          "default": 300,
+          "description": "How long the level must stay above the threshold before speech is\nconfirmed (dips shorter than 200 ms are tolerated).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stop_phrases": {
+          "default": [
+            "stop",
+            "never mind",
+            "goodbye",
+            "cancel",
+            "that's all"
+          ],
+          "description": "Whole utterances that end the voice conversation instead of being\nsent (case and surrounding punctuation ignored); `[]` disables.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
+    "VoiceModelConfig": {
+      "additionalProperties": false,
+      "description": "A speech provider's model and voice (unset: the provider's defaults).",
+      "properties": {
+        "max_text_length": {
+          "description": "Characters per request (a positive integer; default by provider).",
+          "format": "uint64",
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "model": {
+          "description": "The model.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "voice": {
+          "description": "The voice.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "type": "object"
@@ -7938,6 +9809,26 @@
           "description": "Shared backend for web search and extract (`auto` picks the first\nwith credentials).",
           "type": "string"
         },
+        "cache_enabled": {
+          "default": true,
+          "description": "Serve repeat searches and extractions from a cache.",
+          "type": "boolean"
+        },
+        "cache_exempt_hosts": {
+          "default": [],
+          "description": "Hosts never cached (exact, `*.` wildcard or domain suffix), beside\nlocal, private and single-label hosts which never are.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "cache_ttl_secs": {
+          "default": 1200,
+          "description": "How long a cached result is served (clamped to 60..86,400).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
         "extract_backend": {
           "description": "Extract backend; unset uses `backend`.",
           "type": [
@@ -7968,9 +9859,18 @@
         "keyless": {
           "$ref": "#/$defs/KeylessConfig",
           "default": {
-            "enabled": false
+            "enabled": false,
+            "rescue": false
           },
           "description": "Keyless web search."
+        },
+        "provider_tier": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ProviderTier"
+          },
+          "default": {},
+          "description": "Pins a vendor's anonymous (`free`) or keyed (`paid`) endpoint in the\nkeyless ring (`paid` without its key removes the vendor).",
+          "type": "object"
         },
         "search_backend": {
           "description": "Search backend; unset uses `backend`.",
@@ -7983,10 +9883,57 @@
           "$ref": "#/$defs/SearxngConfig",
           "default": {},
           "description": "The `searxng` backend (search only)."
+        },
+        "xai": {
+          "$ref": "#/$defs/WebXaiConfig",
+          "default": {
+            "allowed_domains": [],
+            "excluded_domains": [],
+            "model": "grok-4.5",
+            "timeout_secs": 90
+          },
+          "description": "The `xai` search backend (xAI Responses built-in web search)."
         }
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "WebXaiConfig": {
+      "additionalProperties": false,
+      "description": "`[web.xai]`: the xAI web search backend.",
+      "properties": {
+        "allowed_domains": {
+          "default": [],
+          "description": "Only these domains (at most 5; not with `excluded_domains`).",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 5,
+          "type": "array"
+        },
+        "excluded_domains": {
+          "default": [],
+          "description": "Never these domains (at most 5; not with `allowed_domains`).",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 5,
+          "type": "array"
+        },
+        "model": {
+          "default": "grok-4.5",
+          "description": "The model running the search.",
+          "type": "string"
+        },
+        "timeout_secs": {
+          "default": 90,
+          "description": "Bound on one search.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
     },
     "WebhookFilter": {
       "description": "One filter condition over `payload.<path>`, `event` or\n`headers.<Name>`.",
@@ -8297,6 +10244,69 @@
       },
       "type": "object"
     },
+    "WhisperCppConfig": {
+      "additionalProperties": false,
+      "description": "`[stt.whisper_cpp]`.",
+      "properties": {
+        "binary": {
+          "description": "The `whisper-cli` executable (unset: found on PATH).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "language": {
+          "description": "Spoken language (unset: `stt.language`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "description": "The GGML model file.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "WhisperModel": {
+      "description": "Whisper model sizes.",
+      "oneOf": [
+        {
+          "const": "tiny",
+          "description": "`tiny`.",
+          "type": "string"
+        },
+        {
+          "const": "base",
+          "description": "`base`.",
+          "type": "string"
+        },
+        {
+          "const": "small",
+          "description": "`small`.",
+          "type": "string"
+        },
+        {
+          "const": "medium",
+          "description": "`medium`.",
+          "type": "string"
+        },
+        {
+          "const": "large-v3",
+          "description": "`large-v3`.",
+          "type": "string"
+        },
+        {
+          "const": "turbo",
+          "description": "`turbo`.",
+          "type": "string"
+        }
+      ]
+    },
     "WindowsShell": {
       "description": "Windows shells.",
       "oneOf": [
@@ -8380,6 +10390,75 @@
       },
       "type": "object",
       "x-apply": "live"
+    },
+    "XSearchConfig": {
+      "additionalProperties": false,
+      "description": "The `[x_search]` section (the `x_search` tool, toolset `x_search`).",
+      "properties": {
+        "model": {
+          "default": "grok-4.5",
+          "description": "The xAI model answering X searches.",
+          "type": "string"
+        },
+        "reasoning_effort": {
+          "description": "Reasoning effort sent with each search (unset: the model's own).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "retries": {
+          "default": 2,
+          "description": "Retries on 5xx, read timeouts and connection errors (backoff of\n1.5 s per attempt, capped at 5 s).",
+          "format": "uint32",
+          "maximum": 10,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "timeout_secs": {
+          "default": 180,
+          "description": "Bound on one search request.",
+          "format": "uint64",
+          "minimum": 30,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "XaiTtsConfig": {
+      "additionalProperties": false,
+      "description": "`[tts.xai]`.",
+      "properties": {
+        "language": {
+          "default": "en",
+          "description": "The language.",
+          "type": "string"
+        },
+        "max_text_length": {
+          "description": "Characters per request (a positive integer; default 15,000).",
+          "format": "uint64",
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "speed": {
+          "default": 1.0,
+          "description": "Speaking speed.",
+          "format": "double",
+          "maximum": 1.5,
+          "minimum": 0.7,
+          "type": "number"
+        },
+        "voice": {
+          "default": "eve",
+          "description": "The voice: a built-in name or a custom cloned voice id.",
+          "type": "string"
+        }
+      },
+      "type": "object"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -8392,9 +10471,13 @@
         "api_max_retries": 3,
         "auto_recovery_cycles": 5,
         "clarify_timeout_secs": 3600,
+        "coding_context": "auto",
+        "coding_instructions": "",
         "empty_response_guard": {
           "cost_threshold_usd": 0.25
         },
+        "fast_auto_secs": 60,
+        "fast_mode": "normal",
         "intent_continuation": "auto",
         "max_iterations": 500,
         "max_verify_nudges": 3,
@@ -8402,7 +10485,10 @@
         "personality": "none",
         "reasoning_overrides": {},
         "reasoning_tiers": {},
-        "tool_concurrency": 8
+        "resume_on_crash": "ask",
+        "tool_concurrency": 8,
+        "verify_guidance": true,
+        "verify_on_stop": false
       },
       "description": "Turn loop limits, retries and reasoning effort."
     },
@@ -8419,6 +10505,13 @@
       },
       "description": "Approval modes for dangerous tool calls."
     },
+    "attachments": {
+      "$ref": "#/$defs/AttachmentsConfig",
+      "default": {
+        "storage": "blobs"
+      },
+      "description": "Where received attachments are kept."
+    },
     "auth": {
       "$ref": "#/$defs/AuthConfig",
       "default": {
@@ -8429,6 +10522,7 @@
     "auxiliary": {
       "$ref": "#/$defs/AuxiliaryConfig",
       "default": {
+        "max_concurrency": 8,
         "transient_retries": 2
       },
       "description": "Side-model (auxiliary) task routing."
@@ -8507,15 +10601,20 @@
       "default": {
         "abort_on_summary_failure": false,
         "enabled": true,
+        "idle_compact_after_secs": 0,
         "max_attempts": 3,
         "micro_compact": false,
         "micro_compact_every_n_turns": 1,
         "min_tail_user_messages": 1,
+        "model_thresholds": {},
         "pinned_max_tokens": 8000,
         "prepare_ahead": false,
         "proactive_prune_tokens": 0,
+        "progress_notices": false,
         "protect_first_n": 3,
         "quality_min_coverage": 0.8,
+        "responses_compact_threshold_tokens": 0,
+        "responses_native": false,
         "summary_max_tokens": 10000,
         "summary_timeout_secs": 120,
         "tail_mode": "lean",
@@ -8756,6 +10855,14 @@
       },
       "description": "Shell hooks and outbound webhooks."
     },
+    "image_gen": {
+      "$ref": "#/$defs/ImageGenConfig",
+      "default": {
+        "max_parallel_requests": 4,
+        "openai": {}
+      },
+      "description": "Image generation (`image_generate`)."
+    },
     "logging": {
       "$ref": "#/$defs/LoggingConfig",
       "default": {
@@ -8819,10 +10926,24 @@
         "archival_max_entries": 10000,
         "memory_char_limit": 2200,
         "memory_enabled": true,
+        "notifications": "on",
         "nudge_interval": 10,
+        "provider": "builtin",
+        "provider_prefetch_timeout_ms": 8000,
+        "provider_recall_max_chars": 100000,
+        "provider_recall_spill": false,
         "recall": {
+          "embedding_model": null,
           "max_chars": 1500,
+          "min_score": 0.35,
           "top_k": 5
+        },
+        "require_checkpoint": false,
+        "review": {
+          "defer": "auto",
+          "defer_max_age_secs": 1800,
+          "enabled": true,
+          "extra_tools": []
         },
         "review_mode": "summary",
         "user_char_limit": 1375,
@@ -8830,6 +10951,16 @@
         "write_approval": false
       },
       "description": "Built-in memory."
+    },
+    "moa": {
+      "$ref": "#/$defs/MoaConfig",
+      "default": {
+        "default_preset": "default",
+        "presets": {},
+        "privacy_filter": "",
+        "save_traces": false
+      },
+      "description": "Mixture of Agents presets."
     },
     "model": {
       "$ref": "#/$defs/ModelConfig",
@@ -8876,6 +11007,13 @@
         }
       },
       "description": "Trajectories."
+    },
+    "openrouter": {
+      "$ref": "#/$defs/OpenRouterConfig",
+      "default": {
+        "min_coding_score": 0.65
+      },
+      "description": "OpenRouter-only request settings."
     },
     "plugins": {
       "$ref": "#/$defs/PluginsConfig",
@@ -8930,6 +11068,16 @@
       },
       "description": "Provider prompt caching."
     },
+    "provider_routing": {
+      "$ref": "#/$defs/ProviderRoutingConfig",
+      "default": {
+        "ignore": [],
+        "models": {},
+        "only": [],
+        "order": []
+      },
+      "description": "OpenRouter upstream provider routing preferences."
+    },
     "providers": {
       "additionalProperties": {
         "$ref": "#/$defs/ProviderConfig"
@@ -8959,6 +11107,25 @@
       "description": "User slash commands (`/<name>`), keyed by name.",
       "type": "object",
       "x-apply": "live"
+    },
+    "replay": {
+      "$ref": "#/$defs/ReplayConfig",
+      "default": {
+        "cache": {
+          "max_bytes": 4294967296,
+          "mode": "off",
+          "namespace": "default"
+        }
+      },
+      "description": "The model-call cache."
+    },
+    "routing": {
+      "$ref": "#/$defs/RoutingConfig",
+      "default": {
+        "health_half_life_secs": 1800,
+        "health_window": 50
+      },
+      "description": "Provider health scoring."
     },
     "schema_version": {
       "default": 1,
@@ -9007,6 +11174,7 @@
       "$ref": "#/$defs/SessionsConfig",
       "default": {
         "auto_archive_secs": 604800,
+        "low_disk_bytes": 1073741824,
         "max_export_messages": 20000,
         "max_resume_messages": 20000,
         "retention_secs": 0,
@@ -9047,6 +11215,34 @@
         "journal_mode": "wal"
       },
       "description": "Session database."
+    },
+    "stt": {
+      "$ref": "#/$defs/SttConfig",
+      "default": {
+        "cloud_trim_keep_ms": 300,
+        "cloud_trim_silence": true,
+        "cloud_trim_threshold_db": -40,
+        "deepinfra": {},
+        "elevenlabs": {
+          "diarize": false,
+          "tag_audio_events": false
+        },
+        "groq": {},
+        "language": "en",
+        "local": {
+          "model": "base",
+          "unload_after_idle_secs": 0,
+          "vad": true,
+          "vad_min_silence_ms": 500
+        },
+        "mistral": {},
+        "nous": {},
+        "openai": {},
+        "providers": {},
+        "whisper_cpp": {},
+        "xai": {}
+      },
+      "description": "Speech-to-text providers."
     },
     "telemetry": {
       "$ref": "#/$defs/TelemetryConfig",
@@ -9100,6 +11296,15 @@
         "windows_shell": "auto"
       },
       "description": "The terminal tool and its backends."
+    },
+    "tool_gateway": {
+      "$ref": "#/$defs/ToolGatewayConfig",
+      "default": {
+        "domain": "nousresearch.com",
+        "scheme": "https",
+        "urls": {}
+      },
+      "description": "The subscription tool gateway."
     },
     "tool_loop_guardrails": {
       "$ref": "#/$defs/ToolLoopGuardrails",
@@ -9164,6 +11369,43 @@
       },
       "description": "Per-surface toolset defaults."
     },
+    "tts": {
+      "$ref": "#/$defs/TtsConfig",
+      "default": {
+        "deepinfra": {},
+        "edge": {
+          "voice": "en-US-AriaNeural"
+        },
+        "elevenlabs": {
+          "model_id": "eleven_multilingual_v2",
+          "voice_id": "pNInz6obpgDQGcFmaJgB"
+        },
+        "gemini": {
+          "audio_tags": false,
+          "model": "gemini-2.5-flash-preview-tts",
+          "voice": "Kore"
+        },
+        "keep_warm_secs": 60,
+        "kittentts": {},
+        "minimax": {},
+        "mistral": {},
+        "neutts": {},
+        "nous": {},
+        "openai": {
+          "consent_attestation": false,
+          "model": "gpt-4o-mini-tts",
+          "voice": "alloy"
+        },
+        "piper": {},
+        "providers": {},
+        "xai": {
+          "language": "en",
+          "speed": 1.0,
+          "voice": "eve"
+        }
+      },
+      "description": "Text-to-speech (`text_to_speech`) providers."
+    },
     "ui": {
       "$ref": "#/$defs/UiConfig",
       "default": {
@@ -9217,24 +11459,64 @@
       },
       "description": "The credential vault."
     },
+    "video_gen": {
+      "$ref": "#/$defs/ToolProviderConfig",
+      "default": {},
+      "description": "Video generation's provider selection."
+    },
     "vision": {
       "$ref": "#/$defs/VisionConfig",
       "default": {
-        "image_input_mode": "auto"
+        "embed_target_bytes": 262144,
+        "image_input_mode": "auto",
+        "replay_recent_images": 3
       },
       "description": "Image input routing."
+    },
+    "voice": {
+      "$ref": "#/$defs/VoiceModeConfig",
+      "default": {
+        "auto_tts": false,
+        "beep_enabled": true,
+        "hallucination_filter": true,
+        "max_recording_secs": 120,
+        "no_speech_timeout_secs": 15,
+        "record_key": "ctrl+b",
+        "silence_duration_ms": 3000,
+        "silence_threshold": 200,
+        "speech_confirm_ms": 300,
+        "stop_phrases": [
+          "stop",
+          "never mind",
+          "goodbye",
+          "cancel",
+          "that's all"
+        ]
+      },
+      "description": "Voice conversations on the CLI, TUI and desktop."
     },
     "web": {
       "$ref": "#/$defs/WebConfig",
       "default": {
         "backend": "auto",
+        "cache_enabled": true,
+        "cache_exempt_hosts": [],
+        "cache_ttl_secs": 1200,
         "extract_char_limit": 15000,
         "extract_timeout_secs": 120,
         "firecrawl": {},
         "keyless": {
-          "enabled": false
+          "enabled": false,
+          "rescue": false
         },
-        "searxng": {}
+        "provider_tier": {},
+        "searxng": {},
+        "xai": {
+          "allowed_domains": [],
+          "excluded_domains": [],
+          "model": "grok-4.5",
+          "timeout_secs": 90
+        }
       },
       "description": "Web tools."
     },
@@ -9248,6 +11530,15 @@
         "sync_remote": true
       },
       "description": "Git worktrees: creation, the stale-tree sweep and archives."
+    },
+    "x_search": {
+      "$ref": "#/$defs/XSearchConfig",
+      "default": {
+        "model": "grok-4.5",
+        "retries": 2,
+        "timeout_secs": 180
+      },
+      "description": "The `x_search` tool."
     }
   },
   "title": "Prometheus config.toml",

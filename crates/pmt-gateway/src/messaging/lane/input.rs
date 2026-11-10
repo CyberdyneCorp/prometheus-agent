@@ -35,14 +35,19 @@ impl Buffer {
     }
 }
 
-/// The text and images of an event; other attachments become a note.
-fn content(inbound: &Inbound) -> (String, Vec<String>) {
+/// The text, images and other files of an event; a file also becomes a
+/// note naming it.
+fn content(inbound: &Inbound) -> (String, Vec<String>, Vec<String>) {
     let mut text = inbound.text.trim().to_owned();
     let mut images = Vec::new();
+    let mut files = Vec::new();
     for attachment in &inbound.attachments {
         if attachment.kind == MediaKind::Image {
             images.push(attachment.location.clone());
         } else {
+            if std::path::Path::new(&attachment.location).is_absolute() {
+                files.push(attachment.location.clone());
+            }
             if !text.is_empty() {
                 text.push('\n');
             }
@@ -53,7 +58,7 @@ fn content(inbound: &Inbound) -> (String, Vec<String>) {
             );
         }
     }
-    (text, images)
+    (text, images, files)
 }
 
 impl Lane {
@@ -79,7 +84,7 @@ impl Lane {
 
     /// Plain text or media from the conversation.
     pub(super) async fn text(&mut self, routing: Routing, inbound: &Inbound) {
-        let (text, images) = content(inbound);
+        let (text, images, files) = content(inbound);
         if text.is_empty() && images.is_empty() {
             return;
         }
@@ -87,6 +92,7 @@ impl Lane {
             origin: Origin::Human,
             text,
             images,
+            files,
             routing,
             reply_to: Some(inbound.message_id.clone()).filter(|id| !id.is_empty()),
             voice: self.voice_input,
@@ -281,10 +287,39 @@ fn join(into: &mut Pending, more: Pending) {
         into.text.push_str(&more.text);
     }
     into.images.extend(more.images);
+    into.files.extend(more.files);
     into.voice |= more.voice;
     into.addressed |= more.addressed;
     into.routing = more.routing;
     if more.reply_to.is_some() {
         into.reply_to = more.reply_to;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_downloaded_document_is_a_file_and_a_note() {
+        let mut inbound = Inbound::text(
+            crate::messaging::key::ChatType::Dm,
+            "chat",
+            "user",
+            "see attached",
+        );
+        inbound
+            .attachments
+            .push(crate::messaging::adapter::Attachment::new(
+                MediaKind::Document,
+                "/cache/media/abc.pdf",
+            ));
+        let (text, images, files) = content(&inbound);
+        assert!(images.is_empty());
+        assert_eq!(files, vec!["/cache/media/abc.pdf".to_owned()]);
+        assert!(
+            text.contains("[attachment: Document /cache/media/abc.pdf]"),
+            "{text}"
+        );
     }
 }

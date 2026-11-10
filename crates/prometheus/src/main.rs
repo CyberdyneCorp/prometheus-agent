@@ -70,8 +70,8 @@ fn main() -> ExitCode {
         };
     }
     // Commands that need the home report the resolution error themselves.
-    // `demo` runs in a temporary home of its own and never touches the
-    // user's: it writes no log files and keeps no crash reports there.
+    // `demo` (and `smoke-suite`) runs in a temporary home of its own and
+    // never touches the user's: it writes no log files and keeps no crash reports there.
     // The administrator's managed layer is machine-wide: loaded once, for
     // every profile this process touches.
     let (managed_dir, owner) = match launch.test_managed_dir() {
@@ -93,7 +93,7 @@ fn main() -> ExitCode {
     pmt_config::gateway_check::register_roles(prometheus::daemon_client::role_resolver());
     let home = pmt_config::home::resolve(cli.home.as_deref(), &launch)
         .ok()
-        .filter(|_| !matches!(cli.command, Some(Command::Demo(_))));
+        .filter(|_| !matches!(cli.command, Some(Command::Demo(_) | Command::SmokeSuite(_))));
     let home = home.as_ref();
     startup::install_logging(home, &launch);
     // `profile` is recorded once a command selects one (startup::bind_profile).
@@ -141,9 +141,12 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Worktrees { command }) => prometheus::worktrees_cmd::run(command, &ctx),
         Some(Command::Vault { command }) => prometheus::vault_cmd::run(command, &ctx),
         Some(Command::Files { command }) => prometheus::files_cmd::run(command, &ctx),
+        Some(Command::Cache { command }) => prometheus::cache_cmd::run(command, &ctx),
+        Some(Command::Replay { command }) => prometheus::replay_cmd::run(command, &ctx),
         Some(Command::Verify(args)) => prometheus::verify_cmd::run(args, &ctx),
         Some(Command::Skills { command }) => skills_cmd::run(command, &ctx),
         Some(Command::Memory { command }) => memory_cmd::run(command, &ctx),
+        Some(Command::Journey(args)) => prometheus::journey_cmd::run(args, &ctx, cli.no_color),
         Some(Command::Profile { command }) => profile_cmd::run(command, &ctx),
         Some(Command::Backup { command }) => backup_cmd::backup(command, &ctx),
         Some(Command::Snapshots { command }) => backup_cmd::snapshots(command, &ctx),
@@ -155,12 +158,16 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Usage(args)) => usage_cmd::run(args, &ctx),
         Some(Command::Model { command }) => model_cmd::run(command.as_ref(), &ctx),
         Some(Command::Fallback { command }) => fallback_cmd::run(command, &ctx),
-        Some(Command::Auth { command }) => auth_cmd::run(command, &ctx),
+        Some(Command::Moa { command }) => prometheus::moa_cmd::run(command, &ctx),
+        Some(Command::Local { command }) => prometheus::local_cmd::run(command, &ctx),
+        Some(Command::Providers { command }) => prometheus::providers_cmd::run(command, &ctx),
+        Some(Command::Auth { command }) => auth_cmd::run(command.as_ref(), &ctx),
         Some(Command::Tools { command }) => tools_cmd::run(command, &ctx),
         Some(Command::Toolsets { command }) => tools_cmd::toolsets(command, &ctx),
         Some(Command::Approvals { command }) => approvals_cmd::run(command, &ctx),
         Some(Command::Update(args)) => update_cmd::run(args, &ctx),
         Some(Command::Pause(args)) => prometheus::pause_cmd::run(args, &ctx),
+        Some(Command::Portal { command }) => prometheus::portal_cmd::run(command, &ctx),
         #[cfg(feature = "gateway")]
         Some(Command::Daemon { command }) => prometheus::daemon_cmd::run(command, &ctx),
         #[cfg(feature = "gateway")]
@@ -177,6 +184,7 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Connectors { command }) => prometheus::connectors_cmd::run(command, &ctx),
         Some(Command::Bridge { command }) => prometheus::bridge_cmd::run(command, &ctx),
         Some(Command::SelfTest) => Ok(self_test_cmd::run(&ctx)),
+        Some(Command::SmokeSuite(args)) => prometheus::smoke_suite::runner::run(args),
         Some(Command::Completions { shell }) => prometheus::completions::script(*shell),
         Some(Command::Complete { .. }) => Ok(0),
         Some(Command::Runtimes { command }) => runtimes_cmd::run(command, &ctx),

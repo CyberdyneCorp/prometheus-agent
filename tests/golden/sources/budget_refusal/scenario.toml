@@ -1,0 +1,4 @@
+# A turn token budget refuses the next call; the turn ends with the
+# budget summary handoff.
+prompts = ["check everything"]
+set = ["budgets.turn_tokens=600"]

@@ -4,17 +4,19 @@
 //! model-providers, Error classification; request and stream idle
 //! timeouts).
 
-use std::collections::VecDeque;
-use std::sync::Arc;
+use std::collections::{HashMap, VecDeque};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use jiff::Timestamp;
 use pmt_config::schema::WireFormat;
+use pmt_core::id::SessionId;
 use reqwest::header::{CONTENT_TYPE, HeaderValue};
 use tokio::time::{Instant, timeout_at};
 
 use crate::classify::{self, ErrorClass, ProviderError};
 use crate::cost::Pending;
+use crate::descriptor::BundledWire;
 use crate::event::{Normalizer, StopReason, StreamEvent, Usage};
 use crate::mock::{self, Feed, Mock};
 use crate::request::Request;
@@ -54,11 +56,121 @@ pub fn body(route: &Route, request: &Request) -> serde_json::Value {
         _ if route.supports_prompt_cache => request.cache.key.as_deref(),
         _ => None,
     };
-    let mut body = wire::encode(route.wire_format, &request, &EncodeOptions { cache_key });
+    let compaction = request
+        .server_compaction
+        .as_ref()
+        .filter(|_| route.supports_server_compaction);
+    let options = EncodeOptions {
+        cache_key,
+        compaction,
+    };
+    let mut body = match route.bundled {
+        Some(bundled) => wire::encode_bundled(bundled, &request),
+        None => wire::encode(route.wire_format, &request, &options),
+    };
+    if let Some(extra) = &route.body_extra {
+        crate::request::apply_overrides(&mut body, extra);
+    }
+    if let (Some(speed), Some(tier)) = (request.speed, route.fast_tier) {
+        tier.apply(&mut body, speed);
+    }
     if let Some(overrides) = &request.body_overrides {
         crate::request::apply_overrides(&mut body, overrides);
     }
     body
+}
+
+/// The conversations of a profile's sessions (spec: model-providers,
+/// Session affinity headers and per-model wire routing). Each open session
+/// is bound to its conversation id (its root session id, or the kanban
+/// task id of a kanban worker), and a call carries the affinity of the
+/// session its [`CallContext`](crate::cost::CallContext) names. Keyed per session rather than held
+/// per caller because one daemon process shares a profile's callers
+/// between all of its concurrent sessions.
+#[derive(Debug, Clone, Default)]
+pub struct Conversations(Arc<Mutex<HashMap<SessionId, Bound>>>);
+
+/// A session's conversation id and how many open handles bound it.
+#[derive(Debug)]
+struct Bound {
+    conversation: String,
+    handles: usize,
+}
+
+impl Conversations {
+    /// Calls of `session` belong to `conversation` while the returned
+    /// [`Binding`] lives.
+    #[must_use]
+    pub fn bind(&self, session: SessionId, conversation: &str) -> Binding {
+        let mut map = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        let bound = map.entry(session).or_insert_with(|| Bound {
+            conversation: String::new(),
+            handles: 0,
+        });
+        conversation.clone_into(&mut bound.conversation);
+        bound.handles += 1;
+        Binding {
+            conversations: self.clone(),
+            session,
+        }
+    }
+
+    /// The opaque affinity value of `session`'s calls: a stable hash of
+    /// its conversation id; `None` for a session that is not bound.
+    #[must_use]
+    pub fn affinity(&self, session: SessionId) -> Option<String> {
+        use sha2::{Digest, Sha256};
+        let map = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        let digest = Sha256::digest(map.get(&session)?.conversation.as_bytes());
+        Some(crate::request::hex(&digest[..16]))
+    }
+}
+
+/// Keeps a session bound to its conversation; dropping the last binding
+/// of a session forgets it, so a long-lived daemon does not accumulate
+/// closed sessions.
+#[derive(Debug)]
+pub struct Binding {
+    conversations: Conversations,
+    session: SessionId,
+}
+
+impl Drop for Binding {
+    fn drop(&mut self) {
+        let mut map = self
+            .conversations
+            .0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if let Some(bound) = map.get_mut(&self.session) {
+            bound.handles -= 1;
+            if bound.handles == 0 {
+                map.remove(&self.session);
+            }
+        }
+    }
+}
+
+/// The headers a request on `route` carries besides its credential: the
+/// `affinity` header when the route's provider routes by one, and the
+/// beta flags its body needs.
+pub fn route_headers(
+    route: &Route,
+    request: &Request,
+    affinity: Option<String>,
+) -> Vec<(String, String)> {
+    let mut headers = Vec::new();
+    if let (Some(name), Some(value)) = (&route.affinity_header, affinity) {
+        headers.push((name.clone(), value));
+    }
+    let beta = request
+        .speed
+        .and(route.fast_tier)
+        .and_then(crate::fast::FastTier::beta);
+    if let Some(beta) = beta {
+        headers.push(("anthropic-beta".to_owned(), beta.to_owned()));
+    }
+    headers
 }
 
 /// Request hooks of model providers registered by plugins (spec:
@@ -88,8 +200,10 @@ pub trait RequestHooks: Send + Sync {
 pub(crate) struct Sender {
     client: reqwest::Client,
     mock: Arc<Mock>,
+    calls: Arc<crate::calls::Calls>,
     hooks: Option<Arc<dyn RequestHooks>>,
     pii: Option<Arc<pmt_core::pii::Pii>>,
+    conversations: Conversations,
 }
 
 impl std::fmt::Debug for Sender {
@@ -104,9 +218,18 @@ impl Sender {
         Self {
             client,
             mock: Arc::new(Mock::echo()),
+            calls: Arc::default(),
             hooks: None,
             pii: None,
+            conversations: Conversations::default(),
         }
+    }
+
+    /// Tags every request of a bound session with its conversation's
+    /// affinity header.
+    pub(crate) fn with_conversations(mut self, conversations: Conversations) -> Self {
+        self.conversations = conversations;
+        self
     }
 
     /// Replaces PII in every request before it leaves the process.
@@ -127,7 +250,24 @@ impl Sender {
         self
     }
 
-    /// Sends one attempt and waits for its first normalised event.
+    /// Runs `calls` around every call (replay, cache, recording).
+    pub(crate) fn with_calls(mut self, calls: Arc<crate::calls::Calls>) -> Self {
+        self.calls = calls;
+        self
+    }
+
+    /// The layers around every call.
+    pub(crate) fn calls(&self) -> &crate::calls::Calls {
+        &self.calls
+    }
+
+    /// The layers, shared.
+    pub(crate) fn calls_handle(&self) -> Arc<crate::calls::Calls> {
+        Arc::clone(&self.calls)
+    }
+
+    /// Sends one attempt of `session`'s call and waits for its first
+    /// normalised event.
     ///
     /// # Errors
     ///
@@ -137,6 +277,7 @@ impl Sender {
         &self,
         route: &Route,
         request: &Request,
+        session: Option<SessionId>,
     ) -> Result<ModelStream, ProviderError> {
         let redacted = self.pii.as_deref().map(|pii| request.redacted(pii));
         let request = redacted.as_ref().unwrap_or(request);
@@ -144,10 +285,24 @@ impl Sender {
             let feed = self.mock.reply(route, request)?;
             return ModelStream::start(Source::Mock(feed), Limits::of(route)).await;
         }
+        if let Some(launch) = crate::external::launch(route) {
+            let limits = Limits::of(route);
+            let feed = crate::external::AcpFeed::start(launch, request, limits).await?;
+            return ModelStream::start(Source::Acp(Box::new(feed)), limits).await;
+        }
         let hooks = self.hooks.as_deref().filter(|h| h.handles(&route.provider));
-        send_http(&self.client, hooks, route, request).await
+        let affinity = session.and_then(|s| self.conversations.affinity(s));
+        let extra = route_headers(route, request, affinity);
+        send_http(&self.client, hooks, route, request, extra).await
     }
 }
+
+/// The body field carrying the route's opaque credential handle to the
+/// plugin's `prepare-request` (spec: model-providers, Plugin OAuth and
+/// external-process providers): it names the credential
+/// (`subscription:<provider>/<label>`) and never holds a token, verifier
+/// or `state`; it is removed before the request is sent.
+pub const CREDENTIAL_HANDLE: &str = "prometheus_credential";
 
 /// The body and extra headers of a request, through the plugin's hooks.
 /// A hook that fails (a crashed or stalled plugin) fails the call without
@@ -178,10 +333,20 @@ async fn hooked(
             message: None,
         })),
     };
-    let body = hooks
+    let mut body = body;
+    if let Some(fields) = body.as_object_mut() {
+        fields.insert(
+            CREDENTIAL_HANDLE.to_owned(),
+            route.credential.describe().into(),
+        );
+    }
+    let mut body = hooks
         .prepare(&route.provider, body)
         .await
         .map_err(|why| failed("prepare the request", why))?;
+    if let Some(fields) = body.as_object_mut() {
+        fields.remove(CREDENTIAL_HANDLE);
+    }
     let headers = hooks
         .headers(&route.provider)
         .await
@@ -194,22 +359,33 @@ async fn send_http(
     hooks: Option<&dyn RequestHooks>,
     route: &Route,
     request: &Request,
+    extra: Vec<(String, String)>,
 ) -> Result<ModelStream, ProviderError> {
     let limits = Limits::of(route);
-    let (body, headers) = match hooks {
+    let (body, mut headers) = match hooks {
         Some(hooks) => hooked(hooks, route, body(route, request)).await?,
         None => (body(route, request), Vec::new()),
     };
+    headers.extend(extra);
     let body = serde_json::to_vec(&body).expect("JSON values serialize");
+    let url = match route.bundled {
+        Some(bundled) => wire::bundled_endpoint(bundled, &route.base_url, &route.model),
+        None => wire::endpoint(route.wire_format, &route.base_url),
+    };
+    if route.bundled == Some(BundledWire::BedrockConverse) {
+        headers.extend(bedrock_signature(route, &url, &body)?);
+    }
     let mut builder = client
-        .post(wire::endpoint(route.wire_format, &route.base_url))
+        .post(url)
         .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
-        .header("accept", "text/event-stream")
+        .header("accept", accept(route))
         .body(body);
     for (name, value) in headers {
         builder = builder.header(name, value);
     }
-    builder = authenticate(builder, route);
+    if route.bundled != Some(BundledWire::BedrockConverse) {
+        builder = authenticate(builder, route);
+    }
     let response = match timeout_at(limits.deadline, builder.send()).await {
         Err(_) => return Err(timed_out("no response within the request timeout")),
         Ok(Err(err)) => return Err(transport_error(&err)),
@@ -232,14 +408,100 @@ async fn send_http(
     }
     let body = HttpBody {
         response: Some(response),
-        parser: SseParser::default(),
-        decoder: wire::decoder(route.wire_format),
+        framing: Framing::of(route),
+        decoder: match route.bundled {
+            Some(bundled) => wire::bundled_decoder(bundled),
+            None => wire::decoder(route.wire_format),
+        },
     };
     ModelStream::start(Source::Http(body), limits).await
 }
 
-fn authenticate(builder: reqwest::RequestBuilder, route: &Route) -> reqwest::RequestBuilder {
-    let builder = if route.wire_format == WireFormat::AnthropicMessages {
+/// The `accept` header: Bedrock streams AWS event-stream frames.
+fn accept(route: &Route) -> &'static str {
+    if route.bundled == Some(BundledWire::BedrockConverse) {
+        "application/vnd.amazon.eventstream"
+    } else {
+        "text/event-stream"
+    }
+}
+
+/// The `SigV4` headers of a Bedrock request, signed with the AWS keys the
+/// credential chain minted for the route.
+fn bedrock_signature(
+    route: &Route,
+    url: &str,
+    body: &[u8],
+) -> Result<Vec<(String, String)>, ProviderError> {
+    let keys = route
+        .credential
+        .value()
+        .and_then(crate::aws::Keys::from_secret)
+        .ok_or_else(|| ProviderError::new(ErrorClass::Auth, "no AWS credentials for the route"))?;
+    let parsed = reqwest::Url::parse(url)
+        .map_err(|e| ProviderError::new(ErrorClass::Config, format!("bad Bedrock URL: {e}")))?;
+    let region = route
+        .region
+        .as_deref()
+        .unwrap_or(crate::aws::DEFAULT_REGION);
+    Ok(crate::aws::sigv4::sign(
+        &crate::aws::sigv4::Signing {
+            method: "POST",
+            url: &parsed,
+            headers: &[],
+            body,
+            region,
+            service: crate::aws::SERVICE,
+            now: Timestamp::now(),
+        },
+        &keys,
+    ))
+}
+
+/// How a response body is split into events.
+#[derive(Debug)]
+enum Framing {
+    /// Server-Sent Events (every format but Bedrock's).
+    Sse(SseParser),
+    /// AWS event-stream frames.
+    Aws(crate::aws::eventstream::Parser),
+}
+
+impl Framing {
+    fn of(route: &Route) -> Self {
+        if route.bundled == Some(BundledWire::BedrockConverse) {
+            Self::Aws(crate::aws::eventstream::Parser::default())
+        } else {
+            Self::Sse(SseParser::default())
+        }
+    }
+
+    fn feed(&mut self, bytes: &[u8]) -> Result<Vec<crate::sse::SseEvent>, ProviderError> {
+        match self {
+            Self::Sse(parser) => Ok(parser.feed(bytes)),
+            Self::Aws(parser) => parser.feed(bytes).map_err(|why| wire::malformed(&why)),
+        }
+    }
+
+    fn finish(&mut self) -> Option<crate::sse::SseEvent> {
+        match self {
+            Self::Sse(parser) => parser.finish(),
+            // A partial frame at the end is a truncated stream.
+            Self::Aws(_) => None,
+        }
+    }
+}
+
+/// Adds the route's credential: in its provider's key header
+/// (`x-goog-api-key`, `api-key`, Anthropic's `x-api-key`), else as a
+/// bearer token, which sign-ins and `key_header = "authorization"` routes
+/// always use.
+pub(crate) fn authenticate(
+    builder: reqwest::RequestBuilder,
+    route: &Route,
+) -> reqwest::RequestBuilder {
+    let anthropic = route.wire_format == WireFormat::AnthropicMessages && route.bundled.is_none();
+    let builder = if anthropic {
         builder.header("anthropic-version", wire::ANTHROPIC_VERSION)
     } else {
         builder
@@ -247,18 +509,26 @@ fn authenticate(builder: reqwest::RequestBuilder, route: &Route) -> reqwest::Req
     let Some(secret) = route.credential.value() else {
         return builder;
     };
-    let mut value =
-        if route.wire_format == WireFormat::AnthropicMessages && !route.credential.is_bearer() {
-            HeaderValue::from_str(secret.expose())
-        } else {
-            HeaderValue::from_str(&format!("Bearer {}", secret.expose()))
-        }
-        .unwrap_or_else(|_| HeaderValue::from_static(""));
-    value.set_sensitive(true);
-    if route.wire_format == WireFormat::AnthropicMessages && !route.credential.is_bearer() {
-        return builder.header("x-api-key", value);
+    let key_header = match route.key_header.as_deref() {
+        _ if route.credential.is_bearer() => None,
+        Some(name) if name.eq_ignore_ascii_case("authorization") => None,
+        Some(name) => Some(name),
+        None if anthropic => Some("x-api-key"),
+        None => None,
+    };
+    let sensitive = |text: &str| {
+        let mut value =
+            HeaderValue::from_str(text).unwrap_or_else(|_| HeaderValue::from_static(""));
+        value.set_sensitive(true);
+        value
+    };
+    if let Some(name) = key_header {
+        return builder.header(name, sensitive(secret.expose()));
     }
-    let builder = builder.header(reqwest::header::AUTHORIZATION, value);
+    let builder = builder.header(
+        reqwest::header::AUTHORIZATION,
+        sensitive(&format!("Bearer {}", secret.expose())),
+    );
     subscription_identity(builder, route)
 }
 
@@ -307,7 +577,7 @@ pub(crate) struct Limits {
 
 impl Limits {
     /// The limits of an attempt on `route` starting now.
-    fn of(route: &Route) -> Self {
+    pub(crate) fn of(route: &Route) -> Self {
         Self {
             deadline: Instant::now() + route.timeouts.request,
             idle: route.timeouts.idle,
@@ -335,13 +605,17 @@ impl Limits {
 enum Source {
     Http(HttpBody),
     Mock(Feed),
+    Acp(Box<crate::external::AcpFeed>),
+    /// A served response: one recorded chunk per read, then its recorded
+    /// failure, if it failed.
+    Served(VecDeque<Vec<StreamEvent>>, Option<ProviderError>),
 }
 
 /// An HTTP response body decoded from its wire format's SSE events.
 #[derive(Debug)]
 struct HttpBody {
     response: Option<reqwest::Response>,
-    parser: SseParser,
+    framing: Framing,
     decoder: Box<dyn Decode>,
 }
 
@@ -357,7 +631,7 @@ impl HttpBody {
         };
         let Some(bytes) = chunk else {
             self.response = None;
-            if let Some(event) = self.parser.finish() {
+            if let Some(event) = self.framing.finish() {
                 self.decoder.event(&event, out)?;
             }
             if !out.is_finished() {
@@ -365,7 +639,7 @@ impl HttpBody {
             }
             return Ok(());
         };
-        for event in self.parser.feed(&bytes) {
+        for event in self.framing.feed(&bytes)? {
             self.decoder.event(&event, out)?;
         }
         Ok(())
@@ -385,6 +659,57 @@ pub struct ModelStream {
     usage: Option<Usage>,
     ledger: Option<Pending>,
     recorded: Option<Result<pmt_store::UsageEvent, pmt_core::Error>>,
+    on_end: Vec<OnEnd>,
+    tap: Option<Tap>,
+    /// The response was served, not sent (a cache hit).
+    served: bool,
+    capture: Option<Capture>,
+}
+
+/// What [`Capture`] calls with a successful response.
+type CapturedFn = dyn FnOnce(crate::calls::Recorded) + Send + Sync;
+
+/// Collects a response's chunks and hands them over once it ended
+/// successfully (a failed response is dropped).
+pub(crate) struct Capture {
+    chunks: Vec<Vec<StreamEvent>>,
+    done: Box<CapturedFn>,
+}
+
+impl std::fmt::Debug for Capture {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Capture")
+    }
+}
+
+/// Sees every event of a stream as it is read (a MoA trace collects the
+/// aggregator's output with it).
+pub(crate) struct Tap(pub(crate) Box<dyn FnMut(&StreamEvent) + Send + Sync>);
+
+impl std::fmt::Debug for Tap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Tap")
+    }
+}
+
+/// What [`OnEnd`] calls.
+type EndFn = dyn FnOnce(Option<&ProviderError>, Option<Usage>) + Send + Sync;
+
+/// Called once when a stream ends: its failure, if any, and its usage.
+pub(crate) struct OnEnd(Box<EndFn>);
+
+impl OnEnd {
+    pub(crate) fn new(
+        f: impl FnOnce(Option<&ProviderError>, Option<Usage>) + Send + Sync + 'static,
+    ) -> Self {
+        Self(Box::new(f))
+    }
+}
+
+impl std::fmt::Debug for OnEnd {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("OnEnd")
+    }
 }
 
 impl std::fmt::Debug for dyn Decode {
@@ -405,9 +730,73 @@ impl ModelStream {
             usage: None,
             ledger: None,
             recorded: None,
+            on_end: Vec::new(),
+            tap: None,
+            served: false,
+            capture: None,
         };
         stream.fill().await?;
         Ok(stream)
+    }
+
+    /// A stream replaying `recorded` chunk by chunk (a served call).
+    pub(crate) async fn served(
+        recorded: crate::calls::Recorded,
+        limits: Limits,
+    ) -> Result<Self, ProviderError> {
+        let failure = recorded
+            .failure
+            .as_ref()
+            .map(crate::calls::Failure::to_error);
+        let source = Source::Served(recorded.chunks.into_iter().collect(), failure);
+        let mut stream = Self::start(source, limits).await?;
+        stream.served = true;
+        Ok(stream)
+    }
+
+    /// Whether the response was served rather than sent.
+    #[must_use]
+    pub fn is_served(&self) -> bool {
+        self.served
+    }
+
+    /// Hands the response to `done` once it ended.
+    pub(crate) fn capture(
+        &mut self,
+        done: impl FnOnce(crate::calls::Recorded) + Send + Sync + 'static,
+    ) {
+        let first: Vec<StreamEvent> = self.pending.iter().cloned().collect();
+        self.capture = Some(Capture {
+            chunks: if first.is_empty() {
+                Vec::new()
+            } else {
+                vec![first]
+            },
+            done: Box::new(done),
+        });
+    }
+
+    /// The stream ended with `stop`: the capture gets the response, with
+    /// its failure when it failed.
+    fn ended(&mut self, event: &StreamEvent) {
+        let Some(capture) = self.capture.take() else {
+            return;
+        };
+        let failure = match (&self.failure, event) {
+            (Some(error), _) => Some(crate::calls::Failure::of(error)),
+            (
+                None,
+                StreamEvent::Stop {
+                    stop_reason: StopReason::Error,
+                },
+            ) => Some(crate::calls::Failure::of(&wire::truncated())),
+            _ => None,
+        };
+        (capture.done)(crate::calls::Recorded {
+            chunks: capture.chunks,
+            usage: self.usage.unwrap_or_default(),
+            failure,
+        });
     }
 
     /// The next event; `None` after `stop`.
@@ -419,10 +808,19 @@ impl ModelStream {
             self.fail(error);
         }
         let event = self.pending.pop_front()?;
+        if let Some(Tap(tap)) = &mut self.tap {
+            tap(&event);
+        }
+        if matches!(event, StreamEvent::Stop { .. }) {
+            for OnEnd(on_end) in std::mem::take(&mut self.on_end) {
+                on_end(self.failure.as_ref(), self.usage);
+            }
+            self.ended(&event);
+        }
         if let StreamEvent::Usage { usage } = &event {
             self.usage = Some(*usage);
             if let Some(pending) = self.ledger.take() {
-                let recorded = pending.record(usage);
+                let recorded = pending.record(usage, self.served);
                 if let Err(err) = &recorded {
                     tracing::error!(
                         code = err.code().code,
@@ -434,6 +832,17 @@ impl ModelStream {
             }
         }
         Some(event)
+    }
+
+    /// Calls `on_end` once, when the stream's `stop` event is read (after
+    /// any added before it).
+    pub(crate) fn on_end(&mut self, on_end: OnEnd) {
+        self.on_end.push(on_end);
+    }
+
+    /// Shows `tap` every event from now on.
+    pub(crate) fn tap(&mut self, tap: Tap) {
+        self.tap = Some(tap);
     }
 
     /// Records the call's ledger row when its usage arrives.
@@ -475,8 +884,19 @@ impl ModelStream {
             match &mut self.source {
                 Source::Http(body) => body.step(&mut self.normalizer, self.limits).await?,
                 Source::Mock(feed) => feed.step(&mut self.normalizer, self.limits).await?,
+                Source::Acp(feed) => feed.step(&mut self.normalizer, self.limits).await?,
+                Source::Served(chunks, failure) => match chunks.pop_front() {
+                    Some(chunk) => self.normalizer.replay(chunk),
+                    None => return Err(failure.take().unwrap_or_else(wire::truncated)),
+                },
             }
-            self.pending.extend(self.normalizer.drain());
+            let drained: Vec<StreamEvent> = self.normalizer.drain().collect();
+            if let Some(capture) = &mut self.capture
+                && !drained.is_empty()
+            {
+                capture.chunks.push(drained.clone());
+            }
+            self.pending.extend(drained);
         }
         Ok(())
     }

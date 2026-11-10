@@ -26,6 +26,18 @@ pub struct JsonShape {
 /// Every shape a listing or status command emits. A command adds its shape
 /// here when it gains `--json`.
 pub const JSON_SHAPES: &[JsonShape] = &[
+    JsonShape {
+        schema: "prometheus.cache_stats.v1",
+        command: "cache stats",
+    },
+    JsonShape {
+        schema: "prometheus.cache_prune.v1",
+        command: "cache prune",
+    },
+    JsonShape {
+        schema: "prometheus.cache_clear.v1",
+        command: "cache clear",
+    },
     // `profile import --json` prints the imported archive's manifest too.
     JsonShape {
         schema: "prometheus.profile_export.v1",
@@ -78,6 +90,14 @@ pub const JSON_SHAPES: &[JsonShape] = &[
     JsonShape {
         schema: "prometheus.usage.v1",
         command: "usage",
+    },
+    JsonShape {
+        schema: "prometheus.provider_health.v1",
+        command: "providers health",
+    },
+    JsonShape {
+        schema: "prometheus.fix_models.v1",
+        command: "config fix-models",
     },
     JsonShape {
         schema: "prometheus.prompt_size.v1",
@@ -190,6 +210,26 @@ pub const JSON_SHAPES: &[JsonShape] = &[
     JsonShape {
         schema: "prometheus.fallback.v1",
         command: "fallback list",
+    },
+    JsonShape {
+        schema: "prometheus.moa_presets.v1",
+        command: "moa list",
+    },
+    JsonShape {
+        schema: "prometheus.local_status.v1",
+        command: "local status",
+    },
+    JsonShape {
+        schema: "prometheus.local_catalog.v1",
+        command: "local catalog",
+    },
+    JsonShape {
+        schema: "prometheus.local_jobs.v1",
+        command: "local jobs",
+    },
+    JsonShape {
+        schema: "prometheus.local_search.v1",
+        command: "local search",
     },
     JsonShape {
         schema: "prometheus.auth.v1",

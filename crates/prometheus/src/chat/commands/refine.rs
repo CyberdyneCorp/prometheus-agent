@@ -35,6 +35,8 @@ pub(super) async fn refine(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
             ctx.scope,
             Arc::clone(&ctx.factory.store),
         )),
+        parent_tools: Some(Arc::clone(&live.tools) as _),
+        digest: false,
     };
     let post = Arc::clone(&ctx.post);
     tokio::spawn(async move {

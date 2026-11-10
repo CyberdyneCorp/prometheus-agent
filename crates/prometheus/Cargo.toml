@@ -60,6 +60,8 @@ eval = []
 
 [dependencies]
 clap.workspace = true
+# Free space on the store's volume (low-disk prune prompt).
+sysinfo = { workspace = true, features = ["disk"] }
 jiff.workspace = true
 pmt-agent.workspace = true
 pmt-backup.workspace = true
@@ -79,12 +81,16 @@ pmt-adapters-signal = { workspace = true, optional = true }
 pmt-adapters-slack = { workspace = true, optional = true }
 pmt-adapters-webhook = { workspace = true, optional = true }
 pmt-adapters-whatsapp = { workspace = true, optional = true }
+pmt-local.workspace = true
 pmt-mcp.workspace = true
+pmt-media.workspace = true
+pmt-voice.workspace = true
 pmt-memory.workspace = true
 pmt-net.workspace = true
 pmt-plugins.workspace = true
 pmt-pybridge.workspace = true
 pmt-obs.workspace = true
+pmt-eval.workspace = true
 pmt-providers.workspace = true
 pmt-rpc.workspace = true
 pmt-sandbox.workspace = true
@@ -107,6 +113,8 @@ url.workspace = true
 regex.workspace = true
 # Webhook signatures (HMAC-SHA256).
 sha2.workspace = true
+# Workspace manifests of session recordings (gitignore-aware).
+ignore.workspace = true
 semver.workspace = true
 rpassword.workspace = true
 rustyline.workspace = true
@@ -134,6 +142,9 @@ sha2.workspace = true
 
 [dev-dependencies]
 flate2.workspace = true
+# Large test images for the vision embed budget.
+image.workspace = true
+pmt-local = { workspace = true, features = ["testkit"] }
 pmt-mcp = { workspace = true, features = ["testkit"] }
 # The reference MCP client of the `mcp serve` conformance tests.
 rmcp = { workspace = true, features = ["client", "transport-async-rw", "transport-streamable-http-client-reqwest"] }

@@ -1,0 +1,5 @@
+latency_ms = 60000
+
+[[rule]]
+repeat = true
+text = "never finished"

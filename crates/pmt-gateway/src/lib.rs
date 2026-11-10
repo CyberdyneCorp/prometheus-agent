@@ -24,12 +24,15 @@ pub mod daemon;
 pub mod discovery;
 pub mod host;
 pub mod hub;
+pub mod local;
 pub mod messaging;
 pub mod methods;
+pub mod moa;
 pub mod router;
 pub mod server;
 pub mod slots;
 pub mod tickets;
+pub mod upkeep;
 pub mod vault;
 pub mod worktree;
 

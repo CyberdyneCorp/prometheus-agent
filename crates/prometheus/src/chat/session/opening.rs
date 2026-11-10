@@ -69,13 +69,16 @@ impl Factory {
         &self,
         id: SessionId,
         selection: &pmt_tools::Selection,
-        inline_shell: &Arc<super::skills::DeferredShell>,
+        shell_and_notices: (
+            &Arc<super::skills::DeferredShell>,
+            &pmt_memory::notices::Notices,
+        ),
         clients: Option<&super::Clients>,
     ) -> Arc<SkillsSession> {
         Arc::new(SkillsSession::new(self.skills_setup(
             id,
             selection,
-            inline_shell,
+            shell_and_notices,
             clients,
         )))
     }
@@ -121,16 +124,21 @@ impl Factory {
         (prompt, sections)
     }
 
-    /// The session's model port: a child that pinned its model gets no
-    /// fallback chain.
+    /// The session's model port (spec: model-providers, Scoped fallback
+    /// chains for pinned owners): a child that pinned its model, and a
+    /// scheduled run of a pinned job, get no fallback chain. Neither
+    /// declares a chain of its own, so the profile's is not inherited; a
+    /// child of a pinned run inherits the run's (none).
     pub(super) async fn model_for(
         &self,
         target: &pmt_providers::resolve::Target,
         child: Option<&ChildSpec>,
     ) -> Result<Arc<SwitchableModel>, Error> {
-        let port = match child {
-            Some(spec) if spec.pinned => self.models.port_pinned(target).await?,
-            _ => self.models.port(target).await?,
+        let pinned_run = self.options.cron.as_ref().is_some_and(|run| run.pinned);
+        let port = if pinned_run || child.is_some_and(|spec| spec.pinned) {
+            self.models.port_pinned(target).await?
+        } else {
+            self.models.port(target).await?
         };
         if let Some(spec) = child {
             port.set_body_overrides(spec.body_overrides.clone());
@@ -199,11 +207,18 @@ impl Factory {
             Arc::clone(inputs.tools) as _,
             inputs.prompt,
         );
+        self.record_and_replay(&mut setup, inputs.tools, id);
+        let in_process = inputs.clients.is_none() && child.is_none();
         let events = events_to(inputs.trajectory.cloned(), inputs.clients);
         let _ = inputs.environment.denials.set(Arc::downgrade(&events));
         let events = self.with_lifecycle_hooks(id, inputs.session, events);
         let (tee, progress) = progress::Tee::new(events, self.options.interactive);
         self.observe_model(inputs.model, id, tee.notices());
+        // An in-process session announces memory changes with its other
+        // notices; a daemon binds its clients or chat after opening.
+        if in_process {
+            inputs.memory.setup().notices.bind(Arc::new(tee.notices()));
+        }
         let mcp = self.mcp_session(
             id,
             inputs.target,
@@ -225,7 +240,32 @@ impl Factory {
             setup.memory = None;
         }
         setup.compaction_boundary = Some(Arc::clone(inputs.tool_state) as _);
+        setup.context_engine = crate::context_engine::for_session(
+            &self.scope,
+            &self.plugins,
+            id,
+            &self.plugin_call(id),
+        );
         self.surface_setup(&mut setup, id);
         Ok((Agent::new(setup)?, progress, mcp))
+    }
+
+    /// The session's recording (prompt builds and tool results; its model
+    /// calls are recorded by the model side) and a replay's recorded
+    /// tool results and prompts (spec: replay-and-evaluation).
+    fn record_and_replay(
+        &self,
+        setup: &mut AgentSetup,
+        tools: &Arc<SwappableTools>,
+        id: SessionId,
+    ) {
+        setup.recording = self.models.recording();
+        if let Some(writer) = &setup.recording {
+            tools.record_into(Arc::clone(writer), &id.to_string());
+        }
+        if let Some(replay) = &self.options.replay {
+            setup.prompt_pins = Some(Arc::clone(&replay.pins));
+            tools.replay_from(Arc::clone(&replay.tools));
+        }
     }
 }

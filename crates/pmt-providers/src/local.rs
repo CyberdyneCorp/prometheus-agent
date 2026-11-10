@@ -164,15 +164,24 @@ pub async fn probe(
                 .await
                 .map(|body| ollama(&body))
         }
-        ServerKind::LlamaCpp => get_json(client, &format!("{}/props", root(base_url)))
-            .await
-            .map(|body| Probe {
-                context_window: body
-                    .pointer("/default_generation_settings/n_ctx")
-                    .or_else(|| body.get("n_ctx"))
-                    .and_then(Value::as_u64),
-                ..Probe::default()
-            }),
+        // A router-mode server (the managed runtime) answers `/props` per
+        // model; a single-model server ignores the parameter.
+        ServerKind::LlamaCpp => get_json(
+            client,
+            &format!(
+                "{}/props?model={}",
+                root(base_url),
+                percent_encoding::utf8_percent_encode(model, percent_encoding::NON_ALPHANUMERIC)
+            ),
+        )
+        .await
+        .map(|body| Probe {
+            context_window: body
+                .pointer("/default_generation_settings/n_ctx")
+                .or_else(|| body.get("n_ctx"))
+                .and_then(Value::as_u64),
+            ..Probe::default()
+        }),
         ServerKind::LmStudio => {
             let url = format!("{}/api/v0/models/{model}", root(base_url));
             get_json(client, &url).await.map(|body| lm_studio(&body))

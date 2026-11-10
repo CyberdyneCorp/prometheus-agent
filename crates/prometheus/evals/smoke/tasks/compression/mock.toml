@@ -1,0 +1,29 @@
+[[rule]]
+user = "CONVERSATION TO SUMMARIZE"
+text = "## Goal\nSummarise the ledgers a.md and b.md.\n## Progress\nRead a.md and b.md.\n## Decisions\n(none recorded)\n## Files\n- a.md\n- b.md\n## Open Todos\n(none recorded)\n## Next Steps\nAnswer the totals question."
+repeat = true
+
+[[rule]]
+user = "and the totals?"
+fault = "context_overflow"
+
+[[rule]]
+step = 0
+[[rule.tool_calls]]
+name = "read_file"
+arguments = { path = "a.md" }
+
+[[rule]]
+step = 1
+[[rule.tool_calls]]
+name = "read_file"
+arguments = { path = "b.md" }
+
+[[rule]]
+user = "and the totals?"
+text = "Totals after compaction: 300 entries."
+repeat = true
+
+[[rule]]
+repeat = true
+text = "Read both ledgers."

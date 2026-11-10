@@ -357,6 +357,22 @@ up to 5 seconds at exit for its queued deliveries.
   of that name or by an enabled plugin registering it; otherwise the
   feature is unavailable with `<category> provider '<name>' is not
   installed or not enabled`, never silently another provider.
+  Image, speech and transcription providers get JSON documents shaped
+  like the Hermes provider methods (a Python plugin's `generate`,
+  `synthesize` and `transcribe` receive them as keyword arguments):
+  `image_gen` gets `{"prompt", "aspect_ratio", "upscale", "model"?}` and
+  answers `{"success", "image", "model"?, "upscaled"?, "error"?}` (`image`
+  a `data:` URL, an http(s) URL or a file in its data directory); `tts`
+  gets `{"text", "output_path", "state_path", "format", "voice"?,
+  "speed"?, "instructions"?}` and answers the written path or `{"audio":
+  <base64>}`; `stt` gets `{"file_path", "state_path", "language"?}` and
+  answers `{"success", "transcript", "error"?}`. Files are exchanged in
+  `plugin-data/<id>/files/media/` (`state_path` is the same file for
+  `state` imports); a reported file outside the plugin's data directory,
+  or one that is not an image or audio, is refused. An answer may carry
+  `billing_source` (`api_key:<vendor>`, `subscription:<provider>`,
+  `keyless:<vendor>`) for the usage ledger; otherwise the call counts as
+  `local`.
 
 - **Commands for the command line** in its `cli_commands` grant:
   `prometheus plugins run <id> <command> [args...]` runs one (its stdout

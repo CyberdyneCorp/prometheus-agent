@@ -239,3 +239,38 @@ async fn a_turn_waiting_for_a_slot_is_announced() {
     said(&h.adapter("telegram"), "Waiting for a free slot (2 ahead)").await;
     said(&h.adapter("telegram"), "echo: wait:2").await;
 }
+
+/// Spec: context-compression, Compaction progress notices and context
+/// pressure gauge: one plain-text notice per level crossing per session.
+#[tokio::test]
+async fn context_pressure_is_told_once_per_level_crossing() {
+    let h = Harness::start(Setup::new(&open("telegram"))).await;
+    let notices = |h: &Harness| {
+        h.adapter("telegram")
+            .texts()
+            .into_iter()
+            .filter(|t| t.contains("of the compaction trigger"))
+            .collect::<Vec<_>>()
+    };
+    for (step, percent) in [40, 62, 70, 90, 95].into_iter().enumerate() {
+        h.dm("telegram", "1", &format!("pressure:{percent}")).await;
+        said(&h.adapter("telegram"), &format!("at {percent}")).await;
+        let expected = match step {
+            0 => 0,
+            1 | 2 => 1,
+            _ => 2,
+        };
+        assert_eq!(
+            notices(&h).len(),
+            expected,
+            "after {percent}%: {:?}",
+            notices(&h)
+        );
+    }
+    let told = notices(&h);
+    assert!(told[0].contains("62%"), "{told:?}");
+    assert!(
+        told[1].contains("90%") && told[1].contains("summarized soon"),
+        "{told:?}"
+    );
+}

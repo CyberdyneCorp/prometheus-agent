@@ -102,11 +102,16 @@ pub const INDEX: &[IndexEntry] = &[
     method("session.context_usage", WA),
     method("prompt.submit", WA),
     method("session.interrupt", WA),
+    // agent-turn-loop
+    method("session.steer", "agent-turn-loop"),
     long("session.resolve", WA),
     long("command.dispatch", WA),
     long("daemon.update", WA),
     // session-storage
     long("session.fork", "session-storage"),
+    method("session.tree", "session-storage"),
+    method("session.siblings", "session-storage"),
+    method("autoprune.offer", "session-storage"),
     // tui
     method("commands.catalog", "tui"),
     method("complete.slash", "tui"),
@@ -149,8 +154,24 @@ pub const INDEX: &[IndexEntry] = &[
     // lsp-diagnostics, memory, scheduled-jobs
     method("lsp.status", "lsp-diagnostics"),
     method("journey.list", "memory"),
+    method("memory.summary", "memory"),
     method("cron.blueprints.list", "scheduled-jobs"),
     method("cron.blueprints.fill", "scheduled-jobs"),
+    // local-models
+    method("local.status", "local-models"),
+    method("local.install", "local-models"),
+    method("local.update", "local-models"),
+    method("local.catalog", "local-models"),
+    method("local.pull", "local-models"),
+    method("local.pause", "local-models"),
+    method("local.resume", "local-models"),
+    method("local.jobs", "local-models"),
+    method("local.search", "local-models"),
+    method("local.add", "local-models"),
+    method("local.rm", "local-models"),
+    method("local.use", "local-models"),
+    method("local.start", "local-models"),
+    method("local.stop", "local-models"),
     // mixture-of-agents
     method("moa.presets.list", "mixture-of-agents"),
     method("moa.presets.put", "mixture-of-agents"),

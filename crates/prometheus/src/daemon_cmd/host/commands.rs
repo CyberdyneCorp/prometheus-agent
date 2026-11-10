@@ -14,6 +14,7 @@ use pmt_gateway::Link;
 use pmt_rpc::contracts::{COMMAND_NOTICE, DispatchParams, Dispatched, PromptImage, SessionEvent};
 use serde_json::json;
 
+use super::send_tool::GatewayCell;
 use super::{DaemonHost, Loaded, Profile, session_id};
 use crate::chat::commands::quick::{MAX_DEPTH, alias_line, exec};
 use crate::chat::commands::{self, Ctx, Reply};
@@ -72,6 +73,10 @@ struct Run<'a> {
     /// for a client the surface that created the session (`cli`, `tui`,
     /// `desktop`...).
     caller: &'a str,
+    /// A messaging conversation's gateway: what the command posts after
+    /// it answered (a `/btw` side answer, a `/refine` summary) is said in
+    /// the chat as a message of its own. Clients get a `command.notice`.
+    chat: Option<&'a GatewayCell>,
 }
 
 impl DaemonHost {
@@ -92,6 +97,7 @@ impl DaemonHost {
             surface: Surface::Cli,
             message_limit: None,
             caller: session.live.surface(),
+            chat: None,
         };
         Ok(run.line(line_of(&params), 0).await)
     }
@@ -118,6 +124,7 @@ impl DaemonHost {
             surface: Surface::Gateway,
             message_limit: self.message_limit(profile, id),
             caller: "gateway",
+            chat: Some(&self.gateway),
         };
         Ok(run.line(input.to_owned(), 0).await)
     }
@@ -141,6 +148,7 @@ impl DaemonHost {
             surface: Surface::Cli,
             message_limit: None,
             caller: session.live.surface(),
+            chat: None,
         };
         let scope = profile.scope();
         match commands::cron::confirm(&run.ctx(&scope), confirmation) {
@@ -241,6 +249,11 @@ impl Run<'_> {
                 BusyPolicy::Immediate => {}
             }
         }
+        if name == "retry"
+            && let Some(resume) = super::crash::retry(session)
+        {
+            return resume;
+        }
         match name {
             "stop" if args.trim() == "all" => {
                 if let Some(delegation) = &session.live.delegation {
@@ -292,7 +305,6 @@ impl Run<'_> {
     }
 
     fn ctx<'a>(&'a self, scope: &'a pmt_config::ProfileScope) -> Ctx<'a> {
-        let link = self.link.clone();
         Ctx {
             factory: &self.session.factory,
             live: &self.session.live,
@@ -301,13 +313,27 @@ impl Run<'_> {
             surface: self.surface,
             timestamps: scope.config().display.timestamps,
             running: self.session.busy.load(Ordering::Acquire),
-            post: Arc::new(move |text| notice(&link, &text)),
+            post: self.poster(),
             message_limit: self.message_limit,
         }
     }
 
     fn notice(&self, text: &str) {
-        notice(self.link, text);
+        (self.poster())(text.to_owned());
+    }
+
+    /// Where the command's notices go: the conversation's chat, or the
+    /// session's clients.
+    fn poster(&self) -> commands::Post {
+        let link = self.link.clone();
+        let Some(gateway) = self.chat.cloned() else {
+            return Arc::new(move |text| notice(&link, &text));
+        };
+        let profile = self.profile.scope().name().to_string();
+        Arc::new(move |text| match gateway.get() {
+            Some(gateway) => gateway.say_in_session(&profile, link.session_id(), &text),
+            None => notice(&link, &text),
+        })
     }
 }
 

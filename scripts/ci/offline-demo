@@ -2,8 +2,11 @@
 # Runs `prometheus demo` with networking disabled and checks that it passes
 # end to end: exit 0, the canonical steps, `Total: 85.15`, `demo passed`,
 # within 30 s (spec: replay-and-evaluation, Offline smoke demo; task 21.2).
+# Then, still offline, the binary runs its bundled `smoke` eval suite
+# (`prometheus smoke-suite`: every task graded exactly, exit 0 only when
+# all that ran passed; spec: replay-and-evaluation, Built-in smoke suite).
 # CI runs it on every Tier 1 target and, as their offline smoke run, on the
-# Tier 2 targets.
+# Tier 2 targets, where there is no cargo to run `cargo xtask smoke`.
 #
 # How networking is disabled, per host:
 #   Linux    a new network namespace (`unshare --net`): no interface but a
@@ -123,3 +126,16 @@ for expected in '[ACTION] terminal(' '[ACTION] patch(' '[OBSERVATION]' 'Total: 8
     grep -qF -- "$expected" "$work/demo.out" || fail "the output lacks '$expected'"
 done
 echo "offline-demo: passed offline in ${elapsed} s"
+
+# --- the smoke suite ---------------------------------------------------------
+
+set +e
+$offline "$binary" smoke-suite --output "$output-smoke" >"$work/smoke.out" 2>"$work/smoke.err"
+status=$?
+set -e
+cat "$work/smoke.out"
+cat "$work/smoke.err" >&2
+[ "$status" = 0 ] || fail "prometheus smoke-suite exited $status"
+awk '$1 == "smoke:" && $2 == $4 && $2 > 0 { ok = 1 } END { exit !ok }' "$work/smoke.out" ||
+    fail "the smoke suite did not report every task passed"
+echo "offline-demo: the smoke suite passed offline"

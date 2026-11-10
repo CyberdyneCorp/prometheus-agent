@@ -95,11 +95,19 @@ async fn a_failed_transcription_hands_the_agent_the_voice_note() {
         text.starts_with("[The user sent a voice message: ") && text.ends_with("(duration: 7s)]"),
         "{text}"
     );
-    let cached = std::fs::read_dir(&dir).unwrap().flatten().next().unwrap();
-    assert!(
-        text.contains(&*cached.file_name().to_string_lossy()),
-        "{text}"
-    );
+    // The cache also holds the spoken copy of the reply (`speech-N.ogg`,
+    // the reply mode speaks to voice messages): the voice note is the
+    // file named by its content hash.
+    let names: Vec<String> = std::fs::read_dir(&dir)
+        .unwrap()
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    let note = names
+        .iter()
+        .find(|n| n.len() == 64 + 4 && n[..64].chars().all(|c| c.is_ascii_hexdigit()))
+        .unwrap_or_else(|| panic!("no cached voice note in {names:?}"));
+    assert!(text.contains(note.as_str()), "{text}");
 }
 
 #[tokio::test]
@@ -308,5 +316,134 @@ async fn locations_are_read_as_text_and_sent_as_pins_or_links() {
         &h.adapter("telegram"),
         "📍 Eiffel Tower: https://www.openstreetmap.org/?mlat=48.8584&mlon=2.2945",
     )
+    .await;
+}
+
+/// A voice-note attachment of a reply reaches a voice-bubble platform as
+/// Ogg (spec: web-and-media-tools, `text_to_speech` tool and delivery:
+/// Telegram bubble); without a converter it goes as plain audio.
+#[tokio::test]
+async fn mp3_voice_attachments_are_converted_for_voice_bubbles_or_sent_as_audio() {
+    let mut setup = Setup::new(&open("telegram"));
+    setup.descriptors.push(Descriptor {
+        media_out: [MediaKind::Voice, MediaKind::Audio].into_iter().collect(),
+        ..Descriptor::new("telegram", 4096)
+    });
+    let h = Harness::start(setup).await;
+    *h.agents.speech.lock().unwrap() = Some(Arc::new(FakeSpeech::default()));
+    let media = media_dir(&h);
+    std::fs::create_dir_all(&media).unwrap();
+    std::fs::write(media.join("speech.mp3"), b"ID3audio").unwrap();
+    let reply = format!(
+        "say:Listen\nMEDIA:{} [[as_voice]]",
+        media.join("speech.mp3").display()
+    );
+    h.dm("telegram", "1", &reply).await;
+    said(&h.adapter("telegram"), "Listen").await;
+    let sent = |h: &Harness| {
+        h.adapter("telegram")
+            .all()
+            .into_iter()
+            .find_map(|d| match d {
+                Did::Send(m) if !m.attachments.is_empty() => Some(m.attachments[0].clone()),
+                _ => None,
+            })
+            .unwrap()
+    };
+    let file = sent(&h);
+    assert!(file.as_voice, "{file:?}");
+    assert!(file.path.ends_with("speech.voice.ogg"), "{file:?}");
+
+    let mut setup = Setup::new(&open("telegram"));
+    setup.descriptors.push(Descriptor {
+        media_out: [MediaKind::Voice, MediaKind::Audio].into_iter().collect(),
+        ..Descriptor::new("telegram", 4096)
+    });
+    let plain = Harness::start(setup).await;
+    let media = media_dir(&plain);
+    std::fs::create_dir_all(&media).unwrap();
+    std::fs::write(media.join("speech.mp3"), b"ID3audio").unwrap();
+    let reply = format!(
+        "say:Listen\nMEDIA:{} [[as_voice]]",
+        media.join("speech.mp3").display()
+    );
+    plain.dm("telegram", "1", &reply).await;
+    said(&plain.adapter("telegram"), "Listen").await;
+    let file = sent(&plain);
+    assert!(!file.as_voice, "{file:?}");
+    assert!(file.path.ends_with("speech.mp3"));
+}
+
+/// `/voice tts` is the chat's choice: stored with the chat, it survives a
+/// daemon restart and makes even a typed message get a voice bubble
+/// (spec: voice-mode, Gateway per-chat voice reply command).
+#[tokio::test]
+async fn a_chats_voice_choice_survives_a_restart() {
+    let telegram = || {
+        let mut setup = Setup::new(&open("telegram"));
+        setup.descriptors.push(Descriptor {
+            media_out: [MediaKind::Voice, MediaKind::Audio].into_iter().collect(),
+            ..Descriptor::new("telegram", 4096)
+        });
+        setup
+    };
+    let h = Harness::start(telegram()).await;
+    h.dm("telegram", "1", "/voice status").await;
+    said(
+        &h.adapter("telegram"),
+        "Voice replies: on (spoken to voice messages) (gateway.voice.reply_mode)",
+    )
+    .await;
+    h.dm("telegram", "1", "/voice tts").await;
+    said(
+        &h.adapter("telegram"),
+        "Voice replies: tts (every reply spoken) for this chat.",
+    )
+    .await;
+    let home = h.stop().await;
+    let h = Harness::start_in(home, telegram()).await;
+    let speech = Arc::new(FakeSpeech::default());
+    *h.agents.speech.lock().unwrap() = Some(Arc::clone(&speech) as _);
+    let adapter = h.adapter("telegram");
+    h.dm("telegram", "1", "typed after the restart").await;
+    eventually("a voice bubble", || {
+        adapter
+            .all()
+            .iter()
+            .any(|d| matches!(d, Did::Send(m) if m.attachments.iter().any(|a| a.as_voice)))
+    })
+    .await;
+    assert_eq!(
+        *speech.spoken.lock().unwrap(),
+        ["echo: typed after the restart"]
+    );
+    h.dm("telegram", "1", "/voice off").await;
+    said(&adapter, "Voice replies: off (text only) for this chat.").await;
+    h.dm("telegram", "1", "quiet now").await;
+    said(&adapter, "echo: quiet now").await;
+    assert_eq!(speech.spoken.lock().unwrap().len(), 1);
+}
+
+/// A platform without voice bubbles gets the spoken reply as an audio
+/// file.
+#[tokio::test]
+async fn without_voice_bubbles_a_spoken_reply_is_an_audio_file() {
+    let mut setup = Setup::new(&open("slack"));
+    setup.descriptors.push(Descriptor {
+        media_out: [MediaKind::Audio].into_iter().collect(),
+        ..Descriptor::new("slack", 4000)
+    });
+    let h = Harness::start(setup).await;
+    let speech = Arc::new(FakeSpeech::default());
+    *h.agents.speech.lock().unwrap() = Some(Arc::clone(&speech) as _);
+    let adapter = h.adapter("slack");
+    h.dm("slack", "1", "/voice tts").await;
+    said(&adapter, "for this chat.").await;
+    h.dm("slack", "1", "read this to me").await;
+    eventually("an audio attachment", || {
+        adapter.all().iter().any(|d| {
+            matches!(d, Did::Send(m) if m.attachments.iter().any(|a| !a.as_voice && a.path.contains("speech-")))
+        })
+    })
     .await;
 }

@@ -87,7 +87,46 @@ impl Store {
                 params![session.to_string(), prompt.sha256],
             )
             .map_err(sql)?;
+            tx.execute(
+                "DELETE FROM prompt_refresh WHERE session_id = ?1",
+                [session.to_string()],
+            )
+            .map_err(sql)?;
             Ok(())
+        })
+    }
+
+    /// Marks `session` so its next turn rebuilds the stored prompt from the
+    /// current profile (`sessions refresh-prompts`); saving the rebuilt
+    /// prompt clears the mark.
+    ///
+    /// # Errors
+    ///
+    /// `session.not_found`, `store.sqlite`.
+    pub fn mark_prompt_refresh(&self, session: SessionId) -> Result<(), Error> {
+        self.write(|tx| {
+            if load(tx, session)?.is_none() {
+                return Err(not_found(session));
+            }
+            tx.execute(
+                "INSERT OR REPLACE INTO prompt_refresh (session_id, marked_at) VALUES (?1, ?2)",
+                params![session.to_string(), jiff::Timestamp::now().as_millisecond()],
+            )
+            .map_err(sql)?;
+            Ok(())
+        })
+    }
+
+    /// Whether `session` is marked for a prompt refresh.
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`.
+    pub fn prompt_refresh_pending(&self, session: SessionId) -> Result<bool, Error> {
+        self.read(|conn| {
+            conn.prepare_cached("SELECT 1 FROM prompt_refresh WHERE session_id = ?1")
+                .and_then(|mut stmt| stmt.exists([session.to_string()]))
+                .map_err(sql)
         })
     }
 

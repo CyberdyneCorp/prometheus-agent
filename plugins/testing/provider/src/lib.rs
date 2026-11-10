@@ -9,6 +9,13 @@
 //! `PLUGIN_LLM_KEY`; every request to them carries header
 //! `x-plugin: <id>`, and their model listing is the `listed` setting
 //! (comma list; `plugin-model` when unset, `fail` fails the listing).
+//!
+//! With the `oauth_issuer` setting (an identity provider's base URL) each
+//! model provider also declares an OAuth PKCE sign-in there (`/authorize`,
+//! `/token`, client `testing-plugin`), which the host runs; its
+//! `prepare-request` then copies the whole body it was given into field
+//! `plugin_saw`, so a test can check the plugin got only the opaque
+//! credential handle.
 
 wit_bindgen::generate!({
     path: ["../../../wit/host", "../../../wit/messaging", "../../../wit/provider"],
@@ -84,12 +91,20 @@ impl models::Guest for Provider {
             .and_then(|rest| rest.split(['/', ':']).next())
             .unwrap_or_default()
             .to_owned();
+        let issuer = setting("oauth_issuer");
+        let oauth = if issuer.is_empty() {
+            String::new()
+        } else {
+            format!(
+                r#","oauth":{{"client_id":"testing-plugin","authorize_url":"{issuer}/authorize","token_url":"{issuer}/token","scopes":["inference"]}}"#
+            )
+        };
         setting("model_ids")
             .split(',')
             .filter(|id| !id.is_empty())
             .map(|id| {
                 format!(
-                    r#"{{"id":"{id}","wire_format":"chat_completions","base_url":"{base}","secret_names":["PLUGIN_LLM_KEY"],"key_hosts":["{host}"],"default_model":"plugin-model"}}"#
+                    r#"{{"id":"{id}","wire_format":"chat_completions","base_url":"{base}","secret_names":["PLUGIN_LLM_KEY"],"key_hosts":["{host}"],"default_model":"plugin-model"{oauth}}}"#
                 )
             })
             .collect()
@@ -100,7 +115,11 @@ impl models::Guest for Provider {
     }
 
     fn prepare_request(_provider: String, body: String) -> Result<String, String> {
-        Ok(body)
+        if setting("oauth_issuer").is_empty() {
+            return Ok(body);
+        }
+        let seen = body.replace('\\', "\\\\").replace('"', "\\\"");
+        Ok(body.replacen('{', &format!(r#"{{"plugin_saw":"{seen}","#), 1))
     }
 
     fn list_models(_provider: String) -> Result<Vec<String>, String> {

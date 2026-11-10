@@ -75,3 +75,20 @@ async fn a_pause_survives_a_restart() {
     said(&h.adapter("telegram"), NOTICE).await;
     assert!(h.agents.texts().is_empty());
 }
+
+/// Spec: model-providers, Subscription account commands, "Login refused in
+/// a group": a sign-in code never goes to a group chat.
+#[tokio::test]
+async fn login_in_a_group_is_refused_and_points_to_a_direct_message() {
+    let h = Harness::start(Setup::new(&config("telegram", "allow_all = true"))).await;
+    h.send(
+        "telegram",
+        Inbound::text(ChatType::Group, "team", "42", "/login"),
+    )
+    .await;
+    said(&h.adapter("telegram"), pmt_gateway::messaging::LOGIN_IN_DM).await;
+    assert!(
+        h.agents.texts().is_empty(),
+        "no turn and no sign-in started"
+    );
+}

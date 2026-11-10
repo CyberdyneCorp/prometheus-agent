@@ -1,0 +1,19 @@
+[[rule]]
+user = "approval guardian"
+text = "deny: it deletes the user's files"
+repeat = true
+
+[[rule]]
+user = "clean up"
+step = 0
+[[rule.tool_calls]]
+name = "terminal"
+arguments = { command = "rm -rf ~/important" }
+
+[[rule]]
+tool_result = "DENIED"
+text = "The cleanup was denied."
+
+[[rule]]
+repeat = true
+text = "unexpected"

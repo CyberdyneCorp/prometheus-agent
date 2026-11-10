@@ -100,7 +100,14 @@ pub fn of_profile(scope: &ProfileScope) -> Result<Mode, String> {
         .ok()
         .flatten()
         .is_some();
-    resolve(scope.config().terminal.modal.mode, secrets, subscription)
+    let terminal = &scope.config().terminal;
+    // `terminal.backend = "nous"` is the managed sandbox by definition.
+    let setting = if terminal.backend == pmt_sandbox::backend::MANAGED_SANDBOX {
+        ModalMode::Managed
+    } else {
+        terminal.modal.mode
+    };
+    resolve(setting, secrets, subscription)
 }
 
 /// The credential behind the `modal` handle for profile `scope`: the

@@ -8,11 +8,14 @@
 //! the network.
 
 pub mod args;
+mod aws;
 mod bridge;
 mod daemon;
 mod fix;
 mod groups;
+mod media;
 mod system;
+mod wsl;
 
 use std::fmt::Write as _;
 

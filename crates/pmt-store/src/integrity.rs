@@ -222,7 +222,11 @@ fn open_source(path: &Path, profile_id: &str) -> Option<Connection> {
 }
 
 /// Copies one table row by row; returns (copied, lost).
-fn copy_table(source: &Connection, tx: &Transaction<'_>, table: &str) -> Result<(u64, u64), Error> {
+pub(crate) fn copy_table(
+    source: &Connection,
+    tx: &Transaction<'_>,
+    table: &str,
+) -> Result<(u64, u64), Error> {
     let Some(columns) = shared_columns(source, tx, table)? else {
         return Ok((0, 0));
     };
@@ -311,7 +315,7 @@ fn read_rows(source: &Connection, table: &str, list: &str, width: usize) -> (Vec
 }
 
 /// Session counters follow the rows that survived.
-fn recount(tx: &Transaction<'_>) -> Result<(), Error> {
+pub(crate) fn recount(tx: &Transaction<'_>) -> Result<(), Error> {
     tx.execute_batch(
         "UPDATE sessions SET message_count = \
            (SELECT count(*) FROM messages m WHERE m.session_id = sessions.id)",

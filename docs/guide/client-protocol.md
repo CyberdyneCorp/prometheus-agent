@@ -109,7 +109,17 @@ connection to it; `session.resume` loads a stored one and attaches;
 `session.attach` and `session.detach` join and leave. `session.resolve`
 turns a chat's `-r`/`-c` reference into a session id, `session.fork` copies
 a session's active messages up to a chosen one into a new session (the
-parent is unchanged) and `session.interrupt` stops the running turn.
+parent is unchanged), `session.tree` lists a session's descendants (forks,
+compression continuations, delegates) with their relation and
+`session.siblings` the other children of its parent, and
+`session.interrupt` stops the running turn.
+`memory.summary` answers a session's memory review line (`null` when the
+agent changed nothing to review), which a client shows as it leaves or
+resumes the session, and `autoprune.offer` answers the low-disk prune
+question at most once a day for an interactive client's startup (answered
+with `/autoprune on|off|later` through `command.dispatch`). The daemon
+cannot push either: a resumed session's events start after the client
+attaches, and an ending one has no client left.
 Creating or resuming with `exclusive: true` makes the connection the
 session's interactive owner: until it detaches or disconnects, another
 exclusive resume fails with `-32004` `session <id> is open in another
@@ -132,7 +142,10 @@ flags of a chat (`model`, `provider`, `set` overrides, `skills`, `yolo`,
 ...), applied when the session loads (resuming a loaded, idle session with
 another setup reloads it). `prompt.submit` takes `images` (`{"path":
 "/abs/file.png"}` read by the daemon, or `{"blob": "blob:sha256:..."}` of
-an image the session already holds) and `run_budget_secs`.
+an image the session already holds), `files` (absolute paths of other
+received files the daemon keeps in the session's blob store and, with
+`attachments.storage = "workspace"`, copies into the workspace) and
+`run_budget_secs`.
 
 `command.dispatch {session_id, name, args}` runs a slash command on the
 session with the same implementation as the line interface, following the
@@ -147,7 +160,12 @@ interactive session (a `notify_on_complete` or quiet-wait exit, a watched
 line, a heartbeat) arrives as a `session.event` of type `process.notice`
 with `payload.kind` (`result`, `error` or `progress`) and `payload.text`,
 shown as its own message; gateway sessions get theirs in the chat instead,
-and one-shot sessions get none (quiet-wait never switches there).
+and one-shot sessions get none (quiet-wait never switches there). While a
+turn generates its answer, each piece of text arrives as a `session.event`
+of type `assistant.delta` with the turn's `turn_id` (as `prompt.submit`
+answered it) and `payload.text`; it is not a trajectory event, and the
+whole answer still arrives as `assistant.message` and in `turn.finished`
+(voice clients speak the reply from these pieces).
 
 `prompt.submit` never drops an input: while a turn runs it follows
 `busy.input_mode` (queued, steered into the running turn, or run after

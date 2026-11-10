@@ -67,6 +67,9 @@ pub enum Event {
     Compose(String),
     /// Ctrl+Z while a turn runs (the line is still being read).
     SuspendRefused,
+    /// The voice record key while voice mode is on (the line is still
+    /// being read).
+    Record,
 }
 
 /// State the key handlers share with the REPL.
@@ -80,6 +83,8 @@ struct Shared {
     suspend: Mutex<Option<(String, String)>>,
     /// The line is a secret: drawn as `*` and never remembered.
     masked: AtomicBool,
+    /// Voice mode is on: the record key records.
+    voice: AtomicBool,
     /// The bottom status line's text (`None`: no status line).
     status: Mutex<Option<String>>,
     bottom: Mutex<super::bottom_line::BottomLine>,
@@ -103,6 +108,23 @@ pub struct Input {
     reading: bool,
     shared: Arc<Shared>,
     printing: Option<std::thread::JoinHandle<()>>,
+}
+
+/// Draws the bottom status line now, between the editor's own redraws.
+#[derive(Clone)]
+pub struct StatusLine(Arc<Shared>);
+
+impl StatusLine {
+    /// Shows `text` on the bottom row (`None` gives the row back).
+    pub fn show(&self, text: Option<String>) {
+        let mut status = self.0.status.lock().unwrap_or_else(PoisonError::into_inner);
+        *status = text;
+        self.0
+            .bottom
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .show(status.as_deref());
+    }
 }
 
 /// Prints through the input's printer thread (above the prompt while a
@@ -130,6 +152,9 @@ pub struct Setup {
     pub redactor: Redactor,
     /// Vi key bindings instead of Emacs ones (`display.vim_mode`).
     pub vim_mode: bool,
+    /// The voice record key (`voice.record_key`), when it maps to a key
+    /// the editor can bind.
+    pub record_key: Option<KeyEvent>,
 }
 
 impl Input {
@@ -184,6 +209,19 @@ impl Input {
             .unwrap_or_else(PoisonError::into_inner) = text;
     }
 
+    /// Arms the voice record key (voice mode on) or gives the key back to
+    /// the editor.
+    pub fn set_voice(&self, on: bool) {
+        self.shared.voice.store(on, Ordering::Relaxed);
+    }
+
+    /// A handle that redraws the bottom status line at once (the voice
+    /// level meter while a line is being read).
+    #[must_use]
+    pub fn status_line(&self) -> StatusLine {
+        StatusLine(Arc::clone(&self.shared))
+    }
+
     /// `/redraw`: clears the screen; the next read reprints the prompt and
     /// the status line.
     pub fn redraw(&self) {
@@ -214,8 +252,9 @@ impl Input {
     /// The next event; [`Event::Eof`] when the editor is gone.
     pub async fn next(&mut self) -> Event {
         let event = self.events.recv().await.unwrap_or(Event::Eof);
-        // A refused Ctrl+Z happens in the middle of a read.
-        if event != Event::SuspendRefused {
+        // A refused Ctrl+Z and the record key happen in the middle of a
+        // read.
+        if !matches!(event, Event::SuspendRefused | Event::Record) {
             self.reading = false;
         }
         event
@@ -391,6 +430,15 @@ fn editor(
             events: events.clone(),
         })),
     );
+    if let Some(key) = setup.record_key {
+        editor.bind_sequence(
+            key,
+            EventHandler::Conditional(Box::new(RecordKey {
+                shared: Arc::clone(shared),
+                events: events.clone(),
+            })),
+        );
+    }
     prepare_history_file(&setup.history);
     let _ = editor.load_history(&setup.history);
     Ok(editor)
@@ -525,6 +573,52 @@ pub fn join_continuations(line: &str) -> String {
     line.replace("\\\n", "\n")
 }
 
+/// The voice record key: reported without ending the read while voice
+/// mode is on, else the key's usual editing command.
+struct RecordKey {
+    shared: Arc<Shared>,
+    events: mpsc::UnboundedSender<Event>,
+}
+
+impl ConditionalEventHandler for RecordKey {
+    fn handle(
+        &self,
+        _evt: &rustyline::Event,
+        _n: RepeatCount,
+        _positive: bool,
+        _ctx: &EventContext<'_>,
+    ) -> Option<Cmd> {
+        if !self.shared.voice.load(Ordering::Relaxed) {
+            return None;
+        }
+        let _ = self.events.send(Event::Record);
+        Some(Cmd::Noop)
+    }
+}
+
+/// The editor key of a configured chord (`ctrl+b`, `alt+v`, `f5`), when
+/// the editor can bind it.
+#[must_use]
+pub fn editor_key(chord: &str) -> Option<KeyEvent> {
+    use pmt_config::keys::{Chord, Key};
+    let chord = Chord::parse(chord).ok()?;
+    let code = match chord.key {
+        // The editor reports Ctrl+letter upper-cased.
+        Key::Char(c) if chord.ctrl && !chord.alt => {
+            return Some(KeyEvent::ctrl(c.to_ascii_uppercase()));
+        }
+        Key::Char(c) if chord.alt && !chord.ctrl => return Some(KeyEvent::alt(c)),
+        Key::Char(c) if !chord.ctrl && !chord.alt => KeyCode::Char(c),
+        Key::F(n) => KeyCode::F(n),
+        _ => return None,
+    };
+    let mut modifiers = Modifiers::NONE;
+    if chord.shift {
+        modifiers |= Modifiers::SHIFT;
+    }
+    Some(KeyEvent(code, modifiers))
+}
+
 /// Completion, multi-line validation, masking of a secret.
 struct LineHelper {
     cwd: PathBuf,
@@ -611,6 +705,17 @@ impl Helper for LineHelper {}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn record_keys_map_to_editor_keys() {
+        assert_eq!(editor_key("ctrl+b"), Some(KeyEvent::ctrl('B')));
+        assert_eq!(editor_key("Alt+V"), Some(KeyEvent::alt('v')));
+        assert_eq!(
+            editor_key("F5"),
+            Some(KeyEvent(KeyCode::F(5), Modifiers::NONE))
+        );
+        assert_eq!(editor_key("PageUp"), None);
+    }
 
     #[test]
     fn a_trailing_backslash_continues_the_line() {

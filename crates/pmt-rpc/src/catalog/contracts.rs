@@ -79,18 +79,28 @@ macro_rules! event {
 mod automation;
 mod cron;
 mod files;
+mod journey;
+mod local;
 mod lsp;
 mod messaging;
+mod moa;
 mod security;
 mod tui;
+mod turn;
+mod upkeep;
 mod worktree;
 pub use automation::*;
 pub use cron::*;
 pub use files::*;
+pub use journey::*;
+pub use local::*;
 pub use lsp::*;
 pub use messaging::*;
+pub use moa::*;
 pub use security::*;
 pub use tui::*;
+pub use turn::*;
+pub use upkeep::*;
 pub use worktree::*;
 
 /// A `<major>.<minor>` protocol version on the wire.
@@ -415,6 +425,32 @@ pub struct ForkParams {
     pub title: Option<String>,
 }
 
+/// One related session in `session.tree` / `session.siblings`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct LineageNode {
+    /// The session.
+    pub session_id: String,
+    /// Its parent.
+    pub parent_session_id: String,
+    /// How it relates to the parent: `fork`, `compression`, `delegate`,
+    /// `reset`, `import` or `background`.
+    pub kind: String,
+    /// Distance from the asked session (its children are 1).
+    pub depth: u32,
+    /// Its title.
+    #[serde(default)]
+    pub title: Option<String>,
+}
+
+/// `session.tree` / `session.siblings` result.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Lineage {
+    /// The related sessions, by depth then age.
+    pub nodes: Vec<LineageNode>,
+}
+
 /// `session.attach` / `session.resume` result.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -581,6 +617,51 @@ pub struct ContextUsage {
     /// priced calls only.
     #[serde(default)]
     pub cost_usd: Option<f64>,
+    /// The current route's `billing_source` (`subscription:<provider>/<label>`,
+    /// `api_key:<provider>[/<label>]`, `local`...), when the session is
+    /// loaded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub billing_source: Option<String>,
+    /// The subscription the current route bills, when it is one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subscription: Option<SubscriptionStatus>,
+}
+
+/// A subscription's status in `session.context_usage`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SubscriptionStatus {
+    /// Its plan and quota windows.
+    pub quota: QuotaStatus,
+}
+
+/// A subscription's plan and quota windows.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct QuotaStatus {
+    /// The provider reports quota data.
+    pub reported: bool,
+    /// The plan label.
+    #[serde(default)]
+    pub plan: Option<String>,
+    /// The quota windows.
+    #[serde(default)]
+    pub windows: Vec<QuotaWindow>,
+    /// One line for a status display (`quota: not reported by provider`).
+    pub text: String,
+}
+
+/// One quota window.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct QuotaWindow {
+    /// `5h`, `weekly`...
+    pub name: String,
+    /// Used share, 0-100.
+    pub used_percent: f64,
+    /// When it resets (RFC 3339).
+    #[serde(default)]
+    pub resets_at: Option<String>,
 }
 
 /// `prompt.submit` params.
@@ -594,6 +675,11 @@ pub struct SubmitParams {
     /// Images that go with it.
     #[serde(default)]
     pub images: Vec<PromptImage>,
+    /// Other files received with it (absolute paths on the daemon's
+    /// machine): kept in the session's blob store and, with
+    /// `attachments.storage = "workspace"`, copied into the workspace.
+    #[serde(default)]
+    pub files: Vec<String>,
     /// Wall-clock budget of this turn in seconds (`--run-budget`).
     #[serde(default)]
     pub run_budget_secs: Option<u64>,
@@ -632,6 +718,14 @@ pub const COMMAND_NOTICE: &str = "command.notice";
 /// `payload.kind` is `result` (exit 0), `error` or `progress`, and
 /// `payload.text` is the text to show as its own message.
 pub const PROCESS_NOTICE: &str = "process.notice";
+
+/// The `session.event` type of the answer text a running turn streams
+/// (spec: voice-mode, Sentence-streamed spoken replies; tui, Shared live
+/// sessions): `turn_id` is the turn's id as `prompt.submit` and
+/// `turn.finished` carry it, `payload.text` the next piece of the answer.
+/// It is not a trajectory event: the whole answer still arrives as the
+/// turn's `assistant.message` and in `turn.finished`.
+pub const ASSISTANT_DELTA: &str = "assistant.delta";
 
 /// `command.dispatch` params: a slash command the client does not handle
 /// itself (spec: tui, Slash command flow).
@@ -992,6 +1086,11 @@ method!(/// `session.resolve`: the session a `-r`/`-c` reference names.
 method!(/// `session.fork`: a new session with the parent's active messages up
     /// to `at_message_id`, the parent unchanged.
     SessionFork = "session.fork" (ForkParams) -> SessionRef);
+method!(/// `session.tree`: every descendant of a session (forks, compression
+    /// continuations, delegates) with its relation.
+    SessionTree = "session.tree" (SessionRef) -> Lineage);
+method!(/// `session.siblings`: the other children of a session's parent.
+    SessionSiblings = "session.siblings" (SessionRef) -> Lineage);
 method!(/// `session.compact`.
     SessionCompact = "session.compact" (CompactParams) -> Compacted);
 method!(/// `session.transcript`.

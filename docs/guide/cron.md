@@ -163,6 +163,7 @@ listed). Runs end `ok`, `silent`, `failed`, `timed_out`, `blocked_config`,
 | `cron remove <job>` (`rm`) | delete (runs are kept) |
 | `cron runs <job> [--status S] [--limit N]` | runs, newest first, with duration, cost and session |
 | `cron show-run <run>` | one run in full, output included |
+| `cron replay <run>` | replay the run's recorded session offline: its recorded model responses answer, its tool results are served, nothing is sent or delivered; prints `replay matched: <n> calls`, or the first divergence with a diff (exit 1) |
 | `cron replay <run> --live [--deliver]` | re-run the recorded inputs against the current provider and harness; prints a diff of the outputs |
 | `cron status` / `cron doctor` | counts and lease / health report |
 | `cron tick` | one headless tick |
@@ -417,6 +418,4 @@ prompt = "Review {review.state} on pull request {pull_request.number}"
 
 ## Not in this build yet
 
-- `cron replay <run>` without `--live` (replaying recorded model responses)
-  needs the model-call cache and exits 69.
 - Natural-language schedules (`--nl`, `schedule_text`) are refused.

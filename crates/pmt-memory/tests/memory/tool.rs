@@ -165,7 +165,7 @@ async fn the_fourth_failure_in_a_turn_is_terminal_and_success_resets() {
     let profile = Profile::new("");
     let memory = profile.memory(profile.session());
     let bad = json!({"target": "user", "operations": [{"action": "forget"}]});
-    memory.begin_turn("hello there friend");
+    memory.begin_turn("hello there friend").await;
     for _ in 0..3 {
         let (ok, out) = call(&memory, bad.clone()).await;
         assert!(!ok && out.get("done").is_none(), "{out}");
@@ -185,7 +185,7 @@ async fn the_fourth_failure_in_a_turn_is_terminal_and_success_resets() {
         out.get("done").is_none(),
         "a success resets the count: {out}"
     );
-    memory.begin_turn("a new question entirely");
+    memory.begin_turn("a new question entirely").await;
     for _ in 0..3 {
         let (_, out) = call(&memory, bad.clone()).await;
         assert!(out.get("done").is_none());

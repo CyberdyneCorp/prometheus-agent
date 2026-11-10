@@ -126,6 +126,12 @@ const FAMILIES: &[(&str, u64)] = &[
     ("hermes-4", 131_072),
 ];
 
+/// The family default window of `model`, if its family is known.
+#[must_use]
+pub fn family_window(model: &str) -> Option<u64> {
+    family(model)
+}
+
 fn family(model: &str) -> Option<u64> {
     let name = model.rsplit('/').next().unwrap_or(model).to_lowercase();
     FAMILIES

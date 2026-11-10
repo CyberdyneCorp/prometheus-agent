@@ -242,11 +242,42 @@ alibaba-coding-plan (alibaba-coding, dashscope-coding)
 ```
 
 Providers whose own wire format is implemented by a provider plugin
-(`gemini` speaks `gemini_native`, `bedrock` `bedrock_converse`, `copilot`
-comes from the `github-copilot` plugin) fail with
-`provider.plugin_unavailable` until that plugin is installed; `auto`
-passes over them. Gemini also answers OpenAI-style requests: set
-`providers.gemini.base_url` to its `.../v1beta/openai` endpoint.
+that is not installed (`copilot` comes from the `github-copilot`
+plugin, `solstice` from its own) fail with `provider.plugin_unavailable`;
+`auto` passes over them. Two provider plugins are bundled with the
+binary and always available:
+
+- `gemini` speaks Google AI Studio's `gemini_native` format
+  (`streamGenerateContent`, the key in the `x-goog-api-key` header). The
+  reasoning level becomes Gemini 3's thinking level or Gemini 2.5's
+  thinking budget, and nothing on models without thinking. A
+  `providers.gemini.base_url` ending `/openai` speaks Chat Completions
+  instead.
+- `bedrock` speaks `bedrock_converse` (`ConverseStream`, signed with
+  SigV4) in `providers.bedrock.region` (`us-east-1` by default). Its
+  credentials come from the AWS credential chain: the secrets
+  `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN`
+  (imported from the launch environment like other provider keys), the
+  shared profile `providers.bedrock.aws_profile` (`default`) with static
+  keys or an `aws sso login` sign-in, container credentials, then the
+  EC2 instance role. With none of them a session fails with
+  `provider.missing_credential` naming the chain (exit 78).
+  `prometheus model list --provider bedrock` lists the region's
+  foundation models and inference profiles from the Bedrock control plane
+  with their context windows, cached for `providers.bedrock.catalog_ttl_secs`;
+  `prometheus doctor providers` reports the region and which link of the
+  chain has credentials (`--online` also asks the instance role).
+
+`azure-foundry` needs its resource's `providers.azure-foundry.base_url`.
+It sends `AZURE_FOUNDRY_API_KEY` in the `api-key` header, or with
+`providers.azure-foundry.auth = "entra_id"` a Microsoft Entra ID token
+from `az account get-access-token` (else a managed identity), refreshed
+60 s before it expires and billed as `api_key:azure-foundry/minted`. The
+model is a deployment name: the resource's deployment list says which
+model it serves, so a Claude deployment speaks Anthropic Messages at the
+resource's `/anthropic` endpoint, GPT-5, codex and o-series deployments
+Responses, and the others Chat Completions; `model list --provider
+azure-foundry` lists the deployments.
 
 ### Switching in a session
 
@@ -384,7 +415,7 @@ first rule not used up whose matchers all hold:
 | `step` | the number of assistant messages already in the request (0 for the first call) equals it |
 | `model` | the route's model equals it (`mock/primary`, `mock/secondary`...) |
 | `user`, `user_regex` | the last user message contains the text or matches the regex |
-| `tool_result`, `tool_result_regex` | the last tool result contains the text or matches the regex |
+| `tool_result`, `tool_result_regex` | a result of the latest tool-call batch contains the text or matches the regex; with a list (`tool_result = ["a", "b"]`), each entry holds for some result of the batch |
 | `tools`, `tools_regex` | the tool array offered to the model, as JSON, contains the text or matches the regex |
 
 A rule answers with `reasoning`, `text` and `tool_calls` (streamed in that
