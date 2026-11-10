@@ -4,13 +4,16 @@
 //! recording off by at most 3%, and with OpenTelemetry export on (to a
 //! local collector) by at most 5%.
 //!
-//! The three variants run interleaved [`RUNS`] times each through the
-//! release binary's hidden `smoke-suite --extra-config <file>`, and the
-//! fastest run of each counts: the minimum is the measurement least
-//! disturbed by the rest of the machine. A difference under
-//! [`NOISE_FLOOR_SECS`] never counts. The `interrupt` task is left out of
-//! every variant: it finds its running turn through the trajectory, which
-//! the reference variant does not record.
+//! The suite's wall time jitters by tens of percent between runs (each
+//! task spawns several processes), far more than the budgets, so the
+//! variants are measured task by task: every task runs alone (the hidden
+//! `smoke-suite --skip` leaves the others out) in each variant, the
+//! variants interleaved, [`RUNS`] times, and a variant's time is the sum of
+//! each task's fastest run, the measurement least disturbed by the rest of
+//! the machine. A difference under [`NOISE_FLOOR_SECS`] never counts. The
+//! `interrupt` task is left out of every variant: it finds its running
+//! turn through the trajectory, which the reference variant does not
+//! record.
 
 use std::io::{BufReader, Write as _};
 use std::path::Path;
@@ -71,8 +74,9 @@ pub(crate) fn evaluate(overhead: &Overhead) -> Vec<String> {
     .collect()
 }
 
-/// Measures the three variants with `binary`, in `scratch`.
-pub(crate) fn measure(binary: &Path, scratch: &Path) -> Result<Overhead, String> {
+/// Measures the three variants of every task in `tasks` with `binary`,
+/// in `scratch`.
+pub(crate) fn measure(binary: &Path, scratch: &Path, tasks: &[String]) -> Result<Overhead, String> {
     let _ = std::fs::remove_dir_all(scratch);
     std::fs::create_dir_all(scratch).map_err(|e| format!("{}: {e}", scratch.display()))?;
     let collector = collector()?;
@@ -82,38 +86,82 @@ pub(crate) fn measure(binary: &Path, scratch: &Path) -> Result<Overhead, String>
         ("recording", String::new()),
         ("export", export),
     ];
-    let mut best = [f64::MAX; 3];
+    for (name, extra) in &variants {
+        let config = scratch.join(format!("{name}.toml"));
+        std::fs::write(&config, extra).map_err(|e| format!("{}: {e}", config.display()))?;
+    }
+    // best[variant][task]: the task's fastest run in that variant.
+    let mut best = vec![vec![f64::MAX; tasks.len()]; variants.len()];
     for run in 0..RUNS {
-        for (index, (name, extra)) in variants.iter().enumerate() {
-            let config = scratch.join(format!("{name}.toml"));
-            std::fs::write(&config, extra).map_err(|e| format!("{}: {e}", config.display()))?;
-            let output = scratch.join(format!("{name}-{run}"));
-            best[index] = best[index].min(time_suite(binary, &config, &output)?);
+        for (t, task) in tasks.iter().enumerate() {
+            for (v, (name, _)) in variants.iter().enumerate() {
+                let suite = Suite {
+                    config: &scratch.join(format!("{name}.toml")),
+                    output: &scratch.join(format!("{name}-{task}-{run}")),
+                    task,
+                    tasks,
+                };
+                best[v][t] = best[v][t].min(time_task(binary, &suite)?);
+            }
         }
     }
+    let total = |v: usize| best[v].iter().sum();
     Ok(Overhead {
-        off: best[0],
-        recording: best[1],
-        export: best[2],
+        off: total(0),
+        recording: total(1),
+        export: total(2),
     })
 }
 
-/// One smoke-suite run's wall time.
-fn time_suite(binary: &Path, config: &Path, output: &Path) -> Result<f64, String> {
-    let started = Instant::now();
-    let out = Command::new(binary)
-        .args(["smoke-suite", "--skip", "interrupt", "--extra-config"])
-        .arg(config)
+/// The smoke-suite tasks the gate times: every one but `interrupt`.
+///
+/// # Errors
+///
+/// The suite's task directory cannot be read.
+pub(crate) fn tasks(root: &Path) -> Result<Vec<String>, String> {
+    let dir = root.join("crates/prometheus/evals/smoke/tasks");
+    let mut tasks: Vec<String> = std::fs::read_dir(&dir)
+        .map_err(|e| format!("{}: {e}", dir.display()))?
+        .flatten()
+        .filter(|e| e.path().join("task.toml").is_file())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|t| t != "interrupt")
+        .collect();
+    tasks.sort();
+    Ok(tasks)
+}
+
+/// One task of the suite run alone with one variant's config.
+struct Suite<'a> {
+    config: &'a Path,
+    output: &'a Path,
+    task: &'a str,
+    tasks: &'a [String],
+}
+
+/// The wall time of `suite`'s task run alone.
+fn time_task(binary: &Path, suite: &Suite<'_>) -> Result<f64, String> {
+    let mut command = Command::new(binary);
+    command.args(["smoke-suite", "--skip", "interrupt"]);
+    for other in suite.tasks.iter().filter(|t| *t != suite.task) {
+        command.args(["--skip", other]);
+    }
+    command
+        .arg("--extra-config")
+        .arg(suite.config)
         .arg("--output")
-        .arg(output)
-        .stdin(Stdio::null())
+        .arg(suite.output)
+        .stdin(Stdio::null());
+    let started = Instant::now();
+    let out = command
         .output()
         .map_err(|e| format!("{}: {e}", binary.display()))?;
     let took = started.elapsed().as_secs_f64();
     if !out.status.success() {
         return Err(format!(
-            "the smoke suite failed with {}: {}",
-            config.display(),
+            "the smoke suite's {} task failed with {}: {}",
+            suite.task,
+            suite.config.display(),
             String::from_utf8_lossy(&out.stdout)
         ));
     }

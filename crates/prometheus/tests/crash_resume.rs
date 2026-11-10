@@ -22,9 +22,12 @@ step = 0
 [[rule.tool_calls]]
 name = "read_file"
 arguments = { path = "a.txt" }
+# `read_file` runs in parallel: the pause before `started` lets its result
+# reach the journal before the test kills the turn, so only `terminal` is
+# in flight (CI once killed it while both ran).
 [[rule.tool_calls]]
 name = "terminal"
-arguments = { command = "touch started && sleep 60 && touch deployed" }
+arguments = { command = "sleep 1 && touch started && sleep 60 && touch deployed" }
 
 [[rule]]
 step = 1

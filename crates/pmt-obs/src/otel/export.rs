@@ -14,7 +14,7 @@ use std::time::Duration;
 use pmt_config::schema::OtelProtocol;
 use pmt_core::error::{Error, codes};
 use prost::Message as _;
-use tokio::sync::{Notify, oneshot};
+use tokio::sync::Notify;
 
 use super::proto;
 use crate::metrics::{self, global};
@@ -72,7 +72,9 @@ struct Inner {
     propagate_external: bool,
     queue: Mutex<VecDeque<proto::Span>>,
     wake: Notify,
-    flushes: Mutex<Vec<oneshot::Sender<()>>>,
+    /// Cuts the batching pause short for a flush.
+    flush_now: Notify,
+    flushes: Mutex<Vec<std::sync::mpsc::Sender<()>>>,
     dropped: AtomicU64,
     exported: AtomicU64,
     last: Mutex<(Option<String>, Option<String>)>,
@@ -116,6 +118,7 @@ impl Exporter {
                 propagate_external: settings.propagate_external,
                 queue: Mutex::default(),
                 wake: Notify::new(),
+                flush_now: Notify::new(),
                 flushes: Mutex::default(),
                 dropped: AtomicU64::new(0),
                 exported: AtomicU64::new(0),
@@ -154,23 +157,16 @@ impl Exporter {
     /// Sends everything queued and a metrics snapshot now, waiting at most
     /// `within`.
     pub fn flush_blocking(&self, within: Duration) {
-        let (tx, rx) = oneshot::channel();
+        let (tx, rx) = std::sync::mpsc::channel();
         self.inner
             .flushes
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .push(tx);
         self.inner.wake.notify_one();
-        let deadline = std::time::Instant::now() + within;
-        let mut rx = rx;
-        while std::time::Instant::now() < deadline {
-            match rx.try_recv() {
-                Err(oneshot::error::TryRecvError::Empty) => {
-                    std::thread::sleep(Duration::from_millis(5));
-                }
-                _ => return,
-            }
-        }
+        self.inner.flush_now.notify_one();
+        // Called outside any runtime (process exit): a plain blocking wait.
+        let _ = rx.recv_timeout(within);
     }
 
     /// `capture_content` is on.
@@ -277,7 +273,15 @@ impl Worker {
         let mut next_metrics = tokio::time::Instant::now() + METRICS_EVERY;
         loop {
             tokio::select! {
-                () = self.inner.wake.notified() => tokio::time::sleep(Duration::from_millis(20)).await,
+                () = self.inner.wake.notified() => {
+                    // A short pause batches spans that finish together; a
+                    // flush (process exit) is waited on, so it ends the
+                    // pause at once.
+                    tokio::select! {
+                        () = tokio::time::sleep(Duration::from_millis(20)) => {}
+                        () = self.inner.flush_now.notified() => {}
+                    }
+                }
                 () = tokio::time::sleep(BATCH_DELAY) => {}
             }
             let flushes: Vec<_> = std::mem::take(
