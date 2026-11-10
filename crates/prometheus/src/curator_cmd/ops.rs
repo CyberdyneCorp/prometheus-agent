@@ -75,15 +75,21 @@ impl Curator {
         )
     }
 
-    /// Skills any scheduled job names (paused ones included).
-    fn cron_skills(&self) -> BTreeSet<String> {
-        self.store
-            .cron_jobs()
-            .unwrap_or_default()
+    /// Skills any scheduled job names (paused ones included). Fails
+    /// closed: without the jobs the curator cannot tell which skills they
+    /// use, so it refuses rather than archive one of them.
+    fn cron_skills(&self) -> Result<BTreeSet<String>, Error> {
+        let rows = self.store.cron_jobs().map_err(|e| {
+            refused(format!(
+                "cannot read the scheduled jobs, so the skills they use are unknown: {}",
+                e.message()
+            ))
+        })?;
+        Ok(rows
             .into_iter()
             .filter_map(|row| pmt_cron::job::Job::from_row(row).ok())
             .flat_map(|job| job.spec.skills)
-            .collect()
+            .collect())
     }
 
     fn skills_dir(&self) -> PathBuf {
@@ -98,9 +104,9 @@ impl Curator {
         )
     }
 
-    fn with_scope<T>(&self, now: Timestamp, f: impl FnOnce(&Scope<'_>) -> T) -> T {
+    fn with_scope<T>(&self, now: Timestamp, f: impl FnOnce(&Scope<'_>) -> T) -> Result<T, Error> {
         let catalog = self.catalog();
-        let cron = self.cron_skills();
+        let cron = self.cron_skills()?;
         let scope = Scope {
             profile_dir: self.scope.dir(),
             store: &self.store,
@@ -109,21 +115,21 @@ impl Curator {
             cron_skills: &cron,
             now,
         };
-        f(&scope)
+        Ok(f(&scope))
     }
 
     /// `curator status`.
     ///
     /// # Errors
     ///
-    /// Store errors.
+    /// `curator.refused` (scheduled jobs unreadable), store errors.
     pub(crate) fn status(&self) -> Result<Status, Error> {
         let state = self.store.curator_state()?;
         let config = &self.scope.config().curator;
         let (managed, plan) = self.with_scope(Timestamp::now(), |scope| {
             let (managed, _) = curator::managed(scope);
             (managed, curator::plan(scope))
-        });
+        })?;
         let pinned = self
             .store
             .skill_usages()?
@@ -148,7 +154,8 @@ impl Curator {
     ///
     /// # Errors
     ///
-    /// `curator.busy`, `skill.io`, store errors.
+    /// `curator.busy`, `curator.refused` (scheduled jobs unreadable),
+    /// `skill.io`, store errors.
     pub(crate) fn run(
         &self,
         dry_run: bool,
@@ -164,7 +171,7 @@ impl Curator {
         };
         self.with_scope(Timestamp::now(), |scope| {
             run::run(scope, options, Some(&review), &PatternScanner)
-        })
+        })?
     }
 
     /// `curator pause` / `resume`.
@@ -328,7 +335,7 @@ impl Curator {
     ///
     /// # Errors
     ///
-    /// `skill.io`.
+    /// `curator.refused` (scheduled jobs unreadable), `skill.io`.
     pub(crate) fn prune(&self, days: u64, dry_run: bool) -> Result<Vec<(String, i64)>, Error> {
         let now = Timestamp::now();
         let candidates = self.with_scope(now, |scope| {
@@ -340,7 +347,7 @@ impl Curator {
                     (u64::try_from(idle).unwrap_or(0) >= days).then_some((m, idle))
                 })
                 .collect::<Vec<_>>()
-        });
+        })?;
         let ledger = self.ledger();
         let mut out = Vec::new();
         for (m, idle) in candidates {
@@ -400,7 +407,7 @@ impl Curator {
     /// `curator.refused` (unknown entry, failed safety record, no
     /// backup), `curator.busy`, `skill.io`.
     pub(crate) fn rollback(&self, entry: Option<&str>) -> Result<String, Error> {
-        let _lock = self.with_scope(Timestamp::now(), run::lock)?;
+        let _lock = self.with_scope(Timestamp::now(), run::lock)??;
         if let Some(label) = entry {
             let id = pmt_store::skill_ledger::parse_label(label).ok_or_else(|| {
                 Error::new(

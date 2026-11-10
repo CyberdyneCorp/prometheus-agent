@@ -137,3 +137,156 @@ pub fn remote_hook(skills: &Arc<SkillsSession>, exec: Arc<dyn RemoteExec>) -> Be
     };
     Arc::new(move |_: &str, _: &Path| uploads.send(&wanted(&skills)))
 }
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::io::Write as _;
+    use std::os::unix::fs::PermissionsExt as _;
+    use std::process::{Command, Stdio};
+
+    use pmt_config::grants::{GrantsFile, Subject};
+    use pmt_config::{Home, Launch, Overrides, ProfileName, ProfileScope};
+    use pmt_core::capability::Capability;
+    use pmt_tools::terminal::remote::exec::ExecResult;
+
+    use super::*;
+
+    /// A remote host that is a local directory: scripts run in `sh` with
+    /// `HOME` there, as on an SSH host; every script is logged.
+    #[derive(Debug)]
+    struct LocalHost {
+        home: PathBuf,
+        log: Mutex<Vec<(String, Vec<String>)>>,
+    }
+
+    impl RemoteExec for LocalHost {
+        fn exec(
+            &self,
+            script: &str,
+            args: &[&str],
+            stdin: Option<&[u8]>,
+        ) -> Result<ExecResult, String> {
+            self.log.lock().unwrap().push((
+                script.to_owned(),
+                args.iter().map(|a| (*a).to_owned()).collect(),
+            ));
+            let mut child = Command::new("sh")
+                .args(["-c", script, "pmt"])
+                .args(args)
+                .env("HOME", &self.home)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .map_err(|e| e.to_string())?;
+            let mut pipe = child.stdin.take().unwrap();
+            pipe.write_all(stdin.unwrap_or_default()).unwrap();
+            drop(pipe);
+            let out = child.wait_with_output().map_err(|e| e.to_string())?;
+            Ok(ExecResult {
+                code: out.status.code().unwrap_or(-1),
+                stdout: out.stdout,
+                stderr: out.stderr,
+            })
+        }
+    }
+
+    /// A session with skill `gcloud-ops` (declaring `creds/gcp.json`,
+    /// which exists) loaded; `grant` adds its `credential_files` grant.
+    fn session(root: &Path, grant: bool) -> Arc<SkillsSession> {
+        let home = Home::open(&root.join("home")).unwrap();
+        let dir = home
+            .profile(&ProfileName::parse("default").unwrap())
+            .unwrap();
+        dir.config_file()
+            .replace("[model]\nprovider = \"mock\"\ndefault = \"mock\"\n")
+            .unwrap();
+        let scope = ProfileScope::open(dir.clone(), &Overrides::default(), Launch::Other).unwrap();
+        let profile = scope.dir().to_path_buf();
+        std::fs::create_dir_all(profile.join("skills/gcloud-ops")).unwrap();
+        std::fs::write(
+            profile.join("skills/gcloud-ops/SKILL.md"),
+            "---\nname: gcloud-ops\ndescription: Operate Google Cloud.\nmetadata:\n  prometheus:\n    credential_files:\n      - path: creds/gcp.json\n        description: Service account key.\n---\nUse gcloud.\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(profile.join("creds")).unwrap();
+        std::fs::write(profile.join("creds/gcp.json"), "{\"key\": \"s3cret\"}").unwrap();
+        if grant {
+            GrantsFile::of(&dir)
+                .add(
+                    &Subject::Skill("gcloud-ops".to_owned()),
+                    &std::iter::once(Capability::CredentialFiles).collect(),
+                    "cli",
+                )
+                .unwrap();
+        }
+        let store = Arc::new(pmt_store::Store::open(&scope).unwrap());
+        let mut setup = pmt_skills::session::SessionSetup::new(scope, store, "s1");
+        setup.bundled = Arc::new(pmt_skills::bundled::Bundled::default());
+        let skills = Arc::new(SkillsSession::new(setup));
+        skills.mark_loaded("gcloud-ops", Vec::new());
+        skills
+    }
+
+    fn host(root: &Path) -> Arc<LocalHost> {
+        let home = root.join("remote-home");
+        std::fs::create_dir_all(&home).unwrap();
+        Arc::new(LocalHost {
+            home,
+            log: Mutex::new(Vec::new()),
+        })
+    }
+
+    /// Spec: skills, Skill credential file passthrough (remote backends
+    /// upload before each command and delete after the session).
+    #[test]
+    fn a_remote_backend_gets_the_file_before_each_command_and_loses_it_after() {
+        let root = tempfile::tempdir().unwrap();
+        let skills = session(root.path(), true);
+        let host = host(root.path());
+        let remote = host.home.join(".prometheus/creds/gcp.json");
+        let hook = remote_hook(&skills, Arc::clone(&host) as Arc<dyn RemoteExec>);
+        hook("gcloud auth list", Path::new("/work"));
+        assert_eq!(
+            std::fs::read_to_string(&remote).unwrap(),
+            "{\"key\": \"s3cret\"}"
+        );
+        assert_eq!(
+            std::fs::metadata(&remote).unwrap().permissions().mode() & 0o777,
+            0o400
+        );
+        // A command that changed the copy gets it back before the next.
+        std::fs::remove_file(&remote).unwrap();
+        hook("gcloud config list", Path::new("/work"));
+        assert!(remote.is_file());
+        assert_eq!(
+            host.log
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(s, _)| s == UPLOAD)
+                .count(),
+            2
+        );
+        drop(hook);
+        assert!(!remote.exists(), "the upload outlived the session");
+        let log = host.log.lock().unwrap();
+        assert_eq!(
+            log.last().unwrap(),
+            &(REMOVE.to_owned(), vec!["creds/gcp.json".to_owned()])
+        );
+    }
+
+    /// Scenario: No grant, no file (on a remote backend).
+    #[test]
+    fn without_the_grant_nothing_is_uploaded() {
+        let root = tempfile::tempdir().unwrap();
+        let skills = session(root.path(), false);
+        let host = host(root.path());
+        let hook = remote_hook(&skills, Arc::clone(&host) as Arc<dyn RemoteExec>);
+        hook("gcloud auth list", Path::new("/work"));
+        drop(hook);
+        assert!(host.log.lock().unwrap().is_empty());
+        assert!(!host.home.join(".prometheus").exists());
+    }
+}

@@ -120,6 +120,28 @@ fn every_real_pass_is_backed_up_and_purge_is_explicit() {
 }
 
 #[test]
+fn a_pass_that_cannot_read_the_scheduled_jobs_touches_nothing() {
+    let home = temp_home();
+    skill(home.path(), "old-notes", "Old.");
+    agent_used(home.path(), "old-notes", 40);
+    // A job might use any skill: without the jobs the pass must not run.
+    let db = rusqlite::Connection::open(home.path().join("profiles/default/state.db")).unwrap();
+    db.execute_batch("ALTER TABLE cron_jobs RENAME TO cron_jobs_unreadable")
+        .unwrap();
+    drop(db);
+    let before = tree(&skills(home.path()));
+    let out = run(home.path(), &["curator", "run", "--sync"]);
+    assert_eq!(out.status.code(), Some(75), "{}", stderr(&out));
+    assert!(
+        stderr(&out).contains("cannot read the scheduled jobs"),
+        "{}",
+        stderr(&out)
+    );
+    assert_eq!(tree(&skills(home.path())), before);
+    assert!(!skills(home.path()).join(".archive").exists());
+}
+
+#[test]
 fn rollback_undoes_one_entry_and_restore_brings_a_skill_back() {
     let home = temp_home();
     skill(home.path(), "deploy", "Ship by hand.");
@@ -191,5 +213,66 @@ fn pin_from_a_messaging_chat() {
         rows.iter()
             .any(|r| r.starts_with("deploy-runbook|") && r.ends_with("|1")),
         "{rows:?}"
+    );
+}
+
+/// The review pass runs on the `auxiliary.curator` slot (spec: skills,
+/// Curator audit ledger, single-edit rollback, purge and reports): the
+/// merge it answers is applied, and its call is accounted to that slot's
+/// model in a hidden curator session.
+#[test]
+fn consolidation_asks_the_auxiliary_curator_model() {
+    let home = common::mock_home();
+    skill(home.path(), "deploy-web", "Ship the web app.");
+    skill(home.path(), "deploy-api", "Ship the API.");
+    agent_used(home.path(), "deploy-web", 1);
+    agent_used(home.path(), "deploy-api", 1);
+    let merged =
+        "---\nname: deploy\ndescription: Ship any service.\n---\nShip the web app and the API.\n";
+    let reply = serde_json::json!({"merges": [{
+        "into": "deploy",
+        "absorbed": ["deploy-web", "deploy-api"],
+        "skill_md": merged,
+    }]})
+    .to_string();
+    std::fs::write(
+        home.path().join("profiles/default/mock.toml"),
+        format!("[[rule]]\nrepeat = true\ntext = {reply:?}\n"),
+    )
+    .unwrap();
+    common::append_config(
+        home.path(),
+        "\n[providers.mock]\nscript = \"mock.toml\"\n\n[auxiliary.curator]\nprovider = \"mock\"\nmodel = \"curator-reviewer\"\n",
+    );
+    let out = ok(&run(
+        home.path(),
+        &["curator", "run", "--sync", "--consolidate"],
+    ));
+    assert!(out.contains("deploy"), "{out}");
+    assert_eq!(
+        std::fs::read_to_string(skills(home.path()).join("deploy/SKILL.md")).unwrap(),
+        merged
+    );
+    assert!(skills(home.path()).join(".archive/deploy-web").exists());
+    assert!(skills(home.path()).join(".archive/deploy-api").exists());
+    let db = rusqlite::Connection::open(home.path().join("profiles/default/state.db")).unwrap();
+    let calls: Vec<(String, String, String, i64)> = db
+        .prepare(
+            "SELECT u.purpose, u.model, s.source_tag, s.hidden FROM usage_ledger u \
+             JOIN sessions s ON s.id = u.session_id",
+        )
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    assert_eq!(
+        calls,
+        [(
+            "auxiliary.curator".to_owned(),
+            "curator-reviewer".to_owned(),
+            "curator".to_owned(),
+            1
+        )]
     );
 }

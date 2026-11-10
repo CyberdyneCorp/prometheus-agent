@@ -10,15 +10,22 @@
 //! `smoke-suite --skip` leaves the others out) in each variant, the
 //! variants interleaved, [`RUNS`] times, and a variant's time is the sum of
 //! each task's fastest run, the measurement least disturbed by the rest of
-//! the machine. A difference under [`NOISE_FLOOR_SECS`] never counts. The
-//! `interrupt` task is left out of every variant: it finds its running
-//! turn through the trajectory, which the reference variant does not
-//! record.
+//! the machine. A difference under [`NOISE_FLOOR_SECS`] never counts. Two
+//! tasks are left out of every variant ([`UNTIMED`]): `interrupt` finds
+//! its running turn through the trajectory, which the reference variant
+//! does not record, and `error_recovery` spends most of its time in the
+//! retry's full-jitter backoff, a uniformly random wait of up to a second
+//! (`classify::RetryPolicy`): even the fastest of five runs differs by
+//! hundreds of milliseconds between variants, several times the budgets,
+//! whatever observability costs.
 
 use std::io::{BufReader, Write as _};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::Instant;
+
+/// Smoke tasks the gate does not time (see the module docs).
+const UNTIMED: &[&str] = &["interrupt", "error_recovery"];
 
 /// Runs of each variant.
 pub(crate) const RUNS: usize = 5;
@@ -113,7 +120,7 @@ pub(crate) fn measure(binary: &Path, scratch: &Path, tasks: &[String]) -> Result
     })
 }
 
-/// The smoke-suite tasks the gate times: every one but `interrupt`.
+/// The smoke-suite tasks the gate times: every one but [`UNTIMED`].
 ///
 /// # Errors
 ///
@@ -125,7 +132,7 @@ pub(crate) fn tasks(root: &Path) -> Result<Vec<String>, String> {
         .flatten()
         .filter(|e| e.path().join("task.toml").is_file())
         .map(|e| e.file_name().to_string_lossy().into_owned())
-        .filter(|t| t != "interrupt")
+        .filter(|t| !UNTIMED.contains(&t.as_str()))
         .collect();
     tasks.sort();
     Ok(tasks)
@@ -142,7 +149,10 @@ struct Suite<'a> {
 /// The wall time of `suite`'s task run alone.
 fn time_task(binary: &Path, suite: &Suite<'_>) -> Result<f64, String> {
     let mut command = Command::new(binary);
-    command.args(["smoke-suite", "--skip", "interrupt"]);
+    command.arg("smoke-suite");
+    for untimed in UNTIMED {
+        command.args(["--skip", untimed]);
+    }
     for other in suite.tasks.iter().filter(|t| *t != suite.task) {
         command.args(["--skip", other]);
     }

@@ -320,7 +320,17 @@ fn doctor_warns_about_a_daemon_of_another_build() {
     let home = mock_home();
     let _daemon = start(home.path());
     let path = home.path().join("run/gateway.json");
-    let mut record: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    // The daemon's first heartbeat rewrites the record right after it is
+    // published; the edit goes in after that beat (the next one is a
+    // minute away), or the beat would put the real build id back.
+    let read =
+        || -> Value { serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap() };
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while read().get("updated_at").is_none() {
+        assert!(std::time::Instant::now() < deadline, "no heartbeat");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let mut record = read();
     record["build_id"] = json!("another-build");
     std::fs::write(&path, record.to_string()).unwrap();
     let text = stdout(&run(home.path(), &["doctor", "daemon"]));

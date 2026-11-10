@@ -93,7 +93,7 @@ pub fn compress(plain_path: &Path) -> io::Result<PathBuf> {
         let mut encoder = zstd::stream::write::Encoder::new(file, LEVEL)?;
         io::copy(&mut source, &mut encoder)?;
         let file = encoder.finish()?;
-        file.sync_all()?;
+        private_fs::sync(&file)?;
         fs::rename(&temp, &target)
     })();
     if let Err(err) = written {
