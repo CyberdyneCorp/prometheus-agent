@@ -496,10 +496,10 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 53. M2 Skills hub and curator
 
-- [ ] 53.1 Implement sandboxed skill scripts with managed runtimes and the hub install pipeline with trust policy; verify with a local hub fixture (spec: skills)
-- [ ] 53.2 Implement the skills lockfile with tamper detection, signatures and provenance, and blueprint skills that never auto-schedule; verify that a modified installed skill is detected (spec: skills)
+- [x] 53.1 Implement sandboxed skill scripts with managed runtimes and the hub install pipeline with trust policy; verify with a local hub fixture (spec: skills)
+- [x] 53.2 Implement the skills lockfile with tamper detection, signatures and provenance, and blueprint skills that never auto-schedule; verify that a modified installed skill is detected (spec: skills)
 - [ ] 53.3 Implement the curator (configuration, scheduling, transitions, scope, backups, CLI); verify with curator tests (spec: skills)
-- [ ] 53.4 Implement hub discovery, inspection, updates and audit (local edits survive updates, inspect installs nothing), hub source identifiers, custom skill taps and skill publishing with snapshots; verify with a local hub fixture (spec: skills)
+- [x] 53.4 Implement hub discovery, inspection, updates and audit (local edits survive updates, inspect installs nothing), hub source identifiers, custom skill taps and skill publishing with snapshots; verify with a local hub fixture (spec: skills)
 - [ ] 53.5 Implement the `/curator` slash command, the curator audit ledger with single-edit rollback, purge and reports (purge never automatic), interactive per-surface skill enablement, skill credential file passthrough (read-only mounts only with a grant) and the bundled and official skill catalog content (browsable offline, Hermes name aliases); verify with curator and catalog tests (spec: skills)
 
 ## 54. M2 Distribution channels

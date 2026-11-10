@@ -2371,7 +2371,7 @@ capabilities = [
 "Stdout is only the path" = ["crates/prometheus/tests/python_bridge_cli.rs::a_named_environment_prints_only_its_path_and_is_reused_offline"]
 
 [skills."Skill scripts run sandboxed with managed runtimes"]
-"Skill script gets its pinned environment" = ["crates/prometheus/tests/python_bridge.rs::a_skill_script_gets_its_environment_and_no_plugin_environment"]
+"Skill script gets its pinned environment" = ["crates/prometheus/tests/python_bridge.rs::a_skill_script_gets_its_environment_and_no_plugin_environment", "crates/prometheus/tests/skill_scripts.rs::a_node_skill_script_runs_with_the_managed_node"]
 
 # Group 34.1-34.3 (security hardening for extensions: egress proxy and
 # per-session egress policy, surface-only secrets and sidecar isolation,
@@ -2937,7 +2937,7 @@ capabilities = [
 "Burst does not double-fire" = ["crates/prometheus/tests/cron_webhooks.rs::a_signed_review_event_fires_the_sweeper_job_once"]
 
 [skills."Blueprint skills never auto-schedule"]
-"Install does not create a job" = { tests = ["crates/prometheus/tests/cron_automations.rs::the_inbox_offers_starters_and_skill_blueprints_without_creating_jobs"], note = "the skill is placed in the profile's skills directory (what an install writes); the inbox offers its blueprint and no job exists" }
+"Install does not create a job" = ["crates/prometheus/tests/skills_hub.rs::installing_a_blueprint_skill_creates_no_job", "crates/prometheus/tests/cron_automations.rs::the_inbox_offers_starters_and_skill_blueprints_without_creating_jobs"]
 
 [session-automation."Persisted per-session automation state"]
 "Goal survives resume" = ["crates/prometheus/tests/automation_line.rs::a_goal_survives_resume_with_its_turn_count", "crates/pmt-store/tests/store/automation.rs::rows_are_kept_per_kind_across_reopening_and_go_with_the_session"]
@@ -3540,3 +3540,28 @@ capabilities = [
 
 [observability."ShareGPT trajectory export"]
 "Tool call rendering" = ["crates/pmt-obs/tests/obs/sharegpt.rs::a_tool_using_session_renders_to_the_golden_sharegpt_record", "crates/prometheus/tests/obs_reports.rs::an_exported_session_renders_its_tool_call_and_response"]
+
+# Group 53.1-53.4 (skills hub: install pipeline and trust policy, lockfile
+# and tamper detection, signatures, discovery/inspection/updates/audit,
+# identifiers, taps, publishing and snapshots)
+[skills."Hub install pipeline and trust policy"]
+"Dangerous community skill is blocked even with --force" = ["crates/pmt-skillhub/tests/hub/install.rs::dangerous_community_skill_is_blocked_even_with_force", "crates/prometheus/tests/skills_hub.rs::dangerous_community_skill_is_blocked_even_with_force"]
+
+[skills."Skills lockfile and tamper detection (upgrade)"]
+"Silent modification of a hub skill is caught" = ["crates/pmt-skillhub/tests/hub/maintain.rs::silent_modification_of_a_hub_skill_is_caught", "crates/prometheus/tests/skills_hub.rs::a_silently_modified_hub_skill_is_quarantined_until_accepted"]
+
+[skills."Skill signatures and provenance (upgrade)"]
+"Invalid signature is never accepted" = ["crates/pmt-skillhub/tests/hub/install.rs::invalid_signature_is_never_accepted", "crates/pmt-skillhub/tests/hub/keyless.rs::a_keyless_signature_verifies_offline_and_tampering_breaks_it"]
+
+[skills."Hub discovery, inspection, updates and audit"]
+"Local edits survive update" = ["crates/pmt-skillhub/tests/hub/maintain.rs::local_edits_survive_update", "crates/prometheus/tests/skills_hub.rs::local_edits_survive_update_and_inspect_installs_nothing"]
+"Inspect installs nothing" = ["crates/pmt-skillhub/tests/hub/discover.rs::inspect_installs_nothing", "crates/prometheus/tests/skills_hub.rs::local_edits_survive_update_and_inspect_installs_nothing"]
+
+[skills."Hub source identifiers"]
+"Direct URL without a name" = ["crates/pmt-skillhub/tests/hub/install.rs::direct_url_without_a_name_asks_for_one", "crates/prometheus/tests/skills_hub.rs::identifiers_are_checked_and_a_nameless_url_asks_for_a_name"]
+
+[skills."Custom skill taps"]
+"Install from a team tap" = ["crates/pmt-skillhub/tests/hub/install.rs::install_from_a_team_tap", "crates/prometheus/tests/skills_hub.rs::taps_and_snapshots_round_trip_between_profiles"]
+
+[skills."Skill publishing and snapshots"]
+"Snapshot round trip" = ["crates/pmt-skillhub/tests/hub/discover.rs::snapshot_round_trip", "crates/prometheus/tests/skills_hub.rs::taps_and_snapshots_round_trip_between_profiles"]

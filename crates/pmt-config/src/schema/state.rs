@@ -301,6 +301,16 @@ pub struct SkillsConfig {
     pub include_bundled: bool,
     /// Non-secret per-skill settings: skill to key to value.
     pub config: BTreeMap<String, BTreeMap<String, serde_json::Value>>,
+    /// Hub sources (`owner/repo`) whose skills install with trust
+    /// `trusted` (`safe` and `caution` verdicts allowed).
+    pub trusted_sources: Vec<String>,
+    /// What a hub install does with a skill's `SKILL.sig`.
+    pub signature_policy: super::curator::SkillSignaturePolicy,
+    /// The minisign secret key `skills publish` signs with (empty: none).
+    pub signing_key: String,
+    /// Size of the skill ledger before its oldest entries are compacted
+    /// (0 = unbounded).
+    pub ledger_max_bytes: u64,
 }
 
 impl Default for SkillsConfig {
@@ -320,6 +330,13 @@ impl Default for SkillsConfig {
             auto_load: Vec::new(),
             include_bundled: true,
             config: BTreeMap::new(),
+            trusted_sources: super::curator::DEFAULT_TRUSTED_SOURCES
+                .iter()
+                .map(|s| (*s).to_owned())
+                .collect(),
+            signature_policy: super::curator::SkillSignaturePolicy::Warn,
+            signing_key: String::new(),
+            ledger_max_bytes: super::curator::DEFAULT_LEDGER_MAX_BYTES,
         }
     }
 }

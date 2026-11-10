@@ -195,6 +195,15 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `cron.tick_interval_secs` | integer | `30` | 10 to 300 | `live` | Seconds between the built-in trigger's evaluations of due jobs (it also wakes at the earliest next run). |
 | `cron.timezone` | string | unset | any | `live` | IANA time zone of this profile (`Europe/Lisbon`); unset uses the host's zone. |
 | `cron.wrap_response` | boolean | `true` | any | `live` | Frame delivered output with the job name and a pause hint. |
+| `curator.archive_after_secs` | integer | `2592000` | ≥ 1 | `next_session` | A skill without activity this long is archived. |
+| `curator.archive_ttl_secs` | integer | `0` | ≥ 0 | `next_session` | Archived skills older than this may be deleted by an explicit `prometheus curator purge` (0 = never; a pass never purges). |
+| `curator.backup_keep` | integer | `2` | 1 to 100 | `next_session` | Backup archives kept under `skills/.backups/`. |
+| `curator.consolidate` | boolean | `false` | any | `next_session` | Let a pass merge overlapping skills (a model review through the `auxiliary.curator` slot). |
+| `curator.enabled` | boolean | `true` | any | `next_session` | Run automatic passes. |
+| `curator.interval_secs` | integer | `604800` | ≥ 1 | `next_session` | Least time between two automatic passes. |
+| `curator.min_idle_secs` | integer | `7200` | ≥ 1 | `next_session` | The profile must have been idle this long before an automatic pass. |
+| `curator.prune_builtins` | boolean | `false` | any | `next_session` | Also manage ejected bundled copies. |
+| `curator.stale_after_secs` | integer | `1209600` | ≥ 1 | `next_session` | An active skill without activity this long becomes stale. |
 | `debug.share.endpoint` | string | unset | any | `live` | The URL `--target custom` POSTs the report to (`https://`, or `http://` to a loopback host). |
 | `debug.share.header_secrets` | array of string | `[]` | any | `live` | Names of secrets sent as request headers (`X_API_KEY` -> `x-api-key`). |
 | `delegation.api_key_secret` | string | unset | a secret name | `next_session` | Name of the secret holding the direct endpoint's key. |
@@ -686,10 +695,14 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `skills.index_description_chars` | integer | `60` | ≥ 0 | `next_session` | Description length in the skills index. |
 | `skills.inline_shell` | boolean | `false` | any | `next_session` | Expand inline shell snippets at load. |
 | `skills.inline_shell_timeout_ms` | integer | `10000` | ≥ 0 | `next_session` | Deadline of one inline shell snippet. |
+| `skills.ledger_max_bytes` | integer | `5242880` | ≥ 0 | `next_session` | Size of the skill ledger before its oldest entries are compacted (0 = unbounded). |
 | `skills.platform_disabled` | table | `{}` | any | `next_session` | Disabled skill names per platform or surface. |
 | `skills.project_discovery` | boolean | `true` | any | `next_session` | Scan for untrusted project skills and show a notice. |
+| `skills.signature_policy` | one of "off", "warn", "require" | `"warn"` | `"off"`, `"warn"`, `"require"` | `next_session` | What a hub install does with a skill's `SKILL.sig`. |
+| `skills.signing_key` | string | `""` | any | `next_session` | The minisign secret key `skills publish` signs with (empty: none). |
 | `skills.template_vars` | boolean | `true` | any | `next_session` | Substitute `${PROMETHEUS_SKILL_DIR}`-style tokens at load. |
 | `skills.trusted_project_dirs` | array of string | `[]` | any | `next_session` | Git roots whose project-local skills are trusted. |
+| `skills.trusted_sources` | array of string | `["anthropics/skills","openai/skills"]` | any | `next_session` | Hub sources (`owner/repo`) whose skills install with trust `trusted` (`safe` and `caution` verdicts allowed). |
 | `skills.write_approval` | boolean | `false` | any | `next_session` | Stage skill writes as pending for review. |
 | `snapshots.keep` | integer | `20` | ≥ 0 | `live` | Manual snapshots kept per profile. |
 | `storage.journal_mode` | one of "wal", "delete" | `"wal"` | `"wal"`, `"delete"` | `restart` | `state.db` journal mode; `delete` only for filesystems without WAL support. |

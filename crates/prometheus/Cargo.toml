@@ -95,6 +95,7 @@ pmt-providers.workspace = true
 pmt-rpc.workspace = true
 pmt-sandbox.workspace = true
 pmt-skills.workspace = true
+pmt-skillhub.workspace = true
 pmt-store.workspace = true
 pmt-tools.workspace = true
 pmt-tui = { workspace = true, optional = true }
@@ -155,6 +156,7 @@ pmt-mcp = { workspace = true, features = ["testkit"] }
 rmcp = { workspace = true, features = ["client", "transport-async-rw", "transport-streamable-http-client-reqwest"] }
 pmt-plugins = { workspace = true, features = ["testkit"] }
 pmt-pybridge = { workspace = true, features = ["testkit"] }
+pmt-skillhub = { workspace = true, features = ["testkit"] }
 # The fake Nous connector gateway of the connectors tests.
 pmt-tools = { workspace = true, features = ["connectors-fake"] }
 minisign.workspace = true

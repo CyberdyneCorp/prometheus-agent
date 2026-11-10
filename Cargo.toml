@@ -41,6 +41,7 @@ pmt-adapters-webhook = { path = "crates/pmt-adapters-webhook" }
 pmt-adapters-whatsapp = { path = "crates/pmt-adapters-whatsapp" }
 pmt-sandbox = { path = "crates/pmt-sandbox" }
 pmt-skills = { path = "crates/pmt-skills" }
+pmt-skillhub = { path = "crates/pmt-skillhub" }
 pmt-store = { path = "crates/pmt-store" }
 pmt-tools = { path = "crates/pmt-tools" }
 pmt-tui = { path = "crates/pmt-tui" }
@@ -92,6 +93,8 @@ rustls-platform-verifier = "0.7"
 # RS256 signatures of Google service-account assertions (minted Vertex AI
 # tokens); the same ring rustls already uses.
 ring = "0.17"
+# Sigstore keyless skill signatures: certificate chains checked with ring.
+x509-parser = { version = "0.18", default-features = false, features = ["verify"] }
 # The OS roots exported into the CA bundle handed to sandboxed children.
 rustls-native-certs = "0.8"
 # Decrypts an encrypted PKCS#8 client key of an mTLS MCP server

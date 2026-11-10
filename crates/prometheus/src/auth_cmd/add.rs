@@ -198,7 +198,7 @@ fn mint_openrouter_key(
 
 /// Where a browser sign-in runs: SSH sessions get the tunnel hint, a
 /// graphical terminal may open the browser.
-fn place(ctx: &Context<'_>) -> Place {
+pub(crate) fn place(ctx: &Context<'_>) -> Place {
     let remote = ctx.launch.is_ssh_session();
     Place {
         remote,

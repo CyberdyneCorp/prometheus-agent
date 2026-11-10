@@ -129,7 +129,7 @@ impl Repl {
                 return Flow::Continue;
             }
             "retry" | "learn" | "tools" | "model" | "moa" => {
-                return self.session_reply(name, args).await;
+                return Box::pin(self.session_reply(name, args)).await;
             }
             _ => {
                 let Some(live) = self.live.take() else {

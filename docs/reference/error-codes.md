@@ -266,7 +266,14 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `skill.read_only` | `permission_denied` | 77 | The skill cannot be changed: bundled skills are read-only (eject a copy with `prometheus skills eject <name>`), and hub, plugin, project and external-directory skills are not written by Prometheus. |
 | `skill.scan_blocked` | `permission_denied` | 77 | A skill's security scan returned `dangerous` or failed; scanning fails closed, so the skill was not written, loaded or ejected. |
 | `skill.io` | `io` | 74 | A skill file or directory could not be read or written. |
-| `skill.hub_unavailable` | `unavailable` | 69 | Installing and removing hub skills ships with the skills hub in M2; create skills with `skill_manage` or copy them into the profile's `skills/` directory. |
+| `skill.hub_unavailable` | `unavailable` | 69 | A skills hub source (GitHub, skills.sh, ClawHub, LobeHub, browse.sh, a well-known endpoint, a URL or the central index) could not be reached or gave an answer that cannot be used; check the network settings (`network.proxy`) and retry. The embedded official catalog works offline. |
+| `skill.already_installed` | `tool` | 1 | `prometheus skills install` found the skill installed (`Already installed. Use --force to reinstall.`), or a skill of that name that is not a hub install, which is never replaced. |
+| `skill.signature` | `permission_denied` | 77 | A hub skill's `SKILL.sig` does not verify (`invalid signature`, never accepted), or `skills.signature_policy = "require"` met an unsigned skill; nothing was installed. |
+| `skill.lock_mismatch` | `conflict` | 75 | `prometheus skills install --locked` fetched content whose digest differs from `skills.lock` (`content digest mismatch`); the locked set cannot be reproduced from the source as it is now. |
+| `skill.not_hub` | `invalid_input` | 65 | The command works on hub-installed skills only (recorded in `skills.lock`); user, agent, bundled and plugin skills are managed with their own commands. |
+| `skill.publish_refused` | `permission_denied` | 77 | `prometheus skills publish` refused the skill: lint findings or a `dangerous` scan verdict; fix them with `prometheus skills lint --strict <dir>` first. |
+| `curator.busy` | `conflict` | 75 | Another curator pass of this profile is running; at most one runs at a time. Try again when it has finished. |
+| `curator.refused` | `conflict` | 75 | The curator refused: a restore whose name is now taken by a hub, plugin or bundled skill, a skill it does not manage, or a rollback whose safety capture failed (rollbacks fail closed). |
 | `skill.pending_not_found` | `not_found` | 66 | No staged skill write has that id; `/skills pending` lists them. |
 | `skill.review_running` | `conflict` | 75 | A background skill review of this session is already running (`a review is already running`); `/refine` again once it posts its summary. |
 | `skill.bundle_invalid` | `invalid_input` | 65 | A skill bundle (`<profile>/skill-bundles/<slug>.toml`) is malformed: TOML that does not parse, an unknown field, an empty `skills` list or more than 32 entries; `prometheus skills bundles list` reports each file. |

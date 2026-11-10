@@ -1843,6 +1843,72 @@
         }
       ]
     },
+    "CuratorConfig": {
+      "additionalProperties": false,
+      "description": "The `[curator]` section: the background pass that marks unused\nagent-created skills stale and archives them (never deletes).",
+      "properties": {
+        "archive_after_secs": {
+          "default": 2592000,
+          "description": "A skill without activity this long is archived.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "archive_ttl_secs": {
+          "default": 0,
+          "description": "Archived skills older than this may be deleted by an explicit\n`prometheus curator purge` (0 = never; a pass never purges).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "backup_keep": {
+          "default": 2,
+          "description": "Backup archives kept under `skills/.backups/`.",
+          "format": "uint32",
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "consolidate": {
+          "default": false,
+          "description": "Let a pass merge overlapping skills (a model review through the\n`auxiliary.curator` slot).",
+          "type": "boolean"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Run automatic passes.",
+          "type": "boolean"
+        },
+        "interval_secs": {
+          "default": 604800,
+          "description": "Least time between two automatic passes.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "min_idle_secs": {
+          "default": 7200,
+          "description": "The profile must have been idle this long before an automatic pass.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "prune_builtins": {
+          "default": false,
+          "description": "Also manage ejected bundled copies.",
+          "type": "boolean"
+        },
+        "stale_after_secs": {
+          "default": 1209600,
+          "description": "An active skill without activity this long becomes stale.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
     "DataCollection": {
       "description": "Whether upstream providers that store or train on prompts may serve.",
       "oneOf": [
@@ -7993,6 +8059,26 @@
       },
       "type": "object"
     },
+    "SkillSignaturePolicy": {
+      "description": "`skills.signature_policy`: what a hub install does with `SKILL.sig`.",
+      "oneOf": [
+        {
+          "const": "off",
+          "description": "Signatures are not checked.",
+          "type": "string"
+        },
+        {
+          "const": "warn",
+          "description": "Unsigned skills install with a warning; an invalid signature is\nalways refused.",
+          "type": "string"
+        },
+        {
+          "const": "require",
+          "description": "Unsigned and invalidly signed skills are refused (exit 77).",
+          "type": "string"
+        }
+      ]
+    },
     "SkillsConfig": {
       "additionalProperties": false,
       "description": "The `[skills]` section.",
@@ -8061,6 +8147,13 @@
           "minimum": 0,
           "type": "integer"
         },
+        "ledger_max_bytes": {
+          "default": 5242880,
+          "description": "Size of the skill ledger before its oldest entries are compacted\n(0 = unbounded).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
         "platform_disabled": {
           "additionalProperties": {
             "items": {
@@ -8077,6 +8170,16 @@
           "description": "Scan for untrusted project skills and show a notice.",
           "type": "boolean"
         },
+        "signature_policy": {
+          "$ref": "#/$defs/SkillSignaturePolicy",
+          "default": "warn",
+          "description": "What a hub install does with a skill's `SKILL.sig`."
+        },
+        "signing_key": {
+          "default": "",
+          "description": "The minisign secret key `skills publish` signs with (empty: none).",
+          "type": "string"
+        },
         "template_vars": {
           "default": true,
           "description": "Substitute `${PROMETHEUS_SKILL_DIR}`-style tokens at load.",
@@ -8085,6 +8188,17 @@
         "trusted_project_dirs": {
           "default": [],
           "description": "Git roots whose project-local skills are trusted.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "trusted_sources": {
+          "default": [
+            "anthropics/skills",
+            "openai/skills"
+          ],
+          "description": "Hub sources (`owner/repo`) whose skills install with trust\n`trusted` (`safe` and `caution` verdicts allowed).",
           "items": {
             "type": "string"
           },
@@ -10813,6 +10927,21 @@
       },
       "description": "Profile time zone (scheduler keys arrive with M2)."
     },
+    "curator": {
+      "$ref": "#/$defs/CuratorConfig",
+      "default": {
+        "archive_after_secs": 2592000,
+        "archive_ttl_secs": 0,
+        "backup_keep": 2,
+        "consolidate": false,
+        "enabled": true,
+        "interval_secs": 604800,
+        "min_idle_secs": 7200,
+        "prune_builtins": false,
+        "stale_after_secs": 1209600
+      },
+      "description": "The skill curator."
+    },
     "debug": {
       "$ref": "#/$defs/DebugConfig",
       "default": {
@@ -11362,10 +11491,17 @@
         "index_description_chars": 60,
         "inline_shell": false,
         "inline_shell_timeout_ms": 10000,
+        "ledger_max_bytes": 5242880,
         "platform_disabled": {},
         "project_discovery": true,
+        "signature_policy": "warn",
+        "signing_key": "",
         "template_vars": true,
         "trusted_project_dirs": [],
+        "trusted_sources": [
+          "anthropics/skills",
+          "openai/skills"
+        ],
         "write_approval": false
       },
       "description": "Skills discovery and authoring."

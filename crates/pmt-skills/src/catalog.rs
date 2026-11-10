@@ -15,7 +15,7 @@ use serde_json::{Map, Value};
 
 use crate::frontmatter::{self, Document};
 use crate::layout::{self, SKILL_FILE};
-use crate::lockfile::{Contents, Trust};
+use crate::lockfile::{self, Contents, Trust};
 use crate::meta::Meta;
 use crate::roots::{Root, RootDir, Roots, Tier};
 use crate::scan::{Scanner, Verdict};
@@ -145,6 +145,9 @@ impl Catalog {
             if root.tier == Tier::Project {
                 skills = catalog.screen(skills, scanner);
             }
+            if root.tier == Tier::Profile {
+                skills = catalog.verify_hub(skills, lock);
+            }
             match by_tier.last_mut() {
                 Some((tier, list)) if *tier == root.tier => list.extend(skills),
                 _ => by_tier.push((root.tier, skills)),
@@ -220,6 +223,23 @@ impl Catalog {
                 Ok(()) => kept.push(skill),
                 Err(why) => {
                     tracing::warn!(skill = %skill.name, reason = %why, "project skill quarantined");
+                    self.quarantined.push((Arc::new(skill), why));
+                }
+            }
+        }
+        kept
+    }
+
+    /// Quarantines hub skills whose files no longer match the digest
+    /// recorded at install, or that the audit flagged (spec: skills,
+    /// Skills lockfile and tamper detection).
+    fn verify_hub(&mut self, skills: Vec<Skill>, lock: &Contents) -> Vec<Skill> {
+        let mut kept = Vec::new();
+        for skill in skills {
+            match hub_refusal(&skill, lock) {
+                None => kept.push(skill),
+                Some(why) => {
+                    tracing::warn!(skill = %skill.name, reason = %why, "hub skill quarantined");
                     self.quarantined.push((Arc::new(skill), why));
                 }
             }
@@ -336,6 +356,19 @@ fn provenance(tier: Tier, lock: &Contents, name: &str) -> Provenance {
         },
         Tier::Project | Tier::External | Tier::Plugin => Provenance::Local,
     }
+}
+
+/// Why a hub skill may not load: the audit's quarantine, or files that
+/// differ from the locked digest.
+fn hub_refusal(skill: &Skill, lock: &Contents) -> Option<String> {
+    if !skill.provenance.is_hub() {
+        return None;
+    }
+    let entry = lock.entry(&skill.name).ok().flatten()?;
+    if let Some(why) = &entry.quarantined {
+        return Some(why.clone());
+    }
+    (skill.dir.digest() != entry.content_digest).then(|| lockfile::DIGEST_MISMATCH.to_owned())
 }
 
 /// Every file of `skill` for a scan.

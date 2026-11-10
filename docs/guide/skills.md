@@ -78,6 +78,95 @@ re-records the provenance of installs that still match the copy embedded in
 the binary; `--restore` replaces missing or modified copies, moving the old
 copy to `skills/.backups/` first.
 
+## Installing skills from the hub
+
+`prometheus skills install <identifier>` fetches a skill into a quarantine
+directory, scans it, checks its signature and decides by the source's trust
+level, then moves it into the profile and records it in
+`skills/skills.lock`:
+
+| Identifier | Source | Trust |
+|---|---|---|
+| `official/<category>/<name>` | the official catalog embedded in the binary (works offline) | `builtin` |
+| `<owner>/<repo>/<path>`, `github:<owner>/<repo>/<path>` | a GitHub repository path or a tap | `trusted` when the repository is in `skills.trusted_sources`, else `community` |
+| `skills-sh/<owner>/<repo>/<skill>` | the skills.sh directory (alias slugs resolve) | as GitHub |
+| `well-known:<https url>` | a site's `/.well-known/skills/` endpoint | `community` |
+| `clawhub:<slug>`, `lobehub:<slug>`, `browse-sh:<slug>` | the registries | `community` |
+| `https://.../SKILL.md` | one file plus the support files it references, same host | `community` |
+
+`builtin` allows every scan verdict, `trusted` allows `safe` and `caution`,
+`community` only `safe`. `--force` overrides a block, except a `dangerous`
+verdict on a `trusted` or `community` skill, which nothing overrides.
+Reinstalling needs `--force`. A bare `SKILL.md` URL whose frontmatter and
+slug give no name needs `--name`. GitHub requests use the `GITHUB_TOKEN`
+secret when it is set.
+
+```text
+$ prometheus skills browse --source official   # offline
+$ prometheus skills search terraform            # cached index first, then live sources (8 s at most)
+$ prometheus skills inspect openai/skills/k8s   # preview, scan and upstream metadata; writes nothing
+$ prometheus skills install openai/skills/k8s
+```
+
+A skill carrying a `blueprint` block is never scheduled by its install: its
+blueprint appears in `prometheus cron suggestions` and `/suggestions` until
+you accept it.
+
+### Keeping hub skills honest
+
+`skills.lock` records each hub skill's source, the resolved upstream ref (a
+commit SHA, a version or a URL), the SHA-256 of its installed files, its
+trust level and its signature state. When a session starts, a hub skill
+whose files no longer match is left out of the index and quarantined:
+`prometheus skills doctor` reports `content digest mismatch`, `prometheus
+skills accept <name>` re-scans and records the edit, `prometheus skills
+reset <name>` restores the locked content. `prometheus skills install
+--locked` reproduces exactly the locked set and fails on any digest
+mismatch.
+
+- `prometheus skills check` reports skills whose upstream changed,
+  `orphaned` installs and `invalid_install` paths (the last two without a
+  network call).
+- `prometheus skills update [<name>]` reinstalls changed skills through the
+  whole pipeline; a locally modified skill is skipped (`locally modified;
+  use --force`).
+- `prometheus skills audit` re-scans every hub skill and quarantines
+  `dangerous` ones; `prometheus skills uninstall <name>` removes a hub
+  skill; `prometheus skills untrust <root>` removes a trusted project root.
+- The same verbs work in a chat: `/skills search terraform`, `/skills
+  install <id>`, `/skills tap add my-org/agent-skills`...
+
+### Signatures
+
+A skill may carry `SKILL.sig`, a detached signature over the digest of its
+other files, made with a minisign key or a Sigstore keyless identity:
+`prometheus skills sign <dir> --key <minisign secret key>` or `--keyless`
+(an OpenID sign-in, or GitHub Actions' ambient token in CI).
+`skills.signature_policy` decides installs: `warn` (default) installs
+unsigned skills with a warning, `require` refuses unsigned ones (exit 77),
+and an invalid signature is always refused (`invalid signature`).
+`prometheus skills show <name>` prints the source, ref, digest, signer and
+trust.
+
+### Taps, snapshots and publishing
+
+A tap is a GitHub repository of skills (`skills/` by default):
+`prometheus skills tap add my-org/agent-skills [--path P]` makes its skills
+searchable and installable as `my-org/agent-skills/<skill>` (trust
+`community` unless the repository is trusted); `tap list` and `tap remove`
+manage them (`skills/taps.toml`).
+
+`prometheus skills snapshot export setup.json` writes every hub skill and
+tap; `prometheus skills snapshot import setup.json` on another profile adds
+the taps and installs each skill through the pipeline (exit 5 when an entry
+failed, each failure reported).
+
+`prometheus skills publish <dir> --to github --repo owner/repo` lints and
+scans the skill (refusing lint findings or a `dangerous` verdict), signs it
+with `skills.signing_key` when set, and opens a pull request from a fork
+branch (never a push to the default branch); `--to clawhub` submits it to
+ClawHub (`CLAWHUB_TOKEN`). The pull request or submission URL is printed.
+
 ## Using skills in a chat
 
 - `/<skill> [instruction]` loads a skill into your message; `/skill <name>`

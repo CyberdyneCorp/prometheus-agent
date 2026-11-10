@@ -27,7 +27,7 @@ pub const DEFERRED: &str = "Skill change takes effect in your next session. Use 
 pub const APPLIED_NOW: &str =
     "Skill change applied to this session now (the prompt cache was invalidated).";
 /// `/skills` usage.
-pub const USAGE: &str = "usage: /skills [list] | enable|disable|reset <name> [--now] | pending | diff <id> | approve|reject <id>|all | approval on|off | search|inspect|install|uninstall <identifier>";
+pub const USAGE: &str = "usage: /skills [list] | enable|disable|reset <name> [--now] | pending | diff <id> | approve|reject <id>|all | approval on|off | browse | search <query> | inspect|install <identifier> | uninstall|accept <name> | check | update | audit | tap ... | untrust <root>";
 
 /// What the session does with a `/skills` command.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,12 +64,6 @@ pub fn run(session: &SkillsSession, args: &str, core: &[&str]) -> Result<Reply, 
             let (catalog, _) = session.catalog();
             eject::reset(session.scope().dir(), &catalog, name)?;
             format!("Reset '{name}' to the bundled version.")
-        }
-        ["search" | "inspect" | "install" | "uninstall", ..] => {
-            return Err(Error::new(
-                &codes::SKILL_HUB_UNAVAILABLE,
-                "searching, inspecting, installing and removing hub skills ships with the skills hub (M2)",
-            ));
         }
         _ => return Err(usage()),
     };
@@ -194,6 +188,32 @@ pub fn trust(profile: &ProfileDir, root: &Path) -> Result<String, Error> {
     file.set("skills.trusted_project_dirs", &toml_list(&dirs))?;
     Ok(format!(
         "Trusted {text}: its .prometheus/skills and .agents/skills load in new sessions."
+    ))
+}
+
+/// Removes `root` (as given, or canonical) from
+/// `skills.trusted_project_dirs` (`prometheus skills untrust <root>`).
+///
+/// # Errors
+///
+/// `skill.not_found` when `root` is not trusted; config write errors.
+pub fn untrust(profile: &ProfileDir, root: &Path) -> Result<String, Error> {
+    let given = root.display().to_string();
+    let canonical = root.canonicalize().ok().map(|p| p.display().to_string());
+    let mut dirs = current(profile)?.skills.trusted_project_dirs;
+    let before = dirs.len();
+    dirs.retain(|d| *d != given && Some(d) != canonical.as_ref());
+    if dirs.len() == before {
+        return Err(Error::new(
+            &codes::SKILL_NOT_FOUND,
+            format!("{given} is not a trusted project root"),
+        ));
+    }
+    profile
+        .config_file()
+        .set("skills.trusted_project_dirs", &toml_list(&dirs))?;
+    Ok(format!(
+        "Untrusted {given}: its project skills no longer load in new sessions."
     ))
 }
 

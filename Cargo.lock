@@ -3385,6 +3385,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "pmt-skillhub"
+version = "0.1.0"
+dependencies = [
+ "base64 0.23.1",
+ "jiff",
+ "minisign",
+ "minisign-verify",
+ "pmt-config",
+ "pmt-core",
+ "pmt-net",
+ "pmt-skillhub",
+ "pmt-skills",
+ "rcgen",
+ "regex",
+ "reqwest",
+ "ring",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tempfile",
+ "tokio",
+ "toml",
+ "tracing",
+ "ulid",
+ "x509-parser",
+ "zip",
+]
+
+[[package]]
 name = "pmt-skills"
 version = "0.1.0"
 dependencies = [
@@ -3697,6 +3726,7 @@ dependencies = [
  "pmt-pybridge",
  "pmt-rpc",
  "pmt-sandbox",
+ "pmt-skillhub",
  "pmt-skills",
  "pmt-store",
  "pmt-tools",

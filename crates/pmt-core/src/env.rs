@@ -70,6 +70,10 @@ const TEST_STALL_RUNTIME_MS: &str = "PMT_TEST_STALL_RUNTIME_MS";
 /// `https://paste.rs/`, so tests can upload to and delete from a local
 /// endpoint (a test seam; release builds ignore it).
 const TEST_PASTE_URL: &str = "PMT_TEST_PASTE_URL";
+/// Debug builds: one base URL standing in for every skills hub service
+/// (GitHub, skills.sh, ClawHub, LobeHub, browse.sh, the central index), so
+/// tests run against a local fake (a test seam; release builds ignore it).
+const TEST_SKILLS_HUB: &str = "PMT_TEST_SKILLS_HUB";
 const RUST_LOG: &str = "RUST_LOG";
 /// The notepad channel file of the scheduled run whose terminal started
 /// this process (spec: scheduled-jobs, Per-job notepad): the run's sandbox
@@ -167,6 +171,7 @@ pub struct LaunchEnv {
     test_store_delay: Option<std::time::Duration>,
     test_stall_runtime: Option<std::time::Duration>,
     test_paste_url: Option<String>,
+    test_skills_hub: Option<String>,
     cron_notepad: Option<PathBuf>,
 }
 
@@ -221,6 +226,7 @@ impl LaunchEnv {
                 Var::TestStoreDelay => env.test_store_delay = millis(&value),
                 Var::TestStallRuntime => env.test_stall_runtime = millis(&value),
                 Var::TestPasteUrl => env.test_paste_url = env.unicode(name, value),
+                Var::TestSkillsHub => env.test_skills_hub = env.unicode(name, value),
                 Var::CronNotepad => env.cron_notepad = non_blank(value).map(PathBuf::from),
                 Var::PmtLog => pmt_log = env.unicode(name, value),
                 Var::RustLog => rust_log = env.unicode(name, value),
@@ -316,6 +322,13 @@ impl LaunchEnv {
     #[must_use]
     pub fn test_paste_url(&self) -> Option<&str> {
         self.test_paste_url.as_deref()
+    }
+
+    /// Debug builds: `PMT_TEST_SKILLS_HUB`, the base URL of a local fake of
+    /// every skills hub service. Always `None` in release builds.
+    #[must_use]
+    pub fn test_skills_hub(&self) -> Option<&str> {
+        self.test_skills_hub.as_deref()
     }
 
     /// Debug builds: `PMT_TEST_BATTERY`, the battery the status bar
@@ -465,6 +478,7 @@ enum Var {
     TestStoreDelay,
     TestStallRuntime,
     TestPasteUrl,
+    TestSkillsHub,
     CronNotepad,
     Secret,
     Ignored(Option<String>),
@@ -509,6 +523,7 @@ fn classify(name: &str, policy: &EnvPolicy<'_>) -> Var {
         TEST_STORE_DELAY_MS if cfg!(debug_assertions) => return Var::TestStoreDelay,
         TEST_STALL_RUNTIME_MS if cfg!(debug_assertions) => return Var::TestStallRuntime,
         TEST_PASTE_URL if cfg!(debug_assertions) => return Var::TestPasteUrl,
+        TEST_SKILLS_HUB if cfg!(debug_assertions) => return Var::TestSkillsHub,
         CRON_NOTEPAD => return Var::CronNotepad,
         _ => {}
     }

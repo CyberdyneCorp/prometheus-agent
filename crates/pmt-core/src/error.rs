@@ -805,9 +805,30 @@ error_codes! {
     /// A skill file could not be read or written.
     SKILL_IO = ("skill.io", Io,
         "A skill file or directory could not be read or written.");
-    /// The skills hub is not part of this build.
+    /// A skills hub source could not be reached or answered badly.
     SKILL_HUB_UNAVAILABLE = ("skill.hub_unavailable", Unavailable,
-        "Installing and removing hub skills ships with the skills hub in M2; create skills with `skill_manage` or copy them into the profile's `skills/` directory.");
+        "A skills hub source (GitHub, skills.sh, ClawHub, LobeHub, browse.sh, a well-known endpoint, a URL or the central index) could not be reached or gave an answer that cannot be used; check the network settings (`network.proxy`) and retry. The embedded official catalog works offline.");
+    /// The skill is already installed.
+    SKILL_ALREADY_INSTALLED = ("skill.already_installed", Tool,
+        "`prometheus skills install` found the skill installed (`Already installed. Use --force to reinstall.`), or a skill of that name that is not a hub install, which is never replaced.");
+    /// A skill signature is invalid or required and missing.
+    SKILL_SIGNATURE = ("skill.signature", PermissionDenied,
+        "A hub skill's `SKILL.sig` does not verify (`invalid signature`, never accepted), or `skills.signature_policy = \"require\"` met an unsigned skill; nothing was installed.");
+    /// Locked content differs from what the source serves now.
+    SKILL_LOCK_MISMATCH = ("skill.lock_mismatch", Conflict,
+        "`prometheus skills install --locked` fetched content whose digest differs from `skills.lock` (`content digest mismatch`); the locked set cannot be reproduced from the source as it is now.");
+    /// The skill is not a hub install.
+    SKILL_NOT_HUB = ("skill.not_hub", InvalidInput,
+        "The command works on hub-installed skills only (recorded in `skills.lock`); user, agent, bundled and plugin skills are managed with their own commands.");
+    /// A skill publish was refused.
+    SKILL_PUBLISH_REFUSED = ("skill.publish_refused", PermissionDenied,
+        "`prometheus skills publish` refused the skill: lint findings or a `dangerous` scan verdict; fix them with `prometheus skills lint --strict <dir>` first.");
+    /// A curator pass is already running for the profile.
+    CURATOR_BUSY = ("curator.busy", Conflict,
+        "Another curator pass of this profile is running; at most one runs at a time. Try again when it has finished.");
+    /// A curator operation was refused.
+    CURATOR_REFUSED = ("curator.refused", Conflict,
+        "The curator refused: a restore whose name is now taken by a hub, plugin or bundled skill, a skill it does not manage, or a rollback whose safety capture failed (rollbacks fail closed).");
     /// No pending skill write has that id.
     SKILL_PENDING_NOT_FOUND = ("skill.pending_not_found", NotFound,
         "No staged skill write has that id; `/skills pending` lists them.");

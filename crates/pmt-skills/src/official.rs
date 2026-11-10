@@ -85,11 +85,14 @@ fn installed(profile_dir: &Path, catalog: &Catalog, name: &str) -> bool {
     recorded || profile_copy(catalog, name).is_some()
 }
 
+/// The profile's copy of `name`, also when tamper detection quarantined
+/// it (a modified copy is what `--restore` replaces).
 fn profile_copy(catalog: &Catalog, name: &str) -> Option<PathBuf> {
     catalog
         .skills
         .iter()
         .chain(&catalog.shadowed)
+        .chain(catalog.quarantined.iter().map(|(skill, _)| skill))
         .find(|s| s.name == name && s.tier == Tier::Profile)
         .and_then(|s| s.dir.path().map(Path::to_path_buf))
 }
@@ -177,6 +180,7 @@ fn repair_one(
         content_digest: embedded,
         trust: Some(Trust::Builtin),
         installed_at: lockfile::now(),
+        ..Entry::default()
     })?;
     Ok(repair)
 }

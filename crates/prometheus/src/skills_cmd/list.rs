@@ -182,6 +182,7 @@ pub(super) fn show(env: &Env, name: &str) -> Result<u8, Error> {
         .unwrap_or_default();
     let status = status(env.scope.config(), &skill);
     let files = skill.dir.files();
+    let origin = origin(env, &skill.name);
     if env.json {
         return document(
             "skills show",
@@ -189,7 +190,7 @@ pub(super) fn show(env: &Env, name: &str) -> Result<u8, Error> {
                 "name": skill.name, "description": skill.description, "category": skill.category,
                 "source": skill.tier.as_str(), "path": skill.dir.display(),
                 "provenance": provenance(skill.provenance), "status": status,
-                "files": files, "content": text,
+                "files": files, "content": text, "origin": origin,
             }),
         );
     }
@@ -205,9 +206,42 @@ pub(super) fn show(env: &Env, name: &str) -> Result<u8, Error> {
     );
     let _ = writeln!(out, "provenance: {}", provenance(skill.provenance));
     let _ = writeln!(out, "status: {status}");
+    if let Some(origin) = &origin {
+        for key in [
+            "source",
+            "resolved_ref",
+            "content_digest",
+            "signature",
+            "trust",
+            "installed_at",
+        ] {
+            if let Some(value) = origin.get(key).and_then(|v| v.as_str()) {
+                let label = if key == "source" {
+                    "installed from"
+                } else {
+                    key
+                };
+                let _ = writeln!(out, "{label}: {value}");
+            }
+        }
+    }
     let _ = writeln!(out, "files: {}", files.join(", "));
     let _ = write!(out, "\n{text}");
     print_raw(&out)
+}
+
+/// The lockfile record of `name` (where a hub or ejected skill came
+/// from: source, ref, digest, signer, trust).
+fn origin(env: &Env, name: &str) -> Option<serde_json::Value> {
+    let lock =
+        pmt_skills::lockfile::LockFile::in_dir(&pmt_skills::roots::profile_skills(env.scope.dir()));
+    let entry = lock.read().entry(name).ok().flatten().cloned()?;
+    let mut value = serde_json::to_value(&entry).ok()?;
+    if let Some(trust) = entry.trust {
+        value["trust"] =
+            serde_json::Value::String(pmt_skillhub::sources::trust_text(trust).to_owned());
+    }
+    Some(value)
 }
 
 /// One linted skill.

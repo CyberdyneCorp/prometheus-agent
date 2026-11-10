@@ -239,6 +239,7 @@ fn skill_count(ctx: &Context<'_>, scope: &ProfileScope) -> usize {
         cwd: None,
         bundled: pmt_skills::bundled::Bundled::builtin(),
         json: false,
+        launch: ctx.launch.clone(),
     };
     env.profile_catalog().skills.len()
 }

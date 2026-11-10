@@ -175,12 +175,19 @@ fn state_command(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<String,
     let live = ctx.live;
     let core = ctx.registry.builtin_names();
     Some(match name {
-        "skills" => pmt_skills::activation::run(&live.skills, args, &core).map(|reply| {
-            if reply.rebuild_now {
-                live.agent.rebuild_prompt(Rebuild::Now("skills".to_owned()));
+        "skills" => {
+            if let Some(reply) =
+                crate::skills_cmd::slash::run(ctx.scope, ctx.factory.launch(), args)
+            {
+                return Some(reply);
             }
-            reply.text
-        }),
+            pmt_skills::activation::run(&live.skills, args, &core).map(|reply| {
+                if reply.rebuild_now {
+                    live.agent.rebuild_prompt(Rebuild::Now("skills".to_owned()));
+                }
+                reply.text
+            })
+        }
         "memory" => pmt_memory::slash::run(
             &ctx.factory.store,
             &ctx.scope.config().memory,
