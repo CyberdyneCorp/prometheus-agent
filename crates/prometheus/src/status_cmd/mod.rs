@@ -126,6 +126,9 @@ fn daemon_text(facts: &daemon::DaemonFacts) -> String {
         } else {
             "daemon: not running\n"
         });
+        // A hung runtime is exactly the daemon that cannot answer, so the
+        // record's stale heartbeat is what explains it.
+        stale_warning(&mut text, facts);
         if let Some(last) = &facts.last_exit {
             let _ = writeln!(
                 text,
@@ -147,9 +150,7 @@ fn daemon_text(facts: &daemon::DaemonFacts) -> String {
         "daemon: running (pid {}, up {}s, version {}, {build})",
         status.pid, status.uptime_secs, status.version
     );
-    if let Some(stale) = facts.heartbeat_stale_secs {
-        let _ = writeln!(text, "warning: daemon heartbeat stale ({stale}s)");
-    }
+    stale_warning(&mut text, facts);
     if facts.state.as_deref() == Some("degraded") {
         text.push_str("warning: daemon state is degraded\n");
     }
@@ -177,6 +178,12 @@ fn daemon_text(facts: &daemon::DaemonFacts) -> String {
         let _ = writeln!(text, "  {:<9}{}{owner}{reason}", c.state, c.component);
     }
     text
+}
+
+fn stale_warning(text: &mut String, facts: &daemon::DaemonFacts) {
+    if let Some(stale) = facts.heartbeat_stale_secs {
+        let _ = writeln!(text, "warning: daemon heartbeat stale ({stale}s)");
+    }
 }
 
 fn basics_text(basics: &local::Basics) -> String {

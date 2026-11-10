@@ -282,7 +282,8 @@ status` shows that record (`last daemon: degraded
 `daemon.watchdog.enabled = false` turns it off. While the runtime runs the
 daemon refreshes `updated_at` in `run/gateway.json` every minute, and
 `status` warns `daemon heartbeat stale (<n>s)` once it is older than two
-minutes with the process alive.
+minutes with the process alive, also when a hung daemon no longer answers
+(`daemon: running (not answering)`).
 
 A task dump lists the runtime's counters (workers, tasks alive, queued);
 every OS thread of the process with its name and scheduler state (Linux,

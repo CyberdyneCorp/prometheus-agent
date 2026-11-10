@@ -66,6 +66,10 @@ const TEST_STORE_DELAY_MS: &str = "PMT_TEST_STORE_DELAY_MS";
 /// its async runtime for good, standing in for a task that never yields
 /// (a test seam of the liveness watchdog; release builds ignore it).
 const TEST_STALL_RUNTIME_MS: &str = "PMT_TEST_STALL_RUNTIME_MS";
+/// Debug builds: the URL the `paste_rs` debug-share target uses instead of
+/// `https://paste.rs/`, so tests can upload to and delete from a local
+/// endpoint (a test seam; release builds ignore it).
+const TEST_PASTE_URL: &str = "PMT_TEST_PASTE_URL";
 const RUST_LOG: &str = "RUST_LOG";
 /// The notepad channel file of the scheduled run whose terminal started
 /// this process (spec: scheduled-jobs, Per-job notepad): the run's sandbox
@@ -162,6 +166,7 @@ pub struct LaunchEnv {
     test_audio_dir: Option<PathBuf>,
     test_store_delay: Option<std::time::Duration>,
     test_stall_runtime: Option<std::time::Duration>,
+    test_paste_url: Option<String>,
     cron_notepad: Option<PathBuf>,
 }
 
@@ -215,6 +220,7 @@ impl LaunchEnv {
                 Var::TestAudioDir => env.test_audio_dir = non_blank(value).map(PathBuf::from),
                 Var::TestStoreDelay => env.test_store_delay = millis(&value),
                 Var::TestStallRuntime => env.test_stall_runtime = millis(&value),
+                Var::TestPasteUrl => env.test_paste_url = env.unicode(name, value),
                 Var::CronNotepad => env.cron_notepad = non_blank(value).map(PathBuf::from),
                 Var::PmtLog => pmt_log = env.unicode(name, value),
                 Var::RustLog => rust_log = env.unicode(name, value),
@@ -302,6 +308,14 @@ impl LaunchEnv {
     #[must_use]
     pub fn test_stall_runtime(&self) -> Option<std::time::Duration> {
         self.test_stall_runtime
+    }
+
+    /// Debug builds: `PMT_TEST_PASTE_URL`, the URL the `paste_rs` debug-share
+    /// target uses instead of `https://paste.rs/`. Always `None` in release
+    /// builds.
+    #[must_use]
+    pub fn test_paste_url(&self) -> Option<&str> {
+        self.test_paste_url.as_deref()
     }
 
     /// Debug builds: `PMT_TEST_BATTERY`, the battery the status bar
@@ -450,6 +464,7 @@ enum Var {
     TestAudioDir,
     TestStoreDelay,
     TestStallRuntime,
+    TestPasteUrl,
     CronNotepad,
     Secret,
     Ignored(Option<String>),
@@ -493,6 +508,7 @@ fn classify(name: &str, policy: &EnvPolicy<'_>) -> Var {
         TEST_AUDIO_DIR if cfg!(debug_assertions) => return Var::TestAudioDir,
         TEST_STORE_DELAY_MS if cfg!(debug_assertions) => return Var::TestStoreDelay,
         TEST_STALL_RUNTIME_MS if cfg!(debug_assertions) => return Var::TestStallRuntime,
+        TEST_PASTE_URL if cfg!(debug_assertions) => return Var::TestPasteUrl,
         CRON_NOTEPAD => return Var::CronNotepad,
         _ => {}
     }

@@ -135,3 +135,38 @@ fn dump_tasks_without_a_daemon_says_so() {
     let out = run(home.path(), &["debug", "dump-tasks"]);
     assert_eq!(out.status.code(), Some(69), "{}", common::stderr(&out));
 }
+
+/// The requirement's stale-heartbeat warning: a frozen runtime cannot
+/// answer its control channel, and that hung daemon is the one the
+/// warning is for.
+#[cfg(unix)]
+#[test]
+fn a_frozen_daemon_with_an_old_heartbeat_is_reported_stale() {
+    use nix::sys::signal::{Signal, kill};
+    use nix::unistd::Pid;
+    let home = mock_home();
+    let running = daemon::start(home.path(), &[]);
+    let pid = Pid::from_raw(i32::try_from(running.pid).unwrap());
+    kill(pid, Signal::SIGSTOP).unwrap();
+    // Resume it whatever the asserts do, so the guard can stop it.
+    let _resume = Resume(pid);
+    let path = home.path().join("run/gateway.json");
+    let mut record: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    let hour_ago = jiff::Timestamp::now() - jiff::SignedDuration::from_hours(1);
+    record["updated_at"] = hour_ago.to_string().into();
+    std::fs::write(&path, serde_json::to_vec(&record).unwrap()).unwrap();
+    let text = ok(&run(home.path(), &["status"]));
+    assert!(text.contains("daemon: running (not answering)"), "{text}");
+    assert!(text.contains("warning: daemon heartbeat stale ("), "{text}");
+}
+
+#[cfg(unix)]
+struct Resume(nix::unistd::Pid);
+
+#[cfg(unix)]
+impl Drop for Resume {
+    fn drop(&mut self) {
+        let _ = nix::sys::signal::kill(self.0, nix::sys::signal::Signal::SIGCONT);
+    }
+}

@@ -100,7 +100,7 @@ pub fn run(args: &ShareArgs, ctx: &Context<'_>) -> Result<u8, Error> {
             path.display()
         ));
     }
-    let host = target_host(&scope, args.target)?;
+    let host = target_host(ctx, &scope, args.target)?;
     let interactive = std::io::stdin().is_terminal();
     if !interactive && (!args.yes || args.no_redact) {
         eprintln!(
@@ -121,7 +121,7 @@ pub fn run(args: &ShareArgs, ctx: &Context<'_>) -> Result<u8, Error> {
         eprintln!("nothing was uploaded");
         return Ok(pmt_core::exit::FAILURE);
     }
-    let share = upload(&scope, args, &report)?;
+    let share = crate::model_cmd::block_on(upload(ctx, &scope, args, &report))??;
     record(scope.home(), &share)?;
     if ctx.json {
         return crate::output::document("debug share", &share);
@@ -224,17 +224,21 @@ fn confirm(question: &str) -> bool {
 }
 
 /// The host a report goes to.
-fn target_host(scope: &ProfileScope, target: Target) -> Result<String, Error> {
-    let url = target_url(scope, target)?;
+fn target_host(ctx: &Context<'_>, scope: &ProfileScope, target: Target) -> Result<String, Error> {
+    let url = target_url(ctx, scope, target)?;
     Ok(reqwest::Url::parse(&url)
         .ok()
         .and_then(|u| u.host_str().map(str::to_owned))
         .unwrap_or(url))
 }
 
-fn target_url(scope: &ProfileScope, target: Target) -> Result<String, Error> {
+fn target_url(ctx: &Context<'_>, scope: &ProfileScope, target: Target) -> Result<String, Error> {
     match target {
-        Target::PasteRs => Ok("https://paste.rs/".to_owned()),
+        Target::PasteRs => Ok(ctx
+            .launch
+            .test_paste_url()
+            .unwrap_or("https://paste.rs/")
+            .to_owned()),
         Target::Dpaste => Ok("https://dpaste.com/api/v2/".to_owned()),
         Target::Custom => custom_endpoint(scope),
     }
@@ -297,8 +301,15 @@ fn custom_headers(scope: &ProfileScope) -> Result<Vec<(String, String)>, Error> 
         .collect()
 }
 
-fn upload(scope: &ProfileScope, args: &ShareArgs, report: &str) -> Result<Share, Error> {
-    let url = target_url(scope, args.target)?;
+/// Uploads `report`; async because `/debug share yes` runs inside the
+/// session's runtime, where blocking on a second runtime panics.
+async fn upload(
+    ctx: &Context<'_>,
+    scope: &ProfileScope,
+    args: &ShareArgs,
+    report: &str,
+) -> Result<Share, Error> {
+    let url = target_url(ctx, scope, args.target)?;
     let headers = if args.target == Target::Custom {
         custom_headers(scope)?
     } else {
@@ -326,25 +337,7 @@ fn upload(scope: &ProfileScope, args: &ShareArgs, report: &str) -> Result<Share,
     let request = headers
         .iter()
         .fold(request, |r, (k, v)| r.header(k.as_str(), v.as_str()));
-    let answer = crate::model_cmd::block_on(async move {
-        let response = request
-            .send()
-            .await
-            .map_err(|e| e.without_url().to_string())?;
-        let status = response.status();
-        let location = response
-            .headers()
-            .get("location")
-            .and_then(|v| v.to_str().ok())
-            .map(str::to_owned);
-        let body = response.text().await.map_err(|e| e.to_string())?;
-        if status.is_success() {
-            Ok((body, location))
-        } else {
-            Err(format!("HTTP {}", status.as_u16()))
-        }
-    })?
-    .map_err(|why| {
+    let answer = send(request).await.map_err(|why| {
         Error::new(
             &codes::DEBUG_SHARE_FAILED,
             format!("upload to {url} failed: {why}"),
@@ -363,6 +356,26 @@ fn upload(scope: &ProfileScope, args: &ShareArgs, report: &str) -> Result<Share,
         expire_days: (args.target != Target::PasteRs).then_some(args.expire_days),
         delete_token,
     })
+}
+
+/// Sends an upload: the answer's body and `Location` header on success.
+async fn send(request: reqwest::RequestBuilder) -> Result<(String, Option<String>), String> {
+    let response = request
+        .send()
+        .await
+        .map_err(|e| e.without_url().to_string())?;
+    let status = response.status();
+    let location = response
+        .headers()
+        .get("location")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+    let body = response.text().await.map_err(|e| e.to_string())?;
+    if status.is_success() {
+        Ok((body, location))
+    } else {
+        Err(format!("HTTP {}", status.as_u16()))
+    }
 }
 
 /// The paste URL (and deletion token) from a target's answer: JSON
@@ -399,16 +412,12 @@ fn pending() -> &'static std::sync::Mutex<std::collections::HashMap<String, Path
 /// # Errors
 ///
 /// As `debug share`.
-pub(crate) fn slash(ctx: &Context<'_>, session: &str, args: &str) -> Result<String, Error> {
+pub(crate) async fn slash(ctx: &Context<'_>, session: &str, args: &str) -> Result<String, Error> {
     let scope = ctx.scope()?;
     let words: Vec<&str> = args.split_whitespace().collect();
     let answer = |path: &Path, report: &str| {
         if report.lines().count() <= SCREEN_LINES {
-            format!(
-                "{report}
-(written to {})",
-                path.display()
-            )
+            format!("{report}\n(written to {})", path.display())
         } else {
             format!(
                 "the report is {} lines long; read it at {}",
@@ -421,11 +430,7 @@ pub(crate) fn slash(ctx: &Context<'_>, session: &str, args: &str) -> Result<Stri
         [] => {
             let report = report(ctx, &scope, 200, true)?;
             let path = write_report(&scope, &report)?;
-            Ok(format!(
-                "{}
-nothing was uploaded",
-                answer(&path, &report)
-            ))
+            Ok(format!("{}\nnothing was uploaded", answer(&path, &report)))
         }
         ["share"] => {
             let report = report(ctx, &scope, 200, true)?;
@@ -434,9 +439,10 @@ nothing was uploaded",
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .insert(session.to_owned(), path.clone());
+            let host = target_host(ctx, &scope, Target::PasteRs)?;
             Ok(format!(
-                "{}
-Upload this report to paste.rs? It will be public to anyone with the link.                  Send /debug share yes to upload; nothing is uploaded otherwise.",
+                "{}\nUpload this report to {host}? It will be public to anyone with the link.\n\
+                 Send /debug share yes to upload; nothing is uploaded otherwise.",
                 answer(&path, &report)
             ))
         }
@@ -461,7 +467,7 @@ Upload this report to paste.rs? It will be public to anyone with the link.      
                 yes: true,
                 local: false,
             };
-            let share = upload(&scope, &args, &report)?;
+            let share = upload(ctx, &scope, &args, &report).await?;
             record(scope.home(), &share)?;
             Ok(format!(
                 "uploaded: {} (delete it with: prometheus debug delete {})",

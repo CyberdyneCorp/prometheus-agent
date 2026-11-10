@@ -491,7 +491,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 - [x] 52.1 Implement opt-in OpenTelemetry export, the span model, trace context propagation and the metrics catalog with an optional local scrape endpoint; verify against an OTLP collector container (spec: observability)
 - [x] 52.2 Implement live usage events, health endpoints (`/healthz`, `/readyz`), the component health model and `prometheus status [--check]`; verify with daemon tests (spec: observability)
 - [x] 52.3 Implement the crash/debug bundle (redacted) and the observability overhead budget gate; verify that the bundle contains no secrets (spec: observability)
-- [ ] 52.4 Implement the usage insights report (CLI and slash command, per-platform filters), configuration-centric status, export posture status (content capture visible) and the runtime liveness watchdog with a task dump; verify with daemon tests (spec: observability)
+- [x] 52.4 Implement the usage insights report (CLI and slash command, per-platform filters), configuration-centric status, export posture status (content capture visible) and the runtime liveness watchdog with a task dump; verify with daemon tests (spec: observability)
 - [x] 52.5 Implement the opt-in debug share upload (declined uploads send nothing, unattended shares refused) and ShareGPT trajectory export; verify with a mock upload endpoint and golden exports (spec: observability)
 
 ## 53. M2 Skills hub and curator
