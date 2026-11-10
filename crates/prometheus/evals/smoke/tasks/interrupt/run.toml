@@ -1,2 +1,2 @@
 interrupt_after_turn_start = true
-requires = "posix-signals"
+requires = "interrupt"

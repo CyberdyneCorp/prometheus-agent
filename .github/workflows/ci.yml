@@ -222,14 +222,14 @@ jobs:
       # The offline smoke run of a Tier 2 target (spec: workspace-architecture,
       # Supported targets and support tiers; replay-and-evaluation, Built-in
       # smoke suite): the demo's CLI tests, then `prometheus demo` and the
-      # bundled smoke suite (`prometheus smoke-suite`; `interrupt` needs
-      # POSIX signals and is skipped and listed) with the binary's outbound
-      # traffic blocked. The Android binary runs both in a Termux container
-      # in the android-smoke job.
+      # bundled smoke suite (`prometheus smoke-suite`; its `interrupt` task
+      # sends Ctrl+Break to the run's own console process group) with the
+      # binary's outbound traffic blocked. The Android binary runs both in
+      # a Termux container in the android-smoke job.
       - name: Offline smoke run
         if: runner.os == 'Windows'
         run: |
-          cargo test -p prometheus --test demo_cli --locked --target "${{ matrix.target }}"
+          cargo test -p prometheus --test demo_cli --test interrupt_windows --locked --target "${{ matrix.target }}"
           scripts/ci/offline-demo "target/${{ matrix.target }}/debug/prometheus.exe"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

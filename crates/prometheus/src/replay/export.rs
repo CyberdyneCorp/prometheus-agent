@@ -22,7 +22,10 @@ use sha2::{Digest, Sha256};
 
 use super::State;
 
-/// At most this many workspace files are listed.
+/// At most this many workspace files are listed (the manifest then says
+/// `truncated: true`), so a session started in a huge tree (a home
+/// directory) still exports in bounded time and size. Documented in
+/// docs/guide/replay.md.
 const MAX_WORKSPACE_FILES: usize = 10_000;
 
 /// `replay export` flags.

@@ -51,11 +51,11 @@ struct Grader {
     expect: String,
 }
 
-/// Harness capabilities this platform has. Interrupting a run needs a
-/// signal sent from outside; Windows has no way to send Ctrl+C to one
-/// child process alone.
+/// Harness capabilities this platform has. `interrupt` (stopping a
+/// running child from outside: SIGINT on Unix, Ctrl+Break to the child's
+/// own console process group on Windows) is on every supported target.
 fn has(capability: &str) -> bool {
-    capability == "posix-signals" && cfg!(unix)
+    capability == "interrupt" && cfg!(any(unix, windows))
 }
 
 /// Runs the suite; exit 0 when every task that ran passed, else 1.
@@ -254,13 +254,11 @@ fn chat(
     interrupted(cmd, paths.home)
 }
 
-/// Starts `cmd`, sends it SIGINT once its turn has started, and waits.
-#[cfg(unix)]
+/// Starts `cmd`, interrupts it once its turn has started, and waits.
 fn interrupted(mut cmd: Command, home: &Path) -> Result<Output, String> {
     use std::time::{Duration, Instant};
-
-    use nix::sys::signal::{Signal, kill};
-    use nix::unistd::Pid;
+    #[cfg(windows)]
+    pmt_sandbox::console::new_process_group(&mut cmd);
     let child = cmd
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -274,18 +272,26 @@ fn interrupted(mut cmd: Command, home: &Path) -> Result<Output, String> {
         }
         std::thread::sleep(Duration::from_millis(50));
     }
-    let pid = i32::try_from(child.id()).map_err(|e| e.to_string())?;
-    kill(Pid::from_raw(pid), Signal::SIGINT).map_err(|e| e.to_string())?;
+    interrupt(child.id()).map_err(|e| format!("cannot interrupt the task: {e}"))?;
     child.wait_with_output().map_err(|e| e.to_string())
 }
 
-#[cfg(not(unix))]
-fn interrupted(_: Command, _: &Path) -> Result<Output, String> {
-    Err("interrupting a run needs POSIX signals".to_owned())
+/// SIGINT to process `pid`.
+#[cfg(unix)]
+fn interrupt(pid: u32) -> Result<(), String> {
+    use nix::sys::signal::{Signal, kill};
+    use nix::unistd::Pid;
+    let pid = i32::try_from(pid).map_err(|e| e.to_string())?;
+    kill(Pid::from_raw(pid), Signal::SIGINT).map_err(|e| e.to_string())
+}
+
+/// Ctrl+Break to the console process group the child leads.
+#[cfg(windows)]
+fn interrupt(pid: u32) -> Result<(), String> {
+    pmt_sandbox::console::ctrl_break(pid).map_err(|e| e.to_string())
 }
 
 /// Whether a trajectory under `dir` recorded `turn.start`.
-#[cfg(unix)]
 fn turn_started(dir: &Path) -> bool {
     std::fs::read_dir(dir)
         .into_iter()

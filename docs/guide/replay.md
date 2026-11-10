@@ -50,7 +50,10 @@ state (the configuration the session ran with, which names secrets but
 holds no value; the toolsets and tool schemas; hashes of the skills and
 memory in its prompt; the build) and a manifest of the workspace (path,
 size, sha256, as the session found it: changes its file tools made are
-undone from the file snapshots). File contents are included only with
+undone from the file snapshots). The workspace manifest leaves out
+hidden and ignored files (`.gitignore` and the like) and lists at most
+10,000 files; a larger workspace is cut there and the manifest says
+`truncated: true`. File contents are included only with
 `--include-workspace`; `--lineage` adds every descendant session
 (subagents, forks). Every member is redacted like a trajectory.
 
@@ -104,6 +107,11 @@ The binary bundles an eval suite named `smoke`: offline tasks on the mock
 provider (tool calling, parallel tool calls, a file edit, multi-step
 terminal use, an approval denial, clarify, delegation, compression, a
 skill, a memory write, a budget refusal, an interrupt and error recovery),
-each with an `exact` grader. `scripts/check` runs it on every CI target
-(`cargo xtask smoke`); a task the platform cannot drive (the interrupt
-needs POSIX signals) is skipped and listed.
+each with an `exact` grader. The binary runs it itself with the hidden
+`prometheus smoke-suite` command: `scripts/check` runs it on the Tier 1
+targets (`cargo xtask smoke`), and the offline smoke run
+(`scripts/ci/offline-demo`, after `prometheus demo`) runs it on every CI
+target, the Tier 2 Windows and Termux builds included, where there is no
+cargo. The interrupt task sends SIGINT, or on Windows Ctrl+Break to the
+run's own console process group; a task needing a capability the
+platform lacks would be skipped and listed.
