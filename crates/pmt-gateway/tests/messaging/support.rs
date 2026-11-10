@@ -324,7 +324,7 @@ impl Host for FakeAgents {
             let timeout = *self.approval_timeout.lock().unwrap();
             let turns = Arc::clone(&self.turns);
             let turn_id = turn.clone();
-            tokio::spawn(async move {
+            pmt_core::spawn::spawn(async move {
                 let (reason, answer) = match params.text.strip_prefix("pressure:") {
                     Some(percent) => pressure(percent, &link),
                     None => script(&params.text, &link, &cancel, timeout).await,
@@ -743,6 +743,10 @@ impl FakeAdapter {
 impl Adapter for FakeAdapter {
     fn describe(&self) -> Descriptor {
         self.descriptor.lock().unwrap().clone()
+    }
+
+    fn reach(&self) -> Result<pmt_gateway::messaging::probe::Reach, String> {
+        Ok(pmt_gateway::messaging::probe::Reach::InboundOnly)
     }
 
     fn register_commands<'a>(

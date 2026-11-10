@@ -42,7 +42,7 @@ async fn the_authoring_example_builds_loads_and_answers() {
         .unwrap();
     assert_eq!(tools[0].name, "forecast");
 
-    let answer = tokio::task::spawn_blocking(move || {
+    let answer = pmt_core::spawn::blocking(move || {
         weather.call_tool(
             &pmt_plugins::host::CallInfo::default(),
             "forecast",

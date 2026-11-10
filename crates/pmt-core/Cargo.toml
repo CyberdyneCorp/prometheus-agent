@@ -33,6 +33,19 @@ ulid.workspace = true
 [target.'cfg(unix)'.dependencies]
 nix.workspace = true
 
+# Mach thread listing for task dumps (os_threads/macos.rs).
+[target.'cfg(target_os = "macos")'.dependencies]
+libc.workspace = true
+
+# Toolhelp thread listing and thread names for task dumps
+# (os_threads/windows.rs).
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_Threading",
+] }
+
 # flock(2) for the file locks: std's File::try_lock is unsupported there.
 [target.'cfg(target_os = "android")'.dependencies]
 rustix.workspace = true
@@ -43,5 +56,14 @@ proptest.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
 tempfile.workspace = true
 
-[lints]
-workspace = true
+# `unsafe` is denied (not forbidden, as in the workspace table) so the FFI
+# modules allowlisted in health.toml (os_threads/macos.rs, windows.rs) can
+# opt in with `#![allow(unsafe_code)]`; the health gate keeps every other
+# module free of it. The rest mirrors [workspace.lints].
+[lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+unreachable_pub = "warn"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }

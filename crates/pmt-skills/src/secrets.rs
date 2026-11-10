@@ -83,7 +83,7 @@ async fn ask_and_store(session: &SkillsSession, skill: &str, decl: &SecretDecl) 
         return false;
     };
     let (skill, name, text) = (skill.to_owned(), decl.name.clone(), decl.prompt.clone());
-    let answer = tokio::task::spawn_blocking(move || prompt.ask(&skill, &name, text.as_deref()))
+    let answer = pmt_core::spawn::blocking(move || prompt.ask(&skill, &name, text.as_deref()))
         .await
         .ok()
         .flatten();

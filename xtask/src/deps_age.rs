@@ -310,7 +310,7 @@ fn publish_times(added: &[Locked]) -> Result<BTreeMap<(String, String), Timestam
         let limit = std::sync::Arc::new(tokio::sync::Semaphore::new(16));
         for name in names {
             let (client, limit, name) = (client.clone(), limit.clone(), name.to_owned());
-            set.spawn(async move {
+            pmt_core::spawn::spawn_in(&mut set, async move {
                 let _permit = limit.acquire().await;
                 let url = format!("{INDEX}/{}", index_path(&name));
                 let body = async {

@@ -190,7 +190,7 @@ impl DaemonHost {
         turns.fetch_add(1, Ordering::AcqRel);
         // In the submitting request's session span: the turn's records go
         // to the profile's logs.
-        tokio::spawn(
+        pmt_core::spawn::spawn(
             async move {
                 let mut job = first;
                 loop {

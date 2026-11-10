@@ -108,7 +108,7 @@ impl PluginApprovals {
         };
         let call = self.call.clone();
         let bound = request.timeout;
-        let answer = tokio::task::spawn_blocking(move || {
+        let answer = pmt_core::spawn::blocking(move || {
             transport
                 .backend
                 .present_approval(&call, &transport.name, &wit, bound)

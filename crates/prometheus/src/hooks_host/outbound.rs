@@ -108,7 +108,7 @@ impl Outbound {
                     timeout: Duration::from_secs(self.target.timeout_secs.clamp(1, 60)),
                     client,
                 };
-                handle.spawn(worker.run(receiver));
+                pmt_core::spawn::spawn_on(&handle, worker.run(receiver));
                 Some(sender)
             })
             .as_ref()

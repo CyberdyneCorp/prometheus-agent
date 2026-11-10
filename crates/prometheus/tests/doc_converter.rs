@@ -22,7 +22,7 @@ fn confinement(home: &Path) -> Confinement {
 
 async fn convert(converter: RuntimeConverter, path: &Path, ext: &'static str) -> Converted {
     let path = path.to_path_buf();
-    tokio::task::spawn_blocking(move || converter.convert(&path, ext))
+    pmt_core::spawn::blocking(move || converter.convert(&path, ext))
         .await
         .unwrap()
         .unwrap()

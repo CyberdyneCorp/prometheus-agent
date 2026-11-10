@@ -140,7 +140,7 @@ impl Host for AskingHost {
         link: Link,
     ) -> HostFuture<'a, Submitted> {
         let turn = format!("turn-{}", self.answers.lock().unwrap().len());
-        tokio::spawn(ask(
+        pmt_core::spawn::spawn(ask(
             params.text,
             link,
             turn.clone(),
@@ -238,7 +238,7 @@ impl Gateway {
         let server = Server::new(options, host as Arc<dyn Host>).unwrap();
         let (stop, stopped) = oneshot::channel::<()>();
         let path: PathBuf = home.to_owned();
-        let task = runtime.spawn(async move {
+        let task = pmt_core::spawn::spawn_on(runtime.handle(), async move {
             let lock = WriterLock::acquire(&path, Role::Daemon, server.profiles())?;
             let shutdown = async {
                 let _ = stopped.await;

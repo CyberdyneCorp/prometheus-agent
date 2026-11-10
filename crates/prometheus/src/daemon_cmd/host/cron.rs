@@ -33,7 +33,9 @@ pub(in crate::daemon_cmd) async fn schedule(host: Arc<DaemonHost>) {
             if started.insert(name.clone()) {
                 let span =
                     tracing::info_span!("cron", component = "agent", profile = name.as_str());
-                tokio::spawn(profile_loop(Arc::clone(&host), name, profile).instrument(span));
+                pmt_core::spawn::spawn(
+                    profile_loop(Arc::clone(&host), name, profile).instrument(span),
+                );
             }
         }
         tokio::time::sleep(PROFILES_EVERY).await;
@@ -127,7 +129,7 @@ async fn tick(
     let now = Timestamp::now();
     match cron_host::dispatch(runner, now, permits) {
         Ok(running) if !running.is_empty() => {
-            tokio::spawn(finish(running));
+            pmt_core::spawn::spawn(finish(running));
         }
         Ok(_) => {}
         Err(err) => tracing::warn!(error = %err, "cron tick failed"),

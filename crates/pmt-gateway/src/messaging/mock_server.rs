@@ -26,10 +26,10 @@ where
 {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let addr = listener.local_addr()?;
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         while let Ok((stream, _)) = listener.accept().await {
             let handler = handler.clone();
-            tokio::spawn(async move {
+            pmt_core::spawn::spawn(async move {
                 let service = service_fn(move |request: hyper::Request<hyper::body::Incoming>| {
                     let handler = handler.clone();
                     async move {
@@ -165,9 +165,9 @@ pub async fn proxy() -> std::io::Result<(SocketAddr, ProxyLog)> {
     let addr = listener.local_addr()?;
     let log = ProxyLog::default();
     let seen = std::sync::Arc::clone(&log);
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         while let Ok((client, _)) = listener.accept().await {
-            tokio::spawn(relay(client, std::sync::Arc::clone(&seen)));
+            pmt_core::spawn::spawn(relay(client, std::sync::Arc::clone(&seen)));
         }
     });
     Ok((addr, log))

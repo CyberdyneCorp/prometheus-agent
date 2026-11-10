@@ -2989,6 +2989,7 @@ dependencies = [
  "base64 0.23.1",
  "glob",
  "jiff",
+ "libc",
  "nix 0.31.3",
  "proptest",
  "regex",
@@ -3002,6 +3003,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "ulid",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3544,6 +3546,7 @@ name = "pmt-voice"
 version = "0.1.0"
 dependencies = [
  "pmt-config",
+ "pmt-core",
  "tempfile",
  "tokio",
  "tracing",

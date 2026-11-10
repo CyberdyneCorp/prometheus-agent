@@ -53,7 +53,7 @@ fn ask(
 ) -> tokio::task::JoinHandle<Result<(), pmt_core::Error>> {
     let gate = gate.clone();
     let needed = caps(needed);
-    tokio::spawn(async move { gate.require(&plugin(), &needed, "sync issues").await })
+    pmt_core::spawn::spawn(async move { gate.require(&plugin(), &needed, "sync issues").await })
 }
 
 /// The task's 8.4 verification: a timed-out prompt denies.

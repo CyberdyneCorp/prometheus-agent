@@ -28,7 +28,7 @@ pub(super) async fn run(
     let scope = scope.clone();
     let job = job.clone();
     let script = script.to_path_buf();
-    tokio::task::spawn_blocking(move || run_blocking(&scope, &job, &script, timeout))
+    pmt_core::spawn::blocking(move || run_blocking(&scope, &job, &script, timeout))
         .await
         .unwrap_or_else(|e| failed(format!("the script runner panicked: {e}")))
 }

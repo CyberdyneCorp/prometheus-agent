@@ -64,7 +64,7 @@ async fn a_plugin_provider_serves_a_session_through_its_request_hooks() {
         &["config", "set", "budgets.allow_unpriced", "true"],
     ));
     let home_path = home.path().to_path_buf();
-    let out = tokio::task::spawn_blocking(move || {
+    let out = pmt_core::spawn::blocking(move || {
         run(
             &home_path,
             &["-z", "hi", "--provider", "acme", "--model", "plugin-model"],
@@ -175,7 +175,7 @@ async fn a_provider_plugin_claims_its_404_and_the_turn_falls_back() {
         &["config", "set", "budgets.allow_unpriced", "true"],
     ));
     let ask = |home: std::path::PathBuf| async move {
-        tokio::task::spawn_blocking(move || {
+        pmt_core::spawn::blocking(move || {
             run(
                 &home,
                 &["-z", "hi", "--provider", "acme", "--model", "plugin-model"],
@@ -259,7 +259,7 @@ async fn a_plugin_sign_in_runs_in_the_host_and_the_plugin_gets_only_a_handle() {
     ));
     let mut add = common::command(home.path());
     add.args(["auth", "add", "acme", "--type", "oauth"]);
-    let (code, text) = tokio::task::spawn_blocking(move || common::browser_sign_in(&mut add))
+    let (code, text) = pmt_core::spawn::blocking(move || common::browser_sign_in(&mut add))
         .await
         .unwrap();
     assert_eq!(code, Some(0), "{text}");
@@ -277,7 +277,7 @@ async fn a_plugin_sign_in_runs_in_the_host_and_the_plugin_gets_only_a_handle() {
         .expect("the authorize URL's state")
         .to_owned();
     let home_path = home.path().to_path_buf();
-    let out = tokio::task::spawn_blocking(move || {
+    let out = pmt_core::spawn::blocking(move || {
         run(
             &home_path,
             &["-z", "hi", "--provider", "acme", "--model", "plugin-model"],

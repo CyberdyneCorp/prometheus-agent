@@ -232,7 +232,7 @@ async fn session(
 fn run(session: &Session, tool: &str, arguments: Value) -> tokio::task::JoinHandle<ToolResult> {
     let dispatcher = session.dispatcher.clone();
     let tool = tool.to_owned();
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         dispatcher
             .dispatch(
                 ToolCall::new("call_1", &tool, &arguments.to_string()),

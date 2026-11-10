@@ -33,7 +33,7 @@ const BATCH: usize = 32;
 /// Starts `profile`'s delivery worker.
 pub(crate) fn spawn(shared: &Arc<Shared>, profile: &str) {
     let span = tracing::info_span!("outbox", profile);
-    tokio::spawn(run(Arc::clone(shared), profile.to_owned()).instrument(span));
+    pmt_core::spawn::spawn(run(Arc::clone(shared), profile.to_owned()).instrument(span));
 }
 
 async fn run(shared: Arc<Shared>, profile: String) {

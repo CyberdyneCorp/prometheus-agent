@@ -103,13 +103,13 @@ impl BotApi {
             addr,
         });
         let server = Arc::clone(&api);
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             loop {
                 let Ok((stream, _)) = listener.accept().await else {
                     return;
                 };
                 let server = Arc::clone(&server);
-                tokio::spawn(async move {
+                pmt_core::spawn::spawn(async move {
                     let service = service_fn(move |req| {
                         let server = Arc::clone(&server);
                         async move { Ok::<_, Infallible>(server.serve(req).await) }
@@ -156,7 +156,7 @@ impl BotApi {
         state.last_update = Some(update.clone());
         if let Some((url, secret)) = state.webhook.clone() {
             drop(state);
-            tokio::spawn(async move {
+            pmt_core::spawn::spawn(async move {
                 let client = pmt_net::http::client_builder(&pmt_net::OutboundPolicy::default())
                     .unwrap()
                     .no_proxy()

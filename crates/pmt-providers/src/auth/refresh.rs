@@ -53,7 +53,7 @@ impl Refresher {
     /// Waits for the exclusive lock `name` (released when the file drops).
     async fn lock(&self, name: String) -> Result<File, RefreshError> {
         let dir = self.lock_dir.clone();
-        let locked = tokio::task::spawn_blocking(move || {
+        let locked = pmt_core::spawn::blocking(move || {
             private_fs::create_dir(&dir)?;
             private_fs::lock_beside(&dir.join(name))
         })

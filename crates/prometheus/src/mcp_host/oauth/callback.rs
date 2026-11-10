@@ -107,7 +107,7 @@ pub(super) fn parse(url: &str, path: &str) -> Option<HashMap<String, String>> {
 /// Reads one pasted redirect URL from stdin (a blocking thread, so the
 /// listener keeps answering meanwhile); `None` at end of input.
 pub(super) async fn pasted() -> Option<String> {
-    tokio::task::spawn_blocking(|| {
+    pmt_core::spawn::blocking(|| {
         let mut line = String::new();
         loop {
             line.clear();

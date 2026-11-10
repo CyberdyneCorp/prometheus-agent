@@ -402,9 +402,9 @@ async fn restored_primary_replays_the_original_prefix() {
 async fn stalling_server(first_event: bool) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         while let Ok((mut socket, _)) = listener.accept().await {
-            tokio::spawn(async move {
+            pmt_core::spawn::spawn(async move {
                 let mut buffer = [0u8; 8192];
                 let _ = socket.read(&mut buffer).await;
                 let mut response = "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ntransfer-encoding: chunked\r\n\r\n".to_owned();

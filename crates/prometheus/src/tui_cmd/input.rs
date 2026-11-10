@@ -136,7 +136,7 @@ impl Tui<'_> {
                 session_id: self.link.session.clone(),
             };
             let client = self.link.client.clone();
-            tokio::spawn(async move {
+            pmt_core::spawn::spawn(async move {
                 let _ = client.call_typed::<SessionInterrupt>(&params).await;
             });
             self.notice("interrupting the running turn");

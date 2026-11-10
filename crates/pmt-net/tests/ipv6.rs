@@ -47,7 +47,7 @@ fn ip(s: &str) -> IpAddr {
 
 /// Serves HTTP 200 with `body` on every connection.
 fn serve(listener: TcpListener, body: &'static str) {
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         while let Ok((mut stream, _)) = listener.accept().await {
             let mut buf = [0u8; 1024];
             let _ = stream.read(&mut buf).await;

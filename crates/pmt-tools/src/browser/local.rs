@@ -138,9 +138,9 @@ impl Drop for LocalBrowser {
         let _ = child.start_kill();
         match tokio::runtime::Handle::try_current() {
             Ok(runtime) => {
-                runtime.spawn(async move {
+                pmt_core::spawn::spawn_on(&runtime, async move {
                     let _ = tokio::time::timeout(EXIT_WAIT, child.wait()).await;
-                    let _ = tokio::task::spawn_blocking(remove).await;
+                    let _ = pmt_core::spawn::blocking(remove).await;
                 });
             }
             Err(_) => remove(),

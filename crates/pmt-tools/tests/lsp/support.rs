@@ -184,7 +184,7 @@ impl Launcher for CountingLauncher {
 pub(crate) async fn write(files: &Arc<FileSession>, path: &Path, content: &str) -> Value {
     let files = Arc::clone(files);
     let (path, content) = (path.display().to_string(), content.to_owned());
-    tokio::task::spawn_blocking(move || {
+    pmt_core::spawn::blocking(move || {
         let result = files.write_file(&path, &content);
         serde_json::from_str(&result.text_content()).unwrap()
     })
@@ -196,7 +196,7 @@ pub(crate) async fn write(files: &Arc<FileSession>, path: &Path, content: &str) 
 pub(crate) async fn patch(files: &Arc<FileSession>, path: &Path, old: &str, new: &str) -> Value {
     let files = Arc::clone(files);
     let args = serde_json::json!({"path": path.display().to_string(), "old_string": old, "new_string": new});
-    tokio::task::spawn_blocking(move || {
+    pmt_core::spawn::blocking(move || {
         let edit = pmt_tools::files::patch::PatchArgs::from_value(&args).unwrap();
         let result = files.patch(&edit);
         serde_json::from_str(&result.text_content()).unwrap()
@@ -209,7 +209,7 @@ pub(crate) async fn patch(files: &Arc<FileSession>, path: &Path, old: &str, new:
 pub(crate) async fn read(files: &Arc<FileSession>, path: &Path) {
     let files = Arc::clone(files);
     let path = path.display().to_string();
-    tokio::task::spawn_blocking(move || {
+    pmt_core::spawn::blocking(move || {
         let _ = files.read_file(&pmt_tools::files::ReadArgs::new(&path));
     })
     .await

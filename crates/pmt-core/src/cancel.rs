@@ -81,10 +81,9 @@ mod tests {
     async fn cancelling_the_root_stops_a_deep_task_within_the_bound() {
         let root = CancelToken::new();
         let tool = root.child().child().child(); // session > turn > tool call
-        let task =
-            tokio::spawn(
-                async move { tool.run(tokio::time::sleep(Duration::from_mins(10))).await },
-            );
+        let task = crate::spawn::spawn(async move {
+            tool.run(tokio::time::sleep(Duration::from_mins(10))).await
+        });
         tokio::time::sleep(Duration::from_millis(20)).await;
 
         let interrupted = Instant::now();

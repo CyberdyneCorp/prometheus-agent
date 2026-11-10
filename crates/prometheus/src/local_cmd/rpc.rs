@@ -182,7 +182,7 @@ fn install_in_background(local: Local, update: bool) -> Result<LocalReply, Error
     engine.index().build(&hardware.platform, backend)?;
     let version = engine.index().version.clone();
     let downloader = local.downloader()?;
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         let jobs = local.jobs();
         let done = engine
             .install(
@@ -212,7 +212,7 @@ fn install_in_background(local: Local, update: bool) -> Result<LocalReply, Error
 fn run_in_background(local: Local, mut job: Job) -> Result<LocalReply, Error> {
     let view = local.jobs().view(&job);
     let downloader = local.downloader()?;
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         let (library, jobs) = (local.library(), local.jobs());
         match pull::run(
             &library,

@@ -227,7 +227,7 @@ impl Inner {
         {
             old.cancel();
         }
-        tokio::spawn(Arc::clone(self).poll(session, link, mailbox.address, stop));
+        pmt_core::spawn::spawn(Arc::clone(self).poll(session, link, mailbox.address, stop));
         Ok(())
     }
 
@@ -383,6 +383,22 @@ impl Email {
 }
 
 impl Adapter for Email {
+    fn reach(&self) -> Result<pmt_gateway::messaging::probe::Reach, String> {
+        let options = &self.0.options;
+        let imap = options
+            .imap_host
+            .clone()
+            .ok_or("options.imap_host is not set")?;
+        let smtp = options
+            .smtp_host
+            .clone()
+            .ok_or("options.smtp_host is not set")?;
+        Ok(pmt_gateway::messaging::probe::Reach::Endpoints(vec![
+            pmt_gateway::messaging::probe::Endpoint::Tcp(imap, options.imap_port),
+            pmt_gateway::messaging::probe::Endpoint::Tcp(smtp, options.smtp_port),
+        ]))
+    }
+
     fn describe(&self) -> Descriptor {
         // Mail has no voice notes: a recorded clip is an audio attachment.
         let files: BTreeSet<MediaKind> = [

@@ -114,7 +114,7 @@ impl Observers {
         };
         let (sender, mut receiver) =
             mpsc::channel::<(&'static str, Map<String, Value>)>(OBSERVER_QUEUE);
-        handle.spawn(async move {
+        pmt_core::spawn::spawn_on(&handle, async move {
             while let Some((hook, fields)) = receiver.recv().await {
                 let hooks = source.hooks();
                 if hooks.handles(hook) {

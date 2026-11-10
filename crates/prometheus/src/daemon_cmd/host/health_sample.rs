@@ -21,7 +21,7 @@ pub(in crate::daemon_cmd) async fn sample(host: Arc<DaemonHost>) {
         for (name, profile) in host.all_profiles() {
             let scope = profile.scope();
             let store = Arc::clone(&profile.store);
-            let _ = tokio::task::spawn_blocking(move || sample_profile(&name, &scope, store)).await;
+            let _ = pmt_core::spawn::blocking(move || sample_profile(&name, &scope, store)).await;
         }
         tokio::time::sleep(EVERY).await;
     }

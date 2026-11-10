@@ -395,7 +395,7 @@ impl Agents for DaemonHost {
                 .home()
                 .to_path_buf();
             let check = request.check;
-            tokio::task::spawn_blocking(move || super::super::update_chat::run(&home, check))
+            pmt_core::spawn::blocking(move || super::super::update_chat::run(&home, check))
                 .await
                 .map_err(|e| Error::new(&pmt_core::error::codes::RPC_INTERNAL, e.to_string()))?
         })

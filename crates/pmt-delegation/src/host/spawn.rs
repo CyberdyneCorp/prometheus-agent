@@ -426,7 +426,7 @@ impl Delegator {
             let unit_children = by_unit.remove(&unit.id).unwrap_or_default();
             let me = Arc::clone(self);
             let (id, sink, label) = (unit.id.clone(), Arc::clone(sink), label.map(str::to_owned));
-            tokio::spawn(async move {
+            pmt_core::spawn::spawn(async move {
                 let tasks = unit_children.len();
                 let results = me.run_all(unit_children).await;
                 me.complete(&id, &results, tasks, &sink, label.as_deref())
@@ -475,7 +475,7 @@ impl Delegator {
             .into_iter()
             .map(|child| {
                 let me = Arc::clone(self);
-                tokio::spawn(async move { me.run_child(child).await })
+                pmt_core::spawn::spawn(async move { me.run_child(child).await })
             })
             .collect();
         let mut results = Vec::with_capacity(handles.len());

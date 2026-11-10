@@ -423,7 +423,9 @@ impl Listener {
                 .ok()
                 .and_then(|c| c.pid())
                 .and_then(|p| u32::try_from(p).ok());
-            tokio::spawn(handle(Arc::clone(server), stream, kernel_pid).in_current_span());
+            pmt_core::spawn::spawn(
+                handle(Arc::clone(server), stream, kernel_pid).in_current_span(),
+            );
         }
     }
 
@@ -444,7 +446,7 @@ impl Listener {
             // tokio exposes no client process id for a named pipe (it needs
             // GetNamedPipeClientProcessId, unsafe Win32): the claimed pid
             // is used, a known gap like the pipe's default DACL.
-            tokio::spawn(handle(Arc::clone(server), connected, None).in_current_span());
+            pmt_core::spawn::spawn(handle(Arc::clone(server), connected, None).in_current_span());
         }
     }
 }

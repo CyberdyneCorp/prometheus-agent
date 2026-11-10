@@ -317,12 +317,11 @@ impl ExternalHook for BridgedHook {
         let hook = hook.to_owned();
         Box::pin(async move {
             let timeout = supervisor.settings().hook_timeout;
-            let answer = tokio::task::spawn_blocking(move || {
-                supervisor.call("hook.invoke", &params, timeout)
-            })
-            .await
-            .map_err(|e| e.to_string())?
-            .map_err(|e| e.message())?;
+            let answer =
+                pmt_core::spawn::blocking(move || supervisor.call("hook.invoke", &params, timeout))
+                    .await
+                    .map_err(|e| e.to_string())?
+                    .map_err(|e| e.message())?;
             Ok(answer["results"]
                 .as_array()
                 .and_then(|results| results.iter().find_map(|r| reply(&hook, r))))
@@ -389,7 +388,7 @@ impl ToolHandler for BridgedTool {
         let calls = Arc::clone(&self.calls);
         let (session, call_id) = (context.session_id.clone(), context.call_id.clone());
         Box::pin(async move {
-            let outcome = tokio::task::spawn_blocking(move || {
+            let outcome = pmt_core::spawn::blocking(move || {
                 let facts = super::bridged::context(&calls(&session), Some(&call_id));
                 supervisor.tool(&name, &arguments, &facts)
             })

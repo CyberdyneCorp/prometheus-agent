@@ -122,7 +122,7 @@ impl WarnThrottle {
 /// Starts the export task.
 pub(crate) fn spawn(shared: &Arc<Shared>, options: HealthOptions) {
     let span = tracing::info_span!("health_export");
-    tokio::spawn(run(Arc::clone(shared), options).instrument(span));
+    pmt_core::spawn::spawn(run(Arc::clone(shared), options).instrument(span));
 }
 
 async fn run(shared: Arc<Shared>, options: HealthOptions) {

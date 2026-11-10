@@ -101,7 +101,7 @@ impl ContextEngine for WasmEngine {
                 messages(rows),
             );
             let compacted =
-                tokio::task::spawn_blocking(move || instance.engine_compact(&call, &text))
+                pmt_core::spawn::blocking(move || instance.engine_compact(&call, &text))
                     .await
                     .map_err(|e| e.to_string())?
                     .map_err(|e| e.message().to_owned())??;
@@ -121,7 +121,7 @@ impl ContextEngine for WasmEngine {
                 messages(rows),
             );
             let chosen =
-                tokio::task::spawn_blocking(move || instance.engine_select(&call, &text, budget))
+                pmt_core::spawn::blocking(move || instance.engine_select(&call, &text, budget))
                     .await
                     .map_err(|e| e.to_string())?
                     .map_err(|e| e.message().to_owned())??;
@@ -207,7 +207,7 @@ impl pmt_tools::descriptor::ToolHandler for EngineTool {
                 session_id: Some(context.session_id.clone()),
                 ..CallInfo::default()
             };
-            let outcome = tokio::task::spawn_blocking(move || {
+            let outcome = pmt_core::spawn::blocking(move || {
                 instance.engine_tool_call(&call, &name, &arguments.to_string())
             })
             .await

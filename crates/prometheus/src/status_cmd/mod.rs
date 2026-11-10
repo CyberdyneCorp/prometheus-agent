@@ -240,6 +240,7 @@ fn probes_text(probes: &[deep::Probe]) -> String {
     }
     for p in probes {
         let outcome = match (&p.latency_ms, &p.error) {
+            _ if p.inbound_only => "inbound only".to_owned(),
             (Some(ms), _) => format!("ok in {ms} ms"),
             (None, Some(why)) => format!("failed: {why}"),
             (None, None) => "unknown".to_owned(),

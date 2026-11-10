@@ -419,7 +419,7 @@ impl ToolPort {
         }
         let store = Arc::clone(&self.store);
         let run_id = run.id.clone();
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             let text = match runner.execute(&job, &run).await {
                 Ok(finished) => {
                     let job = ops::find(&store, job.id()).unwrap_or(job);

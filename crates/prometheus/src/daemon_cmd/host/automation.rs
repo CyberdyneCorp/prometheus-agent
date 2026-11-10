@@ -321,7 +321,7 @@ impl DaemonHost {
         }
         let profile = Arc::clone(profile);
         let link = gateway.link(&id.to_string());
-        tokio::spawn(
+        pmt_core::spawn::spawn(
             async move {
                 // A lane that went away without answering started nothing.
                 if lane.await.unwrap_or(false) {
@@ -462,7 +462,7 @@ pub(in crate::daemon_cmd) async fn schedule(host: Arc<DaemonHost>) {
             if started.insert(name.clone()) {
                 let span =
                     tracing::info_span!("automation", component = "agent", profile = name.as_str());
-                tokio::spawn(profile_loop(Arc::clone(&host), profile).instrument(span));
+                pmt_core::spawn::spawn(profile_loop(Arc::clone(&host), profile).instrument(span));
             }
         }
         tokio::time::sleep(PROFILES_EVERY).await;

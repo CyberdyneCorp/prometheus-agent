@@ -13,7 +13,7 @@ use tokio::net::TcpListener;
 async fn server() -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         while let Ok((mut socket, _)) = listener.accept().await {
             let mut buf = [0; 1024];
             let _ = socket.read(&mut buf).await;
@@ -33,7 +33,7 @@ async fn counting_proxy() -> (String, Arc<AtomicUsize>) {
     let url = format!("http://{}", listener.local_addr().unwrap());
     let seen = Arc::new(AtomicUsize::new(0));
     let counter = Arc::clone(&seen);
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         while let Ok((socket, _)) = listener.accept().await {
             counter.fetch_add(1, Ordering::SeqCst);
             drop(socket);

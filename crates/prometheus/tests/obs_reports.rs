@@ -280,6 +280,62 @@ fn full_status_lists_credentials_offline_and_only_deep_probes_connect() {
     );
 }
 
+/// Scenario: Deep status probes every adapter endpoint.
+#[cfg(feature = "gateway")]
+#[test]
+fn deep_status_probes_every_configured_adapter_endpoint() {
+    let home = mock_home();
+    let (homeserver, seen) = endpoint("{}");
+    let imap = TcpListener::bind("127.0.0.1:0").unwrap();
+    let smtp = TcpListener::bind("127.0.0.1:0").unwrap();
+    // A port nothing listens on: the probe must name it and say why.
+    let closed = TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    append_config(
+        home.path(),
+        &format!(
+            "\n[gateway.platforms.matrix]\nenabled = true\noptions = {{ homeserver = \"{homeserver}\" }}\n\
+             \n[gateway.platforms.email]\nenabled = true\noptions = {{ address = \"bot@example.org\", \
+             imap_host = \"127.0.0.1\", imap_port = {}, smtp_host = \"127.0.0.1\", smtp_port = {}, \
+             require_authenticated_sender = false }}\n\
+             \n[gateway.platforms.signal]\nenabled = true\noptions = {{ http_url = \"http://127.0.0.1:{closed}\", \
+             account = \"+15550100\" }}\n\
+             \n[gateway.platforms.webhook]\nenabled = true\n",
+            imap.local_addr().unwrap().port(),
+            smtp.local_addr().unwrap().port(),
+        ),
+    );
+    let text = ok(&run(home.path(), &["status", "--full", "--deep"]));
+    assert!(text.contains("adapter matrix: ok in"), "{text}");
+    assert!(text.contains("adapter email: ok in"), "{text}");
+    assert!(
+        text.contains(&format!(
+            "adapter signal: failed: http://127.0.0.1:{closed}: "
+        )),
+        "{text}"
+    );
+    assert!(text.contains("adapter webhook: inbound only"), "{text}");
+    assert_eq!(
+        seen.lock().unwrap().first().map(|(r, _)| r.as_str()),
+        Some("GET /")
+    );
+    let json: Value = serde_json::from_str(&ok(&run(
+        home.path(),
+        &["--json", "status", "--full", "--deep"],
+    )))
+    .unwrap();
+    let webhook = json["probes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["name"] == "webhook")
+        .unwrap();
+    assert_eq!(webhook["inbound_only"], true, "{json}");
+}
+
 /// Scenario: Content capture is visible.
 #[test]
 fn export_posture_states_what_leaves_the_host() {

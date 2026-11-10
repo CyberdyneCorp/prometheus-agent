@@ -118,7 +118,7 @@ fn a_full_queue_slows_producers_down_and_loses_nothing() {
         let mut tasks = Vec::new();
         for producer in 0..4 {
             let writer = std::sync::Arc::clone(&writer);
-            tasks.push(tokio::spawn(async move {
+            tasks.push(pmt_core::spawn::spawn(async move {
                 for i in 0..500 {
                     let text = format!("{producer}-{i}");
                     let event = Event::UserMessage(MessageText {

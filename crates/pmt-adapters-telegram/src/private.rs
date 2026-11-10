@@ -33,7 +33,7 @@ impl Callbacks {
             .expect("callbacks poisoned")
             .insert(id.to_owned());
         let (callbacks, api, id) = (Arc::clone(self), api.clone(), id.to_owned());
-        tokio::spawn(
+        pmt_core::spawn::spawn(
             async move {
                 tokio::time::sleep(HOLD).await;
                 if callbacks.take(&id) {

@@ -198,7 +198,7 @@ impl Factory {
             },
             channel,
         )?;
-        tokio::spawn(forward(
+        pmt_core::spawn::spawn(forward(
             surface,
             spec.subagent_id.clone(),
             spec.approval,
@@ -313,7 +313,7 @@ mod tests {
 
     async fn decide(policy: ChildApproval, parent: Option<Arc<dyn Escalate>>) -> Decision {
         let (channel, surface) = Channel::attached(Duration::from_hours(1));
-        tokio::spawn(forward(
+        pmt_core::spawn::spawn(forward(
             surface,
             "sa-1".into(),
             policy,

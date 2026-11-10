@@ -9,6 +9,8 @@ repository.workspace = true
 
 [dependencies]
 pmt-config.workspace = true
+# Tracked spawning (task dumps).
+pmt-core.workspace = true
 tokio = { workspace = true, features = ["process", "io-util", "fs"] }
 tracing.workspace = true
 

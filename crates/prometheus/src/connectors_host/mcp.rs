@@ -30,7 +30,7 @@ impl McpTargets for CatalogTargets {
         Box::pin(async move {
             let scope = self.scope.clone();
             let id = name.to_owned();
-            tokio::task::spawn_blocking(move || {
+            pmt_core::spawn::blocking(move || {
                 crate::mcp_cmd::catalog::install_unattended(&scope, &id)
             })
             .await

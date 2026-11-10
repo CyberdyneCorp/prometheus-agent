@@ -221,7 +221,7 @@ impl SessionDiagnostics {
         self.inner.pending.send_modify(|n| *n += 1);
         let inner = Arc::clone(&self.inner);
         let delivered = Arc::clone(&slot);
-        self.inner.setup.handle.spawn(async move {
+        pmt_core::spawn::spawn_on(&self.inner.setup.handle, async move {
             let verdict = inner.check(&job).await;
             inner.deliver(&job, verdict, &delivered);
             inner.pending.send_modify(|n| *n -= 1);

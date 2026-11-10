@@ -239,11 +239,10 @@ impl ProviderSession {
         } = start;
         let init = Arc::clone(&backend);
         let info = session.clone();
-        let prompt_block = tokio::task::spawn_blocking(move || {
-            init.initialize(&info).map(|()| init.prompt_block())
-        })
-        .await
-        .map_err(|e| e.to_string())??;
+        let prompt_block =
+            pmt_core::spawn::blocking(move || init.initialize(&info).map(|()| init.prompt_block()))
+                .await
+                .map_err(|e| e.to_string())??;
         let config = &scope.config().memory;
         let name = backend.name();
         let spill_dir = config
@@ -318,7 +317,7 @@ impl ProviderSession {
         self.queue.push(Job::TurnStart(query.clone()));
         let backend = Arc::clone(&self.backend);
         let bound = self.prefetch_timeout;
-        let call = tokio::task::spawn_blocking(move || backend.prefetch(&query, bound));
+        let call = pmt_core::spawn::blocking(move || backend.prefetch(&query, bound));
         // The plugin call is cut at `bound`; the grace covers the hop.
         let recall = match tokio::time::timeout(bound + Duration::from_millis(250), call).await {
             Ok(Ok(Ok(recall))) => recall?,
@@ -388,7 +387,7 @@ impl ProviderSession {
         }
         let messages = self.egress(messages);
         let backend = Arc::clone(&self.backend);
-        match tokio::task::spawn_blocking(move || backend.pre_compress(&messages)).await {
+        match pmt_core::spawn::blocking(move || backend.pre_compress(&messages)).await {
             Ok(Ok(confirmed)) => confirmed,
             Ok(Err(err)) => {
                 tracing::warn!(provider = %self.name, "memory provider checkpoint failed: {err}");
@@ -420,7 +419,7 @@ impl ProviderSession {
             name.to_owned(),
             self.egress(arguments),
         );
-        tokio::task::spawn_blocking(move || backend.tool_call(&name, &arguments))
+        pmt_core::spawn::blocking(move || backend.tool_call(&name, &arguments))
             .await
             .map_err(|e| e.to_string())?
     }
@@ -430,7 +429,7 @@ impl ProviderSession {
     pub async fn close(&self) {
         self.queue.drain(DRAIN).await;
         let backend = Arc::clone(&self.backend);
-        if let Ok(Err(err)) = tokio::task::spawn_blocking(move || backend.session_end()).await {
+        if let Ok(Err(err)) = pmt_core::spawn::blocking(move || backend.session_end()).await {
             tracing::warn!(provider = %self.name, "memory provider on-session-end failed: {err}");
         }
     }

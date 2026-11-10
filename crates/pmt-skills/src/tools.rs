@@ -252,7 +252,7 @@ async fn manage(session: Arc<SkillsSession>, args: Value) -> Result<ToolResult, 
         Ok(request) => request,
         Err(why) => return Ok(ToolResult::error(why)),
     };
-    let outcome = tokio::task::spawn_blocking(move || manage::run(&session, &request, false))
+    let outcome = pmt_core::spawn::blocking(move || manage::run(&session, &request, false))
         .await
         .map_err(|e| ToolFailure::new("internal", format!("skill_manage: {e}")))?;
     Ok(match outcome {

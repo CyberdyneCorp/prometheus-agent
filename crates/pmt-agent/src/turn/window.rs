@@ -119,7 +119,7 @@ impl Agent {
             &route,
             tools.iter().map(|t| t.name.clone()).collect(),
         );
-        let (built, files) = tokio::task::spawn_blocking(move || {
+        let (built, files) = pmt_core::spawn::blocking(move || {
             prompt::build(&inputs).map(|built| (built, inventory(&inputs)))
         })
         .await

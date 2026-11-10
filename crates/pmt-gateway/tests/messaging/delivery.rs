@@ -193,7 +193,7 @@ async fn an_approval_without_a_requester_needs_an_admin_in_a_group() {
     let params = json!({"session_id": session, "tool": "terminal", "call_id": "c9",
         "subject": "rm -rf /srv", "findings": []});
     let hub = Arc::clone(h.server.hub());
-    let asked = tokio::spawn(async move {
+    let asked = pmt_core::spawn::spawn(async move {
         hub.ask(
             &session,
             "approval.request",

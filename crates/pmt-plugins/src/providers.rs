@@ -242,7 +242,7 @@ impl PluginWeb {
                 .clone();
             let call = self.call.clone();
             let answer =
-                tokio::task::spawn_blocking(move || provider.invoke(&call, &request.to_string()))
+                pmt_core::spawn::blocking(move || provider.invoke(&call, &request.to_string()))
                     .await
                     .map_err(|e| e.to_string())??;
             serde_json::from_str(&answer)

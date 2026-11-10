@@ -53,7 +53,7 @@ async fn spawn_memory_review(factory: &Factory, live: &Live) {
         parent_tools: Some(Arc::clone(&live.tools) as _),
         digest,
     };
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         let _slot = slot;
         let route = review.model.route().await;
         pmt_memory::review_controls::wait_for_turn(&controls, &route).await;
@@ -86,7 +86,7 @@ async fn skill_nudge(factory: &Factory, live: &Live, result: &TurnResult) {
             return;
         }
     };
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         if let Err(err) = pmt_skills::review::run(review).await {
             tracing::warn!(error = %err, "skill review failed");
         }

@@ -207,8 +207,8 @@ async fn run(server: Arc<Server>, socket: Socket, grant: Grant) {
         ordered,
     });
     server.connections.fetch_add(1, Ordering::Relaxed);
-    let writer = tokio::spawn(write_loop(sink, rx, dead.clone()).in_current_span());
-    let in_order = tokio::spawn(ordered_loop(queue).in_current_span());
+    let writer = pmt_core::spawn::spawn(write_loop(sink, rx, dead.clone()).in_current_span());
+    let in_order = pmt_core::spawn::spawn(ordered_loop(queue).in_current_span());
     read_loop(&server, &conn, stream, &dead).await;
     in_order.abort();
     server.hub().detach_all(conn.id);
@@ -338,7 +338,7 @@ fn request(
     };
     if long {
         let workers = Arc::clone(&server.workers);
-        tokio::spawn(
+        pmt_core::spawn::spawn(
             async move {
                 let Ok(_permit) = workers.acquire_owned().await else {
                     return;
@@ -389,7 +389,7 @@ impl Job {
         let name = method.clone();
         let reporter = server.crash_reporter().cloned();
         let catalog = Arc::clone(&server);
-        let handler = tokio::spawn(
+        let handler = pmt_core::spawn::spawn(
             async move {
                 let work = server.router().dispatch(call, &name, params);
                 match reporter {

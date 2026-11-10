@@ -151,9 +151,17 @@ daemon: not running
   the terminal backend and sandbox enforcement, and session counts
   (active, today, total). It makes no outbound connection.
 - `--full --deep` also probes each provider with a credential (one
-  authenticated model-listing request), each enabled adapter's platform
-  and each MCP server (`initialize`), 10 s each, and reports latency or
-  the error. It is the only status mode that reaches the network.
+  authenticated model-listing request), every endpoint each enabled
+  adapter connects out to and each MCP server (`initialize`), 10 s each,
+  and reports latency or the error. Adapters declare their endpoints:
+  the platform API for Telegram, Discord and Slack (an HTTP request
+  through the adapter's proxy; any answer counts), the homeserver for
+  Matrix, the signal-cli daemon's `http_url` for Signal, the bridge for
+  WhatsApp (`options.bridge_url`, or WhatsApp Web for the managed
+  bridge), and the IMAP and SMTP hosts for email (TCP connections). The
+  webhook adapter only receives and shows `inbound only`; a platform this
+  build has no adapter for fails naming it. It is the only status mode
+  that reaches the network.
 - `--exports` reports every telemetry exporter (OTLP traces, metrics and
   logs, the local scrape endpoint, the gateway health export, NeMo Relay
   and Langfuse): whether it is enabled, its endpoint host (never
@@ -276,10 +284,18 @@ daemon refreshes `updated_at` in `run/gateway.json` every minute, and
 `status` warns `daemon heartbeat stale (<n>s)` once it is older than two
 minutes with the process alive.
 
-A task dump lists the runtime's counters (workers, tasks alive, queued),
-every thread that is inside a span with where it is, and every open span
-(sessions, turns, client requests, scheduled runs...) as a tree with its
-age. `prometheus debug dump-tasks` (every platform, over the control
+A task dump lists the runtime's counters (workers, tasks alive, queued);
+every OS thread of the process with its name and scheduler state (Linux,
+Android, macOS and Windows list them; elsewhere the dump shows the
+threads seen running tracked work or inside a span), the task it is
+running and the span it is in; every task and blocking job the agent
+spawned, with its spawn site and either `RUNNING on thread <id> for <n>s`
+(the task blocking a stalled runtime) or, between polls, its await point:
+the innermost span it is suspended in; and every open span (sessions,
+turns, client requests, scheduled runs...) as a tree with its age. Every
+spawn site goes through `pmt_core::spawn` (clippy refuses tokio's spawn
+functions elsewhere); tasks a dependency spawns itself (HTTP connection
+tasks) are only counted in the runtime's alive tasks. `prometheus debug dump-tasks` (every platform, over the control
 channel) or SIGUSR2 (POSIX) writes one without stopping the daemon:
 
 ```console

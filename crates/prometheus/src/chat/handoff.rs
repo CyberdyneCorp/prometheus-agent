@@ -37,7 +37,7 @@ pub async fn handoff(
         return Err(Error::new(&codes::CLI_USAGE, USAGE));
     }
     let lookup = home.to_path_buf();
-    let record = tokio::task::spawn_blocking(move || crate::daemon_client::running(&lookup))
+    let record = pmt_core::spawn::blocking(move || crate::daemon_client::running(&lookup))
         .await
         .map_err(|e| Error::new(&codes::RPC_INTERNAL, format!("daemon lookup failed: {e}")))??
         .ok_or_else(|| {

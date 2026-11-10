@@ -153,7 +153,7 @@ impl Client {
             hello: Arc::new(hello),
             ..client
         };
-        tokio::spawn(heartbeat(client.clone()));
+        pmt_core::spawn::spawn(heartbeat(client.clone()));
         Ok((client, inbox))
     }
 
@@ -164,8 +164,8 @@ impl Client {
         let (events_tx, events) = mpsc::unbounded_channel();
         let (requests_tx, requests) = mpsc::unbounded_channel();
         let pending: Pending = Arc::default();
-        tokio::spawn(write_loop(sink, rx));
-        tokio::spawn(read_loop(
+        pmt_core::spawn::spawn(write_loop(sink, rx));
+        pmt_core::spawn::spawn(read_loop(
             stream,
             Arc::clone(&pending),
             Routes {

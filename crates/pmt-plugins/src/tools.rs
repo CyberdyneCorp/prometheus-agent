@@ -42,7 +42,7 @@ impl ToolHandler for PluginTool {
         Box::pin(async move {
             let arguments = arguments.to_string();
             // The resolver may read the session store: off the async thread.
-            let outcome = tokio::task::spawn_blocking(move || {
+            let outcome = pmt_core::spawn::blocking(move || {
                 instance.call_tool(&calls(&session), &name, &arguments)
             })
             .await

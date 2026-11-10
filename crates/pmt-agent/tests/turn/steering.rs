@@ -248,7 +248,7 @@ impl ToolPort for Child {
     ) -> BoxFuture<'a, ToolBatch> {
         let token = cancel.child();
         let (flag, stopped) = (self.cancelled.clone(), self.stopped.clone());
-        let child = tokio::spawn(async move {
+        let child = pmt_core::spawn::spawn(async move {
             token.cancelled().await;
             flag.store(true, Ordering::SeqCst);
             stopped.notify_one();

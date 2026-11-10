@@ -52,7 +52,7 @@ pub async fn listen(addr: SocketAddr) -> Result<tokio::net::TcpListener, Error> 
 
 /// Serves `listener` until `stop`.
 pub fn serve(listener: tokio::net::TcpListener, options: HealthOptions, stop: CancelToken) {
-    tokio::spawn(
+    pmt_core::spawn::spawn(
         async move {
             loop {
                 let accepted = tokio::select! {
@@ -60,7 +60,7 @@ pub fn serve(listener: tokio::net::TcpListener, options: HealthOptions, stop: Ca
                     accepted = listener.accept() => accepted,
                 };
                 let Ok((stream, _)) = accepted else { continue };
-                tokio::spawn(async move {
+                pmt_core::spawn::spawn(async move {
                     let service = service_fn(move |req| answer(options, req));
                     let conn = hyper::server::conn::http1::Builder::new()
                         .serve_connection(TokioIo::new(stream), service);
@@ -98,7 +98,7 @@ async fn answer(
 }
 
 async fn healthz() -> Response<Full<Bytes>> {
-    let probe = tokio::spawn(async {});
+    let probe = pmt_core::spawn::spawn(async {});
     match tokio::time::timeout(PROBE_WITHIN, probe).await {
         Ok(Ok(())) => respond(200, "application/json", json!({"status": "ok"}).to_string()),
         _ => respond(

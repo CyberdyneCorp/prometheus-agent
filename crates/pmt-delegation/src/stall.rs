@@ -128,7 +128,7 @@ mod tests {
     async fn a_child_progressing_every_minute_for_two_hours_never_stalls() {
         let activity = std::sync::Arc::new(Activity::new());
         let watched = std::sync::Arc::clone(&activity);
-        let monitor = tokio::spawn(async move { watch(Policy::new(0), &watched).await });
+        let monitor = pmt_core::spawn::spawn(async move { watch(Policy::new(0), &watched).await });
         for _ in 0..120 {
             tokio::time::sleep(Duration::from_mins(1)).await;
             activity.progressed();

@@ -83,11 +83,12 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result
             )));
             options.health_url = Some(health_url);
             options.home = Some(home.to_path_buf());
-            let watcher = tokio::spawn(super::host::watch(Arc::clone(&host)));
-            let sweeper = tokio::spawn(super::host::sweep_worktrees(Arc::clone(&host)));
-            let scheduler = tokio::spawn(super::host::schedule_cron(Arc::clone(&host)));
-            let automation = tokio::spawn(super::host::schedule_automation(Arc::clone(&host)));
-            let sampler = tokio::spawn(super::host::sample_health(Arc::clone(&host)));
+            let watcher = pmt_core::spawn::spawn(super::host::watch(Arc::clone(&host)));
+            let sweeper = pmt_core::spawn::spawn(super::host::sweep_worktrees(Arc::clone(&host)));
+            let scheduler = pmt_core::spawn::spawn(super::host::schedule_cron(Arc::clone(&host)));
+            let automation =
+                pmt_core::spawn::spawn(super::host::schedule_automation(Arc::clone(&host)));
+            let sampler = pmt_core::spawn::spawn(super::host::sample_health(Arc::clone(&host)));
             let liveness = super::watchdog::background(home, ctx.launch);
             let server = Server::new(options, Arc::clone(&host) as Arc<dyn pmt_gateway::Host>)?;
             super::host::publish_usage(&host, &server);

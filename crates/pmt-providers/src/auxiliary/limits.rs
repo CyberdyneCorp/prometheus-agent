@@ -109,7 +109,7 @@ mod tests {
             .map(|_| {
                 let (limits, now, peak) =
                     (Arc::clone(&limits), Arc::clone(&now), Arc::clone(&peak));
-                tokio::spawn(async move {
+                pmt_core::spawn::spawn(async move {
                     let _slot = limits.acquire(AuxTask::Compression, task_max).await;
                     let inside = now.fetch_add(1, Ordering::SeqCst) + 1;
                     peak.fetch_max(inside, Ordering::SeqCst);

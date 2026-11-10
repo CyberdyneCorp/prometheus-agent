@@ -121,7 +121,7 @@ pub(super) fn tick(env: &Env<'_>) -> Result<u8, Error> {
     let store = Arc::clone(&env.store);
     let runner = Arc::new(env.runner());
     let outcome = crate::model_cmd::block_on(async move {
-        let renew = tokio::spawn({
+        let renew = pmt_core::spawn::spawn({
             let store = Arc::clone(&store);
             let lease = lease.clone();
             async move {

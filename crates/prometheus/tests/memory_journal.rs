@@ -131,7 +131,7 @@ async fn memory_search_ranks_a_paraphrase_with_the_configured_embedding_model() 
         ),
     );
     let h = home.path().to_owned();
-    let (ana, explained) = tokio::task::spawn_blocking(move || {
+    let (ana, explained) = pmt_core::spawn::blocking(move || {
         let add = |content: &str| {
             memory_json(
                 &h,

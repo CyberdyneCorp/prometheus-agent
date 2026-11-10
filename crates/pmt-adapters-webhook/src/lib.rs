@@ -548,6 +548,12 @@ impl Webhook {
 }
 
 impl Adapter for Webhook {
+    fn reach(&self) -> Result<pmt_gateway::messaging::probe::Reach, String> {
+        // Deliveries arrive on the daemon's listener; replies go back to
+        // per-route URLs only when an event asks.
+        Ok(pmt_gateway::messaging::probe::Reach::InboundOnly)
+    }
+
     fn describe(&self) -> Descriptor {
         let limit = pmt_config::platforms::first_party(PLATFORM)
             .map_or(65_536, |p| p.max_message_length as usize);

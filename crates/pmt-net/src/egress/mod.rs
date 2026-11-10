@@ -239,7 +239,7 @@ impl Attacher {
     /// holding its peer has exited) or the proxy stops.
     pub fn serve(&self, listener: std::net::TcpListener, alive: std::os::unix::net::UnixStream) {
         let (rules, denied) = (Arc::clone(&self.rules), Arc::clone(&self.denied));
-        drop(self.runtime.spawn(async move {
+        drop(pmt_core::spawn::spawn_on(&self.runtime, async move {
             let ready = listener
                 .set_nonblocking(true)
                 .and(alive.set_nonblocking(true));
@@ -271,7 +271,7 @@ async fn accept(listener: TcpListener, rules: Arc<Rules>, denied: Arc<AtomicU64>
             continue;
         };
         let (rules, denied) = (Arc::clone(&rules), Arc::clone(&denied));
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             if let Err(Some(denial)) = serve(stream, &rules).await {
                 denied.fetch_add(1, Ordering::Relaxed);
                 if let Some(observer) = &rules.observer {

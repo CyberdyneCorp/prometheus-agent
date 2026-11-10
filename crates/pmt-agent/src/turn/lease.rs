@@ -83,7 +83,7 @@ impl Refresher {
         every: Duration,
         interrupt: Interrupt,
     ) -> Self {
-        let task = tokio::spawn(async move {
+        let task = pmt_core::spawn::spawn(async move {
             loop {
                 tokio::time::sleep(every).await;
                 if let Err(err) = store.renew_lease(&mut lease) {

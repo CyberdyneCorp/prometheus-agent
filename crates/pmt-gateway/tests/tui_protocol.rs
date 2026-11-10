@@ -174,7 +174,7 @@ async fn a_catalog_request_is_not_held_behind_a_slow_resume() {
     let resuming = {
         let client = client.clone();
         let session = session.clone();
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             let started = tokio::time::Instant::now();
             client
                 .call(

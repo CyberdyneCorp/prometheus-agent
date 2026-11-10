@@ -139,11 +139,11 @@ fn front(pki: &Pki, upstream: String) -> Front {
     let port = listener.local_addr().unwrap().port();
     let refused = Arc::new(AtomicUsize::new(0));
     let counter = Arc::clone(&refused);
-    runtime.spawn(async move {
+    pmt_core::spawn::spawn_on(runtime.handle(), async move {
         while let Ok((tcp, _)) = listener.accept().await {
             let (acceptor, upstream) = (acceptor.clone(), upstream.clone());
             let counter = Arc::clone(&counter);
-            tokio::spawn(async move {
+            pmt_core::spawn::spawn(async move {
                 let Ok(mut tls) = acceptor.accept(tcp).await else {
                     counter.fetch_add(1, Ordering::SeqCst);
                     return;

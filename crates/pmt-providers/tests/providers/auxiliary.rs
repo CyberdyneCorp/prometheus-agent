@@ -206,7 +206,7 @@ async fn compression_calls_wait_for_the_task_cap_and_carry_the_task_extra_body()
         .map(|_| {
             let caller = AuxCaller::new(client.clone()).with_limits(Arc::clone(&limits));
             let aux = Arc::clone(&aux);
-            tokio::spawn(async move {
+            pmt_core::spawn::spawn(async move {
                 let ctx = CallContext::new(pmt_core::id::SessionId::new(), "main");
                 caller
                     .call(&aux, &request("summarise"), &ctx)

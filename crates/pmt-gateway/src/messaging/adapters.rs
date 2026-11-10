@@ -477,7 +477,7 @@ fn launch_slot(
         .expect("adapters poisoned")
         .insert(key.clone(), Arc::clone(&slot));
     let span = tracing::info_span!("adapter", profile = key.0, platform = key.1);
-    tokio::spawn(supervise(Arc::downgrade(shared), key, slot).instrument(span));
+    pmt_core::spawn::spawn(supervise(Arc::downgrade(shared), key, slot).instrument(span));
 }
 
 /// Connects the adapter and reconnects it after a retryable loss.
@@ -746,7 +746,7 @@ fn front_profile(
                 );
                 slot.stop.cancel();
                 let adapter = Arc::clone(&slot.adapter);
-                tokio::spawn(async move { adapter.disconnect().await });
+                pmt_core::spawn::spawn(async move { adapter.disconnect().await });
             }
             None => {
                 let direct = shared.agents.scope(profile).is_some_and(|scope| {

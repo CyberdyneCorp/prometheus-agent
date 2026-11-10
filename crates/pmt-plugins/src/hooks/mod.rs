@@ -362,7 +362,7 @@ impl Hooks {
         let instance = Arc::clone(instance);
         let bound = self.settings.timeout;
         let call = call.clone();
-        let task = tokio::task::spawn_blocking(move || instance.on_hook(&call, &event, bound));
+        let task = pmt_core::spawn::blocking(move || instance.on_hook(&call, &event, bound));
         let outcome = match tokio::time::timeout(bound + WAIT_SLACK, task).await {
             Err(_) => Err(timed_out(plugin)),
             Ok(Err(join)) => Err(Error::new(&codes::PLUGINS_CALL, join.to_string())),

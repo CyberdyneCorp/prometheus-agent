@@ -359,7 +359,7 @@ pub fn dispatch(
     for (job, run) in claimed {
         let runner = Arc::clone(runner);
         let permits = Arc::clone(permits);
-        tasks.spawn(async move {
+        pmt_core::spawn::spawn_in(&mut tasks, async move {
             let _permit = permits.acquire_owned().await;
             runner.execute(&job, &run).await
         });

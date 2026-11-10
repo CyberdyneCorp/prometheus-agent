@@ -100,6 +100,11 @@ fn append(root: &Path, file: &str, value: &Value) {
 }
 
 impl Adapter for FileAdapter {
+    fn reach(&self) -> Result<pmt_gateway::messaging::probe::Reach, String> {
+        // File-backed: nothing to connect to.
+        Ok(pmt_gateway::messaging::probe::Reach::InboundOnly)
+    }
+
     fn describe(&self) -> Descriptor {
         Descriptor {
             supports_edit: true,
@@ -124,7 +129,7 @@ impl Adapter for FileAdapter {
                 })
             });
         }
-        let task = tokio::spawn(read(self.root.clone(), link));
+        let task = pmt_core::spawn::spawn(read(self.root.clone(), link));
         if let Some(old) = self.reader.lock().expect("reader poisoned").replace(task) {
             old.abort();
         }

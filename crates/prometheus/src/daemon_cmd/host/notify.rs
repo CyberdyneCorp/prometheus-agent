@@ -38,7 +38,7 @@ pub(super) fn completions(
     session: String,
 ) -> mpsc::UnboundedSender<Notice> {
     let (tx, mut rx) = mpsc::unbounded_channel::<Notice>();
-    tokio::spawn(
+    pmt_core::spawn::spawn(
         async move {
             while let Some(notice) = rx.recv().await {
                 deliver(&gateway, &profile, &session, of_notice(&notice)).await;
@@ -55,7 +55,7 @@ pub(super) fn completions(
 /// later); its task ends when the session's terminal is dropped.
 pub(super) fn to_clients(link: Link) -> mpsc::UnboundedSender<Notice> {
     let (tx, mut rx) = mpsc::unbounded_channel::<Notice>();
-    tokio::spawn(
+    pmt_core::spawn::spawn(
         async move {
             while let Some(notice) = rx.recv().await {
                 link.emit::<SessionEvent>(&event_of(&notice));

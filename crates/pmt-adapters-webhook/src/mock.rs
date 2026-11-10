@@ -68,7 +68,7 @@ impl WebhookSender {
                 crate::github_signature(SECRET, &body),
             )
             .body(body);
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             let _ = request.send().await;
         });
     }

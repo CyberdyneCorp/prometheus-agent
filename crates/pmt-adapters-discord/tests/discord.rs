@@ -226,14 +226,14 @@ fn run_ambient_child(proxy: std::net::SocketAddr, trust_env: bool) -> bool {
 #[tokio::test(flavor = "multi_thread")]
 async fn ambient_proxy_variables_are_ignored_unless_the_environment_is_trusted() {
     let (proxy, log) = pmt_gateway::messaging::mock_server::proxy().await.unwrap();
-    let ignored = tokio::task::spawn_blocking(move || run_ambient_child(proxy, false));
+    let ignored = pmt_core::spawn::blocking(move || run_ambient_child(proxy, false));
     assert!(ignored.await.unwrap());
     assert!(
         log.lock().unwrap().is_empty(),
         "HTTPS_PROXY was used: {:?}",
         log.lock().unwrap()
     );
-    let trusted = tokio::task::spawn_blocking(move || run_ambient_child(proxy, true));
+    let trusted = pmt_core::spawn::blocking(move || run_ambient_child(proxy, true));
     assert!(trusted.await.unwrap());
     assert!(
         !log.lock().unwrap().is_empty(),

@@ -253,7 +253,7 @@ async fn ping_is_answered_during_a_long_compaction() {
     let compacting = {
         let client = client.clone();
         let session = session.clone();
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             client
                 .call("session.compact", json!({"session_id": session}))
                 .await

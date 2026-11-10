@@ -55,6 +55,16 @@ fn a_stalled_runtime_is_dumped_marked_degraded_and_exits_75() {
     let dump = std::fs::read_to_string(&dumps[0]).unwrap();
     assert!(dump.contains("reason: runtime_liveness_watchdog"), "{dump}");
     assert!(dump.contains("open spans"), "{dump}");
+    // Every thread, also the watchdog's own (it never enters a span), and
+    // the tasks blocking the workers, running where they were spawned.
+    assert!(dump.contains("\"liveness-watchdog\""), "{dump}");
+    assert!(
+        dump.lines().any(|l| l.contains("async task")
+            && l.contains("watchdog.rs")
+            && l.contains("RUNNING on thread")),
+        "{dump}"
+    );
+    assert!(dump.contains("awaiting in "), "{dump}");
     let record: serde_json::Value =
         serde_json::from_slice(&std::fs::read(home.path().join("run/gateway.json")).unwrap())
             .unwrap();

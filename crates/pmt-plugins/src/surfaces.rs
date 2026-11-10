@@ -248,7 +248,7 @@ impl ModelRequestHooks {
 async fn blocking<T: Send + 'static>(
     work: impl FnOnce() -> Result<Result<T, String>, pmt_core::error::Error> + Send + 'static,
 ) -> Result<T, String> {
-    match tokio::task::spawn_blocking(work).await {
+    match pmt_core::spawn::blocking(work).await {
         Ok(Ok(answer)) => answer,
         Ok(Err(err)) => Err(err.message().to_owned()),
         Err(join) => Err(join.to_string()),

@@ -48,9 +48,9 @@ where
 async fn edge_server(seen: Arc<Mutex<Vec<String>>>) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         while let Ok((stream, _)) = listener.accept().await {
-            tokio::spawn(serve_edge(stream, Arc::clone(&seen)));
+            pmt_core::spawn::spawn(serve_edge(stream, Arc::clone(&seen)));
         }
     });
     format!("ws://{address}/readaloud")
@@ -80,10 +80,10 @@ async fn private_ca_edge_server(seen: Arc<Mutex<Vec<String>>>) -> (u16, String) 
     let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(config));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         while let Ok((tcp, _)) = listener.accept().await {
             let (acceptor, seen) = (acceptor.clone(), Arc::clone(&seen));
-            tokio::spawn(async move {
+            pmt_core::spawn::spawn(async move {
                 if let Ok(tls) = acceptor.accept(tcp).await {
                     serve_edge(tls, seen).await;
                 }
@@ -99,10 +99,10 @@ async fn connect_proxy(port: u16, targets: Arc<Mutex<Vec<String>>>) -> String {
     use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         while let Ok((mut client, _)) = listener.accept().await {
             let targets = Arc::clone(&targets);
-            tokio::spawn(async move {
+            pmt_core::spawn::spawn(async move {
                 let mut head = Vec::new();
                 let mut byte = [0u8; 1];
                 while !head.ends_with(b"\r\n\r\n") {

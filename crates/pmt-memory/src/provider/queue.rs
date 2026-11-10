@@ -53,10 +53,10 @@ impl Queue {
     #[must_use]
     pub fn start(backend: Arc<dyn ProviderBackend>, name: String) -> Self {
         let (tx, mut rx) = mpsc::unbounded_channel::<Job>();
-        let worker = tokio::spawn(async move {
+        let worker = pmt_core::spawn::spawn(async move {
             while let Some(job) = rx.recv().await {
                 let backend = Arc::clone(&backend);
-                let ran = tokio::task::spawn_blocking(move || {
+                let ran = pmt_core::spawn::blocking(move || {
                     let (hook, result) = job.run(&*backend);
                     result.map_err(|err| format!("{hook}: {err}"))
                 })

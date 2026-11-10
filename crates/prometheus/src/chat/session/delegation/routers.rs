@@ -60,7 +60,7 @@ impl Router for Plugin {
         Box::pin(async move {
             // A plugin call blocks its thread (its own CPU and time bounds
             // apply).
-            let answer = tokio::task::spawn_blocking(move || router.route(&call, &text))
+            let answer = pmt_core::spawn::blocking(move || router.route(&call, &text))
                 .await
                 .map_err(|e| format!("the router stopped: {e}"))?;
             match answer {

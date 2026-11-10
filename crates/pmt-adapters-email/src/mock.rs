@@ -68,15 +68,15 @@ impl MailMock {
             smtp: smtp.local_addr().unwrap(),
         });
         let server = Arc::clone(&mock);
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             while let Ok((stream, _)) = imap.accept().await {
-                tokio::spawn(Arc::clone(&server).imap_session(stream));
+                pmt_core::spawn::spawn(Arc::clone(&server).imap_session(stream));
             }
         });
         let server = Arc::clone(&mock);
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             while let Ok((stream, _)) = smtp.accept().await {
-                tokio::spawn(Arc::clone(&server).smtp_session(stream));
+                pmt_core::spawn::spawn(Arc::clone(&server).smtp_session(stream));
             }
         });
         mock

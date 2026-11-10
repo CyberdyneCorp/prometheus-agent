@@ -295,7 +295,7 @@ async fn stdio(
         return Err(format!("{program}: no stdio pipes"));
     };
     if let Some(stderr) = child.stderr.take() {
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             let mut lines = BufReader::new(stderr).lines();
             while let Ok(Some(line)) = lines.next_line().await {
                 tracing::debug!(target: "mcp", program = %program, "{line}");

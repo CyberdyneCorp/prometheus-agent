@@ -359,10 +359,10 @@ impl DaemonHost {
         }
         let timeout = Duration::from_secs(profile.scope().config().approvals.timeout_secs);
         if let Some(prompts) = live.approvals.take() {
-            tokio::spawn(approvals(prompts, link.clone(), timeout).in_current_span());
+            pmt_core::spawn::spawn(approvals(prompts, link.clone(), timeout).in_current_span());
         }
         if let Some(prompts) = live.clarify.take() {
-            tokio::spawn(clarify(prompts, link.clone()).in_current_span());
+            pmt_core::spawn::spawn(clarify(prompts, link.clone()).in_current_span());
         }
         // Tool progress is rendered by clients from `session.event`.
         drop(live.progress.take());

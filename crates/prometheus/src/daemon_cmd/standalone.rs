@@ -92,7 +92,7 @@ impl Standalone {
         // The in-process gateway's records are the `gateway` component,
         // as a daemon's are.
         let span = tracing::info_span!("daemon", component = "gateway");
-        let task = tokio::spawn(tracing::Instrument::instrument(
+        let task = pmt_core::spawn::spawn(tracing::Instrument::instrument(
             async move {
                 let shutdown = async {
                     let _ = stopped.await;

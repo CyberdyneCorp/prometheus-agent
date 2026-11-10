@@ -81,7 +81,7 @@ fn start(shared: &Arc<Shared>) -> Result<SocketAddr, String> {
     tracing::info!("webhook listener on http://{addr}/p/<profile>/<platform>/");
     let weak = Arc::downgrade(shared);
     let stop = shared.stop.clone();
-    tokio::spawn(
+    pmt_core::spawn::spawn(
         async move {
             loop {
                 let accepted = tokio::select! {
@@ -90,7 +90,7 @@ fn start(shared: &Arc<Shared>) -> Result<SocketAddr, String> {
                 };
                 let Ok((stream, _)) = accepted else { continue };
                 let weak = Weak::clone(&weak);
-                tokio::spawn(async move {
+                pmt_core::spawn::spawn(async move {
                     let service = service_fn(move |req| serve(Weak::clone(&weak), req));
                     let conn = hyper::server::conn::http1::Builder::new()
                         .serve_connection(TokioIo::new(stream), service);

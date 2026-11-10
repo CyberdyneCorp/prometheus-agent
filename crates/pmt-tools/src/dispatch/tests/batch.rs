@@ -296,7 +296,7 @@ async fn interrupt_cancels_in_flight_calls_within_two_seconds() {
     .await;
     let cancel = CancelToken::new();
     let interrupt = cancel.clone();
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         tokio::time::sleep(Duration::from_millis(100)).await;
         interrupt.cancel();
     });

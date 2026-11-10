@@ -353,7 +353,7 @@ impl Terminal {
     pub async fn close(&self) {
         self.processes.close().await;
         let target = Arc::clone(&self.setup.target);
-        let _ = tokio::task::spawn_blocking(move || target.close()).await;
+        let _ = pmt_core::spawn::blocking(move || target.close()).await;
     }
 
     /// The shell in use: the remote backend's own, else the configured one.
@@ -382,7 +382,7 @@ impl Terminal {
         f: impl FnOnce(&dyn Target) -> R + Send + 'static,
     ) -> R {
         let target = Arc::clone(&self.setup.target);
-        match tokio::task::spawn_blocking(move || f(target.as_ref())).await {
+        match pmt_core::spawn::blocking(move || f(target.as_ref())).await {
             Ok(value) => value,
             Err(err) => std::panic::resume_unwind(err.into_panic()),
         }
@@ -519,7 +519,7 @@ impl Terminal {
         }
         let command = exec.command().to_owned();
         let sudo_for_call = sudo.clone();
-        let joined = tokio::task::spawn_blocking(move || {
+        let joined = pmt_core::spawn::blocking(move || {
             let prepared = inputs.map_or_else(
                 || super::inputs::Prepared {
                     command: command.clone(),
@@ -556,7 +556,7 @@ impl Terminal {
             return;
         };
         let (command, cwd) = (command.to_owned(), cwd.to_path_buf());
-        let _ = tokio::task::spawn_blocking(move || hook(&command, &cwd)).await;
+        let _ = pmt_core::spawn::blocking(move || hook(&command, &cwd)).await;
     }
 
     /// A foreground command on a plugin backend.
@@ -738,11 +738,11 @@ impl Terminal {
             child
                 .stdout
                 .take()
-                .map(|r| tokio::spawn(spawn::pump(r, |_| {}))),
+                .map(|r| pmt_core::spawn::spawn(spawn::pump(r, |_| {}))),
             child
                 .stderr
                 .take()
-                .map(|r| tokio::spawn(spawn::pump(r, |_| {}))),
+                .map(|r| pmt_core::spawn::spawn(spawn::pump(r, |_| {}))),
         ];
         let limit = Duration::from_secs(self.setup.terminal.shell_init_timeout_secs);
         if tokio::time::timeout(limit, child.wait()).await.is_err() {
@@ -1007,7 +1007,7 @@ fn capture_into(
     stream: impl tokio::io::AsyncRead + Unpin + Send + 'static,
 ) -> tokio::task::JoinHandle<()> {
     let capture = Arc::clone(capture);
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         spawn::pump(stream, |bytes| {
             capture
                 .lock()

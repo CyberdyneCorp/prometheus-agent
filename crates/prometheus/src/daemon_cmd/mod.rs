@@ -169,6 +169,14 @@ fn ensure_output(record: &DaemonRecord) -> Result<u8, Error> {
 /// # Errors
 ///
 /// `daemon.start_failed`, `home.io`.
+/// The adapter factories of this build, by platform name (for
+/// `status --deep` probes).
+pub(crate) fn adapter_factories(
+    ctx: &Context<'_>,
+) -> std::collections::BTreeMap<String, pmt_gateway::messaging::AdapterFactory> {
+    messaging::factories(ctx)
+}
+
 pub(crate) fn running_or_start(
     home: &Path,
     profile: Option<&str>,

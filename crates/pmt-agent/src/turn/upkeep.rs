@@ -242,7 +242,7 @@ impl Turn<'_> {
         let pruned = prune(&plan.rows, plan.split.middle.clone());
         let request = summary::request(&compactor.input(&run, &plan, &pruned));
         let limit = Duration::from_secs(config.summary_timeout_secs);
-        let task = tokio::spawn(async move {
+        let task = pmt_core::spawn::spawn(async move {
             tokio::time::timeout(limit, summarizer.summarize(&request))
                 .await
                 .unwrap_or_else(|_| {

@@ -60,10 +60,10 @@ impl Tracker {
                 depth: entry.depth,
             };
             let runtime = tokio::runtime::Handle::current();
-            tokio::spawn(progress::pace(rx, move |snapshot| {
+            pmt_core::spawn::spawn(progress::pace(rx, move |snapshot| {
                 let event = Event::SubagentProgress(identity.event(&snapshot));
                 let events = Arc::clone(&events);
-                runtime.spawn(async move {
+                pmt_core::spawn::spawn_on(&runtime, async move {
                     if let Err(err) = events.emit(Emit::now(event)).await {
                         tracing::debug!(error = %err, "subagent.progress not recorded");
                     }

@@ -84,7 +84,7 @@ impl ClientHandler for Handler {
         if let Some(server) = self.server.upgrade() {
             // Never refresh inline: the refresh's own request travels over
             // this connection.
-            tokio::spawn(async move { server.tools_list_changed().await });
+            pmt_core::spawn::spawn(async move { server.tools_list_changed().await });
         }
     }
 

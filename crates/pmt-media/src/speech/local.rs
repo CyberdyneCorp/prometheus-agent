@@ -208,7 +208,7 @@ impl Drop for Lease {
         let Ok(runtime) = tokio::runtime::Handle::try_current() else {
             return;
         };
-        runtime.spawn(async move {
+        pmt_core::spawn::spawn_on(&runtime, async move {
             tokio::time::sleep(keep_warm).await;
             // A lease taken meanwhile (a new generation) keeps it loaded.
             let idle = {

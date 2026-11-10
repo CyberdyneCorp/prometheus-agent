@@ -268,7 +268,7 @@ impl Host for FakeHost {
             turns.fetch_add(1, Ordering::Relaxed);
             let id = turn.clone();
             let answers = Arc::clone(&self.answers);
-            tokio::spawn(async move {
+            pmt_core::spawn::spawn(async move {
                 script(params.text, link, id, answers).await;
                 turns.fetch_sub(1, Ordering::Relaxed);
             });
@@ -461,7 +461,7 @@ impl Daemon {
         let lock = WriterLock::acquire(&path, Role::Daemon, server.profiles()).unwrap();
         let task = {
             let server = Arc::clone(&server);
-            tokio::spawn(async move {
+            pmt_core::spawn::spawn(async move {
                 let shutdown = async {
                     let _ = stopped.await;
                 };

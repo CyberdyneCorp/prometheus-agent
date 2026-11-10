@@ -29,6 +29,10 @@ unsafe_modules = [
     "crates/pmt-sandbox/src/windows/pipe.rs",
     # Console code pages (UTF-8 console for the CLI and its children).
     "crates/pmt-sandbox/src/windows/console.rs",
+    # Thread listing for task dumps: Mach task_threads/thread_info and the
+    # Windows Toolhelp snapshot with GetThreadDescription.
+    "crates/pmt-core/src/os_threads/macos.rs",
+    "crates/pmt-core/src/os_threads/windows.rs",
     # Test-only: types a terminal's reply into the test's own console
     # (WriteConsoleInputW) for the Windows OSC 11 query test.
     "crates/pmt-tui/src/background/console_input.rs",

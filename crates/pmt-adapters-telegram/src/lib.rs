@@ -282,12 +282,18 @@ impl Telegram {
             old.cancel();
         }
         let timeout = self.options.poll_timeout_secs;
-        tokio::spawn(updates::poll(ctx, Arc::clone(&self.offset), timeout, stop));
+        pmt_core::spawn::spawn(updates::poll(ctx, Arc::clone(&self.offset), timeout, stop));
         Ok(())
     }
 }
 
 impl Adapter for Telegram {
+    fn reach(&self) -> Result<pmt_gateway::messaging::probe::Reach, String> {
+        Ok(pmt_gateway::messaging::probe::Reach::Endpoints(vec![
+            pmt_gateway::messaging::probe::Endpoint::Http(self.endpoints.api.clone()),
+        ]))
+    }
+
     fn describe(&self) -> Descriptor {
         let all: std::collections::BTreeSet<MediaKind> = [
             MediaKind::Image,

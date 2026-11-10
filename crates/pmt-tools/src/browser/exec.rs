@@ -210,7 +210,7 @@ impl BrowserExec {
         else {
             return Err("the interpreter's pipes are missing".to_owned());
         };
-        let errors = tokio::spawn(async move {
+        let errors = pmt_core::spawn::spawn(async move {
             let mut text = String::new();
             let _ = stderr.read_to_string(&mut text).await;
             text

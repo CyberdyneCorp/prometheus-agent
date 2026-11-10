@@ -308,7 +308,7 @@ impl ExternalHook for DirRunner {
         let cwd = call.cwd.clone();
         let event = hook.to_owned();
         // Fire and forget: the gateway never waits for a handler.
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             let Some(handler) = handler else {
                 return;
             };

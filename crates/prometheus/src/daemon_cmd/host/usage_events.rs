@@ -24,7 +24,7 @@ pub(in crate::daemon_cmd) fn publish(host: &Arc<DaemonHost>, server: &Arc<pmt_ga
             profile.to_owned(),
             row.clone(),
         );
-        runtime.spawn(async move {
+        pmt_core::spawn::spawn_on(&runtime, async move {
             if let (Some(host), Some(server)) = (host.upgrade(), server.upgrade()) {
                 announce(&host, &server, &profile, &row);
             }

@@ -53,7 +53,7 @@ pub(crate) fn span(duration: Duration) -> String {
 pub(crate) fn spawn(shared: &Arc<Shared>) {
     let weak = Arc::downgrade(shared);
     let stop = shared.stop.clone();
-    tokio::spawn(
+    pmt_core::spawn::spawn(
         async move {
             loop {
                 tokio::select! {

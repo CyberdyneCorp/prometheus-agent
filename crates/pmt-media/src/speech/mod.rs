@@ -144,7 +144,7 @@ impl Drop for SpeechState {
             return;
         };
         for (line, cwd, runner) in releases {
-            runtime.spawn(async move {
+            pmt_core::spawn::spawn_on(&runtime, async move {
                 if let Err(why) =
                     command::run(runner.as_ref(), &line, &cwd, Duration::from_mins(1), false).await
                 {

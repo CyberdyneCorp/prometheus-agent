@@ -59,9 +59,9 @@ async fn serve(route: fn(&str, u16) -> String) -> (u16, Seen) {
     let port = listener.local_addr().unwrap().port();
     let seen: Seen = Arc::default();
     let log = Arc::clone(&seen);
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         while let Ok((stream, _)) = listener.accept().await {
-            tokio::spawn(answer(stream, port, route, Arc::clone(&log)));
+            pmt_core::spawn::spawn(answer(stream, port, route, Arc::clone(&log)));
         }
     });
     (port, seen)
@@ -256,10 +256,10 @@ async fn corp_https() -> Corp {
     let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(config));
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         while let Ok((tcp, _)) = listener.accept().await {
             let acceptor = acceptor.clone();
-            tokio::spawn(async move {
+            pmt_core::spawn::spawn(async move {
                 if let Ok(tls) = acceptor.accept(tcp).await {
                     answer(tls, port, routes, Seen::default()).await;
                 }
@@ -335,7 +335,7 @@ async fn corporate_root_in_the_os_store_is_trusted() {
     std::fs::write(&bundle, &corp.ca_pem).unwrap();
     let exe = std::env::current_exe().unwrap();
     let port = corp.port;
-    let output = tokio::task::spawn_blocking(move || {
+    let output = pmt_core::spawn::blocking(move || {
         std::process::Command::new(exe)
             .args(["--exact", "os_store_child", "--ignored", "--nocapture"])
             .env("SSL_CERT_FILE", &bundle)

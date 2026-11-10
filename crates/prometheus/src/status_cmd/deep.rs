@@ -1,9 +1,10 @@
 //! `prometheus status --deep` (spec: observability, Configuration-centric
 //! status): the only status mode that makes outbound requests. One
 //! authenticated model-listing request per provider with a credential,
-//! one connection per enabled adapter's platform, and an MCP `initialize`
-//! per configured server, each within [`WITHIN`], reporting latency or
-//! the error.
+//! a connection to every endpoint each enabled adapter declares
+//! (`pmt_gateway::messaging::probe`; an adapter that only receives is
+//! `inbound only`), and an MCP `initialize` per configured server, each
+//! within [`WITHIN`], reporting latency or the error.
 
 use std::time::{Duration, Instant};
 
@@ -27,6 +28,9 @@ pub(super) struct Probe {
     pub latency_ms: Option<u64>,
     /// Why it failed.
     pub error: Option<String>,
+    /// Nothing to probe: the adapter only receives.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub inbound_only: bool,
 }
 
 impl Probe {
@@ -43,6 +47,7 @@ impl Probe {
             name: name.to_owned(),
             latency_ms,
             error,
+            inbound_only: false,
         }
     }
 }
@@ -50,7 +55,7 @@ impl Probe {
 /// Runs every probe of the active profile.
 pub(super) fn probes(ctx: &Context<'_>, scope: &ProfileScope) -> Vec<Probe> {
     let mut probes = providers(ctx, scope);
-    probes.extend(adapters(scope));
+    probes.extend(adapters(ctx, scope));
     probes.extend(mcp(scope));
     probes
 }
@@ -123,43 +128,61 @@ fn configured_model(config: &pmt_config::Config, id: &str) -> Option<String> {
         .map(|e| e.model.clone())
 }
 
-/// The API host an adapter of `platform` connects to, when fixed.
-fn platform_host(platform: &str) -> Option<&'static str> {
-    match platform {
-        "telegram" => Some("api.telegram.org:443"),
-        "discord" => Some("discord.com:443"),
-        "slack" => Some("slack.com:443"),
-        "whatsapp" => Some("graph.facebook.com:443"),
-        _ => None,
+#[cfg(feature = "gateway")]
+fn adapters(ctx: &Context<'_>, scope: &ProfileScope) -> Vec<Probe> {
+    let factories = crate::daemon_cmd::adapter_factories(ctx);
+    let probe = async {
+        let mut out = Vec::new();
+        for (name, table) in &scope.config().gateway.platforms {
+            if table.enabled {
+                let setup = pmt_gateway::messaging::AdapterSetup {
+                    scope: scope.clone(),
+                    platform: name.clone(),
+                    config: table.clone(),
+                };
+                out.push(adapter(&factories, &setup).await);
+            }
+        }
+        out
+    };
+    crate::model_cmd::block_on(probe).unwrap_or_default()
+}
+
+/// Builds the adapter `setup` describes (no connection) and probes the
+/// endpoints it declares.
+#[cfg(feature = "gateway")]
+async fn adapter(
+    factories: &std::collections::BTreeMap<String, pmt_gateway::messaging::AdapterFactory>,
+    setup: &pmt_gateway::messaging::AdapterSetup,
+) -> Probe {
+    use pmt_gateway::messaging::probe::{self, Probed};
+    let name = setup.platform.as_str();
+    let reach = factories
+        .get(name)
+        .ok_or_else(|| format!("this build has no adapter for platform '{name}'"))
+        .and_then(|factory| factory(setup).map_err(|e| e.message().to_owned()))
+        .and_then(|adapter| adapter.reach());
+    let outcome = match reach {
+        Ok(reach) => probe::probe(setup, &reach, WITHIN).await,
+        Err(why) => Err(why),
+    };
+    match outcome {
+        Ok(Probed::InboundOnly) => Probe {
+            kind: "adapter",
+            name: name.to_owned(),
+            latency_ms: None,
+            error: None,
+            inbound_only: true,
+        },
+        Ok(Probed::Reached(took)) => Probe::of("adapter", name, Ok(took)),
+        Err(why) => Probe::of("adapter", name, Err(why)),
     }
 }
 
-fn adapters(scope: &ProfileScope) -> Vec<Probe> {
-    scope
-        .config()
-        .gateway
-        .platforms
-        .iter()
-        .filter(|(_, p)| p.enabled)
-        .map(|(name, _)| {
-            let outcome = platform_host(name).map_or_else(
-                || Err("no fixed platform endpoint; see the daemon's adapter state".to_owned()),
-                connect,
-            );
-            Probe::of("adapter", name, outcome)
-        })
-        .collect()
-}
-
-/// A TCP connection to `host:port` within [`WITHIN`].
-fn connect(host: &str) -> Result<Duration, String> {
-    let started = Instant::now();
-    let addr = std::net::ToSocketAddrs::to_socket_addrs(host)
-        .map_err(|e| format!("cannot resolve {host}: {e}"))?
-        .next()
-        .ok_or_else(|| format!("cannot resolve {host}"))?;
-    std::net::TcpStream::connect_timeout(&addr, WITHIN).map_err(|e| format!("{host}: {e}"))?;
-    Ok(started.elapsed())
+/// Without the messaging gateway no adapter can start, so none is probed.
+#[cfg(not(feature = "gateway"))]
+fn adapters(_ctx: &Context<'_>, _scope: &ProfileScope) -> Vec<Probe> {
+    Vec::new()
 }
 
 fn mcp(scope: &ProfileScope) -> Vec<Probe> {

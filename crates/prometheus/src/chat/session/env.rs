@@ -100,7 +100,7 @@ impl pmt_tools::browser::vault::MaskedPrompt for VaultPrompt {
         let prompt = Arc::clone(&self.0);
         let (name, question) = (name.to_owned(), question.to_owned());
         Box::pin(async move {
-            tokio::task::spawn_blocking(move || prompt.ask("browser_vault", &name, Some(&question)))
+            pmt_core::spawn::blocking(move || prompt.ask("browser_vault", &name, Some(&question)))
                 .await
                 .ok()
                 .flatten()

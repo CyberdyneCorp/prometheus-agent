@@ -43,7 +43,7 @@ impl Lane {
         let public = self.outbound(key, OutboundKind::System, text.to_owned(), None);
         let shared = std::sync::Arc::clone(&self.shared);
         let profile = self.profile.clone();
-        tokio::spawn(
+        pmt_core::spawn::spawn(
             async move {
                 if let Err(err) = adapter.reply_privately(&private).await {
                     tracing::info!(

@@ -25,7 +25,7 @@ pub(super) fn btw(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
     let asker = ctx.factory.models.side(&live.model, live.id);
     let post = Arc::clone(&ctx.post);
     let pending = question.to_owned();
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         let text = match asker.ask(transcript, &pending).await {
             Ok(answer) => format!("{LABEL}: {}", answer.trim()),
             Err(why) => format!("{LABEL} failed: {why}"),

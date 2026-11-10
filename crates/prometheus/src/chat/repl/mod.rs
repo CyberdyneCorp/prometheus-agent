@@ -170,7 +170,7 @@ fn print_notices(
     mut notices: mpsc::UnboundedReceiver<pmt_tools::terminal::process::Notice>,
     printer: input::Printer,
 ) -> tokio::task::JoinHandle<()> {
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         while let Some(notice) = notices.recv().await {
             printer.print(&format!("[background] {}", notice.text()));
         }

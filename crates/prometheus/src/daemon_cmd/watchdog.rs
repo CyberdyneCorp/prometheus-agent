@@ -69,7 +69,7 @@ impl Watch {
         while !self.stop.load(Ordering::Relaxed) {
             let started = Instant::now();
             let (tx, rx) = std::sync::mpsc::channel();
-            self.runtime.spawn(async move {
+            pmt_core::spawn::spawn_on(&self.runtime, async move {
                 let _ = tx.send(());
             });
             if rx.recv_timeout(self.interval).is_ok() {
@@ -122,12 +122,12 @@ pub(super) fn background(
 ) -> tokio::task::JoinHandle<()> {
     let home = home.to_path_buf();
     let stall = launch.test_stall_runtime();
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         if let Some(after) = stall {
-            tokio::spawn(stall_runtime(after));
+            pmt_core::spawn::spawn(stall_runtime(after));
         }
         #[cfg(unix)]
-        tokio::spawn(dump_on_sigusr2(home.clone()));
+        pmt_core::spawn::spawn(dump_on_sigusr2(home.clone()));
         record::heartbeat(home).await;
     })
 }
@@ -157,7 +157,7 @@ async fn stall_runtime(after: Duration) {
     let workers = tokio::runtime::Handle::current().metrics().num_workers();
     tracing::warn!("test seam: blocking all {workers} runtime workers");
     for _ in 0..=workers {
-        tokio::spawn(async {
+        pmt_core::spawn::spawn(async {
             loop {
                 std::thread::sleep(Duration::from_hours(1));
             }

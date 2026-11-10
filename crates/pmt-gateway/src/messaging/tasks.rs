@@ -166,7 +166,7 @@ pub(crate) async fn start(
     );
     let me = Arc::clone(shared);
     let (routing, text) = (routing.clone(), prompt.to_owned());
-    tokio::spawn(async move { run(&me, &routing, &session, text).await });
+    pmt_core::spawn::spawn(async move { run(&me, &routing, &session, text).await });
     started(entry.number, prompt, &entry.id)
 }
 
@@ -194,7 +194,7 @@ fn register(
         model,
         stop: Box::new(move || {
             let (agents, owner, id) = (Arc::clone(&agents), owner.clone(), id.clone());
-            runtime.spawn(async move {
+            pmt_core::spawn::spawn_on(&runtime, async move {
                 if let Err(err) = agents.interrupt(&owner, &id).await {
                     tracing::warn!(error = %err, "background task not interrupted");
                 }

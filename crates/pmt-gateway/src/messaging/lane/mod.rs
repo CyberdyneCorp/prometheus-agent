@@ -367,7 +367,7 @@ pub(crate) fn open(shared: &Arc<Shared>, key: &SessionKey, routing: &Routing) ->
         profile = routing.profile,
         platform = routing.platform
     );
-    tokio::spawn(lane.run(rx).instrument(span));
+    pmt_core::spawn::spawn(lane.run(rx).instrument(span));
     lanes.insert(key.as_str().to_owned(), handle.clone());
     handle
 }

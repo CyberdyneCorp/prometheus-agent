@@ -3524,6 +3524,7 @@ capabilities = [
 
 [observability."Configuration-centric status"]
 "Offline full status" = ["crates/prometheus/tests/obs_reports.rs::full_status_lists_credentials_offline_and_only_deep_probes_connect"]
+"Deep status probes every adapter endpoint" = ["crates/prometheus/tests/obs_reports.rs::deep_status_probes_every_configured_adapter_endpoint"]
 
 [observability."Export posture status"]
 "Content capture is visible" = ["crates/prometheus/tests/obs_reports.rs::export_posture_states_what_leaves_the_host"]
@@ -3531,6 +3532,7 @@ capabilities = [
 [observability."Runtime liveness watchdog and task dump"]
 "Stalled runtime restarts" = ["crates/prometheus/tests/obs_watchdog.rs::a_stalled_runtime_is_dumped_marked_degraded_and_exits_75"]
 "Dump without restart" = ["crates/prometheus/tests/obs_watchdog.rs::sigusr2_writes_a_dump_and_the_daemon_keeps_serving", "crates/prometheus/tests/obs_watchdog.rs::debug_dump_tasks_writes_a_dump_over_the_control_channel"]
+"Dump shows every thread and task" = ["crates/pmt-obs/src/taskdump/tests.rs::a_dump_lists_every_thread_and_every_task_with_its_await_point", "crates/pmt-core/src/os_threads/mod.rs::the_list_has_every_thread_with_its_name_and_the_callers_id"]
 
 [observability."Opt-in debug share upload"]
 "Declined upload sends nothing" = ["crates/prometheus/tests/obs_reports.rs::a_declined_upload_makes_no_connection_and_exits_1"]

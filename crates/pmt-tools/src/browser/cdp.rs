@@ -184,8 +184,7 @@ impl Cdp {
                 let mut frame = text.into_bytes();
                 frame.push(0);
                 let written =
-                    tokio::task::spawn_blocking(move || pipe.write_all(&frame).map(|()| pipe))
-                        .await;
+                    pmt_core::spawn::blocking(move || pipe.write_all(&frame).map(|()| pipe)).await;
                 match written {
                     Ok(Ok(back)) => pipe = back,
                     _ => break,
@@ -211,13 +210,13 @@ impl Cdp {
         let (events, _) = broadcast::channel(256);
         let closed = Arc::new(tokio::sync::Notify::new());
         let alive = Arc::new(std::sync::atomic::AtomicBool::new(true));
-        tokio::spawn(writer(queue));
+        pmt_core::spawn::spawn(writer(queue));
         let reader = Reader {
             pending: Arc::clone(&pending),
             events: events.clone(),
         };
         let (reader_closed, reader_alive) = (Arc::clone(&closed), Arc::clone(&alive));
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             let mut incoming = std::pin::pin!(incoming);
             while let Some(text) = incoming.next().await {
                 reader.dispatch(&text);
@@ -390,7 +389,7 @@ mod tests {
     async fn closing_endpoint() -> String {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             let (stream, _) = listener.accept().await.unwrap();
             let mut socket = tokio_tungstenite::accept_async(stream).await.unwrap();
             let _ = socket.close(None).await;

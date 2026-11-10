@@ -106,6 +106,11 @@ pub(crate) struct Relay {
 }
 
 impl Relay {
+    /// The connector's URL.
+    pub(crate) fn url(&self) -> &str {
+        &self.options.url
+    }
+
     pub(crate) fn new(options: RelayOptions) -> Arc<Self> {
         Arc::new(Self {
             options,
@@ -252,7 +257,7 @@ pub(crate) async fn start(shared: &Arc<Shared>, options: RelayOptions) {
     }
     let _ = relay.shared.set(Arc::downgrade(shared));
     let span = tracing::info_span!("relay");
-    tokio::spawn(supervise(Arc::clone(&relay)).instrument(span));
+    pmt_core::spawn::spawn(supervise(Arc::clone(&relay)).instrument(span));
     relay.wait_descriptor(STARTUP_WAIT).await;
 }
 
@@ -272,7 +277,7 @@ pub(crate) fn reload(shared: &Arc<Shared>) {
                 "connecting the relay enrolled since start"
             );
             let shared = Arc::clone(shared);
-            tokio::spawn(async move { start(&shared, options).await }.in_current_span());
+            pmt_core::spawn::spawn(async move { start(&shared, options).await }.in_current_span());
         }
         Ok(None) => {}
         Err(err) => tracing::error!("relay not connected: {err}"),
@@ -333,7 +338,7 @@ async fn session(relay: &Arc<Relay>) -> Result<(), String> {
     if let Some(shared) = relay.shared.get().and_then(Weak::upgrade) {
         super::adapters::front(&shared, relay, &descriptor);
     }
-    let writer = tokio::spawn(async move {
+    let writer = pmt_core::spawn::spawn(async move {
         while let Some(message) = rx.recv().await {
             if sink.send(message).await.is_err() {
                 break;
@@ -379,7 +384,7 @@ fn handle(relay: &Arc<Relay>, frame: Value) {
         Some("inbound") => {
             if let Some((platform, inbound)) = wire::inbound(&frame) {
                 let relay = Arc::clone(relay);
-                tokio::spawn(admit(relay, platform, inbound).in_current_span());
+                pmt_core::spawn::spawn(admit(relay, platform, inbound).in_current_span());
             } else {
                 tracing::warn!("relay sent an inbound frame without sender, chat or kind");
             }

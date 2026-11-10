@@ -448,7 +448,7 @@ impl Factory {
             return;
         }
         let (store, scope) = (Arc::clone(&self.store), self.scope.clone());
-        tokio::task::spawn_blocking(move || {
+        pmt_core::spawn::blocking(move || {
             match pmt_obs::trajectory::retention::daily(&store, &scope) {
                 Ok(Some(swept)) => tracing::debug!(
                     purged = swept.purged.len(),
@@ -799,7 +799,7 @@ impl Factory {
                     reason: denial.reason.as_str().to_owned(),
                 },
             );
-            runtime.spawn(async move {
+            pmt_core::spawn::spawn_on(&runtime, async move {
                 let emit = pmt_obs::trajectory::writer::Emit::now(event);
                 if let Err(err) = sink.emit(emit).await {
                     tracing::debug!(error = %err, "egress.denied event not recorded");
@@ -1439,7 +1439,7 @@ impl Live {
     pub async fn sync_back(&self) -> Option<String> {
         let sync = self.place.sync()?;
         let budget = self.config.get().config().terminal.sync_back_max_bytes;
-        let done = tokio::task::spawn_blocking(move || sync.sync()).await;
+        let done = pmt_core::spawn::blocking(move || sync.sync()).await;
         Some(match done {
             Ok(Ok(report)) => {
                 let copied = format!("sync-back copied {} files", report.copied.len());

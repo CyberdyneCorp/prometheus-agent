@@ -223,7 +223,7 @@ impl Whatsapp {
             profile: self.profile().to_owned(),
             stop,
         };
-        tokio::spawn(poll.run());
+        pmt_core::spawn::spawn(poll.run());
         Ok(())
     }
 
@@ -386,6 +386,18 @@ impl Poll {
 }
 
 impl Adapter for Whatsapp {
+    fn reach(&self) -> Result<pmt_gateway::messaging::probe::Reach, String> {
+        // An external bridge is a loopback service; the managed one this
+        // adapter starts connects to WhatsApp Web itself.
+        let endpoint = self.bridge_url.clone().map_or_else(
+            || pmt_gateway::messaging::probe::Endpoint::Http("https://web.whatsapp.com".to_owned()),
+            pmt_gateway::messaging::probe::Endpoint::LocalHttp,
+        );
+        Ok(pmt_gateway::messaging::probe::Reach::Endpoints(vec![
+            endpoint,
+        ]))
+    }
+
     fn describe(&self) -> Descriptor {
         let all: BTreeSet<MediaKind> = [
             MediaKind::Image,

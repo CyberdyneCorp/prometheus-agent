@@ -252,10 +252,10 @@ mod tests {
         let acceptor = TlsAcceptor::from(Arc::new(config));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             while let Ok((tcp, _)) = listener.accept().await {
                 let acceptor = acceptor.clone();
-                tokio::spawn(async move {
+                pmt_core::spawn::spawn(async move {
                     if let Ok(mut tls) = acceptor.accept(tcp).await {
                         let _ = tls.write_all(b"* OK ready\r\n").await;
                         let _ = tls.flush().await;

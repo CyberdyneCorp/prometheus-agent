@@ -30,7 +30,7 @@ impl Mouth {
     pub fn start(synth: Arc<dyn Synth>, player: Arc<dyn Player>) -> Arc<Self> {
         let (to_say, mut said) = mpsc::unbounded_channel::<String>();
         let (to_play, mut playing) = mpsc::channel::<Clip>(AHEAD);
-        let synthesize = tokio::spawn(async move {
+        let synthesize = pmt_core::spawn::spawn(async move {
             while let Some(sentence) = said.recv().await {
                 match synth.synthesize(&sentence).await {
                     Ok(sound) => {
@@ -46,7 +46,7 @@ impl Mouth {
                 }
             }
         });
-        let play = tokio::spawn(async move {
+        let play = pmt_core::spawn::spawn(async move {
             while let Some(clip) = playing.recv().await {
                 if let Err(why) = player.play(clip).await {
                     tracing::warn!(%why, "a spoken sentence was not played");

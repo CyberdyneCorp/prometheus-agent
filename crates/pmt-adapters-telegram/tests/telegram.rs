@@ -152,6 +152,10 @@ async fn photos_download_and_files_upload() {
 struct WrongUnit(Telegram);
 
 impl Adapter for WrongUnit {
+    fn reach(&self) -> Result<pmt_gateway::messaging::probe::Reach, String> {
+        self.0.reach()
+    }
+
     fn describe(&self) -> pmt_gateway::messaging::Descriptor {
         pmt_gateway::messaging::Descriptor {
             length_unit: pmt_gateway::messaging::LengthUnit::Chars,
@@ -210,6 +214,10 @@ async fn the_kit_catches_a_wrong_length_unit() {
 struct Hollow(Telegram);
 
 impl Adapter for Hollow {
+    fn reach(&self) -> Result<pmt_gateway::messaging::probe::Reach, String> {
+        self.0.reach()
+    }
+
     fn describe(&self) -> pmt_gateway::messaging::Descriptor {
         self.0.describe()
     }

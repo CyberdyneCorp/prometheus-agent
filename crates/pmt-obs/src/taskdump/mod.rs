@@ -1,12 +1,22 @@
 //! Task dumps (spec: observability, Runtime liveness watchdog and task
-//! dump): every open `tracing` span is a unit of work in flight (a
-//! session, a turn, an RPC request, a scheduled run...), and the span a
-//! thread has entered is where that thread is right now. [`TaskLayer`]
-//! keeps that picture without locking on the hot path (enter and exit are
-//! atomic stores), so a dump can be written from any thread even while
-//! the async runtime is blocked: the threads that hold a span entered,
-//! then every open span as a tree with its age, plus the runtime's own
-//! counters when known.
+//! dump), written from any thread even while the async runtime is
+//! blocked:
+//!
+//! - every OS thread of the process (`pmt_core::os_threads`) with its
+//!   scheduler state, the tracked task it is polling right now and the
+//!   span it has entered;
+//! - every task the agent spawned (`pmt_core::spawn`, which every spawn
+//!   site goes through) with where it was spawned, whether it is running
+//!   (on which thread, for how long) and otherwise its await point: the
+//!   innermost span it is suspended in;
+//! - every open `tracing` span as a tree with its age: each is a unit of
+//!   work in flight (a session, a turn, an RPC request, a scheduled run).
+//!
+//! [`TaskLayer`] keeps the span picture without locking on the hot path
+//! (enter and exit are atomic stores) and forwards enters and exits to
+//! the task tracker, which derives await points from them.
+
+mod render;
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write as _;
@@ -32,25 +42,27 @@ struct SpanState {
     fields: Mutex<String>,
     parent: Option<u64>,
     opened: Instant,
-    /// The key of the thread that has it entered (0: none).
+    /// The OS id of the thread that has it entered (0: none).
     entered: AtomicU64,
 }
 
 static OPEN: LazyLock<Mutex<HashMap<u64, Arc<SpanState>>>> = LazyLock::new(Mutex::default);
-static THREADS: LazyLock<Mutex<BTreeMap<u64, String>>> = LazyLock::new(Mutex::default);
-static NEXT_THREAD: AtomicU64 = AtomicU64::new(1);
+/// Thread names by OS id, for OSes that offer no thread list.
+static NAMES: LazyLock<Mutex<BTreeMap<u64, String>>> = LazyLock::new(Mutex::default);
 
 thread_local! {
-    static THREAD_KEY: u64 = {
-        let key = NEXT_THREAD.fetch_add(1, Ordering::Relaxed);
+    /// The calling thread's OS id, its name recorded on first use.
+    static THREAD: u64 = {
+        let id = pmt_core::os_threads::current_id();
         let current = std::thread::current();
         let name = current.name().map_or_else(|| format!("{:?}", current.id()), str::to_owned);
-        THREADS.lock().unwrap_or_else(PoisonError::into_inner).insert(key, name);
-        key
+        NAMES.lock().unwrap_or_else(PoisonError::into_inner).insert(id, name);
+        id
     };
 }
 
-/// The `tracing` layer that keeps the open spans for dumps.
+/// The `tracing` layer that keeps the open spans for dumps and feeds the
+/// task tracker's await points.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct TaskLayer;
 
@@ -91,14 +103,17 @@ where
     }
 
     fn on_enter(&self, id: &Id, ctx: Context<'_, S>) {
+        pmt_core::spawn::entered(id.into_u64());
         if let Some(state) = state_of(&ctx, id) {
-            state
-                .entered
-                .store(THREAD_KEY.with(|k| *k), Ordering::Relaxed);
+            let thread = THREAD
+                .try_with(|t| *t)
+                .unwrap_or_else(|_| pmt_core::os_threads::current_id());
+            state.entered.store(thread, Ordering::Relaxed);
         }
     }
 
     fn on_exit(&self, id: &Id, ctx: Context<'_, S>) {
+        pmt_core::spawn::exited(id.into_u64());
         if let Some(state) = state_of(&ctx, id) {
             state.entered.store(0, Ordering::Relaxed);
         }
@@ -156,8 +171,8 @@ impl RuntimeCounters {
     }
 }
 
-/// The dump text: why, the runtime counters, the threads inside a span and
-/// every open span as a tree (oldest first) with its age.
+/// The dump text: why, the runtime counters, every thread, every tracked
+/// task and every open span.
 #[must_use]
 pub fn render(reason: &str, runtime: Option<RuntimeCounters>) -> String {
     let open: Vec<(u64, Arc<SpanState>)> = OPEN
@@ -166,92 +181,20 @@ pub fn render(reason: &str, runtime: Option<RuntimeCounters>) -> String {
         .iter()
         .map(|(id, s)| (*id, Arc::clone(s)))
         .collect();
-    let threads = THREADS
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clone();
+    let names = NAMES.lock().unwrap_or_else(PoisonError::into_inner).clone();
+    let snapshot = render::Snapshot {
+        open,
+        tasks: pmt_core::spawn::tasks(),
+        threads: pmt_core::os_threads::list(),
+        names,
+    };
     let mut out = format!(
         "prometheus task dump\nwhen: {}\npid: {}\nreason: {reason}\n",
         crate::trajectory::timestamp(jiff::Timestamp::now()),
         std::process::id()
     );
-    if let Some(r) = runtime {
-        let _ = writeln!(
-            out,
-            "runtime: {} workers, {} tasks alive, {} queued globally",
-            r.workers, r.alive_tasks, r.global_queue
-        );
-    }
-    out.push_str("\nthreads inside a span (where each one is now):\n");
-    let mut any = false;
-    for (id, state) in &open {
-        let key = state.entered.load(Ordering::Relaxed);
-        if key != 0 {
-            any = true;
-            let thread = threads.get(&key).map_or("?", String::as_str);
-            let _ = writeln!(out, "  thread {thread}: {}", chain(*id, &open));
-        }
-    }
-    if !any {
-        out.push_str("  (none)\n");
-    }
-    let _ = writeln!(out, "\nopen spans ({}), oldest first:", open.len());
-    let mut roots: Vec<&(u64, Arc<SpanState>)> = open
-        .iter()
-        .filter(|(_, s)| {
-            s.parent
-                .is_none_or(|p| !open.iter().any(|(id, _)| *id == p))
-        })
-        .collect();
-    roots.sort_by_key(|(_, s)| s.opened);
-    for (id, _) in roots {
-        tree(&mut out, *id, &open, 1);
-    }
+    snapshot.write(&mut out, runtime);
     out
-}
-
-/// `root > ... > span` of span `id`.
-fn chain(id: u64, open: &[(u64, Arc<SpanState>)]) -> String {
-    let mut names = Vec::new();
-    let mut next = Some(id);
-    while let Some(current) = next {
-        let Some((_, state)) = open.iter().find(|(i, _)| *i == current) else {
-            break;
-        };
-        names.push(describe(state));
-        next = state.parent;
-    }
-    names.reverse();
-    names.join(" > ")
-}
-
-fn describe(state: &SpanState) -> String {
-    let fields = state.fields.lock().unwrap_or_else(PoisonError::into_inner);
-    format!("{}::{}{}", state.target, state.name, fields)
-}
-
-fn tree(out: &mut String, id: u64, open: &[(u64, Arc<SpanState>)], depth: usize) {
-    let Some((_, state)) = open.iter().find(|(i, _)| *i == id) else {
-        return;
-    };
-    let age = state.opened.elapsed().as_secs_f64();
-    let entered = if state.entered.load(Ordering::Relaxed) == 0 {
-        ""
-    } else {
-        " [entered]"
-    };
-    let _ = writeln!(
-        out,
-        "{}{} ({age:.1}s){entered}",
-        "  ".repeat(depth),
-        describe(state)
-    );
-    let mut children: Vec<&(u64, Arc<SpanState>)> =
-        open.iter().filter(|(_, s)| s.parent == Some(id)).collect();
-    children.sort_by_key(|(_, s)| s.opened);
-    for (child, _) in children {
-        tree(out, *child, open, depth + 1);
-    }
 }
 
 /// Writes [`render`] to `<home>/logs/task-dump-<UTC timestamp>.txt`
@@ -278,27 +221,4 @@ pub fn write(
 }
 
 #[cfg(test)]
-mod tests {
-    use tracing_subscriber::prelude::*;
-
-    use super::*;
-
-    #[test]
-    fn a_dump_shows_open_spans_and_the_thread_inside_one() {
-        let subscriber = tracing_subscriber::registry().with(TaskLayer);
-        tracing::subscriber::with_default(subscriber, || {
-            let session = tracing::info_span!("session", session_id = "ses_1");
-            let _in_session = session.enter();
-            let turn = tracing::info_span!("turn", turn_id = "turn_1");
-            let _in_turn = turn.enter();
-            let text = render("test", None);
-            assert!(
-                text.contains("session session_id=\"ses_1\"")
-                    || text.contains("::session session_id"),
-                "{text}"
-            );
-            assert!(text.contains("turn turn_id=\"turn_1\" ("), "{text}");
-            assert!(text.contains("> ") && text.contains("[entered]"), "{text}");
-        });
-    }
-}
+mod tests;

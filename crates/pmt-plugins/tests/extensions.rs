@@ -57,7 +57,7 @@ async fn duplicate_section_id_is_refused_naming_the_first_plugin() {
         Some("system prompt section 'style.guide' is already registered by plugin 'a'")
     );
     let sections =
-        tokio::task::spawn_blocking(move || loaded.contributions.render_sections(&session()))
+        pmt_core::spawn::blocking(move || loaded.contributions.render_sections(&session()))
             .await
             .unwrap();
     assert_eq!(sections, vec!["style.guide:be brief".to_owned()]);
@@ -134,7 +134,7 @@ async fn sections_need_the_grant_and_stay_within_their_bounds() {
         .collect();
     assert_eq!(ids, ["over", "p1", "p2", "p3"]);
     let rendered =
-        tokio::task::spawn_blocking(move || loaded.contributions.render_sections(&session()))
+        pmt_core::spawn::blocking(move || loaded.contributions.render_sections(&session()))
             .await
             .unwrap();
     assert_eq!(rendered.len(), 2);
@@ -183,7 +183,7 @@ async fn commands_register_only_when_granted_and_run_in_the_plugin() {
         Some("slash command '/forecast' is already registered by plugin 'weather'")
     );
     let command = loaded.contributions.command("forecast").unwrap().clone();
-    let answer = tokio::task::spawn_blocking(move || command.run(&session(), "berlin"))
+    let answer = pmt_core::spawn::blocking(move || command.run(&session(), "berlin"))
         .await
         .unwrap()
         .unwrap();
@@ -248,7 +248,7 @@ async fn events_reach_subscribers_in_order_and_a_failing_one_does_not_affect_the
     let emit = loaded.contributions.command("emit").unwrap().clone();
     for name in ["one", "two", "three"] {
         let emit = emit.clone();
-        let answer = tokio::task::spawn_blocking(move || emit.run(&session(), name))
+        let answer = pmt_core::spawn::blocking(move || emit.run(&session(), name))
             .await
             .unwrap()
             .unwrap();
@@ -304,7 +304,7 @@ async fn missing_provider_does_not_fall_back_and_a_registered_one_answers() {
         .unwrap()
         .clone();
     let answer =
-        tokio::task::spawn_blocking(move || pics.invoke(&session(), r#"{"prompt":"a cat"}"#))
+        pmt_core::spawn::blocking(move || pics.invoke(&session(), r#"{"prompt":"a cat"}"#))
             .await
             .unwrap();
     assert_eq!(answer.unwrap(), r#"{"prompt":"a cat"}"#);

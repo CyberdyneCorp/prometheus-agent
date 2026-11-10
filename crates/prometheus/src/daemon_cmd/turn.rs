@@ -139,7 +139,7 @@ pub(super) async fn approvals(
     while let Some(prompt) = prompts.next().await {
         let params = approval_params(link.session_id(), prompt.request());
         let link = link.clone();
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             let answer = link.ask::<ApprovalAsk>(&params, Some(timeout)).await;
             if let Some(answer) = answer {
                 prompt.respond(decision(answer.decision));
@@ -196,7 +196,7 @@ pub(super) async fn clarify(mut prompts: Surface<ClarifyRequest, ClarifyAnswer>,
             deadline_ms: None,
         };
         let link = link.clone();
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             let answers = link.ask::<ClarifyAsk>(&params, None).await;
             let parsed =
                 answers.and_then(|a| serde_json::from_value(json!({ "answers": a.answers })).ok());

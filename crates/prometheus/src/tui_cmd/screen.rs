@@ -418,7 +418,7 @@ impl<'a> Tui<'a> {
         F: Future<Output = Done> + Send + 'static,
     {
         let done = self.done.clone();
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             let _ = done.send(request.await);
         });
     }

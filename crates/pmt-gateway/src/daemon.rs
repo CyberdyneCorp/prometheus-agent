@@ -69,9 +69,10 @@ pub async fn run(
         health_url: server.health_url().map(str::to_owned),
     };
     server.set_endpoint(endpoint.clone());
-    let control_task = tokio::spawn(control.serve(Arc::clone(&server)).in_current_span());
-    let accept_task = tokio::spawn(accept(listener, Arc::clone(&server)).in_current_span());
-    let reap_task = tokio::spawn(reap(Arc::clone(&server)).in_current_span());
+    let control_task = pmt_core::spawn::spawn(control.serve(Arc::clone(&server)).in_current_span());
+    let accept_task =
+        pmt_core::spawn::spawn(accept(listener, Arc::clone(&server)).in_current_span());
+    let reap_task = pmt_core::spawn::spawn(reap(Arc::clone(&server)).in_current_span());
     lock.publish(&endpoint)?;
     tracing::info!(rpc_url = %endpoint.rpc_url, "daemon ready");
     tokio::select! {
@@ -102,7 +103,7 @@ async fn accept(listener: tokio::net::TcpListener, server: Arc<Server>) {
             () = server.closing.cancelled() => return,
             accepted = listener.accept() => {
                 if let Ok((stream, _)) = accepted {
-                    tokio::spawn(crate::connection::serve(Arc::clone(&server), stream).in_current_span());
+                    pmt_core::spawn::spawn(crate::connection::serve(Arc::clone(&server), stream).in_current_span());
                 }
             }
         }

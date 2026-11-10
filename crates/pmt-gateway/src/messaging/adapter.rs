@@ -491,6 +491,13 @@ impl SessionHints {
 pub trait Adapter: Send + Sync + 'static {
     /// What it supports; read before `connect`.
     fn describe(&self) -> Descriptor;
+    /// Where it connects out to, for `prometheus status --deep`
+    /// connectivity probes ([`super::probe`]); read without connecting.
+    ///
+    /// # Errors
+    ///
+    /// Why its endpoint is unknown (a required option is not set).
+    fn reach(&self) -> Result<super::probe::Reach, String>;
     /// Connects; inbound events go to `link` until `disconnect`.
     fn connect(&self, link: Arc<dyn AdapterLink>) -> AdapterFuture<'_, Result<(), AdapterError>>;
     /// Disconnects.

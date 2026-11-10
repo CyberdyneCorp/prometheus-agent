@@ -143,7 +143,7 @@ pub(super) fn deliver_owed(profile: &Profile, session: &Loaded, inbox: Arc<dyn C
     };
     let spill = pmt_tools::spillover::session_dir(scope.dir(), &session.live.id.to_string());
     let cap = pmt_delegation::summary::cap(scope.config().delegation.max_summary_chars, None, 1);
-    tokio::spawn(
+    pmt_core::spawn::spawn(
         async move {
             deliver::deliver_pending(&store, root, cap, &spill, inbox.as_ref()).await;
         }

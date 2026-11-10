@@ -172,7 +172,7 @@ impl SandboxShell {
         .flatten()
         .map(|reader| {
             let sink = Arc::clone(&output);
-            tokio::spawn(spawn::pump(reader, move |bytes| {
+            pmt_core::spawn::spawn(spawn::pump(reader, move |bytes| {
                 sink.lock()
                     .unwrap_or_else(PoisonError::into_inner)
                     .extend_from_slice(bytes);
