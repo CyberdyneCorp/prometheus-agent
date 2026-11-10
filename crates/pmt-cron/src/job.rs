@@ -138,6 +138,11 @@ pub struct JobSpec {
     /// continuity).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub context_from: Vec<String>,
+    /// The run's own fallback chain (spec: model-providers, Scoped
+    /// fallback chains for pinned owners): unset, a pinned job gets none
+    /// and an unpinned one the profile's; `[]` disables fallback.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback_chain: Option<Vec<pmt_config::schema::FallbackEntry>>,
 }
 
 impl JobSpec {
@@ -168,6 +173,7 @@ impl JobSpec {
             monitor_script: None,
             monitor_url: None,
             context_from: Vec::new(),
+            fallback_chain: None,
         }
     }
 

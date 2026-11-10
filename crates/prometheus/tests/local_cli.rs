@@ -170,6 +170,21 @@ fn a_linked_file_survives_removing_its_library_entry() {
 }
 
 /// Serves `size` bytes slowly (64 KiB every 20 ms) to every connection.
+#[test]
+fn rm_refuses_ids_that_leave_the_library_and_deletes_nothing() {
+    let home = temp_home();
+    let victim = tempfile::tempdir_in(home.path()).unwrap();
+    std::fs::write(victim.path().join("keep"), b"x").unwrap();
+    std::fs::create_dir_all(home.path().join("models")).unwrap();
+    let absolute = victim.path().to_string_lossy().into_owned();
+    for id in ["..", absolute.as_str(), "../models"] {
+        let out = common::run(home.path(), &["local", "rm", id]);
+        assert_eq!(code(&out), 66, "{id}: {}", stderr(&out));
+    }
+    assert!(victim.path().join("keep").is_file(), "the target survives");
+    assert!(home.path().join("models").is_dir());
+}
+
 fn slow_origin(size: usize) -> u16 {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();

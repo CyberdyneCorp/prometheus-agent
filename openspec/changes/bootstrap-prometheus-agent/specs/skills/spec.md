@@ -224,13 +224,18 @@ The system SHALL record every hub-installed or ejected skill in `<profile_home>/
 - **THEN** the system SHALL exclude `terraform` from the index and `prometheus skills doctor` SHALL report `content digest mismatch`
 
 ### Requirement: Skill signatures and provenance (upgrade)
-The system SHALL verify a detached signature (`SKILL.sig` over the canonical tree digest, minisign key or Sigstore keyless identity) when present, SHALL apply `skills.signature_policy` (`off`, `warn` default, `require`) to hub installs, where `require` refuses unsigned or invalidly signed skills with exit code 77 and `warn` installs unsigned skills with a WARN while always refusing an invalid signature, SHALL provide `prometheus skills sign <dir> [--key <path>|--keyless]` producing `SKILL.sig`, and SHALL show provenance (source, ref, digest, signer, trust) in `prometheus skills show <name>`.
+The system SHALL verify a detached signature (`SKILL.sig` over the canonical tree digest, minisign key or Sigstore keyless identity) when present, SHALL apply `skills.signature_policy` (`off`, `warn` default, `require`) to hub installs, where `require` refuses unsigned or invalidly signed skills with exit code 77 and `warn` installs unsigned skills with a WARN while always refusing an invalid signature, SHALL count a valid signature as verified only when its signer (a minisign key id or public key, or a Sigstore `<subject> via <issuer>` identity) is listed in `skills.trusted_signers`, treating any other signer as untrusted (refused with exit code 77 under `require`, installed with a WARN under `warn`, and recorded as `untrusted:<identity>` in `skills.lock` either way), SHALL provide `prometheus skills sign <dir> [--key <path>|--keyless]` producing `SKILL.sig`, and SHALL show provenance (source, ref, digest, signer, trust) in `prometheus skills show <name>`.
 **Milestone:** M2
 
 #### Scenario: Invalid signature is never accepted
 - **GIVEN** `skills.signature_policy = "warn"` and a skill whose `SKILL.sig` does not match its content
 - **WHEN** it is installed
 - **THEN** the system SHALL refuse the install and print `invalid signature`
+
+#### Scenario: Untrusted signer under require
+- **GIVEN** `skills.signature_policy = "require"` and a skill whose `SKILL.sig` is valid but made with a minisign key not listed in `skills.trusted_signers`
+- **WHEN** it is installed
+- **THEN** the system SHALL refuse the install with exit code 77 naming the untrusted signer, and a skill signed by a listed key SHALL install as verified
 
 ### Requirement: Blueprint skills never auto-schedule
 A skill carrying a `blueprint` block SHALL, on install, be registered only as a suggested scheduled job listed by `/suggestions` and `prometheus cron suggestions`, and SHALL NOT create a scheduled job until the user accepts it.

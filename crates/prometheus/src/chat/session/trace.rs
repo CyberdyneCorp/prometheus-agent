@@ -11,23 +11,31 @@ use pmt_obs::trajectory::writer::TrajectoryWriter;
 
 use super::progress;
 
-/// The trace of `session` of the profile `profile`, under `parent` when a
+/// The trace of `session` of the profile `scope`, under `parent` when a
 /// caller (a cron run) started it, else under its parent session's open
 /// delegation.
 pub(super) fn open(
-    profile: &str,
+    scope: &pmt_config::ProfileScope,
     session: &pmt_store::Session,
     parent: Option<TraceContext>,
 ) -> Arc<SessionTrace> {
+    let redactor_scope = scope.clone();
     SessionTrace::open(
         Identity {
-            profile: profile.to_owned(),
+            profile: scope.name().as_str().to_owned(),
             session_id: session.id.to_string(),
             root_session_id: session.root_session_id.to_string(),
             source: session.source.as_str().to_owned(),
         },
         session.parent_session_id.map(|p| p.to_string()).as_deref(),
         parent,
+        // Captured content is redacted as the trajectory is, loaded only
+        // when a span first captures some.
+        Some(Box::new(move || {
+            pmt_obs::redaction::profile_redactor(&redactor_scope)
+                .ok()
+                .flatten()
+        })),
     )
 }
 

@@ -9,7 +9,9 @@
 //! (or the value gains the `<provider>/` prefix).
 
 use pmt_config::Config;
-use pmt_config::schema::{FallbackEntry, ModelAlias};
+use std::collections::BTreeMap;
+
+use pmt_config::schema::{FallbackEntry, MoaPreset, MoaSlot, ModelAlias};
 use serde::Serialize;
 
 use super::{Retirement, Status, lookup};
@@ -31,7 +33,7 @@ pub struct Finding {
 }
 
 /// What `config fix-models --apply` writes.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Rewrite {
     /// Every finding, in key order.
     pub findings: Vec<Finding>,
@@ -39,6 +41,9 @@ pub struct Rewrite {
     pub sets: Vec<(String, String)>,
     /// The rewritten `[[fallback.chain]]`, when an entry changed.
     pub chain: Option<Vec<FallbackEntry>>,
+    /// The rewritten `[moa.presets.<name>]` whose aggregator or a
+    /// reference changed, by name.
+    pub presets: BTreeMap<String, MoaPreset>,
 }
 
 /// A model-holding slot: its key, value and the provider a bare id
@@ -77,6 +82,7 @@ pub fn scan(config: &Config, registry: &ProviderRegistry) -> Rewrite {
             .push(finding(&slot, &entry, placed.as_ref()));
     }
     chain(config, registry, &mut rewrite);
+    presets(config, registry, &mut rewrite);
     rewrite
 }
 
@@ -300,6 +306,63 @@ fn chain(config: &Config, registry: &ProviderRegistry, rewrite: &mut Rewrite) {
     }
 }
 
+/// `moa.presets.<name>.aggregator.model` and
+/// `moa.presets.<name>.reference_models[i].model`, each with its sibling
+/// `provider`.
+fn presets(config: &Config, registry: &ProviderRegistry, rewrite: &mut Rewrite) {
+    for (name, preset) in &config.moa.presets {
+        let mut rewritten = preset.clone();
+        let mut changed = false;
+        let mut check = |key: String, slot: &MoaSlot, out: &mut MoaSlot| {
+            let found = moa_slot(config, registry, &key, slot, out);
+            if let Some((finding, rewrote)) = found {
+                changed |= rewrote;
+                rewrite.findings.push(finding);
+            }
+        };
+        check(
+            format!("moa.presets.{name}.aggregator"),
+            &preset.aggregator,
+            &mut rewritten.aggregator,
+        );
+        for (i, reference) in preset.reference_models.iter().enumerate() {
+            check(
+                format!("moa.presets.{name}.reference_models[{i}]"),
+                reference,
+                &mut rewritten.reference_models[i],
+            );
+        }
+        if changed {
+            rewrite.presets.insert(name.clone(), rewritten);
+        }
+    }
+}
+
+/// The finding of one MoA slot under `base` (`<base>.model`), and whether
+/// `out` was rewritten.
+fn moa_slot(
+    config: &Config,
+    registry: &ProviderRegistry,
+    base: &str,
+    slot: &MoaSlot,
+    out: &mut MoaSlot,
+) -> Option<(Finding, bool)> {
+    let slot = Slot {
+        key: format!("{base}.model"),
+        value: &slot.model,
+        provider_key: Some(format!("{base}.provider")),
+        provider: Some(&slot.provider),
+    };
+    let (found, placed) = examine(config, registry, &slot)?;
+    if let Some(placed) = &placed {
+        out.model.clone_from(&placed.value);
+        if let Some(provider) = &placed.provider {
+            out.provider.clone_from(provider);
+        }
+    }
+    Some((finding(&slot, &found, placed.as_ref()), placed.is_some()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -348,6 +411,28 @@ mod tests {
         );
         assert_eq!(rewrite.findings[1].status, Status::Deprecated);
         assert_eq!(rewrite.chain.as_ref().unwrap()[0].model, "grok-4");
+    }
+
+    #[test]
+    fn moa_preset_aggregators_and_references_are_scanned() {
+        let rewrite = scanned(
+            "[model]\nprovider = \"anthropic\"\ndefault = \"claude-sonnet-4-5\"\n\
+             [moa.presets.old]\naggregator = { provider = \"xai\", model = \"grok-2\" }\n\
+             reference_models = [{ provider = \"anthropic\", model = \"claude-sonnet-4-5\" }, \
+             { provider = \"xai\", model = \"grok-2\" }]\n",
+        );
+        let keys: Vec<&str> = rewrite.findings.iter().map(|f| f.key.as_str()).collect();
+        assert_eq!(
+            keys,
+            [
+                "moa.presets.old.aggregator.model",
+                "moa.presets.old.reference_models[1].model",
+            ]
+        );
+        let preset = &rewrite.presets["old"];
+        assert_eq!(preset.aggregator.model, "grok-4");
+        assert_eq!(preset.reference_models[0].model, "claude-sonnet-4-5");
+        assert_eq!(preset.reference_models[1].model, "grok-4");
     }
 
     #[test]

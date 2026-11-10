@@ -56,6 +56,7 @@ impl Lane {
             routing: self.routing.clone(),
             reply_to: None,
             voice: false,
+            billed: Vec::new(),
             sent_at: jiff::Timestamp::now(),
             addressed: !quiet,
         };

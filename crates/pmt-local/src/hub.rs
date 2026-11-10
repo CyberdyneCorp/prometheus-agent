@@ -161,7 +161,7 @@ impl Hub {
         let (repo, wanted) = spec
             .split_once(':')
             .map_or((spec, None), |(r, w)| (r, Some(w)));
-        let id = model_id(repo);
+        let id = model_id(repo)?;
         if let Some(job) = jobs.unfinished(&id) {
             return Ok(job);
         }
@@ -175,7 +175,7 @@ impl Hub {
                 ),
             )
         })?;
-        let dir = library.dir(&id);
+        let dir = library.dir(&id)?;
         let url = |path: &str| format!("{}/{repo}/resolve/main/{path}", self.base);
         let mut specs: Vec<(FileSpec, Role)> = chosen
             .parts
@@ -183,9 +183,9 @@ impl Hub {
             .enumerate()
             .map(|(i, (path, size, sha))| {
                 let role = if i == 0 { Role::Weights } else { Role::Part };
-                (crate::pull::spec(url(path), path, *size, sha, &dir), role)
+                Ok((crate::pull::spec(url(path), path, *size, sha, &dir)?, role))
             })
-            .collect();
+            .collect::<Result<_, Error>>()?;
         let tree = self
             .get(&format!(
                 "{}/api/models/{repo}/tree/main?recursive=true",
@@ -197,7 +197,7 @@ impl Hub {
             .find(|(p, ..)| is_projector(p))
         {
             specs.push((
-                crate::pull::spec(url(&path), &path, size, &sha, &dir),
+                crate::pull::spec(url(&path), &path, size, &sha, &dir)?,
                 Role::Projector,
             ));
         }
@@ -242,10 +242,22 @@ impl Hub {
 }
 
 /// `owner/Name-GGUF` -> `name`.
-#[must_use]
-pub fn model_id(repo: &str) -> String {
+///
+/// # Errors
+///
+/// `config.invalid_argument` (2) when the last segment is not a plain
+/// library id (`..`, empty, odd characters): it names a directory.
+pub fn model_id(repo: &str) -> Result<String, Error> {
     let name = repo.rsplit('/').next().unwrap_or(repo).to_lowercase();
-    name.strip_suffix("-gguf").unwrap_or(&name).to_owned()
+    let id = name.strip_suffix("-gguf").unwrap_or(&name);
+    if crate::library::valid_id(id) {
+        Ok(id.to_owned())
+    } else {
+        Err(Error::new(
+            &codes::CONFIG_INVALID_ARGUMENT,
+            format!("'{repo}' does not end in a usable model name"),
+        ))
+    }
 }
 
 fn choose<'a>(files: &'a [HubFile], wanted: Option<&str>) -> Option<&'a HubFile> {
@@ -372,6 +384,7 @@ mod tests {
         assert!(bits("Q4_0").unwrap() >= 4.0);
         assert_eq!(part_number("Big-Q4_K_M-00002-of-00003.gguf"), Some(2));
         assert_eq!(part_number("Small-Q4_K_M.gguf"), None);
-        assert_eq!(model_id("unsloth/Qwen3-8B-GGUF"), "qwen3-8b");
+        assert_eq!(model_id("unsloth/Qwen3-8B-GGUF").unwrap(), "qwen3-8b");
+        assert!(model_id("owner/..").is_err());
     }
 }

@@ -30,6 +30,44 @@ pub trait Speech: Send + Sync {
     fn voice_note<'a>(&'a self, _path: &'a Path) -> AdapterFuture<'a, Option<PathBuf>> {
         Box::pin(async { None })
     }
+    /// [`Speech::transcribe`] with the metered call to bill, if any (the
+    /// default bills nothing).
+    fn transcribe_billed<'a>(
+        &'a self,
+        path: &'a Path,
+    ) -> AdapterFuture<'a, Result<(String, Option<Billed>), String>> {
+        Box::pin(async move { self.transcribe(path).await.map(|text| (text, None)) })
+    }
+    /// [`Speech::synthesize`] with the metered call to bill, if any (the
+    /// default bills nothing).
+    fn synthesize_billed<'a>(
+        &'a self,
+        text: &'a str,
+        out_dir: &'a Path,
+    ) -> AdapterFuture<'a, Result<(PathBuf, Option<Billed>), String>> {
+        Box::pin(async move {
+            self.synthesize(text, out_dir)
+                .await
+                .map(|path| (path, None))
+        })
+    }
+    /// Records `billed` in the usage ledger of `session` (the default
+    /// records nothing).
+    fn bill(&self, _session: &str, _billed: &Billed) {}
+}
+
+/// A metered speech call of a conversation (a voice note transcribed, a
+/// reply spoken), billed to its session once that is known.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Billed {
+    /// `transcribe` or `text_to_speech` (the ledger's `tool.<tool>`).
+    pub tool: &'static str,
+    /// The provider.
+    pub provider: String,
+    /// Its model.
+    pub model: String,
+    /// How it billed.
+    pub billing_source: String,
 }
 
 /// Whether the file at `path` is an Ogg stream (what voice bubbles play).
@@ -82,6 +120,8 @@ pub(crate) struct Heard {
     pub(crate) text: String,
     /// Echoed back to the chat, once.
     pub(crate) echo: Option<String>,
+    /// The transcription to bill.
+    pub(crate) billed: Option<Billed>,
 }
 
 /// Transcribes the clip at `path` per `config`.
@@ -94,18 +134,20 @@ pub(crate) async fn hear(
     let note = || Heard {
         text: untranscribed_note(path, duration_secs),
         echo: None,
+        billed: None,
     };
     let Some(speech) = speech.filter(|_| config.stt_enabled) else {
         return note();
     };
-    match speech.transcribe(path).await {
-        Ok(transcript) if !transcript.trim().is_empty() => Heard {
+    match speech.transcribe_billed(path).await {
+        Ok((transcript, billed)) if !transcript.trim().is_empty() => Heard {
             echo: config
                 .echo_transcripts
                 .then(|| format!("Heard: \"{}\"", transcript.trim())),
             text: transcript.trim().to_owned(),
+            billed,
         },
-        Ok(_) => note(),
+        Ok((_, billed)) => Heard { billed, ..note() },
         Err(err) => {
             tracing::warn!("voice message not transcribed: {err}");
             note()

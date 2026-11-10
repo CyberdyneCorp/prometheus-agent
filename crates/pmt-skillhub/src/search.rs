@@ -158,13 +158,16 @@ pub fn search(hub: &Hub, query: &str, source: Option<&str>) -> Vec<Listing> {
 
 type LiveQuery = fn(&Hub, &str) -> Result<Vec<Listing>, Error>;
 
-const LIVE: [(&str, LiveQuery); 4] = [
+const LIVE: [(&str, LiveQuery); 5] = [
     ("skills-sh", |hub, q| skills_sh::search(hub, q, LIVE_LIMIT)),
     ("clawhub", |hub, q| {
         registries::search_clawhub(hub, q, LIVE_LIMIT)
     }),
     ("lobehub", |hub, q| {
         registries::search_lobehub(hub, q, LIVE_LIMIT)
+    }),
+    ("browse-sh", |hub, q| {
+        registries::search_browse_sh(hub, q, LIVE_LIMIT)
     }),
     ("well-known", |hub, q| {
         if q.starts_with("https://") {

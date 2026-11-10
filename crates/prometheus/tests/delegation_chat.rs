@@ -221,6 +221,56 @@ text = "BACKUP ANSWERED THE CHILD"
     );
 }
 
+/// A pinned child runs on `delegation.fallback_chain` when the profile
+/// declares one for children (spec: model-providers, Scoped fallback
+/// chains for pinned owners), and on none when it is `[]`.
+#[test]
+fn a_pinned_child_uses_the_declared_child_chain_and_an_empty_one_disables_it() {
+    let child_rules = r#"
+[[rule]]
+model = "cheap-model"
+fault = "server_error"
+status = 529
+repeat = true
+
+[[rule]]
+model = "child-backup"
+user = "Cheap lookup"
+text = "CHILD BACKUP ANSWERED"
+"#;
+    let script = delegating(
+        r#"{ goal = "Cheap lookup", model = "mock/cheap-model" }"#,
+        child_rules,
+    );
+    for (declared, expected) in [
+        (
+            "[[delegation.fallback_chain]]\nprovider = \"mock\"\nmodel = \"child-backup\"\n",
+            true,
+        ),
+        ("[delegation]\nfallback_chain = []\n", false),
+    ] {
+        let home = mock_home();
+        append_config(
+            home.path(),
+            &format!(
+                "[agent]\napi_max_retries = 1\nauto_recovery_cycles = 0\n\n\
+                 [[fallback.chain]]\nprovider = \"mock\"\nmodel = \"child-backup\"\n\n{declared}"
+            ),
+        );
+        let out = oneshot(home.path(), "please delegate", &script);
+        assert!(out.status.success(), "{}", stderr(&out));
+        let child = sessions(home.path())
+            .into_iter()
+            .find(|s| s["source"] == "subagent")
+            .expect("a child");
+        let messages = common::session_messages(home.path(), child["id"].as_str().unwrap());
+        let answered = messages
+            .iter()
+            .any(|m| m["content"].as_str() == Some("CHILD BACKUP ANSWERED"));
+        assert_eq!(answered, expected, "{declared}: {messages:?}");
+    }
+}
+
 /// Named agent definitions route their children and unknown names are
 /// refused.
 #[test]

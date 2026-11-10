@@ -2099,6 +2099,16 @@
           "minimum": 1,
           "type": "integer"
         },
+        "fallback_chain": {
+          "description": "The fallback chain of children that pin a route of their own (a\ntask's or agent's model, `delegation.model`, a direct endpoint),\nentries as in `[[fallback.chain]]`; unset: such children get no\nchain, `[]`: fallback off. Unpinned children inherit the parent's.",
+          "items": {
+            "$ref": "#/$defs/FallbackEntry"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "gateway_mode": {
           "$ref": "#/$defs/GatewayDelegationMode",
           "default": "auto",
@@ -8193,6 +8203,14 @@
           },
           "type": "array"
         },
+        "trusted_signers": {
+          "default": [],
+          "description": "The signers whose valid `SKILL.sig` counts as verified: minisign\nkey ids (`minisign:<KEYID>` or the bare 16 hex digits) or public\nkeys, and Sigstore identities (`sigstore:<subject> via <issuer>`).\nA valid signature by anyone else is `untrusted`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "trusted_sources": {
           "default": [
             "anthropics/skills",
@@ -11498,6 +11516,7 @@
         "signing_key": "",
         "template_vars": true,
         "trusted_project_dirs": [],
+        "trusted_signers": [],
         "trusted_sources": [
           "anthropics/skills",
           "openai/skills"

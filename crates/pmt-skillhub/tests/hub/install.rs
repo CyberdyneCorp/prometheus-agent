@@ -96,11 +96,12 @@ fn signed_files(name: &str, key: &std::path::Path) -> Vec<(String, Vec<u8>)> {
     ]
 }
 
-fn key_file(env: &Env) -> std::path::PathBuf {
+/// A fresh minisign secret key file and its public key (base64).
+fn key_pair(env: &Env, name: &str) -> (std::path::PathBuf, String) {
     let pair = minisign::KeyPair::generate_unencrypted_keypair().unwrap();
-    let path = env.profile().join("test.key");
+    let path = env.profile().join(name);
     std::fs::write(&path, pair.sk.to_box(None).unwrap().to_string()).unwrap();
-    path
+    (path, pair.pk.to_base64())
 }
 
 fn serve(env: &Env, repo: &str, files: &[(String, Vec<u8>)]) {
@@ -113,8 +114,9 @@ fn serve(env: &Env, repo: &str, files: &[(String, Vec<u8>)]) {
 
 #[test]
 fn invalid_signature_is_never_accepted() {
-    let env = Env::with(SkillSignaturePolicy::Warn);
-    let key = key_file(&env);
+    let mut env = Env::with(SkillSignaturePolicy::Warn);
+    let (key, public) = key_pair(&env, "test.key");
+    env.hub.trusted_signers = vec![public];
     let mut files = signed_files("good", &key);
     files.extend(signed_files("bad", &key));
     // `bad` changes after signing.
@@ -313,4 +315,87 @@ fn zip_of(files: &[(&str, &str)]) -> Vec<u8> {
         zip.finish().unwrap();
     }
     buffer.into_inner()
+}
+
+/// Regression: a skills.lock entry whose recorded path leaves `skills/`
+/// (edited or tampered with) never makes a `--force` reinstall delete
+/// outside it; the old path is left in place with a warning.
+#[test]
+fn a_reinstall_never_removes_an_unsafe_recorded_path() {
+    let env = Env::new();
+    env.fake.repo(
+        "someone/skills",
+        &[("x/SKILL.md", skill_md("x", "Hello.").as_bytes())],
+    );
+    install::install(&env.hub, &id("someone/skills/x"), &Options::default()).unwrap();
+    let victim = env.profile().join("victim");
+    std::fs::create_dir_all(&victim).unwrap();
+    std::fs::write(victim.join("keep"), b"x").unwrap();
+    let mut entry = locked(&env).remove(0);
+    entry.path = Some("../victim".to_owned());
+    LockFile::in_dir(&env.skills()).upsert(entry).unwrap();
+    let again = install::install(&env.hub, &id("someone/skills/x"), &force()).unwrap();
+    assert!(victim.join("keep").is_file(), "the victim survives");
+    assert!(
+        again
+            .warnings
+            .iter()
+            .any(|w| w.contains("not under skills/")),
+        "{:?}",
+        again.warnings
+    );
+    assert_eq!(locked(&env)[0].path.as_deref(), Some("x"));
+}
+
+/// A signature only says who signed: under `require` a valid signature by
+/// a key `skills.trusted_signers` does not list (here one embedded in the
+/// skill's own `SKILL.sig`) is refused with 77, a listed key installs,
+/// and under `warn` the untrusted signer installs with a warning and is
+/// recorded as such.
+#[test]
+fn require_accepts_only_trusted_signers() {
+    let mut env = Env::with(SkillSignaturePolicy::Require);
+    let (stranger, _) = key_pair(&env, "stranger.key");
+    let (trusted, public) = key_pair(&env, "trusted.key");
+    let mut files = signed_files("mine", &trusted);
+    files.extend(signed_files("theirs", &stranger));
+    serve(&env, "someone/skills", &files);
+    let id_of = |key: &str| format!("minisign:{}", sign::key_id(key).unwrap());
+    env.hub.trusted_signers = vec![id_of(&public)];
+    let err =
+        install::install(&env.hub, &id("someone/skills/theirs"), &Options::default()).unwrap_err();
+    assert_eq!(err.exit_code(), 77);
+    assert!(
+        err.message().contains("untrusted signer"),
+        "{}",
+        err.message()
+    );
+    assert!(!env.skills().join("theirs").exists());
+    let mine = install::install(&env.hub, &id("someone/skills/mine"), &Options::default()).unwrap();
+    assert_eq!(
+        mine.signature.record(),
+        format!("verified:{}", id_of(&public))
+    );
+    env.hub.signature_policy = SkillSignaturePolicy::Warn;
+    let theirs =
+        install::install(&env.hub, &id("someone/skills/theirs"), &Options::default()).unwrap();
+    assert!(
+        theirs
+            .warnings
+            .iter()
+            .any(|w| w.contains("not in skills.trusted_signers")),
+        "{:?}",
+        theirs.warnings
+    );
+    let recorded = locked(&env)
+        .into_iter()
+        .find(|e| e.name == "theirs")
+        .unwrap();
+    assert!(
+        recorded
+            .signature
+            .unwrap()
+            .starts_with("untrusted:minisign:"),
+        "the signer is recorded either way"
+    );
 }

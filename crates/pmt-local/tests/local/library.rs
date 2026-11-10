@@ -47,7 +47,7 @@ fn removing_a_staged_model_deletes_every_file_it_staged() {
     let home = temp();
     let library = Library::open(home.path());
     let jobs = Jobs::open(home.path());
-    let dir = library.dir("qwen-x");
+    let dir = library.dir("qwen-x").unwrap();
     std::fs::create_dir_all(&dir).unwrap();
     let files = [
         "w-00001-of-00002.gguf",
@@ -83,4 +83,35 @@ fn a_file_that_is_not_gguf_is_refused() {
         .link(&path, |_| 65_536)
         .unwrap_err();
     assert_eq!(err.exit_code(), 2);
+}
+
+#[test]
+fn ids_that_leave_the_library_are_refused_and_nothing_is_deleted() {
+    let home = temp();
+    let outside = temp();
+    std::fs::write(outside.path().join("keep"), b"x").unwrap();
+    let library = Library::open(home.path());
+    let jobs = Jobs::open(home.path());
+    std::fs::create_dir_all(library.root()).unwrap();
+    let absolute = outside.path().to_string_lossy().into_owned();
+    for id in ["..", ".", "", absolute.as_str(), "a/../..", "a\\b", "c:x"] {
+        let err = library.remove(id, &jobs).unwrap_err();
+        assert_eq!(err.exit_code(), 66, "{id}");
+        assert!(library.dir(id).is_err(), "{id}");
+    }
+    assert!(outside.path().join("keep").is_file());
+    assert!(library.root().is_dir());
+}
+
+#[test]
+fn a_hub_file_name_that_traverses_is_refused() {
+    let home = temp();
+    let dir = Library::open(home.path()).dir("m").unwrap();
+    for name in ["..", "a\\..\\..\\x.gguf", "C:x.gguf", "sub/..", ""] {
+        assert!(
+            pmt_local::pull::spec(String::new(), name, 1, "", &dir).is_err(),
+            "{name}"
+        );
+    }
+    assert!(pmt_local::pull::spec(String::new(), "sub/w.gguf", 1, "", &dir).is_ok());
 }

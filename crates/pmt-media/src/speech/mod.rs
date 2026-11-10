@@ -81,14 +81,14 @@ impl SpeechState {
         }
     }
 
-    /// Takes the session's lease on `engine` once.
-    fn hold(&self, engine: &str, keep_warm: Option<Duration>) {
+    /// Takes the session's lease on `launcher`'s `engine` once.
+    fn hold(&self, launcher: &dyn local::Launcher, engine: &str, keep_warm: Option<Duration>) {
         let mut held = self.held.lock().unwrap_or_else(PoisonError::into_inner);
         if held.insert(engine.to_owned()) {
             self.leases
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
-                .push(local::Lease::acquire(engine, keep_warm));
+                .push(local::Lease::acquire(launcher, engine, keep_warm));
         }
     }
 
@@ -122,7 +122,7 @@ impl SpeechState {
                 voice.provider
             )
         })?;
-        self.hold(&voice.provider, self.keep_warm);
+        self.hold(launcher.as_ref(), &voice.provider, self.keep_warm);
         let dir = tempdir(setup)?;
         let out = dir.join("out.wav");
         let request = json!({"op": "speak", "text": text, "voice": voice.voice, "model": voice.model,

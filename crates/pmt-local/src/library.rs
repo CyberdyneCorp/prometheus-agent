@@ -138,9 +138,21 @@ impl Library {
     }
 
     /// The directory of model `id` (staged files go here).
-    #[must_use]
-    pub fn dir(&self, id: &str) -> PathBuf {
-        self.root.join(id)
+    ///
+    /// # Errors
+    ///
+    /// `local.not_found` (66) for an id that is not a plain name: ids
+    /// arrive from the CLI and RPC clients, and `..` or an absolute path
+    /// would otherwise point outside the library.
+    pub fn dir(&self, id: &str) -> Result<PathBuf, Error> {
+        if valid_id(id) {
+            Ok(self.root.join(id))
+        } else {
+            Err(Error::new(
+                &codes::LOCAL_NOT_FOUND,
+                format!("'{id}' is not a local model id (letters, digits, '.', '_', '-')"),
+            ))
+        }
     }
 
     /// Every usable model, by id.
@@ -163,7 +175,7 @@ impl Library {
     ///
     /// `local.not_found` (66), naming the download job when it is partial.
     pub fn model(&self, id: &str, jobs: &Jobs) -> Result<Model, Error> {
-        if let Some(model) = read(&self.dir(id).join(RECORD_FILE)) {
+        if let Some(model) = read(&self.dir(id)?.join(RECORD_FILE)) {
             return Ok(model);
         }
         let partial = jobs.unfinished(id);
@@ -228,7 +240,7 @@ impl Library {
     ///
     /// Never: the record serializes.
     pub fn publish(&self, model: &Model) -> Result<(), Error> {
-        let dir = self.dir(&model.id);
+        let dir = self.dir(&model.id)?;
         std::fs::create_dir_all(&dir).map_err(|e| io_error(&dir, &e))?;
         let path = dir.join(RECORD_FILE);
         let tmp = path.with_extension("json.tmp");
@@ -258,7 +270,7 @@ impl Library {
         })?;
         let id = path
             .file_stem()
-            .map(|s| s.to_string_lossy().into_owned())
+            .map(|s| plain_id(&s.to_string_lossy()))
             .unwrap_or_default();
         let size = std::fs::metadata(&path)
             .map_err(|e| io_error(&path, &e))?
@@ -289,7 +301,7 @@ impl Library {
     /// `local.not_found` (66) when there is nothing of that name;
     /// `runtime.io`.
     pub fn remove(&self, id: &str, jobs: &Jobs) -> Result<(), Error> {
-        let dir = self.dir(id);
+        let dir = self.dir(id)?;
         let job = jobs.unfinished(id);
         if !dir.exists() && job.is_none() {
             return Err(Error::new(
@@ -300,7 +312,9 @@ impl Library {
         if let Some(job) = job {
             jobs.remove(&job)?;
         }
-        if dir.exists() {
+        // Second guard: never delete anything but a direct child of the
+        // library, whatever `dir` validation lets through.
+        if dir.exists() && dir.parent() == Some(self.root.as_path()) {
             // Only files inside the model's own directory are deleted; a
             // linked file lives elsewhere and is never followed.
             std::fs::remove_dir_all(&dir).map_err(|e| io_error(&dir, &e))?;
@@ -311,4 +325,30 @@ impl Library {
 
 fn read(path: &Path) -> Option<Model> {
     serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()
+}
+
+/// Whether `id` is a plain model name usable as a library directory:
+/// ASCII letters, digits, `.`, `_` and `-`, and not `.` or `..`.
+#[must_use]
+pub fn valid_id(id: &str) -> bool {
+    !id.is_empty()
+        && id != "."
+        && id != ".."
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+}
+
+/// `name` with every character outside the id alphabet replaced by `-`.
+#[must_use]
+pub fn plain_id(name: &str) -> String {
+    name.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect()
 }

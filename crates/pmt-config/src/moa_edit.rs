@@ -14,6 +14,43 @@ pub(crate) fn set(doc: &mut DocumentMut, name: &str, preset: &MoaPreset) -> Resu
     Ok(())
 }
 
+/// Rewrites the `provider` and `model` of preset `name`'s slots in
+/// place, keeping comments, layout and every other field (`config
+/// fix-models`); a preset not written in the file is set whole.
+pub(crate) fn set_slots(
+    doc: &mut DocumentMut,
+    name: &str,
+    preset: &MoaPreset,
+) -> Result<(), Error> {
+    let Some(item) = doc
+        .get_mut("moa")
+        .and_then(|moa| moa.get_mut("presets"))
+        .and_then(|presets| presets.get_mut(name))
+    else {
+        return set(doc, name, preset);
+    };
+    put_slot(item.get_mut("aggregator"), &preset.aggregator);
+    if let Some(references) = item.get_mut("reference_models") {
+        for (i, slot) in preset.reference_models.iter().enumerate() {
+            put_slot(references.get_mut(i), slot);
+        }
+    }
+    Ok(())
+}
+
+fn put_slot(item: Option<&mut Item>, slot: &MoaSlot) {
+    let Some(table) = item.and_then(Item::as_table_like_mut) else {
+        return;
+    };
+    for (key, text) in [("provider", &slot.provider), ("model", &slot.model)] {
+        if let Some(old) = table.get_mut(key).and_then(Item::as_value_mut) {
+            let decor = old.decor().clone();
+            *old = text.as_str().into();
+            *old.decor_mut() = decor;
+        }
+    }
+}
+
 /// Removes preset `name`; whether it was defined.
 pub(crate) fn remove(doc: &mut DocumentMut, name: &str) -> bool {
     let Some(presets) = doc

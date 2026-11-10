@@ -827,7 +827,7 @@ impl Factory {
         )?
         .map(Arc::new);
         let parent = self.options.cron.as_ref().and_then(|run| run.trace);
-        let trace = trace::open(self.scope_for(child).name().as_str(), session, parent);
+        let trace = trace::open(&self.scope_for(child), session, parent);
         Ok(trace::Recording { trajectory, trace })
     }
 

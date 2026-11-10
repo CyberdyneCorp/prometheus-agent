@@ -42,16 +42,13 @@ pub use turn::{Observers, Rewrite, continuation};
 /// Hooks of the closed registry that nothing in this build fires yet: a
 /// callback registered for one loads but never runs, so registration warns
 /// and `plugins doctor` names it. The owner of a firing point removes the
-/// name when it lands (subagents: delegation; `pre_transcription`: speech;
-/// room activity: group rooms; kanban: the kanban dispatcher).
+/// name when it lands (subagents: delegation; room activity: group rooms;
+/// kanban: the kanban dispatcher).
 pub const NOT_FIRED: &[&str] = &[
-    "pre_auxiliary_call",
-    "post_auxiliary_call",
     "on_session_finalize",
     "subagent_start",
     "subagent_stop",
     "on_room_member_activity",
-    "pre_transcription",
     "kanban_task_claimed",
     "kanban_task_completed",
     "kanban_task_blocked",

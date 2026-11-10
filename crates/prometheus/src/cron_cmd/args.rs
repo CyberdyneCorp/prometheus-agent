@@ -260,6 +260,11 @@ pub struct JobFlags {
     /// Follow `cron.model` (else the main model) again.
     #[arg(long)]
     pub unpin: bool,
+    /// The run's own fallback chain entry, `provider/model` (repeatable;
+    /// `none` disables fallback, `""` removes the declaration). Without
+    /// one a pinned job has no fallback and an unpinned one the profile's.
+    #[arg(long = "fallback", value_name = "PROVIDER/MODEL")]
+    pub fallback: Vec<String>,
     /// Pin a reasoning level: none, minimal, low, medium, high, xhigh or
     /// max (`""` clears).
     #[arg(long, value_name = "LEVEL")]
@@ -353,6 +358,7 @@ impl JobFlags {
             monitor_script: self.monitor_script.clone(),
             monitor_url: self.monitor_url.clone(),
             context_from: some(&self.context_from),
+            fallback: some(&self.fallback),
             continuity: if self.continuity {
                 Some(true)
             } else {

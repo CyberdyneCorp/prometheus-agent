@@ -259,11 +259,17 @@ first 500 characters of the reply) and `on_session_end`, and
 model call. `transform_terminal_output`'s first answer replaces a
 foreground command's output before ANSI stripping, redaction and
 truncation. `sessions delete|prune` fire `on_session_delete`, and loading a
-plugin set fires `on_plugin_loaded` for each plugin. A few registry names
-have no firing point in this build yet (`pre_auxiliary_call`,
-`post_auxiliary_call`, `on_session_finalize`, `subagent_start|stop`,
-`on_room_member_activity`, `pre_transcription` and the kanban hooks):
-registering one logs a warning and `prometheus plugins doctor` names it.
+plugin set fires `on_plugin_loaded` for each plugin. A session's auxiliary
+calls (compression, titles, vision descriptions...) fire
+`pre_auxiliary_call` before and `post_auxiliary_call` after (`task`,
+`provider`, `model`, then `ok`, `attempts`, `error`; answers discarded).
+Every transcription (voice mode, messaging voice notes) fires
+`pre_transcription` once its STT provider is resolved; an answer table may
+change only `prompt`, `language` and `model` (in registration order, the
+last writer wins). A few registry names have no firing point in this build
+yet (`on_session_finalize`, `subagent_start|stop`,
+`on_room_member_activity` and the kanban hooks): registering one logs a
+warning and `prometheus plugins doctor` names it.
 
 ## Shell hooks
 

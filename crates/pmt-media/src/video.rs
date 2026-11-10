@@ -1,7 +1,8 @@
 //! `video_analyze` (spec: web-and-media-tools, `video_analyze` tool).
 //!
 //! A video (http(s) URL through the session's URL policy, or a local
-//! path) is sent to the `vision` auxiliary route only when that route's
+//! path read through the session's file tools and their guards, as
+//! `vision_analyze` reads images) is sent to the `vision` auxiliary route only when that route's
 //! model declares video input; no other route is ever used. Videos above
 //! 20 MiB carry a warning and above 50 MiB are refused before any
 //! provider call.
@@ -13,9 +14,11 @@ use std::sync::Arc;
 
 use pmt_core::capability::Capability as Cap;
 use pmt_tools::descriptor::{
-    CallContext, Effect, HandlerFuture, Owner, RegisteredTool, ResourceClaims, ToolDescriptor,
-    ToolHandler,
+    CallContext, Effect, HandlerFuture, Owner, PathClaim, RegisteredTool, ResourceClaims,
+    ToolDescriptor, ToolHandler,
 };
+use pmt_tools::environments::Environments;
+use pmt_tools::files::FileSession;
 use pmt_tools::result::ToolResult;
 use pmt_tools::variants::RouteTraits;
 use serde_json::{Value, json};
@@ -63,16 +66,20 @@ pub trait VideoDescriber: Send + Sync {
     ) -> DescribeFuture<'a>;
 }
 
-struct Handler(Arc<MediaSessions>);
+struct Handler(Arc<MediaSessions>, Arc<Environments>);
 
 /// `video_analyze`, available only where the session reaches a
-/// video-capable route.
+/// video-capable route; local paths are read through the file tools of
+/// the session's environment in `environments`.
 #[must_use]
-pub fn registered(sessions: &Arc<MediaSessions>) -> RegisteredTool {
+pub fn registered(
+    sessions: &Arc<MediaSessions>,
+    environments: &Arc<Environments>,
+) -> RegisteredTool {
     RegisteredTool::new(
         descriptor(),
         Owner::Builtin,
-        Arc::new(Handler(Arc::clone(sessions))),
+        Arc::new(Handler(Arc::clone(sessions), Arc::clone(environments))),
     )
     .with_route_check(Arc::new(|_, route: &RouteTraits| {
         if route.auxiliary.contains(VIDEO_AUX) {
@@ -101,7 +108,11 @@ fn descriptor() -> ToolDescriptor {
     );
     d.effect = Effect::None;
     d.idempotent = true;
-    d.claims = Some(ResourceClaims::none());
+    // A local video is read (and its path checked by the gate); a URL
+    // never matches a written path.
+    d.claims = Some(ResourceClaims::reads(vec![PathClaim::Argument(
+        "/video_url".into(),
+    )]));
     d.capabilities = vec![Cap::parse("net.connect:*").expect("valid capability")];
     d
 }
@@ -110,6 +121,10 @@ impl ToolHandler for Handler {
     fn call<'a>(&'a self, context: &'a CallContext, arguments: Value) -> HandlerFuture<'a> {
         Box::pin(async move {
             let session = self.0.of(context)?;
+            let files = self
+                .1
+                .session(&context.session_id)
+                .and_then(|env| env.files.clone());
             let text = |key: &str| {
                 arguments
                     .get(key)
@@ -117,7 +132,7 @@ impl ToolHandler for Handler {
                     .unwrap_or_default()
             };
             let result = session
-                .analyze_video(text("video_url"), text("question"))
+                .analyze_video(files.as_deref(), text("video_url"), text("question"))
                 .await;
             pmt_tools::usage::record(
                 session.setup().usage.as_ref(),
@@ -158,8 +173,14 @@ fn too_large(name: &str, bytes: u64) -> ToolResult {
 }
 
 impl MediaSession {
-    /// Runs one `video_analyze` call.
-    pub async fn analyze_video(&self, video_url: &str, question: &str) -> ToolResult {
+    /// Runs one `video_analyze` call; a local path is read through
+    /// `files` (the session's file tools), never from the host directly.
+    pub async fn analyze_video(
+        &self,
+        files: Option<&FileSession>,
+        video_url: &str,
+        question: &str,
+    ) -> ToolResult {
         let Some(describer) = self.setup().video.clone() else {
             return ToolResult::error(format!("video_analyze unavailable: {NO_ROUTE}"));
         };
@@ -168,7 +189,7 @@ impl MediaSession {
                 "video_analyze: unsupported video type (use .mp4, .webm, .mov, .avi, .mkv, .mpeg or .mpg)",
             );
         };
-        let bytes = match self.read_video(video_url).await {
+        let bytes = match self.read_video(files, video_url).await {
             Ok(bytes) => bytes,
             Err(result) => return *result,
         };
@@ -192,26 +213,22 @@ impl MediaSession {
 
     /// The video's bytes; a refusal as the error result. A local file's
     /// size is checked before it is read; a download stops at the limit.
-    async fn read_video(&self, video_url: &str) -> Result<Vec<u8>, Box<ToolResult>> {
+    async fn read_video(
+        &self,
+        files: Option<&FileSession>,
+        video_url: &str,
+    ) -> Result<Vec<u8>, Box<ToolResult>> {
         let remote = video_url.starts_with("http://") || video_url.starts_with("https://");
         if !remote {
-            let path = self.setup().workspace.join(video_url);
-            let size = tokio::fs::metadata(&path)
-                .await
-                .map_err(|e| {
-                    Box::new(ToolResult::error(format!(
-                        "video_analyze: {video_url}: {e}"
-                    )))
-                })?
-                .len();
+            let refused =
+                |why: String| Box::new(ToolResult::error(format!("video_analyze: {why}")));
+            let files = files
+                .ok_or_else(|| refused("local paths need the file tools' environment".into()))?;
+            let size = files.binary_len(video_url).map_err(refused)?;
             if size > MAX_BYTES {
                 return Err(Box::new(too_large(video_url, size)));
             }
-            return tokio::fs::read(&path).await.map_err(|e| {
-                Box::new(ToolResult::error(format!(
-                    "video_analyze: {video_url}: {e}"
-                )))
-            });
+            return files.read_binary(video_url).map_err(refused);
         }
         let response = self.setup().fetcher.get(video_url).await.map_err(|err| {
             Box::new(ToolResult::error(format!(

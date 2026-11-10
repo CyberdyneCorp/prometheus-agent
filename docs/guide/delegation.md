@@ -101,7 +101,11 @@ provider route (a task or agent that names its own model keeps it), with
 `delegation.api_key_secret` (a secret name; it may be sent to that host
 only), `delegation.wire_format` (default: inferred from the URL, as for a
 custom provider) and `delegation.model` (or the parent's model id) as the
-model there. Such children get no fallback chain.
+model there. Such children, and every child whose task or agent pins its
+own model, get no fallback chain unless `[[delegation.fallback_chain]]`
+declares one for them (entries as in `[[fallback.chain]]`;
+`delegation.fallback_chain = []` keeps fallback off). A child on the
+parent's route inherits the parent's chain.
 
 ## Background tasks and the agents monitor
 

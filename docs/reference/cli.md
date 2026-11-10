@@ -7923,6 +7923,9 @@ Options:
       --unpin
           Follow `cron.model` (else the main model) again
 
+      --fallback <PROVIDER/MODEL>
+          The run's own fallback chain entry, `provider/model` (repeatable; `none` disables fallback, `""` removes the declaration). Without one a pinned job has no fallback and an unpinned one the profile's
+
       --reasoning-effort <LEVEL>
           Pin a reasoning level: none, minimal, low, medium, high, xhigh or max (`""` clears)
 
@@ -8066,6 +8069,9 @@ Options:
 
       --unpin
           Follow `cron.model` (else the main model) again
+
+      --fallback <PROVIDER/MODEL>
+          The run's own fallback chain entry, `provider/model` (repeatable; `none` disables fallback, `""` removes the declaration). Without one a pinned job has no fallback and an unpinned one the profile's
 
       --reasoning-effort <LEVEL>
           Pin a reasoning level: none, minimal, low, medium, high, xhigh or max (`""` clears)

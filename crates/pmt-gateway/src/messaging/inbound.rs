@@ -37,22 +37,30 @@ fn read_locations(inbound: &mut Inbound) {
     inbound.text = lines.join("\n");
 }
 
+/// What preparing an event's media found.
+#[derive(Debug, Default)]
+pub(crate) struct Prepared {
+    /// The user sent a voice note.
+    pub(crate) voice: bool,
+    /// The metered transcriptions, billed once the session is known.
+    pub(crate) billed: Vec<voice::Billed>,
+}
+
 /// Downloads `inbound`'s attachments through adapter `platform` of
-/// `adapter_profile` and turns its clips into text; `true` when the user
-/// sent a voice note.
+/// `adapter_profile` and turns its clips into text.
 pub(crate) async fn prepare(
     shared: &Arc<Shared>,
     adapter_profile: &str,
     platform: &str,
     scope: &ProfileScope,
     inbound: &mut Inbound,
-) -> bool {
+) -> Prepared {
     read_locations(inbound);
     if inbound.attachments.is_empty() {
-        return false;
+        return Prepared::default();
     }
     let Some(slot) = shared.adapters.ready(adapter_profile, platform) else {
-        return false;
+        return Prepared::default();
     };
     let config = &scope.config().gateway;
     let cache = media::cache_dir(scope.dir());
@@ -77,13 +85,13 @@ pub(crate) async fn prepare(
         kept.push(attachment);
     }
     let speech = shared.agents.speech(scope.name().as_str());
-    let mut voice_note = false;
+    let mut prepared = Prepared::default();
     let mut heard = Vec::new();
     for attachment in &kept {
         if !matches!(attachment.kind, MediaKind::Voice | MediaKind::Audio) {
             continue;
         }
-        voice_note |= attachment.kind == MediaKind::Voice;
+        prepared.voice |= attachment.kind == MediaKind::Voice;
         let clip = voice::hear(
             speech.as_deref(),
             &config.voice,
@@ -95,6 +103,7 @@ pub(crate) async fn prepare(
             super::admit::reply(shared, adapter_profile, platform, inbound, echo).await;
         }
         heard.push(clip.text);
+        prepared.billed.extend(clip.billed);
     }
     kept.retain(|a| !matches!(a.kind, MediaKind::Voice | MediaKind::Audio));
     inbound.attachments = kept;
@@ -102,5 +111,5 @@ pub(crate) async fn prepare(
         heard.extend(Some(inbound.text.clone()).filter(|t| !t.trim().is_empty()));
         inbound.text = heard.join("\n");
     }
-    voice_note
+    prepared
 }

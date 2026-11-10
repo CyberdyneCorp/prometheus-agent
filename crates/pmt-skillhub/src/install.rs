@@ -117,15 +117,30 @@ fn check_signature(hub: &Hub, bundle: &Bundle) -> Result<(Signature, Option<Stri
     if bundle.trust == Trust::Builtin {
         return Ok((Signature::Verified("prometheus-release".to_owned()), None));
     }
-    let signature = sign::verify(
-        bundle.files.get(SIGNATURE_FILE).map(Vec::as_slice),
-        &bundle.signed_digest(),
-        &hub.roots,
+    let signature = sign::trusted(
+        sign::verify(
+            bundle.files.get(SIGNATURE_FILE).map(Vec::as_slice),
+            &bundle.signed_digest(),
+            &hub.roots,
+        ),
+        &hub.trusted_signers,
     );
     let refuse = |message: String| Err(Error::new(&codes::SKILL_SIGNATURE, message));
     match (hub.signature_policy, &signature) {
         (SkillSignaturePolicy::Off, _) | (_, Signature::Verified(_)) => Ok((signature, None)),
         (_, Signature::Invalid(why)) => refuse(format!("invalid signature: {why}")),
+        (SkillSignaturePolicy::Require, Signature::UntrustedSigner(who)) => refuse(format!(
+            "untrusted signer {who} of '{}': skills.signature_policy = \"require\" accepts only skills.trusted_signers",
+            bundle.name
+        )),
+        (SkillSignaturePolicy::Warn, Signature::UntrustedSigner(who)) => {
+            let warning = format!(
+                "'{}' is signed by {who}, who is not in skills.trusted_signers",
+                bundle.name
+            );
+            tracing::warn!("{warning}");
+            Ok((signature, Some(warning)))
+        }
         (SkillSignaturePolicy::Require, Signature::Unsigned) => refuse(format!(
             "unsigned skill '{}': skills.signature_policy = \"require\" accepts only signed skills",
             bundle.name
@@ -272,9 +287,19 @@ fn screen_and_commit(
     warnings.extend(warning);
     let target = hub.skills_dir().join(rel);
     let replaced = commit(hub, quarantine, &target, &bundle.name)?;
-    let previous_rel = previous.and_then(|e| e.path.clone());
-    if let Some(old) = previous_rel.filter(|p| p != rel) {
-        let _ = std::fs::remove_dir_all(hub.skills_dir().join(old));
+    if let Some(old) = previous.filter(|e| e.path.as_deref().is_some_and(|p| p != rel)) {
+        // The recorded path comes from skills.lock, which may be edited or
+        // tampered with: only a safe path under `skills/` is removed.
+        match crate::maintain::install_dir(hub, old) {
+            Some(dir) => {
+                let _ = std::fs::remove_dir_all(dir);
+            }
+            None => warnings.push(format!(
+                "the previous install path {:?} of {} is not under skills/; left in place",
+                old.path.as_deref().unwrap_or_default(),
+                old.name
+            )),
+        }
     }
     LockFile::in_dir(&hub.skills_dir()).upsert(Entry {
         name: bundle.name.clone(),

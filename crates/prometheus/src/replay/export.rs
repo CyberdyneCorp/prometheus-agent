@@ -183,24 +183,6 @@ fn layers_hash(journal: &Journal, layers: &[&str]) -> Option<String> {
     (!text.is_empty()).then(|| sha256(text.as_bytes()))
 }
 
-/// Every string a `*_secret` key of the config names.
-fn secret_names(value: &Value, out: &mut BTreeSet<String>) {
-    match value {
-        Value::Object(map) => {
-            for (key, value) in map {
-                match value {
-                    Value::String(name) if key.ends_with("secret") && !name.is_empty() => {
-                        out.insert(name.clone());
-                    }
-                    other => secret_names(other, out),
-                }
-            }
-        }
-        Value::Array(items) => items.iter().for_each(|v| secret_names(v, out)),
-        _ => {}
-    }
-}
-
 fn state(
     scope: &ProfileScope,
     store: &Store,
@@ -215,7 +197,7 @@ fn state(
         .and_then(|text| toml::from_str::<pmt_config::Config>(text).ok())
         .unwrap_or_else(|| scope.config().clone());
     let mut names = BTreeSet::new();
-    secret_names(
+    super::trust::secret_names(
         &serde_json::to_value(&config).unwrap_or_default(),
         &mut names,
     );

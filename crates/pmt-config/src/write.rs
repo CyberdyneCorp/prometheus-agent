@@ -203,6 +203,18 @@ impl ConfigFile {
         self.modify(|doc| crate::moa_edit::set(doc, name, preset))
     }
 
+    /// Rewrites only the slot `provider`/`model` values of preset `name`
+    /// to `preset`'s, keeping its comments and layout (`config
+    /// fix-models`).
+    ///
+    /// # Errors
+    ///
+    /// As [`put_moa_preset`](Self::put_moa_preset).
+    pub fn set_moa_slots(&self, name: &str, preset: &MoaPreset) -> Result<(), Error> {
+        crate::managed::check_writable("moa.presets")?;
+        self.modify(|doc| crate::moa_edit::set_slots(doc, name, preset))
+    }
+
     /// Removes `[moa.presets.<name>]`; whether it was defined.
     ///
     /// # Errors

@@ -14,6 +14,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
+use pmt_core::secret::Redactor;
+
 use crate::metrics::{self, global};
 use crate::trajectory::events::Event;
 use crate::trajectory::payload::{Tokens, Usage};
@@ -65,6 +67,37 @@ struct State {
     jobs: HashMap<String, u64>,
 }
 
+/// Loads the profile's redactor (known secrets, PII); called once, on the
+/// first content a span captures.
+pub type RedactorLoader = Box<dyn Fn() -> Option<Redactor> + Send + Sync>;
+
+/// What captured content is redacted with before it leaves the host
+/// (spec: security-boundaries, Known-secret redaction everywhere).
+struct Redaction {
+    load: Option<RedactorLoader>,
+    loaded: std::sync::OnceLock<Option<Redactor>>,
+}
+
+impl std::fmt::Debug for Redaction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Redaction").finish_non_exhaustive()
+    }
+}
+
+impl Redaction {
+    /// `text` redacted (`redact_all`: known values and credential-shaped
+    /// tokens) and clipped.
+    fn clean(&self, text: &str) -> String {
+        let redactor = self
+            .loaded
+            .get_or_init(|| self.load.as_ref().and_then(|load| load()));
+        match redactor {
+            Some(redactor) => clip(&redactor.redact_all(text)),
+            None => clip(&Redactor::default().redact_all(text)),
+        }
+    }
+}
+
 /// A session's trace: its context and the spans of its open work.
 #[derive(Debug)]
 pub struct SessionTrace {
@@ -74,6 +107,7 @@ pub struct SessionTrace {
     parent: Option<[u8; 8]>,
     exporter: Option<Exporter>,
     state: Mutex<State>,
+    redaction: Redaction,
 }
 
 impl SessionTrace {
@@ -81,11 +115,15 @@ impl SessionTrace {
     /// when given (a cron run, an RPC request), else the open delegating
     /// tool call of `parent_session_id`'s live trace (a subagent), else
     /// none (a root span); the trace id is the parent's or the lineage's.
+    /// Content captured for export passes through the redactor `redactor`
+    /// loads (the profile's), else only credential-shaped tokens are
+    /// masked.
     #[must_use]
     pub fn open(
         identity: Identity,
         parent_session_id: Option<&str>,
         parent: Option<TraceContext>,
+        redactor: Option<RedactorLoader>,
     ) -> Arc<Self> {
         let parent = parent.or_else(|| {
             parent_session_id
@@ -103,6 +141,10 @@ impl SessionTrace {
             exporter: super::exporter(),
             state: Mutex::default(),
             identity,
+            redaction: Redaction {
+                load: redactor,
+                loaded: std::sync::OnceLock::new(),
+            },
         });
         context::register(&trace.identity.session_id, &trace);
         global().gauge_add(metrics::SESSIONS_ACTIVE, &[], 1.0);
@@ -329,7 +371,7 @@ impl SessionTrace {
         }
         let span = self.turn_span(state, emit);
         if let Some((_, open)) = state.turns.iter_mut().find(|(_, o)| o.span_id == span) {
-            open.attributes.push(kv(key, clip(text)));
+            open.attributes.push(kv(key, self.redaction.clean(text)));
         }
     }
 
@@ -400,7 +442,7 @@ impl SessionTrace {
                 if self.capture() {
                     open.attributes.push(kv(
                         "prometheus.tool.arguments",
-                        clip(&call.arguments.to_string()),
+                        self.redaction.clean(&call.arguments.to_string()),
                     ));
                 }
                 open.tool = Some(call.tool.clone());
@@ -432,7 +474,7 @@ impl SessionTrace {
                 );
                 if let (true, Some(output)) = (self.capture(), &result.output) {
                     open.attributes
-                        .push(kv("prometheus.tool.output", clip(output)));
+                        .push(kv("prometheus.tool.output", self.redaction.clean(output)));
                 }
                 let error = result.error.as_ref().map(|f| f.kind.clone());
                 self.finish(

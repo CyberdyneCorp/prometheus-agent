@@ -29,6 +29,8 @@ pub struct Hub {
     pub trusted: Vec<String>,
     /// `skills.signature_policy`.
     pub signature_policy: SkillSignaturePolicy,
+    /// `skills.trusted_signers`.
+    pub trusted_signers: Vec<String>,
     /// The profile's taps.
     pub taps: Vec<Tap>,
     /// The embedded official catalog.
@@ -57,6 +59,7 @@ impl Hub {
             clawhub_token: None,
             trusted: config.trusted_sources.clone(),
             signature_policy: config.signature_policy,
+            trusted_signers: config.trusted_signers.clone(),
             taps: crate::taps::read(profile_dir).unwrap_or_default(),
             official: Bundled::official(),
             profile_dir: profile_dir.to_path_buf(),

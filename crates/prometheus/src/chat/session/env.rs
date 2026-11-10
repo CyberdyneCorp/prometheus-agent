@@ -567,7 +567,7 @@ fn media(
         fetcher: fetcher.map(|f| Arc::new(f.for_requester("media"))),
         video: inputs.vision.video(),
         plugins: super::media_plugins::PluginMedia::shared(
-            inputs.providers.clone(),
+            &inputs.plugins.current(),
             inputs.plugin_call.clone(),
         ),
     })

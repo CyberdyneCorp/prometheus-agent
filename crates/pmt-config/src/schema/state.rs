@@ -306,6 +306,11 @@ pub struct SkillsConfig {
     pub trusted_sources: Vec<String>,
     /// What a hub install does with a skill's `SKILL.sig`.
     pub signature_policy: super::curator::SkillSignaturePolicy,
+    /// The signers whose valid `SKILL.sig` counts as verified: minisign
+    /// key ids (`minisign:<KEYID>` or the bare 16 hex digits) or public
+    /// keys, and Sigstore identities (`sigstore:<subject> via <issuer>`).
+    /// A valid signature by anyone else is `untrusted`.
+    pub trusted_signers: Vec<String>,
     /// The minisign secret key `skills publish` signs with (empty: none).
     pub signing_key: String,
     /// Size of the skill ledger before its oldest entries are compacted
@@ -335,6 +340,7 @@ impl Default for SkillsConfig {
                 .map(|s| (*s).to_owned())
                 .collect(),
             signature_policy: super::curator::SkillSignaturePolicy::Warn,
+            trusted_signers: Vec::new(),
             signing_key: String::new(),
             ledger_max_bytes: super::curator::DEFAULT_LEDGER_MAX_BYTES,
         }

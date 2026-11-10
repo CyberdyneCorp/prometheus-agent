@@ -104,6 +104,7 @@ fn factory(
             memory_write: job.spec.memory == MemoryMode::ReadWrite,
             allow_scheduling: config.allow_agent_scheduling,
             pinned: job.spec.pinned(),
+            fallback_chain: job.spec.fallback_chain.clone(),
             notepad: notepad.map(std::path::Path::to_path_buf),
             trace: run_id.map(pmt_obs::otel::context::cron_run),
         }),

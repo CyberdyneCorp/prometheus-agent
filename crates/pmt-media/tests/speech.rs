@@ -530,3 +530,78 @@ async fn a_command_stt_reads_its_output_file_then_stdout() {
         "stt is configured to use mine, but command STT provider wrote no output file and produced no stdout"
     );
 }
+
+/// `pre_transcription` callbacks answering in registration order.
+struct Rewriting(Vec<Value>);
+
+impl pmt_media::plugin::MediaPlugins for Rewriting {
+    fn plugin_of(&self, _: pmt_media::plugin::Kind, _: &str) -> Option<String> {
+        None
+    }
+
+    fn invoke<'a>(
+        &'a self,
+        kind: pmt_media::plugin::Kind,
+        id: &'a str,
+        _: Value,
+    ) -> pmt_media::plugin::PluginFuture<'a> {
+        Box::pin(async move { Err(pmt_media::plugin::not_installed(kind, id)) })
+    }
+
+    fn pre_transcription(
+        &self,
+        mut request: pmt_media::plugin::SttRequest,
+    ) -> pmt_media::plugin::SttFuture<'_> {
+        Box::pin(async move {
+            for answer in &self.0 {
+                request.apply(answer);
+            }
+            request
+        })
+    }
+}
+
+/// `pre_transcription` (spec: plugin-system, Streaming and lifecycle
+/// observer hooks): fired after the provider is resolved, its `prompt`,
+/// `language` and `model` reach the request (last writer wins) and every
+/// other field is ignored.
+#[tokio::test]
+async fn pre_transcription_changes_reach_the_stt_request() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/audio/transcriptions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"text": "ola"})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let mut config = Config::default();
+    config.stt.provider = Some("groq".into());
+    let mut rig = Rig::new(config)
+        .secret("GROQ_API_KEY")
+        .at("groq", &server.uri());
+    rig.plugins = Arc::new(Rewriting(vec![
+        json!({"language": "es", "model": "whisper-x", "provider": "openai"}),
+        json!({"language": "pt", "prompt": "Lisboa, Porto"}),
+    ]));
+    let clip = rig.workspace().join("note.ogg");
+    std::fs::write(&clip, b"OggS").unwrap();
+    let transcript = rig
+        .session()
+        .with_ffmpeg(Ffmpeg::none())
+        .transcribe(&clip)
+        .await
+        .unwrap();
+    assert_eq!(
+        (transcript.provider.as_str(), transcript.model.as_str()),
+        ("groq", "whisper-x"),
+        "the provider never moves"
+    );
+    let body = &server.received_requests().await.unwrap()[0].body;
+    let text = String::from_utf8_lossy(body);
+    assert!(text.contains("name=\"language\"\r\n\r\npt"), "{text}");
+    assert!(text.contains("name=\"model\"\r\n\r\nwhisper-x"), "{text}");
+    assert!(
+        text.contains("name=\"prompt\"\r\n\r\nLisboa, Porto"),
+        "{text}"
+    );
+}

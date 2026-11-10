@@ -744,7 +744,7 @@ fn a_bridged_transcription_provider_transcribes_voice_input() {
     )
     .unwrap();
     setup.plugins = prometheus::chat::session::media_plugins::PluginMedia::shared(
-        plugins.current().providers.clone(),
+        &plugins.current(),
         pmt_plugins::host::CallInfo {
             session_id: None,
             surface: "gateway".to_owned(),

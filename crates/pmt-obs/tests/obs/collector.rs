@@ -33,6 +33,7 @@ fn export(endpoint: &str, protocol: OtelProtocol, session: &str) -> String {
         },
         None,
         None,
+        None,
     );
     trace.observe(&Emit::now(Event::TurnStart(TurnStart { message_id: None })).in_turn("t", None));
     trace.observe(

@@ -96,6 +96,7 @@ impl Lane {
             routing,
             reply_to: Some(inbound.message_id.clone()).filter(|id| !id.is_empty()),
             voice: self.voice_input,
+            billed: std::mem::take(&mut self.voice_billed),
             sent_at: inbound.timestamp,
             addressed: !inbound.addressing.not_addressed,
         };
@@ -289,6 +290,7 @@ fn join(into: &mut Pending, more: Pending) {
     into.images.extend(more.images);
     into.files.extend(more.files);
     into.voice |= more.voice;
+    into.billed.extend(more.billed);
     into.addressed |= more.addressed;
     into.routing = more.routing;
     if more.reply_to.is_some() {

@@ -211,6 +211,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `delegation.base_url` | string | unset | any | `next_session` | A direct endpoint children call instead of a provider route (`model`, or the parent's model id, names the model there). |
 | `delegation.child_approval` | one of "deny", "escalate" | `"deny"` | `"deny"`, `"escalate"` | `next_session` | What an approval a child needs does: `deny` it, or `escalate` it to the root session's surface. |
 | `delegation.escalation_timeout_secs` | integer | `300` | 1 to 86400 | `next_session` | Seconds an escalated approval waits for an answer before it is denied. |
+| `delegation.fallback_chain` | array | unset | any | `next_session` | The fallback chain of children that pin a route of their own (a task's or agent's model, `delegation.model`, a direct endpoint), entries as in `[[fallback.chain]]`; unset: such children get no chain, `[]`: fallback off. Unpinned children inherit the parent's. |
 | `delegation.gateway_mode` | one of "auto", "inline", "background" | `"auto"` | `"auto"`, `"inline"`, `"background"` | `next_session` | How messaging sessions run their children: `auto` waits for them inside the call when the platform's interim assistant messages are off, `inline` always waits, `background` never does. |
 | `delegation.inactivity_timeout_secs` | integer | `0` | ≥ 0 | `next_session` | Seconds without progress after which a child counts as stalled (`0` uses the built-in 450 s between iterations and 1200 s inside one tool call; otherwise at least 30). |
 | `delegation.independent_completions` | boolean | `false` | any | `next_session` | Deliver each ungrouped task's result (and each `group`'s results) as its own completion as soon as it is ready. |
@@ -702,6 +703,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `skills.signing_key` | string | `""` | any | `next_session` | The minisign secret key `skills publish` signs with (empty: none). |
 | `skills.template_vars` | boolean | `true` | any | `next_session` | Substitute `${PROMETHEUS_SKILL_DIR}`-style tokens at load. |
 | `skills.trusted_project_dirs` | array of string | `[]` | any | `next_session` | Git roots whose project-local skills are trusted. |
+| `skills.trusted_signers` | array of string | `[]` | any | `next_session` | The signers whose valid `SKILL.sig` counts as verified: minisign key ids (`minisign:<KEYID>` or the bare 16 hex digits) or public keys, and Sigstore identities (`sigstore:<subject> via <issuer>`). A valid signature by anyone else is `untrusted`. |
 | `skills.trusted_sources` | array of string | `["anthropics/skills","openai/skills"]` | any | `next_session` | Hub sources (`owner/repo`) whose skills install with trust `trusted` (`safe` and `caution` verdicts allowed). |
 | `skills.write_approval` | boolean | `false` | any | `next_session` | Stage skill writes as pending for review. |
 | `snapshots.keep` | integer | `20` | ≥ 0 | `live` | Manual snapshots kept per profile. |

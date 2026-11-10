@@ -188,7 +188,7 @@ fn collector_down_adds_no_latency_and_counts_dropped_items() {
     let before = metrics::global()
         .snapshot()
         .value(metrics::OTEL_DROPPED, &[]);
-    let trace = SessionTrace::open(identity("ses_down", "ses_down", "cli"), None, None);
+    let trace = SessionTrace::open(identity("ses_down", "ses_down", "cli"), None, None, None);
     let started = Instant::now();
     turn(&trace, "hello");
     let spent = started.elapsed();
@@ -230,7 +230,7 @@ fn a_full_queue_drops_the_oldest_and_counts_it() {
 fn content_is_not_exported_by_default() {
     let (url, received) = collector();
     let exporter = exporter(&url, false);
-    let trace = SessionTrace::open(identity("ses_c", "ses_c", "cli"), None, None);
+    let trace = SessionTrace::open(identity("ses_c", "ses_c", "cli"), None, None, None);
     turn(&trace, "confidential plan");
     exporter.flush_blocking(Duration::from_secs(10));
     let spans = received.spans();
@@ -249,7 +249,7 @@ fn content_is_not_exported_by_default() {
 fn capture_content_exports_prompt_arguments_and_output() {
     let (url, received) = collector();
     let exporter = exporter(&url, true);
-    let trace = SessionTrace::open(identity("ses_k", "ses_k", "cli"), None, None);
+    let trace = SessionTrace::open(identity("ses_k", "ses_k", "cli"), None, None, None);
     turn(&trace, "confidential plan");
     exporter.flush_blocking(Duration::from_secs(10));
     let spans = received.spans();
@@ -271,11 +271,52 @@ fn capture_content_exports_prompt_arguments_and_output() {
     );
 }
 
+/// Regression (spec: security-boundaries, Known-secret redaction
+/// everywhere): captured content is redacted with the profile's redactor
+/// before it leaves the host, as the trajectory is.
+#[test]
+fn captured_content_is_redacted_before_export() {
+    let (url, received) = collector();
+    let exporter = exporter(&url, true);
+    let secret = pmt_core::secret::SecretString::new("hunter2-very-secret-value");
+    let loader: pmt_obs::otel::RedactorLoader = Box::new(move || {
+        Some(pmt_core::secret::Redactor::named([(
+            "DB_PASSWORD",
+            &secret,
+        )]))
+    });
+    let trace = SessionTrace::open(identity("ses_r", "ses_r", "cli"), None, None, Some(loader));
+    turn(&trace, "connect with hunter2-very-secret-value");
+    exporter.flush_blocking(Duration::from_secs(10));
+    let raw = received.raw();
+    assert!(
+        !raw.windows(25).any(|w| w == b"hunter2-very-secret-value"),
+        "the secret left the host"
+    );
+    let spans = received.spans();
+    let turn = spans.iter().find(|s| s.name == "turn").unwrap();
+    assert_eq!(
+        string_attr(&turn.attributes, "prometheus.input"),
+        Some("connect with [REDACTED:DB_PASSWORD]")
+    );
+    let tool = spans.iter().find(|s| s.name == "tool.call").unwrap();
+    assert!(
+        string_attr(&tool.attributes, "prometheus.tool.output")
+            .unwrap()
+            .contains("[REDACTED:DB_PASSWORD]")
+    );
+}
+
 #[test]
 fn subagent_spans_join_the_parent_trace() {
     let (url, received) = collector();
     let exporter = exporter(&url, false);
-    let parent = SessionTrace::open(identity("ses_parent", "ses_parent", "cli"), None, None);
+    let parent = SessionTrace::open(
+        identity("ses_parent", "ses_parent", "cli"),
+        None,
+        None,
+        None,
+    );
     parent.observe(&at(
         Event::TurnStart(TurnStart { message_id: None }),
         "turn_p",
@@ -292,6 +333,7 @@ fn subagent_spans_join_the_parent_trace() {
         let trace = SessionTrace::open(
             identity(child, "ses_parent", "subagent"),
             Some("ses_parent"),
+            None,
             None,
         );
         trace.observe(&Emit::now(Event::SessionEnd(SessionEnd {
@@ -333,7 +375,7 @@ fn subagent_spans_join_the_parent_trace() {
 #[test]
 fn tool_failures_count_by_tool_outcome_and_kind() {
     install(None);
-    let trace = SessionTrace::open(identity("ses_m", "ses_m", "cli"), None, None);
+    let trace = SessionTrace::open(identity("ses_m", "ses_m", "cli"), None, None, None);
     trace.observe(&at(
         Event::ToolResult(ToolResult {
             call_id: "c".to_owned(),

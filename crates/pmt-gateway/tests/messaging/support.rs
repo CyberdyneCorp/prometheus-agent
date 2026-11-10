@@ -1057,6 +1057,8 @@ pub struct FakeSpeech {
     pub transcript: Mutex<Option<Result<String, String>>>,
     /// Texts synthesized.
     pub spoken: Mutex<Vec<String>>,
+    /// `(session, tool)` of every metered call billed.
+    pub billed: Mutex<Vec<(String, &'static str)>>,
 }
 
 impl Speech for FakeSpeech {
@@ -1085,6 +1087,31 @@ impl Speech for FakeSpeech {
             std::fs::write(&path, b"OggS").map_err(|e| e.to_string())?;
             Ok(path)
         })
+    }
+
+    /// A transcription is a metered call of the `fake` provider.
+    fn transcribe_billed<'a>(
+        &'a self,
+        path: &'a std::path::Path,
+    ) -> AdapterFuture<'a, Result<(String, Option<pmt_gateway::messaging::voice::Billed>), String>>
+    {
+        Box::pin(async move {
+            let text = self.transcribe(path).await?;
+            let billed = pmt_gateway::messaging::voice::Billed {
+                tool: "transcribe",
+                provider: "fake".into(),
+                model: "m".into(),
+                billing_source: "api_key:fake".into(),
+            };
+            Ok((text, Some(billed)))
+        })
+    }
+
+    fn bill(&self, session: &str, billed: &pmt_gateway::messaging::voice::Billed) {
+        self.billed
+            .lock()
+            .unwrap()
+            .push((session.to_owned(), billed.tool));
     }
 
     /// Converts by writing an Ogg file beside the input.

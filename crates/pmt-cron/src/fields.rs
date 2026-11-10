@@ -3,6 +3,7 @@
 
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
+use pmt_config::schema::FallbackEntry;
 use pmt_core::error::{Error, codes};
 
 use crate::duration;
@@ -78,6 +79,9 @@ pub struct Fields {
     pub context_from: Option<Vec<String>>,
     /// Toggles the `self` entry of `context_from`.
     pub continuity: Option<bool>,
+    /// The fallback chain as `provider/model` entries: `["none"]` declares
+    /// `[]` (fallback off), `[""]` removes the declaration.
+    pub fallback: Option<Vec<String>>,
 }
 
 fn invalid(message: String) -> Error {
@@ -115,6 +119,32 @@ fn resolved(dir: &String) -> String {
 /// A list where a single empty entry (or none) clears the field.
 fn list(value: &[String]) -> Vec<String> {
     value.iter().filter(|v| !v.is_empty()).cloned().collect()
+}
+
+/// `--fallback` values as a declared chain (see [`Fields::fallback`]).
+fn fallback_chain(entries: &[String]) -> Result<Option<Vec<FallbackEntry>>, Error> {
+    let entries = list(entries);
+    match entries.as_slice() {
+        [] => return Ok(None),
+        [only] if only == "none" => return Ok(Some(Vec::new())),
+        _ => {}
+    }
+    entries
+        .iter()
+        .map(|entry| match entry.split_once('/') {
+            Some((provider, model)) if !provider.is_empty() && !model.is_empty() => {
+                Ok(FallbackEntry {
+                    provider: provider.to_owned(),
+                    model: model.to_owned(),
+                    ..FallbackEntry::default()
+                })
+            }
+            _ => Err(invalid(format!(
+                "fallback entry '{entry}' is not provider/model (or 'none' to disable fallback)"
+            ))),
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map(Some)
 }
 
 impl Fields {
@@ -169,6 +199,9 @@ impl Fields {
         }
         if let Some(wall) = &self.wall {
             spec.timeout.wall_secs = Some(limit("wall timeout", wall)?);
+        }
+        if let Some(entries) = &self.fallback {
+            spec.fallback_chain = fallback_chain(entries)?;
         }
         Ok(())
     }
@@ -276,6 +309,31 @@ mod tests {
         .apply(&mut job, now, &zone)
         .unwrap();
         assert_eq!(job.context_from, ["collector"]);
+    }
+
+    #[test]
+    fn a_fallback_chain_is_declared_disabled_or_removed() {
+        let mut job = spec();
+        let now = jiff::Timestamp::now();
+        let zone = jiff::tz::TimeZone::UTC;
+        let with = |values: &[&str], job: &mut JobSpec| {
+            Fields {
+                fallback: Some(values.iter().map(|v| (*v).to_owned()).collect()),
+                ..Fields::default()
+            }
+            .apply(job, now, &zone)
+        };
+        with(&["openrouter/x-ai/grok-4", "mock/m"], &mut job).unwrap();
+        let chain = job.fallback_chain.clone().unwrap();
+        assert_eq!(
+            (chain[0].provider.as_str(), chain[0].model.as_str()),
+            ("openrouter", "x-ai/grok-4")
+        );
+        with(&["none"], &mut job).unwrap();
+        assert_eq!(job.fallback_chain, Some(Vec::new()));
+        with(&[""], &mut job).unwrap();
+        assert_eq!(job.fallback_chain, None);
+        assert!(with(&["grok-4"], &mut job).is_err());
     }
 
     #[test]

@@ -80,21 +80,30 @@ pub(super) fn checks(inputs: &Inputs<'_>) -> Vec<Check> {
             Status::Ok,
             format!("keyless web search sends queries and URLs to {vendors} (third parties, without an account)"),
         ));
-        for (vendor, tier) in &config.web.provider_tier {
-            let secret = pmt_tools::web::select::secret_of(vendor);
-            let missing = *tier == pmt_config::schema::ProviderTier::Paid
-                && secret.is_some_and(|s| scope.secrets().resolve(s).is_err());
-            if missing {
-                checks.push(
-                    Check::new(
-                        "providers",
-                        "keyless",
-                        Status::Warn,
-                        format!("web.provider_tier.{vendor} = \"paid\" without its key: {vendor} left the keyless ring"),
-                    )
-                    .with_hint(format!("prometheus secrets set {}", secret.unwrap_or_default())),
-                );
-            }
+        // The same rule the session's ring applies (a paid tier without
+        // its key leaves the ring), from the ring itself.
+        let scope_secrets = scope.clone();
+        let secrets: pmt_tools::web::SecretLookup =
+            std::sync::Arc::new(move |name| scope_secrets.secrets().resolve(name).ok());
+        let client = pmt_net::client(&pmt_net::OutboundPolicy::default()).ok();
+        let ring = client.map(|client| {
+            pmt_tools::web::keyless::Ring::new(
+                &config.web,
+                &client,
+                &secrets,
+                &std::collections::BTreeMap::new(),
+            )
+        });
+        for problem in ring
+            .iter()
+            .flat_map(pmt_tools::web::keyless::Ring::problems)
+        {
+            checks.push(Check::new(
+                "providers",
+                "keyless",
+                Status::Warn,
+                problem.clone(),
+            ));
         }
     }
     checks

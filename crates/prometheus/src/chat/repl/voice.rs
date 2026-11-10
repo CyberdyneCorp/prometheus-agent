@@ -43,7 +43,8 @@ impl Repl {
                 status.show(Some(crate::chat::voice::meter_line(level, &key)));
             }
         });
-        let kit = match self.voice.kit(meter).await {
+        let session = self.live().id.to_string();
+        let kit = match self.voice.kit(meter, &session).await {
             Ok(kit) => kit,
             Err(why) => {
                 self.notice(&why);

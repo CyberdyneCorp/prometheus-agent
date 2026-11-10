@@ -144,7 +144,12 @@ other files, made with a minisign key or a Sigstore keyless identity:
 (an OpenID sign-in, or GitHub Actions' ambient token in CI).
 `skills.signature_policy` decides installs: `warn` (default) installs
 unsigned skills with a warning, `require` refuses unsigned ones (exit 77),
-and an invalid signature is always refused (`invalid signature`).
+and an invalid signature is always refused (`invalid signature`). A valid
+signature only proves that someone signed, so it counts as verified only
+when the signer is listed in `skills.trusted_signers` (minisign key ids or
+public keys, `sigstore:<subject> via <issuer>` identities); any other
+signer is `untrusted`: refused under `require`, installed with a warning
+under `warn`, and recorded in `skills.lock` either way.
 `prometheus skills show <name>` prints the source, ref, digest, signer and
 trust.
 

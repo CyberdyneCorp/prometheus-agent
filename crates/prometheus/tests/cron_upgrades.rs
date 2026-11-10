@@ -786,6 +786,83 @@ fn a_pinned_job_does_not_inherit_the_profile_fallback_chain() {
     );
 }
 
+/// A job's own `fallback_chain` (spec: model-providers, Scoped fallback
+/// chains for pinned owners): a pinned job that declares a chain falls
+/// back along it, and an unpinned job declaring `none` (`[]`) does not
+/// inherit the profile's chain.
+#[test]
+fn a_declared_job_chain_is_used_and_an_empty_one_disables_fallback() {
+    let home = cron_home(OVERLOADED_CHEAP);
+    common::append_config(
+        home.path(),
+        "\n[agent]\napi_max_retries = 1\nauto_recovery_cycles = 0\n\n\
+         [[fallback.chain]]\nprovider = \"mock\"\nmodel = \"backup\"\n",
+    );
+    ok(&run(
+        home.path(),
+        &["config", "set", "model.default", "cheap-model"],
+    ));
+    let declared = add(
+        home.path(),
+        &[
+            "every 1d",
+            "--prompt",
+            "report",
+            "--provider",
+            "mock",
+            "--model",
+            "cheap-model",
+            "--fallback",
+            "mock/backup",
+        ],
+    );
+    let disabled = add(
+        home.path(),
+        &["every 1d", "--prompt", "report", "--fallback", "none"],
+    );
+    let job = &json(home.path(), &["cron", "list"])["jobs"];
+    assert!(
+        job.as_array()
+            .unwrap()
+            .iter()
+            .any(|j| j["fallback_chain"] == json!([])),
+        "{job}"
+    );
+    let fell_back = run_job(home.path(), &declared);
+    assert_eq!(
+        (&fell_back["status"], &fell_back["output"]),
+        (&json!("ok"), &json!("BACKUP ANSWERED")),
+        "{fell_back}"
+    );
+    let failed = run_job(home.path(), &disabled);
+    assert_eq!(failed["status"], "failed", "{failed}");
+    assert!(
+        failed["error"]
+            .as_str()
+            .is_some_and(|e| e.contains("overloaded")),
+        "{failed}"
+    );
+    let unknown = run(
+        home.path(),
+        &[
+            "cron",
+            "add",
+            "every 1d",
+            "--prompt",
+            "r",
+            "--fallback",
+            "nosuch/m",
+            "--yes",
+        ],
+    );
+    assert_ne!(unknown.status.code(), Some(0));
+    assert!(
+        stderr(&unknown).contains("fallback_chain[0]: unknown provider 'nosuch'"),
+        "{}",
+        stderr(&unknown)
+    );
+}
+
 /// Scenario: Sub-hourly job does not alert every tick, for a pinned job
 /// in a profile with a fallback chain: the chain is not the job's, so a
 /// benched pinned provider still holds it.

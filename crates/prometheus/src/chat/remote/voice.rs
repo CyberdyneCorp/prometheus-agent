@@ -38,7 +38,8 @@ impl Chat<'_, '_> {
                 status.show(Some(crate::chat::voice::meter_line(level, &key)));
             }
         });
-        let kit = match self.voice.kit(meter).await {
+        let session = self.attached.session.clone();
+        let kit = match self.voice.kit(meter, &session).await {
             Ok(kit) => kit,
             Err(why) => {
                 self.screen.notice(&why);

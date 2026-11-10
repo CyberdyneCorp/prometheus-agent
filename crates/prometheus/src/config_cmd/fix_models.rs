@@ -23,7 +23,8 @@ pub(super) fn run(ctx: &Context<'_>, apply: bool, no_backup: bool) -> Result<u8,
     let store = Arc::new(pmt_store::Store::open(&scope)?);
     let jobs = retired::scan(scope.config(), &registry, &store)?;
     let file = scope.profile().config_file();
-    let config_writes = !rewrite.sets.is_empty() || rewrite.chain.is_some();
+    let config_writes =
+        !rewrite.sets.is_empty() || rewrite.chain.is_some() || !rewrite.presets.is_empty();
     let job_writes = jobs.iter().any(|j| j.pin.rewrite.is_some());
     let mut backup = None;
     if apply && config_writes {
@@ -66,6 +67,9 @@ fn write_config(file: &pmt_config::ConfigFile, rewrite: &Rewrite) -> Result<(), 
     }
     if let Some(chain) = &rewrite.chain {
         file.set_fallback_chain(chain)?;
+    }
+    for (name, preset) in &rewrite.presets {
+        file.set_moa_slots(name, preset)?;
     }
     Ok(())
 }

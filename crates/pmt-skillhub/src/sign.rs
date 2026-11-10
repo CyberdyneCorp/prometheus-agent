@@ -50,8 +50,10 @@ pub struct SignatureFile {
 /// What a skill's signature says.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Signature {
-    /// Valid, by this identity.
+    /// Valid, by this trusted identity.
     Verified(String),
+    /// Valid, but by an identity `skills.trusted_signers` does not list.
+    UntrustedSigner(String),
     /// No `SKILL.sig`.
     Unsigned,
     /// A `SKILL.sig` that does not verify, with why.
@@ -64,9 +66,33 @@ impl Signature {
     pub fn record(&self) -> String {
         match self {
             Self::Verified(identity) => format!("verified:{identity}"),
+            Self::UntrustedSigner(identity) => format!("untrusted:{identity}"),
             Self::Unsigned => "unsigned".to_owned(),
             Self::Invalid(_) => "invalid".to_owned(),
         }
+    }
+}
+
+/// `signature` judged against `trusted` (`skills.trusted_signers`): a
+/// valid signature by a signer not listed becomes
+/// [`Signature::UntrustedSigner`]. A signature only proves that someone
+/// signed; this says who may.
+#[must_use]
+pub fn trusted(signature: Signature, trusted: &[String]) -> Signature {
+    let Signature::Verified(identity) = signature else {
+        return signature;
+    };
+    let listed = trusted.iter().any(|entry| {
+        let entry = entry.trim();
+        let as_key = key_id(entry).map(|id| format!("minisign:{id}"));
+        entry == identity
+            || format!("minisign:{}", entry.to_uppercase()) == identity
+            || as_key.as_deref() == Some(identity.as_str())
+    });
+    if listed {
+        Signature::Verified(identity)
+    } else {
+        Signature::UntrustedSigner(identity)
     }
 }
 

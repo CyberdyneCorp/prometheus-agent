@@ -79,6 +79,17 @@ replay has no secrets (placeholders stand in for the names the
 configuration references), no plugins, MCP servers or language servers,
 and never runs a tool: a call without a recorded result is a divergence.
 
+A recording is shared data, so the recorded configuration only shapes the
+conversation (agent, prompt, compression, tool output). Everything that
+reaches outside the replay comes from the invoking profile (or the
+defaults): provider routes, endpoints and keys, approvals, sandbox and
+terminal backend, hooks, MCP, plugins and telemetry. Two tables are
+merged: a recorded `[models.<name>]` keeps its context window, output cap
+and capabilities but never its route or price, and each `[budgets]` limit
+is the tighter of the recorded and the invoking profile's. `model-live`
+fills real secrets only for the names the invoking profile's own model
+route references.
+
 At the first model request whose hash the recording lacks, or the first
 tool call whose name or arguments differ from the recorded call, the
 replay prints `divergence at step <n> (model.call)` (or `tool.call`) and a

@@ -26,8 +26,9 @@ fn job(jobs: &Jobs, library: &Library, url: &str, data: &[u8]) -> pmt_local::dow
         "qwen-x-Q4_K_M.gguf",
         data.len() as u64,
         &sha(data),
-        &library.dir("qwen-x"),
-    );
+        &library.dir("qwen-x").unwrap(),
+    )
+    .unwrap();
     let model = Model {
         id: "qwen-x".to_owned(),
         source: Source::Catalog,
@@ -133,7 +134,11 @@ async fn an_interrupted_download_is_partial_and_not_usable() {
     assert_eq!(err.exit_code(), 66);
     assert!(err.message().contains("partial"), "{}", err.message());
     assert!(
-        !library.dir("qwen-x").join("qwen-x-Q4_K_M.gguf").exists(),
+        !library
+            .dir("qwen-x")
+            .unwrap()
+            .join("qwen-x-Q4_K_M.gguf")
+            .exists(),
         "nothing published"
     );
     assert_eq!(jobs.view(&job).state, "interrupted");
@@ -203,7 +208,7 @@ async fn a_pause_stops_at_a_chunk_boundary_and_resume_finishes_the_file() {
         .count();
     assert_eq!(ranged, 1, "the resume asked for the missing range");
     assert_eq!(
-        std::fs::read(library.dir("qwen-x").join("qwen-x-Q4_K_M.gguf")).unwrap(),
+        std::fs::read(library.dir("qwen-x").unwrap().join("qwen-x-Q4_K_M.gguf")).unwrap(),
         data
     );
 }
@@ -243,7 +248,13 @@ async fn a_file_that_differs_from_its_pin_is_never_published() {
         "{}",
         err.message()
     );
-    assert!(!library.dir("qwen-x").join("qwen-x-Q4_K_M.gguf").exists());
+    assert!(
+        !library
+            .dir("qwen-x")
+            .unwrap()
+            .join("qwen-x-Q4_K_M.gguf")
+            .exists()
+    );
     assert!(
         !jobs.partial(&job.id, 0).exists(),
         "the bad bytes were deleted"

@@ -196,6 +196,7 @@ impl ChildLauncher {
             subagent_id: plan.subagent_id.clone(),
             depth: plan.depth,
             pinned,
+            fallback_chain: delegation.fallback_chain.clone(),
             tools: plan.grant.tools.clone(),
             capabilities,
             system: format!(

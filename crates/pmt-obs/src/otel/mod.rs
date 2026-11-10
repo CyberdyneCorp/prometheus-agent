@@ -24,7 +24,7 @@ use std::sync::{OnceLock, RwLock};
 
 pub use context::TraceContext;
 pub use export::{ExportSettings, ExportStats, Exporter};
-pub use spans::{Identity, SessionTrace, Standalone};
+pub use spans::{Identity, RedactorLoader, SessionTrace, Standalone};
 
 use pmt_config::scope::ProfileScope;
 use pmt_core::error::{Error, codes};

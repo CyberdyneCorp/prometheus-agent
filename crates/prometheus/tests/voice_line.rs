@@ -291,3 +291,126 @@ fn the_tui_speaks_the_first_sentence_while_the_reply_generates() {
     assert_eq!(code, Some(0), "{screen}");
     spoken_while_generating(&audio, first, answered);
 }
+
+/// `pre_transcription` (spec: plugin-system, Streaming and lifecycle
+/// observer hooks) fires after the STT provider is resolved: the sample
+/// WASM plugin answers `language = "fr"` and the command transcriber,
+/// which prints the language it was given, hears it.
+#[test]
+fn a_pre_transcription_plugin_sets_the_language_the_provider_gets() {
+    let home = voice_home("heard-{language}", "edge");
+    let dir = home.path().join("profiles/default/plugins/lang");
+    pmt_plugins::testkit::install("testing-hooks", &dir);
+    std::fs::write(
+        dir.join("plugin.toml"),
+        "manifest_version = 1\nid = \"lang\"\nversion = \"1.0.0\"\nkind = \"wasm\"\n\
+         description = \"test\"\nlicense = \"MIT\"\nrequires_prometheus = \"*\"\n\
+         worlds = [\"hook@1.2\"]\n\n[capabilities]\nhooks = [\"pre_transcription\"]\n",
+    )
+    .unwrap();
+    let h = home.path();
+    ok(&run(
+        h,
+        &["plugins", "adopt", dir.to_str().unwrap(), "--grant", "all"],
+    ));
+    ok(&run(h, &["plugins", "enable", "lang", "--grant", "all"]));
+    for (key, value) in [
+        ("hooks", "\"pre_transcription\""),
+        (
+            "mode_pre_transcription",
+            "\"modify:{'language':'fr','provider':'x'}\"",
+        ),
+    ] {
+        ok(&run(
+            h,
+            &[
+                "config",
+                "set",
+                &format!("plugins.entries.lang.{key}"),
+                value,
+            ],
+        ));
+    }
+    let audio = audio_dir(h, Some("Desk Microphone"), &["question.wav"]);
+    let mut p = spawn(h, &audio);
+    prompt(&mut p);
+    p.send_line("/voice on").unwrap();
+    p.expect("Voice mode on").unwrap();
+    prompt(&mut p);
+    p.send("\x02").unwrap();
+    p.expect("› heard-fr").unwrap();
+    p.expect("mock: heard-fr").unwrap();
+    p.expect("Listening stopped").unwrap();
+    prompt(&mut p);
+    exit(p);
+}
+
+/// Speech outside a tool call is billed like the tool's (spec:
+/// observability, Per-call usage ledger): a reply spoken by a metered
+/// provider (OpenAI, here a loopback mock) in voice mode writes a
+/// `tool.text_to_speech` row to the session's ledger; the on-device
+/// command transcriber writes none.
+#[test]
+fn a_metered_spoken_reply_is_in_the_usage_ledger() {
+    use wiremock::{Mock, MockServer, ResponseTemplate, matchers::path};
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let server = runtime.block_on(async {
+        let server = MockServer::start().await;
+        Mock::given(path("/v1/audio/speech"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(vec![0_u8; 4_800]))
+            .mount(&server)
+            .await;
+        server
+    });
+    let home = voice_home("What time is it in Lisbon", "openai");
+    let h = home.path();
+    common::append_config(
+        h,
+        &format!("\n[tts.openai]\nbase_url = \"{}/v1\"\n", server.uri()),
+    );
+    ok(&common::run_with_stdin(
+        h,
+        &["secrets", "set", "OPENAI_API_KEY"],
+        "sk-test-0123456789abcdef\n",
+    ));
+    let audio = audio_dir(h, Some("Desk Microphone"), &["question.wav"]);
+    let mut p = spawn(h, &audio);
+    prompt(&mut p);
+    p.send_line("/voice on").unwrap();
+    p.expect("Voice mode on").unwrap();
+    prompt(&mut p);
+    p.send_line("/voice tts").unwrap();
+    p.expect("spoken replies: on").unwrap();
+    prompt(&mut p);
+    p.send("\x02").unwrap();
+    p.expect("mock: What time is it in Lisbon").unwrap();
+    p.expect("Listening stopped").unwrap();
+    prompt(&mut p);
+    exit(p);
+    let spoke = runtime.block_on(server.received_requests()).unwrap();
+    assert!(
+        !spoke.is_empty(),
+        "the reply was not spoken by the provider"
+    );
+    let db = rusqlite::Connection::open_with_flags(
+        h.join("profiles/default/state.db"),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .unwrap();
+    let rows: Vec<(String, String, String)> = db
+        .prepare("SELECT purpose, provider, billing_source FROM usage_ledger WHERE purpose LIKE 'tool.%'")
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert!(!rows.is_empty(), "no speech row");
+    assert!(
+        rows.iter().all(
+            |(purpose, provider, billing)| purpose == "tool.text_to_speech"
+                && provider == "openai"
+                && billing == "api_key:openai"
+        ),
+        "{rows:?}"
+    );
+}

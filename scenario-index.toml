@@ -317,6 +317,9 @@ capabilities = [
 "Window around a hit" = ["crates/pmt-agent/tests/agent_tools.rs::session_search_returns_the_window_around_a_hit"]
 "Profile isolation" = ["crates/pmt-agent/tests/agent_tools.rs::session_search_never_sees_another_profile"]
 
+[observability."Gateway sessions share the trajectory grammar"]
+"Same script, different surface" = ["crates/prometheus/tests/trajectory_gateway.rs::a_webhook_session_records_the_same_trajectory_as_chat"]
+
 [observability."One trajectory grammar for every surface"]
 "Same script, interactive and one-shot" = ["crates/prometheus/tests/trajectory_surfaces.rs::the_interactive_and_one_shot_trajectories_match"]
 
@@ -3048,7 +3051,7 @@ capabilities = [
 "Ledger distinguishes subscription calls" = ["crates/prometheus/tests/provider_routing_cli.rs::ledger_distinguishes_subscription_calls"]
 
 [model-providers."Scoped fallback chains for pinned owners"]
-"Pinned cron job" = ["crates/prometheus/tests/cron_upgrades.rs::a_pinned_job_does_not_inherit_the_profile_fallback_chain", "crates/pmt-providers/tests/providers/routing.rs::pinned_cron_job_gets_no_inherited_chain"]
+"Pinned cron job" = ["crates/prometheus/tests/cron_upgrades.rs::a_pinned_job_does_not_inherit_the_profile_fallback_chain", "crates/pmt-providers/tests/providers/routing.rs::pinned_cron_job_gets_no_inherited_chain", "crates/prometheus/tests/cron_upgrades.rs::a_declared_job_chain_is_used_and_an_empty_one_disables_fallback", "crates/prometheus/tests/delegation_chat.rs::a_pinned_child_uses_the_declared_child_chain_and_an_empty_one_disables_it"]
 
 [model-providers."Provider health scoring (upgrade)"]
 "Repeated overloads lower the score" = ["crates/prometheus/tests/provider_routing_cli.rs::repeated_overloads_lower_the_score", "crates/pmt-providers/tests/providers/routing.rs::repeated_overloads_lower_the_score"]
@@ -3552,6 +3555,7 @@ capabilities = [
 
 [skills."Skill signatures and provenance (upgrade)"]
 "Invalid signature is never accepted" = ["crates/pmt-skillhub/tests/hub/install.rs::invalid_signature_is_never_accepted", "crates/pmt-skillhub/tests/hub/keyless.rs::a_keyless_signature_verifies_offline_and_tampering_breaks_it"]
+"Untrusted signer under require" = ["crates/pmt-skillhub/tests/hub/install.rs::require_accepts_only_trusted_signers"]
 
 [skills."Hub discovery, inspection, updates and audit"]
 "Local edits survive update" = ["crates/pmt-skillhub/tests/hub/maintain.rs::local_edits_survive_update", "crates/prometheus/tests/skills_hub.rs::local_edits_survive_update_and_inspect_installs_nothing"]

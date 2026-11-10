@@ -87,6 +87,9 @@ pub struct ChildSpec {
     pub depth: u32,
     /// It runs on a model of its own (no inherited fallback chain).
     pub pinned: bool,
+    /// `delegation.fallback_chain`, the chain children declare
+    /// (`Some(vec![])`: fallback off).
+    pub fallback_chain: Option<Vec<pmt_config::schema::FallbackEntry>>,
     /// Exactly its tools.
     pub tools: Vec<String>,
     /// Its capabilities (already narrowed).

@@ -211,3 +211,21 @@ fn publish_refuses_lint_findings_and_dangerous_skills() {
     assert!(err.message().contains("dangerous"), "{}", err.message());
     assert!(env.fake.requests().is_empty());
 }
+
+/// `--source browse-sh` searches the browse.sh catalog live, and its
+/// results install as `browse-sh:<slug>`.
+#[test]
+fn browse_sh_answers_a_live_search() {
+    let env = Env::new();
+    env.fake.json(
+        "/browse-sh/api/skills",
+        &json!({"skills": [
+            {"slug": "web-scraper", "name": "Web scraper", "description": "Scrape pages.", "installCount": 7},
+            {"slug": "other", "name": "Other", "description": "Unrelated."}
+        ]}),
+    );
+    let found = search::search(&env.hub, "scrape", Some("browse-sh"));
+    let ids: Vec<&str> = found.iter().map(|l| l.identifier.as_str()).collect();
+    assert_eq!(ids, ["browse-sh:web-scraper"]);
+    assert_eq!(found[0].installs, Some(7));
+}

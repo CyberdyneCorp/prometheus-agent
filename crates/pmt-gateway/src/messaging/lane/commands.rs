@@ -204,6 +204,7 @@ impl Lane {
             routing: call.routing.clone(),
             reply_to: None,
             voice: false,
+            billed: Vec::new(),
             sent_at: jiff::Timestamp::now(),
             addressed: true,
         };
@@ -245,6 +246,7 @@ impl Lane {
                     routing,
                     reply_to: None,
                     voice: false,
+                    billed: Vec::new(),
                     sent_at: jiff::Timestamp::now(),
                     addressed: true,
                 };
@@ -323,6 +325,7 @@ impl Lane {
             routing,
             reply_to: None,
             voice: false,
+            billed: Vec::new(),
             sent_at: jiff::Timestamp::now(),
             addressed: true,
         };

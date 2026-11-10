@@ -15,8 +15,8 @@ use std::sync::Arc;
 use pmt_config::Config;
 use pmt_core::capability::{Capability as Cap, canonical};
 use pmt_tools::descriptor::{
-    CallContext, Effect, HandlerFuture, Owner, RegisteredTool, ResourceClaims, ToolDescriptor,
-    ToolHandler,
+    CallContext, Effect, HandlerFuture, Owner, PathClaim, RegisteredTool, ResourceClaims,
+    ToolDescriptor, ToolHandler,
 };
 use pmt_tools::result::ToolResult;
 use pmt_tools::usage;
@@ -70,7 +70,11 @@ fn descriptor() -> ToolDescriptor {
     );
     d.effect = Effect::Workspace;
     d.idempotent = false;
-    d.claims = Some(ResourceClaims::none());
+    // The gate refuses device paths and asks before protected files, and
+    // the dispatcher orders the write against other writes of the path.
+    d.claims = Some(ResourceClaims::writes(vec![PathClaim::Argument(
+        "/output_path".into(),
+    )]));
     d.capabilities = vec![Cap::parse("net.connect:*").expect("valid capability")];
     d
 }
@@ -174,6 +178,11 @@ impl MediaSession {
     /// is dangling (its target may be anywhere) and refused. The host
     /// writes the file, so this check is the only guard it gets.
     fn output_path(&self, requested: &str) -> Result<PathBuf, String> {
+        // Before anything resolves it: on Windows resolving a UNC path
+        // opens it (an SMB connection that leaks credentials).
+        if let Some(refusal) = pmt_tools::files::guards::device_namespace(requested) {
+            return Err(refusal);
+        }
         let setup = self.setup();
         let path = canonical(&setup.workspace.join(requested));
         let cache = canonical(&audio_dir(&setup.profile_dir));
