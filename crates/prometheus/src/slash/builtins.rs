@@ -690,6 +690,16 @@ pub static BUILTINS: &[Command] = &[
         Effect::None,
     ),
     command(
+        "curator",
+        &[],
+        Tools,
+        "The skill curator: status, run [--consolidate] [--dry-run], pause, resume, pin, unpin, archive, restore, ledger",
+        &[text("args")],
+        CHATS,
+        Immediate,
+        Effect::None,
+    ),
+    command(
         "refine",
         &[],
         Tools,

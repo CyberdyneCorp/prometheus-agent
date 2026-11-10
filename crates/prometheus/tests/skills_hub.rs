@@ -317,3 +317,84 @@ fn hub_verbs_work_from_a_chat_slash_command() {
     common::pty::exit(p);
     assert!(skills_dir(home.path()).join("notes/SKILL.md").exists());
 }
+
+#[test]
+fn skills_config_needs_a_terminal() {
+    let home = temp_home();
+    let fake = FakeHub::start();
+    let out = run(home.path(), &fake, &["skills", "config"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(
+        stderr(&out).contains("prometheus skills enable|disable <name> [--platform P]"),
+        "{}",
+        stderr(&out)
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn disable_a_skill_for_telegram_only() {
+    use expectrl::Expect as _;
+    let home = temp_home();
+    let dir = skills_dir(home.path()).join("excalidraw");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("SKILL.md"), skill_md("excalidraw", "Draw.")).unwrap();
+    let mut p = common::pty::spawn(home.path(), &["skills", "config"]);
+    p.expect("excalidraw").unwrap();
+    p.send_line("excalidraw telegram").unwrap();
+    p.expect("Disabled skill 'excalidraw' on telegram.")
+        .unwrap();
+    p.send_line("prometheus-agent").unwrap();
+    p.expect("cannot be disabled").unwrap();
+    p.send_line("").unwrap();
+    p.expect("Changes apply from the next session.").unwrap();
+    p.expect(expectrl::Eof).unwrap();
+    let config = std::fs::read_to_string(home.path().join("profiles/default/config.toml")).unwrap();
+    assert!(config.contains("telegram = [\"excalidraw\"]"), "{config}");
+    let listed: Value = serde_json::from_str(&ok(&command(home.path())
+        .args(["--json", "skills", "list"])
+        .output()
+        .unwrap()))
+    .unwrap();
+    let row = listed["skills"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["name"] == "excalidraw")
+        .cloned()
+        .unwrap();
+    // Off only on telegram: still listed (and loaded) everywhere else.
+    assert_eq!(row["status"], "disabled on telegram", "{row}");
+    assert!(!config.contains("disabled = [\"excalidraw\"]"), "{config}");
+}
+
+#[test]
+fn official_catalog_is_browsable_offline() {
+    let home = temp_home();
+    let fake = FakeHub::start();
+    let out = ok(&run(
+        home.path(),
+        &fake,
+        &["skills", "browse", "--source", "official"],
+    ));
+    assert!(out.contains("official/mlops/axolotl"), "{out}");
+    assert_eq!(
+        out.lines().filter(|l| l.starts_with("official/")).count(),
+        149,
+        "{out}"
+    );
+    assert!(
+        fake.requests().is_empty(),
+        "browsing the official catalog went online"
+    );
+    ok(&run(
+        home.path(),
+        &fake,
+        &["skills", "install", "official/mlops/axolotl"],
+    ));
+    assert!(
+        skills_dir(home.path())
+            .join("mlops/axolotl/SKILL.md")
+            .exists()
+    );
+}

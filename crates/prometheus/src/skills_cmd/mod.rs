@@ -6,6 +6,7 @@
 
 pub mod args;
 mod bundles;
+mod config;
 pub(crate) mod hub;
 mod list;
 mod maintain;
@@ -171,6 +172,7 @@ fn run_hub(command: &SkillsCommand, env: &Env, ctx: &Context<'_>) -> Option<Resu
         SkillsCommand::Publish { dir, to, repo } => share::publish(env, dir, *to, repo.as_deref()),
         SkillsCommand::Snapshot { command } => share::snapshot(env, command),
         SkillsCommand::Untrust { root } => untrust(env, root),
+        SkillsCommand::Config => config::config(env),
         _ => return None,
     })
 }

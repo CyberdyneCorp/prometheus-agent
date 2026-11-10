@@ -9,6 +9,7 @@ pub mod api_hooks;
 pub mod backend;
 pub mod browser;
 pub mod code;
+pub mod credentials;
 pub mod cron;
 pub mod delegation;
 pub mod documents;
@@ -878,6 +879,7 @@ impl Factory {
             processes: &processes,
             snapshots: snapshots::opener(&self.scope, &self.store, id),
             input_roots: input_roots(&self.scope, skills),
+            skills: Arc::clone(skills),
             automatic_trust: automatic_trust(session),
             cron_notepad: cron.and_then(|c| c.notepad.as_deref()),
             store: &self.store,

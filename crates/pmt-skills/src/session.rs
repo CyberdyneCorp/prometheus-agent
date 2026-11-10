@@ -112,6 +112,7 @@ pub struct SkillsSession {
     frozen: Mutex<Frozen>,
     last_note: Mutex<Option<Difference>>,
     loaded: Mutex<BTreeMap<String, Vec<String>>>,
+    notices: Mutex<BTreeSet<String>>,
     review: Option<ReviewState>,
     scanned: Mutex<Scan>,
     reviewing: AtomicBool,
@@ -130,6 +131,7 @@ impl SkillsSession {
             }),
             last_note: Mutex::new(None),
             loaded: Mutex::new(BTreeMap::new()),
+            notices: Mutex::new(BTreeSet::new()),
             review,
             scanned: Mutex::new(Scan::default()),
             reviewing: AtomicBool::new(false),
@@ -303,6 +305,18 @@ impl SkillsSession {
     #[must_use]
     pub fn granted_secrets(&self) -> BTreeSet<String> {
         lock(&self.loaded).values().flatten().cloned().collect()
+    }
+
+    /// The skills loaded in this session.
+    #[must_use]
+    pub fn loaded_skills(&self) -> Vec<String> {
+        lock(&self.loaded).keys().cloned().collect()
+    }
+
+    /// Records that `notice` was shown; `false` when it already was (a
+    /// notice is shown once per session).
+    pub fn first_notice(&self, notice: &str) -> bool {
+        lock(&self.notices).insert(notice.to_owned())
     }
 
     /// The terminal's secret source: the declared secrets of the loaded

@@ -105,6 +105,8 @@ pub enum SkillsCommand {
         #[command(subcommand)]
         command: SnapshotCommand,
     },
+    /// Pick which skills are enabled, globally and per surface or adapter (interactive).
+    Config,
     /// Remove a trusted project root.
     Untrust {
         /// The repository root.

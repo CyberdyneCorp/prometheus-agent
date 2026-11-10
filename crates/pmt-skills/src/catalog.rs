@@ -302,13 +302,31 @@ impl Catalog {
                 ));
             }
         }
-        self.skills
+        let found = self
+            .skills
             .iter()
             .find(|s| s.rel == query)
             .or_else(|| self.find(query))
-            .cloned()
-            .ok_or(Missing::NotFound)
+            .cloned();
+        match (found, hermes_alias(query)) {
+            (Some(skill), _) => Ok(skill),
+            (None, Some(alias)) => self.lookup(&alias),
+            (None, None) => Err(Missing::NotFound),
+        }
     }
+}
+
+/// The Prometheus name of a Hermes skill name (spec: skills, Bundled and
+/// official skill catalog content: migrated jobs and configs keep
+/// resolving): `hermes-agent-skill-authoring` became
+/// `prometheus-skill-authoring`, every other `hermes-*` `prometheus-*`.
+#[must_use]
+pub fn hermes_alias(name: &str) -> Option<String> {
+    if name == "hermes-agent-skill-authoring" {
+        return Some("prometheus-skill-authoring".to_owned());
+    }
+    name.strip_prefix("hermes-")
+        .map(|rest| format!("prometheus-{rest}"))
 }
 
 fn join(base: &std::path::Path, rel: &str) -> std::path::PathBuf {

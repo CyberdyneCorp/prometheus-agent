@@ -120,6 +120,12 @@ pub enum Command {
         #[command(subcommand)]
         command: SkillsCommand,
     },
+    /// The skill curator: status, passes, pins, archive and restore, ledger and rollback.
+    Curator {
+        /// The curator subcommand.
+        #[command(subcommand)]
+        command: crate::curator_cmd::CuratorCommand,
+    },
     /// The skills and memories the agent learned, as a timeline; list, delete, edit.
     #[command(visible_aliases = ["learning", "memory-graph"])]
     Journey(crate::journey_cmd::JourneyArgs),
@@ -848,6 +854,13 @@ pub enum GrantsCommand {
         /// Only grants of this subject (`plugin:<id>@<digest>`, `mcp:<server>`, `skill:<name>`, `profile`).
         #[arg(long, value_name = "SUBJECT")]
         subject: Option<String>,
+    },
+    /// Grant a capability for good (for example `skill:gcloud-ops credential_files`).
+    Add {
+        /// The holder (`skill:<name>`, `mcp:<server>`, `plugin:<id>@<digest>`, `profile`).
+        subject: String,
+        /// The capability (`credential_files`, `secrets.read:<NAME>`, ...).
+        capability: String,
     },
     /// Remove a grant; running sessions lose it at their next tool call.
     Revoke {

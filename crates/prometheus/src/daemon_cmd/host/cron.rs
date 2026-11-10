@@ -110,6 +110,8 @@ async fn profile_loop(host: Arc<DaemonHost>, name: String, profile: Arc<Profile>
                 pruned = Some(std::time::Instant::now());
             }
             tick(&runner, &permits, &sender).await;
+            // A due automatic curator pass runs on its own thread.
+            let _ = crate::curator_cmd::auto::check(&scope, &profile.store, &host.launch);
         }
         // A webhook's queued run wakes the loop early.
         tokio::select! {

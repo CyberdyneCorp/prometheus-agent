@@ -582,6 +582,33 @@ impl Models {
     ) -> Result<Option<String>, Error> {
         const SYSTEM: &str = "Write a short title (at most 6 words) for the conversation \
             below. Answer with the title only, no quotes or punctuation at the end.";
+        let reply = self
+            .ask_auxiliary(AuxTask::Title, session, SYSTEM, conversation, 40)
+            .await?;
+        Ok(reply.and_then(|text| {
+            text.lines()
+                .map(|l| l.trim().trim_matches(['"', '\'', '.']).trim())
+                .find(|l| !l.is_empty())
+                .map(str::to_owned)
+        }))
+    }
+
+    /// One answer of the `task` auxiliary route (default: the profile's
+    /// main route) to `user` under `system`, accounted to `session`;
+    /// `None` when no route answers.
+    ///
+    /// # Errors
+    ///
+    /// The resolution error of a pinned route; the call's failure or
+    /// timeout.
+    pub async fn ask_auxiliary(
+        &self,
+        task: AuxTask,
+        session: pmt_core::id::SessionId,
+        system: &str,
+        user: &str,
+        max_output_tokens: u64,
+    ) -> Result<Option<String>, Error> {
         let main_target = self.primary(&RouteFlags::default()).await?;
         let resolver = self.resolver();
         let main = resolver
@@ -593,38 +620,31 @@ impl Models {
             main: main.as_ref(),
             health: &*self.setup.health,
         };
-        let Some(route) = auxiliary::resolve(AuxTask::Title, &AuxArgs::default(), &ctx).await?
-        else {
+        let Some(route) = auxiliary::resolve(task, &AuxArgs::default(), &ctx).await? else {
             return Ok(None);
         };
         let request = Request {
             system: vec![pmt_providers::request::SystemBlock {
-                text: SYSTEM.to_owned(),
+                text: system.to_owned(),
                 cache_breakpoint: false,
             }],
             messages: vec![pmt_providers::request::Message::text(
                 pmt_providers::request::Role::User,
-                conversation,
+                user,
             )],
-            max_output_tokens: Some(40),
+            max_output_tokens: Some(max_output_tokens),
             ..Request::default()
         };
-        let context = CallContext::new(session, &AuxTask::Title.purpose());
+        let context = CallContext::new(session, &task.purpose());
         let reply = tokio::time::timeout(route.timeout, self.aux.call(&route, &request, &context))
             .await
             .map_err(|_| {
                 Error::new(
                     &pmt_core::error::codes::PROVIDER_CALL_FAILED,
-                    "the title model did not answer in time",
+                    format!("the {} model did not answer in time", task.as_str()),
                 )
             })??;
-        let title = reply
-            .text
-            .lines()
-            .map(|l| l.trim().trim_matches(['"', '\'', '.']).trim())
-            .find(|l| !l.is_empty())
-            .map(str::to_owned);
-        Ok(title)
+        Ok(Some(reply.text))
     }
 
     /// The session's approval guardian on its `approval` auxiliary route.

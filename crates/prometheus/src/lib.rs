@@ -25,6 +25,7 @@ pub mod context;
 pub mod context_engine;
 pub mod cron_cmd;
 pub mod cron_host;
+pub mod curator_cmd;
 pub mod daemon_client;
 #[cfg(feature = "gateway")]
 pub mod daemon_cmd;

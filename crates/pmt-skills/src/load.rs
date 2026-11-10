@@ -117,6 +117,9 @@ pub async fn load(session: &SkillsSession, skill: &Skill, config: &Config) -> Lo
         body = format!("{}\n\n{note}\n", body.trim_end());
     }
     session.mark_loaded(&skill.name, status.names());
+    if let Some(note) = crate::credentials::load_note(session, skill) {
+        body = format!("{}\n\n{note}\n", body.trim_end());
+    }
     Loaded {
         body,
         linked_files: linked_files(&skill.dir.files()),

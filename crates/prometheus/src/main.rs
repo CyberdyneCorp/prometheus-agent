@@ -112,7 +112,9 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
+/// `--set` overrides plus the ones `--accept-hooks` and `--safe-mode`
+/// stand for.
+fn global_set(cli: &Cli) -> Vec<String> {
     let mut set = cli.set.clone();
     if cli.accept_hooks {
         set.push("hooks.auto_accept=true".to_owned());
@@ -120,6 +122,11 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
     if cli.safe_mode {
         set.push("plugins.safe_mode=true".to_owned());
     }
+    set
+}
+
+fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
+    let set = global_set(cli);
     let ctx = Context {
         home_flag: cli.home.as_deref(),
         launch,
@@ -147,6 +154,7 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Replay { command }) => prometheus::replay_cmd::run(command, &ctx),
         Some(Command::Verify(args)) => prometheus::verify_cmd::run(args, &ctx),
         Some(Command::Skills { command }) => skills_cmd::run(command, &ctx),
+        Some(Command::Curator { command }) => prometheus::curator_cmd::run(command, &ctx),
         Some(Command::Memory { command }) => memory_cmd::run(command, &ctx),
         Some(Command::Journey(args)) => prometheus::journey_cmd::run(args, &ctx, cli.no_color),
         Some(Command::Profile { command }) => profile_cmd::run(command, &ctx),

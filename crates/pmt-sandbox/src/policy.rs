@@ -176,6 +176,7 @@ impl Policy {
             | Capability::ToolsOverride(_)
             | Capability::Ui(_)
             | Capability::BrowserRealProfile
+            | Capability::CredentialFiles
             | Capability::Plugin { .. } => {}
         }
     }

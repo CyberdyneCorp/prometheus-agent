@@ -3565,3 +3565,33 @@ capabilities = [
 
 [skills."Skill publishing and snapshots"]
 "Snapshot round trip" = ["crates/pmt-skillhub/tests/hub/discover.rs::snapshot_round_trip", "crates/prometheus/tests/skills_hub.rs::taps_and_snapshots_round_trip_between_profiles"]
+
+# Group 53.3 + 53.5 curator parts (configuration, scheduling, transitions,
+# backups, CLI, /curator, ledger, rollback, purge, reports)
+[skills."Curator configuration and scheduling"]
+"Invalid interval is a validation error" = ["crates/pmt-config/src/validate.rs::curator_seconds_below_one_name_their_key"]
+
+[skills."Curator transitions, scope and backups"]
+"Every real pass is backed up" = ["crates/pmt-skills/tests/skills/curator.rs::every_real_pass_is_backed_up_and_only_managed_skills_move", "crates/prometheus/tests/curator_cli.rs::every_real_pass_is_backed_up_and_purge_is_explicit"]
+
+[skills."Curator CLI"]
+"Dry run changes nothing" = ["crates/pmt-skills/tests/skills/curator.rs::dry_run_changes_nothing", "crates/prometheus/tests/curator_cli.rs::dry_run_changes_nothing_and_prints_the_plan"]
+
+[skills."/curator slash command"]
+"Pin from a messaging chat" = { tests = ["crates/prometheus/tests/curator_cli.rs::pin_from_a_messaging_chat"], note = "proven on the debug-build file adapter's platform (`test`), the gateway path every adapter (Telegram included) shares" }
+
+[skills."Curator audit ledger, single-edit rollback, purge and reports"]
+"Undo one agent edit" = ["crates/pmt-skills/tests/skills/curator.rs::undo_one_agent_edit", "crates/prometheus/tests/curator_cli.rs::rollback_undoes_one_entry_and_restore_brings_a_skill_back"]
+"Purge is never automatic" = ["crates/pmt-skills/tests/skills/curator.rs::purge_is_never_automatic", "crates/prometheus/tests/curator_cli.rs::every_real_pass_is_backed_up_and_purge_is_explicit"]
+
+# Group 53.5 (skill enablement, credential files, catalog content)
+[skills."Interactive per-surface skill enablement"]
+"Disable a skill for Telegram only" = ["crates/prometheus/tests/skills_hub.rs::disable_a_skill_for_telegram_only", "crates/prometheus/tests/skills_hub.rs::skills_config_needs_a_terminal"]
+
+[skills."Skill credential file passthrough"]
+"Read-only mount into Docker" = ["crates/prometheus/tests/container_backend.rs::a_granted_credential_file_is_mounted_read_only"]
+"No grant, no file" = ["crates/prometheus/tests/container_backend.rs::without_the_grant_no_credential_file_is_passed"]
+
+[skills."Bundled and official skill catalog content"]
+"Official catalog is browsable offline" = ["crates/prometheus/tests/skills_hub.rs::official_catalog_is_browsable_offline", "crates/pmt-skills/tests/skills/catalog_content.rs::the_required_skills_are_embedded"]
+"Hermes name alias resolves" = ["crates/pmt-skills/tests/skills/catalog_content.rs::hermes_name_alias_resolves"]

@@ -74,6 +74,8 @@ pub struct EnvInputs<'a> {
     /// Host directories whose files a command on a backend without the
     /// host filesystem may name (attachments, skills): uploaded on demand.
     pub input_roots: Vec<std::path::PathBuf>,
+    /// The session's skills (credential files for remote backends).
+    pub skills: Arc<pmt_skills::session::SkillsSession>,
     /// The working directory's git root is trusted for language servers
     /// (not for cron jobs and kanban workers).
     pub automatic_trust: bool,
@@ -386,6 +388,16 @@ fn remote_parts(
     if let (Some(terminal), Some(container)) = (terminal, &remote.container) {
         let activity: Arc<dyn pmt_sandbox::container::Activity> = Arc::clone(terminal) as _;
         container.attach(Arc::downgrade(&activity));
+    }
+    if let Some(terminal) = terminal {
+        let hook = match &remote.container {
+            Some(container) => super::credentials::container_hook(
+                &inputs.skills,
+                super::credentials::staging_dir(inputs.scope, container.container().name()),
+            ),
+            None => super::credentials::remote_hook(&inputs.skills, Arc::clone(&remote.exec)),
+        };
+        terminal.add_before_command(hook);
     }
     if let Some(terminal) = terminal
         && !remote.target.descriptor().uses_host_filesystem

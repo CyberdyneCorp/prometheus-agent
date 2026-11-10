@@ -272,7 +272,7 @@ fn container(
         user_home.unwrap_or_else(|| Path::new("/")),
         scope.home(),
     )?;
-    let spec = ContainerSpec {
+    let mut spec = ContainerSpec {
         runtime,
         profile: scope.name().to_string(),
         session: session_id.to_owned(),
@@ -288,6 +288,10 @@ fn container(
         user: options.run_as_host_user.then(host_user).flatten(),
         idle_lifetime: Duration::from_secs(config.terminal.idle_lifetime_secs),
     };
+    // Skill credential files appear read-only under the container's
+    // Prometheus home (spec: skills, Skill credential file passthrough).
+    spec.volumes
+        .push(super::credentials::volume(scope, &spec.name()));
     Ok(Arc::new(ContainerTransport::new(
         Pool::process().container(spec),
     )))

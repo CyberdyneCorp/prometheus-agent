@@ -5,9 +5,9 @@
 //! profile unless the user ejects a skill (`crate::eject`). Tests build
 //! their own trees with [`Bundled::from_files`].
 
-use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::sync::{Arc, LazyLock};
+use std::io::Read as _;
+use std::sync::{Arc, LazyLock, OnceLock};
 
 use crate::digest;
 
@@ -15,29 +15,63 @@ mod generated {
     include!(concat!(env!("OUT_DIR"), "/bundled_files.rs"));
 }
 
+/// One file: deflated in the binary (inflated on first read), or plain.
+#[derive(Debug, Clone)]
+enum Content {
+    Deflated {
+        packed: &'static [u8],
+        plain: OnceLock<Arc<[u8]>>,
+    },
+    Plain(Arc<[u8]>),
+}
+
+impl Content {
+    fn bytes(&self) -> &[u8] {
+        match self {
+            Self::Plain(bytes) => bytes,
+            Self::Deflated { packed, plain } => plain.get_or_init(|| {
+                let mut out = Vec::new();
+                // The build wrote these; a failure would be a build bug,
+                // shown as an empty file rather than a crash.
+                let _ = flate2::read::DeflateDecoder::new(*packed).read_to_end(&mut out);
+                out.into()
+            }),
+        }
+    }
+}
+
+impl PartialEq for Content {
+    fn eq(&self, other: &Self) -> bool {
+        self.bytes() == other.bytes()
+    }
+}
+
+impl Eq for Content {}
+
 /// An embedded file tree.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Bundled {
-    files: BTreeMap<String, Cow<'static, [u8]>>,
+    files: BTreeMap<String, Content>,
 }
 
-static BUILTIN: LazyLock<Arc<Bundled>> = LazyLock::new(|| {
+fn embedded(files: &'static [(&'static str, &'static [u8])]) -> Arc<Bundled> {
     Arc::new(Bundled {
-        files: generated::FILES
+        files: files
             .iter()
-            .map(|(path, bytes)| ((*path).to_owned(), Cow::Borrowed(*bytes)))
+            .map(|(path, packed)| {
+                let content = Content::Deflated {
+                    packed,
+                    plain: OnceLock::new(),
+                };
+                ((*path).to_owned(), content)
+            })
             .collect(),
     })
-});
+}
 
-static OFFICIAL: LazyLock<Arc<Bundled>> = LazyLock::new(|| {
-    Arc::new(Bundled {
-        files: generated::OFFICIAL_FILES
-            .iter()
-            .map(|(path, bytes)| ((*path).to_owned(), Cow::Borrowed(*bytes)))
-            .collect(),
-    })
-});
+static BUILTIN: LazyLock<Arc<Bundled>> = LazyLock::new(|| embedded(generated::FILES));
+
+static OFFICIAL: LazyLock<Arc<Bundled>> = LazyLock::new(|| embedded(generated::OFFICIAL_FILES));
 
 impl Bundled {
     /// The official optional catalog shipped with this binary
@@ -62,7 +96,7 @@ impl Bundled {
         Self {
             files: files
                 .into_iter()
-                .map(|(p, c)| (p.into(), Cow::Owned(c.into())))
+                .map(|(p, c)| (p.into(), Content::Plain(c.into().into())))
                 .collect(),
         }
     }
@@ -91,7 +125,7 @@ impl Bundled {
         } else {
             format!("{dir}/{rel}")
         };
-        self.files.get(&path).map(AsRef::as_ref)
+        self.files.get(&path).map(Content::bytes)
     }
 
     /// The subtree of the skill directories named `dir_name` (a bundled
@@ -118,7 +152,7 @@ impl Bundled {
         digest::tree(
             self.files
                 .iter()
-                .filter_map(|(p, c)| relative(p, dir).map(|r| (r.to_owned(), c.as_ref()))),
+                .filter_map(|(p, c)| relative(p, dir).map(|r| (r.to_owned(), c.bytes()))),
         )
     }
 }

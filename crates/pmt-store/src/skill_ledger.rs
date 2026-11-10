@@ -267,6 +267,24 @@ impl Store {
         self.get_blob(&blob)
     }
 
+    /// The latest session activity of the profile (`None`: no session).
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`.
+    pub fn profile_last_activity(&self) -> Result<Option<Timestamp>, Error> {
+        self.read(|conn| {
+            let ms: Option<i64> = conn
+                .query_row("SELECT max(last_activity_at) FROM sessions", [], |r| {
+                    r.get(0)
+                })
+                .map_err(sql)?;
+            ms.map(Timestamp::from_millisecond)
+                .transpose()
+                .map_err(|e| corrupt("sessions.last_activity_at", e))
+        })
+    }
+
     /// The curator's state.
     ///
     /// # Errors

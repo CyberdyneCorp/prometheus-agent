@@ -11,6 +11,7 @@ Commands:
   config       Read, change, validate and explain the profile's config.toml
   secrets      Store, list and remove the profile's secrets (values never on the command line)
   skills       List, inspect, enable, lint and maintain the profile's skills and skill bundles
+  curator      The skill curator: status, passes, pins, archive and restore, ledger and rollback
   journey      The skills and memories the agent learned, as a timeline; list, delete, edit [aliases: learning, memory-graph]
   memory       Inspect, edit, export and import what the agent remembers (built-in memory)
   grants       List and revoke the profile's permanent capability grants and approvals

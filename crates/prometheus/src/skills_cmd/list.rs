@@ -4,6 +4,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use pmt_core::error::{Error, codes};
+use pmt_skills::bundled::Bundled;
 use pmt_skills::catalog::{Missing, Provenance};
 use pmt_skills::layout::{self, SKILL_FILE};
 use pmt_skills::lint::{self, Finding, LintContext};
@@ -278,13 +279,47 @@ fn skill_dirs(paths: &[PathBuf]) -> Result<Vec<PathBuf>, Error> {
     Ok(dirs)
 }
 
+/// Lints the skills found below `paths`.
+fn lint_paths(
+    paths: &[PathBuf],
+    lint_one: &dyn Fn(&str, &str) -> Vec<Finding>,
+) -> Result<Vec<Linted>, Error> {
+    let mut results = Vec::new();
+    for dir in skill_dirs(paths)? {
+        let file = dir.join(SKILL_FILE);
+        let text = std::fs::read_to_string(&file)
+            .map_err(|e| Error::new(&codes::SKILL_IO, format!("{}: {e}", file.display())))?;
+        let dir_name = dir
+            .canonicalize()
+            .unwrap_or_else(|_| dir.clone())
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        results.push(Linted {
+            path: file.display().to_string(),
+            findings: lint_one(&text, &dir_name),
+        });
+    }
+    Ok(results)
+}
+
+/// The official catalog's skill names: a related skill resolves when the
+/// profile has it or the catalog offers it.
+fn official_names() -> std::collections::BTreeSet<String> {
+    pmt_skills::official::skills(&Bundled::official())
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect()
+}
+
 /// `prometheus skills lint [<path>...] [--strict]`; without paths, every
 /// skill of the profile (bundled included).
 pub(super) fn lint(env: &Env, paths: &[PathBuf], strict: bool) -> Result<u8, Error> {
     let catalog = env.catalog();
     let chars =
         usize::try_from(env.scope.config().skills.index_description_chars).unwrap_or(usize::MAX);
-    let resolves = |n: &str| catalog.lookup(n).is_ok();
+    let official = official_names();
+    let resolves = |n: &str| catalog.lookup(n).is_ok() || official.contains(n);
     let lint_one = |text: &str, dir_name: &str| {
         lint::lint(
             text,
@@ -305,21 +340,7 @@ pub(super) fn lint(env: &Env, paths: &[PathBuf], strict: bool) -> Result<u8, Err
             });
         }
     } else {
-        for dir in skill_dirs(paths)? {
-            let file = dir.join(SKILL_FILE);
-            let text = std::fs::read_to_string(&file)
-                .map_err(|e| Error::new(&codes::SKILL_IO, format!("{}: {e}", file.display())))?;
-            let dir_name = dir
-                .canonicalize()
-                .unwrap_or_else(|_| dir.clone())
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default();
-            results.push(Linted {
-                path: file.display().to_string(),
-                findings: lint_one(&text, &dir_name),
-            });
-        }
+        results = lint_paths(paths, &lint_one)?;
     }
     let found = results.iter().any(|r| !r.findings.is_empty());
     let code = u8::from(strict && found);

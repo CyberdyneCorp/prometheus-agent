@@ -3417,6 +3417,7 @@ dependencies = [
 name = "pmt-skills"
 version = "0.1.0"
 dependencies = [
+ "flate2",
  "jiff",
  "pmt-agent",
  "pmt-config",
@@ -3433,12 +3434,14 @@ dependencies = [
  "serde_json",
  "sha2 0.11.1",
  "similar",
+ "tar",
  "tempfile",
  "tokio",
  "toml",
  "tracing",
  "tracing-subscriber",
  "ulid",
+ "zstd",
 ]
 
 [[package]]

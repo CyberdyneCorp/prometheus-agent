@@ -167,6 +167,84 @@ with `skills.signing_key` when set, and opens a pull request from a fork
 branch (never a push to the default branch); `--to clawhub` submits it to
 ClawHub (`CLAWHUB_TOKEN`). The pull request or submission URL is printed.
 
+### Choosing skills per surface
+
+`prometheus skills config` lists every visible skill with where it is off
+and toggles one per answer: `excalidraw` toggles it everywhere
+(`skills.disabled`), `excalidraw telegram` only on Telegram
+(`skills.platform_disabled.telegram`). Changes apply from the next session;
+`prometheus-agent` cannot be disabled. Without a terminal it exits 2 and
+points to `prometheus skills enable|disable <name> [--platform P]`.
+
+### Credential files
+
+A skill may declare files it needs on the execution backend:
+
+```yaml
+metadata:
+  prometheus:
+    credential_files:
+      - path: creds/gcp.json        # relative to the profile home
+        description: Service account key.
+```
+
+They reach a container backend (mounted read-only under the container's
+`/prometheus/`) or a remote backend (uploaded under `~/.prometheus/` before
+each command, removed when the session ends) only while the skill is
+loaded and only with the grant `prometheus grants add skill:gcloud-ops
+credential_files`. Without it the session says so once; a missing file is
+reported once (`credential file missing: <path>`). The host session's file
+tools never read them.
+
+### The embedded catalogs
+
+The binary ships the bundled skills (always available, read-only; eject to
+edit) and the official optional catalog: `prometheus skills browse --source
+official` lists it offline and `prometheus skills install
+official/<category>/<name>` installs one. Skills ported from Hermes are
+renamed `hermes-*` → `prometheus-*`; the old names still resolve (a
+migrated job naming `hermes-agent` gets `prometheus-agent`).
+
+## The curator
+
+The curator keeps the agent's own skills tidy. It manages only skills the
+agent created ([`skill_manage`](../reference/tools.md#skill_manage)) or that you adopted with `prometheus curator
+adopt <name>`; it never touches pinned skills, skills a scheduled job names
+(paused jobs included), or hub, plugin, external-directory and bundled
+skills. A pass marks a skill `stale` after `curator.stale_after_secs`
+without use, makes a stale skill active again once it is used, and moves a
+skill unused for `curator.archive_after_secs` to `skills/.archive/` (it
+never deletes). Every real pass first writes a backup of the skills tree to
+`skills/.backups/` (the newest `curator.backup_keep` are kept) and every
+run writes `logs/curator/<UTC timestamp>/run.json` and `REPORT.md`.
+
+Automatic passes run from the daemon's scheduler (or `prometheus cron
+tick`) when `curator.enabled`, not paused, the last pass is older than
+`curator.interval_secs` and the profile has been idle for
+`curator.min_idle_secs`; the first observation only records the time.
+`curator.consolidate` (or `run --consolidate`) also asks the
+`auxiliary.curator` model to merge overlapping skills; the report lists
+the rename map `old → new`.
+
+```text
+$ prometheus curator status
+$ prometheus curator run --dry-run      # the planned transitions; nothing changes
+$ prometheus curator run --sync         # a pass now (without --sync it runs in the background)
+$ prometheus curator pin deploy-runbook # pause | resume | unpin | adopt | archive | restore
+$ prometheus curator prune --days 60    # archive managed skills idle that long
+$ prometheus curator purge --days 180   # delete archived skills that old; never automatic
+$ prometheus curator ledger --skill deploy
+$ prometheus curator rollback L7        # undo one entry; without an id, restore the newest backup
+```
+
+Every skill change (the curator's, the agent's [`skill_manage`](../reference/tools.md#skill_manage) writes and
+yours from the CLI) is recorded in the skill ledger with the content of
+each touched file before and after (`skills.ledger_max_bytes` caps it,
+oldest entries first). `rollback L<n>` restores exactly the files that entry
+touched and records a `rollback` entry first; if that record fails nothing
+changes. `/curator` offers the same commands in any chat; `/curator run`
+posts its summary to the chat when the pass ends.
+
 ## Using skills in a chat
 
 - `/<skill> [instruction]` loads a skill into your message; `/skill <name>`

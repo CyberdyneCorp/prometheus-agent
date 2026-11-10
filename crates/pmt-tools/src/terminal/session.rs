@@ -171,6 +171,7 @@ pub struct Terminal {
     runs: AtomicU64,
     secret_source: std::sync::RwLock<Option<SecretSource>>,
     path_source: std::sync::RwLock<Option<PathSource>>,
+    before_hooks: std::sync::RwLock<Vec<BeforeCommand>>,
     sudo: std::sync::RwLock<Option<Arc<Sudo>>>,
     inputs: std::sync::RwLock<Option<Arc<Inputs>>>,
 }
@@ -261,6 +262,7 @@ impl Terminal {
             runs: AtomicU64::new(0),
             secret_source: std::sync::RwLock::new(None),
             path_source: std::sync::RwLock::new(None),
+            before_hooks: std::sync::RwLock::new(Vec::new()),
             sudo: std::sync::RwLock::new(None),
             inputs: std::sync::RwLock::new(None),
             setup,
@@ -552,11 +554,36 @@ impl Terminal {
     /// directory in the backend's own namespace (the hook knows where that
     /// backend's files are).
     async fn before_command(&self, command: &str, cwd: &Path) {
-        let Some(hook) = self.setup.before_command.clone() else {
+        let added = self
+            .before_hooks
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        let hooks: Vec<BeforeCommand> = self
+            .setup
+            .before_command
+            .iter()
+            .cloned()
+            .chain(added)
+            .collect();
+        if hooks.is_empty() {
             return;
-        };
+        }
         let (command, cwd) = (command.to_owned(), cwd.to_path_buf());
-        let _ = pmt_core::spawn::blocking(move || hook(&command, &cwd)).await;
+        let _ = pmt_core::spawn::blocking(move || {
+            for hook in &hooks {
+                hook(&command, &cwd);
+            }
+        })
+        .await;
+    }
+
+    /// Adds a hook run before every later command (after the setup's).
+    pub fn add_before_command(&self, hook: BeforeCommand) {
+        self.before_hooks
+            .write()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(hook);
     }
 
     /// A foreground command on a plugin backend.
