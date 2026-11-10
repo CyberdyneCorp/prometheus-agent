@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use pmt_config::ProfileScope;
 use pmt_config::schema::JournalMode;
 use pmt_core::error::{Error, codes};
-use rusqlite::{Connection, OpenFlags, OptionalExtension};
+use rusqlite::{Connection, OpenFlags};
 use serde::Serialize;
 
 use crate::error::sql;
@@ -156,22 +156,10 @@ pub fn swap_in(scope: &ProfileScope, recovered: &Path) -> Result<PathBuf, Error>
     Ok(kept)
 }
 
-/// The journal mode recorded with `sessions journal-mode`, if any.
-pub(crate) fn recorded_journal_mode(database: &Path) -> Option<JournalMode> {
-    if !database.exists() {
-        return None;
-    }
-    let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX;
-    let conn = Connection::open_with_flags(database, flags).ok()?;
-    let value: Option<String> = conn
-        .query_row(
-            "SELECT value FROM store_meta WHERE key = ?1",
-            [JOURNAL_MODE_KEY],
-            |row| row.get(0),
-        )
-        .optional()
-        .ok()?;
-    match value.as_deref() {
+/// The journal mode a `store_meta` value recorded with `sessions
+/// journal-mode` names, if any.
+pub(crate) fn recorded_journal_mode(value: Option<&str>) -> Option<JournalMode> {
+    match value {
         Some("wal") => Some(JournalMode::Wal),
         Some("delete") => Some(JournalMode::Delete),
         _ => None,

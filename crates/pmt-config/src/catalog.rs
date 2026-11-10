@@ -10,9 +10,14 @@ use serde_json::Value;
 
 use crate::schema::Config;
 
-static SCHEMA: LazyLock<Value> = LazyLock::new(|| {
-    serde_json::to_value(schemars::schema_for!(Config)).expect("the schema serializes")
-});
+/// The checked-in `schema/config.schema.json`, which `cargo xtask gen`
+/// writes from [`generate`] (and `--check` keeps current). Every process
+/// validates its config against the schema at start; parsing the file costs
+/// a fraction of deriving the schema from the types each time.
+static CHECKED_IN: &str = include_str!("../../../schema/config.schema.json");
+
+static SCHEMA: LazyLock<Value> =
+    LazyLock::new(|| serde_json::from_str(CHECKED_IN).expect("the checked-in schema is JSON"));
 
 /// The schema of a value that may be anything (`additionalProperties: true`).
 static ANY: LazyLock<Value> = LazyLock::new(|| Value::Object(serde_json::Map::new()));
@@ -22,6 +27,17 @@ static ANY: LazyLock<Value> = LazyLock::new(|| Value::Object(serde_json::Map::ne
 #[must_use]
 pub fn schema() -> &'static Value {
     &SCHEMA
+}
+
+/// The schema derived from [`Config`]: what `cargo xtask gen` writes to
+/// `schema/config.schema.json`, the file [`schema`] reads.
+///
+/// # Panics
+///
+/// Never: a derived schema always serializes.
+#[must_use]
+pub fn generate() -> Value {
+    serde_json::to_value(schemars::schema_for!(Config)).expect("the schema serializes")
 }
 
 /// A schema as pretty JSON with a trailing newline: the bytes of
@@ -358,7 +374,17 @@ pub fn type_label(schema: &'static Value) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{ApplyClass, keys, lookup, suggestions};
+    use super::{ApplyClass, generate, keys, lookup, schema, suggestions};
+
+    /// Validation reads the checked-in schema; it must be the one the
+    /// config types define, or a new key would be rejected as unknown.
+    #[test]
+    fn the_checked_in_schema_is_the_derived_one() {
+        assert!(
+            *schema() == generate(),
+            "schema/config.schema.json is stale: run cargo xtask gen"
+        );
+    }
 
     #[test]
     fn nested_key_has_default_description_and_apply_class() {

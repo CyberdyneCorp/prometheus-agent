@@ -15,19 +15,22 @@ mod generated {
     include!(concat!(env!("OUT_DIR"), "/bundled_files.rs"));
 }
 
-/// One file: deflated in the binary (inflated on first read), or plain.
+/// One file: deflated in the binary (inflated on first read), plain in
+/// the binary, or plain in memory (test trees).
 #[derive(Debug, Clone)]
 enum Content {
     Deflated {
         packed: &'static [u8],
         plain: OnceLock<Arc<[u8]>>,
     },
+    Static(&'static [u8]),
     Plain(Arc<[u8]>),
 }
 
 impl Content {
     fn bytes(&self) -> &[u8] {
         match self {
+            Self::Static(bytes) => bytes,
             Self::Plain(bytes) => bytes,
             Self::Deflated { packed, plain } => plain.get_or_init(|| {
                 let mut out = Vec::new();
@@ -54,16 +57,20 @@ pub struct Bundled {
     files: BTreeMap<String, Content>,
 }
 
-fn embedded(files: &'static [(&'static str, &'static [u8])]) -> Arc<Bundled> {
+fn embedded(files: &'static [(&'static str, &'static [u8], bool)]) -> Arc<Bundled> {
     Arc::new(Bundled {
         files: files
             .iter()
-            .map(|(path, packed)| {
-                let content = Content::Deflated {
-                    packed,
-                    plain: OnceLock::new(),
+            .map(|&(path, bytes, deflated)| {
+                let content = if deflated {
+                    Content::Deflated {
+                        packed: bytes,
+                        plain: OnceLock::new(),
+                    }
+                } else {
+                    Content::Static(bytes)
                 };
-                ((*path).to_owned(), content)
+                (path.to_owned(), content)
             })
             .collect(),
     })

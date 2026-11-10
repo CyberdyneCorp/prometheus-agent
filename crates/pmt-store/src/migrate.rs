@@ -263,6 +263,8 @@ pub(crate) struct Meta {
     pub profile_name: Option<String>,
     pub schema_version: u32,
     pub min_read_version: u32,
+    /// The journal mode `sessions journal-mode` recorded, if any.
+    pub journal_mode: Option<String>,
 }
 
 /// Reads `store_meta`; `None` for an empty database (a store being
@@ -285,6 +287,7 @@ pub(crate) fn read_meta(conn: &Connection) -> Result<Option<Meta>, Error> {
             profile_name: None,
             schema_version: 0,
             min_read_version: 0,
+            journal_mode: None,
         }));
     }
     let get = |key: &str| -> Result<Option<String>, Error> {
@@ -304,6 +307,7 @@ pub(crate) fn read_meta(conn: &Connection) -> Result<Option<Meta>, Error> {
         profile_name: get("profile_name")?,
         schema_version: number("schema_version")?,
         min_read_version: number("min_read_version")?,
+        journal_mode: get(crate::recover::JOURNAL_MODE_KEY)?,
     }))
 }
 
