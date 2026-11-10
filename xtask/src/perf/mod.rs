@@ -69,7 +69,7 @@ fn check_overhead(root: &Path) -> Result<(), String> {
     let tasks = overhead::tasks(root)?;
     let measured = overhead::measure(&binary, &root.join("target/perf-overhead"), &tasks)?;
     println!(
-        "perf: smoke suite {:.3}s with recording off, {:.3}s with recording and logging, {:.3}s with OTLP export (sum of each task's fastest of {})",
+        "perf: smoke suite {:.3}s with recording off, {:.3}s with recording and logging, {:.3}s with OTLP export (sum of each task's median of {})",
         measured.off,
         measured.recording,
         measured.export,

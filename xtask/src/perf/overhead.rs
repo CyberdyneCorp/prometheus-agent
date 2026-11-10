@@ -9,15 +9,19 @@
 //! variants are measured task by task: every task runs alone (the hidden
 //! `smoke-suite --skip` leaves the others out) in each variant, the
 //! variants interleaved, [`RUNS`] times, and a variant's time is the sum of
-//! each task's fastest run, the measurement least disturbed by the rest of
-//! the machine. A difference under [`NOISE_FLOOR_SECS`] never counts. Two
+//! each task's median run. The median, not the fastest run: on a shared CI
+//! runner the fastest of a few runs is whichever run got lucky, and how
+//! lucky differs between variants by more than the budgets (CI saw the
+//! same build pass at +0.4% and fail at +3.3%); the median of [`RUNS`]
+//! ignores every disturbed run as long as most runs are not. A difference
+//! under [`NOISE_FLOOR_SECS`] never counts. Two
 //! tasks are left out of every variant ([`UNTIMED`]): `interrupt` finds
 //! its running turn through the trajectory, which the reference variant
 //! does not record, and `error_recovery` spends most of its time in the
 //! retry's full-jitter backoff, a uniformly random wait of up to a second
-//! (`classify::RetryPolicy`): even the fastest of five runs differs by
-//! hundreds of milliseconds between variants, several times the budgets,
-//! whatever observability costs.
+//! (`classify::RetryPolicy`): the fastest and the median of a few runs
+//! alike differ by a hundred milliseconds or more between variants,
+//! several times the budgets, whatever observability costs.
 
 use std::io::{BufReader, Write as _};
 use std::path::Path;
@@ -27,8 +31,8 @@ use std::time::Instant;
 /// Smoke tasks the gate does not time (see the module docs).
 const UNTIMED: &[&str] = &["interrupt", "error_recovery"];
 
-/// Runs of each variant.
-pub(crate) const RUNS: usize = 5;
+/// Runs of each task in each variant (odd, so the median is one run).
+pub(crate) const RUNS: usize = 11;
 /// Allowed slowdown with recording and logging on.
 pub(crate) const RECORDING_BUDGET: f64 = 1.03;
 /// Allowed slowdown with OpenTelemetry export on as well.
@@ -40,7 +44,8 @@ pub(crate) const NOISE_FLOOR_SECS: f64 = 0.05;
 const OFF: &str =
     "\n[observability.trajectories]\nenabled = false\n\n[logging]\nlevel = \"error\"\n";
 
-/// The fastest smoke-suite wall time of each variant, in seconds.
+/// The smoke-suite wall time of each variant (sum of per-task medians), in
+/// seconds.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct Overhead {
     /// Recording and logging off.
@@ -97,8 +102,8 @@ pub(crate) fn measure(binary: &Path, scratch: &Path, tasks: &[String]) -> Result
         let config = scratch.join(format!("{name}.toml"));
         std::fs::write(&config, extra).map_err(|e| format!("{}: {e}", config.display()))?;
     }
-    // best[variant][task]: the task's fastest run in that variant.
-    let mut best = vec![vec![f64::MAX; tasks.len()]; variants.len()];
+    // runs[variant][task]: the task's wall time in each run of that variant.
+    let mut runs = vec![vec![Vec::with_capacity(RUNS); tasks.len()]; variants.len()];
     for run in 0..RUNS {
         for (t, task) in tasks.iter().enumerate() {
             for (v, (name, _)) in variants.iter().enumerate() {
@@ -108,16 +113,41 @@ pub(crate) fn measure(binary: &Path, scratch: &Path, tasks: &[String]) -> Result
                     task,
                     tasks,
                 };
-                best[v][t] = best[v][t].min(time_task(binary, &suite)?);
+                runs[v][t].push(time_task(binary, &suite)?);
             }
         }
     }
-    let total = |v: usize| best[v].iter().sum();
+    for (t, task) in tasks.iter().enumerate() {
+        let ms = |v: usize| median(&runs[v][t]) * 1000.0;
+        println!(
+            "perf: overhead {task}: off {:.1} ms, recording {:.1} ms, export {:.1} ms (median of {RUNS})",
+            ms(0),
+            ms(1),
+            ms(2)
+        );
+    }
     Ok(Overhead {
-        off: total(0),
-        recording: total(1),
-        export: total(2),
+        off: variant_time(&runs[0]),
+        recording: variant_time(&runs[1]),
+        export: variant_time(&runs[2]),
     })
+}
+
+/// A variant's time: the sum of each task's median run.
+fn variant_time(runs: &[Vec<f64>]) -> f64 {
+    runs.iter().map(|task| median(task)).sum()
+}
+
+/// The median of `samples` (the mean of the middle two for an even count).
+fn median(samples: &[f64]) -> f64 {
+    let mut sorted = samples.to_vec();
+    sorted.sort_by(f64::total_cmp);
+    let mid = sorted.len() / 2;
+    if sorted.len() % 2 == 1 {
+        sorted[mid]
+    } else {
+        f64::midpoint(sorted[mid - 1], sorted[mid])
+    }
 }
 
 /// The smoke-suite tasks the gate times: every one but [`UNTIMED`].
@@ -233,7 +263,19 @@ fn skip_request(reader: &mut impl std::io::BufRead) -> Option<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Overhead, evaluate};
+    use super::{Overhead, evaluate, variant_time};
+
+    /// One disturbed run (a runner hiccup) moves neither variant: the
+    /// gate compares typical runs, not the luckiest or unluckiest one.
+    #[test]
+    fn a_single_disturbed_run_does_not_move_a_variant() {
+        let steady = vec![vec![0.20, 0.21, 0.20, 0.22, 0.21]; 3];
+        let mut disturbed = steady.clone();
+        disturbed[1][2] = 0.90;
+        disturbed[2][0] = 0.05;
+        assert!((variant_time(&steady) - variant_time(&disturbed)).abs() < 1e-9);
+        assert!((variant_time(&steady) - 0.63).abs() < 1e-9);
+    }
 
     /// Scenario: Overhead gate. A change that made trajectory writing
     /// synchronous on the turn path shows as a recording variant more than
