@@ -484,6 +484,13 @@ jobs:
           cache-key: perf
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
 
+      # The overhead gate runs the smoke suite, whose terminal steps run in
+      # the OS sandbox; Ubuntu 24.04's AppArmor refuses the unprivileged
+      # user namespaces it needs (the terminal tool then fails "sandbox
+      # unavailable"), as in the check job.
+      - name: Allow user namespaces for the terminal sandbox
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
       # A push to main checks the absolute budgets only.
       - name: Check the absolute budgets
         if: github.event_name == 'push'
