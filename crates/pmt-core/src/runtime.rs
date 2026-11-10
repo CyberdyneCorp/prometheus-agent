@@ -226,7 +226,7 @@ impl WriterLock {
         let file = lock_file_options()
             .open(&path)
             .map_err(|e| Error::io_doing(&codes::HOME_IO, "cannot access", &path, &e))?;
-        match file.try_lock() {
+        match crate::file_lock::try_lock(&file) {
             Ok(()) => {}
             Err(TryLockError::WouldBlock) => return Err(held_error(home)),
             Err(TryLockError::Error(e)) => {

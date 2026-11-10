@@ -137,7 +137,7 @@ fn lock(backups: &Path) -> Result<File, Error> {
         .open(&path)
         .map_err(|e| Error::io(&codes::BACKUP_IO, &path, &e))?;
     fsutil::private_file(&path);
-    match file.try_lock() {
+    match pmt_core::file_lock::try_lock(&file) {
         Ok(()) => Ok(file),
         Err(std::fs::TryLockError::WouldBlock) => Err(Error::new(
             &codes::BACKUP_RUNNING,

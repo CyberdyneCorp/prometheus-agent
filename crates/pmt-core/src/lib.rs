@@ -13,6 +13,7 @@ pub mod doctor;
 pub mod env;
 pub mod error;
 pub mod exit;
+pub mod file_lock;
 pub mod hooks;
 pub mod human;
 pub mod id;

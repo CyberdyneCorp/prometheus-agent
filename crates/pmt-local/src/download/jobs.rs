@@ -346,7 +346,7 @@ impl Jobs {
             .write(true)
             .open(&path)
             .map_err(|e| io_error(&path, &e))?;
-        match file.try_lock() {
+        match pmt_core::file_lock::try_lock(&file) {
             Ok(()) => Ok(file),
             Err(std::fs::TryLockError::WouldBlock) => Err(Error::new(
                 &codes::LOCAL_BUSY,

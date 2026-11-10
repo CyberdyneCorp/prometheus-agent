@@ -1,2 +1,10 @@
 # Product and protocol names that pedantic `doc_markdown` would otherwise ask to backtick.
 doc-valid-idents = ["DevTools", "OpenAI", "CPython", "SQLite", "WebAssembly", "JavaScript", "TypeScript", "..", "GitHub", "AppContainer", "SonarSource", "ChatGPT", "OpenID", "SearXNG", "OpenRouter", "SuperGrok", "MiniMax", "MoA", "ROCm"]
+
+# std's file locks are unsupported on Android (Termux, a Tier 2 target).
+disallowed-methods = [
+    { path = "std::fs::File::try_lock", reason = "unsupported on Android; use pmt_core::file_lock::try_lock" },
+    { path = "std::fs::File::lock", reason = "unsupported on Android; use pmt_core::file_lock::lock" },
+    { path = "std::fs::File::try_lock_shared", reason = "unsupported on Android; extend pmt_core::file_lock" },
+    { path = "std::fs::File::lock_shared", reason = "unsupported on Android; extend pmt_core::file_lock" },
+]

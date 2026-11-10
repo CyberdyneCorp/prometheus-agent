@@ -33,6 +33,10 @@ ulid.workspace = true
 [target.'cfg(unix)'.dependencies]
 nix.workspace = true
 
+# flock(2) for the file locks: std's File::try_lock is unsupported there.
+[target.'cfg(target_os = "android")'.dependencies]
+rustix.workspace = true
+
 [dev-dependencies]
 proptest.workspace = true
 # Paused time for prompt-timeout tests.

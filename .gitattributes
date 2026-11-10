@@ -1,0 +1,3 @@
+# The smoke suite is bundled into the binary and graded byte for byte:
+# its files keep LF line endings on every checkout (Windows included).
+crates/prometheus/evals/** text eol=lf

@@ -39,8 +39,7 @@ impl Lease {
             ulid::Ulid::generate()
         ));
         let file = File::create(&path).map_err(|e| Error::io(&codes::RUNTIME_IO, &path, &e))?;
-        file.lock()
-            .map_err(|e| Error::io(&codes::RUNTIME_IO, &path, &e))?;
+        pmt_core::file_lock::lock(&file).map_err(|e| Error::io(&codes::RUNTIME_IO, &path, &e))?;
         Ok(Self {
             file: Some(file),
             path,
@@ -86,7 +85,7 @@ fn is_held(path: &Path) -> bool {
     };
     // A lock that cannot even be tried is treated as held: never collect
     // what might be in use.
-    !matches!(file.try_lock(), Ok(()))
+    !matches!(pmt_core::file_lock::try_lock(&file), Ok(()))
 }
 
 /// Removes the lease directory of a version that no longer exists.

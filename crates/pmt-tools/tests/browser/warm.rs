@@ -39,7 +39,7 @@ pub(crate) fn warm(executable: &Path, dir: &Path, run: &str, timeout: Duration) 
     std::fs::create_dir_all(dir).unwrap();
     let lock = File::create(dir.join("lock")).unwrap();
     // Held until `lock` drops at the end of this call.
-    lock.lock().unwrap();
+    pmt_core::file_lock::lock(&lock).unwrap();
     let marker = dir.join("warmed");
     let stamp = format!("{run}\n{}", executable.display());
     if std::fs::read_to_string(&marker).is_ok_and(|text| text == stamp) {

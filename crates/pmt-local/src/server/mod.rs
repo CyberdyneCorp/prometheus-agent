@@ -235,7 +235,7 @@ fn start(home: &Path, helper: &HelperCommand, engine: &Installed) -> Result<Serv
         .write(true)
         .open(&lock_path)
         .map_err(|e| io_error(&lock_path, &e))?;
-    lock.lock().map_err(|e| io_error(&lock_path, &e))?;
+    pmt_core::file_lock::lock(&lock).map_err(|e| io_error(&lock_path, &e))?;
     if let Some(found) = recorded(home) {
         return Ok(found);
     }

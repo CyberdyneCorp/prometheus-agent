@@ -51,7 +51,7 @@ pub fn python_root() -> PathBuf {
     std::fs::create_dir_all(&root).unwrap();
     // Not `<root>/.lock`: uv locks that file itself while installing.
     let guard = std::fs::File::create(root.with_extension("lock")).unwrap();
-    guard.lock().unwrap();
+    pmt_core::file_lock::lock(&guard).unwrap();
     let probe = root.parent().unwrap().join("pybridge-probe");
     let link = probe.join("runtimes").join("python");
     std::fs::create_dir_all(link.parent().unwrap()).unwrap();

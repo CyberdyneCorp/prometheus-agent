@@ -137,7 +137,7 @@ pub fn lock_beside(path: &Path) -> io::Result<File> {
         }
         Err(e) => return Err(e),
     };
-    file.lock()?;
+    crate::file_lock::lock(&file)?;
     Ok(file)
 }
 

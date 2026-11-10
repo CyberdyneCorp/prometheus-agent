@@ -151,6 +151,8 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["f
 landlock = "0.4"
 seccompiler = "0.5"
 libc = "0.2"
+# flock(2) on Android, where std's File::try_lock is unsupported.
+rustix = { version = "1.1", default-features = false, features = ["std", "fs"] }
 # Plain (non-`\\?\`) Windows paths for shells that mishandle verbatim ones.
 dunce = "1.0"
 windows-sys = "0.61"

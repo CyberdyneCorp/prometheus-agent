@@ -71,8 +71,15 @@ pub(crate) fn binary(root: &Path) -> Result<PathBuf, String> {
     if !status.success() {
         return Err("cargo build -p prometheus failed".to_owned());
     }
+    // Where cargo put it: CI sets CARGO_BUILD_TARGET (target/<triple>/)
+    // and may move the target dir.
+    let mut dir =
+        std::env::var_os("CARGO_TARGET_DIR").map_or_else(|| root.join("target"), |d| root.join(d));
+    if let Some(triple) = std::env::var_os("CARGO_BUILD_TARGET") {
+        dir.push(triple);
+    }
     let name = format!("prometheus{}", std::env::consts::EXE_SUFFIX);
-    Ok(root.join("target/debug").join(name))
+    Ok(dir.join("debug").join(name))
 }
 
 fn record_all(root: &Path) -> Result<(), String> {

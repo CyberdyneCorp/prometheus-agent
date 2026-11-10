@@ -244,7 +244,7 @@ fn second_concurrent_backup_is_refused() {
     let backups = home.root().join("backups");
     std::fs::create_dir_all(&backups).unwrap();
     let held = std::fs::File::create(backups.join(".backup.lock")).unwrap();
-    held.lock().unwrap();
+    pmt_core::file_lock::lock(&held).unwrap();
     let err = create(&home, &options(3)).unwrap_err();
     assert_eq!(err.exit_code(), 75);
     assert_eq!(err.message(), "another backup is running");
