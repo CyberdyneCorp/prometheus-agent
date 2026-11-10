@@ -14,7 +14,7 @@ Commands:
   version      Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
   setup        Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
   doctor       Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
-  debug        Diagnostics: `debug summary` prints a plain-text setup summary for support threads
+  debug        Diagnostics: a setup summary for support threads, a redacted debug bundle, an opt-in report upload and a daemon task dump
   config       Read, change, validate and explain the profile's config.toml
   secrets      Store, list and remove the profile's secrets (values never on the command line)
   skills       List, inspect, enable, lint and maintain the profile's skills and skill bundles
@@ -36,10 +36,11 @@ Commands:
   profile      List, create, select, rename and delete profiles
   sessions     List, search, export and manage the profile's sessions
   logs         Show structured log records of a component (`list` names them)
+  status       Whether the daemon runs and how: components, sessions, the next scheduled job and today's spend (`--check` for scripts)
   usage        Totals of model and metered tool calls from the usage ledger
   prompt       Measure the system prompt and tool schemas a new session would send
   demo         Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
-  trajectory   Render the recorded trajectory of a session
+  trajectory   Render a session's recorded trajectory, or export sessions as `ShareGPT` training records
   model        Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
   providers    Provider routing state: per-route health scores
   moa          List, create, update and delete Mixture of Agents presets (`[moa.presets.<name>]`)
@@ -512,13 +513,17 @@ Options:
 ## `prometheus debug`
 
 ```text
-Diagnostics: `debug summary` prints a plain-text setup summary for support threads
+Diagnostics: a setup summary for support threads, a redacted debug bundle, an opt-in report upload and a daemon task dump
 
 Usage: prometheus debug [OPTIONS] <COMMAND>
 
 Commands:
-  summary  A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
-  help     Print this message or the help of the given subcommand(s)
+  summary     A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
+  bundle      Write a redacted `tar.zst` of the window's logs, the configuration, `doctor --json`, `version --json`, crash reports and optionally a session's trajectory (nothing is uploaded)
+  share       Upload a redacted report (setup summary and recent log records) to a paste service after an explicit yes, or write it locally
+  delete      Delete a share recorded in `logs/shares.json` where the target supports deletion
+  dump-tasks  Ask the running daemon to write a dump of every thread and task to `logs/task-dump-<UTC>.txt` without stopping it
+  help        Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -594,6 +599,206 @@ Options:
           Print help
 ```
 
+## `prometheus debug bundle`
+
+```text
+Write a redacted `tar.zst` of the window's logs, the configuration, `doctor --json`, `version --json`, crash reports and optionally a session's trajectory (nothing is uploaded)
+
+Usage: prometheus debug bundle [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --session <ID>
+          Include this session's trajectory (id, id prefix or title)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --since <S>
+          Log records since `<N>[smhd]` ago or an RFC 3339 time
+
+          [default: 24h]
+
+  -o, --output <PATH>
+          Where to write the bundle (default: `./prometheus-debug-<UTC>.tar.zst`)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus debug share`
+
+```text
+Upload a redacted report (setup summary and recent log records) to a paste service after an explicit yes, or write it locally
+
+Usage: prometheus debug share [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --lines <N>
+          Log records of the daemon and of the profile to include, each
+
+          [default: 200]
+
+      --expire-days <D>
+          Days until the paste expires, where the target supports expiry
+
+          [default: 7]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --target <TARGET>
+          Where to upload
+
+          Possible values:
+          - paste_rs: `https://paste.rs` (no expiry; deletable)
+          - dpaste:   `https://dpaste.com` (expires after `--expire-days`; not deletable)
+          - custom:   `debug.share.endpoint`, a private support endpoint
+
+          [default: paste_rs]
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --no-redact
+          Upload without redaction (asks a second time; never unattended)
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -y, --yes
+          Upload without asking
+
+      --local
+          Write the report to a file instead (no network access at all)
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus debug delete`
+
+```text
+Delete a share recorded in `logs/shares.json` where the target supports deletion
+
+Usage: prometheus debug delete [OPTIONS] <URL>
+
+Arguments:
+  <URL>
+          The share's URL
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus debug dump-tasks`
+
+```text
+Ask the running daemon to write a dump of every thread and task to `logs/task-dump-<UTC>.txt` without stopping it
+
+Usage: prometheus debug dump-tasks [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus debug help`
 
 ```text
@@ -602,8 +807,12 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus debug help [COMMAND]
 
 Commands:
-  summary  A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
-  help     Print this message or the help of the given subcommand(s)
+  summary     A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
+  bundle      Write a redacted `tar.zst` of the window's logs, the configuration, `doctor --json`, `version --json`, crash reports and optionally a session's trajectory (nothing is uploaded)
+  share       Upload a redacted report (setup summary and recent log records) to a paste service after an explicit yes, or write it locally
+  delete      Delete a share recorded in `logs/shares.json` where the target supports deletion
+  dump-tasks  Ask the running daemon to write a dump of every thread and task to `logs/task-dump-<UTC>.txt` without stopping it
+  help        Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus debug help summary`
@@ -612,6 +821,38 @@ Commands:
 A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
 
 Usage: prometheus debug help summary
+```
+
+## `prometheus debug help bundle`
+
+```text
+Write a redacted `tar.zst` of the window's logs, the configuration, `doctor --json`, `version --json`, crash reports and optionally a session's trajectory (nothing is uploaded)
+
+Usage: prometheus debug help bundle
+```
+
+## `prometheus debug help share`
+
+```text
+Upload a redacted report (setup summary and recent log records) to a paste service after an explicit yes, or write it locally
+
+Usage: prometheus debug help share
+```
+
+## `prometheus debug help delete`
+
+```text
+Delete a share recorded in `logs/shares.json` where the target supports deletion
+
+Usage: prometheus debug help delete
+```
+
+## `prometheus debug help dump-tasks`
+
+```text
+Ask the running daemon to write a dump of every thread and task to `logs/task-dump-<UTC>.txt` without stopping it
+
+Usage: prometheus debug help dump-tasks
 ```
 
 ## `prometheus debug help help`
@@ -11653,24 +11894,86 @@ Options:
           Print help (see a summary with '-h')
 ```
 
+## `prometheus status`
+
+```text
+Whether the daemon runs and how: components, sessions, the next scheduled job and today's spend (`--check` for scripts)
+
+Usage: prometheus status [OPTIONS]
+
+Options:
+      --check
+          Exit 1 when the daemon is not running or a component is down
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --full
+          Add the profile's model, providers with credentials, adapters, scheduled jobs, terminal backend, sandbox and session counts
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --deep
+          With `--full`: probe each provider, adapter and MCP server live (10 s each); the only mode that makes outbound requests
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --liveness
+          Ask the daemon's `/healthz`: exit 0 on 200 (printing nothing), 1 otherwise
+
+      --exports
+          Report every telemetry exporter and what can leave this host
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus usage`
 
 ```text
 Totals of model and metered tool calls from the usage ledger
 
 Usage: prometheus usage [OPTIONS]
+       prometheus usage <COMMAND>
+
+Commands:
+  insights  What the profile did: sessions, messages, turns, tools, tokens, cost, breakdowns by model, provider and source, top tools, skills, activity by weekday and hour, and the costliest lineages (no model call)
+  help      Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
 
       --since <S>
           Calls since `<N>[smhd]` ago or an RFC 3339 time
 
           [default: 30d]
 
-  -p, --profile <NAME>
-          Profile to use (default: the home's active_profile, else default)
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
 
       --until <S>
           Calls before `<N>[smhd]` ago or an RFC 3339 time (default: now)
@@ -11690,17 +11993,64 @@ Options:
 
           [default: day]
 
-      --set <KEY=VALUE>
-          Override a config key for this invocation only; repeatable, never saved
-
       --json
           Print one JSON document on stdout; errors go to stderr as JSON
 
       --session <ID>
           Only this session and its descendants (a root: its whole lineage)
 
+  -v, --verbose...
+          More detail; repeatable
+
       --all-profiles
           Every profile, each through its own scope, with a grand total
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus usage insights`
+
+```text
+What the profile did: sessions, messages, turns, tools, tokens, cost, breakdowns by model, provider and source, top tools, skills, activity by weekday and hour, and the costliest lineages (no model call)
+
+Usage: prometheus usage insights [OPTIONS]
+
+Options:
+      --days <N>
+          The last N days
+
+          [default: 30]
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --source <S>
+          Only lineages started from this surface or platform (`cli`, `tui`, `cron`, `telegram`...)
+
+      --all-profiles
+          Every profile, each through its own scope
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
 
   -v, --verbose...
           More detail; repeatable
@@ -11718,7 +12068,35 @@ Options:
           Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
-          Print help (see a summary with '-h')
+          Print help
+```
+
+## `prometheus usage help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus usage help [COMMAND]
+
+Commands:
+  insights  What the profile did: sessions, messages, turns, tools, tokens, cost, breakdowns by model, provider and source, top tools, skills, activity by weekday and hour, and the costliest lineages (no model call)
+  help      Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus usage help insights`
+
+```text
+What the profile did: sessions, messages, turns, tools, tokens, cost, breakdowns by model, provider and source, top tools, skills, activity by weekday and hour, and the costliest lineages (no model call)
+
+Usage: prometheus usage help insights
+```
+
+## `prometheus usage help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus usage help help
 ```
 
 ## `prometheus prompt`
@@ -11890,13 +12268,14 @@ Options:
 ## `prometheus trajectory`
 
 ```text
-Render the recorded trajectory of a session
+Render a session's recorded trajectory, or export sessions as `ShareGPT` training records
 
 Usage: prometheus trajectory [OPTIONS] <COMMAND>
 
 Commands:
-  show  Render a session's trajectory as canonical text or its JSONL lines
-  help  Print this message or the help of the given subcommand(s)
+  show    Render a session's trajectory as canonical text or its JSONL lines
+  export  Write sessions as `ShareGPT` conversations (or their events), one JSON line per session, redacted; sessions that ended in an error are left out unless `--include-failed`
+  help    Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -11995,6 +12374,67 @@ Options:
           Print help (see a summary with '-h')
 ```
 
+## `prometheus trajectory export`
+
+```text
+Write sessions as `ShareGPT` conversations (or their events), one JSON line per session, redacted; sessions that ended in an error are left out unless `--include-failed`
+
+Usage: prometheus trajectory export [OPTIONS] --format <FORMAT> --output <FILE>
+
+Options:
+      --format <FORMAT>
+          Record format
+
+          Possible values:
+          - sharegpt: `ShareGPT` `conversations` records
+          - jsonl:    The session's redacted trajectory events, one record per session
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --session <ID>
+          Sessions to export (id, id prefix or title; repeatable)
+
+      --eval-run <ID>
+          Sessions of this evaluation run
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --since <S>
+          Sessions started since `<N>[smhd]` ago or an RFC 3339 time
+
+      --include-failed
+          Also sessions that ended in an error
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -o, --output <FILE>
+          The JSON-lines file to write
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
 ## `prometheus trajectory help`
 
 ```text
@@ -12003,8 +12443,9 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus trajectory help [COMMAND]
 
 Commands:
-  show  Render a session's trajectory as canonical text or its JSONL lines
-  help  Print this message or the help of the given subcommand(s)
+  show    Render a session's trajectory as canonical text or its JSONL lines
+  export  Write sessions as `ShareGPT` conversations (or their events), one JSON line per session, redacted; sessions that ended in an error are left out unless `--include-failed`
+  help    Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus trajectory help show`
@@ -12013,6 +12454,14 @@ Commands:
 Render a session's trajectory as canonical text or its JSONL lines
 
 Usage: prometheus trajectory help show
+```
+
+## `prometheus trajectory help export`
+
+```text
+Write sessions as `ShareGPT` conversations (or their events), one JSON line per session, redacted; sessions that ended in an error are left out unless `--include-failed`
+
+Usage: prometheus trajectory help export
 ```
 
 ## `prometheus trajectory help help`
@@ -21897,7 +22346,7 @@ Commands:
   version      Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
   setup        Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
   doctor       Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
-  debug        Diagnostics: `debug summary` prints a plain-text setup summary for support threads
+  debug        Diagnostics: a setup summary for support threads, a redacted debug bundle, an opt-in report upload and a daemon task dump
   config       Read, change, validate and explain the profile's config.toml
   secrets      Store, list and remove the profile's secrets (values never on the command line)
   skills       List, inspect, enable, lint and maintain the profile's skills and skill bundles
@@ -21919,10 +22368,11 @@ Commands:
   profile      List, create, select, rename and delete profiles
   sessions     List, search, export and manage the profile's sessions
   logs         Show structured log records of a component (`list` names them)
+  status       Whether the daemon runs and how: components, sessions, the next scheduled job and today's spend (`--check` for scripts)
   usage        Totals of model and metered tool calls from the usage ledger
   prompt       Measure the system prompt and tool schemas a new session would send
   demo         Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
-  trajectory   Render the recorded trajectory of a session
+  trajectory   Render a session's recorded trajectory, or export sessions as `ShareGPT` training records
   model        Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
   providers    Provider routing state: per-route health scores
   moa          List, create, update and delete Mixture of Agents presets (`[moa.presets.<name>]`)
@@ -21985,12 +22435,16 @@ Usage: prometheus help doctor
 ## `prometheus help debug`
 
 ```text
-Diagnostics: `debug summary` prints a plain-text setup summary for support threads
+Diagnostics: a setup summary for support threads, a redacted debug bundle, an opt-in report upload and a daemon task dump
 
 Usage: prometheus help debug [COMMAND]
 
 Commands:
-  summary  A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
+  summary     A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
+  bundle      Write a redacted `tar.zst` of the window's logs, the configuration, `doctor --json`, `version --json`, crash reports and optionally a session's trajectory (nothing is uploaded)
+  share       Upload a redacted report (setup summary and recent log records) to a paste service after an explicit yes, or write it locally
+  delete      Delete a share recorded in `logs/shares.json` where the target supports deletion
+  dump-tasks  Ask the running daemon to write a dump of every thread and task to `logs/task-dump-<UTC>.txt` without stopping it
 ```
 
 ## `prometheus help debug summary`
@@ -21999,6 +22453,38 @@ Commands:
 A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
 
 Usage: prometheus help debug summary
+```
+
+## `prometheus help debug bundle`
+
+```text
+Write a redacted `tar.zst` of the window's logs, the configuration, `doctor --json`, `version --json`, crash reports and optionally a session's trajectory (nothing is uploaded)
+
+Usage: prometheus help debug bundle
+```
+
+## `prometheus help debug share`
+
+```text
+Upload a redacted report (setup summary and recent log records) to a paste service after an explicit yes, or write it locally
+
+Usage: prometheus help debug share
+```
+
+## `prometheus help debug delete`
+
+```text
+Delete a share recorded in `logs/shares.json` where the target supports deletion
+
+Usage: prometheus help debug delete
+```
+
+## `prometheus help debug dump-tasks`
+
+```text
+Ask the running daemon to write a dump of every thread and task to `logs/task-dump-<UTC>.txt` without stopping it
+
+Usage: prometheus help debug dump-tasks
 ```
 
 ## `prometheus help config`
@@ -23708,12 +24194,31 @@ Show structured log records of a component (`list` names them)
 Usage: prometheus help logs
 ```
 
+## `prometheus help status`
+
+```text
+Whether the daemon runs and how: components, sessions, the next scheduled job and today's spend (`--check` for scripts)
+
+Usage: prometheus help status
+```
+
 ## `prometheus help usage`
 
 ```text
 Totals of model and metered tool calls from the usage ledger
 
-Usage: prometheus help usage
+Usage: prometheus help usage [COMMAND]
+
+Commands:
+  insights  What the profile did: sessions, messages, turns, tools, tokens, cost, breakdowns by model, provider and source, top tools, skills, activity by weekday and hour, and the costliest lineages (no model call)
+```
+
+## `prometheus help usage insights`
+
+```text
+What the profile did: sessions, messages, turns, tools, tokens, cost, breakdowns by model, provider and source, top tools, skills, activity by weekday and hour, and the costliest lineages (no model call)
+
+Usage: prometheus help usage insights
 ```
 
 ## `prometheus help prompt`
@@ -23746,12 +24251,13 @@ Usage: prometheus help demo
 ## `prometheus help trajectory`
 
 ```text
-Render the recorded trajectory of a session
+Render a session's recorded trajectory, or export sessions as `ShareGPT` training records
 
 Usage: prometheus help trajectory [COMMAND]
 
 Commands:
-  show  Render a session's trajectory as canonical text or its JSONL lines
+  show    Render a session's trajectory as canonical text or its JSONL lines
+  export  Write sessions as `ShareGPT` conversations (or their events), one JSON line per session, redacted; sessions that ended in an error are left out unless `--include-failed`
 ```
 
 ## `prometheus help trajectory show`
@@ -23760,6 +24266,14 @@ Commands:
 Render a session's trajectory as canonical text or its JSONL lines
 
 Usage: prometheus help trajectory show
+```
+
+## `prometheus help trajectory export`
+
+```text
+Write sessions as `ShareGPT` conversations (or their events), one JSON line per session, redacted; sessions that ended in an error are left out unless `--include-failed`
+
+Usage: prometheus help trajectory export
 ```
 
 ## `prometheus help model`
@@ -25384,6 +25898,13 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | Schema | Command |
 |---|---|
 | `prometheus.cache_stats.v1` | `prometheus cache stats` |
+| `prometheus.status.v1` | `prometheus status` |
+| `prometheus.debug_bundle.v1` | `prometheus debug bundle` |
+| `prometheus.debug_share.v1` | `prometheus debug share` |
+| `prometheus.debug_dump_tasks.v1` | `prometheus debug dump-tasks` |
+| `prometheus.usage_insights.v1` | `prometheus usage insights` |
+| `prometheus.trajectory_export.v1` | `prometheus trajectory export` |
+| `prometheus.status_exports.v1` | `prometheus status exports` |
 | `prometheus.cache_prune.v1` | `prometheus cache prune` |
 | `prometheus.cache_clear.v1` | `prometheus cache clear` |
 | `prometheus.profile_export.v1` | `prometheus profile export` |

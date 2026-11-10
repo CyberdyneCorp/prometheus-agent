@@ -167,6 +167,13 @@ pub struct DaemonSection {
     /// request and no queued input is closed after this many seconds.
     #[schemars(range(min = 1))]
     pub idle_session_close_secs: u64,
+    /// The runtime liveness watchdog (spec: observability, Runtime liveness
+    /// watchdog and task dump).
+    pub watchdog: WatchdogConfig,
+    /// Linux: `> 0` makes the generated systemd unit `Type=notify` with
+    /// this `WatchdogSec`; the daemon notifies only while its watchdog
+    /// probes succeed. `0` (default): no systemd watchdog.
+    pub systemd_watchdog_secs: u64,
 }
 
 impl Default for DaemonSection {
@@ -176,6 +183,35 @@ impl Default for DaemonSection {
             restart_drain_secs: 120,
             autostart: true,
             idle_session_close_secs: 3600,
+            watchdog: WatchdogConfig::default(),
+            systemd_watchdog_secs: 0,
+        }
+    }
+}
+
+/// `[daemon.watchdog]`: a thread outside the async runtime probes it; a
+/// runtime that misses `max_strikes` probes in a row is dumped and the
+/// daemon exits 75 so its supervisor restarts it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct WatchdogConfig {
+    /// Run the watchdog.
+    pub enabled: bool,
+    /// Seconds between probes; a probe not answered within this is a
+    /// strike.
+    #[schemars(range(min = 1, max = 3600))]
+    pub probe_interval_secs: u64,
+    /// Consecutive strikes before the dump and exit.
+    #[schemars(range(min = 1, max = 100))]
+    pub max_strikes: u32,
+}
+
+impl Default for WatchdogConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            probe_interval_secs: 30,
+            max_strikes: 3,
         }
     }
 }

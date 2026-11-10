@@ -32,14 +32,22 @@ use serde_json::{Value, json};
 use crate::sidecar::CallError;
 use crate::supervisor::Supervisor;
 
-/// The facts of a call as the shim reads them (`session_cwd()`...).
+/// The facts of a call as the shim reads them (`session_cwd()`...), with
+/// the W3C `traceparent` of the session's current span (spec:
+/// observability, Trace context propagation).
 #[must_use]
 pub fn context(call: &CallInfo, call_id: Option<&str>) -> Value {
+    let traceparent = call
+        .session_id
+        .as_deref()
+        .and_then(pmt_obs::otel::context::current)
+        .map(|c| c.traceparent());
     json!({
         "session_id": call.session_id,
         "surface": call.surface,
         "cwd": call.cwd,
         "call_id": call_id,
+        "traceparent": traceparent,
     })
 }
 

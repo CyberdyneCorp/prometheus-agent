@@ -196,6 +196,13 @@
                   "string",
                   "null"
                 ]
+              },
+              "trace_id": {
+                "description": "The session's trace id (32 hex digits), the same as in its log\nrecords and exported spans.",
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             },
             "required": [

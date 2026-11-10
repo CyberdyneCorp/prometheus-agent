@@ -66,6 +66,7 @@ pub async fn run(
         control: address,
         rpc_protocol: server.protocol().to_string(),
         started_at: server.started_at().to_owned(),
+        health_url: server.health_url().map(str::to_owned),
     };
     server.set_endpoint(endpoint.clone());
     let control_task = tokio::spawn(control.serve(Arc::clone(&server)).in_current_span());

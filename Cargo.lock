@@ -3081,6 +3081,7 @@ dependencies = [
  "pmt-config",
  "pmt-core",
  "pmt-net",
+ "pmt-obs",
  "pmt-rpc",
  "pmt-store",
  "pmt-vault",
@@ -3240,6 +3241,7 @@ dependencies = [
  "pmt-core",
  "pmt-net",
  "pmt-store",
+ "prost",
  "reqwest",
  "schemars",
  "serde",
@@ -3265,6 +3267,7 @@ dependencies = [
  "minisign-verify",
  "pmt-config",
  "pmt-core",
+ "pmt-obs",
  "pmt-plugins",
  "pmt-providers",
  "pmt-sandbox",
@@ -3326,6 +3329,7 @@ dependencies = [
  "nix 0.31.3",
  "pmt-config",
  "pmt-core",
+ "pmt-obs",
  "pmt-plugins",
  "pmt-providers",
  "pmt-pybridge",
@@ -3698,6 +3702,7 @@ dependencies = [
  "pmt-vault",
  "pmt-voice",
  "pmt-worktrees",
+ "prost",
  "pulldown-cmark",
  "qrcode",
  "ratatui",
@@ -3742,6 +3747,29 @@ dependencies = [
  "rand_xorshift",
  "regex-syntax",
  "unarray",
+]
+
+[[package]]
+name = "prost"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "528ac67416ff8646872a3c02cad9cc4ee5dc9f9540c9b10771855c95cb2e5ae1"
+dependencies = [
+ "bytes",
+ "prost-derive",
+]
+
+[[package]]
+name = "prost-derive"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b570b25f7617e43d59005d0990ccb79e950a423952cea19671b7a876da390adf"
+dependencies = [
+ "anyhow",
+ "itertools",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]

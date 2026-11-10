@@ -8,20 +8,24 @@
 
 mod enroll_cmd;
 mod gateway_cmd;
+mod health;
 mod host;
 mod inventory;
 mod messaging;
 mod platform_cmd;
+mod record;
 pub(crate) mod self_guard;
 mod send_cmd;
 mod serve;
 pub mod service;
 mod slack_manifest_cmd;
 pub(crate) mod standalone;
+mod systemd;
 #[cfg(debug_assertions)]
 mod test_adapter;
 mod turn;
 mod update_chat;
+mod watchdog;
 mod whatsapp_cmd;
 
 use std::fmt::Write as _;

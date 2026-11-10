@@ -1858,6 +1858,43 @@
         }
       ]
     },
+    "DebugConfig": {
+      "additionalProperties": false,
+      "description": "The `[debug]` section (spec: observability, Opt-in debug share upload).",
+      "properties": {
+        "share": {
+          "$ref": "#/$defs/DebugShareConfig",
+          "default": {
+            "header_secrets": []
+          },
+          "description": "`prometheus debug share --target custom`."
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
+    "DebugShareConfig": {
+      "additionalProperties": false,
+      "description": "The `[debug.share]` section: a private support endpoint.",
+      "properties": {
+        "endpoint": {
+          "description": "The URL `--target custom` POSTs the report to (`https://`, or\n`http://` to a loopback host).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "header_secrets": {
+          "default": [],
+          "description": "Names of secrets sent as request headers (`X_API_KEY` ->\n`x-api-key`).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
     "DedupConfig": {
       "additionalProperties": false,
       "description": "`[gateway.dedup]`.",
@@ -3444,6 +3481,18 @@
         }
       ]
     },
+    "HealthListenerConfig": {
+      "additionalProperties": false,
+      "description": "The `[observability.health]` section (spec: observability, Health\nendpoints).",
+      "properties": {
+        "bind": {
+          "default": "127.0.0.1:0",
+          "description": "Loopback listen address; port `0` picks a free port, recorded as\n`health_url` in `run/gateway.json`.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "HeartbeatConfig": {
       "additionalProperties": false,
       "description": "The `[heartbeat]` section.",
@@ -4867,6 +4916,18 @@
       },
       "type": "object"
     },
+    "MetricsEndpointConfig": {
+      "additionalProperties": false,
+      "description": "The `[observability.metrics_endpoint]` section (spec: observability,\nLocal metrics scrape endpoint).",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Serve `GET /metrics` on the health listener (no authentication, no\nper-session or per-user labels). Off by default: 404.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
     "MoaConfig": {
       "additionalProperties": false,
       "description": "The `[moa]` section.",
@@ -5491,6 +5552,34 @@
           "description": "The gateway daemon's health export (read from the launch profile).",
           "x-apply": "restart"
         },
+        "health": {
+          "$ref": "#/$defs/HealthListenerConfig",
+          "default": {
+            "bind": "127.0.0.1:0"
+          },
+          "description": "The daemon's loopback health listener (`/healthz`, `/readyz`).",
+          "x-apply": "restart"
+        },
+        "metrics_endpoint": {
+          "$ref": "#/$defs/MetricsEndpointConfig",
+          "default": {
+            "enabled": false
+          },
+          "description": "The daemon's local Prometheus-format scrape endpoint.",
+          "x-apply": "restart"
+        },
+        "otel": {
+          "$ref": "#/$defs/OtelConfig",
+          "default": {
+            "capture_content": false,
+            "enabled": false,
+            "header_secrets": [],
+            "propagate_external": false,
+            "protocol": "http/protobuf"
+          },
+          "description": "Opt-in OpenTelemetry export (traces and metrics).",
+          "x-apply": "restart"
+        },
         "trajectories": {
           "$ref": "#/$defs/TrajectoriesConfig",
           "default": {
@@ -5564,6 +5653,63 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "OtelConfig": {
+      "additionalProperties": false,
+      "description": "The `[observability.otel]` section (spec: observability, Opt-in\nOpenTelemetry export; Span model; Trace context propagation). Nothing\nis exported unless `enabled`; `OTEL_*` environment variables never\nconfigure export.",
+      "properties": {
+        "capture_content": {
+          "default": false,
+          "description": "Attach message content, tool arguments and tool output to spans.",
+          "type": "boolean"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Export traces and metrics over OTLP. Off by default.",
+          "type": "boolean"
+        },
+        "endpoint": {
+          "description": "The collector's OTLP base URL (`https://`, or `http://` to a\nloopback collector), e.g. `http://127.0.0.1:4318`; required when\nenabled. `/v1/traces` and `/v1/metrics` are appended for\n`http/protobuf`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "header_secrets": {
+          "default": [],
+          "description": "Names of secrets sent as request headers: the secret `NAME` becomes\nthe header `name` with `_` as `-` (`X_API_KEY` -> `x-api-key`).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "propagate_external": {
+          "default": false,
+          "description": "Send `traceparent` to model providers, MCP servers and other\nexternal hosts.",
+          "type": "boolean"
+        },
+        "protocol": {
+          "$ref": "#/$defs/OtelProtocol",
+          "default": "http/protobuf",
+          "description": "Wire protocol."
+        }
+      },
+      "type": "object"
+    },
+    "OtelProtocol": {
+      "description": "`observability.otel.protocol`.",
+      "oneOf": [
+        {
+          "const": "http/protobuf",
+          "description": "OTLP over HTTP with protobuf bodies.",
+          "type": "string"
+        },
+        {
+          "const": "grpc",
+          "description": "OTLP over gRPC.",
+          "type": "string"
+        }
+      ]
     },
     "OutboundHook": {
       "additionalProperties": false,
@@ -10667,6 +10813,15 @@
       },
       "description": "Profile time zone (scheduler keys arrive with M2)."
     },
+    "debug": {
+      "$ref": "#/$defs/DebugConfig",
+      "default": {
+        "share": {
+          "header_secrets": []
+        }
+      },
+      "description": "Diagnostics: the debug share target."
+    },
     "delegation": {
       "$ref": "#/$defs/DelegationConfig",
       "default": {
@@ -10999,6 +11154,19 @@
         "gateway_health": {
           "enabled": false,
           "interval_secs": 60
+        },
+        "health": {
+          "bind": "127.0.0.1:0"
+        },
+        "metrics_endpoint": {
+          "enabled": false
+        },
+        "otel": {
+          "capture_content": false,
+          "enabled": false,
+          "header_secrets": [],
+          "propagate_external": false,
+          "protocol": "http/protobuf"
         },
         "trajectories": {
           "enabled": true,

@@ -10,6 +10,7 @@ repository.workspace = true
 [dependencies]
 pmt-config.workspace = true
 pmt-core.workspace = true
+pmt-obs.workspace = true
 pmt-plugins.workspace = true
 pmt-providers.workspace = true
 pmt-tools.workspace = true

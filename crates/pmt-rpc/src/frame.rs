@@ -162,6 +162,10 @@ pub enum Incoming {
         method: String,
         /// Its params (an object; `{}` when absent).
         params: Value,
+        /// The caller's W3C `traceparent`, from the request's
+        /// `meta.traceparent` (spec: observability, Trace context
+        /// propagation).
+        traceparent: Option<String>,
     },
     /// A call without an id (events from the daemon; ignored by it).
     Notification {
@@ -206,14 +210,24 @@ pub fn parse(text: &str) -> Result<Incoming, Rejected> {
     if object.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
         return Err((id, RpcError::invalid_request("jsonrpc must be \"2.0\"")));
     }
+    let traceparent = object
+        .get("meta")
+        .and_then(|meta| meta.get("traceparent"))
+        .and_then(Value::as_str)
+        .map(str::to_owned);
     match object.remove("method") {
-        Some(Value::String(method)) => call(id, method, object.remove("params")),
+        Some(Value::String(method)) => call(id, method, object.remove("params"), traceparent),
         Some(_) => Err((id, RpcError::invalid_request("method must be a string"))),
         None => response(id, &mut object),
     }
 }
 
-fn call(id: Option<Id>, method: String, params: Option<Value>) -> Result<Incoming, Rejected> {
+fn call(
+    id: Option<Id>,
+    method: String,
+    params: Option<Value>,
+    traceparent: Option<String>,
+) -> Result<Incoming, Rejected> {
     let params = match params {
         None => Value::Object(Map::new()),
         Some(params @ Value::Object(_)) => params,
@@ -225,7 +239,12 @@ fn call(id: Option<Id>, method: String, params: Option<Value>) -> Result<Incomin
         }
     };
     Ok(match id {
-        Some(id) => Incoming::Request { id, method, params },
+        Some(id) => Incoming::Request {
+            id,
+            method,
+            params,
+            traceparent,
+        },
         None => Incoming::Notification { method, params },
     })
 }
@@ -312,7 +331,8 @@ mod tests {
             Incoming::Request {
                 id: Id::Num(1),
                 method: "rpc.ping".into(),
-                params: json!({})
+                params: json!({}),
+                traceparent: None,
             }
         );
         let event = parse(r#"{"jsonrpc":"2.0","method":"x","params":{"a":1}}"#).unwrap();

@@ -64,6 +64,7 @@ fn local_session(home: &Path) -> String {
             title: None,
             model: Some("mock/scripted".to_owned()),
             parent_session_id: None,
+            trace_id: None,
         })))
         .unwrap();
     store

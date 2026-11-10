@@ -46,6 +46,17 @@ impl Role {
             Self::Chat => "chat.json",
         }
     }
+
+    /// The last record of a process that stopped degraded (`state =
+    /// "degraded"`), kept for `prometheus status` until a new process of
+    /// the role starts.
+    #[must_use]
+    pub const fn last_exit_file(self) -> &'static str {
+        match self {
+            Self::Daemon => "gateway.last-exit.json",
+            Self::Chat => "chat.last-exit.json",
+        }
+    }
 }
 
 /// One process's runtime record.
@@ -183,8 +194,24 @@ pub fn live_record(home: &Path, role: Role) -> Result<Option<RuntimeRecord>, Err
     if record.liveness() == Liveness::Alive {
         return Ok(Some(record));
     }
+    keep_degraded(home, role);
     remove_record(home, role)?;
     Ok(None)
+}
+
+/// A stale record whose process stopped degraded (the liveness watchdog
+/// wrote `state = "degraded"`) moves to [`Role::last_exit_file`] instead
+/// of disappearing.
+fn keep_degraded(home: &Path, role: Role) {
+    let dir = run_dir(home);
+    let path = dir.join(role.record_file());
+    let degraded = fs::read(&path)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
+        .is_some_and(|v| v["state"] == "degraded");
+    if degraded {
+        let _ = fs::rename(&path, dir.join(role.last_exit_file()));
+    }
 }
 
 fn remove_record(home: &Path, role: Role) -> Result<(), Error> {

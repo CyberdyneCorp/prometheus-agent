@@ -195,6 +195,8 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `cron.tick_interval_secs` | integer | `30` | 10 to 300 | `live` | Seconds between the built-in trigger's evaluations of due jobs (it also wakes at the earliest next run). |
 | `cron.timezone` | string | unset | any | `live` | IANA time zone of this profile (`Europe/Lisbon`); unset uses the host's zone. |
 | `cron.wrap_response` | boolean | `true` | any | `live` | Frame delivered output with the job name and a pause hint. |
+| `debug.share.endpoint` | string | unset | any | `live` | The URL `--target custom` POSTs the report to (`https://`, or `http://` to a loopback host). |
+| `debug.share.header_secrets` | array of string | `[]` | any | `live` | Names of secrets sent as request headers (`X_API_KEY` -> `x-api-key`). |
 | `delegation.api_key_secret` | string | unset | a secret name | `next_session` | Name of the secret holding the direct endpoint's key. |
 | `delegation.background` | one of "auto", "never" | `"auto"` | `"auto"`, `"never"` | `next_session` | `auto` runs top-level spawns in the background where the session can receive later completions; `never` always waits. |
 | `delegation.base_url` | string | unset | any | `next_session` | A direct endpoint children call instead of a provider route (`model`, or the parent's model id, names the model there). |
@@ -542,6 +544,14 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `observability.gateway_health.enabled` | boolean | `false` | any | `restart` | Export gateway health. Off by default: nothing is sent. |
 | `observability.gateway_health.endpoint` | string | unset | any | `restart` | The OTLP/HTTP metrics endpoint (`https://`, or `http://` to a loopback collector), e.g. `http://127.0.0.1:4318/v1/metrics`. |
 | `observability.gateway_health.interval_secs` | integer | `60` | 1 to 3600 | `restart` | Seconds between two exports. |
+| `observability.health.bind` | string | `"127.0.0.1:0"` | any | `restart` | Loopback listen address; port `0` picks a free port, recorded as `health_url` in `run/gateway.json`. |
+| `observability.metrics_endpoint.enabled` | boolean | `false` | any | `restart` | Serve `GET /metrics` on the health listener (no authentication, no per-session or per-user labels). Off by default: 404. |
+| `observability.otel.capture_content` | boolean | `false` | any | `restart` | Attach message content, tool arguments and tool output to spans. |
+| `observability.otel.enabled` | boolean | `false` | any | `restart` | Export traces and metrics over OTLP. Off by default. |
+| `observability.otel.endpoint` | string | unset | any | `restart` | The collector's OTLP base URL (`https://`, or `http://` to a loopback collector), e.g. `http://127.0.0.1:4318`; required when enabled. `/v1/traces` and `/v1/metrics` are appended for `http/protobuf`. |
+| `observability.otel.header_secrets` | array of string | `[]` | any | `restart` | Names of secrets sent as request headers: the secret `NAME` becomes the header `name` with `_` as `-` (`X_API_KEY` -> `x-api-key`). |
+| `observability.otel.propagate_external` | boolean | `false` | any | `restart` | Send `traceparent` to model providers, MCP servers and other external hosts. |
+| `observability.otel.protocol` | one of "http/protobuf", "grpc" | `"http/protobuf"` | `"http/protobuf"`, `"grpc"` | `restart` | Wire protocol. |
 | `observability.trajectories.enabled` | boolean | `true` | any | `next_session` | Record trajectories for sessions started from now on. |
 | `observability.trajectories.max_bytes_per_session` | integer | `268435456` | ≥ 0 | `next_session` | Stop recording payload bodies of a session beyond this size. |
 | `observability.trajectories.retention_secs` | integer | `7776000` | ≥ 0 | `next_session` | Delete unpinned trajectories older than this; `0` keeps forever. |

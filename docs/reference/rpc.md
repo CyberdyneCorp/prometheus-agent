@@ -134,8 +134,8 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `session.tree` | `session-storage` | 1.0 | [`SessionRef`](#sessionref) | [`Lineage`](#lineage) |
 | `subagent.list` | `tui` | 1.0 | [`SessionRef`](#sessionref) | [`SubagentList`](#subagentlist) |
 | `subagent.subscribe` | `tui` | 1.0 | not served yet | |
-| `system.health` | `observability` | 1.0 | not served yet | |
-| `system.metrics` | `observability` | 1.0 | not served yet | |
+| `system.health` | `observability` | 1.0 | [`SystemParams`](#systemparams) | [`SystemHealth`](#systemhealth) |
+| `system.metrics` | `observability` | 1.0 | [`SystemParams`](#systemparams) | [`MetricsSnapshot`](#metricssnapshot) |
 | `tools.call` | `tool-system` | 1.0 | not served yet | |
 | `tools.list` | `tool-system` | 1.0 | not served yet | |
 | `ui.prefs.get` | `desktop-app` | 1.0 | not served yet | |
@@ -167,7 +167,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `achievement.unlocked` | `pets` | 1.0 | not served yet |
 | `adapter.state` | `messaging-gateway` | 1.0 | [`AdapterStatePayload`](#adapterstatepayload) |
 | `automation.state` | `session-automation` | 1.0 | [`AutomationStatePayload`](#automationstatepayload) |
-| `health.changed` | `observability` | 1.0 | not served yet |
+| `health.changed` | `observability` | 1.0 | [`HealthChanged`](#healthchanged) |
 | `local_model.context_grown` | `local-models` | 1.0 | not served yet |
 | `message.delivery` | `messaging-gateway` | 1.0 | not served yet |
 | `message.reaction` | `desktop-app` | 1.0 | not served yet |
@@ -176,7 +176,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `session.event` | `workspace-architecture` | 1.0 | any |
 | `session.presence` | `messaging-gateway` | 1.0 | not served yet |
 | `turn.finished` | `workspace-architecture` | 1.0 | [`TurnFinished`](#turnfinished) |
-| `usage.updated` | `observability` | 1.0 | not served yet |
+| `usage.updated` | `observability` | 1.0 | [`UsageUpdated`](#usageupdated) |
 | `wake.detected` | `voice-mode` | 1.0 | not served yet |
 
 ## Types
@@ -402,6 +402,18 @@ One slot, as a form field.
 |---|---|---|---|
 | `profile` | string or null | no | The profile (the connection's only one when omitted). |
 
+### `BudgetStanding`
+
+One budget's standing in `usage.updated`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `limit` | number | yes | The limit. |
+| `remaining` | number | yes | `limit - spent`, never below zero. |
+| `scope` | string | yes | `turn`, `session`, `root`, `daily`, `monthly` or `unattended`. |
+| `spent` | number | yes | Spent in the scope's period. |
+| `unit` | string | yes | `usd` or `tokens`. |
+
 ### `ClarifyAnswers`
 
 `clarify.request` result.
@@ -521,6 +533,18 @@ One completion.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `items` | array of [`Completion`](#completion) | yes | The candidates, best first. |
+
+### `ComponentHealth`
+
+One component's health.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `component` | string | yes | `store`, `scheduler`, `adapter:<platform>`, `mcp:<server>`... |
+| `profile` | string or null | no | The owning profile; `null` for daemon-wide components. |
+| `reason` | string | yes | Why. |
+| `since` | string | yes | When it entered the state (RFC 3339). |
+| `state` | string | yes | `ok`, `degraded` or `down`. |
 
 ### `ConfigGetParams`
 
@@ -715,6 +739,19 @@ The system prompt a session froze on its first turn.
 | `sha256` | string | yes | `sha256:<hex>` of the prompt text. |
 | `text` | string | yes | The prompt text, its tiers joined in request order. |
 
+### `HealthChanged`
+
+`health.changed` payload.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `component` | string | yes | The component. |
+| `previous` | string or null | no | The previous state (`null` when first reported). |
+| `profile` | string or null | no | Its profile; `null` for daemon-wide components. |
+| `reason` | string | yes | Why. |
+| `since` | string | yes | When (RFC 3339). |
+| `state` | string | yes | The new state. |
+
 ### `HelloParams`
 
 `rpc.hello` params: the first request on every connection.
@@ -860,6 +897,38 @@ One MCP server of a session.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `line` | string or null | no | `Memory: +<added> ~<patched> -<removed> (review with /memory review)` when the agent changed memory in the session and `memory.review_mode` is not `off`; `null` otherwise. |
+
+### `MetricPoint`
+
+One data point of a metric.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `attributes` | object | yes | Its bounded attributes (never content, paths or user ids). |
+| `buckets` | array of integer or null | no | A histogram's per-bucket counts (the bounds of `bounds`, then the overflow bucket). |
+| `sum` | number or null | no | A histogram's sum of observations. |
+| `value` | number | yes | A counter's or gauge's value; a histogram's observation count. |
+
+### `MetricView`
+
+One metric of the catalog.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `description` | string | yes | What it counts. |
+| `kind` | string | yes | `counter`, `histogram` or `gauge`. |
+| `name` | string | yes | `prometheus.tokens`... |
+| `points` | array of [`MetricPoint`](#metricpoint) | yes | Its data points. |
+| `unit` | string | yes | The UCUM unit. |
+
+### `MetricsSnapshot`
+
+`system.metrics` result: the metrics catalog now.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `bounds` | array of number | yes | Upper bucket bounds of every histogram, in milliseconds. |
+| `metrics` | array of [`MetricView`](#metricview) | yes | Every catalog metric. |
 
 ### `MoaPresetInfo`
 
@@ -1261,6 +1330,22 @@ A subscription's status in `session.context_usage`.
 | `deadline_ms` | integer or null | no | Milliseconds until the request settles unanswered (set by the daemon when it sends the request). |
 | `session_id` | string | yes | The session. |
 
+### `SystemHealth`
+
+`system.health` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `components` | array of [`ComponentHealth`](#componenthealth) | yes | The profile's components and the daemon-wide ones. |
+
+### `SystemParams`
+
+`system.metrics` and `system.health` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
+
 ### `Transcript`
 
 `session.transcript` result.
@@ -1302,6 +1387,34 @@ Why a turn ended in error.
 | `report` | any | no | The turn's `--usage-file` report (session, lineage root, route, billing source, tokens, cost and cost status of its model calls). |
 | `turn_id` | string | yes | The turn. |
 | `usage` | any | no | The turn's token and cost totals, as the turn loop reports them. |
+
+### `UsageTotalsView`
+
+Usage totals of a session or a lineage.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `cache_read_tokens` | integer | yes | Cache-read tokens. |
+| `cache_write_tokens` | integer | yes | Cache-write tokens. |
+| `calls` | integer | yes | Calls. |
+| `cost_usd` | number | yes | Sum of the priced calls. |
+| `input_tokens` | integer | yes | Uncached input tokens. |
+| `output_tokens` | integer | yes | Output tokens. |
+| `reasoning_tokens` | integer | yes | Reasoning tokens. |
+| `unpriced_calls` | integer | yes | Calls without a price. |
+
+### `UsageUpdated`
+
+`usage.updated` payload: after every model call, the same numbers for every client attached to the session.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `budgets` | array of [`BudgetStanding`](#budgetstanding) | yes | Every configured budget. |
+| `call` | any | yes | The call's ledger row, without `request_hash`. |
+| `root_session_id` | string | yes | Its lineage root. |
+| `root_totals` | [`UsageTotalsView`](#usagetotalsview) | yes | The lineage's totals. |
+| `session_id` | string | yes | The session that made the call. |
+| `session_totals` | [`UsageTotalsView`](#usagetotalsview) | yes | The session's totals. |
 
 ### `VaultAddParams`
 

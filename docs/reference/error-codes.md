@@ -135,6 +135,7 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `logs.invalid_since` | `usage` | 2 | `prometheus logs --since` takes `<N>[smhd]` (30m, 2h, 1d) or an RFC 3339 time. |
 | `logs.io` | `io` | 74 | A log file under `logs/` could not be read. |
 | `usage.invalid_time` | `usage` | 2 | `prometheus usage --since/--until` take `<N>[smhd]` (30m, 2h, 7d) or an RFC 3339 time. |
+| `usage.unknown_source` | `usage` | 2 | `prometheus usage insights --source` names a surface or platform with no activity in the window; the message lists the sources present. |
 | `budget.exceeded` | `budget_exceeded` | 3 | A model call was not sent because its worst-case cost or tokens would exceed a `budgets.*` limit; raise it with `prometheus config set budgets.<key>` or `/budget set`. |
 | `budget.unpriced_model` | `budget_exceeded` | 3 | A USD budget is set but the model has no price; set `models.<model>.price` or `budgets.allow_unpriced = true` (then only token budgets apply to it). |
 | `budget.agent_write` | `permission_denied` | 77 | Budgets are changed only by the user (`prometheus config set`, `/budget set`); agent tools may not write `budgets.*` keys, including through file writes to `config.toml`. |
@@ -288,6 +289,9 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `update.backup_failed` | `io` | 74 | The pre-update backup (`update.pre_update_backup`, `--backup`) could not be written, usually because the home volume is full; the update stopped before the swap (exit 73) and the installed binary is unchanged. Free space, or rerun with `--no-backup`. |
 | `demo.output_not_empty` | `usage` | 2 | `prometheus demo --output DIR` names a directory that is not empty; the demo only runs in a new or empty directory, so it never removes files it did not create. |
 | `demo.io` | `io` | 74 | `prometheus demo` could not create its directory, home, ledger repository or mock script. |
+| `debug.io` | `io` | 74 | `prometheus debug bundle`, `debug share --local` or `debug dump-tasks` could not write its file (the message names it). |
+| `debug.share_failed` | `unavailable` | 69 | `prometheus debug share` (or `debug delete`) could not reach the paste target, or the target refused the report; nothing is recorded in `logs/shares.json`. |
+| `debug.share_invalid` | `config` | 78 | `prometheus debug share --target custom` needs `debug.share.endpoint` (`https://`, or `http://` to a loopback host), or `debug delete` names a URL `logs/shares.json` does not record or whose target cannot delete. |
 | `replay.integrity` | `invalid_input` | 65 | A member of the `.pmtrec` recording is missing, unlisted or no longer matches the sha256 its manifest records (the message names it); the recording was changed after export and is not replayed. |
 | `replay.malformed` | `invalid_input` | 65 | The file is not a `.pmtrec` recording this build reads: not a zstd-compressed tar, no `manifest.json`, a newer `format_version`, or a member that does not parse. |
 | `replay.not_recorded` | `not_found` | 66 | The session has no recording under `<profile>/recordings/` (it ran with `observability.trajectories.enabled = false`, before recordings existed, or retention removed it), so it cannot be exported or replayed. |

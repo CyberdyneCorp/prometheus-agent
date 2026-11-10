@@ -264,6 +264,20 @@ export interface BlueprintsListParams {
   profile?: string | null;
 }
 
+/** One budget's standing in `usage.updated`. */
+export interface BudgetStanding {
+  /** The limit. */
+  limit: number;
+  /** `limit - spent`, never below zero. */
+  remaining: number;
+  /** `turn`, `session`, `root`, `daily`, `monthly` or `unattended`. */
+  scope: string;
+  /** Spent in the scope's period. */
+  spent: number;
+  /** `usd` or `tokens`. */
+  unit: string;
+}
+
 /** `clarify.request` result. */
 export interface ClarifyAnswers {
   /** One answer per question, as the `clarify` tool defines them. */
@@ -360,6 +374,20 @@ export interface Completion {
 export interface Completions {
   /** The candidates, best first. */
   items: Array<Completion>;
+}
+
+/** One component's health. */
+export interface ComponentHealth {
+  /** `store`, `scheduler`, `adapter:<platform>`, `mcp:<server>`... */
+  component: string;
+  /** The owning profile; `null` for daemon-wide components. */
+  profile?: string | null;
+  /** Why. */
+  reason: string;
+  /** When it entered the state (RFC 3339). */
+  since: string;
+  /** `ok`, `degraded` or `down`. */
+  state: string;
 }
 
 /** `config.get` params. */
@@ -550,6 +578,22 @@ export interface FrozenPrompt {
   text: string;
 }
 
+/** `health.changed` payload. */
+export interface HealthChanged {
+  /** The component. */
+  component: string;
+  /** The previous state (`null` when first reported). */
+  previous?: string | null;
+  /** Its profile; `null` for daemon-wide components. */
+  profile?: string | null;
+  /** Why. */
+  reason: string;
+  /** When (RFC 3339). */
+  since: string;
+  /** The new state. */
+  state: string;
+}
+
 /** `rpc.hello` params: the first request on every connection. */
 export interface HelloParams {
   /** What it can handle. */
@@ -700,6 +744,40 @@ export interface McpServerState {
 export interface MemorySummary {
   /** `Memory: +<added> ~<patched> -<removed> (review with /memory review)` when the agent changed memory in the session and `memory.review_mode` is not `off`; `null` otherwise. */
   line?: string | null;
+}
+
+/** One data point of a metric. */
+export interface MetricPoint {
+  /** Its bounded attributes (never content, paths or user ids). */
+  attributes: Record<string, string>;
+  /** A histogram's per-bucket counts (the bounds of `bounds`, then the overflow bucket). */
+  buckets?: Array<number> | null;
+  /** A histogram's sum of observations. */
+  sum?: number | null;
+  /** A counter's or gauge's value; a histogram's observation count. */
+  value: number;
+}
+
+/** One metric of the catalog. */
+export interface MetricView {
+  /** What it counts. */
+  description: string;
+  /** `counter`, `histogram` or `gauge`. */
+  kind: string;
+  /** `prometheus.tokens`... */
+  name: string;
+  /** Its data points. */
+  points: Array<MetricPoint>;
+  /** The UCUM unit. */
+  unit: string;
+}
+
+/** `system.metrics` result: the metrics catalog now. */
+export interface MetricsSnapshot {
+  /** Upper bucket bounds of every histogram, in milliseconds. */
+  bounds: Array<number>;
+  /** Every catalog metric. */
+  metrics: Array<MetricView>;
 }
 
 /** One preset as editors show it. */
@@ -1099,6 +1177,18 @@ export interface SudoRequestParams {
   session_id: string;
 }
 
+/** `system.health` result. */
+export interface SystemHealth {
+  /** The profile's components and the daemon-wide ones. */
+  components: Array<ComponentHealth>;
+}
+
+/** `system.metrics` and `system.health` params. */
+export interface SystemParams {
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+}
+
 /** `session.transcript` result. */
 export interface Transcript {
   /** The active messages, oldest first. */
@@ -1141,6 +1231,42 @@ export interface TurnFinished {
   turn_id: string;
   /** The turn's token and cost totals, as the turn loop reports them. */
   usage?: unknown;
+}
+
+/** Usage totals of a session or a lineage. */
+export interface UsageTotalsView {
+  /** Cache-read tokens. */
+  cache_read_tokens: number;
+  /** Cache-write tokens. */
+  cache_write_tokens: number;
+  /** Calls. */
+  calls: number;
+  /** Sum of the priced calls. */
+  cost_usd: number;
+  /** Uncached input tokens. */
+  input_tokens: number;
+  /** Output tokens. */
+  output_tokens: number;
+  /** Reasoning tokens. */
+  reasoning_tokens: number;
+  /** Calls without a price. */
+  unpriced_calls: number;
+}
+
+/** `usage.updated` payload: after every model call, the same numbers for every client attached to the session. */
+export interface UsageUpdated {
+  /** Every configured budget. */
+  budgets: Array<BudgetStanding>;
+  /** The call's ledger row, without `request_hash`. */
+  call: unknown;
+  /** Its lineage root. */
+  root_session_id: string;
+  /** The lineage's totals. */
+  root_totals: UsageTotalsView;
+  /** The session that made the call. */
+  session_id: string;
+  /** The session's totals. */
+  session_totals: UsageTotalsView;
 }
 
 /** `vault.add` params: exactly one of `login`, `card`, `address`. */
@@ -1428,6 +1554,8 @@ export interface Methods {
   "session.transcript": { params: SessionRef; result: Transcript };
   "session.tree": { params: SessionRef; result: Lineage };
   "subagent.list": { params: SessionRef; result: SubagentList };
+  "system.health": { params: SystemParams; result: SystemHealth };
+  "system.metrics": { params: SystemParams; result: MetricsSnapshot };
   "vault.add": { params: VaultAddParams; result: VaultItem };
   "vault.list": { params: VaultListParams; result: VaultItems };
   "vault.remove": { params: VaultRemoveParams; result: VaultItem };
@@ -1448,10 +1576,12 @@ export interface ServerRequests {
 export interface Events {
   "adapter.state": AdapterStatePayload;
   "automation.state": AutomationStatePayload;
+  "health.changed": HealthChanged;
   "request.cancel": RequestCancel;
   "request.resolved": RequestResolved;
   "session.event": unknown;
   "turn.finished": TurnFinished;
+  "usage.updated": UsageUpdated;
 }
 
 export const UNDECLARED = [
@@ -1489,8 +1619,6 @@ export const UNDECLARED = [
   "screen.handback",
   "screen.takeover",
   "subagent.subscribe",
-  "system.health",
-  "system.metrics",
   "tools.call",
   "tools.list",
   "ui.prefs.get",
@@ -1498,11 +1626,9 @@ export const UNDECLARED = [
   "voice.client_config",
   "wake.feed",
   "achievement.unlocked",
-  "health.changed",
   "local_model.context_grown",
   "message.delivery",
   "message.reaction",
   "session.presence",
-  "usage.updated",
   "wake.detected",
 ] as const;

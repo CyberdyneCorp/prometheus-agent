@@ -292,7 +292,13 @@ impl Sender {
         }
         let hooks = self.hooks.as_deref().filter(|h| h.handles(&route.provider));
         let affinity = session.and_then(|s| self.conversations.affinity(s));
-        let extra = route_headers(route, request, affinity);
+        let mut extra = route_headers(route, request, affinity);
+        // Never sent to a provider unless `observability.otel.propagate_external`.
+        if let Some(traceparent) =
+            session.and_then(|s| pmt_obs::otel::context::external_traceparent(&s.to_string()))
+        {
+            extra.push(("traceparent".to_owned(), traceparent));
+        }
         send_http(&self.client, hooks, route, request, extra).await
     }
 }

@@ -273,8 +273,16 @@ fn send(conn: &Conn, text: String) {
 fn text_frame(server: &Arc<Server>, conn: &Arc<Conn>, text: &str) -> ControlFlow<()> {
     match frame::parse(text) {
         Err((id, err)) => send(conn, frame::error(id.as_ref(), &err)),
-        Ok(Incoming::Request { id, method, params }) => {
-            return request(server, conn, id, &method, params);
+        Ok(Incoming::Request {
+            id,
+            method,
+            params,
+            traceparent,
+        }) => {
+            let traceparent = traceparent
+                .as_deref()
+                .and_then(pmt_obs::otel::TraceContext::parse);
+            return request(server, conn, (id, traceparent), &method, params);
         }
         Ok(Incoming::Response {
             id: Id::Str(id),
@@ -292,7 +300,7 @@ fn text_frame(server: &Arc<Server>, conn: &Arc<Conn>, text: &str) -> ControlFlow
 fn request(
     server: &Arc<Server>,
     conn: &Arc<Conn>,
-    id: Id,
+    (id, traceparent): (Id, Option<pmt_obs::otel::TraceContext>),
     method: &str,
     params: Value,
 ) -> ControlFlow<()> {
@@ -326,6 +334,7 @@ fn request(
         id,
         method: method.to_owned(),
         params,
+        traceparent,
     };
     if long {
         let workers = Arc::clone(&server.workers);
@@ -351,6 +360,8 @@ pub struct Job {
     id: Id,
     method: String,
     params: Value,
+    /// The caller's trace context (`meta.traceparent`).
+    traceparent: Option<pmt_obs::otel::TraceContext>,
 }
 
 impl Job {
@@ -363,7 +374,15 @@ impl Job {
             id,
             method,
             params,
+            traceparent,
         } = self;
+        // The request's `rpc.request` span, under the caller's context.
+        let mut span = pmt_obs::otel::Standalone::start(
+            "rpc.request",
+            pmt_obs::otel::context::derived(&format!("rpc:{}", random_hex(8))),
+            traceparent,
+        );
+        span.attribute("rpc.method", &method);
         let conn = Arc::clone(&call.conn);
         let server = Arc::clone(&call.server);
         let minor = conn.hello.get().map_or(0, |h| h.minor);
@@ -390,15 +409,16 @@ impl Job {
             let err = Error::new(&codes::RPC_INTERNAL, format!("internal error: {method}"));
             Err(RpcError::from_error(&err))
         };
-        let reply = match outcome {
+        let (reply, error) = match outcome {
             Ok(mut result) => {
                 catalog
                     .catalog()
                     .strip_newer(&method, &mut result, true, minor);
-                frame::result(&id, &result)
+                (frame::result(&id, &result), None)
             }
-            Err(err) => frame::error(Some(&id), &err),
+            Err(err) => (frame::error(Some(&id), &err), Some(err.code.to_string())),
         };
+        span.end(error);
         send(&conn, reply);
     }
 }

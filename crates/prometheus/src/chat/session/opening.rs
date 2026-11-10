@@ -10,14 +10,14 @@ use pmt_core::capability::CapabilitySet;
 use pmt_core::error::Error;
 use pmt_core::id::SessionId;
 use pmt_memory::session::MemorySession;
-use pmt_obs::trajectory::writer::TrajectoryWriter;
 use pmt_skills::session::SkillsSession;
 
 use super::delegation::{ChildSpec, Wiring};
 use super::model::SwitchableModel;
 use super::tool_state::ToolState;
 use super::tools::SwappableTools;
-use super::{Factory, code, env, events_to, progress, summarize, tools};
+use super::trace::events_to;
+use super::{Factory, code, env, progress, summarize, tools};
 
 /// What the agent of an opening session is assembled from.
 pub(super) struct AgentInputs<'a> {
@@ -30,7 +30,7 @@ pub(super) struct AgentInputs<'a> {
     pub tools: &'a Arc<SwappableTools>,
     pub tool_state: &'a Arc<ToolState>,
     pub prompt: PromptSetup,
-    pub trajectory: Option<&'a Arc<TrajectoryWriter>>,
+    pub recording: &'a super::trace::Recording,
     pub environment: &'a env::Attached,
     pub agent_tools: &'a Arc<AgentTools>,
     pub delegation: &'a Wiring,
@@ -209,7 +209,7 @@ impl Factory {
         );
         self.record_and_replay(&mut setup, inputs.tools, id);
         let in_process = inputs.clients.is_none() && child.is_none();
-        let events = events_to(inputs.trajectory.cloned(), inputs.clients);
+        let events = events_to(inputs.recording, inputs.clients);
         let _ = inputs.environment.denials.set(Arc::downgrade(&events));
         let events = self.with_lifecycle_hooks(id, inputs.session, events);
         let (tee, progress) = progress::Tee::new(events, self.options.interactive);

@@ -695,6 +695,43 @@
       },
       "type": "object"
     },
+    "BudgetStanding": {
+      "additionalProperties": false,
+      "description": "One budget's standing in `usage.updated`.",
+      "properties": {
+        "limit": {
+          "description": "The limit.",
+          "format": "double",
+          "type": "number"
+        },
+        "remaining": {
+          "description": "`limit - spent`, never below zero.",
+          "format": "double",
+          "type": "number"
+        },
+        "scope": {
+          "description": "`turn`, `session`, `root`, `daily`, `monthly` or `unattended`.",
+          "type": "string"
+        },
+        "spent": {
+          "description": "Spent in the scope's period.",
+          "format": "double",
+          "type": "number"
+        },
+        "unit": {
+          "description": "`usd` or `tokens`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "scope",
+        "unit",
+        "limit",
+        "spent",
+        "remaining"
+      ],
+      "type": "object"
+    },
     "ClarifyAnswers": {
       "additionalProperties": false,
       "description": "`clarify.request` result.",
@@ -1005,6 +1042,43 @@
       },
       "required": [
         "items"
+      ],
+      "type": "object"
+    },
+    "ComponentHealth": {
+      "additionalProperties": false,
+      "description": "One component's health.",
+      "properties": {
+        "component": {
+          "description": "`store`, `scheduler`, `adapter:<platform>`, `mcp:<server>`...",
+          "type": "string"
+        },
+        "profile": {
+          "default": null,
+          "description": "The owning profile; `null` for daemon-wide components.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "description": "Why.",
+          "type": "string"
+        },
+        "since": {
+          "description": "When it entered the state (RFC 3339).",
+          "type": "string"
+        },
+        "state": {
+          "description": "`ok`, `degraded` or `down`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "component",
+        "state",
+        "reason",
+        "since"
       ],
       "type": "object"
     },
@@ -1604,6 +1678,51 @@
       ],
       "type": "object"
     },
+    "HealthChanged": {
+      "additionalProperties": false,
+      "description": "`health.changed` payload.",
+      "properties": {
+        "component": {
+          "description": "The component.",
+          "type": "string"
+        },
+        "previous": {
+          "default": null,
+          "description": "The previous state (`null` when first reported).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile": {
+          "default": null,
+          "description": "Its profile; `null` for daemon-wide components.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "description": "Why.",
+          "type": "string"
+        },
+        "since": {
+          "description": "When (RFC 3339).",
+          "type": "string"
+        },
+        "state": {
+          "description": "The new state.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "component",
+        "state",
+        "reason",
+        "since"
+      ],
+      "type": "object"
+    },
     "HelloParams": {
       "additionalProperties": false,
       "description": "`rpc.hello` params: the first request on every connection.",
@@ -2012,6 +2131,112 @@
           ]
         }
       },
+      "type": "object"
+    },
+    "MetricPoint": {
+      "additionalProperties": false,
+      "description": "One data point of a metric.",
+      "properties": {
+        "attributes": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Its bounded attributes (never content, paths or user ids).",
+          "type": "object"
+        },
+        "buckets": {
+          "description": "A histogram's per-bucket counts (the bounds of `bounds`, then the\noverflow bucket).",
+          "items": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "sum": {
+          "description": "A histogram's sum of observations.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "value": {
+          "description": "A counter's or gauge's value; a histogram's observation count.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "attributes",
+        "value"
+      ],
+      "type": "object"
+    },
+    "MetricView": {
+      "additionalProperties": false,
+      "description": "One metric of the catalog.",
+      "properties": {
+        "description": {
+          "description": "What it counts.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "`counter`, `histogram` or `gauge`.",
+          "type": "string"
+        },
+        "name": {
+          "description": "`prometheus.tokens`...",
+          "type": "string"
+        },
+        "points": {
+          "description": "Its data points.",
+          "items": {
+            "$ref": "#/$defs/MetricPoint"
+          },
+          "type": "array"
+        },
+        "unit": {
+          "description": "The UCUM unit.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "kind",
+        "unit",
+        "description",
+        "points"
+      ],
+      "type": "object"
+    },
+    "MetricsSnapshot": {
+      "additionalProperties": false,
+      "description": "`system.metrics` result: the metrics catalog now.",
+      "properties": {
+        "bounds": {
+          "description": "Upper bucket bounds of every histogram, in milliseconds.",
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "metrics": {
+          "description": "Every catalog metric.",
+          "items": {
+            "$ref": "#/$defs/MetricView"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "bounds",
+        "metrics"
+      ],
       "type": "object"
     },
     "MoaPresetInfo": {
@@ -3191,6 +3416,38 @@
       ],
       "type": "object"
     },
+    "SystemHealth": {
+      "additionalProperties": false,
+      "description": "`system.health` result.",
+      "properties": {
+        "components": {
+          "description": "The profile's components and the daemon-wide ones.",
+          "items": {
+            "$ref": "#/$defs/ComponentHealth"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "components"
+      ],
+      "type": "object"
+    },
+    "SystemParams": {
+      "additionalProperties": false,
+      "description": "`system.metrics` and `system.health` params.",
+      "properties": {
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "Transcript": {
       "additionalProperties": false,
       "description": "`session.transcript` result.",
@@ -3307,6 +3564,111 @@
       "required": [
         "turn_id",
         "exit_reason"
+      ],
+      "type": "object"
+    },
+    "UsageTotalsView": {
+      "additionalProperties": false,
+      "description": "Usage totals of a session or a lineage.",
+      "properties": {
+        "cache_read_tokens": {
+          "description": "Cache-read tokens.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cache_write_tokens": {
+          "description": "Cache-write tokens.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "calls": {
+          "description": "Calls.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cost_usd": {
+          "description": "Sum of the priced calls.",
+          "format": "double",
+          "type": "number"
+        },
+        "input_tokens": {
+          "description": "Uncached input tokens.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "output_tokens": {
+          "description": "Output tokens.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reasoning_tokens": {
+          "description": "Reasoning tokens.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "unpriced_calls": {
+          "description": "Calls without a price.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "calls",
+        "input_tokens",
+        "output_tokens",
+        "cache_read_tokens",
+        "cache_write_tokens",
+        "reasoning_tokens",
+        "cost_usd",
+        "unpriced_calls"
+      ],
+      "type": "object"
+    },
+    "UsageUpdated": {
+      "additionalProperties": false,
+      "description": "`usage.updated` payload: after every model call, the same numbers for\nevery client attached to the session.",
+      "properties": {
+        "budgets": {
+          "description": "Every configured budget.",
+          "items": {
+            "$ref": "#/$defs/BudgetStanding"
+          },
+          "type": "array"
+        },
+        "call": {
+          "description": "The call's ledger row, without `request_hash`."
+        },
+        "root_session_id": {
+          "description": "Its lineage root.",
+          "type": "string"
+        },
+        "root_totals": {
+          "$ref": "#/$defs/UsageTotalsView",
+          "description": "The lineage's totals."
+        },
+        "session_id": {
+          "description": "The session that made the call.",
+          "type": "string"
+        },
+        "session_totals": {
+          "$ref": "#/$defs/UsageTotalsView",
+          "description": "The session's totals."
+        }
+      },
+      "required": [
+        "session_id",
+        "root_session_id",
+        "call",
+        "session_totals",
+        "root_totals",
+        "budgets"
       ],
       "type": "object"
     },
@@ -4009,8 +4371,10 @@
       "since": "1.0"
     },
     "health.changed": {
-      "declared": false,
       "owner": "observability",
+      "payload": {
+        "$ref": "#/$defs/HealthChanged"
+      },
       "since": "1.0"
     },
     "local_model.context_grown": {
@@ -4060,8 +4424,10 @@
       "since": "1.0"
     },
     "usage.updated": {
-      "declared": false,
       "owner": "observability",
+      "payload": {
+        "$ref": "#/$defs/UsageUpdated"
+      },
       "since": "1.0"
     },
     "wake.detected": {
@@ -4794,13 +5160,23 @@
       "since": "1.0"
     },
     "system.health": {
-      "declared": false,
       "owner": "observability",
+      "params": {
+        "$ref": "#/$defs/SystemParams"
+      },
+      "result": {
+        "$ref": "#/$defs/SystemHealth"
+      },
       "since": "1.0"
     },
     "system.metrics": {
-      "declared": false,
       "owner": "observability",
+      "params": {
+        "$ref": "#/$defs/SystemParams"
+      },
+      "result": {
+        "$ref": "#/$defs/MetricsSnapshot"
+      },
       "since": "1.0"
     },
     "tools.call": {

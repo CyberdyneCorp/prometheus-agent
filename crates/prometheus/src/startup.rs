@@ -130,6 +130,26 @@ pub fn register_profile(scope: &pmt_config::ProfileScope) {
     crate::advisories::warn_unacked(scope);
 }
 
+/// Starts the OTLP export the profile enables (spec: observability, Opt-in
+/// OpenTelemetry export); export stays off, with an error logged, when it
+/// cannot start. Nothing reaches the network unless enabled.
+pub fn start_export(scope: &pmt_config::ProfileScope) {
+    if pmt_obs::otel::exporter().is_some() {
+        return;
+    }
+    let instance = format!("{}-{}", scope.name(), std::process::id());
+    if let Err(err) = pmt_obs::otel::start(scope, &instance) {
+        tracing::error!("OpenTelemetry export disabled: {err}");
+    }
+}
+
+/// Sends what the export still holds before the process exits.
+pub fn flush_export() {
+    if let Some(exporter) = pmt_obs::otel::exporter() {
+        exporter.flush_blocking(std::time::Duration::from_secs(3));
+    }
+}
+
 /// The launch environment's secrets, named (`PMT_SECRET_X` is `X`).
 fn launch_redactor(launch: &LaunchEnv) -> Redactor {
     Redactor::named(launch.secrets().map(|(variable, value)| {

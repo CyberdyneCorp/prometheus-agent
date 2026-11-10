@@ -26,6 +26,9 @@ pub(crate) struct Daemon<'a> {
     pub(crate) home: Option<&'a Path>,
     /// The user a system-scope unit runs as.
     pub(crate) run_as: Option<&'a str>,
+    /// `daemon.systemd_watchdog_secs`: `> 0` makes the systemd unit
+    /// `Type=notify` with this `WatchdogSec`.
+    pub(crate) watchdog_secs: u64,
 }
 
 /// Quotes a path for systemd's `ExecStart` (C-style double quotes).
@@ -40,8 +43,18 @@ fn systemd_quote(text: &str) -> String {
 pub(crate) fn systemd(daemon: &Daemon<'_>) -> String {
     let mut unit = String::from(
         "[Unit]\nDescription=Prometheus agent daemon\nAfter=network-online.target\n\
-         Wants=network-online.target\n\n[Service]\nType=simple\n",
+         Wants=network-online.target\n\n[Service]\n",
     );
+    if daemon.watchdog_secs > 0 {
+        // The daemon notifies only while its liveness probes succeed.
+        let _ = writeln!(
+            unit,
+            "Type=notify\nNotifyAccess=main\nWatchdogSec={}",
+            daemon.watchdog_secs
+        );
+    } else {
+        unit.push_str("Type=simple\n");
+    }
     let _ = writeln!(
         unit,
         "ExecStart={} daemon run",
@@ -174,7 +187,22 @@ mod tests {
             exe: Path::new(EXE),
             home,
             run_as,
+            watchdog_secs: 0,
         }
+    }
+
+    #[test]
+    fn a_systemd_watchdog_makes_the_unit_notify() {
+        assert!(systemd(&daemon(None, None)).contains("Type=simple\n"));
+        let unit = systemd(&Daemon {
+            watchdog_secs: 90,
+            ..daemon(None, None)
+        });
+        assert!(
+            unit.contains("Type=notify\nNotifyAccess=main\nWatchdogSec=90\n"),
+            "{unit}"
+        );
+        assert!(!unit.contains("Type=simple"));
     }
 
     #[test]

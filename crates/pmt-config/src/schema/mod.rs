@@ -102,10 +102,12 @@ pub use models::{
     PoolStrategy, PreferCredential, ProviderAuth, ProviderConfig, RoutingConfig, WireFormat,
 };
 pub use operations::{
-    BudgetsConfig, DegradedFeature, EgressConfig, EgressMode, GatewayHealthConfig, LogLevel,
-    LoggingConfig, NetworkConfig, ObservabilityConfig, PrivacyConfig, SandboxConfig, SandboxMode,
-    SecretCommandConfig, SecretsBackend, SecretsConfig, SecurityConfig, TelemetryConfig,
-    TrajectoriesConfig, VaultConfig, VaultKeyStorage, VaultSourceConfig, WorktreesConfig,
+    BudgetsConfig, DebugConfig, DebugShareConfig, DegradedFeature, EgressConfig, EgressMode,
+    GatewayHealthConfig, HealthListenerConfig, LogLevel, LoggingConfig, MetricsEndpointConfig,
+    NetworkConfig, ObservabilityConfig, OtelConfig, OtelProtocol, PrivacyConfig, SandboxConfig,
+    SandboxMode, SecretCommandConfig, SecretsBackend, SecretsConfig, SecurityConfig,
+    TelemetryConfig, TrajectoriesConfig, VaultConfig, VaultKeyStorage, VaultSourceConfig,
+    WorktreesConfig,
 };
 pub use plugins::{
     DEFAULT_CATALOG_URL, GuidanceMode, PluginsConfig, PluginsWasmConfig, SecurityGuidanceConfig,
@@ -178,6 +180,8 @@ pub struct Config {
     pub cron: CronConfig,
     /// Subagent delegation.
     pub delegation: DelegationConfig,
+    /// Diagnostics: the debug share target.
+    pub debug: DebugConfig,
     /// Display preferences of interactive surfaces.
     pub display: DisplayConfig,
     /// Provider fallback.
@@ -309,6 +313,7 @@ impl Default for Config {
             context: ContextConfig::default(),
             cron: CronConfig::default(),
             delegation: DelegationConfig::default(),
+            debug: DebugConfig::default(),
             display: DisplayConfig::default(),
             fallback: FallbackConfig::default(),
             files: FilesConfig::default(),

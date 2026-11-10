@@ -15,6 +15,82 @@ pub struct ObservabilityConfig {
     /// The gateway daemon's health export (read from the launch profile).
     #[schemars(extend("x-apply" = "restart"))]
     pub gateway_health: GatewayHealthConfig,
+    /// Opt-in OpenTelemetry export (traces and metrics).
+    #[schemars(extend("x-apply" = "restart"))]
+    pub otel: OtelConfig,
+    /// The daemon's local Prometheus-format scrape endpoint.
+    #[schemars(extend("x-apply" = "restart"))]
+    pub metrics_endpoint: MetricsEndpointConfig,
+    /// The daemon's loopback health listener (`/healthz`, `/readyz`).
+    #[schemars(extend("x-apply" = "restart"))]
+    pub health: HealthListenerConfig,
+}
+
+/// The `[observability.otel]` section (spec: observability, Opt-in
+/// OpenTelemetry export; Span model; Trace context propagation). Nothing
+/// is exported unless `enabled`; `OTEL_*` environment variables never
+/// configure export.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct OtelConfig {
+    /// Export traces and metrics over OTLP. Off by default.
+    pub enabled: bool,
+    /// The collector's OTLP base URL (`https://`, or `http://` to a
+    /// loopback collector), e.g. `http://127.0.0.1:4318`; required when
+    /// enabled. `/v1/traces` and `/v1/metrics` are appended for
+    /// `http/protobuf`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub endpoint: Option<String>,
+    /// Wire protocol.
+    pub protocol: OtelProtocol,
+    /// Names of secrets sent as request headers: the secret `NAME` becomes
+    /// the header `name` with `_` as `-` (`X_API_KEY` -> `x-api-key`).
+    pub header_secrets: Vec<String>,
+    /// Attach message content, tool arguments and tool output to spans.
+    pub capture_content: bool,
+    /// Send `traceparent` to model providers, MCP servers and other
+    /// external hosts.
+    pub propagate_external: bool,
+}
+
+/// `observability.otel.protocol`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub enum OtelProtocol {
+    /// OTLP over HTTP with protobuf bodies.
+    #[default]
+    #[serde(rename = "http/protobuf")]
+    HttpProtobuf,
+    /// OTLP over gRPC.
+    #[serde(rename = "grpc")]
+    Grpc,
+}
+
+/// The `[observability.metrics_endpoint]` section (spec: observability,
+/// Local metrics scrape endpoint).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct MetricsEndpointConfig {
+    /// Serve `GET /metrics` on the health listener (no authentication, no
+    /// per-session or per-user labels). Off by default: 404.
+    pub enabled: bool,
+}
+
+/// The `[observability.health]` section (spec: observability, Health
+/// endpoints).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct HealthListenerConfig {
+    /// Loopback listen address; port `0` picks a free port, recorded as
+    /// `health_url` in `run/gateway.json`.
+    pub bind: String,
+}
+
+impl Default for HealthListenerConfig {
+    fn default() -> Self {
+        Self {
+            bind: "127.0.0.1:0".to_owned(),
+        }
+    }
 }
 
 /// The `[observability.gateway_health]` section (spec: messaging-gateway,
@@ -161,6 +237,28 @@ pub struct TelemetryConfig {
     /// HTTPS endpoint (loopback HTTP allowed).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub endpoint: Option<String>,
+}
+
+/// The `[debug]` section (spec: observability, Opt-in debug share upload).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+#[schemars(extend("x-apply" = "live"))]
+pub struct DebugConfig {
+    /// `prometheus debug share --target custom`.
+    pub share: DebugShareConfig,
+}
+
+/// The `[debug.share]` section: a private support endpoint.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct DebugShareConfig {
+    /// The URL `--target custom` POSTs the report to (`https://`, or
+    /// `http://` to a loopback host).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub endpoint: Option<String>,
+    /// Names of secrets sent as request headers (`X_API_KEY` ->
+    /// `x-api-key`).
+    pub header_secrets: Vec<String>,
 }
 
 /// The `[worktrees]` section (spec: git-worktrees).

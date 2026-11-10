@@ -28,6 +28,10 @@ use crate::tickets::random_hex;
 /// A connection's number within the daemon.
 pub type ConnId = u64;
 
+/// No connection (connection ids start at 1): a daemon-level event sent to
+/// everyone.
+pub const NO_CONN: ConnId = 0;
+
 /// How the hub reaches one attached connection.
 #[derive(Debug, Clone)]
 pub struct Peer {
@@ -138,6 +142,7 @@ impl Violations {
             "RPC contract violation by the daemon in {name}: {violation}"
         );
         self.count.fetch_add(1, Ordering::Relaxed);
+        pmt_obs::metrics::global().add(pmt_obs::metrics::RPC_CONTRACT_VIOLATIONS, &[], 1.0);
         if self.abort {
             eprintln!("RPC contract violation by the daemon in {name}: {violation}");
             std::process::abort();

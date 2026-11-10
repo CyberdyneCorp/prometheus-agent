@@ -42,6 +42,7 @@ pub mod media_check;
 pub mod migrate;
 pub mod moa_check;
 mod moa_edit;
+pub mod observability_check;
 mod parse;
 pub mod passthrough;
 mod platform_options;

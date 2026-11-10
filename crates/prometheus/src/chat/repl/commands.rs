@@ -33,7 +33,9 @@ impl Repl {
     /// Runs a slash line typed at an idle prompt.
     pub(super) async fn slash(&mut self, line: String) -> Flow {
         match self.registry.resolve(&line, Surface::Cli) {
-            Resolution::Builtin { command, args } => self.builtin(command, &args, &line).await,
+            Resolution::Builtin { command, args } => {
+                Box::pin(self.builtin(command, &args, &line)).await
+            }
             Resolution::External { command, args } => match command.source {
                 Source::Quick => self.quick(&command.name, &args, 0).await,
                 Source::Plugin => {
@@ -65,7 +67,7 @@ impl Repl {
             });
             return Flow::Continue;
         }
-        self.run_builtin(command.name, &args).await
+        Box::pin(self.run_builtin(command.name, &args)).await
     }
 
     /// The answer to a destructive command's confirmation.
@@ -90,7 +92,9 @@ impl Repl {
                 }
                 let (name, args) = crate::slash::split_line(line);
                 match self.registry.builtin(&name) {
-                    Some(command) => self.run_builtin(command.name, &take_yes(&args).0).await,
+                    Some(command) => {
+                        Box::pin(self.run_builtin(command.name, &take_yes(&args).0)).await
+                    }
                     None => Flow::Continue,
                 }
             }

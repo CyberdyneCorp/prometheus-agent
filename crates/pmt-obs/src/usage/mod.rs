@@ -7,6 +7,8 @@
 //! appended ([`UsageRecorder`]) and sums rows for reports ([`report`]).
 //! Unpriced calls are shown as `—` ([`format_cost`]), never `$0.00`.
 
+pub mod insights;
+pub mod live;
 mod price;
 pub mod report;
 
@@ -157,6 +159,8 @@ impl UsageRecorder {
             cache_hit: call.cache_hit,
         };
         self.store.record_usage(&event)?;
+        crate::metrics::record_model_call(&event);
+        live::notify(self.store.profile_name(), &event);
         Ok(event)
     }
 }

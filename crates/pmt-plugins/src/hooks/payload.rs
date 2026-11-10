@@ -57,6 +57,20 @@ impl Payload {
         &self.fields
     }
 
+    /// The payload with the W3C `traceparent` of `session`'s current span
+    /// (spec: observability, Trace context propagation), when the session
+    /// is live in this process; plugins ignore fields they do not know.
+    #[must_use]
+    pub fn traced(&self, session: Option<&str>) -> Self {
+        let mut traced = self.clone();
+        if let Some(context) = session.and_then(pmt_obs::otel::context::current) {
+            traced
+                .fields
+                .insert("traceparent".to_owned(), context.traceparent().into());
+        }
+        traced
+    }
+
     /// The JSON a plugin built against hook world `1.<minor>` receives.
     #[must_use]
     pub fn for_minor(&self, hook: &str, minor: u64) -> String {

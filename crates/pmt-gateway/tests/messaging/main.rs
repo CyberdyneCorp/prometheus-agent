@@ -7,6 +7,7 @@ mod busy;
 mod cards;
 mod chats;
 mod commands;
+mod component_health;
 mod controls;
 mod delivery;
 mod display;

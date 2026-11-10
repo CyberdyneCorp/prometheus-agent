@@ -95,8 +95,8 @@ pub enum Command {
     /// Check the install and profile: one ok / warn / fail line per check;
     /// `--fix` performs the enumerated repairs.
     Doctor(DoctorArgs),
-    /// Diagnostics: `debug summary` prints a plain-text setup summary for
-    /// support threads.
+    /// Diagnostics: a setup summary for support threads, a redacted debug
+    /// bundle, an opt-in report upload and a daemon task dump.
     Debug {
         /// The debug subcommand.
         #[command(subcommand)]
@@ -224,6 +224,9 @@ pub enum Command {
     },
     /// Show structured log records of a component (`list` names them).
     Logs(LogsArgs),
+    /// Whether the daemon runs and how: components, sessions, the next
+    /// scheduled job and today's spend (`--check` for scripts).
+    Status(crate::status_cmd::StatusArgs),
     /// Totals of model and metered tool calls from the usage ledger.
     Usage(UsageArgs),
     /// Measure the system prompt and tool schemas a new session would send.
@@ -235,7 +238,8 @@ pub enum Command {
     /// Run the offline demo: the agent fixes a bug in a small ledger
     /// repository with the scripted mock provider, in a temporary profile.
     Demo(DemoArgs),
-    /// Render the recorded trajectory of a session.
+    /// Render a session's recorded trajectory, or export sessions as
+    /// `ShareGPT` training records.
     Trajectory {
         /// The trajectory subcommand.
         #[command(subcommand)]
@@ -489,6 +493,13 @@ pub struct SmokeSuiteArgs {
     /// Keep the directory afterwards.
     #[arg(long, help = "Keep every task's home and workspace afterwards")]
     pub keep: bool,
+    /// TOML appended to every task's profile configuration (the
+    /// observability overhead gate measures with it).
+    #[arg(long, value_name = "FILE", hide = true)]
+    pub extra_config: Option<PathBuf>,
+    /// Task ids not to run (listed as skipped).
+    #[arg(long, value_name = "ID", hide = true)]
+    pub skip: Vec<String>,
 }
 
 /// `prometheus update` arguments. The flags are independent switches of
@@ -544,6 +555,22 @@ pub enum DebugCommand {
         #[arg(long)]
         show_key_prefixes: bool,
     },
+    /// Write a redacted `tar.zst` of the window's logs, the configuration,
+    /// `doctor --json`, `version --json`, crash reports and optionally a
+    /// session's trajectory (nothing is uploaded).
+    Bundle(crate::debug_cmd::bundle::BundleArgs),
+    /// Upload a redacted report (setup summary and recent log records) to
+    /// a paste service after an explicit yes, or write it locally.
+    Share(crate::debug_cmd::share::ShareArgs),
+    /// Delete a share recorded in `logs/shares.json` where the target
+    /// supports deletion.
+    Delete {
+        /// The share's URL.
+        url: String,
+    },
+    /// Ask the running daemon to write a dump of every thread and task to
+    /// `logs/task-dump-<UTC>.txt` without stopping it.
+    DumpTasks,
 }
 
 /// `prometheus approvals` subcommands.
@@ -649,7 +676,11 @@ pub struct LogsArgs {
 
 /// `prometheus usage` arguments.
 #[derive(Debug, Clone, clap::Args)]
+#[command(args_conflicts_with_subcommands = true)]
 pub struct UsageArgs {
+    /// `usage insights`.
+    #[command(subcommand)]
+    pub command: Option<UsageCommand>,
     /// Calls since `<N>[smhd]` ago or an RFC 3339 time.
     #[arg(long, value_name = "S", default_value = "30d")]
     pub since: String,
@@ -663,6 +694,31 @@ pub struct UsageArgs {
     #[arg(long, value_name = "ID", conflicts_with = "all_profiles")]
     pub session: Option<String>,
     /// Every profile, each through its own scope, with a grand total.
+    #[arg(long)]
+    pub all_profiles: bool,
+}
+
+/// `prometheus usage` subcommands.
+#[derive(Debug, Clone, Subcommand)]
+pub enum UsageCommand {
+    /// What the profile did: sessions, messages, turns, tools, tokens,
+    /// cost, breakdowns by model, provider and source, top tools, skills,
+    /// activity by weekday and hour, and the costliest lineages (no model
+    /// call).
+    Insights(InsightsArgs),
+}
+
+/// `prometheus usage insights` arguments.
+#[derive(Debug, Clone, clap::Args)]
+pub struct InsightsArgs {
+    /// The last N days.
+    #[arg(long, value_name = "N", default_value_t = 30, value_parser = clap::value_parser!(u32).range(1..=3650))]
+    pub days: u32,
+    /// Only lineages started from this surface or platform (`cli`, `tui`,
+    /// `cron`, `telegram`...).
+    #[arg(long, value_name = "S")]
+    pub source: Option<String>,
+    /// Every profile, each through its own scope.
     #[arg(long)]
     pub all_profiles: bool,
 }
@@ -769,6 +825,10 @@ pub enum TrajectoryCommand {
         #[arg(long, value_name = "N")]
         max_chars: Option<usize>,
     },
+    /// Write sessions as `ShareGPT` conversations (or their events), one
+    /// JSON line per session, redacted; sessions that ended in an error
+    /// are left out unless `--include-failed`.
+    Export(crate::trajectory_export::ExportArgs),
 }
 
 /// `trajectory show --format` values.

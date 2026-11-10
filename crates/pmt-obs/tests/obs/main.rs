@@ -4,9 +4,12 @@
 //! (modules below) to keep the build small.
 
 mod budget;
+mod collector;
 mod golden;
 mod logs;
+mod otel;
 mod retention;
+mod sharegpt;
 mod support;
 mod usage;
 mod writer;

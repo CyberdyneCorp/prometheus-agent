@@ -45,7 +45,9 @@ pub(crate) async fn read(shared: Arc<Shared>, mut rx: UnboundedReceiver<Message>
         };
         match frame::parse(text.as_str()) {
             Ok(Incoming::Notification { method, params }) => event(&shared, &method, &params),
-            Ok(Incoming::Request { id, method, params }) => request(&shared, id, &method, params),
+            Ok(Incoming::Request {
+                id, method, params, ..
+            }) => request(&shared, id, &method, params),
             Ok(Incoming::Response { .. }) | Err(_) => {}
         }
     }

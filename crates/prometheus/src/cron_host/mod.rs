@@ -230,7 +230,22 @@ impl HostRunner {
             runner: self,
             clock: &SystemClock,
         };
-        pmt_cron::exec::execute(&ctx, job, run).await
+        // The run's `cron.run` span; its agent session hangs under it.
+        let mut span = pmt_obs::otel::Standalone::start(
+            "cron.run",
+            pmt_obs::otel::context::cron_run(&run.id),
+            None,
+        );
+        span.attribute("prometheus.profile", self.scope.name().as_str());
+        span.attribute("prometheus.cron.job_id", job.id());
+        let done = pmt_cron::exec::execute(&ctx, job, run).await;
+        let error = match &done {
+            Ok(row) if matches!(row.status.as_str(), "ok" | "silent" | "delivery_queued") => None,
+            Ok(row) => Some(row.status.clone()),
+            Err(err) => Some(err.code().code.to_owned()),
+        };
+        span.end(error);
+        done
     }
 }
 

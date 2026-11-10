@@ -1,8 +1,15 @@
-//! `prometheus debug summary [--show-key-prefixes]` (spec: observability,
-//! Plain-text setup summary): one plain-text block for a support thread.
-//! Secret values never appear (with `--show-key-prefixes`, only the first
-//! and last four characters of secrets longer than 16 characters), and
-//! credentials embedded in URLs become `***`.
+//! `prometheus debug` (spec: observability, Plain-text setup summary;
+//! Crash and debug bundle; Opt-in debug share upload; Runtime liveness
+//! watchdog and task dump): `summary [--show-key-prefixes]` prints one
+//! plain-text block for a support thread (secret values never appear;
+//! with `--show-key-prefixes`, only the first and last four characters of
+//! secrets longer than 16 characters; credentials embedded in URLs become
+//! `***`), `bundle` writes a redacted local archive, `share` uploads a
+//! redacted report only after an explicit yes, `delete` removes a recorded
+//! share, and `dump-tasks` asks the daemon for a task dump.
+
+pub mod bundle;
+pub mod share;
 
 use std::fmt::Write as _;
 use std::path::PathBuf;
@@ -28,7 +35,38 @@ pub fn run(command: &DebugCommand, ctx: &Context<'_>) -> Result<u8, Error> {
             let scope = ctx.scope()?;
             print_raw(&summary(ctx, &scope, *show_key_prefixes))
         }
+        DebugCommand::Bundle(args) => bundle::run(args, ctx),
+        DebugCommand::Share(args) => share::run(args, ctx),
+        DebugCommand::Delete { url } => share::delete(url, ctx),
+        DebugCommand::DumpTasks => dump_tasks(ctx),
     }
+}
+
+/// `prometheus debug dump-tasks`: the running daemon writes a task dump
+/// without stopping; its path.
+fn dump_tasks(ctx: &Context<'_>) -> Result<u8, Error> {
+    let home = ctx.home()?.root().to_path_buf();
+    let Some(record) = (match pmt_rpc::discovery::discover(&home)? {
+        pmt_rpc::discovery::Discovery::Running(record) => Some(record),
+        _ => None,
+    }) else {
+        return Err(Error::new(
+            &pmt_core::error::codes::DAEMON_NOT_RUNNING,
+            "the daemon is not running; there are no tasks to dump",
+        ));
+    };
+    let control = record.endpoint.control.clone();
+    let response = crate::model_cmd::block_on(async move {
+        pmt_rpc::control::call(&control, &pmt_rpc::control::ControlRequest::DumpTasks).await
+    })??;
+    if let Some(error) = response.error {
+        return Err(Error::new(&pmt_core::error::codes::DEBUG_IO, error.message));
+    }
+    let path = response.dumped.unwrap_or_default();
+    if ctx.json {
+        return crate::output::document("debug dump-tasks", &serde_json::json!({ "path": path }));
+    }
+    crate::output::print(&format!("task dump written to {path}"))
 }
 
 /// Replaces `user:password@` in every URL of `text` with `***@`.
@@ -66,7 +104,9 @@ pub fn key_prefix(value: &str) -> String {
     format!("{head}…{tail}")
 }
 
-fn summary(ctx: &Context<'_>, scope: &ProfileScope, prefixes: bool) -> String {
+/// The plain-text setup summary of `scope` (`debug summary`, the head of
+/// a `debug share` report).
+pub(crate) fn summary(ctx: &Context<'_>, scope: &ProfileScope, prefixes: bool) -> String {
     let config = scope.config();
     let mut text = String::new();
     let mut line = |label: &str, value: &str| {
@@ -138,7 +178,9 @@ fn install_owner(scope: &ProfileScope) -> String {
     }
 }
 
-fn sandbox_enforcement(ctx: &Context<'_>, scope: &ProfileScope) -> String {
+/// What the OS sandbox enforces for `scope` here (`debug summary`,
+/// `status --full`).
+pub(crate) fn sandbox_enforcement(ctx: &Context<'_>, scope: &ProfileScope) -> String {
     let scratch = scope.path("cache/scratch");
     let paths = Paths {
         user_home: ctx

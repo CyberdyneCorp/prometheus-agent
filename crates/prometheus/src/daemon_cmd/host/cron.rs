@@ -27,6 +27,7 @@ const PRUNE_EVERY: Duration = Duration::from_hours(1);
 /// serves later) until the daemon stops.
 pub(in crate::daemon_cmd) async fn schedule(host: Arc<DaemonHost>) {
     let mut started = BTreeSet::new();
+    pmt_obs::health::global().report(None, "scheduler", pmt_obs::health::State::Ok, "running");
     loop {
         for (name, profile) in host.all_profiles() {
             if started.insert(name.clone()) {

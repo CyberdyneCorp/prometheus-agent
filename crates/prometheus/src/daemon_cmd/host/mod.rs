@@ -41,19 +41,23 @@ mod cron_send;
 mod delegations;
 mod discovery;
 mod gateway;
+mod health_sample;
 mod notify;
 mod reload;
 mod send_tool;
 mod setup;
 mod speech;
 mod turns;
+mod usage_events;
 mod worktrees;
 
 use crate::chat::resume;
 use crate::chat::session::{Clients, Factory, Live};
 pub(super) use automation::schedule as schedule_automation;
 pub(super) use cron::schedule as schedule_cron;
+pub(super) use health_sample::sample as sample_health;
 pub(super) use reload::watch;
+pub(super) use usage_events::publish as publish_usage;
 pub(super) use worktrees::sweep_worktrees;
 
 /// A loaded session.
@@ -155,7 +159,14 @@ fn session_id(text: &str) -> Result<SessionId, Error> {
 /// spawns) go to that profile's `logs/` as the `agent` component, not to
 /// the daemon's `gateway.log` (spec: observability, Structured logs).
 fn session_span(profile: &str, session_id: &str) -> tracing::Span {
-    tracing::info_span!("session", component = "agent", profile, session_id)
+    let trace_id = pmt_obs::otel::context::trace_hex_of(session_id);
+    tracing::info_span!(
+        "session",
+        component = "agent",
+        profile,
+        session_id,
+        trace_id = trace_id.as_str()
+    )
 }
 
 fn busy(id: SessionId) -> Error {
@@ -207,7 +218,11 @@ impl DaemonHost {
     ) -> Result<Self, Error> {
         let mut profiles = BTreeMap::new();
         for scope in scopes {
-            profiles.insert(scope.name().to_string(), Profile::open(scope)?);
+            let name = scope.name().to_string();
+            let profile = super::health::opening_store(&name, launch.test_store_delay(), || {
+                Profile::open(scope)
+            })?;
+            profiles.insert(name, profile);
         }
         Ok(Self {
             profiles: std::sync::RwLock::new(profiles),

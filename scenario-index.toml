@@ -364,7 +364,7 @@ capabilities = [
 "Fresh install network audit" = ["crates/prometheus/tests/no_telemetry.rs::a_mock_chat_session_makes_no_connection"]
 
 [observability."Plain-text setup summary"]
-"URL credentials redacted" = ["crates/prometheus/src/debug_cmd.rs::url_credentials_are_replaced"]
+"URL credentials redacted" = ["crates/prometheus/src/debug_cmd/mod.rs::url_credentials_are_replaced"]
 
 [security-boundaries."Declared trust model"]
 "Approval regex bypass report" = ["crates/prometheus/tests/security_policy.rs::every_spec_boundary_and_heuristic_is_classified"]
@@ -3482,3 +3482,59 @@ capabilities = [
 
 [replay-and-evaluation."Built-in smoke suite"]
 "Regression in tool dispatch" = ["crates/prometheus/tests/smoke_suite.rs::a_broken_parallel_dispatch_misses_the_smoke_grade"]
+
+# Group 52 (observability upgrades)
+
+[observability."Opt-in OpenTelemetry export"]
+"Collector down" = ["crates/pmt-obs/tests/obs/otel.rs::collector_down_adds_no_latency_and_counts_dropped_items", "crates/pmt-obs/tests/obs/otel.rs::a_full_queue_drops_the_oldest_and_counts_it"]
+
+[observability."Span model"]
+"Content not exported by default" = ["crates/prometheus/tests/obs_otel.rs::a_turn_exports_its_span_tree_under_the_session_trace_without_content", "crates/pmt-obs/tests/obs/otel.rs::content_is_not_exported_by_default"]
+
+[observability."Trace context propagation"]
+"Subagent spans join the parent trace" = ["crates/prometheus/tests/obs_otel.rs::subagent_session_spans_hang_under_the_delegating_tool_call", "crates/pmt-obs/tests/obs/otel.rs::subagent_spans_join_the_parent_trace"]
+
+[observability."Metrics catalog"]
+"Error counted by kind" = ["crates/pmt-providers/tests/providers/metrics.rs::an_authentication_failure_counts_one_auth_error"]
+
+[observability."Local metrics scrape endpoint (upgrade)"]
+"Scrape disabled by default" = ["crates/prometheus/tests/obs_daemon.rs::scrape_is_disabled_by_default"]
+
+[observability."Live usage events"]
+"TUI and desktop agree" = ["crates/prometheus/tests/obs_daemon.rs::every_attached_client_receives_the_same_usage_update"]
+
+[observability."Health endpoints"]
+"Store migration in progress" = ["crates/prometheus/tests/obs_daemon.rs::readyz_names_the_store_while_it_opens_and_turns_ready"]
+
+[observability."Component health model"]
+"Adapter loses its connection" = ["crates/pmt-gateway/tests/messaging/component_health.rs::three_failed_polls_in_a_row_degrade_the_adapter_and_announce_it", "crates/prometheus/tests/obs_daemon.rs::system_health_returns_the_components_of_the_connections_profile"]
+
+[observability."Status command"]
+"Scripted health check" = ["crates/prometheus/tests/obs_daemon.rs::status_check_exits_1_naming_a_down_adapter", "crates/prometheus/tests/obs_daemon.rs::status_without_a_daemon_says_so_and_check_exits_1"]
+
+[observability."Crash and debug bundle (upgrade)"]
+"Bundle contains no secret values" = ["crates/prometheus/tests/obs_reports.rs::a_debug_bundle_contains_none_of_the_profiles_secret_values"]
+
+[observability."Observability overhead budget"]
+"Overhead gate" = ["xtask/src/perf/overhead.rs::recording_more_than_3_percent_slower_fails_the_gate"]
+
+[observability."Usage insights report"]
+"Insights for one platform" = ["crates/prometheus/tests/obs_reports.rs::insights_for_one_platform_count_only_its_sessions_and_calls"]
+"Slash command in a chat" = ["crates/prometheus/tests/obs_daemon.rs::insights_in_a_session_shows_the_report_and_adds_no_ledger_row"]
+
+[observability."Configuration-centric status"]
+"Offline full status" = ["crates/prometheus/tests/obs_reports.rs::full_status_lists_credentials_offline_and_only_deep_probes_connect"]
+
+[observability."Export posture status"]
+"Content capture is visible" = ["crates/prometheus/tests/obs_reports.rs::export_posture_states_what_leaves_the_host"]
+
+[observability."Runtime liveness watchdog and task dump"]
+"Stalled runtime restarts" = ["crates/prometheus/tests/obs_watchdog.rs::a_stalled_runtime_is_dumped_marked_degraded_and_exits_75"]
+"Dump without restart" = ["crates/prometheus/tests/obs_watchdog.rs::sigusr2_writes_a_dump_and_the_daemon_keeps_serving", "crates/prometheus/tests/obs_watchdog.rs::debug_dump_tasks_writes_a_dump_over_the_control_channel"]
+
+[observability."Opt-in debug share upload"]
+"Declined upload sends nothing" = ["crates/prometheus/tests/obs_reports.rs::a_declined_upload_makes_no_connection_and_exits_1"]
+"Unattended share refused" = ["crates/prometheus/tests/obs_reports.rs::an_unattended_share_without_yes_uploads_nothing_and_exits_4"]
+
+[observability."ShareGPT trajectory export"]
+"Tool call rendering" = ["crates/pmt-obs/tests/obs/sharegpt.rs::a_tool_using_session_renders_to_the_golden_sharegpt_record", "crates/prometheus/tests/obs_reports.rs::an_exported_session_renders_its_tool_call_and_response"]

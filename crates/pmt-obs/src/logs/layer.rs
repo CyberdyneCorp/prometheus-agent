@@ -108,7 +108,10 @@ pub fn install(setup: LogSetup) -> &'static LogHandle {
     HANDLE.get_or_init(|| {
         let (layer, handle) = layer(setup);
         // Fails only when a subscriber is already set (tests): keep it.
-        let _ = tracing::subscriber::set_global_default(tracing_subscriber::registry().with(layer));
+        let subscriber = tracing_subscriber::registry()
+            .with(layer)
+            .with(crate::taskdump::TaskLayer);
+        let _ = tracing::subscriber::set_global_default(subscriber);
         handle
     })
 }

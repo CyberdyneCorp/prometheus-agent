@@ -103,6 +103,7 @@ fn main() -> ExitCode {
     startup::raise_nofile(home.map(PathBuf::as_path));
     let reporter = startup::crash_reporter(home, &launch);
     let outcome = panic::catch_main(&reporter, || run(&cli, &launch));
+    startup::flush_export();
     // Python-bridge sidecars and their children end with the process.
     prometheus::plugins_host::bridge::shutdown_all();
     match outcome {
@@ -131,6 +132,7 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Setup(args)) => prometheus::setup_cmd::run(args, &ctx),
         Some(Command::Doctor(args)) => prometheus::doctor_cmd::run(args, &ctx),
         Some(Command::Debug { command }) => prometheus::debug_cmd::run(command, &ctx),
+        Some(Command::Status(args)) => prometheus::status_cmd::run(args, &ctx),
         Some(Command::Config { command }) => config_cmd::run(command, &ctx),
         Some(Command::Secrets { command }) => secrets_cmd::run(command, &ctx),
         Some(Command::Grants { command }) => grants_cmd::run(command, &ctx),

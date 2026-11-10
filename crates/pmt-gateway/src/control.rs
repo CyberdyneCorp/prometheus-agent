@@ -128,6 +128,7 @@ pub(crate) fn answer(
                 Err(err) => failure(&err),
             }
         }
+        ControlRequest::DumpTasks => dump_tasks(server),
         ControlRequest::Status => ControlResponse {
             status: Some(server.status()),
             ..ControlResponse::default()
@@ -205,6 +206,26 @@ async fn send(
 }
 
 /// `/handoff` through the running daemon's gateway.
+/// `prometheus debug dump-tasks`: the task dump, written without stopping.
+fn dump_tasks(server: &Server) -> ControlResponse {
+    let Some(home) = server.home() else {
+        return failure(&Error::new(
+            &codes::HOME_IO,
+            "this daemon has no home to write a dump to",
+        ));
+    };
+    let runtime = tokio::runtime::Handle::try_current()
+        .ok()
+        .map(|h| pmt_obs::taskdump::RuntimeCounters::of(&h));
+    match pmt_obs::taskdump::write(home, "requested (debug dump-tasks)", runtime) {
+        Ok(path) => ControlResponse {
+            dumped: Some(path.display().to_string()),
+            ..ControlResponse::default()
+        },
+        Err(err) => failure(&err),
+    }
+}
+
 async fn handoff(server: &Server, profile: &str, session: &str, target: &str) -> ControlResponse {
     let Some(messaging) = server.messaging() else {
         return failure(&Error::new(

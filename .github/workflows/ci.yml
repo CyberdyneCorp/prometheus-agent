@@ -140,6 +140,13 @@ jobs:
         # The budgets apply to the reference runner only; the perf job runs them.
         run: scripts/check --no-perf
 
+      # The OTLP export (http/protobuf and gRPC) against a real
+      # OpenTelemetry Collector container (spec: observability, Opt-in
+      # OpenTelemetry export).
+      - name: OTLP export against an OpenTelemetry Collector
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: scripts/ci/otel-collector
+
       # A build without an optional surface still answers to its name with
       # exit 69 (spec: workspace-architecture, Version and build
       # identity); only the prometheus crate rebuilds.

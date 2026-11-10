@@ -28,6 +28,17 @@ pub struct ListOptions {
     pub pinned_only: bool,
 }
 
+/// Session counts of a store.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SessionCounts {
+    /// Every session.
+    pub total: u64,
+    /// Sessions started since the asked time.
+    pub since: u64,
+    /// Sessions with no end recorded.
+    pub open: u64,
+}
+
 /// The sources `-c` and `--resume latest` pick from.
 const INTERACTIVE_SOURCES: &[Source] = &[Source::Cli, Source::Tui];
 
@@ -95,6 +106,32 @@ impl Store {
         }
         let filter = clauses.join(" AND ");
         self.read(|conn| query_sessions(conn, &filter, &params, options.limit))
+    }
+
+    /// How many sessions the store holds: in all, started since `since`
+    /// and still open (no end recorded); for `prometheus status --full`.
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`.
+    pub fn session_counts(&self, since: jiff::Timestamp) -> Result<SessionCounts, Error> {
+        self.read(|conn| {
+            conn.query_row(
+                "SELECT COUNT(*), \
+                        COALESCE(SUM(started_at >= ?1), 0), \
+                        COALESCE(SUM(ended_at IS NULL), 0) \
+                 FROM sessions",
+                params![since.as_millisecond()],
+                |row| {
+                    Ok(SessionCounts {
+                        total: row.get::<_, i64>(0)?.unsigned_abs(),
+                        since: row.get::<_, i64>(1)?.unsigned_abs(),
+                        open: row.get::<_, i64>(2)?.unsigned_abs(),
+                    })
+                },
+            )
+            .map_err(sql)
+        })
     }
 
     /// The session `-c` resumes in `cwd`: the most recent CLI or TUI

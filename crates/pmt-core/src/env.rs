@@ -58,6 +58,14 @@ const TEST_SERVICE_DIR: &str = "PMT_TEST_SERVICE_DIR";
 /// test suite can hold voice conversations without a sound card (a test
 /// seam; release builds ignore it).
 const TEST_AUDIO_DIR: &str = "PMT_TEST_AUDIO_DIR";
+/// Debug builds: milliseconds the daemon waits while opening each
+/// profile's store at startup, standing in for a slow schema migration (a
+/// test seam of `/readyz`; release builds ignore it).
+const TEST_STORE_DELAY_MS: &str = "PMT_TEST_STORE_DELAY_MS";
+/// Debug builds: milliseconds after startup at which the daemon blocks
+/// its async runtime for good, standing in for a task that never yields
+/// (a test seam of the liveness watchdog; release builds ignore it).
+const TEST_STALL_RUNTIME_MS: &str = "PMT_TEST_STALL_RUNTIME_MS";
 const RUST_LOG: &str = "RUST_LOG";
 /// The notepad channel file of the scheduled run whose terminal started
 /// this process (spec: scheduled-jobs, Per-job notepad): the run's sandbox
@@ -152,6 +160,8 @@ pub struct LaunchEnv {
     test_adapter_dir: Option<PathBuf>,
     test_service_dir: Option<PathBuf>,
     test_audio_dir: Option<PathBuf>,
+    test_store_delay: Option<std::time::Duration>,
+    test_stall_runtime: Option<std::time::Duration>,
     cron_notepad: Option<PathBuf>,
 }
 
@@ -203,6 +213,8 @@ impl LaunchEnv {
                 Var::TestAdapterDir => env.test_adapter_dir = non_blank(value).map(PathBuf::from),
                 Var::TestServiceDir => env.test_service_dir = non_blank(value).map(PathBuf::from),
                 Var::TestAudioDir => env.test_audio_dir = non_blank(value).map(PathBuf::from),
+                Var::TestStoreDelay => env.test_store_delay = millis(&value),
+                Var::TestStallRuntime => env.test_stall_runtime = millis(&value),
                 Var::CronNotepad => env.cron_notepad = non_blank(value).map(PathBuf::from),
                 Var::PmtLog => pmt_log = env.unicode(name, value),
                 Var::RustLog => rust_log = env.unicode(name, value),
@@ -275,6 +287,21 @@ impl LaunchEnv {
     #[must_use]
     pub fn test_audio_dir(&self) -> Option<&PathBuf> {
         self.test_audio_dir.as_ref()
+    }
+
+    /// Debug builds: `PMT_TEST_STORE_DELAY_MS`, the wait the daemon adds to
+    /// opening each profile's store at startup. Always `None` in release
+    /// builds.
+    #[must_use]
+    pub fn test_store_delay(&self) -> Option<std::time::Duration> {
+        self.test_store_delay
+    }
+
+    /// Debug builds: `PMT_TEST_STALL_RUNTIME_MS`, when the daemon blocks
+    /// its runtime for good. Always `None` in release builds.
+    #[must_use]
+    pub fn test_stall_runtime(&self) -> Option<std::time::Duration> {
+        self.test_stall_runtime
     }
 
     /// Debug builds: `PMT_TEST_BATTERY`, the battery the status bar
@@ -421,6 +448,8 @@ enum Var {
     TestAdapterDir,
     TestServiceDir,
     TestAudioDir,
+    TestStoreDelay,
+    TestStallRuntime,
     CronNotepad,
     Secret,
     Ignored(Option<String>),
@@ -438,6 +467,16 @@ impl Var {
     }
 }
 
+/// A whole number of milliseconds.
+fn millis(value: &std::ffi::OsStr) -> Option<std::time::Duration> {
+    value
+        .to_str()?
+        .trim()
+        .parse::<u64>()
+        .ok()
+        .map(std::time::Duration::from_millis)
+}
+
 fn classify(name: &str, policy: &EnvPolicy<'_>) -> Var {
     match name {
         HOME_VAR => return Var::Home,
@@ -452,6 +491,8 @@ fn classify(name: &str, policy: &EnvPolicy<'_>) -> Var {
         TEST_ADAPTER_DIR if cfg!(debug_assertions) => return Var::TestAdapterDir,
         TEST_SERVICE_DIR if cfg!(debug_assertions) => return Var::TestServiceDir,
         TEST_AUDIO_DIR if cfg!(debug_assertions) => return Var::TestAudioDir,
+        TEST_STORE_DELAY_MS if cfg!(debug_assertions) => return Var::TestStoreDelay,
+        TEST_STALL_RUNTIME_MS if cfg!(debug_assertions) => return Var::TestStallRuntime,
         CRON_NOTEPAD => return Var::CronNotepad,
         _ => {}
     }

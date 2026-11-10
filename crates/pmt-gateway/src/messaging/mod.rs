@@ -23,6 +23,7 @@
 //! client alike, and the first valid answer from any of them wins.
 
 pub mod adapter;
+mod adapter_health;
 mod adapters;
 mod admit;
 mod admit_groups;

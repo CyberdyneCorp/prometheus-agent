@@ -78,10 +78,19 @@ pub fn run(args: &SmokeSuiteArgs) -> Result<u8, Error> {
             std::env::consts::OS
         );
     }
+    let extra = match &args.extra_config {
+        Some(path) => std::fs::read_to_string(path)
+            .map_err(|e| Error::io(&pmt_core::error::codes::DEMO_IO, path, &e))?,
+        None => String::new(),
+    };
     let ids = super::task_ids();
     let (mut passed, mut failed, mut skipped) = (0, Vec::new(), Vec::new());
     for id in &ids {
-        match run_task(&bin, id, &place.root().join(id)) {
+        if args.skip.iter().any(|s| s == id) {
+            skipped.push(format!("{id} (left out)"));
+            continue;
+        }
+        match run_task(&bin, id, &place.root().join(id), &extra) {
             Outcome::Passed => {
                 passed += 1;
                 println!("passed: {id}");
@@ -114,11 +123,12 @@ enum Outcome {
     Skipped(String),
 }
 
-fn run_task(bin: &Path, id: &str, scratch: &Path) -> Outcome {
-    let run: Run = match parse_optional(id, "run.toml") {
+fn run_task(bin: &Path, id: &str, scratch: &Path, extra_config: &str) -> Outcome {
+    let mut run: Run = match parse_optional(id, "run.toml") {
         Ok(run) => run.unwrap_or_default(),
         Err(why) => return Outcome::Failed(why),
     };
+    run.config.push_str(extra_config);
     if let Some(needed) = run.requires.as_deref().filter(|c| !has(c)) {
         return Outcome::Skipped(needed.to_owned());
     }

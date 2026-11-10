@@ -299,6 +299,8 @@ impl Hooks {
         let Some(callbacks) = self.callbacks.get(hook) else {
             return Vec::new();
         };
+        let traced = payload.traced(call.session_id.as_deref());
+        let payload = &traced;
         let mut answers = Vec::new();
         for callback in callbacks {
             if self.is_suspended(&callback.plugin, hook) {

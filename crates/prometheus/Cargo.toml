@@ -129,6 +129,9 @@ ulid.workspace = true
 tokio = { workspace = true, features = ["signal"] }
 tracing.workspace = true
 unicode-width.workspace = true
+# `debug bundle` archives (`.tar.zst`).
+tar.workspace = true
+zstd.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 # The controlling terminal's device and session leader (`-c` per terminal);
@@ -142,6 +145,8 @@ sha2.workspace = true
 
 [dev-dependencies]
 flate2.workspace = true
+# Decodes what the fake OTLP collector of the export tests receives.
+prost.workspace = true
 # Large test images for the vision embed budget.
 image.workspace = true
 pmt-local = { workspace = true, features = ["testkit"] }

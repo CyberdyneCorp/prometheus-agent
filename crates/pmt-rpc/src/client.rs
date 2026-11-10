@@ -416,7 +416,9 @@ async fn route(text: &str, pending: &Pending, routes: &Routes) {
                 let _ = routes.events.send(envelope);
             }
         }
-        Ok(Incoming::Request { id, method, params }) => {
+        Ok(Incoming::Request {
+            id, method, params, ..
+        }) => {
             let _ = routes.requests.send(ServerCall {
                 id: id.to_string(),
                 method,

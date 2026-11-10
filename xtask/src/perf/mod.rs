@@ -17,6 +17,7 @@
 //! (see `perf/README.md`).
 
 mod budget;
+mod overhead;
 mod sample;
 
 use std::path::{Path, PathBuf};
@@ -33,6 +34,7 @@ pub(crate) fn run(
     update: bool,
 ) -> Result<(), String> {
     let current = measure(root, runs)?;
+    check_overhead(root)?;
     let mut baseline = load_baseline(baseline_path)?;
     let platform = platform();
     report(&platform, &current, baseline.get(&platform));
@@ -55,6 +57,35 @@ pub(crate) fn run(
         println!("perf: recorded {platform} in {}", baseline_path.display());
     }
     Ok(())
+}
+
+/// The observability overhead gate on the release binary.
+fn check_overhead(root: &Path) -> Result<(), String> {
+    let binary = cargo_build_bin(
+        root,
+        &["--release", "--package", "prometheus"],
+        "prometheus",
+    )?;
+    let measured = overhead::measure(&binary, &root.join("target/perf-overhead"))?;
+    println!(
+        "perf: smoke suite {:.3}s with recording off, {:.3}s with recording and logging, {:.3}s with OTLP export (fastest of {})",
+        measured.off,
+        measured.recording,
+        measured.export,
+        overhead::RUNS
+    );
+    let violations = overhead::evaluate(&measured);
+    for violation in &violations {
+        eprintln!("perf: {violation}");
+    }
+    if violations.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "{} observability overhead violation(s)",
+            violations.len()
+        ))
+    }
 }
 
 /// Builds `name` with `cargo build <args>` and returns the executable cargo

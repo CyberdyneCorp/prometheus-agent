@@ -73,6 +73,9 @@ toml_edit = "0.25"
 # Compile-fail tests of the ProfileScope API contract.
 trybuild = "1.0"
 tracing = "0.1"
+# OTLP protobuf messages of the opt-in OpenTelemetry export (the message
+# subset is declared by hand with the derive; no codegen, no gRPC stack).
+prost = { version = "0.14", default-features = false, features = ["derive", "std"] }
 sha2 = "0.11"
 # TOTP codes of vault logins (HMAC-SHA1, RFC 6238).
 sha1 = "0.11"

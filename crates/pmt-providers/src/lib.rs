@@ -37,6 +37,7 @@ pub mod metadata;
 pub mod moa;
 pub mod mock;
 pub mod pool;
+pub mod probe;
 pub mod quota;
 pub mod reasoning;
 pub mod registry;

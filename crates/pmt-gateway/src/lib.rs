@@ -10,6 +10,8 @@
 //! - [`router`], [`methods`] and [`discovery`]: typed method dispatch,
 //!   the built-in session methods with their profile and attachment checks,
 //!   and the read-only discovery methods;
+//! - [`health_http`]: the loopback health listener (`/healthz`,
+//!   `/readyz`, `/metrics`);
 //! - [`hub`]: attachments, per-session event logs with replay, and
 //!   server-to-client requests;
 //! - [`host`]: the agent side the daemon serves sessions with;
@@ -22,12 +24,14 @@ pub mod connection;
 pub mod control;
 pub mod daemon;
 pub mod discovery;
+pub mod health_http;
 pub mod host;
 pub mod hub;
 pub mod local;
 pub mod messaging;
 pub mod methods;
 pub mod moa;
+pub mod observability;
 pub mod router;
 pub mod server;
 pub mod slots;

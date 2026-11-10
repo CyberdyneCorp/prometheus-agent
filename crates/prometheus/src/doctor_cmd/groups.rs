@@ -396,16 +396,54 @@ pub(super) fn mcp(inputs: &Inputs<'_>) -> Vec<Check> {
 
 /// `observability`: exporters (none can be enabled in this build).
 pub(super) fn observability(inputs: &Inputs<'_>) -> Vec<Check> {
-    let trajectories = inputs.scope.config().observability.trajectories.enabled;
-    vec![Check::new(
+    let observability = &inputs.scope.config().observability;
+    let trajectories = if observability.trajectories.enabled {
+        "on"
+    } else {
+        "off"
+    };
+    let otel = &observability.otel;
+    let exporters = if otel.enabled {
+        let host = otel
+            .endpoint
+            .as_deref()
+            .and_then(|e| reqwest::Url::parse(e).ok())
+            .and_then(|u| u.host_str().map(str::to_owned))
+            .unwrap_or_default();
+        format!("OTLP export to {host}; trajectories {trajectories}")
+    } else {
+        format!("no exporter enabled; trajectories {trajectories}")
+    };
+    let mut checks = vec![Check::new(
         "observability",
         "exporters",
         Status::Ok,
-        format!(
-            "no exporter enabled; trajectories {}",
-            if trajectories { "on" } else { "off" }
-        ),
-    )]
+        exporters,
+    )];
+    // `OTEL_*` variables configure nothing (spec: observability, Opt-in
+    // OpenTelemetry export): say so instead of letting them look effective.
+    let ignored = pmt_obs::otel::ignored_env_vars(
+        inputs
+            .ctx
+            .launch
+            .inherited_vars()
+            .map(|(name, _)| name.to_owned()),
+    );
+    if !ignored.is_empty() {
+        checks.push(
+            Check::new(
+                "observability",
+                "otel_env",
+                Status::Warn,
+                format!(
+                    "{} set but ignored: export is configured only by [observability.otel]",
+                    ignored.join(", ")
+                ),
+            )
+            .with_hint("prometheus config set observability.otel.enabled true"),
+        );
+    }
+    checks
 }
 
 /// `providers`: a credential for every configured provider; with

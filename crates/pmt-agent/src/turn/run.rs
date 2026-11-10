@@ -123,6 +123,7 @@ pub(super) async fn run(
 ) -> Result<TurnResult, Error> {
     let setup = &agent.setup;
     let id = TurnId::new();
+    tracing::Span::current().record("turn_id", id.as_str());
     // `cron.timezone` is live: a reloaded zone counts from this turn on.
     agent
         .budgets

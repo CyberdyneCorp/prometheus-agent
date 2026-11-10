@@ -32,6 +32,8 @@ pub struct CronRun {
     /// ([`crate::cron_host::notepad`]): writable by its terminal, whose
     /// `PATH` starts with the channel's `bin/`.
     pub notepad: Option<PathBuf>,
+    /// The run's `cron.run` span, the session span's parent.
+    pub trace: Option<pmt_obs::otel::TraceContext>,
 }
 
 /// The tool of scheduling jobs.
