@@ -1,11 +1,11 @@
 {
   "macos-aarch64": {
-    "startup_median_ms": 5.34,
-    "startup_p95_ms": 8.02,
-    "peak_rss_bytes": 10780672,
-    "binary_bytes": 55617408,
-    "chat_prompt_median_ms": 129.12,
-    "chat_prompt_p95_ms": 134.07,
-    "chat_peak_rss_bytes": 36208640
+    "startup_median_ms": 5.22,
+    "startup_p95_ms": 6.58,
+    "peak_rss_bytes": 12156928,
+    "binary_bytes": 56752992,
+    "chat_prompt_median_ms": 141.12,
+    "chat_prompt_p95_ms": 144.89,
+    "chat_peak_rss_bytes": 43565056
   }
 }
