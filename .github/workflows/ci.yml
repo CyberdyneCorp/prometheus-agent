@@ -496,28 +496,31 @@ jobs:
         if: github.event_name == 'push'
         run: scripts/check --perf --update-baseline --baseline target/perf-main.json
 
-      # The baseline is the pull request's base branch measured in this same
-      # job, on this same machine, right before the head. A baseline recorded
-      # by another run lands on another runner, and the chat prompt median
-      # alone moved 22-32 ms between runs of one branch, past the 15% gate.
+      # The baseline is the pull request's base branch, built here and
+      # measured in rounds alternating with the head in the same step
+      # (`--base-binary`), so both see the same machine: measured ~20 min
+      # apart, the runner's drift alone moved the head's `--version` 29%
+      # and failed the chat prompt gate. A baseline recorded by another run
+      # lands on another runner, and the chat prompt median alone moved
+      # 22-32 ms between runs of one branch, past the 15% gate.
       # A pull request that changes perf/reference.json re-baselines
       # deliberately (the new reference-runner numbers are reviewed in its
       # diff) and is compared with that file instead. Without a base branch
       # (workflow_dispatch) the checked-in perf/baseline.json applies.
-      - name: Measure the base branch
+      - name: Build the base branch
         if: github.event_name != 'push'
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
           if [ -z "$BASE_REF" ]; then
             echo "no base branch; using perf/baseline.json"
-            echo "PERF_BASELINE=perf/baseline.json" >>"$GITHUB_ENV"
+            echo "PERF_ARGS=--baseline perf/baseline.json" >>"$GITHUB_ENV"
             exit 0
           fi
           git fetch --depth=1 origin "$BASE_REF"
           if ! git diff --quiet FETCH_HEAD HEAD -- perf/reference.json; then
             echo "perf/reference.json changed in this pull request; comparing with it"
-            echo "PERF_BASELINE=perf/reference.json" >>"$GITHUB_ENV"
+            echo "PERF_ARGS=--baseline perf/reference.json" >>"$GITHUB_ENV"
             exit 0
           fi
           git worktree add --detach "$RUNNER_TEMP/perf-base" FETCH_HEAD
@@ -525,12 +528,12 @@ jobs:
           # crates relative to the workspace root, so a shared dir gives base
           # and head the same unit hashes, and the base checkout's newer
           # mtimes make its stale crates look fresh to the head build.
-          mkdir -p "$GITHUB_WORKSPACE/target"
           (cd "$RUNNER_TEMP/perf-base" &&
-            CARGO_TARGET_DIR="$RUNNER_TEMP/perf-base-target" scripts/check --perf \
-              --update-baseline --baseline "$GITHUB_WORKSPACE/target/perf-base.json")
-          echo "PERF_BASELINE=target/perf-base.json" >>"$GITHUB_ENV"
+            CARGO_TARGET_DIR="$RUNNER_TEMP/perf-base-target" \
+              cargo build --locked --release --package prometheus)
+          echo "PERF_ARGS=--base-binary $RUNNER_TEMP/perf-base-target/release/prometheus" >>"$GITHUB_ENV"
 
       - name: Check the budgets
         if: github.event_name != 'push'
-        run: scripts/check --perf --baseline "$PERF_BASELINE"
+        # PERF_ARGS is one flag and one path without spaces.
+        run: scripts/check --perf $PERF_ARGS
