@@ -217,7 +217,11 @@ impl Factory {
         let events = events_to(inputs.recording, inputs.clients);
         let _ = inputs.environment.denials.set(Arc::downgrade(&events));
         let events = self.with_lifecycle_hooks(id, inputs.session, events);
-        let (tee, progress) = progress::Tee::new(events, self.options.interactive);
+        let (tee, progress) = progress::Tee::new(
+            events,
+            self.options.interactive,
+            self.scope.dir().to_path_buf(),
+        );
         self.observe_model(inputs.model, id, tee.notices());
         // An in-process session announces memory changes with its other
         // notices; a daemon binds its clients or chat after opening.

@@ -44,25 +44,33 @@ pub fn streak(previous: u32, status: Status) -> u32 {
     }
 }
 
-/// The failure notice of `job`: the error and, for a recurring job at or
-/// past `threshold` consecutive failures, the review nudge.
+/// The failure notice of `job`, in the profile's language: the error and,
+/// for a recurring job at or past `threshold` consecutive failures, the
+/// review nudge.
 #[must_use]
-pub fn notice(job: &Job, status: Status, error: &str, streak: u32, threshold: u32) -> String {
-    let what = if status == Status::TimedOut {
-        "was interrupted"
+pub fn notice(
+    text: &dyn pmt_core::text::Catalog,
+    job: &Job,
+    status: Status,
+    error: &str,
+    streak: u32,
+    threshold: u32,
+) -> String {
+    let key = if status == Status::TimedOut {
+        "gateway.cron_interrupted"
     } else {
-        "failed"
+        "gateway.cron_failed"
     };
-    let mut text = format!("⚠ cron job {} ({}) {what}: {error}", job.row.name, job.id());
+    let id = job.id();
+    let mut body = text.text(
+        key,
+        &[("name", &job.row.name), ("id", &id), ("error", &error)],
+    );
     if threshold > 0 && streak >= threshold && job.spec.schedule.recurring() {
-        let id = job.id();
-        let _ = write!(
-            text,
-            "\n\nThis job has failed {streak} runs in a row. Fix it, pause it (prometheus cron \
-             pause {id}) or remove it (prometheus cron rm {id})."
-        );
+        let nudge = text.text("gateway.cron_streak", &[("streak", &streak), ("id", &id)]);
+        let _ = write!(body, "\n\n{nudge}");
     }
-    text
+    body
 }
 
 /// When the next automatic re-run of a recurring job fires after an

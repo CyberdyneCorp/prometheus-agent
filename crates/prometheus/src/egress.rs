@@ -330,13 +330,14 @@ impl Change {
     }
 }
 
-/// `/egress status`: the mode and patterns in one block.
+/// `/egress status`: the mode and patterns in one block, worded with
+/// `text`.
 #[must_use]
-pub fn describe(hosts: &HostPolicy) -> String {
+pub fn describe(text: &dyn pmt_core::text::Catalog, hosts: &HostPolicy) -> String {
     let state = hosts.state();
     let list = |patterns: &[Allowed]| {
         if patterns.is_empty() {
-            "none".to_owned()
+            text.text("slash.egress.none", &[])
         } else {
             patterns
                 .iter()
@@ -345,11 +346,13 @@ pub fn describe(hosts: &HostPolicy) -> String {
                 .join(", ")
         }
     };
-    format!(
-        "egress: {}\nallowed: {}\ndenied: {}",
-        state.mode.as_str(),
-        list(&state.allow),
-        list(&state.deny)
+    text.text(
+        "slash.egress.status",
+        &[
+            ("mode", &state.mode.as_str()),
+            ("allowed", &list(&state.allow)),
+            ("denied", &list(&state.deny)),
+        ],
     )
 }
 

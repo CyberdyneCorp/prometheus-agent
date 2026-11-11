@@ -26,7 +26,7 @@ pub(super) async fn context(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> 
         Surface::Gateway => Style::Text,
         _ => Style::Grid,
     };
-    Ok(render(&view, style, all))
+    Ok(render(&*ctx.strings(), &view, style, all))
 }
 
 /// What each indexed skill costs in the index and when loaded whole.

@@ -1430,28 +1430,31 @@ impl Live {
         if let Some(browser) = &self.place.browser() {
             browser.close_session(&self.id.to_string()).await;
         }
-        if let Some(text) = self.sync_back().await {
+        // Logged, so in English.
+        let english = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
+        if let Some(text) = self.sync_back(&*english).await {
             tracing::info!(session = %self.id, "{text}");
         }
         self.place.release();
     }
 
     /// Copies the remote workspace's changes back to the host (session end
-    /// and `/sync`); `None` without sync-back.
-    pub async fn sync_back(&self) -> Option<String> {
+    /// and `/sync`), reported with `text`; `None` without sync-back.
+    pub async fn sync_back(&self, text: &(dyn pmt_core::text::Catalog + Sync)) -> Option<String> {
         let sync = self.place.sync()?;
         let budget = self.config.get().config().terminal.sync_back_max_bytes;
         let done = pmt_core::spawn::blocking(move || sync.sync()).await;
         Some(match done {
             Ok(Ok(report)) => {
-                let copied = format!("sync-back copied {} files", report.copied.len());
-                match report.notice(budget) {
+                let count = report.copied.len();
+                let copied = text.text("display.sync_copied", &[("count", &count)]);
+                match report.notice(text, budget) {
                     Some(notice) => format!("{copied}; {notice}"),
                     None => copied,
                 }
             }
-            Ok(Err(why)) => format!("sync-back failed: {why}"),
-            Err(err) => format!("sync-back failed: {err}"),
+            Ok(Err(why)) => text.text("display.sync_failed", &[("why", &why)]),
+            Err(err) => text.text("display.sync_failed", &[("why", &err)]),
         })
     }
 }

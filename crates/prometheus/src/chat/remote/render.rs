@@ -86,7 +86,8 @@ pub(super) fn event(out: &dyn Out, data: &Value, strings: &pmt_i18n::Strings) {
             text = data["payload"]["text"].as_str().unwrap_or_default()
         )),
         Some(kind) => {
-            if let Some(line) = crate::chat::session::progress::context_line(kind, &data["payload"])
+            if let Some(line) =
+                crate::chat::session::progress::context_line(strings, kind, &data["payload"])
             {
                 out.notice(&line);
             }

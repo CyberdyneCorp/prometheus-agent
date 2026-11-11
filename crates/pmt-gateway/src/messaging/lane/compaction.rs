@@ -25,7 +25,7 @@ impl Lane {
             self.pressure(payload);
             return;
         }
-        let Some(notice) = compaction_notice(kind, payload) else {
+        let Some(notice) = compaction_notice(&*self.strings(), kind, payload) else {
             return;
         };
         let progress = self
@@ -61,6 +61,7 @@ impl Lane {
             Level::Info => OutboundKind::System,
             Level::Warning => OutboundKind::Warning,
         };
-        self.say_as(as_kind, &notice(level, percent), None);
+        let text = notice(&*self.strings(), level, percent);
+        self.say_as(as_kind, &text, None);
     }
 }

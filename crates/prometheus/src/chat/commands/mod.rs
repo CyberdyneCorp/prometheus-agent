@@ -134,13 +134,18 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "status" => info::status(ctx),
         "platforms" => info::platforms(ctx).await,
         "version" => Ok(format!("prometheus {}", crate::build_info::identity())),
-        "toolsets" => crate::tools_cmd::slash_toolsets(&ctx.live.registry(), &ctx.live.selection()),
-        "bundles" => Ok(pmt_skills::bundles::listing(&pmt_skills::bundles::load(
-            ctx.scope.dir(),
-        ))),
+        "toolsets" => crate::tools_cmd::slash_toolsets(
+            &*ctx.strings(),
+            &ctx.live.registry(),
+            &ctx.live.selection(),
+        ),
+        "bundles" => Ok(pmt_skills::bundles::listing(
+            &*ctx.strings(),
+            &pmt_skills::bundles::load(ctx.scope.dir()),
+        )),
         "approvals" => Ok(approvals(&ctx.strings(), ctx.live)),
         "reload-secrets" => crate::slash_handlers::reload_secrets(ctx.scope),
-        "reload-skills" => Ok(pmt_skills::reload::reload(&ctx.live.skills).render()),
+        "reload-skills" => Ok(pmt_skills::reload::reload(&ctx.live.skills).render(&*ctx.strings())),
         "refine" => refine::refine(ctx, args).await,
         "curator" => {
             crate::curator_cmd::slash::run(ctx.scope, ctx.factory.launch(), args, &ctx.post)
@@ -200,6 +205,7 @@ fn state_command(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<String,
             })
         }
         "memory" => pmt_memory::slash::run(
+            &*ctx.strings(),
             &ctx.factory.store,
             &ctx.scope.config().memory,
             Some(&live.id.to_string()),
@@ -227,7 +233,7 @@ fn state_command(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<String,
             text
         }),
         "yolo" => Ok(yolo(&ctx.strings(), live, args)),
-        "egress" => egress(live, args),
+        "egress" => egress(&ctx.strings(), live, args),
         "config" => config(&ctx.strings(), ctx.scope, args),
         _ => return None,
     })
@@ -308,7 +314,8 @@ fn profile(ctx: &Ctx<'_>) -> String {
 
 /// `/sync`: copies the remote workspace's changes back, when there is one.
 async fn sync(ctx: &Ctx<'_>) -> String {
-    match ctx.live.sync_back().await {
+    let strings = ctx.strings();
+    match ctx.live.sync_back(&*strings).await {
         Some(report) => report,
         None => pmt_i18n::t!(ctx.strings(), "slash.nothing_to_sync"),
     }
@@ -373,12 +380,12 @@ fn approvals(strings: &pmt_i18n::Strings, live: &Live) -> String {
 /// `/egress [status] | allow <host> | deny <host> | mode <m>`: changes the
 /// session's egress policy in place (the system prompt and tool array stay
 /// as they are, so the prompt cache holds).
-fn egress(live: &Live, args: &str) -> Result<String, Error> {
+fn egress(strings: &pmt_i18n::Strings, live: &Live, args: &str) -> Result<String, Error> {
     let (action, value) = args.trim().split_once(' ').unwrap_or((args.trim(), ""));
     if !matches!(action, "" | "status") {
         crate::egress::Change::parse(action, value)?.apply(&live.egress.hosts);
     }
-    Ok(crate::egress::describe(&live.egress.hosts))
+    Ok(crate::egress::describe(strings, &live.egress.hosts))
 }
 
 fn yolo(strings: &pmt_i18n::Strings, live: &Live, args: &str) -> String {

@@ -27,7 +27,10 @@ pub(super) fn run(env: &Env, command: &BundlesCommand) -> Result<u8, Error> {
                     .collect();
                 return json(&json!({"bundles": rows, "problems": problems}));
             }
-            print_raw(&bundles::listing(&all))
+            print_raw(&bundles::listing(
+                &*pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+                &all,
+            ))
         }
         BundlesCommand::Show { slug } => show(env, slug),
         BundlesCommand::Create {

@@ -17,6 +17,7 @@ jiff.workspace = true
 percent-encoding.workspace = true
 pmt-config.workspace = true
 pmt-core.workspace = true
+pmt-i18n.workspace = true
 pmt-net.workspace = true
 pmt-obs.workspace = true
 pmt-store.workspace = true

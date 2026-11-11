@@ -117,7 +117,11 @@ fn account_block(ctx: &Ctx<'_>) -> Option<String> {
         Some(quota) => AccountUsage::from_quota(&last.provider, &last.billing_source, &quota),
         None => AccountUsage::unavailable(&last.provider, strings.get("slash.usage.not_reported")),
     };
-    Some(t!(strings, "slash.usage.account", usage = usage.render()))
+    Some(t!(
+        strings,
+        "slash.usage.account",
+        usage = usage.render_in(&*strings)
+    ))
 }
 
 /// `/usage reset [--force]`: redeems a banked limit reset of the session's

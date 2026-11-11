@@ -148,7 +148,11 @@ async fn newly_copied_skill_becomes_invocable_after_reload() {
     );
     let changes = reload::reload(&session.skills);
     assert_eq!(changes.skills.added, ["copied"]);
-    assert!(changes.render().contains("skills added: copied"));
+    assert!(
+        changes
+            .render(&*pmt_i18n::Strings::english(pmt_i18n::Surface::Core))
+            .contains("skills added: copied")
+    );
     let expanded = dispatch::expand(&session.skills, "/copied go", &[])
         .await
         .unwrap()

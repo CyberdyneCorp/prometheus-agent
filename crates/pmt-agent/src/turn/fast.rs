@@ -14,9 +14,8 @@ use super::Agent;
 use super::model::RouteInfo;
 use super::run::Turn;
 
-/// The notice of a fast mode a route cannot honour.
-pub const NO_TIER_NOTICE: &str =
-    "fast mode is ignored on this route: its provider offers no priority tier";
+/// The catalog key of the notice of a fast mode a route cannot honour.
+pub const NO_TIER_NOTICE: &str = "display.fast_no_tier";
 
 impl Agent {
     /// The session's fast mode: its `/fast` choice, else `agent.fast_mode`.
@@ -54,8 +53,9 @@ impl Turn<'_> {
             return Some(speed);
         }
         if !self.agent.fast_noticed.swap(true, Ordering::Relaxed) {
-            tracing::info!(provider = %route.provider, model = %route.model, "{NO_TIER_NOTICE}");
-            self.notices.push(NO_TIER_NOTICE.to_owned());
+            tracing::info!(provider = %route.provider, model = %route.model, "fast mode ignored: no priority tier");
+            self.notices
+                .push(self.strings.get(NO_TIER_NOTICE).to_owned());
         }
         None
     }

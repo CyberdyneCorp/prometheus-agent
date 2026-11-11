@@ -156,9 +156,14 @@ pub fn modify<T>(
 
 /// The live rows of `id` (`/agents`, the line interface's status line).
 #[must_use]
-pub fn rows(store: &pmt_store::Store, id: SessionId, limits: &Limits) -> Vec<String> {
+pub fn rows(
+    text: &dyn pmt_core::text::Catalog,
+    store: &pmt_store::Store,
+    id: SessionId,
+    limits: &Limits,
+) -> Vec<String> {
     load(store, id)
-        .map(|s| s.automation.rows(now_ms(), limits))
+        .map(|s| s.automation.rows(text, now_ms(), limits))
         .unwrap_or_default()
 }
 

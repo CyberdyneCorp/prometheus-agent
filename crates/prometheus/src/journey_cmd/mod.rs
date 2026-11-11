@@ -80,10 +80,12 @@ pub fn run(args: &JourneyArgs, ctx: &Context<'_>, no_color: bool) -> Result<u8, 
     let scope = ctx.scope()?;
     let store = Arc::new(Store::open(&scope)?);
     let user_home = ctx.launch.user_home().map(std::path::PathBuf::as_path);
+    let english = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
     let journey = Journey {
         scope: &scope,
         store: &store,
         user_home,
+        text: &*english,
     };
     match &args.command {
         None => show(&journey, args, ctx, no_color),
@@ -138,7 +140,7 @@ fn list(journey: &Journey<'_>, since: Option<&str>, as_json: bool) -> Result<u8,
     if as_json {
         return json(&nodes);
     }
-    print_raw(&slash::listing(&nodes))
+    print_raw(&slash::listing(journey.text, &nodes))
 }
 
 fn delete(journey: &Journey<'_>, node: &str, yes: bool, as_json: bool) -> Result<u8, Error> {

@@ -498,18 +498,26 @@ fn list_toolsets(args: &ToolsetsListArgs, ctx: &Context<'_>) -> Result<u8, Error
     if ctx.json {
         return document("toolsets list", &serde_json::json!({ "toolsets": rows }));
     }
-    print_raw(&render_toolsets(&rows))
+    print_raw(&render_toolsets(
+        &*pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+        &rows,
+    ))
 }
 
 /// `/toolsets`: the listing with the session's own selection marked
-/// active (the typed slash registry registers it by name).
+/// active (the typed slash registry registers it by name), worded with
+/// `text`.
 ///
 /// # Errors
 ///
 /// A registry inconsistency (a programming error).
-pub fn slash_toolsets(registry: &ToolRegistry, selection: &Selection) -> Result<String, Error> {
+pub fn slash_toolsets(
+    text: &dyn pmt_core::text::Catalog,
+    registry: &ToolRegistry,
+    selection: &Selection,
+) -> Result<String, Error> {
     let rows = toolset_rows(registry, &active(selection, &[]))?;
-    Ok(render_toolsets(&rows))
+    Ok(render_toolsets(text, &rows))
 }
 
 /// The selected toolsets that no disabled toolset names.

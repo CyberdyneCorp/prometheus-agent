@@ -281,12 +281,11 @@ impl Run<'_> {
             // What a command set starts at the next idle boundary, and every
             // surface shows it.
             self.profile.automation_wake.notify_one();
-            let limits = crate::automation::limits(scope.config());
             super::automation::publish(
+                &scope,
                 &self.session.factory.store,
                 self.session.live.id,
                 self.link,
-                &limits,
             );
         }
         match reply {

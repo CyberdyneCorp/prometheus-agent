@@ -415,14 +415,18 @@ fn pending() -> &'static std::sync::Mutex<std::collections::HashMap<String, Path
 pub(crate) async fn slash(ctx: &Context<'_>, session: &str, args: &str) -> Result<String, Error> {
     let scope = ctx.scope()?;
     let words: Vec<&str> = args.split_whitespace().collect();
+    // The report is a diagnostic dump (English, like logs); the replies
+    // around it follow the profile's language.
+    let text = pmt_config::language::strings(scope.dir(), pmt_i18n::Surface::Core);
     let answer = |path: &Path, report: &str| {
-        if report.lines().count() <= SCREEN_LINES {
-            format!("{report}\n(written to {})", path.display())
+        let lines = report.lines().count();
+        if lines <= SCREEN_LINES {
+            let written = text.fmt("slash.debug.written", &[("path", &path.display())]);
+            format!("{report}\n{written}")
         } else {
-            format!(
-                "the report is {} lines long; read it at {}",
-                report.lines().count(),
-                path.display()
+            text.fmt(
+                "slash.debug.long",
+                &[("lines", &lines), ("path", &path.display())],
             )
         }
     };
@@ -430,7 +434,8 @@ pub(crate) async fn slash(ctx: &Context<'_>, session: &str, args: &str) -> Resul
         [] => {
             let report = report(ctx, &scope, 200, true)?;
             let path = write_report(&scope, &report)?;
-            Ok(format!("{}\nnothing was uploaded", answer(&path, &report)))
+            let kept = text.get("slash.debug.not_uploaded");
+            Ok(format!("{}\n{kept}", answer(&path, &report)))
         }
         ["share"] => {
             let report = report(ctx, &scope, 200, true)?;
@@ -440,11 +445,8 @@ pub(crate) async fn slash(ctx: &Context<'_>, session: &str, args: &str) -> Resul
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .insert(session.to_owned(), path.clone());
             let host = target_host(ctx, &scope, Target::PasteRs)?;
-            Ok(format!(
-                "{}\nUpload this report to {host}? It will be public to anyone with the link.\n\
-                 Send /debug share yes to upload; nothing is uploaded otherwise.",
-                answer(&path, &report)
-            ))
+            let ask = text.fmt("slash.debug.confirm", &[("host", &host)]);
+            Ok(format!("{}\n{ask}", answer(&path, &report)))
         }
         ["share", "yes" | "y"] => {
             let path = pending()
@@ -469,10 +471,7 @@ pub(crate) async fn slash(ctx: &Context<'_>, session: &str, args: &str) -> Resul
             };
             let share = upload(ctx, &scope, &args, &report).await?;
             record(scope.home(), &share)?;
-            Ok(format!(
-                "uploaded: {} (delete it with: prometheus debug delete {})",
-                share.url, share.url
-            ))
+            Ok(text.fmt("slash.debug.uploaded", &[("url", &share.url)]))
         }
         _ => Err(Error::new(
             &codes::CLI_USAGE,

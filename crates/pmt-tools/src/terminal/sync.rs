@@ -43,29 +43,31 @@ pub struct Report {
 }
 
 impl Report {
-    /// The notice for the session: what was skipped or left in conflict.
+    /// The notice for the session, in the profile's language: what was
+    /// skipped or left in conflict.
     #[must_use]
-    pub fn notice(&self, budget: u64) -> Option<String> {
+    pub fn notice(&self, text: &dyn pmt_core::text::Catalog, budget: u64) -> Option<String> {
         let mut parts = Vec::new();
         if !self.skipped.is_empty() {
             let names: Vec<String> = self
                 .skipped
                 .iter()
-                .map(|(path, size)| format!("{path} ({size} bytes)"))
+                .map(|(path, size)| {
+                    text.text("display.sync_file", &[("path", path), ("size", size)])
+                })
                 .collect();
-            parts.push(format!(
-                "sync-back stopped at the {budget}-byte budget (terminal.sync_back_max_bytes); skipped: {}",
-                names.join(", ")
+            let files = names.join(", ");
+            parts.push(text.text(
+                "display.sync_budget",
+                &[("budget", &budget), ("files", &files)],
             ));
         }
         if !self.conflicts.is_empty() {
-            parts.push(format!(
-                "sync-back left host files changed since the last sync untouched (conflict): {}",
-                self.conflicts.join(", ")
-            ));
+            let files = self.conflicts.join(", ");
+            parts.push(text.text("display.sync_conflict", &[("files", &files)]));
         }
         for (path, why) in &self.failed {
-            parts.push(format!("sync-back could not copy {path}: {why}"));
+            parts.push(text.text("display.sync_not_copied", &[("path", path), ("why", why)]));
         }
         (!parts.is_empty()).then(|| parts.join("; "))
     }
@@ -230,6 +232,16 @@ fn modified_since(host: &Path, since: Option<SystemTime>) -> bool {
 mod tests {
     use super::Report;
 
+    /// Shows the key and its arguments.
+    struct Keys;
+
+    impl pmt_core::text::Catalog for Keys {
+        fn text(&self, key: &str, args: &[(&str, &dyn std::fmt::Display)]) -> String {
+            let args: Vec<String> = args.iter().map(|(n, v)| format!("{n}={v}")).collect();
+            format!("{key}({})", args.join(" "))
+        }
+    }
+
     #[test]
     fn the_notice_lists_every_skipped_file() {
         let report = Report {
@@ -237,13 +249,16 @@ mod tests {
             conflicts: vec!["README.md".to_owned()],
             ..Report::default()
         };
-        let notice = report.notice(2_000).unwrap();
+        let notice = report.notice(&Keys, 2_000).unwrap();
         assert!(
-            notice.contains("stopped at the 2000-byte budget"),
+            notice.contains("display.sync_budget(budget=2000"),
             "{notice}"
         );
-        assert!(notice.contains("build/big.bin (3000 bytes)"), "{notice}");
+        assert!(
+            notice.contains("display.sync_file(path=build/big.bin size=3000)"),
+            "{notice}"
+        );
         assert!(notice.contains("README.md"), "{notice}");
-        assert!(Report::default().notice(1).is_none());
+        assert!(Report::default().notice(&Keys, 1).is_none());
     }
 }

@@ -207,17 +207,17 @@ pub fn accepted(store: &Store, key: &str) -> Result<(), Error> {
     store.cron_set_suggestion(key, "accepted").map(|_| ())
 }
 
-/// The inbox as numbered lines.
+/// The inbox as numbered lines, worded with `text`.
 #[must_use]
-pub fn render(rows: &[SuggestionRow]) -> String {
+pub fn render(text: &dyn pmt_core::text::Catalog, rows: &[SuggestionRow]) -> String {
     if rows.is_empty() {
-        return "no suggested automations (`catalog` adds the starters)".to_owned();
+        return text.text("slash.suggestions.none", &[]);
     }
     rows.iter()
         .enumerate()
         .map(|(i, r)| {
             let when = if r.schedule.is_empty() {
-                "needs values".to_owned()
+                text.text("slash.suggestions.needs_values", &[])
             } else {
                 r.schedule.clone()
             };

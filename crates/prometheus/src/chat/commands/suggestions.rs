@@ -36,7 +36,7 @@ pub(super) fn suggestions(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
     match words.first().map(String::as_str) {
         None | Some("list") => {
             blueprints::offer_skill_blueprints(store, ctx.scope, ctx.factory.launch())?;
-            Ok(suggest::render(&suggest::pending(store)?))
+            Ok(suggest::render(&*ctx.strings(), &suggest::pending(store)?))
         }
         Some("accept") => {
             let yes = words.iter().any(|w| w == "--yes");
@@ -55,7 +55,7 @@ pub(super) fn suggestions(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
             let head = pmt_i18n::t!(ctx.strings(), "slash.suggestions.added", count = added);
             Ok(format!(
                 "{head}\n{}",
-                suggest::render(&suggest::pending(store)?)
+                suggest::render(&*ctx.strings(), &suggest::pending(store)?)
             ))
         }
         Some("clear") => {

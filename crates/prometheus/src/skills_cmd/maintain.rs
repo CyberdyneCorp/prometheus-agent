@@ -61,7 +61,8 @@ pub(super) fn print_changes(env: &Env, changes: &Changes) -> Result<u8, Error> {
     if env.json {
         return json(changes);
     }
-    print_raw(&format!("{}\n", changes.render()))
+    let english = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
+    print_raw(&format!("{}\n", changes.render(&*english)))
 }
 
 /// A session-less view of the profile's skills for the pending commands.
@@ -81,7 +82,8 @@ pub(super) fn pending(env: &Env, command: Option<&PendingCommand>) -> Result<u8,
         Some(PendingCommand::Approve { target }) => format!("approve {target}"),
         Some(PendingCommand::Reject { target }) => format!("reject {target}"),
     };
-    let reply = activation::run(&session(env)?, &args, &[])?;
+    let english = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
+    let reply = activation::run_in(&*english, &session(env)?, &args, &[])?;
     if env.json {
         return json(&json!({"profile": env.scope.name().as_str(), "message": reply.text}));
     }

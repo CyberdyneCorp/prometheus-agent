@@ -118,3 +118,27 @@ fn notices_replies_and_help_follow_the_profile_language() {
     assert!(help.contains("Información:"), "{help}");
     assert!(!help.contains("List the commands available here"), "{help}");
 }
+
+/// Scenario: Static UI string catalogs (replies rendered by subsystems,
+/// such as `/goal`, `/loop`, `/memory`, `/bundles` and `/journey`, follow
+/// the profile's language too).
+#[test]
+fn subsystem_replies_follow_the_profile_language() {
+    let home = gateway_home("");
+    let home = home.path();
+    ok(&run(home, &["config", "set", "gateway.multiplex", "true"]));
+    profile_in(home, "a", "es");
+    let _daemon = Daemon::start(home);
+    for (command, reply) in [
+        ("/goal status", "No hay objetivo."),
+        ("/loop status", "No hay bucle."),
+        ("/memory pending", "No hay cambios de memoria pendientes."),
+        ("/bundles", "No hay paquetes de skills."),
+        ("/journey list", "Aún no se ha aprendido nada"),
+    ] {
+        send(home, "a", "u1", command);
+        wait_said(home, "a", reply);
+    }
+    let said = texts(home, "a");
+    assert!(!said.iter().any(|t| t.contains("No goal set.")), "{said:?}");
+}

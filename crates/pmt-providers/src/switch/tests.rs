@@ -81,6 +81,9 @@ impl Env {
             catalog: &self.catalog,
             current,
             needs: NEEDS,
+            text: &**Box::leak(Box::new(pmt_i18n::Strings::english(
+                pmt_i18n::Surface::Core,
+            ))),
         };
         switch(&Args::parse(text)?, state, &ctx).await
     }

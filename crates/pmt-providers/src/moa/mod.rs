@@ -176,12 +176,27 @@ pub fn validate(config: &Config, registry: &ProviderRegistry) -> Result<(), Erro
 /// MoA billing and accounting).
 #[must_use]
 pub fn billing_notice(config: &Config, name: &str) -> Option<String> {
+    billing_notice_in(
+        &*pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+        config,
+        name,
+    )
+}
+
+/// [`billing_notice`] worded with `text` (a chat's `/model` switch).
+#[must_use]
+pub fn billing_notice_in(
+    text: &dyn pmt_core::text::Catalog,
+    config: &Config,
+    name: &str,
+) -> Option<String> {
     let preset = config.moa.preset(name)?;
     let main = config.model.provider.as_deref()?;
     let aggregator = &preset.aggregator.provider;
     (aggregator != main).then(|| {
-        format!(
-            "Aggregator is on {aggregator}; the whole tool loop will be billed there, not to {main}."
+        text.text(
+            "slash.model.moa_billing",
+            &[("aggregator", aggregator), ("main", &main)],
         )
     })
 }

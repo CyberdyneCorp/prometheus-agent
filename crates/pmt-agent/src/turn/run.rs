@@ -131,10 +131,14 @@ pub(super) async fn run(
     // `@` references are expanded before admission: the admitted message
     // is the expanded one.
     let (input, notices) = expand(agent, input).await;
+    // The notices the user reads follow the profile's language; none of
+    // them enters a model request.
+    let strings = pmt_config::language::strings(scope.dir(), pmt_i18n::Surface::Core);
     let lease = match lease::admit(&setup.store, setup.session, options.lease).await {
         Ok(lease) => lease,
         Err(err) if err.code().code == "turn.lease_unavailable" => {
             let mut turn = Turn::new(agent, scope.config(), id, options);
+            turn.strings = strings;
             turn.notices = notices;
             return turn
                 .finish(Ending::failed(ExitReason::LeaseUnavailable, err), None)
@@ -149,6 +153,7 @@ pub(super) async fn run(
         options.interrupt.clone(),
     );
     let mut turn = Turn::new(agent, scope.config(), id, options);
+    turn.strings = strings;
     turn.notices = notices;
     let result = turn.run(input).await;
     if result
@@ -205,6 +210,8 @@ pub(super) struct Turn<'a> {
     /// This turn's user text (what an external memory provider syncs).
     pub(super) user_text: String,
     pub(super) notices: Vec<String>,
+    /// The profile's UI strings (the notices above; never model input).
+    pub(super) strings: std::sync::Arc<pmt_i18n::Strings>,
     pub(super) guard: LoopGuard,
     /// Empty replies retried in the current streak.
     empty_streak: u32,
@@ -272,6 +279,7 @@ impl<'a> Turn<'a> {
             user_row: None,
             user_text: String::new(),
             notices: Vec::new(),
+            strings: pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
             guard: LoopGuard::new(&config.tool_loop_guardrails, agent.setup.interactive),
             empty_streak: 0,
             nudges: 0,
@@ -369,9 +377,10 @@ impl<'a> Turn<'a> {
             return;
         };
         match std::fs::write(path, merged) {
-            Ok(()) => self.notices.push(format!(
-                "kept your sections of {} that the update dropped",
-                path.display()
+            Ok(()) => self.notices.push(pmt_i18n::t!(
+                self.strings,
+                "display.agents_file_kept",
+                path = path.display()
             )),
             Err(err) => {
                 tracing::warn!(error = %err, path = %path.display(), "AGENTS.md sections not restored");

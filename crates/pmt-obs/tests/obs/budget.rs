@@ -306,7 +306,10 @@ fn a_warning_is_given_once_per_scope_and_period_at_the_ratio() {
     assert_eq!(warnings.len(), 1);
     assert_eq!(warnings[0].scope, "root");
     assert_eq!(
-        notice(&warnings[0]),
+        notice(
+            &*pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+            &warnings[0]
+        ),
         "budget warning: root spend $0.81 of $1.00 (81%)"
     );
     // Not again for the same root, neither after a call nor before one.

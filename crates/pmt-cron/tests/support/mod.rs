@@ -253,6 +253,9 @@ pub fn context<'a>(
         config,
         runner,
         clock,
+        text: &**Box::leak(Box::new(pmt_i18n::Strings::english(
+            pmt_i18n::Surface::Core,
+        ))),
     }
 }
 

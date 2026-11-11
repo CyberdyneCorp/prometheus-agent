@@ -105,7 +105,8 @@ pub(super) fn config(env: &Env) -> Result<u8, Error> {
             continue;
         };
         let disable = !state.disabled(name, platform);
-        match activation::set_disabled(env.scope.profile(), name, platform, disable) {
+        let english = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
+        match activation::set_disabled(&*english, env.scope.profile(), name, platform, disable) {
             Ok(message) => {
                 state.set(name, platform, disable);
                 wizard.say(&message)?;

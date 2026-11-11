@@ -8,10 +8,14 @@ publish.workspace = true
 repository.workspace = true
 
 [dependencies]
+pmt-core.workspace = true
 regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+
+[dev-dependencies]
+pmt-i18n.workspace = true
 
 [lints]
 workspace = true

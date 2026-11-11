@@ -102,10 +102,24 @@ impl AccountUsage {
         }
     }
 
-    /// The text block: title and plan, then one line per window.
+    /// The text block in English (`prometheus auth usage`): title and
+    /// plan, then one line per window.
     #[must_use]
     pub fn render(&self) -> String {
-        let mut text = self.title.clone();
+        self.render_in(&*pmt_i18n::Strings::english(pmt_i18n::Surface::Core))
+    }
+
+    /// The text block worded with `text` (`/usage`); the JSON fields stay
+    /// English.
+    #[must_use]
+    pub fn render_in(&self, catalog: &dyn pmt_core::text::Catalog) -> String {
+        let known = ["openai-codex", "anthropic", "nous", "xai-oauth"];
+        let mut text = if known.contains(&self.provider.as_str()) {
+            let id = self.provider.replace('-', "_");
+            catalog.text(&format!("slash.account.title.{id}"), &[])
+        } else {
+            catalog.text("slash.account.title_other", &[("provider", &self.provider)])
+        };
         if let Some(plan) = &self.plan {
             let _ = write!(text, " ({plan})");
         }
@@ -114,7 +128,18 @@ impl AccountUsage {
             return text;
         }
         for window in &self.windows {
-            let _ = write!(text, "\n  {}", window.detail);
+            let percent = format!("{:.0}", window.used_percent);
+            let args: [(&str, &dyn std::fmt::Display); 2] =
+                [("label", &window.label), ("percent", &percent)];
+            let line = match &window.resets_at {
+                Some(at) => {
+                    let mut all = args.to_vec();
+                    all.push(("at", at));
+                    catalog.text("slash.account.window_resets", &all)
+                }
+                None => catalog.text("slash.account.window", &args),
+            };
+            let _ = write!(text, "\n  {line}");
         }
         for line in &self.details {
             let _ = write!(text, "\n  {line}");

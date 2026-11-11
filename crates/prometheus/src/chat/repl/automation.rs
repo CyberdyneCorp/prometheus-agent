@@ -15,6 +15,7 @@ use super::Repl;
 use crate::automation::boundary::{self, Ended, Reserved, Session};
 use crate::automation::{self, Host};
 use crate::chat::session::Live;
+use crate::chat::theme::Role;
 
 /// What a finished turn tells the boundary.
 pub(super) struct Outcome {
@@ -72,8 +73,14 @@ impl Repl {
     pub(super) fn automation_due(&mut self) {
         let scope = self.live().config.get();
         let limits = automation::limits(scope.config());
-        let (reserved, notices) =
-            boundary::due(&self.factory.store, self.live().id, Host::Line, &limits);
+        let strings = self.strings();
+        let (reserved, notices) = boundary::due(
+            &*strings,
+            &self.factory.store,
+            self.live().id,
+            Host::Line,
+            &limits,
+        );
         for notice in &notices {
             self.notice(notice);
         }
@@ -90,9 +97,9 @@ impl Repl {
     /// Runs an automated turn at an idle boundary; refused before it
     /// starts (a paused home), its reservation is given back.
     pub(super) async fn automated(&mut self, reserved: Reserved) {
-        if let Err(err) = pmt_core::pause::check(self.factory.scope.home()) {
+        if let Some(pause) = pmt_core::pause::active(self.factory.scope.home()) {
             boundary::refund(&self.factory.store, self.live().id, reserved);
-            self.error(&err);
+            self.say(Role::Error, &pause.notice(&*self.strings()));
             return;
         }
         let wakeup = reserved.wakeup;
@@ -125,6 +132,11 @@ impl Repl {
     pub(super) fn automation_rows(&self) -> Vec<String> {
         let scope = self.live().config.get();
         let limits = automation::limits(scope.config());
-        automation::rows(&self.factory.store, self.live().id, &limits)
+        automation::rows(
+            &*self.strings(),
+            &self.factory.store,
+            self.live().id,
+            &limits,
+        )
     }
 }

@@ -96,6 +96,7 @@ async fn memory_reload_now_rebuilds_with_reason_memory_now() {
     run.turn(&profile, "first question here").await;
     add(&run.memory, "user", "Likes tea.").await;
     let reply = pmt_memory::slash::run(
+        &*pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
         &profile.store,
         &profile.scope.config().memory,
         None,
@@ -104,6 +105,7 @@ async fn memory_reload_now_rebuilds_with_reason_memory_now() {
     .unwrap();
     assert!(!reply.rebuild_now && reply.text.contains("next session"));
     let reply = pmt_memory::slash::run(
+        &*pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
         &profile.store,
         &profile.scope.config().memory,
         None,

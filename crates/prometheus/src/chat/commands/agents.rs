@@ -84,7 +84,7 @@ async fn listing(ctx: &Ctx<'_>, conversation: &str) -> String {
     // Automation status on every surface).
     let scope = ctx.live.config.get();
     let limits = crate::automation::limits(scope.config());
-    let rows = crate::automation::rows(&ctx.factory.store, ctx.live.id, &limits);
+    let rows = crate::automation::rows(&*ctx.strings(), &ctx.factory.store, ctx.live.id, &limits);
     if !rows.is_empty() {
         out.push_str(&heading("slash.agents.automation"));
         for row in rows {

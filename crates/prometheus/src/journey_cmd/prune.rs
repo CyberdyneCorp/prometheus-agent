@@ -30,6 +30,8 @@ pub struct Journey<'a> {
     pub store: &'a Arc<Store>,
     /// The user's home (external skill roots).
     pub user_home: Option<&'a Path>,
+    /// How replies are worded (English for `prometheus journey`).
+    pub text: &'a dyn pmt_core::text::Catalog,
 }
 
 impl Journey<'_> {
@@ -42,12 +44,16 @@ impl Journey<'_> {
         Ok(match node {
             Node::Skill(name) => {
                 self.skill(name)?;
-                format!("archive skill '{name}' (restorable from skills/.archive/)")
+                self.text
+                    .text("slash.journey.would_archive", &[("name", name)])
             }
-            Node::Memory(id) => format!(
-                "remove memory entry {id}: {}",
-                self.entry(id)?.content.trim()
-            ),
+            Node::Memory(id) => {
+                let entry = self.entry(id)?;
+                self.text.text(
+                    "slash.journey.would_remove",
+                    &[("id", id), ("content", &entry.content.trim())],
+                )
+            }
         })
     }
 
@@ -88,7 +94,7 @@ impl Journey<'_> {
     /// What validation or the scan refused (nothing changes then).
     pub fn apply(&self, node: &Node, edited: &str) -> Result<String, Error> {
         if edited.trim() == self.text(node)?.trim() {
-            return Ok("no changes".to_owned());
+            return Ok(self.text.text("slash.journey.no_changes", &[]));
         }
         match node {
             Node::Skill(name) => self.edit_skill(name, edited),
@@ -142,9 +148,9 @@ impl Journey<'_> {
         let _lock = mutate::lock(&skills_dir, name).map_err(io)?;
         let archived = mutate::archive(&skills_dir, name, &dir, "").map_err(io)?;
         self.store.set_skill_state(name, SkillState::Archived)?;
-        Ok(format!(
-            "archived skill '{name}' to {} (move it back to restore it)",
-            archived.display()
+        Ok(self.text.text(
+            "slash.journey.archived",
+            &[("name", &name), ("path", &archived.display())],
         ))
     }
 
@@ -154,10 +160,10 @@ impl Journey<'_> {
         op.id = Some(entry.id.clone());
         self.commit(&entry, &[op])?;
         Ok(match self.last_revision(id)? {
-            Some(rev) => {
-                format!("removed {id} (revision {rev}; prometheus memory revert {rev} restores it)")
-            }
-            None => format!("removed {id}"),
+            Some(rev) => self
+                .text
+                .text("slash.journey.removed_rev", &[("id", &id), ("rev", &rev)]),
+            None => self.text.text("slash.journey.removed", &[("id", &id)]),
         })
     }
 
@@ -175,7 +181,7 @@ impl Journey<'_> {
         op.id = Some(entry.id.clone());
         op.content = Some(content.to_owned());
         self.commit(&entry, &[op])?;
-        Ok(format!("updated {id} (from the next session)"))
+        Ok(self.text.text("slash.journey.updated", &[("id", &id)]))
     }
 
     fn commit(&self, entry: &MemoryEntry, ops: &[Op]) -> Result<(), Error> {

@@ -10,6 +10,8 @@
 //! it at the turn's end); [`due`] covers what a timer brings: a parked
 //! goal's barrier releasing, a loop wakeup and a heartbeat fire.
 
+use pmt_core::text::Catalog;
+
 use crate::cadence;
 use crate::goal::{self, Probe, Step};
 use crate::state::{Automation, Kind, Limits, RunStatus};
@@ -44,8 +46,9 @@ impl Wakeup {
 /// What a timer brings at `now_ms` on an idle session: the wakeup, with
 /// `automation` already updated as if it were admitted (keep a copy to
 /// refund a refused admission), and the status line of a goal step that
-/// does not continue.
+/// does not continue (worded with `text`).
 pub fn due(
+    text: &dyn Catalog,
     automation: &mut Automation,
     now_ms: i64,
     limits: &Limits,
@@ -61,7 +64,7 @@ pub fn due(
             };
             return (Some(wakeup), None);
         }
-        if let Some(step) = goal::release(goal, limits, now_ms, probe) {
+        if let Some(step) = goal::release(text, goal, limits, now_ms, probe) {
             let wakeup = Wakeup::goal(&step);
             let notice = wakeup.is_none().then(|| step.notice().to_owned());
             return (wakeup, notice);
@@ -75,7 +78,7 @@ pub fn due(
         .as_mut()
         .filter(|l| l.status == RunStatus::Active && l.next_fire_ms <= now_ms)
     {
-        match cadence::exhausted(looping, limits) {
+        match cadence::exhausted(text, looping, limits) {
             Some(cadence::LoopEnd::Removed(notice)) => {
                 automation.looping = None;
                 return (None, Some(notice));
@@ -126,6 +129,11 @@ mod tests {
     use crate::judge::{Verdict, WaitOn};
     use crate::state::Goal;
 
+    /// The bundled English strings (what the assertions read).
+    fn en() -> std::sync::Arc<pmt_i18n::Strings> {
+        pmt_i18n::Strings::english(pmt_i18n::Surface::Core)
+    }
+
     struct Pids(Vec<u32>);
 
     impl Probe for Pids {
@@ -158,6 +166,7 @@ mod tests {
         let mut goal = Goal::new("ship".into(), None);
         goal.kickoff = false;
         goal::verdict(
+            &*en(),
             &mut goal,
             Ok(Verdict::Wait {
                 on: WaitOn::Pid(4242),
@@ -173,10 +182,10 @@ mod tests {
             heartbeat: None,
         };
         // The first wakeup is due at once, the next two minutes later.
-        let (first, _) = due(&mut automation, 0, &limits, &live);
+        let (first, _) = due(&*en(), &mut automation, 0, &limits, &live);
         assert_eq!(first.unwrap().kind, Kind::Loop);
-        assert_eq!(due(&mut automation, 60_000, &limits, &live).0, None);
-        let (second, _) = due(&mut automation, 120_000, &limits, &live);
+        assert_eq!(due(&*en(), &mut automation, 60_000, &limits, &live).0, None);
+        let (second, _) = due(&*en(), &mut automation, 120_000, &limits, &live);
         assert_eq!(second.unwrap().kind, Kind::Loop);
         assert!(automation.goal.as_ref().unwrap().barrier.is_some());
     }
@@ -193,14 +202,14 @@ mod tests {
             heartbeat: Some(cadence::new_heartbeat(60, "ping".into(), 0)),
         };
         assert_eq!(
-            due(&mut automation, 999_999, &limits, &Pids(vec![])).0,
+            due(&*en(), &mut automation, 999_999, &limits, &Pids(vec![])).0,
             None
         );
         automation.goal.as_mut().unwrap().status = crate::state::GoalStatus::Paused;
-        let (wakeup, _) = due(&mut automation, 999_999, &limits, &Pids(vec![]));
+        let (wakeup, _) = due(&*en(), &mut automation, 999_999, &limits, &Pids(vec![]));
         assert_eq!(wakeup.unwrap().kind, Kind::Loop);
         // One automated turn per boundary: the heartbeat waits for the next.
-        let (wakeup, _) = due(&mut automation, 999_999, &limits, &Pids(vec![]));
+        let (wakeup, _) = due(&*en(), &mut automation, 999_999, &limits, &Pids(vec![]));
         assert_eq!(wakeup.unwrap().kind, Kind::Heartbeat);
     }
 
@@ -212,12 +221,15 @@ mod tests {
             looping: Some(looping(120)),
             heartbeat: None,
         };
-        let (wakeup, _) = due(&mut automation, 0, &limits, &Pids(vec![]));
+        let (wakeup, _) = due(&*en(), &mut automation, 0, &limits, &Pids(vec![]));
         let wakeup = wakeup.unwrap();
         assert_eq!((wakeup.kind, wakeup.prompt.as_str()), (Kind::Goal, "ship"));
         assert_eq!(automation.goal.as_ref().unwrap().turns_used, 0);
         // Then the goal drives: the loop waits for it.
-        assert_eq!(due(&mut automation, 0, &limits, &Pids(vec![])).0, None);
+        assert_eq!(
+            due(&*en(), &mut automation, 0, &limits, &Pids(vec![])).0,
+            None
+        );
     }
 
     #[test]
@@ -230,7 +242,7 @@ mod tests {
             looping: Some(spent),
             ..Automation::default()
         };
-        let (wakeup, notice) = due(&mut automation, 0, &limits, &Pids(vec![]));
+        let (wakeup, notice) = due(&*en(), &mut automation, 0, &limits, &Pids(vec![]));
         assert_eq!(wakeup, None);
         assert_eq!(notice.as_deref(), Some("Loop finished after 1 runs."));
         assert!(automation.looping.is_none());
@@ -251,10 +263,10 @@ mod tests {
             heartbeat: Some(serde_json::from_str(&stored).unwrap()),
             ..Automation::default()
         };
-        let (wakeup, _) = due(&mut automation, idle_at, &limits, &Pids(vec![]));
+        let (wakeup, _) = due(&*en(), &mut automation, idle_at, &limits, &Pids(vec![]));
         assert_eq!(wakeup.unwrap().kind, Kind::Heartbeat);
         assert_eq!(
-            due(&mut automation, idle_at, &limits, &Pids(vec![])).0,
+            due(&*en(), &mut automation, idle_at, &limits, &Pids(vec![])).0,
             None
         );
         assert_eq!(automation.next_fire_ms(), Some(idle_at + 10 * minute));
@@ -266,6 +278,7 @@ mod tests {
         let mut goal = Goal::new("ship".into(), None);
         goal.kickoff = false;
         goal::verdict(
+            &*en(),
             &mut goal,
             Ok(Verdict::Wait {
                 on: WaitOn::Seconds(30),
@@ -280,8 +293,11 @@ mod tests {
             ..Automation::default()
         };
         assert_eq!(automation.next_fire_ms(), Some(30_000));
-        assert_eq!(due(&mut automation, 29_999, &limits, &Pids(vec![])).0, None);
-        let (wakeup, _) = due(&mut automation, 30_000, &limits, &Pids(vec![]));
+        assert_eq!(
+            due(&*en(), &mut automation, 29_999, &limits, &Pids(vec![])).0,
+            None
+        );
+        let (wakeup, _) = due(&*en(), &mut automation, 30_000, &limits, &Pids(vec![]));
         let wakeup = wakeup.unwrap();
         assert_eq!(wakeup.kind, Kind::Goal);
         assert!(

@@ -8,6 +8,7 @@ use std::fmt::Write as _;
 use std::sync::Arc;
 
 use pmt_core::error::{Error, codes};
+use pmt_core::text::Catalog;
 use pmt_net::http::OutboundPolicy;
 use pmt_skillhub::http::{Client, Endpoints};
 use pmt_skillhub::install::{self, Installed, Options};
@@ -118,32 +119,33 @@ pub(super) fn install(
     if env.json {
         return json(&installed_json(&installed));
     }
-    eprint!("{}", install_text(&installed));
+    eprint!("{}", install_text(&*english(), &installed));
     Ok(0)
 }
 
 /// What an install tells the user.
-pub(crate) fn install_text(installed: &Installed) -> String {
+pub(crate) fn install_text(catalog: &dyn Catalog, installed: &Installed) -> String {
     let mut text = String::new();
     for warning in &installed.warnings {
-        let _ = writeln!(text, "warning: {warning}");
+        let line = catalog.text("slash.skills.warning", &[("warning", warning)]);
+        let _ = writeln!(text, "{line}");
     }
-    let _ = writeln!(
-        text,
-        "installed '{}' from {} (trust {}, scan {}, {}) to {}",
-        installed.name,
-        installed.identifier,
-        pmt_skillhub::sources::trust_text(installed.trust),
-        installed.report.verdict,
-        installed.signature.record(),
-        installed.path.display()
+    let line = catalog.text(
+        "slash.skills.installed",
+        &[
+            ("name", &installed.name),
+            ("identifier", &installed.identifier),
+            ("trust", &pmt_skillhub::sources::trust_text(installed.trust)),
+            ("scan", &installed.report.verdict),
+            ("signature", &installed.signature.record()),
+            ("path", &installed.path.display()),
+        ],
     );
+    let _ = writeln!(text, "{line}");
     if installed.blueprint {
-        text.push_str(
-            "it carries a blueprint: see `prometheus cron suggestions` (nothing was scheduled)\n",
-        );
+        let _ = writeln!(text, "{}", catalog.text("slash.skills.blueprint", &[]));
     }
-    text.push_str("It applies from the next session.\n");
+    let _ = writeln!(text, "{}", catalog.text("slash.skills.next_session", &[]));
     text
 }
 
@@ -190,12 +192,15 @@ pub(super) fn uninstall(env: &Env, name: &str) -> Result<u8, Error> {
     Ok(0)
 }
 
-pub(crate) fn listing_text(listings: &[Listing]) -> String {
+pub(crate) fn listing_text(catalog: &dyn Catalog, listings: &[Listing]) -> String {
     let mut text = String::new();
     for l in listings {
         let installs = l
             .installs
-            .map(|n| format!(" · {n} installs"))
+            .map(|n| {
+                let count = catalog.text("slash.skills.installs", &[("count", &n)]);
+                format!(" · {count}")
+            })
             .unwrap_or_default();
         let _ = writeln!(
             text,
@@ -206,7 +211,7 @@ pub(crate) fn listing_text(listings: &[Listing]) -> String {
         );
     }
     if text.is_empty() {
-        text.push_str("no skills found\n");
+        let _ = writeln!(text, "{}", catalog.text("slash.skills.none_found", &[]));
     }
     text
 }
@@ -217,7 +222,7 @@ pub(super) fn browse(env: &Env, source: Option<&str>) -> Result<u8, Error> {
     if env.json {
         return json(&json!({"skills": listed}));
     }
-    print_raw(&listing_text(&listed))
+    print_raw(&listing_text(&*english(), &listed))
 }
 
 /// `skills search <query> [--source S]`.
@@ -226,7 +231,7 @@ pub(super) fn search(env: &Env, query: &str, source: Option<&str>) -> Result<u8,
     if env.json {
         return json(&json!({"query": query, "skills": found}));
     }
-    print_raw(&listing_text(&found))
+    print_raw(&listing_text(&*english(), &found))
 }
 
 /// `skills inspect <identifier>`: nothing is written.
@@ -235,28 +240,32 @@ pub(super) fn inspect(env: &Env, identifier: &str) -> Result<u8, Error> {
     if env.json {
         return json(&shown);
     }
-    print_raw(&inspect_text(&shown))
+    print_raw(&inspect_text(&*english(), &shown))
 }
 
 /// What `inspect` shows.
-pub(crate) fn inspect_text(shown: &inspect::Inspection) -> String {
+pub(crate) fn inspect_text(catalog: &dyn Catalog, shown: &inspect::Inspection) -> String {
     let mut text = String::new();
-    let _ = writeln!(text, "identifier: {}", shown.identifier);
-    let _ = writeln!(text, "name: {}", shown.name);
-    let _ = writeln!(text, "trust: {}", shown.trust);
-    let _ = writeln!(text, "ref: {}", shown.resolved_ref);
-    let _ = writeln!(text, "scan: {}", shown.scan.summary());
-    let _ = writeln!(text, "signature: {}", shown.signature);
+    let mut field = |label: &str, value: &dyn std::fmt::Display| {
+        let label = catalog.text(&format!("slash.skills.field.{label}"), &[]);
+        let _ = writeln!(text, "{label}: {value}");
+    };
+    field("identifier", &shown.identifier);
+    field("name", &shown.name);
+    field("trust", &shown.trust);
+    field("ref", &shown.resolved_ref);
+    field("scan", &shown.scan.summary());
+    field("signature", &shown.signature);
     if let Some(url) = &shown.upstream.repo_url {
-        let _ = writeln!(text, "upstream: {url}");
+        field("upstream", url);
     }
     if let Some(n) = shown.upstream.installs {
-        let _ = writeln!(text, "installs: {n}");
+        field("installs", &n);
     }
     if let Some(audit) = &shown.upstream.audit {
-        let _ = writeln!(text, "upstream audit: {audit}");
+        field("upstream_audit", audit);
     }
-    let _ = writeln!(text, "files: {}", shown.files.join(", "));
+    field("files", &shown.files.join(", "));
     let _ = write!(text, "\n{}", shown.skill_md);
     text
 }
@@ -271,18 +280,18 @@ pub(super) fn check(env: &Env, name: Option<&str>) -> Result<u8, Error> {
         json(&json!({"skills": rows}))?;
         return Ok(u8::from(attention));
     }
-    print_raw(&check_text(&rows))?;
+    print_raw(&check_text(&*english(), &rows))?;
     Ok(u8::from(attention))
 }
 
 /// The `check` rows.
-pub(crate) fn check_text(rows: &[maintain::Checked]) -> String {
+pub(crate) fn check_text(catalog: &dyn Catalog, rows: &[maintain::Checked]) -> String {
     let mut text = String::new();
     for r in rows {
         let modified = if r.locally_modified {
-            " (locally modified)"
+            format!(" ({})", catalog.text("slash.skills.locally_modified", &[]))
         } else {
-            ""
+            String::new()
         };
         let detail = r
             .detail
@@ -292,7 +301,7 @@ pub(crate) fn check_text(rows: &[maintain::Checked]) -> String {
         let _ = writeln!(text, "{}: {}{modified}{detail}", r.name, r.state);
     }
     if rows.is_empty() {
-        text.push_str("no hub skills installed\n");
+        let _ = writeln!(text, "{}", catalog.text("slash.skills.no_hub_skills", &[]));
     }
     text
 }
@@ -305,12 +314,12 @@ pub(super) fn update(env: &Env, name: Option<&str>, force: bool) -> Result<u8, E
         json(&json!({"skills": rows}))?;
         return Ok(u8::from(failed));
     }
-    print_raw(&update_text(&rows))?;
+    print_raw(&update_text(&*english(), &rows))?;
     Ok(u8::from(failed))
 }
 
 /// The `update` rows.
-pub(crate) fn update_text(rows: &[maintain::Updated]) -> String {
+pub(crate) fn update_text(catalog: &dyn Catalog, rows: &[maintain::Updated]) -> String {
     let mut text = String::new();
     for r in rows {
         let detail = r
@@ -321,7 +330,7 @@ pub(crate) fn update_text(rows: &[maintain::Updated]) -> String {
         let _ = writeln!(text, "{}: {}{detail}", r.name, r.action);
     }
     if rows.is_empty() {
-        text.push_str("no hub skills installed\n");
+        let _ = writeln!(text, "{}", catalog.text("slash.skills.no_hub_skills", &[]));
     }
     text
 }
@@ -334,19 +343,23 @@ pub(super) fn audit(env: &Env) -> Result<u8, Error> {
         json(&json!({"skills": rows}))?;
         return Ok(u8::from(quarantined));
     }
-    print_raw(&audit_text(&rows))?;
+    print_raw(&audit_text(&*english(), &rows))?;
     Ok(u8::from(quarantined))
 }
 
 /// The `audit` rows.
-pub(crate) fn audit_text(rows: &[maintain::Audited]) -> String {
+pub(crate) fn audit_text(catalog: &dyn Catalog, rows: &[maintain::Audited]) -> String {
     let mut text = String::new();
     for r in rows {
-        let note = if r.quarantined { " -> quarantined" } else { "" };
+        let note = if r.quarantined {
+            format!(" -> {}", catalog.text("slash.skills.quarantined", &[]))
+        } else {
+            String::new()
+        };
         let _ = writeln!(text, "{}: {}{note}", r.name, r.summary);
     }
     if rows.is_empty() {
-        text.push_str("no hub skills installed\n");
+        let _ = writeln!(text, "{}", catalog.text("slash.skills.no_hub_skills", &[]));
     }
     text
 }
@@ -372,4 +385,9 @@ pub(super) fn reset(env: &Env, name: &str) -> Option<Result<u8, Error>> {
         eprintln!("restored '{name}' to its locked content");
         0
     }))
+}
+
+/// `prometheus skills` reports are English, like every command's.
+fn english() -> Arc<pmt_i18n::Strings> {
+    pmt_i18n::Strings::english(pmt_i18n::Surface::Core)
 }

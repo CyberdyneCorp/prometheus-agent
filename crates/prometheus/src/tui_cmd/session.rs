@@ -142,8 +142,9 @@ impl Tui<'_> {
                 }
             }
             Some(kind) => {
+                let strings = pmt_config::language::strings(self.open.scope.dir(), Surface::Core);
                 if let Some(line) =
-                    crate::chat::session::progress::context_line(kind, &data["payload"])
+                    crate::chat::session::progress::context_line(&*strings, kind, &data["payload"])
                 {
                     self.notice(line);
                 }

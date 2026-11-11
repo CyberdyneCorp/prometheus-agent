@@ -142,7 +142,7 @@ pub fn run(command: &CuratorCommand, ctx: &Context<'_>) -> Result<u8, Error> {
             if ctx.json {
                 return json(&json!({"entries": entries}));
             }
-            print_raw(&ledger_text(&entries))
+            print_raw(&ledger_text(&*curator.text, &entries))
         }
     }
 }
@@ -184,19 +184,17 @@ fn list(names: &[String]) -> String {
 }
 
 /// The text of a pass (the transitions, then the summary).
-pub(crate) fn report_text(report: &RunReport) -> String {
+pub(crate) fn report_text(catalog: &dyn pmt_core::text::Catalog, report: &RunReport) -> String {
     let mut text = String::new();
     for t in &report.transitions {
-        let _ = writeln!(
-            text,
-            "{}: {} -> {} ({} days idle)",
-            t.name, t.from, t.to, t.idle_days
-        );
+        let idle = catalog.text("slash.curator.idle", &[("days", &t.idle_days)]);
+        let _ = writeln!(text, "{}: {} -> {} ({idle})", t.name, t.from, t.to);
     }
     for e in &report.errors {
-        let _ = writeln!(text, "problem: {e}");
+        let line = catalog.text("slash.curator.problem", &[("problem", e)]);
+        let _ = writeln!(text, "{line}");
     }
-    let _ = writeln!(text, "{}", report.summary());
+    let _ = writeln!(text, "{}", report.summary_in(catalog));
     text
 }
 
@@ -214,7 +212,7 @@ fn run_pass(
     if ctx.json {
         return json(&report);
     }
-    print_raw(&report_text(&report))
+    print_raw(&report_text(&*curator.text, &report))
 }
 
 /// Starts `curator run --sync` as a detached process.

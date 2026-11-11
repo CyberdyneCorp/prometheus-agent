@@ -267,7 +267,12 @@ pub fn summary(
 ///
 /// `memory.not_found` for a revision that is not one of this session's
 /// unreviewed changes; store errors.
-pub fn review(store: &Store, session: &str, args: &[&str]) -> Result<String, Error> {
+pub fn review(
+    text: &dyn pmt_core::text::Catalog,
+    store: &Store,
+    session: &str,
+    args: &[&str],
+) -> Result<String, Error> {
     let changes = session_changes(store, session)?;
     let pick = |which: &str| -> Result<Vec<i64>, Error> {
         if which == "all" {
@@ -287,18 +292,18 @@ pub fn review(store: &Store, session: &str, args: &[&str]) -> Result<String, Err
         Ok(vec![rev])
     };
     match args {
-        [] => Ok(listing(&changes)),
+        [] => Ok(listing(text, &changes)),
         ["keep", which] => {
             let revs = pick(which)?;
             store.mark_memory_reviewed(&revs)?;
-            Ok(format!("Kept {} change(s).", revs.len()))
+            Ok(text.text("slash.memory.kept", &[("count", &revs.len())]))
         }
         ["revert", which] => {
             let revs = pick(which)?;
             for rev in revs.iter().rev() {
                 revert(store, *rev)?;
             }
-            Ok(format!("Reverted {} change(s).", revs.len()))
+            Ok(text.text("slash.memory.reverted", &[("count", &revs.len())]))
         }
         _ => Ok(REVIEW_USAGE.to_owned()),
     }
@@ -307,9 +312,9 @@ pub fn review(store: &Store, session: &str, args: &[&str]) -> Result<String, Err
 /// The usage of `/memory review`.
 pub const REVIEW_USAGE: &str = "usage: /memory review [keep <rev>|all | revert <rev>|all]";
 
-fn listing(changes: &[Revision]) -> String {
+fn listing(catalog: &dyn pmt_core::text::Catalog, changes: &[Revision]) -> String {
     if changes.is_empty() {
-        return "No memory changes of this session to review.".to_owned();
+        return catalog.text("slash.memory.nothing_to_review", &[]);
     }
     let mut text = String::new();
     for r in changes {
@@ -324,13 +329,10 @@ fn listing(changes: &[Revision]) -> String {
         for line in diff(std::slice::from_ref(r)).lines().skip(2) {
             let _ = writeln!(text, "  {line}");
         }
-        let _ = writeln!(
-            text,
-            "  [keep: /memory review keep {0}] [revert: /memory review revert {0}]",
-            r.rev
-        );
+        let actions = catalog.text("slash.memory.review_actions", &[("rev", &r.rev)]);
+        let _ = writeln!(text, "  {actions}");
     }
-    text.push_str("Keep or revert every change with /memory review keep all | revert all.");
+    text.push_str(&catalog.text("slash.memory.review_hint", &[]));
     text
 }
 

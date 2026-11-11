@@ -12,13 +12,15 @@ names are not, nor are the reports of non-interactive `prometheus
 <command>` runs (scripts read them). Localized text never enters a model
 request, so changing the language never breaks a session's prompt cache.
 
-Not yet translated: replies a subsystem renders itself (`/insights`,
-`/context`, `/toolsets`, `/skills`, `/bundles`, `/reload-skills`,
-`/memory`, `/journey`, `/goal`, `/subgoal`, `/loop`, `/heartbeat`,
-`/egress`, `/curator`, `/debug`, the `/suggestions` list, the
-`/personality` list, the `/model` switch notice) and the notices the agent
-adds to a turn (fast-mode tier, budget warnings, context pressure,
-guardrail stops, scheduled-job failures) still show in English.
+That includes the replies subsystems render (`/insights`, `/context`,
+`/toolsets`, `/skills`, `/memory`, `/journey`, `/goal`, `/loop`,
+`/heartbeat`, `/curator`, the `/model` switch notice and the rest) and the
+notices a turn shows (fast-mode tier, budget warnings, context pressure and
+compaction, guardrail stops, scheduled-job failures, the pause refusal).
+Text the model reads stays English even when you see it: a skill's
+credential-file notes are part of the skill the model loads, and the goal
+judge's reasons and the guardrail warnings in tool results are the model's
+own input.
 
 ## Choosing a language
 

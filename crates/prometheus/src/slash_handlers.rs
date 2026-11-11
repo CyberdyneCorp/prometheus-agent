@@ -391,7 +391,7 @@ pub fn personality(scope: &ProfileScope, args: &str) -> Result<(String, Option<S
     words.retain(|w| *w != "--now");
     let agent = &scope.config().agent;
     match (words.as_slice(), now) {
-        ([], false) => Ok((listing(agent), None)),
+        ([], false) => Ok((listing(&*strings(scope), agent), None)),
         ([name], _) => {
             let selected = canonical(agent, name)?;
             scope

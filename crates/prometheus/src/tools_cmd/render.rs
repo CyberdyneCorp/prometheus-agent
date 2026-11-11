@@ -8,6 +8,7 @@ use pmt_config::schema::{ApprovalMode, Config};
 use pmt_core::capability::Capability;
 use pmt_core::error::Error;
 use pmt_core::secret::Redactor;
+use pmt_core::text::Catalog;
 use pmt_store::tool_surface::SurfaceTool;
 use pmt_tools::budget::ResultBudget;
 use pmt_tools::descriptor::{Effect, PathClaim, ResourceClaims};
@@ -396,20 +397,21 @@ pub fn toolset_rows(
 
 /// `toolsets list` and `/toolsets` as text.
 #[must_use]
-pub fn render_toolsets(rows: &[ToolsetRow]) -> String {
+pub fn render_toolsets(text: &dyn Catalog, rows: &[ToolsetRow]) -> String {
     let mut out = String::new();
     for row in rows {
-        let flags: Vec<&str> = [
-            (row.active, "active"),
-            (row.default_off, "default-off"),
-            (row.posture, "posture"),
+        let flags: Vec<String> = [
+            (row.active, "slash.toolsets.active"),
+            (row.default_off, "slash.toolsets.default_off"),
+            (row.posture, "slash.toolsets.posture"),
         ]
         .iter()
-        .filter_map(|&(on, flag)| on.then_some(flag))
+        .filter(|&&(on, _)| on)
+        .map(|&(_, key)| text.text(key, &[]))
         .collect();
         let count = match row.resolved {
-            1 => "1 tool".to_owned(),
-            n => format!("{n} tools"),
+            1 => text.text("slash.toolsets.one_tool", &[]),
+            n => text.text("slash.toolsets.tools", &[("count", &n)]),
         };
         let mark = if row.active { '*' } else { ' ' };
         let _ = write!(out, "{mark} {}  ({count})", row.name);
@@ -418,10 +420,14 @@ pub fn render_toolsets(rows: &[ToolsetRow]) -> String {
         }
         let _ = writeln!(out, "\n    {}", row.description);
         if !row.tools.is_empty() {
-            let _ = writeln!(out, "    tools: {}", row.tools.join(", "));
+            let tools = row.tools.join(", ");
+            let line = text.text("slash.toolsets.tool_list", &[("tools", &tools)]);
+            let _ = writeln!(out, "    {line}");
         }
         if !row.includes.is_empty() {
-            let _ = writeln!(out, "    includes: {}", row.includes.join(", "));
+            let includes = row.includes.join(", ");
+            let line = text.text("slash.toolsets.includes", &[("toolsets", &includes)]);
+            let _ = writeln!(out, "    {line}");
         }
     }
     out

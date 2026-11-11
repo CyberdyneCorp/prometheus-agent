@@ -64,6 +64,7 @@ async fn model_switch_validates_before_changing_anything_and_persists_a_first_pi
         ad_hoc: None,
     };
     let current = route(&resolver, "anthropic", "claude-x").await;
+    let english = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
     let ctx = Context {
         resolver: &resolver,
         catalog: &catalog,
@@ -72,6 +73,7 @@ async fn model_switch_validates_before_changing_anything_and_persists_a_first_pi
             tools: true,
             min_context_window: 64_000,
         },
+        text: &*english,
     };
     let mut session = SessionModel::default();
     let err = model_slash::model(&scope, &mut session, &ctx, "deepseek/large")

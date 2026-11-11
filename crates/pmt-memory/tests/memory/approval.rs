@@ -70,9 +70,17 @@ async fn approval_stages_without_a_person_and_a_stale_patch_is_refused() {
         profile.store.memory_entry(&id).unwrap().unwrap().content,
         "B"
     );
-    let reply = slash::run(&profile.store, config, None, "pending").unwrap();
+    let reply = slash::run(
+        &*pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+        &profile.store,
+        config,
+        None,
+        "pending",
+    )
+    .unwrap();
     assert!(reply.text.contains(&pending_id), "{}", reply.text);
     slash::run(
+        &*pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
         &profile.store,
         config,
         None,
@@ -95,6 +103,7 @@ async fn approve_applies_a_staged_add_and_inline_answers_decide() {
     let pending_id = out["pending_id"].as_str().unwrap().to_owned();
     assert!(profile.store.memory_entries(None).unwrap().is_empty());
     let reply = slash::run(
+        &*pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
         &profile.store,
         &profile.scope.config().memory,
         None,

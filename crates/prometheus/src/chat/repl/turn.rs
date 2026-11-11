@@ -59,8 +59,8 @@ impl Repl {
             Work::Input(input) => input.origin.clone(),
             Work::Resume(..) => None,
         };
-        if let Err(err) = pmt_core::pause::check(live.scope.home()) {
-            self.error(&err);
+        if let Some(pause) = pmt_core::pause::active(live.scope.home()) {
+            self.say(Role::Error, &pause.notice(&*self.strings()));
             self.live = Some(live);
             return;
         }

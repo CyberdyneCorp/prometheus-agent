@@ -101,14 +101,17 @@ impl Delta {
         self.added.is_empty() && self.removed.is_empty() && self.changed.is_empty()
     }
 
-    fn write(&self, out: &mut String, noun: &str) {
-        for (label, names) in [
+    /// One line per kind of change, under `prefix` (`slash.reload.skills`).
+    fn write(&self, text: &dyn pmt_core::text::Catalog, out: &mut String, prefix: &str) {
+        for (kind, names) in [
             ("added", &self.added),
             ("removed", &self.removed),
             ("changed", &self.changed),
         ] {
             if !names.is_empty() {
-                let _ = writeln!(out, "{noun} {label}: {}", names.join(", "));
+                let names = names.join(", ");
+                let line = text.text(&format!("{prefix}_{kind}"), &[("names", &names)]);
+                let _ = writeln!(out, "{line}");
             }
         }
     }
@@ -139,16 +142,17 @@ impl Changes {
         self.skills.is_empty() && self.bundles.is_empty()
     }
 
-    /// The report shown to the user.
+    /// The report shown to the user, worded with `text`.
     #[must_use]
-    pub fn render(&self) -> String {
+    pub fn render(&self, text: &dyn pmt_core::text::Catalog) -> String {
         if self.is_empty() {
-            return "Skills reloaded: no changes.".to_owned();
+            return text.text("slash.reload.unchanged", &[]);
         }
-        let mut text = String::from("Skills reloaded.\n");
-        self.skills.write(&mut text, "skills");
-        self.bundles.write(&mut text, "bundles");
-        text.trim_end().to_owned()
+        let mut out = text.text("slash.reload.done", &[]);
+        out.push('\n');
+        self.skills.write(text, &mut out, "slash.reload.skills");
+        self.bundles.write(text, &mut out, "slash.reload.bundles");
+        out.trim_end().to_owned()
     }
 }
 
@@ -207,12 +211,13 @@ mod tests {
         assert_eq!(changes.skills.added, ["c"]);
         assert_eq!(changes.skills.removed, ["b"]);
         assert_eq!(changes.skills.changed, ["a"]);
+        let english = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
         assert_eq!(
-            changes.render(),
+            changes.render(&*english),
             "Skills reloaded.\nskills added: c\nskills removed: b\nskills changed: a\nbundles added: dev"
         );
         assert_eq!(
-            Changes::between(&new, &new).render(),
+            Changes::between(&new, &new).render(&*english),
             "Skills reloaded: no changes."
         );
     }

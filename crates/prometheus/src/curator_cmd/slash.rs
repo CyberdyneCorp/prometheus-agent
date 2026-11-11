@@ -27,26 +27,9 @@ pub(crate) fn run(
     post: &Post,
 ) -> Result<String, Error> {
     let words: Vec<&str> = args.split_whitespace().collect();
-    let curator = Curator::open(scope.clone(), launch.clone())?;
+    let curator = Curator::open(scope.clone(), launch.clone())?.in_language();
     match words.as_slice() {
-        [] | ["status"] => {
-            let s = curator.status()?;
-            Ok(format!(
-                "Curator {}; last pass {}; managing {} skill(s), {} pinned, {} archived; a pass now would make {} transition(s).",
-                if !s.enabled {
-                    "disabled"
-                } else if s.paused {
-                    "paused"
-                } else {
-                    "enabled"
-                },
-                s.last_run_at.as_deref().unwrap_or("never"),
-                s.managed.len(),
-                s.pinned.len(),
-                s.archived,
-                s.planned.len()
-            ))
-        }
+        [] | ["status"] => Ok(status(&curator)?),
         ["run", flags @ ..]
             if flags
                 .iter()
@@ -62,21 +45,57 @@ pub(crate) fn run(
         ["unpin", name] => curator.pin(name, false),
         ["archive", name] => curator.archive(name),
         ["restore", name] => curator.restore(name),
-        ["ledger"] => Ok(ledger_text(&curator.entries(None, 20)?)),
-        ["ledger", skill] => Ok(ledger_text(&curator.entries(Some(skill), 20)?)),
+        ["ledger"] => Ok(ledger_text(&*curator.text, &curator.entries(None, 20)?)),
+        ["ledger", skill] => Ok(ledger_text(
+            &*curator.text,
+            &curator.entries(Some(skill), 20)?,
+        )),
         _ => Err(Error::new(&codes::CLI_USAGE, USAGE)),
     }
+}
+
+/// `/curator status`.
+fn status(curator: &Curator) -> Result<String, Error> {
+    let s = curator.status()?;
+    let text = &curator.text;
+    let state = text.get(if !s.enabled {
+        "slash.curator.state_disabled"
+    } else if s.paused {
+        "slash.curator.state_paused"
+    } else {
+        "slash.curator.state_enabled"
+    });
+    let never = text.get("slash.curator.never");
+    Ok(text.fmt(
+        "slash.curator.status",
+        &[
+            ("state", &state),
+            ("last", &s.last_run_at.as_deref().unwrap_or(never)),
+            ("managed", &s.managed.len()),
+            ("pinned", &s.pinned.len()),
+            ("archived", &s.archived),
+            ("planned", &s.planned.len()),
+        ],
+    ))
 }
 
 /// Runs the pass on its own thread and posts its report.
 fn start(curator: Curator, dry_run: bool, consolidate: bool, post: &Post) -> Result<String, Error> {
     let post = Arc::clone(post);
+    let started = curator.text.get(if dry_run {
+        "slash.curator.dry_run_started"
+    } else {
+        "slash.curator.pass_started"
+    });
+    let started = started.to_owned();
     std::thread::Builder::new()
         .name("pmt-curator".to_owned())
         .spawn(move || {
             let text = match curator.run(dry_run, consolidate, false) {
-                Ok(report) => report_text(&report).trim_end().to_owned(),
-                Err(e) => format!("Curator pass failed: {}", e.message()),
+                Ok(report) => report_text(&*curator.text, &report).trim_end().to_owned(),
+                Err(e) => curator
+                    .text
+                    .fmt("slash.curator.failed", &[("why", &e.message())]),
             };
             post(text);
         })
@@ -86,8 +105,5 @@ fn start(curator: Curator, dry_run: bool, consolidate: bool, post: &Post) -> Res
                 format!("cannot start the curator pass: {e}"),
             )
         })?;
-    Ok(format!(
-        "Curator {} started in the background; its summary is posted here when it finishes.",
-        if dry_run { "dry run" } else { "pass" }
-    ))
+    Ok(started)
 }

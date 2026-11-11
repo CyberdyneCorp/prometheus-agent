@@ -211,11 +211,7 @@ impl Lane {
     pub(super) async fn start_turn(&mut self, pending: Pending) {
         if let Some(pause) = pmt_core::pause::active(&self.shared.options.home) {
             tracing::info!(profile = self.profile, "turn refused: the home is paused");
-            let text = pmt_i18n::t!(
-                self.strings(),
-                "gateway.paused_refused",
-                reason = pause.reason
-            );
+            let text = pause.notice(&*self.strings());
             self.say(&text);
             return;
         }

@@ -30,19 +30,23 @@ pub struct Pause {
 }
 
 impl Pause {
-    /// What a refused submission answers.
+    /// What a refused submission answers, in the profile's language.
     #[must_use]
-    pub fn notice(&self) -> String {
-        format!(
-            "Paused: {}. Run `prometheus pause off` (or /pause off) to resume.",
-            self.reason
-        )
+    pub fn notice(&self, text: &dyn crate::text::Catalog) -> String {
+        text.text("gateway.paused_refused", &[("reason", &self.reason)])
     }
 
-    /// The refusal as an error (`pause.active`, exit 69).
+    /// The refusal as an error (`pause.active`, exit 69; English, like
+    /// every error message).
     #[must_use]
     pub fn error(&self) -> Error {
-        Error::new(&codes::PAUSE_ACTIVE, self.notice())
+        Error::new(
+            &codes::PAUSE_ACTIVE,
+            format!(
+                "Paused: {}. Run `prometheus pause off` (or /pause off) to resume.",
+                self.reason
+            ),
+        )
     }
 }
 

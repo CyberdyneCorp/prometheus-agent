@@ -77,10 +77,12 @@ pub(super) async fn compress(ctx: &Ctx<'_>, args: &str) -> Result<String, Error>
     let manual = pmt_agent::compress::manual::parse(args)?;
     let live = ctx.live;
     let outcome = live.agent.compress(&live.config.get(), &manual).await?;
+    let strings = ctx.strings();
+    let status = format!("{:?}", outcome.status).to_lowercase();
     let mut said = pmt_i18n::t!(
-        ctx.strings(),
+        strings,
         "slash.compress.done",
-        status = format!("{:?}", outcome.status).to_lowercase(),
+        status = strings.get(&format!("slash.compress.status_{status}")),
         before = outcome.tokens_before,
         after = outcome.tokens_after
     );
@@ -129,11 +131,13 @@ pub(super) async fn model(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
         tools: true,
         min_context_window: ctx.scope.config().model.min_context_window,
     };
+    let strings = ctx.strings();
     let switch = pmt_providers::switch::Context {
         resolver: &resolver,
         catalog: models.catalog(),
         current: &current,
         needs,
+        text: &*strings,
     };
     let mut session = live.model.session();
     let text = crate::model_slash::model(ctx.scope, &mut session, &switch, args).await?;
@@ -188,7 +192,11 @@ pub(super) async fn tools(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
     let registry = &ctx.live.registry();
     let (enable, toolset) = match words.as_slice() {
         [] | ["list"] => {
-            return crate::tools_cmd::slash_toolsets(registry, &ctx.live.selection());
+            return crate::tools_cmd::slash_toolsets(
+                &*ctx.strings(),
+                registry,
+                &ctx.live.selection(),
+            );
         }
         ["enable", name] => (true, *name),
         ["disable", name] => (false, *name),

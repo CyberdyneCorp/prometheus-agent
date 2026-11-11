@@ -2,7 +2,9 @@
 //! the TUI and the desktop, a text gauge on messaging platforms (spec:
 //! context-compression, Context window view).
 
-use std::fmt::Write as _;
+use std::fmt::{Display, Write as _};
+
+use pmt_core::text::Catalog;
 
 use super::window::ContextView;
 
@@ -45,16 +47,32 @@ fn cells(view: &ContextView) -> Vec<char> {
     cells
 }
 
-/// The view as text.
+/// The catalog key of a category or file-state label (`MCP tools` ->
+/// `slash.context.label.mcp_tools`).
+fn label(text: &dyn Catalog, name: &str) -> String {
+    let key = format!(
+        "slash.context.label.{}",
+        name.to_lowercase().replace(' ', "_")
+    );
+    text.text(&key, &[])
+}
+
+/// The view as text, worded with `text`.
 #[must_use]
-pub fn render(view: &ContextView, style: Style, all: bool) -> String {
+pub fn render(text: &dyn Catalog, view: &ContextView, style: Style, all: bool) -> String {
     let used = view.used();
     let mut out = String::new();
-    let _ = writeln!(
-        out,
-        "Context window: {used} of {} tokens ({:.0}%)",
-        view.window,
-        share(used, view.window)
+    let mut line = |key: &str, args: &[(&str, &dyn Display)]| {
+        let _ = writeln!(out, "{}", text.text(key, args));
+    };
+    let percent = format!("{:.0}", share(used, view.window));
+    line(
+        "slash.context.window",
+        &[
+            ("used", &used),
+            ("window", &view.window),
+            ("percent", &percent),
+        ],
     );
     match style {
         Style::Grid => {
@@ -78,71 +96,90 @@ pub fn render(view: &ContextView, style: Style, all: bool) -> String {
         } else {
             String::new()
         };
-        let _ = writeln!(
-            out,
-            "{glyph}{}: {} tokens ({:.1}%)",
-            c.name,
-            c.tokens,
-            share(c.tokens, view.window)
+        let row = text.text(
+            "slash.context.category",
+            &[
+                ("name", &label(text, c.name)),
+                ("tokens", &c.tokens),
+                ("percent", &format!("{:.1}", share(c.tokens, view.window))),
+            ],
         );
+        let _ = writeln!(out, "{glyph}{row}");
     }
-    let _ = writeln!(
-        out,
-        "Compaction trigger: {} tokens ({} headroom)",
-        view.trigger_tokens,
-        view.trigger_tokens.saturating_sub(used)
-    );
+    let headroom = view.trigger_tokens.saturating_sub(used);
     let last = view.last_compaction.map_or_else(
-        || "never".to_owned(),
+        || text.text("slash.context.never", &[]),
         |at| at.strftime("%Y-%m-%d %H:%M").to_string(),
     );
-    let _ = writeln!(out, "Compactions: {} (last: {last})", view.compactions);
-    let _ = writeln!(
-        out,
-        "Throughput: {} input, {} output tokens",
-        view.input_tokens, view.output_tokens
+    let mut line = |key: &str, args: &[(&str, &dyn Display)]| {
+        let _ = writeln!(out, "{}", text.text(key, args));
+    };
+    line(
+        "slash.context.trigger",
+        &[("tokens", &view.trigger_tokens), ("headroom", &headroom)],
     );
-    files(&mut out, view);
+    line(
+        "slash.context.compactions",
+        &[("count", &view.compactions), ("last", &last)],
+    );
+    line(
+        "slash.context.throughput",
+        &[
+            ("input", &view.input_tokens),
+            ("output", &view.output_tokens),
+        ],
+    );
+    files(text, &mut out, view);
     if all {
-        details(&mut out, view);
+        details(text, &mut out, view);
     }
     out.trim_end().to_owned()
 }
 
-fn files(out: &mut String, view: &ContextView) {
+fn files(text: &dyn Catalog, out: &mut String, view: &ContextView) {
     if view.files.is_empty() {
-        let _ = writeln!(out, "Context files: none");
+        let _ = writeln!(out, "{}", text.text("slash.context.no_files", &[]));
         return;
     }
-    let _ = writeln!(out, "Context files:");
+    let _ = writeln!(out, "{}", text.text("slash.context.files", &[]));
     for file in &view.files {
-        let _ = writeln!(
-            out,
-            "  {}: {} tokens, {}",
-            file.name,
-            file.tokens,
-            file.state.as_str()
+        let row = text.text(
+            "slash.context.file",
+            &[
+                ("name", &file.name),
+                ("tokens", &file.tokens),
+                ("state", &label(text, file.state.as_str())),
+            ],
         );
+        let _ = writeln!(out, "  {row}");
     }
 }
 
-fn details(out: &mut String, view: &ContextView) {
-    let _ = writeln!(out, "Toolsets:");
+fn details(text: &dyn Catalog, out: &mut String, view: &ContextView) {
+    let _ = writeln!(out, "{}", text.text("slash.context.toolsets", &[]));
     for set in &view.toolsets {
-        let _ = writeln!(
-            out,
-            "  {}: {} tools, {} tokens",
-            set.toolset, set.tools, set.tokens
+        let row = text.text(
+            "slash.context.toolset",
+            &[
+                ("name", &set.toolset),
+                ("tools", &set.tools),
+                ("tokens", &set.tokens),
+            ],
         );
+        let _ = writeln!(out, "  {row}");
     }
     if !view.skills.is_empty() {
-        let _ = writeln!(out, "Skills (index / full load):");
+        let _ = writeln!(out, "{}", text.text("slash.context.skills", &[]));
         for skill in &view.skills {
-            let _ = writeln!(
-                out,
-                "  {}: {} / {} tokens",
-                skill.name, skill.index_tokens, skill.full_tokens
+            let row = text.text(
+                "slash.context.skill",
+                &[
+                    ("name", &skill.name),
+                    ("index", &skill.index_tokens),
+                    ("full", &skill.full_tokens),
+                ],
             );
+            let _ = writeln!(out, "  {row}");
         }
     }
 }
@@ -151,6 +188,10 @@ fn details(out: &mut String, view: &ContextView) {
 mod tests {
     use super::*;
     use crate::turn::window::Category;
+
+    fn en() -> std::sync::Arc<pmt_i18n::Strings> {
+        pmt_i18n::Strings::english(pmt_i18n::Surface::Core)
+    }
 
     fn view() -> ContextView {
         let category = |name, glyph, tokens| Category {
@@ -178,7 +219,7 @@ mod tests {
 
     #[test]
     fn the_grid_is_five_rows_of_twenty_cells() {
-        let text = render(&view(), Style::Grid, false);
+        let text = render(&*en(), &view(), Style::Grid, false);
         let grid: Vec<&str> = text.lines().skip(1).take(5).collect();
         assert!(
             grid.iter().all(|row| row.trim().chars().count() == 20),
@@ -193,7 +234,7 @@ mod tests {
 
     #[test]
     fn messaging_gets_a_gauge_instead_of_the_grid() {
-        let text = render(&view(), Style::Text, false);
+        let text = render(&*en(), &view(), Style::Text, false);
         assert_eq!(text.lines().nth(1), Some("███░░░░░░░░░░░░░░░░░"));
     }
 }

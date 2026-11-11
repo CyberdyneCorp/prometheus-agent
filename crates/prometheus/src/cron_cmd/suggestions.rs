@@ -57,7 +57,8 @@ fn list(env: &Env<'_>) -> Result<u8, Error> {
             .collect();
         return document("cron suggestions", &json!({"suggestions": items}));
     }
-    print_raw(&format!("{}\n", suggest::render(&rows)))
+    let english = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
+    print_raw(&format!("{}\n", suggest::render(&*english, &rows)))
 }
 
 /// `cron add` of suggestion `n`.

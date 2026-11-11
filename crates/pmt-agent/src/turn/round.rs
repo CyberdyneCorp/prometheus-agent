@@ -84,11 +84,11 @@ impl Turn<'_> {
         self.subdirectory_hints(calls, &mut outcomes);
         self.checkpoint(&mut outcomes)?;
         self.keep_results(calls, &outcomes).await?;
-        Ok(stop.map(|why| {
-            self.notices.push(why.clone());
+        Ok(stop.map(|stop| {
+            self.notices.push(stop.notice(&self.strings));
             Ending::failed(
                 ExitReason::GuardrailStop,
-                Error::new(&codes::TURN_GUARDRAIL_STOP, why),
+                Error::new(&codes::TURN_GUARDRAIL_STOP, stop.message()),
             )
         }))
     }
@@ -98,7 +98,7 @@ impl Turn<'_> {
         &mut self,
         calls: &[RequestedCall],
         outcomes: &mut [ToolOutcome],
-    ) -> Option<String> {
+    ) -> Option<super::guardrails::Stop> {
         let tools = self.agent.setup.tools.clone();
         let mut stop = None;
         for (call, outcome) in calls.iter().zip(outcomes.iter_mut()) {

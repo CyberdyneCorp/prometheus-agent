@@ -13,6 +13,7 @@ use jiff::Timestamp;
 use jiff::tz::TimeZone;
 use pmt_core::error::{Error, codes};
 use pmt_core::id::SessionId;
+use pmt_core::text::Catalog;
 use pmt_store::{Activity, Store, Tokens, UsageFilter};
 use serde::Serialize;
 
@@ -342,127 +343,161 @@ fn finish(acc: Acc, window: &Window, sources: Vec<String>) -> Insights {
     }
 }
 
-/// The report as text (the CLI and `/insights`).
+/// The report as text, worded with `text` (the CLI passes English,
+/// `/insights` the profile's language).
 #[must_use]
-pub fn render(insights: &Insights) -> String {
-    let mut text = String::new();
-    let scope = insights
-        .source
-        .as_deref()
-        .map(|s| format!(" from {s}"))
-        .unwrap_or_default();
-    let _ = writeln!(text, "Insights for the last {} days{scope}", insights.days);
+pub fn render(text: &dyn Catalog, insights: &Insights) -> String {
+    let mut out = String::new();
+    let days = insights.days;
+    let heading = match insights.source.as_deref() {
+        Some(source) => text.text(
+            "slash.insights.heading_source",
+            &[("days", &days), ("source", &source)],
+        ),
+        None => text.text("slash.insights.heading", &[("days", &days)]),
+    };
+    let _ = writeln!(out, "{heading}");
     let o = &insights.overview;
-    let _ = writeln!(
-        text,
-        "sessions {}, user messages {}, turns {}, tool calls {}, active days {}",
-        o.sessions, o.user_messages, o.turns, o.tool_calls, o.active_days
+    let overview = text.text(
+        "slash.insights.overview",
+        &[
+            ("sessions", &o.sessions),
+            ("messages", &o.user_messages),
+            ("turns", &o.turns),
+            ("calls", &o.tool_calls),
+            ("days", &o.active_days),
+        ],
     );
-    let _ = writeln!(
-        text,
-        "tokens: input {}, output {}, cache read {}, cache write {}, reasoning {}",
-        o.input_tokens,
-        o.output_tokens,
-        o.cache_read_tokens,
-        o.cache_write_tokens,
-        o.reasoning_tokens
+    let tokens = text.text(
+        "slash.insights.tokens",
+        &[
+            ("input", &o.input_tokens),
+            ("output", &o.output_tokens),
+            ("cache_read", &o.cache_read_tokens),
+            ("cache_write", &o.cache_write_tokens),
+            ("reasoning", &o.reasoning_tokens),
+        ],
     );
+    let _ = writeln!(out, "{overview}\n{tokens}");
     let cost = if insights.unpriced_calls > 0 && insights.cost_usd == 0.0 {
         "—".to_owned()
     } else {
         format!("${:.4}", insights.cost_usd)
     };
-    let _ = writeln!(
-        text,
-        "cost: {cost} ({} unpriced calls)",
-        insights.unpriced_calls
+    let cost = text.text(
+        "slash.insights.cost",
+        &[("cost", &cost), ("unpriced", &insights.unpriced_calls)],
     );
-    groups(&mut text, "by model", &insights.by_model);
-    groups(&mut text, "by provider", &insights.by_provider);
-    groups(&mut text, "by source", &insights.by_source);
+    let _ = writeln!(out, "{cost}");
+    groups(
+        text,
+        &mut out,
+        "slash.insights.by_model",
+        &insights.by_model,
+    );
+    groups(
+        text,
+        &mut out,
+        "slash.insights.by_provider",
+        &insights.by_provider,
+    );
+    groups(
+        text,
+        &mut out,
+        "slash.insights.by_source",
+        &insights.by_source,
+    );
     if !insights.top_tools.is_empty() {
-        text.push_str("top tools:\n");
+        let _ = writeln!(out, "{}", text.text("slash.insights.top_tools", &[]));
         for t in &insights.top_tools {
-            let _ = writeln!(
-                text,
-                "  {:<24}{:>6} calls  {:>5.1}% ok",
-                t.tool,
-                t.calls,
-                t.success_rate * 100.0
+            let rate = format!("{:>5.1}", t.success_rate * 100.0);
+            let calls = format!("{:>6}", t.calls);
+            let row = text.text(
+                "slash.insights.tool_row",
+                &[("calls", &calls), ("rate", &rate)],
             );
+            let _ = writeln!(out, "  {:<24}{row}", t.tool);
         }
     }
     if !insights.skills.is_empty() {
-        text.push_str("skills:\n");
+        let _ = writeln!(out, "{}", text.text("slash.insights.skills", &[]));
         for (skill, loads) in &insights.skills {
-            let _ = writeln!(text, "  {skill:<24}{loads:>6}");
+            let _ = writeln!(out, "  {skill:<24}{loads:>6}");
         }
     }
-    activity_matrix(&mut text, &insights.activity);
+    activity_matrix(text, &mut out, &insights.activity);
     roots(
-        &mut text,
-        "top lineages by cost",
+        text,
+        &mut out,
+        "slash.insights.top_by_cost",
         &insights.top_roots_by_cost,
     );
     roots(
-        &mut text,
-        "top lineages by tokens",
+        text,
+        &mut out,
+        "slash.insights.top_by_tokens",
         &insights.top_roots_by_tokens,
     );
-    text
+    out
 }
 
-fn groups(text: &mut String, title: &str, groups: &[Group]) {
+fn groups(text: &dyn Catalog, out: &mut String, title: &str, groups: &[Group]) {
     if groups.is_empty() {
         return;
     }
-    let _ = writeln!(text, "{title}:");
+    let _ = writeln!(out, "{}", text.text(title, &[]));
     for g in groups {
         let cost = if g.calls == g.unpriced_calls {
             "—".to_owned()
         } else {
             format!("${:.4}", g.cost_usd)
         };
-        let _ = writeln!(
-            text,
-            "  {:<32}{:>6} calls {:>10} tokens  {cost}",
-            g.key, g.calls, g.tokens
+        let calls = format!("{:>6}", g.calls);
+        let tokens = format!("{:>10}", g.tokens);
+        let row = text.text(
+            "slash.insights.group_row",
+            &[("calls", &calls), ("tokens", &tokens), ("cost", &cost)],
         );
+        let _ = writeln!(out, "  {:<32}{row}", g.key);
     }
 }
 
-fn roots(text: &mut String, title: &str, roots: &[RootUse]) {
+fn roots(text: &dyn Catalog, out: &mut String, title: &str, roots: &[RootUse]) {
     if roots.is_empty() {
         return;
     }
-    let _ = writeln!(text, "{title}:");
+    let _ = writeln!(out, "{}", text.text(title, &[]));
     for r in roots {
-        let _ = writeln!(
-            text,
-            "  {}  ${:.4}  {} tokens",
-            r.root_session_id, r.cost_usd, r.tokens
+        let cost = format!("${:.4}", r.cost_usd);
+        let row = text.text(
+            "slash.insights.root_row",
+            &[("cost", &cost), ("tokens", &r.tokens)],
         );
+        let _ = writeln!(out, "  {}  {row}", r.root_session_id);
     }
 }
 
-fn activity_matrix(text: &mut String, matrix: &[Vec<u64>]) {
+fn activity_matrix(catalog: &dyn Catalog, text: &mut String, matrix: &[Vec<u64>]) {
     if matrix.iter().flatten().all(|n| *n == 0) {
         return;
     }
-    text.push_str("turns by weekday and hour:\n     ");
+    let _ = write!(
+        text,
+        "{}\n     ",
+        catalog.text("slash.insights.activity", &[])
+    );
     for hour in 0..24 {
         let _ = write!(text, "{hour:>3}");
     }
     text.push('\n');
     let seen: HashSet<usize> = (0..7).collect();
-    for (day, name) in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-        .iter()
-        .enumerate()
-    {
+    // Seven space-separated names, Monday first, three columns wide.
+    let names = catalog.text("slash.insights.weekdays", &[]);
+    for (day, name) in names.split_whitespace().take(7).enumerate() {
         if !seen.contains(&day) {
             continue;
         }
-        let _ = write!(text, "  {name}");
+        let _ = write!(text, "  {name:<3}");
         for count in &matrix[day] {
             let _ = write!(text, "{count:>3}");
         }
