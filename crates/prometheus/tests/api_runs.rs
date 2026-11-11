@@ -383,3 +383,43 @@ fn an_unknown_run_is_resolved_and_its_session_follower_runs() {
         "the lost turn was not replayed: {replies:?}"
     );
 }
+
+/// Run events stream: a `tool.completed` preview passes through forced
+/// secret redaction, even with `security.redact_secrets = false`.
+#[test]
+fn tool_previews_redact_known_secrets_even_when_redaction_is_off() {
+    const VALUE: &str = "horse-battery-staple-9417";
+    let (home, port) = api::home("");
+    ok(&run(
+        home.path(),
+        &["config", "set", "security.redact_secrets", "false"],
+    ));
+    ok(&common::run_with_stdin(
+        home.path(),
+        &["secrets", "set", "TICKET_TOKEN"],
+        &format!("{VALUE}\n"),
+    ));
+    std::fs::create_dir_all(home.path().join("profiles/default/workspace")).unwrap();
+    std::fs::write(
+        home.path().join("profiles/default/workspace/notes.txt"),
+        format!("token {VALUE}\n"),
+    )
+    .unwrap();
+    script(
+        home.path(),
+        "[[rule]]\nstep = 0\n[[rule.tool_calls]]\nname = \"read_file\"\narguments = { path = \"notes.txt\" }\n\
+         [[rule]]\ntext = \"read\"\nrepeat = true\n",
+    );
+    let _daemon = daemon::start(home.path(), &[]);
+    let id = run_id(&create(port, &json!({"input": "read the notes"})));
+    run_until_terminal(port, "default", &id);
+    let all = events(&id, None).send(port).events();
+    let completed = all
+        .iter()
+        .find(|(_, e, _)| e.as_deref() == Some("tool.completed"))
+        .unwrap();
+    let completed: Value = serde_json::from_str(&completed.2).unwrap();
+    let preview = completed["preview"].as_str().unwrap();
+    assert!(preview.contains("[REDACTED:TICKET_TOKEN]"), "{completed}");
+    assert!(!preview.contains(VALUE), "{completed}");
+}

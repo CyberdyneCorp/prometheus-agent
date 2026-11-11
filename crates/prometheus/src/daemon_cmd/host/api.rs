@@ -430,18 +430,27 @@ impl pmt_api::ApiHost for DaemonHost {
         })
     }
 
+    /// Forced redaction (spec: api-server, Run events stream): the
+    /// profile's known secrets whatever `security.redact_secrets` says,
+    /// plus its PII rules, plus credential-shaped patterns.
     fn api_redact(&self, profile: &str, text: &str) -> String {
         let redactor = self
             .profile(profile)
             .ok()
-            .and_then(|p| {
-                pmt_obs::redaction::profile_redactor(&p.scope())
-                    .ok()
-                    .flatten()
-            })
-            .unwrap_or_else(|| pmt_core::secret::Redactor::new(std::iter::empty()));
+            .and_then(|p| forced_redactor(&p.scope()).ok())
+            .unwrap_or_default();
         redactor.redact_all(text)
     }
+}
+
+/// The profile's known secrets (always) merged with its configured
+/// redaction (PII when `privacy.redact_pii` is set).
+fn forced_redactor(scope: &ProfileScope) -> Result<pmt_core::secret::Redactor, Error> {
+    let secrets = scope.secrets().redactor()?;
+    Ok(match pmt_obs::redaction::profile_redactor(scope)? {
+        Some(profile) => secrets.merged(&profile),
+        None => secrets,
+    })
 }
 
 #[cfg(test)]
