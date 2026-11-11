@@ -36,14 +36,15 @@ pub(crate) fn run(
     base_binary: Option<&Path>,
 ) -> Result<(), String> {
     let (current, base) = measure(root, runs, base_binary)?;
-    check_overhead(root)?;
     let mut baseline = load_baseline(baseline_path)?;
     let platform = platform();
     if let Some(base) = &base {
         report(&format!("{platform}, base binary"), base, Some(base));
     }
     let reference = base.as_ref().or_else(|| baseline.get(&platform));
+    // Reported before the overhead gate, which may fail first.
     report(&platform, &current, reference);
+    check_overhead(root)?;
     let stored = if update { None } else { reference };
 
     let violations = budget::evaluate(&current, stored);

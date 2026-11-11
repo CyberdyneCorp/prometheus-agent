@@ -119,7 +119,9 @@ pub fn decompress(compressed_path: &Path) -> io::Result<PathBuf> {
         let mut file = private_fs::new_file_options().open(&temp)?;
         io::copy(&mut decoder, &mut file)?;
         file.flush()?;
-        file.sync_all()?;
+        // As in `compress`: fsync(2), not Apple's F_FULLFSYNC, which cost
+        // a resumed session ~4 ms of its start on macOS.
+        private_fs::sync(&file)?;
         fs::rename(&temp, &target)
     })();
     if let Err(err) = written {
