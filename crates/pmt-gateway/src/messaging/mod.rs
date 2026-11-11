@@ -104,13 +104,16 @@ pub use adapter::{
     LengthUnit, Markup, MediaKind, MediaStream, MenuCommand, Outgoing, Private, Reaction, Select,
     SendError, SenderVerdict, Sent, SessionHints, TaskCard, TaskStatus,
 };
-pub use agents::{Agents, BusyPolicy, Conversation, Lookup, ModelChoice, UpdateFromChat};
+pub use agents::{
+    Agents, BusyPolicy, Conversation, Lookup, ModelChoice, UpdateEvent, UpdateFromChat, UpdateRun,
+};
 pub use hooks::{Hook, HookBridge, Hooks, PreCommand};
 pub use http::HttpOptions;
 pub use key::{ChatType, Isolation, KeyParts, Routing, SessionKey};
 pub use lane::{Background, BackgroundKind};
 pub use recovery::{CLEAN_SHUTDOWN, RESTARTED, RESUME_ORIGIN, RESUMING};
 pub use relay::{RelayOptions, RelaySource};
+pub use restart::{forget_update, remember_update};
 pub use send::{KnownTarget, SendRequest, known_targets};
 pub use voice::Speech;
 

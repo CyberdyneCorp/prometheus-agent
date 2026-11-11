@@ -602,9 +602,13 @@ impl Agents for FakeAgents {
     fn update_from_chat<'a>(
         &'a self,
         request: &'a pmt_gateway::messaging::UpdateFromChat,
-    ) -> HostFuture<'a, String> {
+    ) -> HostFuture<'a, pmt_gateway::messaging::UpdateRun> {
         self.updates.lock().unwrap().push(request.clone());
-        Box::pin(async { Ok("update started".to_owned()) })
+        Box::pin(async {
+            Ok(pmt_gateway::messaging::UpdateRun::Answer(
+                "update started".to_owned(),
+            ))
+        })
     }
 
     fn end_conversation<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()> {
@@ -1159,6 +1163,8 @@ pub struct Setup {
     pub credentials: Vec<((&'static str, &'static str), String)>,
     /// Take platform credential locks (in the home).
     pub locks: bool,
+    /// `gateway.http.listen` (default: any free loopback port).
+    pub http_listen: Option<std::net::SocketAddr>,
 }
 
 impl Setup {
@@ -1177,6 +1183,7 @@ impl Setup {
             descriptors: Vec::new(),
             credentials: Vec::new(),
             locks: false,
+            http_listen: None,
         }
     }
 }
@@ -1317,7 +1324,9 @@ impl Harness {
         options.relay.clone_from(&setup.relay);
         options.health.clone_from(&setup.health);
         options.drain_timeout = setup.drain;
-        options.http.listen = std::net::SocketAddr::from(([127, 0, 0, 1], 0));
+        options.http.listen = setup
+            .http_listen
+            .unwrap_or_else(|| std::net::SocketAddr::from(([127, 0, 0, 1], 0)));
         if setup.locks {
             options.locks_dir = Some(home.path().join("user-runtime").join("locks"));
         }

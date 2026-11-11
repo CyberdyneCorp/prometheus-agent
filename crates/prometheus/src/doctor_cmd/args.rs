@@ -24,6 +24,11 @@ pub struct DoctorArgs {
     /// Check every profile of the home.
     #[arg(long)]
     pub all_profiles: bool,
+    /// With `network`: print the hosts an egress proxy must allow for every
+    /// profile (providers, MCP servers, releases and runtimes), one per
+    /// line, for the image's `compose.isolated.yaml`.
+    #[arg(long, requires = "group")]
+    pub allowlist: bool,
     /// Silence the startup warning of a supply-chain advisory (added to
     /// `security.acked_advisories`); `doctor security` still shows it.
     #[arg(long, value_name = "ADVISORY_ID")]

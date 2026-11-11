@@ -123,6 +123,8 @@ pub mod pty;
 #[cfg(unix)]
 pub mod tui;
 
+pub mod release;
+
 #[cfg(feature = "gateway")]
 pub mod daemon;
 

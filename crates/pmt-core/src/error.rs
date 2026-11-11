@@ -886,6 +886,16 @@ error_codes! {
     /// A `state.db` was written by a build this one cannot read.
     STORE_SCHEMA_UNREADABLE = ("store.schema_unreadable", Tool,
         "`state.db` was migrated by a newer Prometheus to a schema this build cannot read; it was not modified. Update Prometheus, or roll back with `prometheus update --rollback --restore-snapshots`.");
+    /// Restarting a busy daemon needs a confirmation nobody can give.
+    UPDATE_CONFIRMATION_REQUIRED = ("update.confirmation_required", PermissionDenied,
+        "A running gateway daemon has turns in progress, and restarting it on the new build needs a confirmation that cannot be asked without a terminal; the update stopped before the swap (exit 4) and nothing changed. Rerun with `--yes` (it restarts once the turns finish) or `--no-restart`.");
+    /// `prometheus uninstall` removed nothing because it needs a
+    /// confirmation nobody can give.
+    UNINSTALL_CONFIRMATION_REQUIRED = ("uninstall.confirmation_required", PermissionDenied,
+        "`prometheus uninstall --purge` or `--data-only` deletes the Prometheus home and asks first; without a terminal it needs `--yes`. Nothing was removed. Run `prometheus uninstall --dry-run` to see what it would delete.");
+    /// The install is removed by its package manager.
+    UNINSTALL_OWNED_ELSEWHERE = ("uninstall.owned_elsewhere", Unavailable,
+        "This binary was installed by a package manager, the container image or a desktop package, which removes it; `prometheus uninstall` refuses to delete it and names that removal method. `--data-only` (and `--desktop-data`) still remove Prometheus data.");
     /// The pre-update backup could not be written.
     UPDATE_BACKUP_FAILED = ("update.backup_failed", Io,
         "The pre-update backup (`update.pre_update_backup`, `--backup`) could not be written, usually because the home volume is full; the update stopped before the swap (exit 73) and the installed binary is unchanged. Free space, or rerun with `--no-backup`.");

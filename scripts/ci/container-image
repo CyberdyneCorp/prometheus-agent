@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+# Container image tests (spec: distribution-and-update, Container image run
+# modes; Container filesystem, init and health; Multiple profiles in one
+# container; Container audio bridge and host services; Network-isolated
+# deployment recipe). Builds the image of distrib/container around a static
+# Linux binary of this checkout and checks, against real containers:
+#
+#   - `docker exec` runs as uid 10001 on the daemon's /data home
+#   - --read-only with a writable /data and tmpfs /tmp works; image files
+#     are not writable by the runtime user
+#   - 200 orphaned grandchildren leave no <defunct> entry (PID 1 reaps)
+#   - SIGTERM reaches the daemon (`docker stop` exits 0 quickly)
+#   - a profile created by `docker exec` is served after an in-place
+#     `daemon restart` (the container is not restarted)
+#   - a stopped daemon runtime turns the health check unhealthy
+#   - `doctor providers` warns about a provider on the container loopback
+#   - compose.isolated.yaml's layout: direct egress blocked, provider
+#     hosts reachable through the egress proxy; attached to a bridge too,
+#     the doctor fails
+#
+# usage: scripts/ci/container-image <static linux prometheus binary>
+set -euo pipefail
+
+binary=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
+root=$(cd "$(dirname "$0")/../.." && pwd)
+work=$root/target/container-image
+image=pmt-image-test
+c=pmt-image-test
+suffix=$$
+
+case $(docker version -f '{{.Server.Arch}}') in
+amd64 | x86_64) arch=amd64 ;;
+arm64 | aarch64) arch=arm64 ;;
+*) echo "unsupported docker architecture" >&2; exit 1 ;;
+esac
+
+cleanup() {
+    docker rm -f "$c" "$c-proxy" "$c-isolated" >/dev/null 2>&1 || true
+    docker network rm "pmt-isolated-$suffix" "pmt-egress-$suffix" >/dev/null 2>&1 || true
+    docker volume rm "pmt-data-$suffix" "pmt-iso-$suffix" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+fail() {
+    echo "FAIL: $*" >&2
+    docker logs "$c" 2>&1 | tail -n 30 >&2 || true
+    exit 1
+}
+
+pass() { echo "ok: $*"; }
+
+wait_for() { # seconds description command...
+    local limit=$1 what=$2
+    shift 2
+    for _ in $(seq "$limit"); do
+        if "$@" >/dev/null 2>&1; then return 0; fi
+        sleep 1
+    done
+    fail "timed out waiting: $what"
+}
+
+health() { docker inspect -f '{{.State.Health.Status}}' "$c"; }
+is_health() { [ "$(health)" = "$1" ]; }
+
+rm -rf "$work"
+mkdir -p "$work/ctx/bin/$arch"
+cp -R "$root/distrib/container/." "$work/ctx/"
+cp "$binary" "$work/ctx/bin/$arch/prometheus"
+docker build -q -t "$image" --target runtime "$work/ctx" >/dev/null
+pass "image built"
+
+docker volume create "pmt-data-$suffix" >/dev/null
+docker run -d --name "$c" --read-only --tmpfs /tmp -v "pmt-data-$suffix:/data" \
+    --health-interval 2s --health-timeout 5s --health-retries 3 --health-start-period 1s \
+    "$image" >/dev/null
+wait_for 60 "a healthy daemon" is_health healthy
+pass "read-only container with /data and tmpfs /tmp is healthy"
+
+[ "$(docker exec "$c" id -u)" = 10001 ] || fail "docker exec does not run as uid 10001"
+docker exec "$c" prometheus daemon status | grep -q "gateway running" ||
+    fail "docker exec does not see the daemon of /data"
+pass "exec as the runtime user on the same /data"
+
+writable=$(docker exec "$c" sh -c 'find /usr /etc /opt /bin /sbin /lib -xdev -writable ! -type l 2>/dev/null | head -n 5')
+[ -z "$writable" ] || fail "image files writable by uid 10001: $writable"
+pass "image files are not writable by the runtime user"
+
+docker exec "$c" sh -c 'i=0; while [ $i -lt 200 ]; do sh -c "sleep 0.2 &"; i=$((i+1)); done'
+sleep 3
+zombies=$(docker exec "$c" sh -c 'for s in /proc/[0-9]*/status; do grep -q "^State:.*Z" "$s" 2>/dev/null && echo "$s"; done; true')
+[ -z "$zombies" ] || fail "defunct processes: $zombies"
+pass "no zombie build-up after 200 orphaned grandchildren"
+
+started=$(docker inspect -f '{{.State.StartedAt}}' "$c")
+docker exec "$c" prometheus profile create work >/dev/null
+docker exec "$c" prometheus daemon restart >/dev/null || fail "daemon restart failed"
+[ "$(docker inspect -f '{{.State.StartedAt}}' "$c")" = "$started" ] || fail "the container restarted"
+docker exec "$c" prometheus daemon status | grep -q "profiles: .*work" ||
+    fail "the new profile is not served after daemon restart"
+pass "a new profile is served after an in-place daemon restart"
+
+docker exec "$c" prometheus config set model.provider ollama >/dev/null
+docker exec "$c" prometheus doctor providers 2>&1 |
+    grep -q "ollama points at the container's own loopback; use http://host.docker.internal:11434 to reach a server on the host" ||
+    fail "doctor providers does not warn about the container loopback"
+pass "doctor providers points a loopback provider at host.docker.internal"
+
+pid=$(docker exec "$c" sh -c 'sed -n "s/.*\"pid\": *\([0-9]*\).*/\1/p" /data/run/gateway.json | head -n 1')
+docker exec "$c" sh -c "kill -STOP $pid"
+wait_for 60 "an unhealthy container" is_health unhealthy
+if docker exec "$c" prometheus status --liveness; then fail "liveness passed for a stopped runtime"; fi
+docker exec "$c" sh -c "kill -CONT $pid"
+pass "a stopped daemon runtime is reported unhealthy"
+
+before=$(date +%s)
+docker stop -t 30 "$c" >/dev/null
+elapsed=$(($(date +%s) - before))
+[ "$(docker inspect -f '{{.State.ExitCode}}' "$c")" = 0 ] || fail "the daemon did not exit 0 on SIGTERM"
+[ "$elapsed" -lt 25 ] || fail "SIGTERM was not forwarded (stop took ${elapsed}s)"
+pass "SIGTERM is forwarded to the daemon (${elapsed}s, exit 0)"
+docker rm -f "$c" >/dev/null
+
+# The network-isolated recipe: an internal network, the egress proxy on
+# both networks, the allowlist from the profiles' configuration.
+docker network create --internal "pmt-isolated-$suffix" >/dev/null
+docker network create "pmt-egress-$suffix" >/dev/null
+docker volume create "pmt-iso-$suffix" >/dev/null
+run_iso() { docker run --rm --network "pmt-isolated-$suffix" -v "pmt-iso-$suffix:/data" "$image" "$@"; }
+run_iso prometheus config set model.provider anthropic >/dev/null
+run_iso prometheus config set network.proxy "http://$c-proxy:3128" >/dev/null
+run_iso prometheus config set network.expect_isolated true >/dev/null
+run_iso prometheus doctor network --allowlist >"$work/allowlist.txt"
+grep -q . "$work/allowlist.txt" || fail "empty allowlist"
+proxy_image=$(sed -n 's/^ *image: \(ubuntu\/squid.*\)$/\1/p' "$root/distrib/container/compose.isolated.yaml")
+docker run -d --name "$c-proxy" --network "pmt-egress-$suffix" \
+    -v "$root/distrib/container/squid.conf:/etc/squid/squid.conf:ro" \
+    -v "$work/allowlist.txt:/etc/squid/allowlist.txt:ro" "$proxy_image" >/dev/null
+docker network connect "pmt-isolated-$suffix" "$c-proxy"
+sleep 5
+out=$(run_iso prometheus doctor network --online 2>&1) || fail "isolated doctor failed: $out"
+echo "$out" | grep -q "direct egress: blocked" || fail "egress not blocked: $out"
+echo "$out" | grep -q "reachable through the proxy" || fail "no host reachable through the proxy: $out"
+pass "isolation verified: direct egress blocked, provider hosts through the proxy"
+
+docker create --name "$c-isolated" --network "pmt-isolated-$suffix" -v "pmt-iso-$suffix:/data" \
+    "$image" prometheus doctor network --online >/dev/null
+docker network connect bridge "$c-isolated"
+if out=$(docker start -a "$c-isolated" 2>&1); then fail "the misconfigured network passed: $out"; fi
+echo "$out" | grep -q "direct egress succeeded although network.expect_isolated = true" ||
+    fail "no misconfiguration message: $out"
+pass "a misconfigured network fails the doctor"
+echo "container image: all checks passed"

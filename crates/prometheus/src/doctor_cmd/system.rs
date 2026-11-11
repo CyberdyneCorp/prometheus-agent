@@ -105,8 +105,8 @@ fn modal_mode(scope: &ProfileScope) -> Check {
     }
 }
 
-/// The configured providers' endpoints: `(provider, host, port)`.
-pub(crate) fn provider_endpoints(scope: &ProfileScope) -> Vec<(String, String, u16)> {
+/// The configured providers' base URLs: `(provider, url)`.
+pub(crate) fn provider_urls(scope: &ProfileScope) -> Vec<(String, String)> {
     let config = scope.config();
     let Ok(registry) = pmt_providers::ProviderRegistry::for_profile(config, Vec::new()) else {
         return Vec::new();
@@ -119,20 +119,29 @@ pub(crate) fn provider_endpoints(scope: &ProfileScope) -> Vec<(String, String, u
         .into_iter()
         .collect();
     ids.extend(config.fallback.chain.iter().map(|e| e.provider.as_str()));
-    let mut endpoints = Vec::new();
+    let mut urls: Vec<(String, String)> = Vec::new();
     for id in ids {
-        let Some(url) = registry
-            .lookup(id)
-            .ok()
-            .and_then(|p| p.base_url())
-            .and_then(|u| reqwest::Url::parse(u).ok())
-        else {
+        if let Some(url) = registry.lookup(id).ok().and_then(|p| p.base_url()) {
+            let entry = (id.to_owned(), url.to_owned());
+            if !urls.contains(&entry) {
+                urls.push(entry);
+            }
+        }
+    }
+    urls
+}
+
+/// The configured providers' endpoints: `(provider, host, port)`.
+pub(crate) fn provider_endpoints(scope: &ProfileScope) -> Vec<(String, String, u16)> {
+    let mut endpoints = Vec::new();
+    for (id, url) in provider_urls(scope) {
+        let Ok(url) = reqwest::Url::parse(&url) else {
             continue;
         };
         let (Some(host), Some(port)) = (url.host_str(), url.port_or_known_default()) else {
             continue;
         };
-        let entry = (id.to_owned(), host.to_owned(), port);
+        let entry = (id, host.to_owned(), port);
         if !endpoints.contains(&entry) {
             endpoints.push(entry);
         }
@@ -161,6 +170,20 @@ pub(super) async fn network(inputs: &Inputs<'_>) -> Vec<Check> {
         Status::Ok,
         egress_line(&config.security.egress),
     ));
+    if inputs.online {
+        let network = &config.network;
+        let open = super::isolation::direct_egress(&super::isolation::EGRESS_PROBES);
+        checks.push(super::isolation::egress_check(
+            open,
+            network.expect_isolated,
+        ));
+        if network.expect_isolated || network.proxy.is_some() {
+            checks.extend(super::isolation::proxy_checks(
+                network.proxy.as_deref(),
+                &provider_endpoints(inputs.scope),
+            ));
+        }
+    }
     checks
 }
 

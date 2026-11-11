@@ -9,6 +9,12 @@
 # - install.sh / install.ps1 with the release keys embedded
 # - a minisign signature for every archive, the manifest, the index and
 #   the installers
+# - the container images (prometheus `<v>` and `<v>-full`,
+#   prometheus-sandbox `<v>` and `<v>-desktop`, linux/amd64 + linux/arm64),
+#   pushed by digest on a tag and pinned in the manifest
+# - the package channels (`cargo xtask release channels`): Homebrew
+#   formula, WinGet manifests and their Windows zips, Termux recipe and the
+#   Nix release pins, published by the Release channels job
 #
 # and then verifies the complete set (`cargo xtask release verify`), so a
 # release missing any artifact or signature fails here. Before any of that
@@ -74,6 +80,9 @@ jobs:
   finalize:
     needs: universal
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
     env:
       PLAN: ${{ inputs.plan }}
       PUBLISHING: ${{ startsWith(github.ref, 'refs/tags/') }}
@@ -108,7 +117,42 @@ jobs:
           path: dist
       - name: Build the release tooling
         run: cargo build --locked -p xtask
-      - name: SBOMs, manifest, channel index and installers
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Log in to the container registry
+        if: env.PUBLISHING == 'true'
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Container images
+        run: |
+          set -euo pipefail
+          tag=$(jq -r '.announcement_tag' <<<"$PLAN")
+          version=${tag#v}
+          case "$tag" in *-canary.*) channel=canary ;; *) channel=stable ;; esac
+          ctx="$RUNNER_TEMP/image"
+          cargo xtask release container-context --dir dist --out "$ctx"
+          # A tag pushes by digest; a dry run only builds.
+          if [ "$PUBLISHING" = true ]; then output=type=image,push=true; else output=type=cacheonly; fi
+          echo '{}' >"$RUNNER_TEMP/images.json"
+          build() { # <image> <tag> <dockerfile> <target>
+            docker buildx build --platform linux/amd64,linux/arm64 \
+              --file "$ctx/$3" --target "$4" --build-arg "CHANNEL=$channel" \
+              --tag "ghcr.io/cyberdynecorp/$1:$2" --output "$output" \
+              --metadata-file "$RUNNER_TEMP/meta.json" "$ctx"
+            digest=$(jq -r '."containerimage.digest" // empty' "$RUNNER_TEMP/meta.json")
+            if [ -n "$digest" ]; then
+              jq --arg k "$1:$2" --arg v "ghcr.io/cyberdynecorp/$1@$digest" '. + {($k): $v}' \
+                "$RUNNER_TEMP/images.json" >"$RUNNER_TEMP/images.next" && mv "$RUNNER_TEMP/images.next" "$RUNNER_TEMP/images.json"
+            fi
+          }
+          build prometheus "$version" Dockerfile runtime
+          build prometheus "$version-full" Dockerfile full
+          build prometheus-sandbox "$version" sandbox.Dockerfile sandbox
+          build prometheus-sandbox "$version-desktop" sandbox.Dockerfile desktop
+      - name: SBOMs, manifest, channel index, installers and package channels
         run: |
           set -euo pipefail
           tag=$(jq -r '.announcement_tag' <<<"$PLAN")
@@ -117,11 +161,20 @@ jobs:
             target=${target#prometheus-}
             cargo xtask release sbom --target "$target" --out "dist/prometheus-$target.spdx.json"
           done
-          cargo xtask release manifest --dir dist --tag "$tag" --commit "$GITHUB_SHA"
+          cargo xtask release manifest --dir dist --tag "$tag" --commit "$GITHUB_SHA" \
+            --images "$RUNNER_TEMP/images.json"
           cargo xtask release installers --out dist
+          cargo xtask release channels --dir dist --out "$RUNNER_TEMP/channels"
+          cp "$RUNNER_TEMP"/channels/archives/*.zip dist/
+          # The reference deployments, attached to the release.
+          cp distrib/container/compose.yaml distrib/container/compose.isolated.yaml \
+            distrib/container/squid.conf dist/
           # The supply-chain advisory catalog this release embeds, published
           # signed beside the channel indexes for installed builds to refresh.
           cp crates/pmt-update/advisories/advisories.json dist/advisories.json
+          # The runtime index this release pins, signed, for offline
+          # bundles (`prometheus bundle create --with ...`).
+          cp crates/pmt-update/runtimes/index.json dist/runtime-index.json
       - name: Sign
         env:
           RELEASE_KEY: ${{ secrets.PMT_RELEASE_SIGNING_KEY }}
@@ -140,8 +193,8 @@ jobs:
           fi
           cargo xtask release sign --key-env SIGNING_KEY $embedded \
             --public-key-out "$RUNNER_TEMP/signing.pub" \
-            dist/prometheus-*.tar.gz dist/release-manifest.json dist/channel-*.json \
-            dist/advisories.json dist/install.sh dist/install.ps1
+            dist/prometheus-*.tar.gz dist/prometheus-*.zip dist/release-manifest.json dist/channel-*.json \
+            dist/advisories.json dist/runtime-index.json dist/install.sh dist/install.ps1
       - name: Verify every artifact
         run: cargo xtask release verify --dir dist --key "$RUNNER_TEMP/signing.pub"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -150,10 +203,21 @@ jobs:
           path: |
             dist/prometheus-universal2-apple-darwin.tar.gz
             dist/prometheus-universal2-apple-darwin.tar.gz.sha256
+            dist/prometheus-*.zip
+            dist/compose.yaml
+            dist/compose.isolated.yaml
+            dist/squid.conf
             dist/*.minisig
             dist/*.spdx.json
             dist/release-manifest.json
             dist/channel-*.json
             dist/advisories.json
+            dist/runtime-index.json
             dist/install.sh
             dist/install.ps1
+      # Not an `artifacts-*` artifact: the channel files are published by the
+      # Release channels job, not attached to the GitHub release.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: package-channels
+          path: ${{ runner.temp }}/channels

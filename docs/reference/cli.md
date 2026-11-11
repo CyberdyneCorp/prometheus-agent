@@ -52,6 +52,8 @@ Commands:
   toolsets     List toolsets and show the tools a toolset resolves to
   approvals    Check how the approval gate treats a command, without running it
   update       Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
+  bundle       Offline bundles: one file holding a signed release (and runtimes) for installs and updates without network access
+  uninstall    Remove this install: the binary, its alias, `prometheus.prev` and its service units; the home only with `--purge` (`--dry-run` lists all)
   pause        Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
   portal       The Nous Portal subscription and its tool gateway routing
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
@@ -489,11 +491,14 @@ Options:
       --json
           Print one JSON document on stdout; errors go to stderr as JSON
 
-      --ack <ADVISORY_ID>
-          Silence the startup warning of a supply-chain advisory (added to `security.acked_advisories`); `doctor security` still shows it
+      --allowlist
+          With `network`: print the hosts an egress proxy must allow for every profile (providers, MCP servers, releases and runtimes), one per line, for the image's `compose.isolated.yaml`
 
   -v, --verbose...
           More detail; repeatable
+
+      --ack <ADVISORY_ID>
+          Silence the startup warning of a supply-chain advisory (added to `security.acked_advisories`); `doctor security` still shows it
 
       --no-color
           No colour (also when `NO_COLOR` is set or stdout is not a terminal)
@@ -17906,16 +17911,206 @@ Options:
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -y, --yes
-          Confirm `--restore-snapshots` without asking
+          Confirm without asking: `--restore-snapshots`, and restarting a daemon whose turns are still running (once they finish)
 
       --accept-hooks
           Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+      --dry-run
+          Show what the update would do (versions, download size, changelog, migrations per profile, runtime pin changes, daemon restart) without downloading the binary or changing anything; exits 0 or 10 like `--check`
+
+      --from-bundle <FILE>
+          Update from an offline bundle (`prometheus bundle create`) with no network access; the install becomes `owner = bundle`
+
+      --no-restart
+          Leave a running daemon on the old build (the receipt lists `daemon_restart_pending`)
 
       --backup
           Also write a full home archive before the swap (`update.pre_update_backup = "full"` for this run)
 
       --no-backup
           Skip the pre-update backup for this run (a store migration still gets its pre-migration snapshot)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus bundle`
+
+```text
+Offline bundles: one file holding a signed release (and runtimes) for installs and updates without network access
+
+Usage: prometheus bundle [OPTIONS] <COMMAND>
+
+Commands:
+  create  Write an offline bundle for a target
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus bundle create`
+
+```text
+Write an offline bundle for a target
+
+Usage: prometheus bundle create [OPTIONS] --target <TARGET> --output <FILE>
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --target <TARGET>
+          Target triple of the binary (for example `x86_64-unknown-linux-musl`, `universal2-apple-darwin`)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --version <VERSION>
+          Release tag (default: the channel's newest)
+
+      --channel <CHANNEL>
+          Channel read when `--version` is not given
+
+          [default: stable]
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --with <RUNTIMES>
+          Runtimes to include, comma separated (node, cpython, uv, chromium)
+
+  -o, --output <FILE>
+          Output file
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus bundle help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus bundle help [COMMAND]
+
+Commands:
+  create  Write an offline bundle for a target
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus bundle help create`
+
+```text
+Write an offline bundle for a target
+
+Usage: prometheus bundle help create
+```
+
+## `prometheus bundle help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus bundle help help
+```
+
+## `prometheus uninstall`
+
+```text
+Remove this install: the binary, its alias, `prometheus.prev` and its service units; the home only with `--purge` (`--dry-run` lists all)
+
+Usage: prometheus uninstall [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --purge
+          Also delete `PROMETHEUS_HOME` (asks first; `--yes` without a terminal)
+
+      --data-only
+          Keep the binary; delete the contents of `PROMETHEUS_HOME` (asks first). Allowed for installs owned by a package manager
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --desktop-data
+          Delete the desktop app's per-user data: webview storage, window state and desktop logs
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --dry-run
+          Print everything it would remove or stop; change nothing
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -y, --yes
+          Confirm deleting data without asking
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -23715,6 +23910,56 @@ Options:
           Print help (see a summary with '-h')
 ```
 
+## `prometheus install-receipt`
+
+```text
+Stamp the install receipt beside this binary for a package channel (run by the Homebrew formula, Dockerfile, Nix derivation and Termux package; no home is touched)
+
+Usage: prometheus install-receipt [OPTIONS] --owner <OWNER>
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --owner <OWNER>
+          Who updates this install (`homebrew`, `nix`, `termux`, `winget`, `image`, `system-package`, ...)
+
+      --channel <CHANNEL>
+          The release channel the package follows
+
+          [default: stable]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --binary <PATH>
+          The installed binary (default: this executable)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus self-test`
 
 ```text
@@ -23892,13 +24137,16 @@ Options:
 ```text
 Download, verify and install the pinned versions
 
-Usage: prometheus runtimes install [OPTIONS] <NAME>...
+Usage: prometheus runtimes install [OPTIONS] [NAME]...
 
 Arguments:
-  <NAME>...
-          Runtime names (node, cpython, uv, chromium), or `python@<version>` for the python bridge's managed CPython (3.11, 3.12, 3.13)
+  [NAME]...
+          Runtime names (node, cpython, uv, chromium), or `python@<version>` for the python bridge's managed CPython (3.11, 3.12, 3.13); with `--from-bundle`, default every runtime the bundle carries
 
 Options:
+      --from-bundle <FILE>
+          Install from an offline bundle (`prometheus bundle create`) with no network access; each archive must match this build's pins
+
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
@@ -24314,6 +24562,9 @@ Install this build's pins of the runtimes in use, then collect garbage (run by `
 Usage: prometheus runtimes refresh [OPTIONS]
 
 Options:
+      --bundle-dir <DIR>
+          The unpacked offline bundle of a `--from-bundle` update
+
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
@@ -24514,6 +24765,8 @@ Commands:
   toolsets     List toolsets and show the tools a toolset resolves to
   approvals    Check how the approval gate treats a command, without running it
   update       Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
+  bundle       Offline bundles: one file holding a signed release (and runtimes) for installs and updates without network access
+  uninstall    Remove this install: the binary, its alias, `prometheus.prev` and its service units; the home only with `--purge` (`--dry-run` lists all)
   pause        Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
   portal       The Nous Portal subscription and its tool gateway routing
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
@@ -27301,6 +27554,33 @@ Update this install to its channel's newest signed release, check for one (exit 
 Usage: prometheus help update
 ```
 
+## `prometheus help bundle`
+
+```text
+Offline bundles: one file holding a signed release (and runtimes) for installs and updates without network access
+
+Usage: prometheus help bundle [COMMAND]
+
+Commands:
+  create  Write an offline bundle for a target
+```
+
+## `prometheus help bundle create`
+
+```text
+Write an offline bundle for a target
+
+Usage: prometheus help bundle create
+```
+
+## `prometheus help uninstall`
+
+```text
+Remove this install: the binary, its alias, `prometheus.prev` and its service units; the home only with `--purge` (`--dry-run` lists all)
+
+Usage: prometheus help uninstall
+```
+
 ## `prometheus help pause`
 
 ```text
@@ -28235,6 +28515,14 @@ The completion candidates for a command line (called by the scripts `completions
 Usage: prometheus help __complete
 ```
 
+## `prometheus help install-receipt`
+
+```text
+Stamp the install receipt beside this binary for a package channel (run by the Homebrew formula, Dockerfile, Nix derivation and Termux package; no home is touched)
+
+Usage: prometheus help install-receipt
+```
+
 ## `prometheus help self-test`
 
 ```text
@@ -28389,6 +28677,7 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.doctor.v1` | `prometheus doctor` |
 | `prometheus.update_status.v1` | `prometheus update --status` |
 | `prometheus.update_check.v1` | `prometheus update --check` |
+| `prometheus.update_dry_run.v1` | `prometheus update --dry-run` |
 | `prometheus.runtimes.v1` | `prometheus runtimes list` |
 | `prometheus.runtimes_verify.v1` | `prometheus runtimes verify` |
 | `prometheus.runtimes_doctor.v1` | `prometheus runtimes doctor` |

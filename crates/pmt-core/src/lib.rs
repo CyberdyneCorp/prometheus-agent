@@ -8,6 +8,7 @@ pub mod audit;
 pub mod battery;
 pub mod cancel;
 pub mod capability;
+pub mod container;
 pub mod context_pressure;
 pub mod doctor;
 pub mod env;
@@ -32,6 +33,7 @@ pub mod secret;
 pub mod secret_paths;
 pub mod spawn;
 pub mod subagent_tree;
+pub mod supervisor;
 pub mod tasks;
 
 pub use error::{Error, ErrorKind, Result};

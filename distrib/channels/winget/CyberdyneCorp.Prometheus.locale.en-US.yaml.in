@@ -1,0 +1,12 @@
+# WinGet default locale manifest, rendered by `cargo xtask release channels`.
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.9.0.schema.json
+PackageIdentifier: CyberdyneCorp.Prometheus
+PackageVersion: @BARE_VERSION@
+PackageLocale: en-US
+Publisher: CyberdyneCorp
+PackageName: Prometheus
+License: TBD (see the repository README)
+ShortDescription: Self-hosted personal AI agent harness
+PackageUrl: https://github.com/CyberdyneCorp/prometheus-agent
+ManifestType: defaultLocale
+ManifestVersion: 1.9.0

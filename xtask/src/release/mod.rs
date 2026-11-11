@@ -10,11 +10,15 @@
 //! - `installers`: `install.sh` / `install.ps1` with the trusted keys
 //!   embedded
 //! - `sign`: a detached `.minisig` for each file
+//! - `channels`: the Homebrew formula, `WinGet` manifests, Termux recipe,
+//!   Nix release pins and container build context of a release
 //! - `verify`: every expected artifact present, matching the signed
 //!   manifest, checksummed, signed and with an SBOM
 
+mod channels;
 mod installers;
 mod manifest;
+mod notes;
 mod sbom;
 mod sign;
 
@@ -56,6 +60,10 @@ pub(crate) enum Step {
         /// Commit the release was built from.
         #[arg(long)]
         commit: String,
+        /// JSON map of the images built for the release (`name` to
+        /// `ref@sha256:digest`), pinned in the manifest.
+        #[arg(long)]
+        images: Option<PathBuf>,
     },
     /// Render `install.sh` and `install.ps1` with the trusted public keys.
     Installers {
@@ -81,6 +89,26 @@ pub(crate) enum Step {
         /// Files to sign.
         files: Vec<PathBuf>,
     },
+    /// Render the package-manager and image channels of the release in
+    /// `--dir` (its `release-manifest.json` and archives) into `--out`.
+    Channels {
+        /// Release directory.
+        #[arg(long)]
+        dir: PathBuf,
+        /// Output directory.
+        #[arg(long)]
+        out: PathBuf,
+    },
+    /// Write the container image build context (`distrib/container` plus
+    /// the Linux binaries of the archives in `--dir`) to `--out`.
+    ContainerContext {
+        /// Directory holding the target archives.
+        #[arg(long)]
+        dir: PathBuf,
+        /// Output directory.
+        #[arg(long)]
+        out: PathBuf,
+    },
     /// Check a release directory: every target archive, its checksum,
     /// signature and SBOM, the signed manifest and channel index, and the
     /// signed installers.
@@ -99,7 +127,12 @@ pub(crate) fn run(step: Step) -> Result<(), String> {
     match step {
         Step::Keygen { out, name } => sign::keygen(&out, &name),
         Step::Sbom { target, out } => sbom::write(&crate::repo_root(), &target, &out),
-        Step::Manifest { dir, tag, commit } => manifest::write(&dir, &tag, &commit),
+        Step::Manifest {
+            dir,
+            tag,
+            commit,
+            images,
+        } => manifest::write(&crate::repo_root(), &dir, &tag, &commit, images.as_deref()),
         Step::Installers { out, keys } => installers::render(&crate::repo_root(), &out, &keys),
         Step::Sign {
             key_env,
@@ -109,6 +142,10 @@ pub(crate) fn run(step: Step) -> Result<(), String> {
         } => {
             let key = std::env::var(&key_env).map_err(|_| format!("{key_env} is not set"))?;
             sign::sign_files(&key, require_embedded, public_key_out.as_deref(), &files)
+        }
+        Step::Channels { dir, out } => channels::render(&crate::repo_root(), &dir, &out),
+        Step::ContainerContext { dir, out } => {
+            channels::container_context(&crate::repo_root(), &dir, &out)
         }
         Step::Verify { dir, key } => manifest::verify(&dir, &key),
     }

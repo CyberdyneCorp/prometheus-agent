@@ -489,6 +489,78 @@ fn uninstall_on_os(_: &Host, _: bool) -> Result<String, Error> {
     Err(unsupported())
 }
 
+/// The supervisor units `install-service` created (per-user and system),
+/// as `prometheus uninstall` lists them.
+///
+/// # Errors
+///
+/// Home and `daemon.toml` errors.
+pub fn installed_units(ctx: &Context<'_>) -> Result<Vec<String>, Error> {
+    Ok(units_on_os(&Host::new(ctx)?))
+}
+
+/// Stops and removes every unit `install-service` created (a system unit
+/// only as root); returns what was removed.
+///
+/// # Errors
+///
+/// `service.manager` when the service manager refuses; file errors.
+pub fn remove_units(ctx: &Context<'_>) -> Result<Vec<String>, Error> {
+    let host = Host::new(ctx)?;
+    if units_on_os(&host).is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut removed = Vec::new();
+    for system in [false, true] {
+        if system && !host.is_root() {
+            continue;
+        }
+        let done = uninstall_on_os(&host, system)?;
+        if done != "no service installed" && !removed.contains(&done) {
+            removed.push(done);
+        }
+    }
+    Ok(removed)
+}
+
+fn existing(paths: &[PathBuf]) -> Vec<String> {
+    paths
+        .iter()
+        .filter(|p| p.exists())
+        .map(|p| p.display().to_string())
+        .collect()
+}
+
+#[cfg(target_os = "linux")]
+fn units_on_os(host: &Host) -> Vec<String> {
+    existing(&[systemd_path(host, false), systemd_path(host, true)])
+}
+
+#[cfg(target_os = "macos")]
+fn units_on_os(host: &Host) -> Vec<String> {
+    existing(&[launchd_target(host, false).0, launchd_target(host, true).0])
+}
+
+#[cfg(windows)]
+fn units_on_os(host: &Host) -> Vec<String> {
+    let (wrapper, startup) = windows_paths(host);
+    let mut units = Vec::new();
+    if host
+        .runner
+        .run("schtasks", &["/Query", "/TN", TASK_NAME])
+        .is_ok()
+    {
+        units.push(format!("Scheduled Task '{TASK_NAME}'"));
+    }
+    units.extend(existing(&[startup, wrapper]));
+    units
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+fn units_on_os(_: &Host) -> Vec<String> {
+    Vec::new()
+}
+
 /// Legacy supervisor units for `prometheus doctor`, searched where
 /// `install-service` would write (the test seam included) for `home`.
 #[must_use]

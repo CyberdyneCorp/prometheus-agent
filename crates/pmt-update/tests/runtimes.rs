@@ -537,3 +537,44 @@ async fn verify_reports_a_modified_file() {
     assert_eq!(verified.len(), 1);
     assert_eq!(verified[0].mismatch.as_deref(), Some("node-v1/README.md"));
 }
+
+/// Offline bundles (spec: distribution-and-update, Offline bundles): an
+/// installer reading a bundle makes no request and still checks the
+/// archive against this build's pinned digest.
+#[tokio::test]
+async fn a_bundled_runtime_installs_without_a_request_and_only_when_pinned() {
+    let f = Fixture::new().await;
+    let bundle = f.root.parent().unwrap().join("bundle");
+    let at = bundle.join("runtimes").join(PLATFORM).join("node");
+    std::fs::create_dir_all(&at).unwrap();
+    std::fs::write(at.join("node-v1.tar.gz"), &f.bytes).unwrap();
+    let installed = f
+        .installer(Sources::default())
+        .with_bundle(&bundle)
+        .install("node")
+        .await
+        .unwrap();
+    assert_eq!(installed.record.source, "bundle");
+    assert_eq!(f.requests("/").await, 0, "nothing was downloaded");
+    assert_eq!(f.versions().len(), 1);
+
+    let tampered = Fixture::new().await;
+    let bundle = tampered.root.parent().unwrap().join("bundle");
+    let at = bundle.join("runtimes").join(PLATFORM).join("node");
+    std::fs::create_dir_all(&at).unwrap();
+    let mut bytes = tampered.bytes.clone();
+    bytes[10] ^= 0xff;
+    std::fs::write(at.join("node-v1.tar.gz"), &bytes).unwrap();
+    let err = tampered
+        .installer(Sources::default())
+        .with_bundle(&bundle)
+        .install("node")
+        .await
+        .unwrap_err();
+    assert!(
+        err.message().contains("sha256 mismatch"),
+        "{}",
+        err.message()
+    );
+    assert!(tampered.versions().is_empty(), "nothing was installed");
+}

@@ -10,9 +10,14 @@ pub enum RuntimesCommand {
     /// Download, verify and install the pinned versions.
     Install {
         /// Runtime names (node, cpython, uv, chromium), or `python@<version>`
-        /// for the python bridge's managed CPython (3.11, 3.12, 3.13).
-        #[arg(required = true, value_name = "NAME")]
+        /// for the python bridge's managed CPython (3.11, 3.12, 3.13); with
+        /// `--from-bundle`, default every runtime the bundle carries.
+        #[arg(required_unless_present = "from_bundle", value_name = "NAME")]
         names: Vec<String>,
+        /// Install from an offline bundle (`prometheus bundle create`) with
+        /// no network access; each archive must match this build's pins.
+        #[arg(long, value_name = "FILE")]
+        from_bundle: Option<std::path::PathBuf>,
     },
     /// Remove every installed version no process is using.
     Remove {
@@ -37,7 +42,11 @@ pub enum RuntimesCommand {
     /// Install this build's pins of the runtimes in use, then collect
     /// garbage (run by `prometheus update` with the new binary).
     #[command(hide = true)]
-    Refresh,
+    Refresh {
+        /// The unpacked offline bundle of a `--from-bundle` update.
+        #[arg(long, value_name = "DIR")]
+        bundle_dir: Option<std::path::PathBuf>,
+    },
 }
 
 /// `prometheus runtimes exclude` subcommands.

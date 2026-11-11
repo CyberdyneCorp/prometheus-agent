@@ -30,6 +30,9 @@ fn main() -> ExitCode {
         Ok(cli) => cli,
         Err(err) => return usage_failure(&err),
     };
+    if let Some(code) = before_anything(&cli) {
+        return code;
+    }
     if cli.print_version {
         return ExitCode::from(version::run(cli.json, cli.verbose > 0));
     }
@@ -112,6 +115,41 @@ fn main() -> ExitCode {
     }
 }
 
+/// What runs before the launch environment, logging or the home exist:
+/// the container init (as PID 1, the command runs as a child of a minimal
+/// init that reaps orphans and forwards signals) and a package build
+/// stamping its receipt (it has no home and must not grow one).
+fn before_anything(cli: &Cli) -> Option<ExitCode> {
+    if let Some(code) = prometheus::init::run_if_pid1(is_daemon_run(cli)) {
+        return Some(ExitCode::from(code));
+    }
+    let Some(Command::InstallReceipt(args)) = &cli.command else {
+        return None;
+    };
+    Some(match prometheus::install_receipt_cmd::run(args) {
+        Ok(code) => ExitCode::from(code),
+        Err(err) => failure(&err, cli.json),
+    })
+}
+
+/// Whether the command line runs the gateway daemon in the foreground.
+fn is_daemon_run(cli: &Cli) -> bool {
+    #[cfg(feature = "gateway")]
+    {
+        matches!(
+            cli.command,
+            Some(Command::Daemon {
+                command: prometheus::daemon_cmd::DaemonCommand::Run { .. }
+            })
+        )
+    }
+    #[cfg(not(feature = "gateway"))]
+    {
+        let _ = cli;
+        false
+    }
+}
+
 /// `--set` overrides plus the ones `--accept-hooks` and `--safe-mode`
 /// stand for.
 fn global_set(cli: &Cli) -> Vec<String> {
@@ -176,6 +214,8 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Toolsets { command }) => tools_cmd::toolsets(command, &ctx),
         Some(Command::Approvals { command }) => approvals_cmd::run(command, &ctx),
         Some(Command::Update(args)) => update_cmd::run(args, &ctx),
+        Some(Command::Bundle { command }) => prometheus::bundle_cmd::run(command, &ctx),
+        Some(Command::Uninstall(args)) => prometheus::uninstall_cmd::run(args, &ctx),
         Some(Command::Pause(args)) => prometheus::pause_cmd::run(args, &ctx),
         Some(Command::Portal { command }) => prometheus::portal_cmd::run(command, &ctx),
         #[cfg(feature = "gateway")]
@@ -196,7 +236,7 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::SelfTest) => Ok(self_test_cmd::run(&ctx)),
         Some(Command::SmokeSuite(args)) => prometheus::smoke_suite::runner::run(args),
         Some(Command::Completions { shell }) => prometheus::completions::script(*shell),
-        Some(Command::Complete { .. }) => Ok(0),
+        Some(Command::Complete { .. } | Command::InstallReceipt(_)) => Ok(0),
         Some(Command::Runtimes { command }) => runtimes_cmd::run(command, &ctx),
         Some(Command::Chat(args)) => chat::run(&safe(args, cli), &ctx, ui(cli)),
         #[cfg(feature = "tui")]

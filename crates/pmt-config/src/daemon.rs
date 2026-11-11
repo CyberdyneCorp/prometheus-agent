@@ -416,6 +416,12 @@ pub struct UpdateConfig {
     pub pre_update_backup: PreUpdateBackup,
     /// Let gateway admins run `/update` from a chat.
     pub allow_from_chat: bool,
+    /// How long an update waits for a running daemon's turns to finish
+    /// before restarting it on the new build; when they are still running
+    /// the daemon keeps the old build and the update reports
+    /// `daemon_restart_pending`.
+    #[schemars(range(min = 1, max = 86_400))]
+    pub drain_timeout_secs: u64,
 }
 
 impl Default for UpdateConfig {
@@ -429,6 +435,7 @@ impl Default for UpdateConfig {
             mirror_fallback: false,
             pre_update_backup: PreUpdateBackup::State,
             allow_from_chat: false,
+            drain_timeout_secs: 120,
         }
     }
 }
@@ -464,6 +471,11 @@ impl DaemonConfig {
         if !(1..=100).contains(&config.update.snapshot_keep) {
             return Err(parse_error(
                 "update.snapshot_keep: must be between 1 and 100",
+            ));
+        }
+        if !(1..=86_400).contains(&config.update.drain_timeout_secs) {
+            return Err(parse_error(
+                "update.drain_timeout_secs: must be between 1 and 86400",
             ));
         }
         config

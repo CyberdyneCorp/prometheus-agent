@@ -193,6 +193,14 @@ pub struct DaemonStatus {
     pub active_turns: usize,
     /// It is draining to stop or restart.
     pub retiring: bool,
+    /// A supervisor (container init, systemd, launchd) starts it again
+    /// after a restart exit (75); otherwise a restart must start it.
+    #[serde(default)]
+    pub supervised: bool,
+    /// The executable it started from (an update hands over only the
+    /// daemon of the binary it replaced).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub binary: Option<std::path::PathBuf>,
     /// Each served profile's configuration: reloads, the error of an
     /// invalid edit it ignored, keys waiting for a restart.
     #[serde(default)]

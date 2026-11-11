@@ -423,6 +423,14 @@
           "minimum": 0,
           "type": "integer"
         },
+        "drain_timeout_secs": {
+          "default": 120,
+          "description": "How long an update waits for a running daemon's turns to finish\nbefore restarting it on the new build; when they are still running\nthe daemon keeps the old build and the update reports\n`daemon_restart_pending`.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        },
         "mirror_fallback": {
           "default": false,
           "description": "When a mirror (`update.mirror_url`, `runtimes.mirrors.runtimes`)\nstill fails after the retry budget, download from the default origin\ninstead of failing.",
@@ -568,6 +576,7 @@
         "allow_from_chat": false,
         "auto_apply": false,
         "check_interval_secs": 86400,
+        "drain_timeout_secs": 120,
         "mirror_fallback": false,
         "mirror_url": null,
         "pre_update_backup": "state",

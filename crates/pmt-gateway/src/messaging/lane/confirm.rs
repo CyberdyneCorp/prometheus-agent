@@ -11,6 +11,9 @@
 //!   requesting chat and thread.
 //! - `/update [check]` needs `update.allow_from_chat = true` in
 //!   `daemon.toml`; `check` only looks for a release and asks nothing.
+//!   A confirmed update runs `prometheus update` detached; its stages are
+//!   relayed here ([`super::update_relay`]), a busy daemon's restart is
+//!   asked here again, and the restarted daemon says `updated to <v>`.
 
 use std::time::Duration;
 
@@ -21,7 +24,7 @@ use tokio::time::Instant;
 
 use super::Lane;
 use crate::messaging::adapter::{Button, Outgoing};
-use crate::messaging::agents::UpdateFromChat;
+use crate::messaging::agents::{UpdateFromChat, UpdateRun};
 use crate::messaging::auth;
 use crate::messaging::cards::{Card, CardKind};
 use crate::messaging::descriptor::Interactive;
@@ -37,13 +40,15 @@ pub(crate) const UPDATES_DISABLED: &str =
 pub(crate) enum Action {
     Restart,
     Update,
+    /// Restart a daemon whose turns still run, once they finish.
+    UpdateBusy,
 }
 
 impl Action {
     fn name(self) -> &'static str {
         match self {
             Self::Restart => "restart",
-            Self::Update => "update",
+            Self::Update | Self::UpdateBusy => "update",
         }
     }
 }
@@ -87,7 +92,7 @@ impl Lane {
             return;
         }
         match args.trim() {
-            "check" => self.run_update(routing, true).await,
+            "check" => self.run_update(routing, true, false).await,
             "" => self.ask_confirmation(
                 routing,
                 Action::Update,
@@ -233,8 +238,15 @@ impl Lane {
     pub(super) async fn confirmed(&mut self, action: Action, routing: &Routing) {
         match action {
             Action::Restart => self.restart_now(routing).await,
-            Action::Update => self.run_update(routing, false).await,
+            Action::Update => self.run_update(routing, false, false).await,
+            Action::UpdateBusy => self.run_update(routing, false, true).await,
         }
+    }
+
+    /// The updater stopped before the swap: the daemon has turns running.
+    pub(super) fn ask_busy_restart(&mut self, routing: &Routing, question: &str) {
+        let question = format!("{question} The update has not been applied yet.");
+        self.ask_confirmation(routing, Action::UpdateBusy, &question);
     }
 
     async fn restart_now(&self, routing: &Routing) {
@@ -267,16 +279,21 @@ impl Lane {
         self.shared.server.request_stop(true);
     }
 
-    async fn run_update(&self, routing: &Routing, check: bool) {
+    async fn run_update(&self, routing: &Routing, check: bool, restart_busy: bool) {
         let request = UpdateFromChat {
             profile: self.profile.clone(),
             platform: routing.platform.clone(),
             chat_id: routing.chat_id.clone(),
             thread_id: routing.thread_id.clone(),
             check,
+            restart_busy,
         };
         match self.shared.agents.update_from_chat(&request).await {
-            Ok(text) => self.say(&text),
+            Ok(UpdateRun::Answer(text)) => self.say(&text),
+            Ok(UpdateRun::Running(events)) => {
+                self.say("Update started; its progress follows here.");
+                super::update_relay::spawn(self.tx.clone(), routing.clone(), events);
+            }
             Err(err) => self.say(err.message()),
         }
     }

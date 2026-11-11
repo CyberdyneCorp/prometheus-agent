@@ -6273,6 +6273,7 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "flate2",
  "jiff",
  "minisign",
  "nix 0.31.3",
@@ -6282,6 +6283,7 @@ dependencies = [
  "pmt-net",
  "pmt-obs",
  "pmt-rpc",
+ "pmt-store",
  "pmt-tools",
  "pmt-update",
  "proc-macro2",
@@ -6291,8 +6293,10 @@ dependencies = [
  "serde",
  "serde_json",
  "syn 3.0.9",
+ "tar",
  "tokio",
  "toml",
+ "zip",
 ]
 
 [[package]]

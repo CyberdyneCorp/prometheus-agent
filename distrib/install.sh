@@ -5,7 +5,11 @@
 #
 #   curl -fsSL https://github.com/CyberdyneCorp/prometheus-agent/releases/latest/download/install.sh | sh
 #   sh install.sh [--channel stable|canary] [--version vX.Y.Z] [--modify-path|--no-modify-path]
-#                 [--base-url URL] [--without RUNTIME]...
+#                 [--base-url URL] [--without RUNTIME]... [--bundle FILE]
+#
+# `--bundle FILE` installs from an offline bundle (`prometheus bundle
+# create`) with no network access: the same signature and digest checks,
+# the bundle's runtimes installed too, and the receipt says owner `bundle`.
 #
 # It downloads the signed channel index and release manifest, verifies their
 # minisign signatures against the embedded keys (with `minisign`, or with
@@ -27,6 +31,7 @@ usage() {
     cat <<'USAGE'
 usage: install.sh [--channel stable|canary] [--version vX.Y.Z] [--modify-path|--no-modify-path]
                   [--base-url URL] [--without node|cpython|uv|chromium|doc-converter]...
+                  [--bundle FILE]
 USAGE
 }
 
@@ -40,6 +45,7 @@ version=
 modify_path=ask
 base_url=$DEFAULT_BASE_URL
 without=
+bundle=
 
 need_value() {
     [ "$2" -ge 2 ] || die "$1 needs a value" 2
@@ -55,6 +61,8 @@ while [ $# -gt 0 ]; do
     --base-url=*) base_url=${1#*=}; shift ;;
     --without) need_value "$1" $#; without="$without $2"; shift 2 ;;
     --without=*) without="$without ${1#*=}"; shift ;;
+    --bundle) need_value "$1" $#; bundle=$2; shift 2 ;;
+    --bundle=*) bundle=${1#*=}; shift ;;
     --modify-path) modify_path=yes; shift ;;
     --no-modify-path) modify_path=no; shift ;;
     -h | --help) usage; exit 0 ;;
@@ -78,6 +86,10 @@ for runtime in $without; do
     esac
 done
 base_url=${base_url%/}
+if [ -n "$bundle" ]; then
+    [ -f "$bundle" ] || die "--bundle: no such file: $bundle" 2
+    case $bundle in /*) ;; *) bundle=$PWD/$bundle ;; esac
+fi
 
 detect_target() {
     os=$(uname -s)
@@ -103,6 +115,11 @@ detect_target() {
 }
 
 download() { # url file
+    # An offline bundle's files are copied from where it was unpacked.
+    if [ -n "$bundle" ]; then
+        cp "$bundle_dir/${1#"$base_url"/}" "$2" 2>/dev/null || die "the bundle has no ${1#"$base_url"/}"
+        return 0
+    fi
     if command -v curl >/dev/null 2>&1; then
         curl -fsSL -o "$2" "$1"
     elif command -v wget >/dev/null 2>&1; then
@@ -228,7 +245,18 @@ target=$(detect_target)
 tmp=$(mktemp -d 2>/dev/null || mktemp -d -t prometheus-install)
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
-if [ -z "$version" ]; then
+owner=self
+if [ -n "$bundle" ]; then
+    bundle_dir=$tmp/bundle
+    mkdir "$bundle_dir"
+    tar -xf "$bundle" -C "$bundle_dir" || die "cannot read bundle $bundle"
+    [ -f "$bundle_dir/bundle.json" ] || die "$bundle is not a prometheus bundle"
+    bundle_target=$(tr -d '\n' <"$bundle_dir/bundle.json" | json_field target)
+    [ "$bundle_target" = "$target" ] ||
+        die "bundle target $bundle_target does not match this host ($target)"
+    version=$(tr -d '\n' <"$bundle_dir/bundle.json" | json_field version)
+    owner=bundle
+elif [ -z "$version" ]; then
     fetch_signed "channels/$channel.json" "$tmp/index.json"
     version=$(tr -d '\n' <"$tmp/index.json" | json_field version)
     [ -n "$version" ] || die "the $channel channel index names no version"
@@ -254,7 +282,7 @@ mv -f "$bin_dir/.prometheus.new.$$" "$bin_dir/prometheus"
 ln -sf prometheus "$bin_dir/pmt"
 cat >"$bin_dir/install.json" <<RECEIPT
 {
-  "owner": "self",
+  "owner": "$owner",
   "channel": "$channel",
   "version": "$version",
   "target": "$target",
@@ -269,4 +297,8 @@ for runtime in $without; do
         die "cannot record --without $runtime in runtimes.exclude"
     echo "excluded runtime $runtime (runtimes.exclude)"
 done
+if [ -n "$bundle" ] && ls "$bundle_dir/runtimes" >/dev/null 2>&1; then
+    "$bin_dir/prometheus" runtimes install --from-bundle "$bundle" ||
+        die "cannot install the bundle's runtimes"
+fi
 setup_path "$bin_dir"

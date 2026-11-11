@@ -4,8 +4,8 @@
 use std::path::Path;
 
 use pmt_update::manifest::{
-    Artifact, ChannelIndex, MACOS_UNIVERSAL, MANIFEST_FILE, MANIFEST_SCHEMA, ReleaseManifest,
-    SIGNATURE_SUFFIX, sha256_hex,
+    Artifact, ChannelIndex, MACOS_UNIVERSAL, MANIFEST_FILE, MANIFEST_SCHEMA, ReleaseDetails,
+    ReleaseManifest, SIGNATURE_SUFFIX, Schemas, sha256_hex,
 };
 use pmt_update::{ReleaseVersion, TrustRoot};
 
@@ -28,8 +28,15 @@ pub(super) const TARGETS: [&str; 10] = [
 /// The files beside the archives that are signed too.
 const INSTALLERS: [&str; 2] = ["install.sh", "install.ps1"];
 
-/// Writes `release-manifest.json` and `channel-<channel>.json` in `dir`.
-pub(super) fn write(dir: &Path, tag: &str, commit: &str) -> Result<(), String> {
+/// Writes `release-manifest.json` and `channel-<channel>.json` in `dir`;
+/// `images` is the `name -> ref@digest` JSON of the images built for it.
+pub(super) fn write(
+    root: &Path,
+    dir: &Path,
+    tag: &str,
+    commit: &str,
+    images: Option<&Path>,
+) -> Result<(), String> {
     let version = ReleaseVersion::parse(tag).map_err(|e| e.to_string())?;
     let mut artifacts = Vec::new();
     for target in TARGETS {
@@ -51,6 +58,7 @@ pub(super) fn write(dir: &Path, tag: &str, commit: &str) -> Result<(), String> {
         commit: commit.to_owned(),
         published_at: jiff::Timestamp::now().to_string(),
         artifacts,
+        details: details(root, version, images)?,
     };
     let index = ChannelIndex::new(version.channel(), version);
     write_file(&dir.join(MANIFEST_FILE), &manifest.to_published_json())?;
@@ -59,6 +67,43 @@ pub(super) fn write(dir: &Path, tag: &str, commit: &str) -> Result<(), String> {
         &dir.join(format!("channel-{}.json", version.channel())),
         &index_json,
     )
+}
+
+/// The release notes (`CHANGELOG.md`), schemas, runtime pins and images.
+fn details(
+    root: &Path,
+    version: ReleaseVersion,
+    images: Option<&Path>,
+) -> Result<ReleaseDetails, String> {
+    let changelog_path = root.join("CHANGELOG.md");
+    let changelog = std::fs::read_to_string(&changelog_path)
+        .map_err(|e| format!("{}: {e}", changelog_path.display()))?;
+    let images = match images {
+        Some(path) => {
+            let text =
+                std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+            serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?
+        }
+        None => std::collections::BTreeMap::new(),
+    };
+    let index = pmt_update::runtimes::index::RuntimeIndex::embedded();
+    let runtimes = index
+        .names()
+        .into_iter()
+        .filter_map(|name| {
+            let pin = index.pin(name).ok()?;
+            Some((name.to_owned(), pin.version.clone()))
+        })
+        .collect();
+    Ok(ReleaseDetails {
+        notes: super::notes::parse(&changelog, version)?,
+        schemas: Some(Schemas {
+            config: pmt_config::schema::SCHEMA_VERSION,
+            store: pmt_store::SCHEMA_VERSION,
+        }),
+        runtimes,
+        images,
+    })
 }
 
 fn write_file(path: &Path, text: &str) -> Result<(), String> {
@@ -233,7 +278,7 @@ mod tests {
         let advisories = crate::repo_root().join("crates/pmt-update/advisories/advisories.json");
         std::fs::copy(advisories, dir.join("advisories.json")).unwrap();
         signed.push(dir.join("advisories.json"));
-        write(dir, "v1.4.0", "abc").unwrap();
+        write(&crate::repo_root(), dir, "v1.4.0", "abc", None).unwrap();
         signed.push(dir.join(MANIFEST_FILE));
         signed.push(dir.join("channel-stable.json"));
         sign_files(KEY, false, None, &signed).unwrap();

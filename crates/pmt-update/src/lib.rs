@@ -9,6 +9,7 @@
 
 pub mod advisories;
 pub mod archive;
+pub mod bundle;
 pub mod download;
 pub mod fetch;
 pub mod flow;

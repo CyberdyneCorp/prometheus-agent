@@ -34,6 +34,7 @@ mod requests;
 mod resume;
 mod topic;
 mod turns;
+mod update_relay;
 mod watchdog;
 
 use std::collections::VecDeque;
@@ -106,6 +107,12 @@ pub(crate) enum Msg {
     Automated(crate::messaging::automation::Automated),
     /// A status line to say in the chat.
     Say(String),
+    /// An update from chat stopped because restarting the busy daemon
+    /// needs a yes: ask it here.
+    UpdateBusy {
+        routing: Box<Routing>,
+        question: String,
+    },
 }
 
 /// What a lane shows outside its task.
@@ -530,6 +537,7 @@ impl Lane {
             }
             Msg::Automated(automated) => self.automated(automated).await,
             Msg::Say(text) => self.say(&text),
+            Msg::UpdateBusy { routing, question } => self.ask_busy_restart(&routing, &question),
             Msg::Mirror(row) => {
                 self.mirrors.push(row);
                 if self.running.is_none() {

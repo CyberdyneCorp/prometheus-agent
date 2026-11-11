@@ -20,6 +20,7 @@ pmt-config.workspace = true
 pmt-core.workspace = true
 pmt-obs.workspace = true
 pmt-rpc.workspace = true
+pmt-store.workspace = true
 prometheus.workspace = true
 pmt-tools.workspace = true
 pmt-update.workspace = true
@@ -38,6 +39,10 @@ reqwest.workspace = true
 tokio.workspace = true
 syn = { version = "3.0", default-features = false, features = ["full", "parsing", "visit"] }
 toml.workspace = true
+# `release channels` reads release archives and repacks Windows ones as zips.
+flate2.workspace = true
+tar.workspace = true
+zip.workspace = true
 
 # Peak RSS of the measured binary in perf-sampler (getrusage of reaped children).
 [target.'cfg(unix)'.dependencies]

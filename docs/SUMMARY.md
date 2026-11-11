@@ -9,6 +9,7 @@
 - [The terminal UI](guide/tui.md)
 - [The offline demo](guide/demo.md)
 - [Installing and updating](guide/install-and-update.md)
+- [Package managers, containers and offline installs](guide/distribution.md)
 - [Setup, onboarding and doctor](guide/setup-and-doctor.md)
 - [Sessions](guide/sessions.md)
 - [Turns and the system prompt](guide/turns.md)

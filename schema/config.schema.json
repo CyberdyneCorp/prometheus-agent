@@ -5487,6 +5487,11 @@
       "additionalProperties": false,
       "description": "The `[network]` section.",
       "properties": {
+        "expect_isolated": {
+          "default": false,
+          "description": "The deployment is network-isolated (the egress proxy in\n`network.proxy` is the only way out, as in the image's\n`compose.isolated.yaml`): `prometheus doctor network --online`\nfails when a direct connection succeeds.",
+          "type": "boolean"
+        },
         "extra_ca_file": {
           "description": "Extra PEM CA bundle trusted in addition to the platform store.",
           "type": [
@@ -11291,6 +11296,7 @@
     "network": {
       "$ref": "#/$defs/NetworkConfig",
       "default": {
+        "expect_isolated": false,
         "force_ipv4": false
       },
       "description": "Outbound networking."

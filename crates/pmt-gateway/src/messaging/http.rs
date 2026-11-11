@@ -71,13 +71,22 @@ fn start(shared: &Arc<Shared>) -> Result<SocketAddr, String> {
             options.listen
         );
     }
-    let listener = std::net::TcpListener::bind(options.listen)
+    let bound = std::net::TcpListener::bind(options.listen)
         .and_then(|l| l.set_nonblocking(true).map(|()| l))
         .and_then(tokio::net::TcpListener::from_std)
-        .map_err(|e| format!("cannot listen on {}: {e}", options.listen))?;
-    let addr = listener
-        .local_addr()
-        .map_err(|e| format!("cannot listen on {}: {e}", options.listen))?;
+        .and_then(|l| l.local_addr().map(|addr| (l, addr)));
+    let (listener, addr) = match bound {
+        Ok(bound) => bound,
+        Err(e) => {
+            let reason = bind_failure(options.listen, &e);
+            // Only this listener is down: every other listener, adapter
+            // and profile keeps running (spec: distribution-and-update,
+            // Multiple profiles in one container).
+            listener_health(pmt_obs::health::State::Down, &reason);
+            return Err(reason);
+        }
+    };
+    listener_health(pmt_obs::health::State::Ok, &format!("listening on {addr}"));
     tracing::info!("webhook listener on http://{addr}/p/<profile>/<platform>/");
     let weak = Arc::downgrade(shared);
     let stop = shared.stop.clone();
@@ -103,6 +112,23 @@ fn start(shared: &Arc<Shared>) -> Result<SocketAddr, String> {
         .in_current_span(),
     );
     Ok(addr)
+}
+
+/// The health component of the shared webhook listener.
+pub(crate) const LISTENER_COMPONENT: &str = "listener:gateway.http";
+
+fn listener_health(state: pmt_obs::health::State, reason: &str) {
+    pmt_obs::health::global().report(None, LISTENER_COMPONENT, state, reason);
+}
+
+/// Why a listener could not bind: `port <n> already in use` when another
+/// process holds the port.
+pub(crate) fn bind_failure(addr: SocketAddr, e: &std::io::Error) -> String {
+    if e.kind() == std::io::ErrorKind::AddrInUse {
+        format!("port {} already in use", addr.port())
+    } else {
+        format!("cannot listen on {addr}: {e}")
+    }
 }
 
 async fn serve(

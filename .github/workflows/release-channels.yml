@@ -3,7 +3,21 @@
 # `<channel>.json` and its signature in the rolling `channels` release,
 # which is where `prometheus update` and the installers read the channel
 # index (`<origin>/channels/<channel>.json`), with the signed supply-chain
-# advisory catalog (`<origin>/channels/advisories.json`).
+# advisory catalog (`<origin>/channels/advisories.json`). Then it publishes
+# the package channels rendered by the finalize job (spec:
+# distribution-and-update, Package-manager and image channels), each
+# stamping its install receipt with its own owner:
+#
+# - container images: the release's digests tagged `latest` (stable) or
+#   `canary`
+# - Nix: `nix/release.json` committed to the `flake` branch, which the
+#   flake's package fetches (`nix run github:CyberdyneCorp/prometheus-agent/flake`)
+# - Homebrew: the formula pushed to CyberdyneCorp/homebrew-tap (stable;
+#   needs the HOMEBREW_TAP_TOKEN secret)
+# - WinGet: the manifests submitted to microsoft/winget-pkgs (stable;
+#   needs the WINGET_TOKEN secret)
+# - Termux: the recipe attached to the `channels` release for the
+#   termux-packages pull request (stable)
 
 name: Release channels
 
@@ -16,6 +30,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   channels:
@@ -45,3 +60,91 @@ jobs:
               --notes "Signed channel indexes read by prometheus update and the installers."
           fi
           gh release upload channels upload/* --clobber -R "$REPO"
+
+  packages:
+    needs: channels
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      PLAN: ${{ inputs.plan }}
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: package-channels
+          path: channels
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: artifacts-release-finalize
+          path: dist
+      - name: Release facts
+        run: |
+          set -euo pipefail
+          tag=$(jq -r '.announcement_tag' <<<"$PLAN")
+          case "$tag" in *-canary.*) channel=canary ;; *) channel=stable ;; esac
+          { echo "TAG=$tag"; echo "VERSION=${tag#v}"; echo "CHANNEL=$channel"; } >>"$GITHUB_ENV"
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Container image channel tags
+        run: |
+          set -euo pipefail
+          moving=$([ "$CHANNEL" = stable ] && echo latest || echo canary)
+          for name in prometheus prometheus-sandbox; do
+            ref=$(jq -r --arg k "$name:$VERSION" '.images[$k] // empty' dist/release-manifest.json)
+            [ -n "$ref" ] || { echo "no $name image pinned in the manifest" >&2; exit 1; }
+            docker buildx imagetools create --tag "ghcr.io/cyberdynecorp/$name:$VERSION" "$ref"
+            docker buildx imagetools create --tag "ghcr.io/cyberdynecorp/$name:$moving" "$ref"
+          done
+      - name: Nix flake pins
+        run: |
+          set -euo pipefail
+          git clone --depth 1 "https://x-access-token:$GH_TOKEN@github.com/$REPO.git" flake-src
+          cd flake-src
+          git fetch --depth 1 origin flake && git checkout -B flake FETCH_HEAD || git checkout -B flake
+          cp ../channels/nix/release.json nix/release.json
+          git -c user.name=prometheus-release -c user.email=release@users.noreply.github.com \
+            commit -am "nix: pin $TAG" && git push origin flake
+      - name: Homebrew tap
+        if: env.CHANNEL == 'stable' && env.HOMEBREW_TAP_TOKEN != ''
+        run: |
+          set -euo pipefail
+          git clone --depth 1 "https://x-access-token:$HOMEBREW_TAP_TOKEN@github.com/CyberdyneCorp/homebrew-tap.git" tap
+          mkdir -p tap/Formula
+          cp channels/homebrew/prometheus.rb tap/Formula/prometheus.rb
+          cd tap
+          git -c user.name=prometheus-release -c user.email=release@users.noreply.github.com \
+            commit -am "prometheus $VERSION" && git push
+      - name: WinGet
+        if: env.CHANNEL == 'stable' && env.WINGET_TOKEN != ''
+        env:
+          GH_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: |
+          set -euo pipefail
+          login=$(gh api user --jq .login)
+          gh repo fork microsoft/winget-pkgs --clone=false || true
+          git clone --depth 1 --filter=blob:none --sparse \
+            "https://x-access-token:$GH_TOKEN@github.com/$login/winget-pkgs.git" winget
+          cd winget
+          dir="manifests/c/CyberdyneCorp/Prometheus/$VERSION"
+          git sparse-checkout set "manifests/c/CyberdyneCorp"
+          git checkout -b "prometheus-$VERSION"
+          mkdir -p "$dir"
+          cp ../channels/winget/*.yaml "$dir/"
+          git add "$dir"
+          git -c user.name=prometheus-release -c user.email=release@users.noreply.github.com \
+            commit -m "New version: CyberdyneCorp.Prometheus version $VERSION"
+          git push origin "prometheus-$VERSION"
+          gh pr create -R microsoft/winget-pkgs --head "$login:prometheus-$VERSION" \
+            --title "New version: CyberdyneCorp.Prometheus version $VERSION" \
+            --body "Portable zip of the signed Prometheus $TAG release (owner = winget)."
+      - name: Termux recipe
+        if: env.CHANNEL == 'stable'
+        run: |
+          cp channels/termux/build.sh "prometheus-termux-build.sh"
+          gh release upload channels prometheus-termux-build.sh --clobber -R "$REPO"

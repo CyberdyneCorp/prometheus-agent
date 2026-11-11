@@ -101,6 +101,33 @@ pub struct UpdateFromChat {
     pub thread_id: Option<String>,
     /// Only look for a newer release.
     pub check: bool,
+    /// The sender confirmed restarting a daemon whose turns are still
+    /// running (`prometheus update --yes`).
+    pub restart_busy: bool,
+}
+
+/// What the updater reports while an update from chat runs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UpdateEvent {
+    /// A stage line (`checking`, `downloading <n>%`, `verifying`,
+    /// `self-test`, `swapping`, `restarting`).
+    Progress(String),
+    /// The updater exited.
+    Finished {
+        /// Its exit code (4: restarting a busy daemon needs a yes).
+        code: i32,
+        /// The last line it printed: the result, or why it refused.
+        last_line: String,
+    },
+}
+
+/// What `update_from_chat` started.
+#[derive(Debug)]
+pub enum UpdateRun {
+    /// An answer for the chat (`/update check`).
+    Answer(String),
+    /// A running updater and its events.
+    Running(tokio::sync::mpsc::UnboundedReceiver<UpdateEvent>),
 }
 
 /// The agent side of the messaging gateway.
@@ -232,8 +259,8 @@ pub trait Agents: Host {
         None
     }
     /// Runs the updater for a confirmed `/update` (or `/update check`):
-    /// the text answers the chat.
-    fn update_from_chat<'a>(&'a self, _request: &'a UpdateFromChat) -> HostFuture<'a, String> {
+    /// a check answers at once, an update reports its stages.
+    fn update_from_chat<'a>(&'a self, _request: &'a UpdateFromChat) -> HostFuture<'a, UpdateRun> {
         Box::pin(async {
             Err(pmt_core::error::Error::new(
                 &pmt_core::error::codes::GATEWAY_DAEMON_REQUIRED,

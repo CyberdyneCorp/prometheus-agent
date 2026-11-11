@@ -1,0 +1,7 @@
+# WinGet version manifest, rendered by `cargo xtask release channels`.
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.9.0.schema.json
+PackageIdentifier: CyberdyneCorp.Prometheus
+PackageVersion: @BARE_VERSION@
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.9.0

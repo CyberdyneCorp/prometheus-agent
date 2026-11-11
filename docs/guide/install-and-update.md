@@ -5,7 +5,10 @@ it from the release origin, verify it against the release keys built into
 the installer, and record who owns its updates; `prometheus update` keeps
 it current the same way. External runtimes the tools need (Node, CPython,
 uv, Chromium) are installed separately, on demand, into a store shared by
-every profile.
+every profile. Package managers (Homebrew, WinGet, Termux, Nix), the
+container image, offline bundles, update previews, the daemon handover,
+updates from a chat and `prometheus uninstall` are described in
+[Package managers, containers and offline installs](distribution.md).
 
 Every command on this page runs in CI: the `console` examples against a
 fresh home in `scripts/check`, the installer and update commands against a

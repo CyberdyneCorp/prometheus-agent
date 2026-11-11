@@ -4,7 +4,11 @@
 #
 #   irm https://github.com/CyberdyneCorp/prometheus-agent/releases/latest/download/install.ps1 | iex
 #   .\install.ps1 [-Channel stable|canary] [-Version vX.Y.Z] [-ModifyPath|-NoModifyPath] [-BaseUrl URL]
-#                  [-Without node,cpython,uv,chromium,doc-converter]
+#                  [-Without node,cpython,uv,chromium,doc-converter] [-Bundle FILE]
+#
+# -Bundle FILE installs from an offline bundle (`prometheus bundle create`)
+# with no network access: the same signature and digest checks, the
+# bundle's runtimes installed too, and the receipt says owner `bundle`.
 #
 # It downloads the signed channel index and release manifest, verifies their
 # minisign signatures against the embedded keys (Ed25519 and BLAKE2b in the
@@ -20,7 +24,8 @@ param(
     [switch]$ModifyPath,
     [switch]$NoModifyPath,
     [string]$BaseUrl = 'https://github.com/CyberdyneCorp/prometheus-agent/releases/download',
-    [string[]]$Without = @()
+    [string[]]$Without = @(),
+    [string]$Bundle = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -51,6 +56,11 @@ foreach ($runtime in $Without) {
     }
 }
 $BaseUrl = $BaseUrl.TrimEnd('/')
+if ($Bundle -ne '') {
+    if (-not (Test-Path -PathType Leaf $Bundle)) { Fail "-Bundle: no such file: $Bundle" 2 }
+    $Bundle = (Resolve-Path $Bundle).Path
+}
+$BundleDir = ''
 
 # Windows PowerShell 5.1 (.NET Framework) needs System.Numerics for
 # BigInteger; PowerShell 7 compiles against every .NET reference assembly
@@ -238,6 +248,13 @@ public static class PmtMinisign {
 '@
 
 function Get-File([string]$Path, [string]$OutFile) {
+    # An offline bundle's files are copied from where it was unpacked.
+    if ($BundleDir -ne '') {
+        $source = Join-Path $BundleDir $Path
+        if (-not (Test-Path -PathType Leaf $source)) { Fail "the bundle has no $Path" }
+        Copy-Item $source $OutFile -Force
+        return
+    }
     try {
         Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/$Path" -OutFile $OutFile
     } catch {
@@ -265,8 +282,20 @@ switch ($arch) {
 
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ("prometheus-install-" + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $tmp | Out-Null
+$owner = 'self'
 try {
-    if ($Version -eq '') {
+    if ($Bundle -ne '') {
+        $BundleDir = Join-Path $tmp 'bundle'
+        New-Item -ItemType Directory -Path $BundleDir | Out-Null
+        & "$env:SystemRoot\System32\tar.exe" -xf $Bundle -C $BundleDir
+        if ($LASTEXITCODE -ne 0) { Fail "cannot read bundle $Bundle" }
+        $described = Join-Path $BundleDir 'bundle.json'
+        if (-not (Test-Path $described)) { Fail "$Bundle is not a prometheus bundle" }
+        $info = Get-Content -Raw $described | ConvertFrom-Json
+        if ($info.target -ne $target) { Fail "bundle target $($info.target) does not match this host ($target)" }
+        $Version = $info.version
+        $owner = 'bundle'
+    } elseif ($Version -eq '') {
         Get-Signed "channels/$Channel.json" "$tmp\index.json"
         $Version = (Get-Content -Raw "$tmp\index.json" | ConvertFrom-Json).version
     }
@@ -297,13 +326,14 @@ try {
     try { New-Item -ItemType HardLink -Path $alias -Target $exe | Out-Null } catch { Copy-Item $exe $alias }
 
     [ordered]@{
-        owner = 'self'
+        owner = $owner
         channel = $Channel
         version = $Version
         target = $target
         installed_at = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
         binary = $exe
     } | ConvertTo-Json | Set-Content -Encoding ASCII (Join-Path $dir 'install.json')
+    $bundledRuntimes = $BundleDir -ne '' -and (Test-Path (Join-Path $BundleDir 'runtimes'))
 } finally {
     Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 }
@@ -313,6 +343,10 @@ foreach ($runtime in $Without) {
     & $exe runtimes exclude add $runtime | Out-Null
     if ($LASTEXITCODE -ne 0) { Fail "cannot record -Without $runtime in runtimes.exclude" }
     Write-Output "excluded runtime $runtime (runtimes.exclude)"
+}
+if ($bundledRuntimes) {
+    & $exe runtimes install --from-bundle $Bundle
+    if ($LASTEXITCODE -ne 0) { Fail "cannot install the bundle's runtimes" }
 }
 
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')

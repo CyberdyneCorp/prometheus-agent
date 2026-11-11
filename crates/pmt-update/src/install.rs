@@ -2,7 +2,8 @@
 //! `install.json` beside the binary, or under
 //! `<home>/updates/install/<sha16 of binary path>.json` when that directory
 //! is not writable. It records who updates this binary; a binary without
-//! one is a source build (`dev`).
+//! one is a source build (`dev`), unless it sits where a package manager
+//! that cannot run install scripts keeps its files (see [`inferred_owner`]).
 
 use std::path::{Path, PathBuf};
 
@@ -48,6 +49,28 @@ pub enum Owner {
 }
 
 impl Owner {
+    /// Every owner, in receipt order.
+    pub const ALL: [Self; 12] = [
+        Self::SelfInstall,
+        Self::Bundle,
+        Self::Homebrew,
+        Self::Nix,
+        Self::Termux,
+        Self::Winget,
+        Self::Image,
+        Self::Desktop,
+        Self::Msix,
+        Self::Msstore,
+        Self::SystemPackage,
+        Self::Dev,
+    ];
+
+    /// The owner spelled `name` in a receipt.
+    #[must_use]
+    pub fn parse(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|o| o.as_str() == name)
+    }
+
     /// The receipt spelling (`self`, `homebrew`, ...).
     #[must_use]
     pub fn as_str(self) -> &'static str {
@@ -89,6 +112,28 @@ impl Owner {
             Self::Msstore => "Microsoft Store",
             Self::SystemPackage => "the system package manager",
             Self::Dev => "rebuild from source",
+        }
+    }
+}
+
+impl Owner {
+    /// How an install owned elsewhere is removed, as `prometheus
+    /// uninstall` names it.
+    #[must_use]
+    pub fn remove_command(self) -> &'static str {
+        match self {
+            Self::SelfInstall | Self::Bundle => "prometheus uninstall",
+            Self::Homebrew => "brew uninstall prometheus",
+            Self::Nix => "remove it from your Nix configuration, then rebuild",
+            Self::Termux => "pkg uninstall prometheus",
+            Self::Winget => "winget uninstall CyberdyneCorp.Prometheus",
+            Self::Image => "remove the container and its image",
+            Self::Desktop => "the desktop app's uninstaller (or delete the app)",
+            Self::Msix | Self::Msstore => "Settings > Apps > Installed apps",
+            Self::SystemPackage => {
+                "the system package manager (apt remove or dnf remove prometheus)"
+            }
+            Self::Dev => "delete the build output (cargo clean)",
         }
     }
 }
@@ -135,6 +180,31 @@ impl InstallReceipt {
         Ok(None)
     }
 
+    /// Writes the receipt beside the binary only (a package's own files),
+    /// readable by every user like the binary it describes (a root-owned
+    /// image or system package is run by other users); returns the path
+    /// written.
+    ///
+    /// # Errors
+    ///
+    /// `update.failed` when that directory is not writable.
+    ///
+    /// # Panics
+    ///
+    /// Never: the receipt always serializes.
+    pub fn write_beside(&self) -> Result<PathBuf, Error> {
+        let json = serde_json::to_vec_pretty(self).expect("receipt serializes");
+        let path = beside(&self.binary);
+        let temp = path.with_extension("json.tmp");
+        std::fs::write(&temp, &json)
+            .and_then(|()| std::fs::rename(&temp, &path))
+            .map_err(|e| {
+                let _ = std::fs::remove_file(&temp);
+                Error::io(&codes::UPDATE_FAILED, &path, &e)
+            })?;
+        Ok(path)
+    }
+
     /// Writes the receipt beside the binary when that directory is
     /// writable, else to the home fallback; returns the path written.
     ///
@@ -158,6 +228,31 @@ impl InstallReceipt {
         private_fs::write_atomic(&fallback, &json)
             .map_err(|e| Error::io(&codes::UPDATE_FAILED, &fallback, &e))?;
         Ok(fallback)
+    }
+}
+
+/// The owner a receipt-less binary's location implies. Package channels
+/// stamp a receipt (`prometheus install-receipt`), but `WinGet` portable
+/// installs run no scripts, and a receipt lost from a read-only store
+/// (Nix, Homebrew's Cellar, Termux) must still not self-update.
+#[must_use]
+pub fn inferred_owner(binary: &Path) -> Option<Owner> {
+    let parts: Vec<String> = binary
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().to_ascii_lowercase())
+        .collect();
+    let follows = |a: &str, b: &str| parts.windows(2).any(|w| w[0] == a && w[1].starts_with(b));
+    let text = binary.to_string_lossy();
+    if text.starts_with("/nix/store/") {
+        Some(Owner::Nix)
+    } else if text.starts_with("/data/data/com.termux/") {
+        Some(Owner::Termux)
+    } else if follows("cellar", "prometheus") {
+        Some(Owner::Homebrew)
+    } else if follows("winget", "packages") || follows("winget", "links") {
+        Some(Owner::Winget)
+    } else {
+        None
     }
 }
 
@@ -239,6 +334,34 @@ mod tests {
         assert_eq!(written, fallback(&binary, &home));
         assert!(written.starts_with(home.join("updates/install")));
         assert!(InstallReceipt::read(&binary, &home).unwrap().is_some());
+    }
+
+    #[test]
+    fn package_manager_locations_imply_their_owner() {
+        use super::inferred_owner;
+        use std::path::Path;
+        let cases = [
+            (
+                "/nix/store/abc-prometheus-1.4.0/bin/prometheus",
+                Some(Owner::Nix),
+            ),
+            (
+                "/opt/homebrew/Cellar/prometheus/1.4.0/libexec/prometheus",
+                Some(Owner::Homebrew),
+            ),
+            (
+                "/data/data/com.termux/files/usr/bin/prometheus",
+                Some(Owner::Termux),
+            ),
+            (
+                "C:/Users/a/AppData/Local/Microsoft/WinGet/Packages/CyberdyneCorp.Prometheus_x/prometheus.exe",
+                Some(Owner::Winget),
+            ),
+            ("/home/a/.local/bin/prometheus", None),
+        ];
+        for (path, owner) in cases {
+            assert_eq!(inferred_owner(Path::new(path)), owner, "{path}");
+        }
     }
 
     #[test]

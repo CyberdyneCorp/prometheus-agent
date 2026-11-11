@@ -71,6 +71,16 @@ impl ConfigFile {
         }
     }
 
+    /// The file's `schema_version`; `None` when missing or unreadable
+    /// (loading reports those errors).
+    #[must_use]
+    pub fn schema_version(&self) -> Option<u32> {
+        let text = self.raw().ok()??;
+        migrate::in_memory(&self.path, &text)
+            .ok()
+            .map(|(version, _)| version)
+    }
+
     /// The file's `schema_version` when it is older than this build (a
     /// migration is pending); `None` when current, missing or unreadable
     /// (loading reports those errors).
@@ -285,6 +295,7 @@ impl ConfigFile {
     }
 
     fn commit(&self, old: Option<&str>, new: &str) -> Result<(), Error> {
+        crate::generated::check_writable(profile_dir(&self.path))?;
         if let Some(old) = old.filter(|old| *old != new) {
             backups::save(&self.backups, "config", old)?;
             backups::prune(&self.backups);

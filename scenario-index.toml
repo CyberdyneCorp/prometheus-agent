@@ -3599,3 +3599,49 @@ capabilities = [
 [skills."Bundled and official skill catalog content"]
 "Official catalog is browsable offline" = ["crates/prometheus/tests/skills_hub.rs::official_catalog_is_browsable_offline", "crates/pmt-skills/tests/skills/catalog_content.rs::the_required_skills_are_embedded"]
 "Hermes name alias resolves" = ["crates/pmt-skills/tests/skills/catalog_content.rs::hermes_name_alias_resolves"]
+
+# Group 54 (distribution channels)
+[distribution-and-update."Package-manager and image channels"]
+"Homebrew install is owned by Homebrew" = ["crates/prometheus/tests/update_channels.rs::homebrew_install_is_owned_by_homebrew", "crates/prometheus/tests/update_channels.rs::every_package_channel_stamps_its_owner_and_is_refused_with_69", "crates/prometheus/tests/update_channels.rs::a_winget_portable_install_is_recognised_without_a_receipt"]
+
+[distribution-and-update."Running daemon handover"]
+"Busy daemon" = ["crates/prometheus/tests/update_handover.rs::a_busy_daemon_keeps_its_turn_and_the_restart_stays_pending", "crates/prometheus/tests/update_handover.rs::an_idle_daemon_restarts_on_the_new_build"]
+
+[distribution-and-update."Update dry-run and changelog preview (upgrade)"]
+"Preview a breaking update" = ["crates/prometheus/tests/update_offline.rs::preview_a_breaking_update", "crates/pmt-update/src/flow/dry_run.rs::only_entries_after_the_installed_version_are_listed"]
+
+[distribution-and-update."Offline bundles (upgrade)"]
+"Air-gapped update" = ["crates/prometheus/tests/update_offline.rs::air_gapped_update_from_a_bundle", "crates/pmt-update/tests/runtimes.rs::a_bundled_runtime_installs_without_a_request_and_only_when_pinned"]
+"Bundle for another target" = ["crates/prometheus/tests/update_offline.rs::a_bundle_for_another_target_is_refused", "crates/pmt-update/src/bundle.rs::a_bundle_for_another_target_is_refused"]
+
+[distribution-and-update."Uninstall"]
+"Data kept by default" = ["crates/prometheus/tests/uninstall_cli.rs::data_is_kept_by_default"]
+
+[distribution-and-update."Container image run modes"]
+"Exec as the runtime user" = ["crates/prometheus/tests/container_image.rs::the_image_runs_as_the_spec_says"]
+
+[distribution-and-update."Container filesystem, init and health"]
+"No zombie build-up" = ["crates/prometheus/tests/container_image.rs::the_image_runs_as_the_spec_says"]
+"Unhealthy daemon detected" = ["crates/prometheus/tests/container_image.rs::the_image_runs_as_the_spec_says"]
+
+[distribution-and-update."Multiple profiles in one container"]
+"Port collision isolated" = ["crates/pmt-gateway/tests/messaging/platforms.rs::a_listener_whose_port_is_taken_is_down_and_the_rest_runs"]
+
+[distribution-and-update."Container audio bridge and host services"]
+"Local Ollama from a container" = ["crates/prometheus/src/doctor_cmd/isolation.rs::a_local_provider_in_a_container_is_pointed_at_the_host", "crates/prometheus/tests/container_image.rs::the_image_runs_as_the_spec_says", "crates/pmt-voice/src/system.rs::the_mounted_container_socket_becomes_the_pulse_server"]
+
+[distribution-and-update."Network-isolated deployment recipe"]
+"Isolation verified" = ["crates/prometheus/tests/container_image.rs::the_image_runs_as_the_spec_says", "crates/prometheus/src/doctor_cmd/isolation.rs::open_egress_fails_only_when_isolation_is_expected"]
+"Misconfigured network" = ["crates/prometheus/tests/container_image.rs::the_image_runs_as_the_spec_says", "crates/prometheus/src/doctor_cmd/isolation.rs::open_egress_fails_only_when_isolation_is_expected"]
+
+[distribution-and-update."Update from chat"]
+"Admin updates from Telegram" = ["crates/prometheus/tests/update_chat.rs::an_admin_updates_from_the_chat", "crates/pmt-gateway/src/messaging/lane/update_relay.rs::stages_are_relayed_at_most_every_two_seconds", "crates/pmt-gateway/src/messaging/lane/update_relay.rs::a_busy_daemon_is_asked_about_in_the_chat"]
+"Disabled by default" = ["crates/pmt-gateway/tests/messaging/operations.rs::update_from_chat_is_off_by_default"]
+
+[distribution-and-update."Uninstall scopes and dry run"]
+"Dry run lists the service unit" = ["crates/prometheus/tests/uninstall_cli.rs::dry_run_lists_the_service_unit"]
+"Data wipe on a Homebrew install" = ["crates/prometheus/tests/uninstall_cli.rs::a_data_wipe_on_a_homebrew_install_keeps_the_binary"]
+
+[distribution-and-update."NixOS and Home Manager modules"]
+"Nix-owned key is read-only" = ["crates/prometheus/tests/nix_module.rs::the_nixos_module_vm_test_passes", "crates/prometheus/tests/config_generated.rs::a_home_manager_generated_config_is_read_only"]
+"Bad config does not restart-loop" = ["crates/prometheus/tests/nix_module.rs::the_nixos_module_vm_test_passes"]

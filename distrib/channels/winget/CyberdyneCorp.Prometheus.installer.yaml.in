@@ -1,0 +1,25 @@
+# WinGet installer manifest, rendered by `cargo xtask release channels`.
+# A portable install runs no scripts, so it carries no install receipt:
+# `prometheus` recognises the WinGet packages directory it runs from and
+# treats the install as owner = winget (`prometheus update` exits 69 and
+# names `winget upgrade CyberdyneCorp.Prometheus`).
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.9.0.schema.json
+PackageIdentifier: CyberdyneCorp.Prometheus
+PackageVersion: @BARE_VERSION@
+InstallerType: zip
+NestedInstallerType: portable
+NestedInstallerFiles:
+  - RelativeFilePath: prometheus-x86_64-pc-windows-msvc\prometheus.exe
+    PortableCommandAlias: prometheus
+Installers:
+  - Architecture: x64
+    InstallerUrl: @URL_x86_64-pc-windows-msvc.zip@
+    InstallerSha256: @SHA256_x86_64-pc-windows-msvc.zip@
+  - Architecture: arm64
+    InstallerUrl: @URL_aarch64-pc-windows-msvc.zip@
+    InstallerSha256: @SHA256_aarch64-pc-windows-msvc.zip@
+    NestedInstallerFiles:
+      - RelativeFilePath: prometheus-aarch64-pc-windows-msvc\prometheus.exe
+        PortableCommandAlias: prometheus
+ManifestType: installer
+ManifestVersion: 1.9.0

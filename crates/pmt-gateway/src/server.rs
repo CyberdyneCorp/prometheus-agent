@@ -171,6 +171,9 @@ pub struct Call {
 pub struct Server {
     identity: Identity,
     instance_id: String,
+    /// The executable it started from, read at start: an update replaces
+    /// the file under a running daemon.
+    binary: Option<std::path::PathBuf>,
     catalog: Arc<Catalog>,
     digest: String,
     /// Grows when `gateway reload` serves a profile created since start.
@@ -253,6 +256,7 @@ impl Server {
         let server = Self {
             identity: options.identity,
             instance_id: random_hex(16),
+            binary: std::env::current_exe().and_then(std::fs::canonicalize).ok(),
             digest: catalog.digest(),
             catalog,
             profiles: std::sync::RwLock::new(options.profiles),
@@ -546,6 +550,8 @@ impl Server {
             sessions,
             active_turns,
             retiring: self.retiring(),
+            supervised: pmt_core::supervisor::supervised(),
+            binary: self.binary.clone(),
             config: self.host.config(),
             adapters: self
                 .messaging()

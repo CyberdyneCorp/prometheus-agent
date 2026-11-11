@@ -13,7 +13,7 @@ use std::sync::atomic::Ordering;
 use pmt_config::{Home, Launch, Overrides, ProfileScope};
 use pmt_core::error::Error;
 use pmt_gateway::messaging::{
-    Agents, BusyPolicy, Conversation, Lookup, MenuCommand, ModelChoice, UpdateFromChat,
+    Agents, BusyPolicy, Conversation, Lookup, MenuCommand, ModelChoice, UpdateFromChat, UpdateRun,
 };
 use pmt_gateway::{HostFuture, Link};
 use pmt_rpc::contracts::{Dispatched, SessionSetup};
@@ -387,15 +387,15 @@ impl Agents for DaemonHost {
         }
     }
 
-    fn update_from_chat<'a>(&'a self, request: &'a UpdateFromChat) -> HostFuture<'a, String> {
+    fn update_from_chat<'a>(&'a self, request: &'a UpdateFromChat) -> HostFuture<'a, UpdateRun> {
         Box::pin(async move {
             let home = self
                 .profile(&self.launch_profile)?
                 .scope()
                 .home()
                 .to_path_buf();
-            let check = request.check;
-            pmt_core::spawn::blocking(move || super::super::update_chat::run(&home, check))
+            let request = request.clone();
+            pmt_core::spawn::blocking(move || super::super::update_chat::run(&home, &request))
                 .await
                 .map_err(|e| Error::new(&pmt_core::error::codes::RPC_INTERNAL, e.to_string()))?
         })

@@ -1,0 +1,32 @@
+# termux-packages build recipe (packages/prometheus/build.sh), rendered by
+# `cargo xtask release channels` from the signed release manifest. It
+# repackages the verified aarch64-linux-android release archive; the
+# postinst stamps owner = termux so `prometheus update` refuses (exit 69)
+# and names `pkg upgrade prometheus`.
+TERMUX_PKG_HOMEPAGE=https://github.com/CyberdyneCorp/prometheus-agent
+TERMUX_PKG_DESCRIPTION="Self-hosted personal AI agent harness"
+TERMUX_PKG_LICENSE="custom"
+TERMUX_PKG_MAINTAINER="CyberdyneCorp"
+TERMUX_PKG_VERSION=@BARE_VERSION@
+TERMUX_PKG_SRCURL=@URL_aarch64-linux-android@
+TERMUX_PKG_SHA256=@SHA256_aarch64-linux-android@
+TERMUX_PKG_PLATFORM_INDEPENDENT=false
+TERMUX_PKG_BLACKLISTED_ARCHES="arm, i686, x86_64"
+TERMUX_PKG_SKIP_SRC_EXTRACT=false
+
+termux_step_make_install() {
+	install -Dm755 prometheus "$TERMUX_PREFIX/libexec/prometheus/prometheus"
+	ln -sf ../libexec/prometheus/prometheus "$TERMUX_PREFIX/bin/prometheus"
+	ln -sf ../libexec/prometheus/prometheus "$TERMUX_PREFIX/bin/pmt"
+}
+
+termux_step_create_debscripts() {
+	cat > ./postinst <<-POSTINST
+	#!$TERMUX_PREFIX/bin/sh
+	"$TERMUX_PREFIX/libexec/prometheus/prometheus" install-receipt --owner termux
+	POSTINST
+	cat > ./prerm <<-PRERM
+	#!$TERMUX_PREFIX/bin/sh
+	rm -f "$TERMUX_PREFIX/libexec/prometheus/install.json"
+	PRERM
+}

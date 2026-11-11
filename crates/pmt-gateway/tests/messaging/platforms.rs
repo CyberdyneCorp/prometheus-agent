@@ -414,6 +414,47 @@ async fn two_profiles_share_one_webhook_listener_and_unsigned_requests_get_401()
     said(&h.adapter_of("work", "webhook"), "echo: build red").await;
 }
 
+/// Scenario: Port collision isolated (spec: distribution-and-update,
+/// Multiple profiles in one container): the daemon-wide listener whose
+/// port another process holds is down with `port <n> already in use`;
+/// every profile's other adapters keep running.
+#[tokio::test]
+async fn a_listener_whose_port_is_taken_is_down_and_the_rest_runs() {
+    let taken = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = taken.local_addr().unwrap().port();
+    let mut setup = Setup::new(&open("webhook"));
+    setup.profiles.push(("work", open("telegram")));
+    setup.profiles.push(("home", open("telegram")));
+    setup.descriptors.push(Descriptor {
+        binds_http: true,
+        ..Descriptor::new("webhook", 65_536)
+    });
+    setup.http_listen = Some(taken.local_addr().unwrap());
+    setup.unconnected.push("webhook");
+    let h = Harness::start(setup).await;
+    let reason = format!("port {port} already in use");
+    eventually("the listener is reported down", || {
+        h.server.status().health.iter().any(|c| {
+            c.component == "listener:gateway.http" && c.state == "down" && c.reason == reason
+        })
+    })
+    .await;
+    let adapters = h.server.status().adapters;
+    let webhook = adapters.iter().find(|a| a.platform == "webhook").unwrap();
+    assert_eq!(webhook.message.as_deref(), Some(reason.as_str()));
+    for profile in ["work", "home"] {
+        eventually("the profile's adapter runs", || {
+            h.server.status().adapters.iter().any(|a| {
+                a.profile == profile
+                    && a.platform == "telegram"
+                    && matches!(a.state.as_str(), "connected" | "degraded")
+            })
+        })
+        .await;
+    }
+    drop(taken);
+}
+
 #[tokio::test]
 async fn attached_clients_see_adapter_state_changes() {
     let h = Harness::start(Setup::new(&open("telegram"))).await;

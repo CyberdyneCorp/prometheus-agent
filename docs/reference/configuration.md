@@ -548,6 +548,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `model.min_context_window` | integer | `64000` | ≥ 16000 | `next_session` | Smallest context window (tokens) a session may start with. |
 | `model.provider` | string | unset | any | `next_session` | Provider id or alias; unset means `auto`. |
 | `models` | table | `{}` | any | `next_session` | Model aliases and metadata overrides, keyed by name or `"<provider>/<model>"`. |
+| `network.expect_isolated` | boolean | `false` | any | `restart` | The deployment is network-isolated (the egress proxy in `network.proxy` is the only way out, as in the image's `compose.isolated.yaml`): `prometheus doctor network --online` fails when a direct connection succeeds. |
 | `network.extra_ca_file` | string | unset | any | `restart` | Extra PEM CA bundle trusted in addition to the platform store. |
 | `network.force_ipv4` | boolean | `false` | any | `restart` | Resolve and connect every outbound client (providers, MCP over HTTP, web tools, adapters, OTLP, downloads) over IPv4 only; loopback listeners are unaffected. Set it when `prometheus doctor network --online` reports a blackholed IPv6 route. |
 | `network.proxy` | string | unset | any | `restart` | Outbound HTTP(S) proxy URL. |
