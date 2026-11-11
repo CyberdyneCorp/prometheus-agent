@@ -113,7 +113,9 @@ pub(super) fn history(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
     Ok(text)
 }
 
-/// `/status`: the session's details and a recap, from the store only.
+/// `/status`: the session's details and a recap, from the store only, its
+/// labels in the profile's language (spec: i18n, display.language
+/// selection: a gateway serving several profiles answers each in its own).
 pub(super) fn status(ctx: &Ctx<'_>) -> Result<String, Error> {
     let live = ctx.live;
     let store = &ctx.factory.store;
@@ -121,28 +123,69 @@ pub(super) fn status(ctx: &Ctx<'_>) -> Result<String, Error> {
     let messages = store.messages(live.id, Visibility::Active)?;
     let totals = store.usage_totals(UsageScope::Session(live.id))?;
     let target = live.model.target();
-    let mut text = String::new();
-    let mut field = |name: &str, value: &dyn std::fmt::Display| {
-        let _ = writeln!(text, "{name:<14}{value}");
-    };
-    field("model", &target.model.as_deref().unwrap_or("default"));
-    field("provider", &target.provider);
-    field("profile", &ctx.scope.name());
-    field("session", &session.id);
-    field("title", &session.title.as_deref().unwrap_or("-"));
-    field("cwd", &session.cwd.as_deref().unwrap_or("-"));
-    field("started", &minute(session.started_at));
-    field("last activity", &minute(session.last_activity_at));
+    let strings = pmt_config::language::strings(ctx.scope.dir(), pmt_i18n::Surface::Core);
+    let label = |key: &str| strings.get(key).to_owned();
     let t = &totals.tokens;
-    field(
-        "tokens",
-        &format!(
-            "input {} output {} cache read {} cache write {} reasoning {}",
-            t.input, t.output, t.cache_read, t.cache_write, t.reasoning
+    let rows = [
+        (
+            label("slash.status.model"),
+            target
+                .model
+                .clone()
+                .unwrap_or_else(|| label("slash.status.default_model")),
         ),
-    );
-    field("cost", &pmt_obs::usage::format_total_cost(&totals));
-    field("state", &if ctx.running { "running" } else { "idle" });
+        (label("slash.status.provider"), target.provider.clone()),
+        (label("slash.status.profile"), ctx.scope.name().to_string()),
+        (label("slash.status.session"), session.id.to_string()),
+        (
+            label("slash.status.title"),
+            session.title.clone().unwrap_or_else(|| "-".to_owned()),
+        ),
+        (
+            label("slash.status.cwd"),
+            session.cwd.clone().unwrap_or_else(|| "-".to_owned()),
+        ),
+        (label("slash.status.started"), minute(session.started_at)),
+        (
+            label("slash.status.last_activity"),
+            minute(session.last_activity_at),
+        ),
+        (
+            label("slash.status.tokens"),
+            strings.fmt(
+                "slash.status.token_counts",
+                &[
+                    ("input", &t.input),
+                    ("output", &t.output),
+                    ("cache_read", &t.cache_read),
+                    ("cache_write", &t.cache_write),
+                    ("reasoning", &t.reasoning),
+                ],
+            ),
+        ),
+        (
+            label("slash.status.cost"),
+            pmt_obs::usage::format_total_cost(&totals),
+        ),
+        (
+            label("slash.status.state"),
+            label(if ctx.running {
+                "slash.status.running"
+            } else {
+                "slash.status.idle"
+            }),
+        ),
+    ];
+    let width = rows
+        .iter()
+        .map(|(name, _)| name.chars().count() + 1)
+        .max()
+        .unwrap_or(0)
+        .max(14);
+    let mut text = String::new();
+    for (name, value) in &rows {
+        let _ = writeln!(text, "{name:<width$}{value}");
+    }
     text.push_str(&recap(&messages));
     Ok(text.trim_end().to_owned())
 }

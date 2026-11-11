@@ -237,6 +237,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `display.final_response_markdown` | one of "render", "raw" | `"render"` | `"render"`, `"raw"` | `live` | How the final response is printed. |
 | `display.inline_diffs` | boolean | `true` | any | `live` | Show file-edit diffs inline. |
 | `display.interim_messages` | boolean | `true` | any | `live` | Show assistant text between tool calls. |
+| `display.language` | string | `"en"` | any | `live` | The UI language: `en` or another bundled id (`af`, `ar`, `de`, `es`, `fr`, `ga`, `hu`, `it`, `ja`, `ko`, `pt`, `ru`, `tr`, `uk`, `zh`, `zh-hant`), a language a profile overlay (`<profile_home>/locales/<id>.toml`) or an enabled language pack supplies. Localizes static UI text only, never what the model sees. |
 | `display.reasoning_full` | boolean | `false` | any | `live` | Show reasoning in full instead of clamped. |
 | `display.resume_display` | one of "full", "minimal", "off" | `"full"` | `"full"`, `"minimal"`, `"off"` | `live` | Recap printed when a session is resumed. |
 | `display.resume_exchanges` | integer | `10` | ≥ 0 | `live` | User/assistant exchanges shown in the recap. |

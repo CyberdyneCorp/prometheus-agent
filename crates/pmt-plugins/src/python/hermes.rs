@@ -200,6 +200,11 @@ fn read_as(dir: &Path, id: String) -> Result<Manifest, Error> {
         kanban_lanes: Vec::new(),
         automation_blueprints: Vec::new(),
         delegation_router: None,
+        provides_locales: crate::locales::hermes_declared(
+            &yaml,
+            report.inferred.registers_locales,
+            dir,
+        ),
         build: None,
         launch: Some(launch),
         id,

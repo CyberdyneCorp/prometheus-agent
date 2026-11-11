@@ -1,0 +1,10 @@
+# Ukrainian: translated from en.tui.toml (same keys and placeholders).
+
+[tui]
+approval_title = "потрібне схвалення: {0} {1}"
+approval_hint = "[o] одноразово  [s] на сесію  [a] завжди  [d] відхилити  [e] пояснити"
+clarify_hint = "введіть номер, власну відповідь або нічого, щоб пропустити; Enter надсилає"
+answer_within = "   (відповідайте протягом {0} с)"
+withdrawn_timeout = "час минув або ніхто не зміг відповісти; відхилено"
+withdrawn_elsewhere = "відповідь надано в іншому вікні"
+background = "[фон] {0}"

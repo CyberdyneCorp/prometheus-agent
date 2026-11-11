@@ -265,11 +265,14 @@ pub fn load(runtime: &Runtime, ports: &Ports, inputs: &LoadInputs<'_>) -> Loaded
         .into_iter()
         .map(|(d, s)| (s.id.clone(), (d, s)))
         .collect();
-    // Python plugins are hosted by the bridge (see [`bridged`]).
+    // Python plugins are hosted by the bridge (see [`bridged`]); a
+    // data-only plugin (a language pack) has no component to instantiate.
     let wanted: BTreeMap<String, Vec<String>> = surveyed
         .iter()
-        .filter(|(_, (_, status))| {
-            status.state == State::Loaded && status.kind != Some(Kind::Python)
+        .filter(|(_, (plugin, status))| {
+            status.state == State::Loaded
+                && status.kind != Some(Kind::Python)
+                && !plugin.manifest.as_ref().is_ok_and(Manifest::is_data_only)
         })
         .map(|(id, (d, _))| (id.clone(), requirements(d)))
         .collect();

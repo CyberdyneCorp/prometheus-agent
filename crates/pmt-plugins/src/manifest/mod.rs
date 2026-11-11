@@ -19,9 +19,11 @@
 //! [`MANIFEST_VERSION`] asks for a newer Prometheus, and a
 //! `requires_prometheus` range that excludes the running version is
 //! refused before anything is instantiated. A `wasm` plugin's component is
-//! the file [`COMPONENT_FILE`] next to the manifest.
+//! the file [`COMPONENT_FILE`] next to the manifest; a `wasm` plugin with
+//! an empty `worlds` list has none (a no-code language pack).
 
 mod capabilities;
+mod locales;
 mod router;
 
 use std::path::Path;
@@ -31,6 +33,7 @@ use semver::{Version, VersionReq};
 use toml::{Table, Value};
 
 pub use capabilities::{Declared, LlmDeclaration, describe, label};
+pub use locales::LocaleDeclaration;
 pub use router::RouterDeclaration;
 
 use crate::worlds::{self, Support, WorldRef};
@@ -61,6 +64,7 @@ const FIELDS: &[&str] = &[
     "kanban_lanes",
     "automation_blueprints",
     "delegation_router",
+    "provides_locales",
     "build",
     "mcp",
     "python",
@@ -120,6 +124,9 @@ pub struct Manifest {
     /// `[delegation_router]`: the router a `delegation-router` plugin
     /// provides.
     pub delegation_router: Option<RouterDeclaration>,
+    /// `[[provides_locales]]`: the UI languages a language pack ships in
+    /// `locales/`.
+    pub provides_locales: Vec<LocaleDeclaration>,
     /// The dev loop's build command.
     pub build: Option<String>,
     /// `[mcp]` or `[python]`: how the server or bridge starts it.
@@ -153,6 +160,14 @@ impl Manifest {
             return crate::python::hermes::read(dir);
         }
         Self::read(dir, running)
+    }
+
+    /// A plugin with no code to run: a `wasm` manifest implementing no
+    /// world (a language pack, a set of blueprints). No component is
+    /// needed or instantiated.
+    #[must_use]
+    pub fn is_data_only(&self) -> bool {
+        self.kind == Kind::Wasm && self.worlds.is_empty()
     }
 
     /// The messaging platform this plugin's adapter provides, when it
@@ -210,6 +225,7 @@ impl Manifest {
             kanban_lanes: tables(&table, "kanban_lanes")?,
             automation_blueprints: tables(&table, "automation_blueprints")?,
             delegation_router: router::parse(table.get("delegation_router"))?,
+            provides_locales: locales::parse(table.get("provides_locales"))?,
             build: optional_string(&table, "build")?,
             launch,
             id,

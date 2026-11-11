@@ -1,0 +1,10 @@
+# Irish: translated from en.tui.toml (same keys and placeholders).
+
+[tui]
+approval_title = "cead ag teastáil: {0} {1}"
+approval_hint = "[o] uair amháin  [s] seisiún  [a] i gcónaí  [d] diúltú  [e] míniú"
+clarify_hint = "clóscríobh uimhir, do fhreagra féin, nó faic le scipeáil; seolann Enter"
+answer_within = "   (freagair laistigh de {0} s)"
+withdrawn_timeout = "am caite nó níorbh fhéidir le duine ar bith freagairt; diúltaithe"
+withdrawn_elsewhere = "freagraíodh i bhfuinneog eile"
+background = "[sa chúlra] {0}"

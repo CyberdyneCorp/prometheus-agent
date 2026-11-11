@@ -1,0 +1,10 @@
+# Simplified Chinese: translated from en.tui.toml (same keys and placeholders).
+
+[tui]
+approval_title = "需要批准：{0} {1}"
+approval_hint = "[o] 仅此一次  [s] 本次会话  [a] 始终  [d] 拒绝  [e] 解释"
+clarify_hint = "输入编号、你自己的回答，或留空跳过；按 Enter 发送"
+answer_within = "   （请在 {0} 秒内回答）"
+withdrawn_timeout = "已超时或无人能够回答；已拒绝"
+withdrawn_elsewhere = "已在另一个窗口中回答"
+background = "[后台] {0}"

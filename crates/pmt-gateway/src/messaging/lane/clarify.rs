@@ -119,7 +119,7 @@ impl Lane {
             title,
             details: vec![question["question"].as_str().unwrap_or("?").to_owned()],
             deadline_ms: clarify.left_ms(),
-            on_expiry: "unanswered, the agent goes on without it",
+            on_expiry: "unanswered, the agent goes on without it".to_owned(),
         };
         let mut text = card.text(&Zoned::now());
         for (n, choice) in options.iter().enumerate() {

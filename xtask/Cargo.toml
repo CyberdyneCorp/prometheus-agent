@@ -18,6 +18,8 @@ clap.workspace = true
 pmt-agent.workspace = true
 pmt-config.workspace = true
 pmt-core.workspace = true
+# The English catalog key sets exported to schema/locales/.
+pmt-i18n.workspace = true
 pmt-obs.workspace = true
 pmt-rpc.workspace = true
 pmt-store.workspace = true

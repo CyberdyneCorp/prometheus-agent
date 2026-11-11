@@ -93,6 +93,9 @@ pub enum Class {
     Platform,
     /// A process-control variable, dropped.
     ProcessControl,
+    /// `HERMES_LANGUAGE`: the identity component maps it to
+    /// `display.language` with the profile's overlays.
+    Language,
 }
 
 /// How a setting's text becomes a config value.
@@ -200,6 +203,9 @@ pub fn secret_shaped(name: &str) -> bool {
 pub fn classify(name: &str, known_secret: &dyn Fn(&str) -> bool) -> Class {
     if PROCESS_CONTROL.contains(&name) {
         return Class::ProcessControl;
+    }
+    if name == crate::locale::ENV_NAME {
+        return Class::Language;
     }
     if let Some((_, key, transform)) = SETTINGS.iter().find(|(n, _, _)| *n == name) {
         return Class::Setting(key, *transform);

@@ -19,6 +19,8 @@ hyper-util.workspace = true
 jiff.workspace = true
 pmt-config.workspace = true
 pmt-core.workspace = true
+# Chat notices and approval cards in the profile's language.
+pmt-i18n.workspace = true
 pmt-net.workspace = true
 pmt-obs.workspace = true
 pmt-rpc.workspace = true

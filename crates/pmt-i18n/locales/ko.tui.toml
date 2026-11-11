@@ -1,0 +1,10 @@
+# Korean: translated from en.tui.toml (same keys and placeholders).
+
+[tui]
+approval_title = "승인 필요: {0} {1}"
+approval_hint = "[o] 이번만  [s] 세션 동안  [a] 항상  [d] 거부  [e] 설명"
+clarify_hint = "번호나 직접 쓴 답을 입력하거나, 건너뛰려면 비워 두세요. Enter로 보냅니다"
+answer_within = "   ({0}초 안에 답변)"
+withdrawn_timeout = "시간이 초과되었거나 아무도 답할 수 없어 거부되었습니다"
+withdrawn_elsewhere = "다른 창에서 답변됨"
+background = "[백그라운드] {0}"

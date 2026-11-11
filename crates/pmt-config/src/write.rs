@@ -296,6 +296,11 @@ impl ConfigFile {
         check_document(&self.path, text)?;
         let old = self.raw()?;
         refuse_locked_changes(old.as_deref().unwrap_or_default(), text)?;
+        crate::language::check_change(
+            old.as_deref().unwrap_or_default(),
+            &parse::config(&self.path, text)?,
+            profile_dir(&self.path),
+        )?;
         self.commit(old.as_deref(), text)
     }
 
@@ -308,7 +313,9 @@ impl ConfigFile {
         let mut doc = parse::document(&self.path, &old)?.into_mut();
         change(&mut doc)?;
         let new = doc.to_string();
-        crate::essential::semantic(&parse::config(&self.path, &new)?, profile_dir(&self.path))?;
+        let config = parse::config(&self.path, &new)?;
+        crate::essential::semantic(&config, profile_dir(&self.path))?;
+        crate::language::check_change(&old, &config, profile_dir(&self.path))?;
         if new == old {
             return Ok(());
         }

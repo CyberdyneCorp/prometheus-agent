@@ -2306,6 +2306,11 @@
           "description": "Show assistant text between tool calls.",
           "type": "boolean"
         },
+        "language": {
+          "default": "en",
+          "description": "The UI language: `en` or another bundled id (`af`, `ar`, `de`,\n`es`, `fr`, `ga`, `hu`, `it`, `ja`, `ko`, `pt`, `ru`, `tr`, `uk`,\n`zh`, `zh-hant`), a language a profile overlay\n(`<profile_home>/locales/<id>.toml`) or an enabled language pack\nsupplies. Localizes static UI text only, never what the model sees.",
+          "type": "string"
+        },
         "reasoning_full": {
           "default": false,
           "description": "Show reasoning in full instead of clamped.",
@@ -11007,6 +11012,7 @@
         "final_response_markdown": "render",
         "inline_diffs": true,
         "interim_messages": true,
+        "language": "en",
         "reasoning_full": false,
         "resume_display": "full",
         "resume_exchanges": 10,

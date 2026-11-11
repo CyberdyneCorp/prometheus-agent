@@ -14,6 +14,7 @@ pub mod hooks;
 pub mod host;
 pub mod install;
 pub mod load;
+pub mod locales;
 pub mod manifest;
 pub mod mcp_catalog;
 pub mod memory;

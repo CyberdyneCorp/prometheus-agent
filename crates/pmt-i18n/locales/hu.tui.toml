@@ -1,0 +1,10 @@
+# Hungarian: translated from en.tui.toml (same keys and placeholders).
+
+[tui]
+approval_title = "jóváhagyás szükséges: {0} {1}"
+approval_hint = "[o] egyszer  [s] munkamenet  [a] mindig  [d] elutasít  [e] magyarázat"
+clarify_hint = "írj be egy számot, saját választ, vagy semmit a kihagyáshoz; az Enter küldi"
+answer_within = "   (válasz {0} mp-en belül)"
+withdrawn_timeout = "lejárt az idő, vagy senki sem tudott válaszolni; elutasítva"
+withdrawn_elsewhere = "egy másik ablakban megválaszolva"
+background = "[háttér] {0}"

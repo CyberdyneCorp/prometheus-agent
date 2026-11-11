@@ -94,6 +94,7 @@ fn main() -> ExitCode {
         launch.user_home().cloned(),
     ));
     pmt_config::gateway_check::register_roles(prometheus::daemon_client::role_resolver());
+    pmt_config::language::register_packs(Box::new(prometheus::plugins_host::language_packs));
     let home = pmt_config::home::resolve(cli.home.as_deref(), &launch)
         .ok()
         .filter(|_| !matches!(cli.command, Some(Command::Demo(_) | Command::SmokeSuite(_))));

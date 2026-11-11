@@ -26,6 +26,7 @@ pub mod gateway;
 pub mod host;
 pub mod identity;
 pub mod ledger;
+mod locale;
 pub mod mcp;
 pub mod memory;
 pub mod plan;

@@ -76,6 +76,10 @@ What lands where:
   imported as sign-ins and secrets.
 - `SOUL.md` and the selected personality become the profile's `SOUL.md`;
   `memories/MEMORY.md` and `USER.md` become memory entries in their order.
+- The UI language (`display.language`, or `HERMES_LANGUAGE` in `.env`)
+  becomes `display.language`, and the profile's `locales/*.yaml` overlays
+  become TOML overlays (the identity component; see
+  [UI languages](languages.md)).
 - Your skills are copied under the Prometheus skill scan: a skill the scan
   flags goes to `skills/.quarantine/` and is disabled. Unchanged Hermes
   bundled skills stay behind.

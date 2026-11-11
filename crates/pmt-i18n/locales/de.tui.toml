@@ -1,0 +1,10 @@
+# German: translated from en.tui.toml (same keys and placeholders).
+
+[tui]
+approval_title = "Genehmigung erforderlich: {0} {1}"
+approval_hint = "[o] einmal  [s] Sitzung  [a] immer  [d] ablehnen  [e] erklären"
+clarify_hint = "gib eine Nummer, eine eigene Antwort oder nichts zum Überspringen ein; Enter sendet"
+answer_within = "   (Antwort innerhalb von {0} s)"
+withdrawn_timeout = "Zeit abgelaufen oder niemand konnte antworten; abgelehnt"
+withdrawn_elsewhere = "in einem anderen Fenster beantwortet"
+background = "[Hintergrund] {0}"

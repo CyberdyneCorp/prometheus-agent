@@ -89,7 +89,14 @@ pub fn stage_dir(
     let manifest = if !dir.join(crate::manifest::MANIFEST_FILE).exists()
         && dir.join(crate::manifest::HERMES_MANIFEST_FILE).exists()
     {
-        crate::python::hermes::read_staged(&dir)
+        crate::python::hermes::read_staged(&dir).inspect(|manifest| {
+            // Converted before the digest, so the record covers the TOML
+            // catalogs the host reads.
+            for problem in crate::locales::convert_hermes_catalogs(&dir, &manifest.provides_locales)
+            {
+                tracing::warn!(plugin = %manifest.id, "{problem}");
+            }
+        })
     } else {
         Manifest::read(&dir, running)
     }

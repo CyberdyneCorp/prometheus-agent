@@ -1,0 +1,59 @@
+# English: the source of truth. Every bundled catalog has exactly these
+# keys with the same {placeholders}; `cargo xtask gen` exports the key set
+# to schema/locales/keys.core.json.
+
+[approval]
+question = "{tool} wants to run: {subject}"
+why = "why: {reason}"
+prompt = "approve? [o]nce [s]ession [a]lways [d]eny [e]xplain › "
+answer_hint = "answer o(nce), s(ession), a(lways) or d(eny)"
+not_approved = "not approved"
+allowed_once = "Approved once"
+allowed_session = "Approved for this session"
+allowed_always = "Approved always"
+denied = "Denied"
+explaining = "Explaining; the request follows again"
+expired = "Approval expired; the action was denied."
+withdrawn = "Approval withdrawn; the action was denied."
+title = "Approval needed: {tool}"
+action = "Action: {subject}"
+directory = "Directory: {cwd}"
+risk = "Risk: {reason}"
+on_expiry = "unanswered, it is denied"
+reply_hint = "Reply /approve, /approve session, /approve always, /approve explain or /deny."
+remote_title = "approval needed: {tool} {subject}"
+remote_choices = "allow? [o]nce, [s]ession, [a]lways, [d]eny, [e]xplain"
+
+[cli]
+answer_prompt = "answer › "
+memory_prompt = "save to memory? [y/n] › "
+install_prompt = "install? [Y/n] › "
+secret_prompt = "secret › "
+confirm_prompt = "once / always / cancel › "
+resume_prompt = "resume the interrupted turn? [y/N] › "
+autoprune_prompt = "auto-prune? [on/off/later] › "
+
+[gateway]
+stopped = "Stopped. You can continue this session."
+nothing_to_stop = "No active task to stop."
+new_session = "New session started."
+busy_rejected = "Agent is running - /{command} can't run mid-turn. Wait for the response or /stop first."
+login_in_dm = "Sign-in runs only in a direct message: DM the bot and send /login there."
+admin_only = "This command is restricted to admins."
+
+[slash.status]
+model = "model"
+provider = "provider"
+profile = "profile"
+session = "session"
+title = "title"
+cwd = "cwd"
+started = "started"
+last_activity = "last activity"
+tokens = "tokens"
+token_counts = "input {input} output {output} cache read {cache_read} cache write {cache_write} reasoning {reasoning}"
+cost = "cost"
+state = "state"
+running = "running"
+idle = "idle"
+default_model = "default"

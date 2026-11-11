@@ -16,6 +16,9 @@ A plugin is a directory with two files:
   and the capabilities it asks for;
 - `plugin.wasm`, a WebAssembly *component* implementing those worlds.
 
+A plugin whose `worlds` list is empty has no component at all: a language
+pack is one (see [UI languages](languages.md)).
+
 The component runs inside Prometheus with no ambient authority: no files,
 network, clock or environment variables. Everything it reaches goes
 through the host interfaces in `wit/host/host.wit`, and each of those

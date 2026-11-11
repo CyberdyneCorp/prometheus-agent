@@ -118,7 +118,7 @@ impl Lane {
                 vec!["Reply /approve to confirm or /deny to cancel.".to_owned()]
             },
             deadline_ms: u64::try_from(timeout.as_millis()).ok(),
-            on_expiry: "it is cancelled",
+            on_expiry: "it is cancelled".to_owned(),
         };
         let buttons: Vec<Button> = if native {
             [("Confirm", "yes"), ("Cancel", "no")]

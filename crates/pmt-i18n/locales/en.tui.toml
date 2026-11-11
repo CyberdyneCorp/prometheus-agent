@@ -1,0 +1,12 @@
+# English TUI strings: the source of truth for the `tui` surface. Values
+# take positional {0}, {1} placeholders; `cargo xtask gen` exports the key
+# set to schema/locales/keys.tui.json.
+
+[tui]
+approval_title = "approval needed: {0} {1}"
+approval_hint = "[o]nce  [s]ession  [a]lways  [d]eny  [e]xplain"
+clarify_hint = "type a number, your own answer, or nothing to skip; Enter sends"
+answer_within = "   (answer within {0} s)"
+withdrawn_timeout = "timed out or nobody could answer it; denied"
+withdrawn_elsewhere = "answered in another window"
+background = "[background] {0}"

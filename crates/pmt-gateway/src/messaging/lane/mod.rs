@@ -602,6 +602,16 @@ impl Lane {
         self.shared.agents.scope(&self.profile)
     }
 
+    /// The profile's UI strings now (spec: i18n): each profile served by
+    /// this gateway speaks its own language, and a language, overlay or
+    /// pack change shows in the next notice without a restart.
+    fn strings(&self) -> std::sync::Arc<pmt_i18n::Strings> {
+        self.config().map_or_else(
+            || pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+            |scope| pmt_config::language::strings(scope.dir(), pmt_i18n::Surface::Core),
+        )
+    }
+
     /// Appends the waiting mirrored messages to the session (never while
     /// a turn runs: it owns the transcript then).
     fn flush_mirrors(&mut self) {

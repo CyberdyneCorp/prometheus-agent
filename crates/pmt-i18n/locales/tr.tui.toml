@@ -1,0 +1,10 @@
+# Turkish: translated from en.tui.toml (same keys and placeholders).
+
+[tui]
+approval_title = "onay gerekiyor: {0} {1}"
+approval_hint = "[o] bir kez  [s] oturum  [a] her zaman  [d] reddet  [e] açıkla"
+clarify_hint = "bir numara, kendi yanıtınızı veya atlamak için hiçbir şey yazmayın; Enter gönderir"
+answer_within = "   ({0} sn içinde yanıtlayın)"
+withdrawn_timeout = "süre doldu veya kimse yanıtlayamadı; reddedildi"
+withdrawn_elsewhere = "başka bir pencerede yanıtlandı"
+background = "[arka plan] {0}"

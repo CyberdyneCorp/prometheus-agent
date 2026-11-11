@@ -1,0 +1,10 @@
+# Arabic: translated from en.tui.toml (same keys and placeholders).
+
+[tui]
+approval_title = "مطلوب موافقة: {0} {1}"
+approval_hint = "[o] مرة واحدة  [s] الجلسة  [a] دائمًا  [d] رفض  [e] شرح"
+clarify_hint = "اكتب رقمًا أو إجابتك الخاصة أو لا شيء للتخطي؛ Enter للإرسال"
+answer_within = "   (أجب خلال {0} ث)"
+withdrawn_timeout = "انتهت المهلة أو لم يتمكن أحد من الإجابة؛ مرفوض"
+withdrawn_elsewhere = "تمت الإجابة في نافذة أخرى"
+background = "[في الخلفية] {0}"

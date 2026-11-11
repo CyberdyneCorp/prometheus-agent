@@ -34,6 +34,7 @@ pub mod home;
 pub mod hooks_check;
 pub mod image_models;
 pub mod keys;
+pub mod language;
 pub mod layers;
 pub mod layout;
 pub mod lsp_check;

@@ -66,6 +66,8 @@ jiff.workspace = true
 pmt-agent.workspace = true
 pmt-backup.workspace = true
 pmt-config.workspace = true
+# UI string catalogs (display.language).
+pmt-i18n.workspace = true
 pmt-core.workspace = true
 pmt-automation.workspace = true
 pmt-cron.workspace = true

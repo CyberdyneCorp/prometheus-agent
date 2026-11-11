@@ -75,10 +75,11 @@ impl Repl {
                 verdict = &mut check => return verdict,
                 Some(prompt) = super::turn::next(&mut self.approvals) => {
                     self.ring_bell();
-                    self.say(Role::Notice, &prompts::approval_question(prompt.request()));
+                    let strings = self.strings();
+                    self.say(Role::Notice, &prompts::approval_question(prompt.request(), &strings));
                     let ask = self.display.theme.paint(
                         Role::Prompt,
-                        "approve? [o]nce [s]ession [a]lways [d]eny [e]xplain › ",
+                        strings.get("approval.prompt"),
                         self.display.color,
                     );
                     self.input.request(&ask);
@@ -87,8 +88,13 @@ impl Repl {
                         _ => None,
                     };
                     match decision {
-                        Some(decision) => prompt.respond(decision),
-                        None => self.notice("not approved"),
+                        Some(decision) => {
+                            if let Some(outcome) = prompts::outcome(decision, &strings) {
+                                self.notice(outcome);
+                            }
+                            prompt.respond(decision);
+                        }
+                        None => self.notice(strings.get("approval.not_approved")),
                     }
                 }
             }

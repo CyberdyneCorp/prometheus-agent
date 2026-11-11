@@ -1,0 +1,10 @@
+# Russian: translated from en.tui.toml (same keys and placeholders).
+
+[tui]
+approval_title = "требуется одобрение: {0} {1}"
+approval_hint = "[o] однократно  [s] на сессию  [a] всегда  [d] отклонить  [e] объяснить"
+clarify_hint = "введите номер, свой ответ или ничего, чтобы пропустить; Enter отправляет"
+answer_within = "   (ответьте в течение {0} с)"
+withdrawn_timeout = "время истекло или никто не смог ответить; отклонено"
+withdrawn_elsewhere = "ответ дан в другом окне"
+background = "[фон] {0}"

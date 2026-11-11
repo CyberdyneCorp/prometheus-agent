@@ -3776,3 +3776,32 @@ capabilities = [
 
 [projects."Projects in backups and exports"]
 "Missing folder flagged" = ["crates/prometheus/tests/projects_backup.rs::an_imported_profile_keeps_folders_missing_on_this_machine"]
+
+# 57. M2 Internationalization (catalogs, bundled languages, display.language, overlays, packs, validation, live changes, Hermes migration)
+[i18n."Static UI string catalogs"]
+"Language change keeps the prompt cache" = ["crates/prometheus/tests/i18n_chat.rs::a_language_change_mid_session_localizes_prompts_and_keeps_the_cached_prefix"]
+
+[i18n."Bundled languages"]
+"Bundled language list" = ["crates/prometheus/tests/i18n_cli.rs::an_unknown_language_exits_78_naming_the_bundled_ids_and_changes_nothing", "crates/pmt-i18n/src/languages.rs::an_unknown_id_names_every_bundled_language", "crates/pmt-i18n/src/bundled.rs::every_bundled_catalog_is_complete_with_english_placeholders"]
+
+[i18n."display.language selection"]
+"Unknown id refused" = ["crates/prometheus/tests/i18n_cli.rs::an_unknown_language_exits_78_naming_the_bundled_ids_and_changes_nothing"]
+"Two profiles, two languages" = ["crates/prometheus/tests/i18n_gateway.rs::each_profile_on_one_gateway_answers_status_in_its_own_language"]
+
+[i18n."Layered lookup with partial catalogs"]
+"Overlay changes one string" = ["crates/prometheus/tests/i18n_chat.rs::an_overlay_changes_the_denial_and_nothing_else", "crates/pmt-i18n/src/strings.rs::an_overlay_changes_one_string_and_keeps_the_rest_bundled"]
+
+[i18n."Placeholder and value validation"]
+"Misspelled placeholder falls back" = ["crates/pmt-i18n/src/strings.rs::a_misspelled_placeholder_falls_back_to_english_with_a_warning"]
+
+[i18n."Language-pack plugins"]
+"No-code pack adds a language" = ["crates/prometheus/tests/i18n_chat.rs::a_no_code_pack_language_drives_the_approval_prompts", "crates/prometheus/tests/i18n_cli.rs::an_enabled_pack_makes_its_language_selectable_until_it_is_disabled"]
+
+[i18n."Language pack validation"]
+"Unknown key warned not failed" = ["crates/prometheus/tests/i18n_cli.rs::validating_a_pack_warns_about_unknown_keys_and_refuses_misfit_placeholders", "crates/pmt-i18n/src/validate.rs::an_unknown_key_is_a_warning"]
+
+[i18n."Language changes apply without restart (upgrade)"]
+"Gateway picks up an overlay edit" = ["crates/prometheus/tests/i18n_gateway.rs::an_overlay_edit_shows_in_the_next_notice_without_a_restart"]
+
+[i18n."Migration of Hermes language settings"]
+"Env override becomes config" = ["crates/prometheus/tests/i18n_cli.rs::hermes_language_settings_and_overlays_migrate"]

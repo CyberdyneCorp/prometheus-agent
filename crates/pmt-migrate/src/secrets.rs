@@ -212,7 +212,7 @@ fn plan_env(src: &Source<'_>, step: &mut SecretsStep) {
                     entry(Disposition::Skipped).because("steers the Hermes process"),
                 );
             }
-            Class::Platform => {}
+            Class::Platform | Class::Language => {}
         }
     }
 }

@@ -1,0 +1,9 @@
+[
+  "tui.answer_within",
+  "tui.approval_hint",
+  "tui.approval_title",
+  "tui.background",
+  "tui.clarify_hint",
+  "tui.withdrawn_elsewhere",
+  "tui.withdrawn_timeout"
+]

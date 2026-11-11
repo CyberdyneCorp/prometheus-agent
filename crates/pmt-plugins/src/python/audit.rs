@@ -103,6 +103,9 @@ pub struct Inferred {
     pub subprocess: bool,
     /// Calls the model.
     pub llm: bool,
+    /// Registers UI catalogs (`register_locale`, `register_locale_dir`):
+    /// its `locales/` YAML files are converted at install time.
+    pub registers_locales: bool,
     /// A memory provider whose `cli.py` defines `register_cli(subparser)`:
     /// its command is named after the plugin.
     pub memory_cli: bool,
@@ -514,6 +517,7 @@ fn infer_member(source: &Source, at: usize, column: usize, member: &str, inferre
                 .extend(first_literal(source, at, "register_cli_command"));
         }
         "register_system_prompt_section" => inferred.prompt_section = true,
+        "register_locale" | "register_locale_dir" => inferred.registers_locales = true,
         "inject_message" => inferred.inject_messages = true,
         "register_approval_transport" => inferred.approval_transport = true,
         "llm" => inferred.llm = true,

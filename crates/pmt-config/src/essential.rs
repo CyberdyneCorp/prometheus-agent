@@ -43,7 +43,7 @@ pub fn check(config: &Config) -> Result<(), Error> {
 
 /// Every whole-config check beyond the schema: provider transports,
 /// quick commands, gateway keys (chat policies resolve skills in
-/// `profile_dir`) and the essential skill. Run when a profile loads and
+/// `profile_dir`), the form of `display.language` and the essential skill. Run when a profile loads and
 /// before any write.
 ///
 /// # Errors
@@ -61,6 +61,7 @@ pub fn semantic(config: &Config, profile_dir: &std::path::Path) -> Result<(), Er
     crate::moa_check::check(config)?;
     crate::media_check::check(config)?;
     crate::observability_check::check(config)?;
+    crate::language::check(config)?;
     check(config)
 }
 

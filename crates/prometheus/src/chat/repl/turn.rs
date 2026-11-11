@@ -142,7 +142,8 @@ impl Repl {
                 }
                 Some(prompt) = next(&mut self.approvals) => {
                     self.ring_bell();
-                    self.say(Role::Notice, &prompts::approval_question(prompt.request()));
+                    let question = prompts::approval_question(prompt.request(), &self.strings());
+                    self.say(Role::Notice, &question);
                     self.ask(Pending::Approval(prompt));
                 }
                 Some(prompt) = next(&mut self.clarify) => {
@@ -179,12 +180,13 @@ impl Repl {
         if let Some(old) = self.pending.replace(pending) {
             old.cancel();
         }
+        let strings = self.strings();
         self.say(
             Role::Prompt,
             &self
                 .pending
                 .as_ref()
-                .map(Pending::prompt)
+                .map(|p| p.prompt(&strings))
                 .unwrap_or_default(),
         );
     }
@@ -283,10 +285,14 @@ impl Repl {
     pub(super) fn answer_now(&mut self, pending: Pending, line: &str) {
         match pending {
             Pending::Approval(prompt) => {
+                let strings = self.strings();
                 if let Some(decision) = prompts::decision(line) {
+                    if let Some(outcome) = prompts::outcome(decision, &strings) {
+                        self.notice(outcome);
+                    }
                     prompt.respond(decision);
                 } else {
-                    self.notice("answer o(nce), s(ession), a(lways) or d(eny)");
+                    self.notice(strings.get("approval.answer_hint"));
                     self.pending = Some(Pending::Approval(prompt));
                 }
             }

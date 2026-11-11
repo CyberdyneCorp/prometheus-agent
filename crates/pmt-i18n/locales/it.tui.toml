@@ -1,0 +1,10 @@
+# Italian: translated from en.tui.toml (same keys and placeholders).
+
+[tui]
+approval_title = "approvazione necessaria: {0} {1}"
+approval_hint = "[o] una volta  [s] sessione  [a] sempre  [d] nega  [e] spiega"
+clarify_hint = "scrivi un numero, una tua risposta o niente per saltare; Invio invia"
+answer_within = "   (rispondi entro {0} s)"
+withdrawn_timeout = "tempo scaduto o nessuno ha potuto rispondere; negato"
+withdrawn_elsewhere = "risposto in un'altra finestra"
+background = "[in background] {0}"

@@ -32,6 +32,7 @@
 - [Subagents and programmatic tool calls](guide/delegation.md)
 - [Git worktrees](guide/worktrees.md)
 - [Projects](guide/projects.md)
+- [UI languages](guide/languages.md)
 - [Scheduled jobs](guide/cron.md)
 - [Session automation](guide/session-automation.md)
 - [Skills](guide/skills.md)

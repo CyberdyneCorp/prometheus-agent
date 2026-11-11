@@ -183,7 +183,7 @@ impl Lane {
     /// model becomes the chat's override.
     pub(super) async fn switch_model(&mut self, routing: &Routing, args: &str) {
         if self.running.is_some() {
-            self.say(&super::commands::rejected("model"));
+            self.say(&self.rejected("model"));
             return;
         }
         let session = match self.ensure_session(routing).await {

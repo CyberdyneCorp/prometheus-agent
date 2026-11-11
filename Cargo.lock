@@ -2978,6 +2978,7 @@ dependencies = [
  "known-folders",
  "nix 0.31.3",
  "pmt-core",
+ "pmt-i18n",
  "regex",
  "schemars",
  "serde",
@@ -3092,6 +3093,7 @@ dependencies = [
  "jiff",
  "pmt-config",
  "pmt-core",
+ "pmt-i18n",
  "pmt-net",
  "pmt-obs",
  "pmt-rpc",
@@ -3110,6 +3112,17 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "pmt-i18n"
+version = "0.1.0"
+dependencies = [
+ "pmt-core",
+ "serde_json",
+ "tempfile",
+ "toml",
+ "tracing",
 ]
 
 [[package]]
@@ -3230,6 +3243,7 @@ dependencies = [
  "pmt-config",
  "pmt-core",
  "pmt-cron",
+ "pmt-i18n",
  "pmt-memory",
  "pmt-obs",
  "pmt-providers",
@@ -3301,6 +3315,7 @@ dependencies = [
  "minisign-verify",
  "pmt-config",
  "pmt-core",
+ "pmt-i18n",
  "pmt-obs",
  "pmt-plugins",
  "pmt-providers",
@@ -3750,6 +3765,7 @@ dependencies = [
  "pmt-delegation",
  "pmt-eval",
  "pmt-gateway",
+ "pmt-i18n",
  "pmt-local",
  "pmt-mcp",
  "pmt-media",
@@ -6313,6 +6329,7 @@ dependencies = [
  "pmt-agent",
  "pmt-config",
  "pmt-core",
+ "pmt-i18n",
  "pmt-net",
  "pmt-obs",
  "pmt-rpc",

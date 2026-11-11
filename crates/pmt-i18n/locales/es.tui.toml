@@ -1,0 +1,10 @@
+# Spanish: translated from en.tui.toml (same keys and placeholders).
+
+[tui]
+approval_title = "se necesita aprobación: {0} {1}"
+approval_hint = "[o] una vez  [s] sesión  [a] siempre  [d] denegar  [e] explicar"
+clarify_hint = "escribe un número, tu propia respuesta o nada para omitir; Enter envía"
+answer_within = "   (responde en {0} s)"
+withdrawn_timeout = "se agotó el tiempo o nadie pudo responder; denegado"
+withdrawn_elsewhere = "respondido en otra ventana"
+background = "[segundo plano] {0}"

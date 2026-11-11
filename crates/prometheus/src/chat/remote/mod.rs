@@ -51,6 +51,8 @@ pub(super) struct Attached {
     /// The session's live goal, loop and heartbeat rows by kind, from its
     /// `automation.state` events (the line interface's status line).
     pub(super) automation: std::collections::BTreeMap<String, String>,
+    /// The profile's directory, whose UI strings the prompts use.
+    pub(super) profile_dir: PathBuf,
 }
 
 /// What the attached chat starts with.
@@ -157,6 +159,7 @@ pub fn run(record: &DaemonRecord, scope: &ProfileScope, start: &Start<'_>) -> Re
             run_budget: start.run_budget,
             record: Arc::clone(&start.record),
             automation: std::collections::BTreeMap::new(),
+            profile_dir: scope.dir().to_path_buf(),
         };
         let status = match open_session(&mut attached, start).await? {
             Opened::Session(session) => {

@@ -2,7 +2,8 @@
 //! imported; Config translation from user-set values only): `SOUL.md` is
 //! the profile identity file, and the Hermes personality selection (or
 //! its user-owned `agent.system_prompt`) becomes a section of it, never a
-//! config key.
+//! config key. The UI language and its overlays ride along
+//! ([`crate::locale`]).
 
 use pmt_config::profiles::IDENTITY_FILE;
 use pmt_core::error::{Error, codes};
@@ -12,7 +13,8 @@ use crate::component::Component;
 use crate::config::flatten;
 use crate::data;
 use crate::ledger::{self, Decision};
-use crate::plan::{Dest, Source, Step};
+use crate::locale::Locale;
+use crate::plan::{Dest, Existing, Source, Step};
 use crate::report::{Disposition, Entry};
 use crate::writes;
 
@@ -24,6 +26,8 @@ pub struct IdentityStep {
     entries: Vec<Entry>,
     soul: Option<String>,
     soul_entries: Vec<usize>,
+    /// The UI language and overlays.
+    locale: Locale,
 }
 
 impl Step for IdentityStep {
@@ -35,7 +39,12 @@ impl Step for IdentityStep {
         &mut self.entries
     }
 
+    fn predict(&mut self, existing: &Existing<'_>) {
+        self.locale.predict(existing, &mut self.entries);
+    }
+
     fn apply(&mut self, dest: &Dest<'_>) -> Result<(), Error> {
+        self.locale.apply(dest, &mut self.entries)?;
         let Some(soul) = &self.soul else {
             return Ok(());
         };
@@ -80,6 +89,7 @@ pub fn plan(src: &Source<'_>) -> Result<IdentityStep, Error> {
         entries: Vec::new(),
         soul: None,
         soul_entries: Vec::new(),
+        locale: Locale::default(),
     };
     let mut parts = Vec::new();
     if let Some(text) = src.profile.read("SOUL.md")?
@@ -97,6 +107,7 @@ pub fn plan(src: &Source<'_>) -> Result<IdentityStep, Error> {
     if !parts.is_empty() {
         step.soul = Some(parts.join("\n\n") + "\n");
     }
+    step.locale = Locale::plan(src, &mut step.entries);
     Ok(step)
 }
 

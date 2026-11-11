@@ -1,0 +1,10 @@
+# Afrikaans: translated from en.tui.toml (same keys and placeholders).
+
+[tui]
+approval_title = "goedkeuring nodig: {0} {1}"
+approval_hint = "[o] eenmalig  [s] sessie  [a] altyd  [d] weier  [e] verduidelik"
+clarify_hint = "tik 'n nommer, jou eie antwoord, of niks om oor te slaan; Enter stuur"
+answer_within = "   (antwoord binne {0} s)"
+withdrawn_timeout = "tyd verstreke of niemand kon antwoord nie; geweier"
+withdrawn_elsewhere = "in 'n ander venster beantwoord"
+background = "[agtergrond] {0}"

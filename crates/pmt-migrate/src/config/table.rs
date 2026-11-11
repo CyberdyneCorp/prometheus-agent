@@ -217,6 +217,7 @@ pub const OWNED_ELSEWHERE: &[(&str, Component)] = &[
     ("agent.personalities", Component::Identity),
     ("agent.personality", Component::Identity),
     ("display.personality", Component::Identity),
+    ("display.language", Component::Identity),
     ("agent.system_prompt", Component::Identity),
     ("credential_pool_strategies", Component::Secrets),
     ("memory.provider", Component::Memory),

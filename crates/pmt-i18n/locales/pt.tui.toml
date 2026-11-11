@@ -1,0 +1,10 @@
+# Portuguese: translated from en.tui.toml (same keys and placeholders).
+
+[tui]
+approval_title = "aprovação necessária: {0} {1}"
+approval_hint = "[o] uma vez  [s] sessão  [a] sempre  [d] negar  [e] explicar"
+clarify_hint = "digite um número, sua própria resposta ou nada para pular; Enter envia"
+answer_within = "   (responda em {0} s)"
+withdrawn_timeout = "tempo esgotado ou ninguém pôde responder; negado"
+withdrawn_elsewhere = "respondido em outra janela"
+background = "[segundo plano] {0}"

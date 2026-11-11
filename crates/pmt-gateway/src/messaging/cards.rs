@@ -114,7 +114,7 @@ pub(crate) struct Card {
     /// Milliseconds until the request settles unanswered.
     pub(crate) deadline_ms: Option<u64>,
     /// What happens when nobody answers in time.
-    pub(crate) on_expiry: &'static str,
+    pub(crate) on_expiry: String,
 }
 
 impl Card {
@@ -125,7 +125,7 @@ impl Card {
             let _ = write!(text, "\n{}", visible(line));
         }
         if let Some(ms) = self.deadline_ms {
-            let _ = write!(text, "\n{}", expiry_line(ms, now, self.on_expiry));
+            let _ = write!(text, "\n{}", expiry_line(ms, now, &self.on_expiry));
         }
         text
     }

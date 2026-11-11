@@ -3,6 +3,7 @@
 //! requests and turning Ctrl-C into `session.interrupt`.
 
 use pmt_core::error::{Error, codes};
+use pmt_i18n::Strings;
 use pmt_rpc::RpcError;
 use pmt_rpc::client::{ServerCall, error_of};
 use pmt_rpc::contracts::{
@@ -231,7 +232,7 @@ async fn ask(
             None
         }
         (Asker::Line(_), "approval.request") => {
-            out.ask(&approval_text(&call.params));
+            out.ask(&approval_text(&call.params, &attached.strings()));
             Some(Asking::Approval { id: call.id })
         }
         (Asker::Line(_), "clarify.request") => {
@@ -250,6 +251,13 @@ async fn ask(
             client.respond(&call.id, Err(unanswered()));
             None
         }
+    }
+}
+
+impl Attached {
+    /// The profile's UI strings now.
+    fn strings(&self) -> std::sync::Arc<Strings> {
+        pmt_config::language::strings(&self.profile_dir, pmt_i18n::Surface::Core)
     }
 }
 
@@ -293,7 +301,7 @@ fn on_line(
                     .respond(&id, Ok(json!({ "decision": decision })));
                 None
             } else {
-                out.ask(ALLOW);
+                out.ask(attached.strings().get("approval.remote_choices"));
                 Some(Asking::Approval { id })
             }
         }
@@ -320,10 +328,7 @@ fn on_line(
     }
 }
 
-/// The approval choices.
-const ALLOW: &str = "allow? [o]nce, [s]ession, [a]lways, [d]eny, [e]xplain";
-
-fn approval_text(params: &Value) -> String {
+fn approval_text(params: &Value, strings: &Strings) -> String {
     use std::fmt::Write as _;
     // Every field may come from the model: escaped so a control sequence
     // cannot hide part of what is approved.
@@ -331,7 +336,10 @@ fn approval_text(params: &Value) -> String {
     let tool = params["tool"]
         .as_str()
         .map_or_else(|| "tool".to_owned(), printable);
-    let mut text = format!("approval needed: {tool} {}", field(&params["subject"]));
+    let mut text = strings.fmt(
+        "approval.remote_title",
+        &[("tool", &tool), ("subject", &field(&params["subject"]))],
+    );
     for finding in params["findings"].as_array().into_iter().flatten() {
         let _ = write!(
             text,
@@ -346,7 +354,7 @@ fn approval_text(params: &Value) -> String {
             let _ = write!(text, "\n  {}", printable(line));
         }
     }
-    let _ = write!(text, "\n{ALLOW}");
+    let _ = write!(text, "\n{}", strings.get("approval.remote_choices"));
     text
 }
 
@@ -420,11 +428,14 @@ mod tests {
     /// on the attached approval prompt.
     #[test]
     fn the_approval_prompt_shows_control_sequences() {
-        let text = approval_text(&json!({
-            "tool": "terminal",
-            "subject": "rm -rf ~\u{1b}[2K\rls",
-            "findings": [{"detector": "dangerous", "reason": "deletes", "fragment": "rm\u{1b}[1A"}],
-        }));
+        let text = approval_text(
+            &json!({
+                "tool": "terminal",
+                "subject": "rm -rf ~\u{1b}[2K\rls",
+                "findings": [{"detector": "dangerous", "reason": "deletes", "fragment": "rm\u{1b}[1A"}],
+            }),
+            &pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+        );
         assert!(
             text.starts_with("approval needed: terminal rm -rf ~^[[2K\\rls\n"),
             "{text}"

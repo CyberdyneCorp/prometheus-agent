@@ -1,0 +1,10 @@
+# Japanese: translated from en.tui.toml (same keys and placeholders).
+
+[tui]
+approval_title = "承認が必要です: {0} {1}"
+approval_hint = "[o] 今回のみ  [s] セッション中  [a] 常に  [d] 拒否  [e] 説明"
+clarify_hint = "番号、自由回答、またはスキップする場合は何も入力しないでください。Enter で送信"
+answer_within = "   ({0} 秒以内に回答)"
+withdrawn_timeout = "時間切れ、または誰も回答できませんでした。拒否されました"
+withdrawn_elsewhere = "別のウィンドウで回答されました"
+background = "[バックグラウンド] {0}"

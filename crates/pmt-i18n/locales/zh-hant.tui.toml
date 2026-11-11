@@ -1,0 +1,10 @@
+# Traditional Chinese: translated from en.tui.toml (same keys and placeholders).
+
+[tui]
+approval_title = "需要核准：{0} {1}"
+approval_hint = "[o] 僅此一次  [s] 本次工作階段  [a] 一律  [d] 拒絕  [e] 說明"
+clarify_hint = "輸入編號、你自己的回答，或留空略過；按 Enter 送出"
+answer_within = "   （請在 {0} 秒內回答）"
+withdrawn_timeout = "已逾時或無人能回答；已拒絕"
+withdrawn_elsewhere = "已在另一個視窗中回答"
+background = "[背景] {0}"

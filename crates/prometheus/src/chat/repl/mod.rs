@@ -479,9 +479,15 @@ impl Repl {
         }
     }
 
+    /// The profile's UI strings now (spec: i18n): a language or overlay
+    /// change shows at the next prompt, and never reaches the model.
+    fn strings(&self) -> std::sync::Arc<pmt_i18n::Strings> {
+        pmt_config::language::strings(self.factory.scope.dir(), pmt_i18n::Surface::Core)
+    }
+
     fn prompt(&self) -> String {
         let symbol = match &self.pending {
-            Some(pending) => pending.prompt(),
+            Some(pending) => pending.prompt(&self.strings()),
             None if self.display.focus.is_some() => "focus › ".to_owned(),
             None => "› ".to_owned(),
         };

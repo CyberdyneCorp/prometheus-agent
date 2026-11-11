@@ -8,6 +8,7 @@
 //! questions are in `clarify.rs`.
 
 use jiff::Zoned;
+use pmt_i18n::Strings;
 use pmt_rpc::contracts::{ApprovalRequestParams, Decision};
 use pmt_store::gateway::outbox::OutboundKind;
 use serde_json::{Value, json};
@@ -52,53 +53,55 @@ fn decision_of(word: &str) -> Option<Decision> {
     }
 }
 
-fn outcome_text(decision: Decision) -> &'static str {
-    match decision {
-        Decision::Once => "Approved once",
-        Decision::Session => "Approved for this session",
-        Decision::Always => "Approved always",
-        Decision::Deny => "Denied",
-        Decision::Explain => "Explaining; the request follows again",
-    }
+fn outcome_text(decision: Decision, strings: &Strings) -> String {
+    let key = match decision {
+        Decision::Once => "approval.allowed_once",
+        Decision::Session => "approval.allowed_session",
+        Decision::Always => "approval.allowed_always",
+        Decision::Deny => "approval.denied",
+        Decision::Explain => "approval.explaining",
+    };
+    strings.get(key).to_owned()
 }
 
-/// The approval card's text: title, exact action, working directory, risk
-/// reasons, expiry, and how to answer on this tier.
+/// The approval card's text, in the profile's language: title, exact
+/// action, working directory, risk reasons, expiry, and how to answer on
+/// this tier.
 fn card_text(
     params: &ApprovalRequestParams,
     cwd: Option<&str>,
     tier: Interactive,
     id: &str,
     now: &Zoned,
+    strings: &Strings,
 ) -> String {
     let mut details = Vec::new();
     if let Some(subject) = &params.subject {
-        details.push(format!("Action: {subject}"));
+        details.push(strings.fmt("approval.action", &[("subject", subject)]));
     }
     if let Some(cwd) = cwd {
-        details.push(format!("Directory: {cwd}"));
+        details.push(strings.fmt("approval.directory", &[("cwd", &cwd)]));
     }
     details.extend(
         params
             .findings
             .iter()
-            .map(|finding| format!("Risk: {}", finding.reason)),
+            .map(|finding| strings.fmt("approval.risk", &[("reason", &finding.reason)])),
     );
     if let Some(explanation) = &params.explanation {
         details.push(explanation.clone());
     }
     let card = Card {
-        title: format!("Approval needed: {}", params.tool),
+        title: strings.fmt("approval.title", &[("tool", &params.tool)]),
         details,
         deadline_ms: params.deadline_ms,
-        on_expiry: "unanswered, it is denied",
+        on_expiry: strings.get("approval.on_expiry").to_owned(),
     };
     let mut text = card.text(now);
     match tier {
         Interactive::Native => {
-            text.push_str(
-                "\nReply /approve, /approve session, /approve always, /approve explain or /deny.",
-            );
+            text.push('\n');
+            text.push_str(strings.get("approval.reply_hint"));
         }
         other => text.push_str(&cards::instructions(other, id)),
     }
@@ -145,7 +148,8 @@ impl Lane {
         let session = self.session.clone().unwrap_or_default();
         let card_key = format!("{session}:{id}:card");
         let cwd = self.session_cwd(&request.session_id);
-        let text = card_text(&request, cwd.as_deref(), tier, &id, &Zoned::now());
+        let strings = self.strings();
+        let text = card_text(&request, cwd.as_deref(), tier, &id, &Zoned::now(), &strings);
         let body = json!({"text": text, "buttons": buttons}).to_string();
         self.deliver(card_key.clone(), OutboundKind::Approval, body, None);
         self.requests.approvals.push(Approval {
@@ -306,7 +310,7 @@ impl Lane {
                 let who = format!("{} via {}", routing.sender_id, routing.platform);
                 self.close_card(
                     &approval.id,
-                    &format!("{} by {who}", outcome_text(decision)),
+                    &format!("{} by {who}", outcome_text(decision, &self.strings())),
                 );
             }
             Answered::Settled | Answered::Unknown => {
@@ -351,7 +355,11 @@ impl Lane {
                 .and_then(|(value, _)| {
                     serde_json::from_value::<Decision>(value["decision"].clone()).ok()
                 });
-            let outcome = decision.map_or("Answered", outcome_text);
+            let strings = self.strings();
+            let outcome = decision.map_or_else(
+                || "Answered".to_owned(),
+                |decision| outcome_text(decision, &strings),
+            );
             self.close_card(id, &format!("{outcome} via {surface}"));
         }
         if self.requests.clarify.as_ref().is_some_and(|c| c.id == id) {
@@ -362,11 +370,12 @@ impl Lane {
 
     /// A request settled unanswered: an expired approval is denied.
     pub(super) fn cancelled(&mut self, id: &str, reason: &str) {
-        let outcome = if reason == "timeout" {
-            "Approval expired; the action was denied."
+        let strings = self.strings();
+        let outcome = strings.get(if reason == "timeout" {
+            "approval.expired"
         } else {
-            "Approval withdrawn; the action was denied."
-        };
+            "approval.withdrawn"
+        });
         self.close_card(id, outcome);
         if self.requests.clarify.as_ref().is_some_and(|c| c.id == id) {
             self.requests.clarify = None;

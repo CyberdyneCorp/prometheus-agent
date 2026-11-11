@@ -13,22 +13,10 @@ use pmt_store::gateway::routes::ResetReason;
 use super::{Deferred, Lane, Origin, Pending};
 use crate::messaging::adapter::Inbound;
 use crate::messaging::agents::{BusyPolicy, Lookup};
-use crate::messaging::auth::{self, ADMIN_ONLY};
+use crate::messaging::auth;
 use crate::messaging::hooks::PreCommand;
 use crate::messaging::key::ChatType;
 use crate::messaging::key::Routing;
-
-/// What `/stop` answers.
-pub(crate) const STOPPED: &str = "Stopped. You can continue this session.";
-/// What `/stop` answers with nothing running.
-pub(crate) const NOTHING_TO_STOP: &str = "No active task to stop.";
-/// What `/new` answers.
-pub(crate) const NEW_SESSION: &str = "New session started.";
-
-/// The refusal of a `reject` command mid-turn.
-pub(crate) fn rejected(name: &str) -> String {
-    format!("Agent is running - /{name} can't run mid-turn. Wait for the response or /stop first.")
-}
 
 /// A command the lane runs.
 struct Call<'a> {
@@ -40,12 +28,19 @@ struct Call<'a> {
     busy: BusyPolicy,
 }
 
-/// The refusal of `/login` outside a direct message (spec:
-/// model-providers, Subscription account commands).
+/// The English refusal of `/login` outside a direct message (spec:
+/// model-providers, Subscription account commands); the lane says it in
+/// the profile's language (`gateway.login_in_dm`).
 pub const LOGIN_IN_DM: &str =
     "Sign-in runs only in a direct message: DM the bot and send /login there.";
 
 impl Lane {
+    /// The refusal of a `reject` command mid-turn.
+    pub(super) fn rejected(&self, name: &str) -> String {
+        self.strings()
+            .fmt("gateway.busy_rejected", &[("command", &name)])
+    }
+
     /// An authorized event of the conversation.
     pub(super) async fn inbound(&mut self, seq: u64, routing: Routing, inbound: Inbound) {
         self.routing = routing.clone();
@@ -119,7 +114,7 @@ impl Lane {
             ),
         };
         if !allowed {
-            self.say(ADMIN_ONLY);
+            self.say(self.strings().get("gateway.admin_only"));
             return None;
         }
         let hooks = &self.shared.options.hooks;
@@ -180,7 +175,9 @@ impl Lane {
             }
             "update" => self.update_command(&call.routing, &call.args).await,
             // A sign-in's device code never goes to a group or channel.
-            "login" if call.routing.chat_type != ChatType::Dm => self.say(LOGIN_IN_DM),
+            "login" if call.routing.chat_type != ChatType::Dm => {
+                self.say(self.strings().get("gateway.login_in_dm"));
+            }
             "retry" => {
                 self.retry_releases();
                 self.registry(call).await;
@@ -209,7 +206,7 @@ impl Lane {
             addressed: true,
         };
         match call.busy {
-            BusyPolicy::Reject => self.say(&rejected(&call.name)),
+            BusyPolicy::Reject => self.say(&self.rejected(&call.name)),
             BusyPolicy::Queue => self.pending.push_back(pending),
             BusyPolicy::InterruptThenDispatch => {
                 self.pending.push_front(pending);
@@ -265,7 +262,7 @@ impl Lane {
     /// the session stays.
     async fn stop(&mut self) {
         let Some(running) = self.running.as_mut() else {
-            self.say(NOTHING_TO_STOP);
+            self.say(self.strings().get("gateway.nothing_to_stop"));
             return;
         };
         running.stopped = true;
@@ -273,7 +270,7 @@ impl Lane {
         self.buffer = None;
         self.deferred = None;
         self.interrupt().await;
-        self.say(STOPPED);
+        self.say(self.strings().get("gateway.stopped"));
     }
 
     /// `/new` and `/reset`: a new session for the key once the running
@@ -282,7 +279,7 @@ impl Lane {
     /// transition completed shares its result.
     async fn new_session(&mut self, seq: u64, routing: Routing, reset: bool) {
         if seq <= self.horizon && self.session.is_some() {
-            self.say(NEW_SESSION);
+            self.say(self.strings().get("gateway.new_session"));
             return;
         }
         self.pending.retain(|p| p.origin == Origin::Internal);
@@ -305,7 +302,7 @@ impl Lane {
         };
         let previous = self.current_session();
         match self.transition(routing, Some(reason), previous).await {
-            Ok(_) => self.say(NEW_SESSION),
+            Ok(_) => self.say(self.strings().get("gateway.new_session")),
             Err(err) => self.say(err.message()),
         }
     }
@@ -364,7 +361,7 @@ impl Lane {
     /// restricts other commands).
     fn pair(&self, routing: &Routing, table: &pmt_config::schema::PlatformConfig, args: &str) {
         if auth::is_admin(table, routing.chat_type, &routing.sender_id) != Some(true) {
-            self.say(ADMIN_ONLY);
+            self.say(self.strings().get("gateway.admin_only"));
             return;
         }
         let Some(code) = args.trim().strip_prefix("approve") else {

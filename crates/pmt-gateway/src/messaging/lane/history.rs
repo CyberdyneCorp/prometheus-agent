@@ -96,7 +96,7 @@ impl Lane {
     /// becomes the conversation's session.
     pub(super) fn resume_command(&mut self, routing: &Routing, args: &str) {
         if self.running.is_some() {
-            self.say(&super::commands::rejected("resume"));
+            self.say(&self.rejected("resume"));
             return;
         }
         let sessions = self.chat_sessions(routing);

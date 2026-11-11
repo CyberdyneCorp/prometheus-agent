@@ -13,6 +13,8 @@ md-5.workspace = true
 pmt-backup.workspace = true
 pmt-config.workspace = true
 pmt-core.workspace = true
+# Hermes UI language overlays become TOML catalogs.
+pmt-i18n.workspace = true
 pmt-cron.workspace = true
 pmt-memory.workspace = true
 pmt-obs.workspace = true
