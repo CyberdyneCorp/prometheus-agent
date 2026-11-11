@@ -167,6 +167,16 @@ daemon run` as a service (systemd, or a launchd agent on macOS) that
 restarts on failure but never on exit codes 2, 65, 77 and 78, so a bad
 configuration stops with status 78 instead of restart-looping.
 
+With `container.enable = true` the service runs the image (`container.image`)
+instead, on the same home mounted at `/data`, under the same restart
+policy (the image's init passes the daemon's exit code on). NixOS runs it
+through `virtualisation.oci-containers`. Home Manager runs it with
+`container.runtime` (`podman`, the Linux default, or `docker`, the macOS
+default) found on the service's `PATH`: rootless podman maps your user
+onto the image's uid 10001 and docker runs the container as your user, so
+the home stays yours. The environment files go to the container
+(`--env-file`), not to the runtime.
+
 ## Uninstalling
 
 `prometheus uninstall` stops the daemon, removes the service units `daemon

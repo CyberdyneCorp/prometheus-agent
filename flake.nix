@@ -44,6 +44,9 @@
         in
         {
           nixos-module = import ./nix/tests/nixos.nix { inherit pkgs self; };
+          # Pure evaluation, no binary needed:
+          #   nix build .#checks.x86_64-linux.home-manager-module
+          home-manager-module = import ./nix/tests/home-manager.nix { inherit pkgs self; };
         }
       );
     };

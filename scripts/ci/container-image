@@ -10,6 +10,8 @@
 #     are not writable by the runtime user
 #   - 200 orphaned grandchildren leave no <defunct> entry (PID 1 reaps)
 #   - SIGTERM reaches the daemon (`docker stop` exits 0 quickly)
+#   - a configuration the daemon rejects stops the container with exit 78
+#     (the init passes the code on, so supervisors spare it)
 #   - a profile created by `docker exec` is served after an in-place
 #     `daemon restart` (the container is not restarted)
 #   - a stopped daemon runtime turns the health check unhealthy
@@ -118,6 +120,13 @@ elapsed=$(($(date +%s) - before))
 [ "$(docker inspect -f '{{.State.ExitCode}}' "$c")" = 0 ] || fail "the daemon did not exit 0 on SIGTERM"
 [ "$elapsed" -lt 25 ] || fail "SIGTERM was not forwarded (stop took ${elapsed}s)"
 pass "SIGTERM is forwarded to the daemon (${elapsed}s, exit 0)"
+
+docker run --rm -v "pmt-data-$suffix:/data" --entrypoint sh "$image" \
+    -c 'printf "[approvals]\nmode = \"sometimes\"\n" > /data/profiles/default/config.toml'
+code=0
+docker run --rm --read-only --tmpfs /tmp -v "pmt-data-$suffix:/data" "$image" >/dev/null 2>&1 || code=$?
+[ "$code" = 78 ] || fail "a rejected configuration exited $code, not 78"
+pass "a rejected configuration exits the container with 78"
 docker rm -f "$c" >/dev/null
 
 # The network-isolated recipe: an internal network, the egress proxy on

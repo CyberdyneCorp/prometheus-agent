@@ -3644,4 +3644,4 @@ capabilities = [
 
 [distribution-and-update."NixOS and Home Manager modules"]
 "Nix-owned key is read-only" = ["crates/prometheus/tests/nix_module.rs::the_nixos_module_vm_test_passes", "crates/prometheus/tests/config_generated.rs::a_home_manager_generated_config_is_read_only"]
-"Bad config does not restart-loop" = ["crates/prometheus/tests/nix_module.rs::the_nixos_module_vm_test_passes"]
+"Bad config does not restart-loop" = ["crates/prometheus/tests/nix_module.rs::the_nixos_module_vm_test_passes", "crates/prometheus/tests/nix_module.rs::the_home_manager_module_evaluation_test_passes"]

@@ -414,9 +414,10 @@ jobs:
             -Binary target/debug/prometheus.exe -Target x86_64-pc-windows-msvc
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
-  # Distribution channels (spec: distribution-and-update): the NixOS
-  # module in a NixOS VM test (Nix-owned keys read-only, no restart loop on
-  # exit 78) around a static binary of this commit. The container image
+  # Distribution channels (spec: distribution-and-update): the NixOS and
+  # Home Manager modules in a NixOS VM test (Nix-owned keys read-only, no
+  # restart loop on exit 78, natively and in container mode) around a
+  # static binary of this commit, and the Home Manager evaluation test. The container image
   # tests run in the x86_64 gnu check job (tests/container_image.rs).
   channels:
     name: distribution channels (NixOS module)

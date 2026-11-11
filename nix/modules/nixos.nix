@@ -6,7 +6,9 @@
 # 77); `profiles.<name>.settings` is written to that profile's
 # config.toml on every start. The daemon runs as a systemd service that
 # restarts on failure but never on exit codes 2, 65, 77 and 78, so a bad
-# configuration stops instead of restart-looping.
+# configuration stops instead of restart-looping; with `container.enable`
+# the image runs through virtualisation.oci-containers under that same
+# policy.
 self:
 {
   config,
@@ -16,6 +18,7 @@ self:
 }:
 let
   cfg = config.services.prometheus-agent;
+  noRestart = lib.concatMapStringsSep " " toString common.noRestartCodes;
   common = import ./common.nix { inherit lib pkgs self; };
   settings = common.defaultSettings cfg;
   managed = common.generate "managed.toml" (
@@ -72,7 +75,7 @@ in
             EnvironmentFile = cfg.environmentFiles;
             Restart = "on-failure";
             RestartSec = 5;
-            RestartPreventExitStatus = lib.concatMapStringsSep " " toString common.noRestartCodes;
+            RestartPreventExitStatus = noRestart;
             NoNewPrivileges = true;
             PrivateTmp = true;
             ProtectSystem = "strict";
@@ -97,6 +100,14 @@ in
             "--tmpfs=/tmp"
             "--add-host=host.docker.internal:host-gateway"
           ];
+        };
+        # The unit's exit status is the daemon's (the image's init passes
+        # it on). oci-containers sets its own Restart (not on-failure in
+        # every nixpkgs) and no exit codes to spare: a config the daemon
+        # rejects (78) would restart-loop.
+        systemd.services."${config.virtualisation.oci-containers.backend}-prometheus-agent".serviceConfig = {
+          Restart = lib.mkForce "on-failure";
+          RestartPreventExitStatus = noRestart;
         };
       })
     ]
