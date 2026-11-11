@@ -1315,6 +1315,24 @@ error_codes! {
     /// No supported service manager on this OS.
     SERVICE_UNSUPPORTED = ("service.unsupported", Unavailable,
         "`prometheus daemon install-service` knows systemd (Linux), launchd (macOS) and Task Scheduler (Windows); on other OSes (Android/Termux, the BSDs) run `prometheus daemon run` under your own supervisor.");
+    /// No project matches a reference.
+    PROJECT_NOT_FOUND = ("project.not_found", NotFound,
+        "No project of the profile has this id or slug; `prometheus projects list --all` shows every project, archived ones included.");
+    /// A project slug outside the slug pattern.
+    PROJECT_INVALID_SLUG = ("project.invalid_slug", Usage,
+        "A project slug must match `^[a-z0-9][a-z0-9_-]{0,63}$`; a name with no letter or digit needs an explicit `--slug`.");
+    /// Another project already uses the slug.
+    PROJECT_SLUG_IN_USE = ("project.slug_in_use", Tool,
+        "Project slugs are unique per profile (archived projects keep theirs); pick another `--slug`.");
+    /// A folder already owned by another live project.
+    PROJECT_FOLDER_CLAIMED = ("project.folder_claimed", Tool,
+        "A folder belongs to at most one non-archived project: remove it from the project that owns it (or archive that project) first. Restoring an archived project fails the same way when one of its folders was claimed meanwhile.");
+    /// A folder argument that is not usable.
+    PROJECT_FOLDER_INVALID = ("project.folder_invalid", Tool,
+        "The folder does not exist (folders are stored canonicalised, so they must exist when added), or it is not a folder of the project (`set-primary` and `remove-folder` take one of the project's folders).");
+    /// The command needs a live project.
+    PROJECT_ARCHIVED = ("project.archived", Tool,
+        "The project is archived: `prometheus projects restore <project>` brings it back before it can be activated or edited.");
 }
 
 /// A user-visible error: a catalog code (which fixes the kind), a one-line

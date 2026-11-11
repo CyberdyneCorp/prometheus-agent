@@ -170,6 +170,13 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::worktrees_cmd::WorktreesCommand,
     },
+    /// Projects: named workspaces spanning folders, the active project,
+    /// archive and restore.
+    Projects {
+        /// The projects subcommand.
+        #[command(subcommand)]
+        command: crate::projects_cmd::ProjectsCommand,
+    },
     /// The credential vault: logins, cards and addresses the browser fills
     /// by handle.
     Vault {

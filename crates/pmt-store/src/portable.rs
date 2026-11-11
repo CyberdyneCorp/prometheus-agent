@@ -116,13 +116,19 @@ fn insert_session(
         other => other.clone(),
     };
     let ms = |t: jiff::Timestamp| t.as_millisecond();
+    // An imported session joins the project owning its cwd here; the
+    // source's project ids mean nothing in this profile.
+    let project = match session.cwd.as_deref() {
+        Some(cwd) => crate::projects::owner_id(tx, &crate::projects::lookup_path(cwd))?,
+        None => None,
+    };
     tx.execute(
         "INSERT INTO sessions (id, profile_id, source, source_tag, origin, model, provider, cwd, \
          git_repo_root, git_branch, title, title_source, started_at, last_activity_at, ended_at, \
          end_reason, pinned, archived, hidden, bot_chat, parent_session_id, lineage_kind, \
-         parent_deleted, root_session_id, compaction_count, rewind_count) \
+         parent_deleted, root_session_id, compaction_count, rewind_count, project_id) \
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, \
-         ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)",
+         ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27)",
         params![
             session.id.to_string(),
             profile_id,
@@ -152,6 +158,7 @@ fn insert_session(
             root.to_string(),
             session.compaction_count,
             session.rewind_count,
+            project,
         ],
     )
     .map_err(sql)?;

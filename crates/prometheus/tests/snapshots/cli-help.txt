@@ -19,6 +19,7 @@ Commands:
   lsp          Language servers behind the diagnostics of file edits: status, registry, installs, restart
   cron         Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and the headless tick
   worktrees    Git worktrees of sessions and subagents: list, sweep and restore archived trees
+  projects     Projects: named workspaces spanning folders, the active project, archive and restore
   vault        The credential vault: logins, cards and addresses the browser fills by handle
   security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one

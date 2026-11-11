@@ -1,7 +1,8 @@
 //! `profile export` and `profile import` (spec: configuration-and-
 //! profiles, Profile export excludes credentials by default; Profile
 //! lifecycle commands): the archive itself is `pmt_backup::profile_archive`;
-//! this adds the profile's memory entries (they live in `state.db`) and,
+//! this adds the profile's memory entries and projects (they live in
+//! `state.db`) and,
 //! when asked, its secrets sealed under a passphrase read at a hidden
 //! prompt.
 
@@ -43,6 +44,7 @@ pub(super) fn export(
     let profile = home.existing_profile(&ProfileName::parse(name)?)?;
     let scope = open_scope(profile.clone())?;
     let memory = memory_jsonl(&scope)?;
+    let projects = projects_json(&scope)?;
     let sealed_secrets = if with_secrets {
         let pass = passphrase("the export passphrase")?;
         Some(pmt_backup::sealed::seal(
@@ -55,6 +57,7 @@ pub(super) fn export(
     let options = ExportOptions {
         with_sessions,
         memory,
+        projects,
         sealed_secrets,
     };
     let manifest = profile_archive::export(&profile, output, &options, crate::build_info::VERSION)?;
@@ -84,6 +87,19 @@ fn memory_jsonl(scope: &ProfileScope) -> Result<Option<Vec<u8>>, Error> {
         let _ = writeln!(out, "{}", crate::memory_cmd::entry_json(entry));
     }
     Ok(Some(out.into_bytes()))
+}
+
+/// The projects and the active project as JSON (`None` when there are
+/// none or no store) (spec: projects, Projects in backups and exports).
+fn projects_json(scope: &ProfileScope) -> Result<Option<Vec<u8>>, Error> {
+    if !scope.path("state.db").is_file() {
+        return Ok(None);
+    }
+    let projects = pmt_store::Store::open(scope)?.export_projects()?;
+    if projects.projects.is_empty() {
+        return Ok(None);
+    }
+    Ok(serde_json::to_vec(&projects).ok())
 }
 
 /// The store's secrets as `NAME = "value"` lines.
@@ -128,6 +144,9 @@ pub(super) fn import(
     if let Some(memory) = staged.read(profile_archive::MEMORY_ENTRY)? {
         restore_memory(&scope, &memory)?;
     }
+    if let Some(projects) = staged.read(profile_archive::PROJECTS_ENTRY)? {
+        restore_projects(&scope, &projects)?;
+    }
     if json {
         return crate::output::json(&staged.manifest);
     }
@@ -162,5 +181,18 @@ fn restore_memory(scope: &ProfileScope, memory: &[u8]) -> Result<(), Error> {
     let store = pmt_store::Store::open(scope)?;
     let redactor = scope.secrets().redactor()?;
     pmt_memory::manage::import(&store, &scope.config().memory, &items, &redactor)?;
+    Ok(())
+}
+
+/// Writes the archive's projects; folders missing on this machine are kept
+/// (`projects show` flags them).
+fn restore_projects(scope: &ProfileScope, projects: &[u8]) -> Result<(), Error> {
+    let projects: pmt_store::ProjectsExport = serde_json::from_slice(projects).map_err(|e| {
+        Error::new(
+            &codes::PROFILE_ARCHIVE_INVALID,
+            format!("the archive's projects do not parse: {e}"),
+        )
+    })?;
+    pmt_store::Store::open(scope)?.import_projects(&projects)?;
     Ok(())
 }

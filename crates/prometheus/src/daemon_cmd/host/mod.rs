@@ -463,6 +463,19 @@ impl DaemonHost {
 }
 
 /// The stored source of a session a client of kind `client` creates.
+/// Where a GUI session (desktop, TUI) given no directory works: the
+/// active project's primary folder (spec: projects, Active project and
+/// path ownership). Other surfaces keep the profile workspace.
+fn gui_default_cwd(profile: &Profile, source: Source) -> Result<Option<String>, Error> {
+    if !matches!(source, Source::Desktop | Source::Tui) {
+        return Ok(None);
+    }
+    Ok(profile
+        .store
+        .active_project()?
+        .and_then(|p| p.primary_path().map(str::to_owned)))
+}
+
 fn source_of(client: Option<ClientKind>) -> Source {
     match client {
         Some(ClientKind::Tui) => Source::Tui,
@@ -517,12 +530,17 @@ impl Host for DaemonHost {
     ) -> HostFuture<'a, SessionRef> {
         Box::pin(async move {
             let profile = &self.profile(profile)?;
-            let cwd = Self::cwd_of(profile, params.cwd.as_deref());
+            let source = source_of(params.source);
+            let given = match &params.cwd {
+                Some(cwd) => Some(cwd.clone()),
+                None => gui_default_cwd(profile, source)?,
+            };
+            let cwd = Self::cwd_of(profile, given.as_deref());
             std::fs::create_dir_all(&cwd).map_err(|e| Error::io(&codes::HOME_IO, &cwd, &e))?;
             let setup = params.setup.clone();
             let factory = self.factory(profile, cwd.clone(), &setup)?;
             let target = factory.models.primary(&setup::flags(&setup)).await?;
-            let mut new = NewSession::new(source_of(params.source));
+            let mut new = NewSession::new(source);
             new.provider = Some(target.provider.clone());
             new.model.clone_from(&target.model);
             if let Some(tag) = &params.source_tag {

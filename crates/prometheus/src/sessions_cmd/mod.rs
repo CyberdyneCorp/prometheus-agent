@@ -48,12 +48,17 @@ pub fn run(command: &SessionsCommand, ctx: &Context<'_>, ui: crate::chat::Ui) ->
             all,
             source,
             pinned,
+            project,
         } => {
             let options = ListOptions {
                 limit: *limit,
                 all: *all,
                 sources: source.clone(),
                 pinned_only: *pinned,
+                project: project
+                    .as_deref()
+                    .map(|p| store.project(p).map(|p| p.id))
+                    .transpose()?,
             };
             list(ctx, &store.list_sessions(&options)?)
         }
@@ -183,7 +188,14 @@ fn render_list(sessions: &[Session]) -> String {
 
 fn list(ctx: &Context<'_>, sessions: &[Session]) -> Result<u8, Error> {
     if ctx.json {
-        let sessions: Vec<Value> = sessions.iter().map(session_json).collect();
+        let sessions: Vec<Value> = sessions
+            .iter()
+            .map(|s| {
+                let mut row = session_json(s);
+                row["project_id"] = json!(s.project_id.map(|p| p.to_string()));
+                row
+            })
+            .collect();
         return document("sessions list", &json!({ "sessions": sessions }));
     }
     if sessions.is_empty() {

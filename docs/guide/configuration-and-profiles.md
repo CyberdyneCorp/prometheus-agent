@@ -295,8 +295,8 @@ profile gets one unless `--no-alias` is given. A reserved name, a
 ### Export and import
 
 `prometheus profile export <name> -o <file>.tar.zst` writes the profile's
-configuration, identity file, memory, skills, themes, scripts and cron job
-definitions. It never holds secrets, `state.db`, blobs, logs or backups
+configuration, identity file, memory, [projects](projects.md), skills,
+themes, scripts and cron job definitions. It never holds secrets, `state.db`, blobs, logs or backups
 unless asked: `--with-sessions` adds the sessions, and `--with-secrets`
 adds the secrets encrypted with a key derived from a passphrase you type
 at a hidden prompt (Argon2id, XChaCha20-Poly1305).

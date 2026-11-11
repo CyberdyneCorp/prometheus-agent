@@ -26,6 +26,7 @@ Commands:
   lsp          Language servers behind the diagnostics of file edits: status, registry, installs, restart
   cron         Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and the headless tick
   worktrees    Git worktrees of sessions and subagents: list, sweep and restore archived trees
+  projects     Projects: named workspaces spanning folders, the active project, archive and restore
   vault        The credential vault: logins, cards and addresses the browser fills by handle
   security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one
@@ -9762,6 +9763,694 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus worktrees help help
 ```
 
+## `prometheus projects`
+
+```text
+Projects: named workspaces spanning folders, the active project, archive and restore
+
+Usage: prometheus projects [OPTIONS] <COMMAND>
+
+Commands:
+  create         Create a project; the first folder is primary unless `--primary`
+  list           List projects, the active one marked `*` [alias: ls]
+  show           Show a project with its folders (missing ones flagged)
+  add-folder     Add a folder to a project
+  remove-folder  Remove a folder from a project
+  rename         Rename a project (its slug stays)
+  set-primary    Make one of a project's folders its primary
+  use            Set the active project (omit it to clear)
+  archive        Archive a project: hidden from listings, its folders released
+  restore        Restore an archived project
+  bind-board     Bind a project to a kanban board (omit the board to unbind)
+  help           Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus projects create`
+
+```text
+Create a project; the first folder is primary unless `--primary`
+
+Usage: prometheus projects create [OPTIONS] <NAME> [FOLDERS]...
+
+Arguments:
+  <NAME>
+          Display name (the slug derives from it unless `--slug`)
+
+  [FOLDERS]...
+          Its folders (existing directories)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --slug <SLUG>
+          Explicit slug, `^[a-z0-9][a-z0-9_-]{0,63}$`
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --primary <PATH>
+          The primary folder (added when not among the folders)
+
+      --description <TEXT>
+          A description
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --icon <ICON>
+          An icon
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --color <COLOR>
+          A color
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --board <SLUG>
+          Bind it to this kanban board
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --use
+          Make it the active project
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus projects list`
+
+```text
+List projects, the active one marked `*`
+
+Usage: prometheus projects list [OPTIONS]
+
+Options:
+      --all
+          Include archived projects
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus projects show`
+
+```text
+Show a project with its folders (missing ones flagged)
+
+Usage: prometheus projects show [OPTIONS] <PROJECT>
+
+Arguments:
+  <PROJECT>
+          Project id or slug
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus projects add-folder`
+
+```text
+Add a folder to a project
+
+Usage: prometheus projects add-folder [OPTIONS] <PROJECT> <PATH>
+
+Arguments:
+  <PROJECT>
+          Project id or slug
+
+  <PATH>
+          The folder (an existing directory)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --label <LABEL>
+          A label shown next to it
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --primary
+          Make it the primary folder
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus projects remove-folder`
+
+```text
+Remove a folder from a project
+
+Usage: prometheus projects remove-folder [OPTIONS] <PROJECT> <PATH>
+
+Arguments:
+  <PROJECT>
+          Project id or slug
+
+  <PATH>
+          One of its folders
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus projects rename`
+
+```text
+Rename a project (its slug stays)
+
+Usage: prometheus projects rename [OPTIONS] <PROJECT> <NAME>
+
+Arguments:
+  <PROJECT>
+          Project id or slug
+
+  <NAME>
+          The new display name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus projects set-primary`
+
+```text
+Make one of a project's folders its primary
+
+Usage: prometheus projects set-primary [OPTIONS] <PROJECT> <PATH>
+
+Arguments:
+  <PROJECT>
+          Project id or slug
+
+  <PATH>
+          One of its folders
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus projects use`
+
+```text
+Set the active project (omit it to clear)
+
+Usage: prometheus projects use [OPTIONS] [PROJECT]
+
+Arguments:
+  [PROJECT]
+          Project id or slug
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus projects archive`
+
+```text
+Archive a project: hidden from listings, its folders released
+
+Usage: prometheus projects archive [OPTIONS] <PROJECT>
+
+Arguments:
+  <PROJECT>
+          Project id or slug
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus projects restore`
+
+```text
+Restore an archived project
+
+Usage: prometheus projects restore [OPTIONS] <PROJECT>
+
+Arguments:
+  <PROJECT>
+          Project id or slug
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus projects bind-board`
+
+```text
+Bind a project to a kanban board (omit the board to unbind)
+
+Usage: prometheus projects bind-board [OPTIONS] <PROJECT> [BOARD]
+
+Arguments:
+  <PROJECT>
+          Project id or slug
+
+  [BOARD]
+          The board's slug
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus projects help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus projects help [COMMAND]
+
+Commands:
+  create         Create a project; the first folder is primary unless `--primary`
+  list           List projects, the active one marked `*`
+  show           Show a project with its folders (missing ones flagged)
+  add-folder     Add a folder to a project
+  remove-folder  Remove a folder from a project
+  rename         Rename a project (its slug stays)
+  set-primary    Make one of a project's folders its primary
+  use            Set the active project (omit it to clear)
+  archive        Archive a project: hidden from listings, its folders released
+  restore        Restore an archived project
+  bind-board     Bind a project to a kanban board (omit the board to unbind)
+  help           Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus projects help create`
+
+```text
+Create a project; the first folder is primary unless `--primary`
+
+Usage: prometheus projects help create
+```
+
+## `prometheus projects help list`
+
+```text
+List projects, the active one marked `*`
+
+Usage: prometheus projects help list
+```
+
+## `prometheus projects help show`
+
+```text
+Show a project with its folders (missing ones flagged)
+
+Usage: prometheus projects help show
+```
+
+## `prometheus projects help add-folder`
+
+```text
+Add a folder to a project
+
+Usage: prometheus projects help add-folder
+```
+
+## `prometheus projects help remove-folder`
+
+```text
+Remove a folder from a project
+
+Usage: prometheus projects help remove-folder
+```
+
+## `prometheus projects help rename`
+
+```text
+Rename a project (its slug stays)
+
+Usage: prometheus projects help rename
+```
+
+## `prometheus projects help set-primary`
+
+```text
+Make one of a project's folders its primary
+
+Usage: prometheus projects help set-primary
+```
+
+## `prometheus projects help use`
+
+```text
+Set the active project (omit it to clear)
+
+Usage: prometheus projects help use
+```
+
+## `prometheus projects help archive`
+
+```text
+Archive a project: hidden from listings, its folders released
+
+Usage: prometheus projects help archive
+```
+
+## `prometheus projects help restore`
+
+```text
+Restore an archived project
+
+Usage: prometheus projects help restore
+```
+
+## `prometheus projects help bind-board`
+
+```text
+Bind a project to a kanban board (omit the board to unbind)
+
+Usage: prometheus projects help bind-board
+```
+
+## `prometheus projects help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus projects help help
+```
+
 ## `prometheus vault`
 
 ```text
@@ -12635,6 +13324,9 @@ Options:
 
       --pinned
           Only pinned sessions
+
+      --project <PROJECT>
+          Only sessions of this project (id or slug)
 
   -v, --verbose...
           More detail; repeatable
@@ -25390,6 +26082,7 @@ Commands:
   lsp          Language servers behind the diagnostics of file edits: status, registry, installs, restart
   cron         Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and the headless tick
   worktrees    Git worktrees of sessions and subagents: list, sweep and restore archived trees
+  projects     Projects: named workspaces spanning folders, the active project, archive and restore
   vault        The credential vault: logins, cards and addresses the browser fills by handle
   security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one
@@ -26923,6 +27616,115 @@ Usage: prometheus help worktrees prune
 Recreate an archived tree with its branch, staged and untracked files; exits 66 when no archive has that name
 
 Usage: prometheus help worktrees restore
+```
+
+## `prometheus help projects`
+
+```text
+Projects: named workspaces spanning folders, the active project, archive and restore
+
+Usage: prometheus help projects [COMMAND]
+
+Commands:
+  create         Create a project; the first folder is primary unless `--primary`
+  list           List projects, the active one marked `*`
+  show           Show a project with its folders (missing ones flagged)
+  add-folder     Add a folder to a project
+  remove-folder  Remove a folder from a project
+  rename         Rename a project (its slug stays)
+  set-primary    Make one of a project's folders its primary
+  use            Set the active project (omit it to clear)
+  archive        Archive a project: hidden from listings, its folders released
+  restore        Restore an archived project
+  bind-board     Bind a project to a kanban board (omit the board to unbind)
+```
+
+## `prometheus help projects create`
+
+```text
+Create a project; the first folder is primary unless `--primary`
+
+Usage: prometheus help projects create
+```
+
+## `prometheus help projects list`
+
+```text
+List projects, the active one marked `*`
+
+Usage: prometheus help projects list
+```
+
+## `prometheus help projects show`
+
+```text
+Show a project with its folders (missing ones flagged)
+
+Usage: prometheus help projects show
+```
+
+## `prometheus help projects add-folder`
+
+```text
+Add a folder to a project
+
+Usage: prometheus help projects add-folder
+```
+
+## `prometheus help projects remove-folder`
+
+```text
+Remove a folder from a project
+
+Usage: prometheus help projects remove-folder
+```
+
+## `prometheus help projects rename`
+
+```text
+Rename a project (its slug stays)
+
+Usage: prometheus help projects rename
+```
+
+## `prometheus help projects set-primary`
+
+```text
+Make one of a project's folders its primary
+
+Usage: prometheus help projects set-primary
+```
+
+## `prometheus help projects use`
+
+```text
+Set the active project (omit it to clear)
+
+Usage: prometheus help projects use
+```
+
+## `prometheus help projects archive`
+
+```text
+Archive a project: hidden from listings, its folders released
+
+Usage: prometheus help projects archive
+```
+
+## `prometheus help projects restore`
+
+```text
+Restore an archived project
+
+Usage: prometheus help projects restore
+```
+
+## `prometheus help projects bind-board`
+
+```text
+Bind a project to a kanban board (omit the board to unbind)
+
+Usage: prometheus help projects bind-board
 ```
 
 ## `prometheus help vault`
@@ -29480,6 +30282,8 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.lsp_status.v1` | `prometheus lsp status` |
 | `prometheus.lsp_list.v1` | `prometheus lsp list` |
 | `prometheus.worktrees_list.v1` | `prometheus worktrees list` |
+| `prometheus.projects_list.v1` | `prometheus projects list` |
+| `prometheus.project.v1` | `prometheus projects show` |
 | `prometheus.cron_list.v1` | `prometheus cron list` |
 | `prometheus.cron_job.v1` | `prometheus cron add` |
 | `prometheus.cron_runs.v1` | `prometheus cron runs` |

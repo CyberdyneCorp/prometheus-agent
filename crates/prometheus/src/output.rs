@@ -324,6 +324,14 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "worktrees list",
     },
     JsonShape {
+        schema: "prometheus.projects_list.v1",
+        command: "projects list",
+    },
+    JsonShape {
+        schema: "prometheus.project.v1",
+        command: "projects show",
+    },
+    JsonShape {
         schema: "prometheus.cron_list.v1",
         command: "cron list",
     },

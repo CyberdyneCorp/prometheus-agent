@@ -211,6 +211,7 @@ pub(super) fn session(
         compaction_count: 0,
         rewind_count: 0,
         trajectory_purged_at: None,
+        project_id: None,
     }
 }
 

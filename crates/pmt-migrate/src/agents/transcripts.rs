@@ -365,6 +365,7 @@ pub fn import(store: &Store, cli: Cli, transcript: &Transcript) -> Result<Import
         compaction_count: 0,
         rewind_count: 0,
         trajectory_purged_at: None,
+        project_id: None,
     };
     let count = messages.len();
     store.import_linked(

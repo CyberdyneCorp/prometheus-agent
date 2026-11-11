@@ -523,8 +523,8 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 56. M2 Projects
 
-- [ ] 56.1 Implement project records (one owner per folder), project commands (create, activate, list, show), the active project with path ownership (nested folders resolved) and archive and restore (an archived active project is cleared); verify with CLI tests (spec: projects)
-- [ ] 56.2 Include projects in backups and exports (missing folders flagged on restore); verify with a backup round trip (spec: projects)
+- [x] 56.1 Implement project records (one owner per folder), project commands (create, activate, list, show), the active project with path ownership (nested folders resolved) and archive and restore (an archived active project is cleared); verify with CLI tests (spec: projects)
+- [x] 56.2 Include projects in backups and exports (missing folders flagged on restore); verify with a backup round trip (spec: projects)
 
 ## 57. M2 Internationalization
 

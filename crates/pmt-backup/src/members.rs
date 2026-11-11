@@ -29,8 +29,8 @@ pub const HOME_FILES: &[&str] = &["active_profile", "daemon.toml"];
 
 /// The critical per-profile state kept by `--quick` and by snapshots:
 /// files, then directories (cron job definitions, pairing and allowlist
-/// data). Groups that add critical state (the projects store, pairing)
-/// keep its path here.
+/// data). Projects and the active project live in `state.db`. Groups
+/// that add critical state outside `state.db` keep its path here.
 pub const QUICK_PROFILE_FILES: &[&str] = &[
     "config.toml",
     "secrets.toml",
@@ -38,7 +38,6 @@ pub const QUICK_PROFILE_FILES: &[&str] = &[
     "state.db",
     // The id `state.db` is bound to (store_meta.profile_id).
     "profile_id",
-    "projects.toml",
 ];
 /// Directories of [`QUICK_PROFILE_FILES`]' critical state.
 pub const QUICK_PROFILE_DIRS: &[&str] = &["cron", "pairing"];

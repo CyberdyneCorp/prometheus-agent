@@ -181,15 +181,6 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Config { command }) => config_cmd::run(command, &ctx),
         Some(Command::Secrets { command }) => secrets_cmd::run(command, &ctx),
         Some(Command::Grants { command }) => grants_cmd::run(command, &ctx),
-        Some(Command::Security { command }) => prometheus::security_cmd::run(command, &ctx),
-        Some(Command::Browser { command }) => prometheus::browser_cmd::run(command, &ctx),
-        Some(Command::Lsp { command }) => prometheus::lsp_cmd::run(command, &ctx),
-        Some(Command::Cron { command }) => prometheus::cron_cmd::run(command, &ctx),
-        Some(Command::Worktrees { command }) => prometheus::worktrees_cmd::run(command, &ctx),
-        Some(Command::Vault { command }) => prometheus::vault_cmd::run(command, &ctx),
-        Some(Command::Files { command }) => prometheus::files_cmd::run(command, &ctx),
-        Some(Command::Cache { command }) => prometheus::cache_cmd::run(command, &ctx),
-        Some(Command::Replay { command }) => prometheus::replay_cmd::run(command, &ctx),
         Some(Command::Verify(args)) => prometheus::verify_cmd::run(args, &ctx),
         Some(Command::Skills { command }) => skills_cmd::run(command, &ctx),
         Some(Command::Curator { command }) => prometheus::curator_cmd::run(command, &ctx),
@@ -259,11 +250,31 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         #[cfg(not(feature = "eval"))]
         Some(Command::Eval(_)) => prometheus::surface::require("eval").map(|()| 0),
         None => chat::run(&safe(&cli.chat, cli), &ctx, ui(cli)),
+        // Every other command is a record/workspace group.
+        Some(command) => workspace(command, &ctx),
     };
     result.unwrap_or_else(|err| {
         print_error(&err, cli.json);
         err.exit_code()
     })
+}
+
+/// The subcommand groups over the profile's records and workspaces
+/// (kept out of [`run`] to bound its length).
+fn workspace(command: &Command, ctx: &Context<'_>) -> Result<u8, Error> {
+    match command {
+        Command::Security { command } => prometheus::security_cmd::run(command, ctx),
+        Command::Browser { command } => prometheus::browser_cmd::run(command, ctx),
+        Command::Lsp { command } => prometheus::lsp_cmd::run(command, ctx),
+        Command::Cron { command } => prometheus::cron_cmd::run(command, ctx),
+        Command::Cache { command } => prometheus::cache_cmd::run(command, ctx),
+        Command::Replay { command } => prometheus::replay_cmd::run(command, ctx),
+        Command::Worktrees { command } => prometheus::worktrees_cmd::run(command, ctx),
+        Command::Projects { command } => prometheus::projects_cmd::run(command, ctx),
+        Command::Vault { command } => prometheus::vault_cmd::run(command, ctx),
+        Command::Files { command } => prometheus::files_cmd::run(command, ctx),
+        _ => unreachable!("run() dispatches every other command itself"),
+    }
 }
 
 fn context<'a>(

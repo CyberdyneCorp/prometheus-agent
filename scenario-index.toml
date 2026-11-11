@@ -3760,3 +3760,19 @@ capabilities = [
 [hermes-migration."Session transcripts from other agent CLIs"]
 "Re-import is idempotent" = ["crates/prometheus/tests/migrate_sync.rs::a_reimported_codex_rollout_returns_the_existing_session"]
 "Clean transcript" = ["crates/prometheus/tests/migrate_sync.rs::a_claude_log_imports_as_a_clean_transcript", "crates/pmt-migrate/src/agents/transcripts.rs::claude_tool_output_and_injected_context_are_left_out"]
+
+# 56. M2 Projects (records, commands, ownership, archive/restore, backups and exports)
+[projects."Project records"]
+"Folder claimed twice" = ["crates/prometheus/tests/projects_cli.rs::a_folder_of_one_project_cannot_join_another"]
+
+[projects."Project commands"]
+"Create and activate" = ["crates/prometheus/tests/projects_cli.rs::create_with_use_lists_both_folders_and_marks_the_project_active"]
+
+[projects."Active project and path ownership"]
+"Nested folders" = ["crates/prometheus/tests/projects_cli.rs::a_session_belongs_to_the_innermost_project_of_its_directory"]
+
+[projects."Archive and restore"]
+"Archived active project cleared" = ["crates/prometheus/tests/projects_cli.rs::archiving_the_active_project_clears_it_and_hides_it"]
+
+[projects."Projects in backups and exports"]
+"Missing folder flagged" = ["crates/prometheus/tests/projects_backup.rs::an_imported_profile_keeps_folders_missing_on_this_machine"]

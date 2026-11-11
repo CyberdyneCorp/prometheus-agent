@@ -435,3 +435,9 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `service.needs_root` | `permission_denied` | 77 | `prometheus daemon install-service --system` installs a boot-time unit and must run as root (administrator on Windows); the per-user install needs no elevation. |
 | `service.manager` | `unavailable` | 69 | The OS service manager (systemd, launchd or Task Scheduler) refused the operation or is not available; the message carries its output. |
 | `service.unsupported` | `unavailable` | 69 | `prometheus daemon install-service` knows systemd (Linux), launchd (macOS) and Task Scheduler (Windows); on other OSes (Android/Termux, the BSDs) run `prometheus daemon run` under your own supervisor. |
+| `project.not_found` | `not_found` | 66 | No project of the profile has this id or slug; `prometheus projects list --all` shows every project, archived ones included. |
+| `project.invalid_slug` | `usage` | 2 | A project slug must match `^[a-z0-9][a-z0-9_-]{0,63}$`; a name with no letter or digit needs an explicit `--slug`. |
+| `project.slug_in_use` | `tool` | 1 | Project slugs are unique per profile (archived projects keep theirs); pick another `--slug`. |
+| `project.folder_claimed` | `tool` | 1 | A folder belongs to at most one non-archived project: remove it from the project that owns it (or archive that project) first. Restoring an archived project fails the same way when one of its folders was claimed meanwhile. |
+| `project.folder_invalid` | `tool` | 1 | The folder does not exist (folders are stored canonicalised, so they must exist when added), or it is not a folder of the project (`set-primary` and `remove-folder` take one of the project's folders). |
+| `project.archived` | `tool` | 1 | The project is archived: `prometheus projects restore <project>` brings it back before it can be activated or edited. |

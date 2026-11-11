@@ -204,8 +204,15 @@ fn run(home: &Path, snippet: &Snippet, guide: &Path) {
 }
 
 /// Sources a guide's commands read: the migration guide imports from
-/// fixture agent homes in the user home.
+/// fixture agent homes in the user home; the projects guide's folders
+/// exist there.
 fn fixtures(guide: &Path, home: &Path) {
+    if guide.file_stem().is_some_and(|s| s == "projects") {
+        let user = common::user_home(home);
+        for dir in ["src/prometheus", "src/docs", "src/api", "src/api-docs"] {
+            std::fs::create_dir_all(user.join(dir)).unwrap();
+        }
+    }
     if guide.file_stem().is_some_and(|s| s == "migration") {
         let user = common::user_home(home);
         std::fs::create_dir_all(&user).unwrap();

@@ -60,6 +60,7 @@ pub mod plugins_cmd;
 pub mod plugins_host;
 pub mod portal_cmd;
 pub mod profile_cmd;
+pub mod projects_cmd;
 pub mod prompt;
 pub mod prompt_cmd;
 pub mod providers_cmd;

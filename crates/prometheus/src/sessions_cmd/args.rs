@@ -38,6 +38,9 @@ pub enum SessionsCommand {
         /// Only pinned sessions.
         #[arg(long)]
         pinned: bool,
+        /// Only sessions of this project (id or slug).
+        #[arg(long, value_name = "PROJECT")]
+        project: Option<String>,
     },
     /// Show a session (id, id prefix or title).
     Show {
