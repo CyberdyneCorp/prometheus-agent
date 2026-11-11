@@ -27,6 +27,7 @@ default = ["tui", "gateway", "dashboard", "acp", "mcp", "evolve", "eval"]
 tui = ["dep:pmt-tui", "dep:ratatui"]
 gateway = [
     "dep:pmt-gateway",
+    "dep:pmt-api",
     "dep:qrcode",
     "dep:pmt-adapters-telegram",
     "dep:pmt-adapters-discord",
@@ -74,6 +75,7 @@ pmt-cron.workspace = true
 pmt-delegation.workspace = true
 pmt-worktrees.workspace = true
 pmt-gateway = { workspace = true, optional = true }
+pmt-api = { workspace = true, optional = true }
 qrcode = { workspace = true, optional = true }
 pmt-adapters-telegram = { workspace = true, optional = true }
 pmt-adapters-discord = { workspace = true, optional = true }
@@ -149,6 +151,9 @@ jiff.workspace = true
 sha2.workspace = true
 
 [dev-dependencies]
+# The OpenAI SDK client of the API server tests (and its streams).
+async-openai.workspace = true
+futures-util.workspace = true
 flate2.workspace = true
 # Decodes what the fake OTLP collector of the export tests receives.
 prost.workspace = true

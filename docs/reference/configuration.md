@@ -30,6 +30,18 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `agent.tool_concurrency` | integer | `8` | 1 to 64 | `next_session` | Tool calls of one batch that may run at once. |
 | `agent.verify_guidance` | boolean | `true` | any | `next_session` | Append clean-diff guidance to the verification nudge. |
 | `agent.verify_on_stop` | boolean or one of "auto" | `false` | any | `next_session` | Refuse a final answer after unverified code edits: `true`, `false` or `"auto"` (on for CLI, TUI, desktop, ACP and API callers). |
+| `api_server.direct_model_requests` | boolean | `false` | any | `live` | Honour a bare `model` without `provider` on Chat Completions and Responses (generic clients send `gpt-4o`; off keeps the profile's default). |
+| `api_server.enabled` | boolean | `false` | any | `restart` | Serve this profile on the daemon's API listener (`/p/<profile>/`, and without prefix for `default`). It also needs the key named by `key_secret`. |
+| `api_server.key_secret` | string | `"API_SERVER_KEY"` | a secret name | `live` | The secret holding this profile's bearer key (at least 32 characters); without it the profile's routes answer 404. |
+| `api_server.max_concurrent_runs` | integer | `10` | 0 to 10000 | `live` | Runs executing at once for this profile; `0` disables the cap. |
+| `api_server.model_name` | string | unset | any | `live` | The model id `/v1/models` advertises (default: the profile name, `prometheus-agent` for `default`). |
+| `api_server.model_routes.<name>.model` | string | unset | any | `live` | The model at the provider (default: the provider's default). |
+| `api_server.model_routes.<name>.provider` | string | unset | any | `live` | The provider id. |
+| `api_server.responses.history_tool_output_max_chars` | integer | `0` | ≥ 0 | `live` | Characters kept of each stored tool output (its head plus `...[<n> more chars]`); `0` keeps them verbatim. |
+| `api_server.responses.max_stored` | integer | `100` | 1 to 100000 | `live` | Stored responses kept; the least recently used go first. |
+| `api_server.tool_progress_events` | boolean | `true` | any | `live` | Stream tool starts as `prometheus.tool.progress` SSE events. |
+| `api_server.toolsets` | array | unset | any | `live` | Toolsets of API sessions instead of the `api_server` default; toolsets the profile does not enable are dropped. |
+| `api_server.unattended_approvals` | one of "deny", "approve" | `"deny"` | `"deny"`, `"approve"` | `live` | The decision for approvals on Chat Completions and Responses, which have no answer channel (Runs and session chat ask). |
 | `approvals.cron_mode` | one of "deny", "approve" | `"deny"` | `"deny"`, `"approve"` | `live` | Decision for approvals in cron jobs. |
 | `approvals.denial_breaker_threshold` | integer | `3` | ≥ 0 | `live` | In `smart` mode, after this many consecutive denials by the approval guardian the denial tells the model to stop trying variations (`0` disables); a human approval resets the count. |
 | `approvals.deny` | array of string | `[]` | any | `live` | Command patterns that are always blocked. |

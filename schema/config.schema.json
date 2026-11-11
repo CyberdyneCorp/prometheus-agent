@@ -248,6 +248,127 @@
         }
       ]
     },
+    "ApiModelRoute": {
+      "additionalProperties": false,
+      "description": "A route alias of `[api_server.model_routes]`.",
+      "properties": {
+        "model": {
+          "default": null,
+          "description": "The model at the provider (default: the provider's default).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provider": {
+          "description": "The provider id.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider"
+      ],
+      "type": "object"
+    },
+    "ApiResponsesConfig": {
+      "additionalProperties": false,
+      "description": "`[api_server.responses]`.",
+      "properties": {
+        "history_tool_output_max_chars": {
+          "default": 0,
+          "description": "Characters kept of each stored tool output (its head plus\n`...[<n> more chars]`); `0` keeps them verbatim.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_stored": {
+          "default": 100,
+          "description": "Stored responses kept; the least recently used go first.",
+          "format": "uint32",
+          "maximum": 100000,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "ApiServerConfig": {
+      "additionalProperties": false,
+      "description": "The `[api_server]` section.",
+      "properties": {
+        "direct_model_requests": {
+          "default": false,
+          "description": "Honour a bare `model` without `provider` on Chat Completions and\nResponses (generic clients send `gpt-4o`; off keeps the profile's\ndefault).",
+          "type": "boolean"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Serve this profile on the daemon's API listener (`/p/<profile>/`,\nand without prefix for `default`). It also needs the key named by\n`key_secret`.",
+          "type": "boolean",
+          "x-apply": "restart"
+        },
+        "key_secret": {
+          "$ref": "#/$defs/SecretName",
+          "default": "API_SERVER_KEY",
+          "description": "The secret holding this profile's bearer key (at least 32\ncharacters); without it the profile's routes answer 404."
+        },
+        "max_concurrent_runs": {
+          "default": 10,
+          "description": "Runs executing at once for this profile; `0` disables the cap.",
+          "format": "uint32",
+          "maximum": 10000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "model_name": {
+          "default": null,
+          "description": "The model id `/v1/models` advertises (default: the profile name,\n`prometheus-agent` for `default`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model_routes": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ApiModelRoute"
+          },
+          "default": {},
+          "description": "Extra model ids `/v1/models` advertises, each a route a request\ncan pick by sending its name as `model`.",
+          "type": "object"
+        },
+        "responses": {
+          "$ref": "#/$defs/ApiResponsesConfig",
+          "default": {
+            "history_tool_output_max_chars": 0,
+            "max_stored": 100
+          },
+          "description": "The Responses API store."
+        },
+        "tool_progress_events": {
+          "default": true,
+          "description": "Stream tool starts as `prometheus.tool.progress` SSE events.",
+          "type": "boolean"
+        },
+        "toolsets": {
+          "default": null,
+          "description": "Toolsets of API sessions instead of the `api_server` default;\ntoolsets the profile does not enable are dropped.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "unattended_approvals": {
+          "$ref": "#/$defs/UnattendedApproval",
+          "default": "deny",
+          "description": "The decision for approvals on Chat Completions and Responses,\nwhich have no answer channel (Runs and session chat ask)."
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
     "ApprovalMode": {
       "description": "Interactive approval modes. In TOML they are strings: `mode = \"off\"`;\nthe YAML habit `mode = off` does not parse and `mode = false` is not a\nmode.",
       "oneOf": [
@@ -10779,6 +10900,25 @@
         "verify_on_stop": false
       },
       "description": "Turn loop limits, retries and reasoning effort."
+    },
+    "api_server": {
+      "$ref": "#/$defs/ApiServerConfig",
+      "default": {
+        "direct_model_requests": false,
+        "enabled": false,
+        "key_secret": "API_SERVER_KEY",
+        "max_concurrent_runs": 10,
+        "model_name": null,
+        "model_routes": {},
+        "responses": {
+          "history_tool_output_max_chars": 0,
+          "max_stored": 100
+        },
+        "tool_progress_events": true,
+        "toolsets": null,
+        "unattended_approvals": "deny"
+      },
+      "description": "The OpenAI-compatible API server's view of this profile."
     },
     "approvals": {
       "$ref": "#/$defs/ApprovalsConfig",

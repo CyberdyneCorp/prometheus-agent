@@ -51,6 +51,9 @@ pub struct SessionInfo {
     pub profile: String,
     /// `cli`, `tui`, `telegram`...
     pub platform: String,
+    /// The caller identity that scopes long-term memory across sessions
+    /// (an API caller's session key), when there is one.
+    pub user_id: Option<String>,
 }
 
 /// A tool a provider offers.

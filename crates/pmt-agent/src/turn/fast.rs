@@ -28,6 +28,15 @@ impl Agent {
         chosen.unwrap_or(config.agent.fast_mode)
     }
 
+    /// The session's own `/fast` choice, if any.
+    #[must_use]
+    pub fn fast_override(&self) -> Option<FastMode> {
+        *self
+            .fast
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
     /// `/fast <mode>` for this session (`None`: back to the config).
     pub fn set_fast_mode(&self, mode: Option<FastMode>) {
         *self

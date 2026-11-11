@@ -255,7 +255,7 @@ When the human picks `explain`, the system SHALL show the parsed command (progra
 - **THEN** the sandbox SHALL deny the write and the explanation SHALL show the denial
 
 ### Requirement: Unattended contexts never wait
-In single-query (`prometheus chat -z`), cron and unattended gateway contexts (webhook and API surfaces without an approval channel) the gate SHALL resolve immediately using the matching typed mode, and in `deny` SHALL return `BLOCKED: <reason>. To allow this in <context> runs set approvals.<context>_mode = "approve" in config.toml.`
+In single-query (`prometheus chat -z`), cron and unattended gateway contexts (webhook and API surfaces without an approval channel) the gate SHALL resolve immediately using the matching typed mode, and in `deny` SHALL return `BLOCKED: <reason>. To allow this in <context> runs set approvals.<context>_mode = "approve" in config.toml.`; an API Chat Completions or Responses turn uses `api_server.unattended_approvals` instead and names that key (spec: api-server, Unattended approvals and the API toolset). A denial a person or an approval transport gives SHALL also start with `BLOCKED:`, so every refused call carries one marker.
 **Milestone:** M1
 
 #### Scenario: Cron default

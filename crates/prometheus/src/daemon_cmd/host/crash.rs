@@ -72,7 +72,17 @@ impl DaemonHost {
             Ok(None) => return,
             Err(err) => return tracing::warn!(error = %err, "turn journal unreadable"),
         };
-        let choice = AfterCrash::from(profile.scope().config().agent.resume_on_crash);
+        // An API session's lost turn is reported by its run (`unknown`)
+        // and never replayed (spec: api-server, Run controls).
+        let api = profile
+            .store
+            .session(id)
+            .is_ok_and(|row| row.source == pmt_store::Source::Api);
+        let choice = if api {
+            AfterCrash::Close
+        } else {
+            AfterCrash::from(profile.scope().config().agent.resume_on_crash)
+        };
         if choice != AfterCrash::Close && session.chat.is_some() {
             // The gateway's restart recovery asks in the chat (`/retry`) or
             // resumes the turn as its lane's, which delivers the answer.
@@ -102,6 +112,7 @@ impl DaemonHost {
             link: link.clone(),
             from_lane,
             resume: Some((unfinished, choice)),
+            api: None,
         };
         let turn_id = job.turn_id.clone();
         let admission = if session.busy.swap(true, Ordering::AcqRel) {

@@ -24,6 +24,7 @@
 //!   jobs, their runs, delivery outbox and tick lease, and [`projects`]
 //!   projects, their folders and the active project.
 
+pub mod api;
 pub mod automation;
 pub mod blobs;
 pub mod compaction;
@@ -121,7 +122,7 @@ pub use usage_query::UsageFilter;
 /// The newest `state.db` schema version this build reads and writes
 /// (`store_meta.schema_version`); every embedded migration bumps it, and a
 /// newer store opens read-only. Reported by `prometheus version --json`.
-pub const SCHEMA_VERSION: u32 = 37;
+pub const SCHEMA_VERSION: u32 = 38;
 
 #[cfg(test)]
 mod tests {

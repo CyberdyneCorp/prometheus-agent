@@ -539,11 +539,11 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 59. M2 OpenAI-compatible API server
 
-- [ ] 59.1 Implement the opt-in API listener on `8642` that fails closed without a per-profile key (public binds need explicit opt-in), profile-bound routing with bearer authentication, and browser access rules with Host checks and security headers; verify with HTTP security tests (spec: api-server)
-- [ ] 59.2 Implement model listing with Open WebUI compatibility, the Chat Completions endpoint (budget exhaustion is not success, uploaded files refused), API session identity and ownership, and caller instructions with long-term memory scoping; verify with an OpenAI SDK client test (spec: api-server)
-- [ ] 59.3 Implement the Responses endpoint with its response store (chained turns, echoed reasoning items ignored) and idempotent admission for Chat Completions and Responses (key reuse for different work refused); verify that a retried request after network loss runs once (spec: api-server)
-- [ ] 59.4 Implement the Runs API lifecycle, the run idempotency ledger (replay after restart), the run events stream (reconnect without loss), run controls (stale approval generations refused), unattended approvals with the API toolset, per-request model selection and the concurrent run cap; verify with integration tests (spec: api-server)
-- [ ] 59.5 Implement the Sessions REST API (fork and continue, light transcripts), the Jobs REST API and discovery and readiness endpoints that hide secrets; verify with HTTP tests and document the API server (spec: api-server)
+- [x] 59.1 Implement the opt-in API listener on `8642` that fails closed without a per-profile key (public binds need explicit opt-in), profile-bound routing with bearer authentication, and browser access rules with Host checks and security headers; verify with HTTP security tests (spec: api-server)
+- [x] 59.2 Implement model listing with Open WebUI compatibility, the Chat Completions endpoint (budget exhaustion is not success, uploaded files refused), API session identity and ownership, and caller instructions with long-term memory scoping; verify with an OpenAI SDK client test (spec: api-server)
+- [x] 59.3 Implement the Responses endpoint with its response store (chained turns, echoed reasoning items ignored) and idempotent admission for Chat Completions and Responses (key reuse for different work refused); verify that a retried request after network loss runs once (spec: api-server)
+- [x] 59.4 Implement the Runs API lifecycle, the run idempotency ledger (replay after restart), the run events stream (reconnect without loss), run controls (stale approval generations refused), unattended approvals with the API toolset, per-request model selection and the concurrent run cap; verify with integration tests (spec: api-server)
+- [x] 59.5 Implement the Sessions REST API (fork and continue, light transcripts), the Jobs REST API and discovery and readiness endpoints that hide secrets; verify with HTTP tests and document the API server (spec: api-server)
 
 ## 60. M2 Exit criteria
 

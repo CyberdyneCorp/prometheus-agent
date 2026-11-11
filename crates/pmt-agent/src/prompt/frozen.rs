@@ -115,6 +115,19 @@ pub fn stored(
     Frozen::of(prompt).map(Ok)
 }
 
+/// The stored prompt of `session` whatever route it was built for; `None`
+/// when there is none or a refresh is pending.
+///
+/// # Errors
+///
+/// Store errors, a corrupt stored prompt.
+pub fn stored_any_route(store: &Store, session: SessionId) -> Result<Option<Frozen>, Error> {
+    if store.prompt_refresh_pending(session)? {
+        return Ok(None);
+    }
+    store.session_prompt(session)?.map(Frozen::of).transpose()
+}
+
 /// Stores a freshly built prompt for `session`.
 ///
 /// # Errors

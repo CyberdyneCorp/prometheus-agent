@@ -52,10 +52,19 @@ impl Factory {
         let mut setup = self.memory_setup(id, model)?;
         setup.notices = notices;
         let surface = stored_surface(&self.store, id);
+        // An API caller's session key scopes its long-term memory across
+        // sessions (spec: api-server, Caller instructions and long-term
+        // memory scoping).
+        let user = self
+            .store
+            .api_session(id)
+            .ok()
+            .flatten()
+            .and_then(|api| api.session_key);
         let started = crate::memory_provider::start(
             &self.scope,
             &self.plugins,
-            (&id.to_string(), &surface),
+            (&id.to_string(), &surface, user),
             &self.redactor,
             &self.plugin_call(id),
         )

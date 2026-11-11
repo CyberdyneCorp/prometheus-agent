@@ -99,7 +99,7 @@ fn list(arguments: &Value, key: &str) -> Option<Vec<String>> {
 }
 
 /// The tool arguments as job fields.
-fn fields(arguments: &Value, scope: &ProfileScope) -> Result<Fields, Error> {
+pub(crate) fn fields(arguments: &Value, scope: &ProfileScope) -> Result<Fields, Error> {
     let pin = match arguments["pinned"].as_bool() {
         Some(true) => Some(crate::cron_cmd::main_model(scope)?),
         Some(false) => Some(Pin::Release),
@@ -176,7 +176,7 @@ pub fn summary(job: &Job) -> Value {
     fields
 }
 
-fn needs_confirmation(echo: &Echo, token: &str) -> Value {
+pub(crate) fn needs_confirmation(echo: &Echo, token: &str) -> Value {
     json!({
         "status": "needs_confirmation",
         "echo": echo,

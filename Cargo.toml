@@ -14,6 +14,7 @@ repository = "https://github.com/CyberdyneCorp/prometheus-agent"
 
 [workspace.dependencies]
 pmt-agent = { path = "crates/pmt-agent" }
+pmt-api = { path = "crates/pmt-api" }
 pmt-automation = { path = "crates/pmt-automation" }
 pmt-config = { path = "crates/pmt-config" }
 pmt-core = { path = "crates/pmt-core" }
@@ -182,6 +183,9 @@ chacha20poly1305 = { version = "0.11", default-features = false, features = ["al
 url = "2.5"
 # Test-only HTTP mock server (recorded provider stream fixtures).
 wiremock = "0.6"
+# Test-only: a real OpenAI SDK client against the API server (plain HTTP,
+# so no TLS backend).
+async-openai = { version = "0.43", default-features = false, features = ["chat-completion", "responses", "model", "byot"] }
 # The gateway's shared HTTP listener for webhook-style adapters.
 hyper = { version = "1.12", default-features = false, features = ["server", "http1"] }
 hyper-util = { version = "0.1", default-features = false, features = ["tokio"] }

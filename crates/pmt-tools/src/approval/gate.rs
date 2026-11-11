@@ -129,6 +129,9 @@ pub struct CommandGate {
     breaker: Breaker,
     /// The hosting daemon, in a daemon-hosted session.
     hosted: Option<Hosted>,
+    /// The running turn has no answer channel (an API request without
+    /// one): its approvals are decided at once this way.
+    turn_unattended: Mutex<Option<UnattendedApproval>>,
 }
 
 impl CommandGate {
@@ -147,6 +150,7 @@ impl CommandGate {
             breaker: Breaker::default(),
             previewer: None,
             hosted: None,
+            turn_unattended: Mutex::new(None),
         }
     }
 
@@ -203,6 +207,17 @@ impl CommandGate {
         self.approvals
             .read()
             .unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Decides the approvals of the turn about to run with `mode` instead
+    /// of asking (`None`: ask again); an API request without an answer
+    /// channel sets it for its turn (spec: api-server, Unattended
+    /// approvals and the API toolset).
+    pub fn set_turn_unattended(&self, mode: Option<UnattendedApproval>) {
+        *self
+            .turn_unattended
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = mode;
     }
 
     /// `/yolo`: bypass on or off for the rest of the session.
@@ -407,7 +422,7 @@ impl CommandGate {
                 Some(TransportOutcome::Denied(why)) => {
                     let summary = request.summary();
                     return (
-                        GateVerdict::Denied(format!("DENIED: {summary} ({why}). {STOP}")),
+                        GateVerdict::Denied(format!("BLOCKED: {summary} ({why}). {STOP}")),
                         "deny",
                         "transport",
                     );
@@ -417,11 +432,32 @@ impl CommandGate {
         }
         let summary = request.summary();
         let context = self.setup.context;
-        let mode = match context {
-            Context::Interactive => return self.ask(request).await,
-            Context::Cron => self.approvals().cron_mode,
-            Context::SingleQuery => self.approvals().single_query_mode,
-            Context::Unattended => self.approvals().unattended_mode,
+        let turn = *self
+            .turn_unattended
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        let (mode, context, setting) = match (context, turn) {
+            (_, Some(mode)) => (
+                mode,
+                "API".to_owned(),
+                "api_server.unattended_approvals".to_owned(),
+            ),
+            (Context::Interactive, None) => return self.ask(request).await,
+            (Context::Cron, None) => (
+                self.approvals().cron_mode,
+                context.to_string(),
+                format!("approvals.{context}_mode"),
+            ),
+            (Context::SingleQuery, None) => (
+                self.approvals().single_query_mode,
+                context.to_string(),
+                format!("approvals.{context}_mode"),
+            ),
+            (Context::Unattended, None) => (
+                self.approvals().unattended_mode,
+                context.to_string(),
+                format!("approvals.{context}_mode"),
+            ),
         };
         if request.remember.is_none() || mode == UnattendedApproval::Deny {
             self.unobtainable.fetch_add(1, Ordering::Relaxed);
@@ -444,7 +480,7 @@ impl CommandGate {
             (true, UnattendedApproval::Approve) => (GateVerdict::Allow, "once", "policy"),
             (true, UnattendedApproval::Deny) => (
                 GateVerdict::Denied(format!(
-                    "BLOCKED: {summary}. To allow this in {context} runs set approvals.{context}_mode = \"approve\" in config.toml."
+                    "BLOCKED: {summary}. To allow this in {context} runs set {setting} = \"approve\" in config.toml."
                 )),
                 "deny",
                 "policy",
@@ -471,7 +507,7 @@ impl CommandGate {
             Ok(GuardianVerdict::Deny(reason)) => {
                 let threshold = self.approvals().denial_breaker_threshold;
                 let mut message = format!(
-                    "DENIED: {} (the approval guardian refused it: {reason}). {STOP}",
+                    "BLOCKED: {} (the approval guardian refused it: {reason}). {STOP}",
                     request.summary()
                 );
                 if let Some(note) = self.breaker.deny(threshold) {
@@ -551,7 +587,7 @@ impl CommandGate {
                 GateVerdict::Allow
             }
             Decision::Deny | Decision::Explain => GateVerdict::Denied(format!(
-                "DENIED: {summary} (denied through the approval transport). {STOP}"
+                "BLOCKED: {summary} (denied through the approval transport). {STOP}"
             )),
         }
     }
@@ -559,7 +595,7 @@ impl CommandGate {
     async fn ask(&self, request: ApprovalRequest) -> (GateVerdict, &'static str, &'static str) {
         let summary = request.summary();
         let remember = request.remember.clone();
-        let denied = |why: &str| GateVerdict::Denied(format!("DENIED: {summary} ({why}). {STOP}"));
+        let denied = |why: &str| GateVerdict::Denied(format!("BLOCKED: {summary} ({why}). {STOP}"));
         let answer = self.ask_explaining(request).await;
         if matches!(
             answer,

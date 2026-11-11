@@ -44,6 +44,8 @@ pub(super) struct Queued {
     /// Instead of `input`: a turn a crash left unfinished, resumed or
     /// closed (`Ask`: as the session's clients answer).
     pub(super) resume: Option<(pmt_agent::turn::Unfinished, AfterCrash)>,
+    /// What an API request changes for this turn only.
+    pub(super) api: Option<super::api::ApiSetup>,
 }
 
 impl DaemonHost {
@@ -56,6 +58,7 @@ impl DaemonHost {
         params: SubmitParams,
         (author, link): (Author, Link),
         busy: Option<BusyInputMode>,
+        api: Option<super::api::ApiSetup>,
     ) -> Result<Submitted, Error> {
         let id = session_id(&params.session_id)?;
         // No new turn starts while the home is paused (spec: messaging-
@@ -86,6 +89,9 @@ impl DaemonHost {
             session.after.lock().expect("after poisoned").turn = None;
         }
         input.author = serde_json::to_value(&author).ok();
+        if let Some(api) = &api {
+            input.additions.extend(api.additions.iter().cloned());
+        }
         // An automated turn neither steers nor interrupts a running one
         // (a client's turn on a conversation's session): it queues.
         let busy = busy.or_else(|| author.origin.is_some().then_some(BusyInputMode::Queue));
@@ -97,6 +103,7 @@ impl DaemonHost {
             // The lane is the gateway's only submitter.
             from_lane: author.client_kind == "gateway",
             resume: None,
+            api,
         };
         let turn_id = job.turn_id.clone();
         let admission = {
@@ -377,6 +384,7 @@ fn automated(wakeup: pmt_automation::arbiter::Wakeup, link: Link) -> Queued {
         link,
         from_lane: false,
         resume: None,
+        api: None,
     }
 }
 
@@ -438,6 +446,7 @@ async fn run_one(
     {
         tracing::warn!(session = %id, error = %err, "gateway session hygiene failed");
     }
+    let applied = job.api.as_ref().map(|api| api.begin(session));
     let outcome = match job.resume {
         Some((unfinished, choice)) => {
             let resume = super::crash::decide(&job.link, &unfinished, choice).await;
@@ -448,6 +457,9 @@ async fn run_one(
         None => agent.run_turn(Some(&scope), id, job.input, options).await,
     };
     session.interrupt.lock().expect("interrupt poisoned").take();
+    if let Some(applied) = applied {
+        applied.end(session);
+    }
     // A `/model --once` or `/moa` route ends with its turn, whatever the
     // turn's outcome (spec: mixture-of-agents, One-shot /moa command).
     session.live.model.end_turn();

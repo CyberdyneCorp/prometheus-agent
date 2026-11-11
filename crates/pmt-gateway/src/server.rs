@@ -472,7 +472,7 @@ impl Server {
     }
 
     /// A new connection's number.
-    pub(crate) fn next_conn_id(&self) -> ConnId {
+    pub fn next_conn_id(&self) -> ConnId {
         self.next_conn.fetch_add(1, Ordering::Relaxed)
     }
 

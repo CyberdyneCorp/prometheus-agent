@@ -30,6 +30,8 @@ use tracing::Instrument as _;
 
 use super::turn::{SecretsToClients, SudoToClients, ToClients, approvals, clarify};
 
+mod api;
+mod api_profile;
 mod automation;
 mod commands;
 mod crash;
@@ -149,6 +151,10 @@ pub(super) struct DaemonHost {
     slots: pmt_gateway::slots::Slots,
     /// The messaging gateway, for the `send_message` tool.
     gateway: send_tool::GatewayCell,
+    /// The API server's view of the profiles' keys.
+    api_keys: api::KeyCache,
+    /// The API server, once started (it is told when the daemon drains).
+    api: std::sync::OnceLock<pmt_api::ApiServer>,
 }
 
 fn session_id(text: &str) -> Result<SessionId, Error> {
@@ -232,6 +238,8 @@ impl DaemonHost {
             turns: Arc::default(),
             slots: pmt_gateway::slots::Slots::new(0),
             gateway: Arc::default(),
+            api_keys: api::KeyCache::default(),
+            api: std::sync::OnceLock::new(),
         })
     }
 
@@ -239,6 +247,11 @@ impl DaemonHost {
     pub(super) fn with_turn_cap(mut self, max: u32) -> Self {
         self.slots = pmt_gateway::slots::Slots::new(max);
         self
+    }
+
+    /// Keeps the started API server (it is told when the daemon drains).
+    pub(super) fn set_api(&self, api: pmt_api::ApiServer) {
+        let _ = self.api.set(api);
     }
 
     /// Hands sessions the started messaging gateway (`send_message`).
@@ -886,7 +899,7 @@ impl Host for DaemonHost {
         Box::pin(
             async move {
                 let profile = &self.profile(profile)?;
-                self.submit_turn(profile, params, (author, link), None)
+                self.submit_turn(profile, params, (author, link), None, None)
                     .await
             }
             .instrument(span),
@@ -1100,9 +1113,18 @@ impl Host for DaemonHost {
         deadline: Duration,
     ) -> Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
         Box::pin(async move {
+            if let Some(api) = self.api.get() {
+                api.begin_drain();
+            }
             let until = tokio::time::Instant::now() + deadline;
             while self.turns.load(Ordering::Acquire) > 0 && tokio::time::Instant::now() < until {
                 tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+            // API runs still active are recorded `interrupted` before their
+            // agents are stopped (spec: api-server, Runs API lifecycle).
+            if let Some(api) = self.api.get() {
+                api.interrupt_active();
+                api.stop();
             }
             for (name, profile) in self.all_profiles() {
                 Self::close_all(&name, &profile).await;

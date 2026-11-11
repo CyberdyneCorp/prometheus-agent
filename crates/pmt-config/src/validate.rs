@@ -13,7 +13,9 @@ use serde_json::Value;
 
 use crate::catalog::{self, allowed_values, resolve, type_label};
 use crate::credential;
-use crate::schema::{MACHINE_WIDE_GATEWAY_KEYS, MACHINE_WIDE_SECTIONS, is_secret_name};
+use crate::schema::{
+    MACHINE_WIDE_API_KEYS, MACHINE_WIDE_GATEWAY_KEYS, MACHINE_WIDE_SECTIONS, is_secret_name,
+};
 
 /// One validation problem.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -147,7 +149,11 @@ fn is_machine_wide_duplicate(issue: &Issue) -> bool {
         || issue
             .key
             .strip_prefix("gateway.")
-            .is_some_and(|k| MACHINE_WIDE_GATEWAY_KEYS.contains(&k));
+            .is_some_and(|k| MACHINE_WIDE_GATEWAY_KEYS.contains(&k))
+        || issue
+            .key
+            .strip_prefix("api_server.")
+            .is_some_and(|k| MACHINE_WIDE_API_KEYS.contains(&k));
     machine_wide && issue.message.starts_with("unknown key")
 }
 
@@ -161,17 +167,26 @@ fn machine_wide_keys(root: &Node) -> Vec<(String, Option<Range<usize>>)> {
     for (key, span, node) in entries {
         if MACHINE_WIDE_SECTIONS.contains(&key.as_str()) {
             found.push((key.clone(), span.clone()));
-        } else if key == "gateway"
-            && let Kind::Table(gateway) = &node.kind
+        } else if let Some(keys) = machine_wide_keys_of(key)
+            && let Kind::Table(section) = &node.kind
         {
-            for (sub, span, _) in gateway {
-                if MACHINE_WIDE_GATEWAY_KEYS.contains(&sub.as_str()) {
-                    found.push((format!("gateway.{sub}"), span.clone()));
+            for (sub, span, _) in section {
+                if keys.contains(&sub.as_str()) {
+                    found.push((format!("{key}.{sub}"), span.clone()));
                 }
             }
         }
     }
     found
+}
+
+/// The daemon-wide keys of a profile section that has some.
+fn machine_wide_keys_of(section: &str) -> Option<&'static [&'static str]> {
+    match section {
+        "gateway" => Some(MACHINE_WIDE_GATEWAY_KEYS),
+        "api_server" => Some(MACHINE_WIDE_API_KEYS),
+        _ => None,
+    }
 }
 
 /// Validates one value for `key` (a `--set` or `config set` argument).

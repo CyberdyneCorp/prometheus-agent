@@ -3834,3 +3834,75 @@ capabilities = [
 
 [cli."Webhook subscriptions"]
 "Subscribe prints secret once" = ["crates/prometheus/tests/webhooks_cli.rs::subscribe_prints_the_secret_once_and_list_never_shows_it", "crates/prometheus/tests/webhooks_cli.rs::test_delivers_a_signed_sample_through_the_running_daemon"]
+
+# 59. M2 OpenAI-compatible API server
+[api-server."Opt-in listener that fails closed"]
+"Enabled without a key" = ["crates/prometheus/tests/api_server.rs::a_profile_without_a_key_is_not_served_but_health_answers"]
+"Public bind needs explicit opt-in" = ["crates/prometheus/tests/api_server.rs::a_public_bind_without_opt_in_fails_validation", "crates/pmt-config/src/daemon_api.rs::a_public_bind_needs_public_true"]
+
+[api-server."Profile-bound routing and bearer authentication"]
+"Default key on a named prefix" = ["crates/prometheus/tests/api_server.rs::each_profile_answers_only_its_own_key_and_model_and_ids"]
+"Run id from another profile" = ["crates/prometheus/tests/api_server.rs::each_profile_answers_only_its_own_key_and_model_and_ids"]
+
+[api-server."Browser access, Host checks and security headers"]
+"Web page on another origin" = ["crates/prometheus/tests/api_server.rs::browser_origins_and_foreign_hosts_are_refused_before_any_work", "crates/pmt-api/src/guard.rs::an_origin_outside_the_allowlist_is_refused"]
+"Rebinding host refused" = ["crates/prometheus/tests/api_server.rs::browser_origins_and_foreign_hosts_are_refused_before_any_work", "crates/pmt-api/src/guard.rs::a_foreign_host_on_a_loopback_bind_is_refused"]
+
+[api-server."Model listing and Open WebUI compatibility"]
+"Two users, two models" = ["crates/prometheus/tests/api_server.rs::each_profile_answers_only_its_own_key_and_model_and_ids"]
+"Unknown OpenAI field ignored" = ["crates/prometheus/tests/api_server.rs::unknown_openai_fields_are_ignored", "crates/prometheus/tests/api_responses.rs::an_openai_sdk_client_completes_chats_and_responses"]
+
+[api-server."Chat Completions endpoint"]
+"Budget exhausted is not success" = ["crates/prometheus/tests/api_server.rs::an_exhausted_iteration_budget_answers_length", "crates/pmt-api/src/chat.rs::an_exhausted_iteration_budget_finishes_with_length"]
+"Uploaded file refused" = ["crates/prometheus/tests/api_server.rs::an_uploaded_file_is_refused_before_a_turn", "crates/pmt-api/src/content.rs::files_and_non_image_data_urls_are_refused"]
+
+[api-server."API session identity and ownership"]
+"Header continues the session" = ["crates/prometheus/tests/api_server.rs::the_session_header_continues_from_stored_history"]
+"Foreign session refused" = ["crates/prometheus/tests/api_server.rs::a_session_of_another_surface_is_refused"]
+
+[api-server."Caller instructions and long-term memory scoping"]
+"Instructions do not replace the agent" = ["crates/prometheus/tests/api_server.rs::caller_instructions_are_layered_after_the_profile_prompt"]
+"Session key scopes memory" = ["crates/prometheus/tests/api_responses.rs::the_session_key_is_the_memory_scope_across_chats"]
+
+[api-server."Responses endpoint and response store"]
+"Chained turn" = ["crates/prometheus/tests/api_responses.rs::a_chained_response_sees_the_earlier_tool_call_and_lists_only_its_own_items"]
+"Echoed reasoning items ignored on input" = ["crates/prometheus/tests/api_responses.rs::echoed_reasoning_items_are_not_user_turns", "crates/pmt-api/src/responses.rs::echoed_output_items_are_not_user_turns"]
+
+[api-server."Idempotent admission for Chat Completions and Responses"]
+"Retry after network loss" = ["crates/prometheus/tests/api_responses.rs::a_retried_request_replays_the_original_answer_and_runs_once", "crates/pmt-store/src/api/tests.rs::a_key_is_reserved_once_and_keeps_its_answer"]
+"Key reused for different work" = ["crates/prometheus/tests/api_responses.rs::a_retried_request_replays_the_original_answer_and_runs_once"]
+
+[api-server."Runs API lifecycle"]
+"Graceful stop mid-run" = ["crates/prometheus/tests/api_runs.rs::a_run_active_at_shutdown_is_recorded_interrupted", "crates/pmt-store/src/api/tests.rs::a_terminal_run_never_changes_again"]
+"Fallback reflected in runtime" = ["crates/prometheus/tests/api_runs.rs::the_runtime_names_the_fallback_pair_that_served_the_run"]
+
+[api-server."Run idempotency ledger"]
+"Replay after restart" = ["crates/prometheus/tests/api_runs.rs::an_idempotent_run_is_replayed_after_a_restart"]
+
+[api-server."Run events stream"]
+"Approval refusal distinguishable" = ["crates/prometheus/tests/api_runs.rs::approvals_are_pending_controls_answered_with_their_generation"]
+"Reconnect without loss" = ["crates/prometheus/tests/api_runs.rs::a_reconnecting_client_resumes_after_its_last_event", "crates/pmt-api/src/runs/events.rs::a_reconnect_resumes_after_the_last_seen_id"]
+
+[api-server."Run controls"]
+"Stale approval generation" = ["crates/prometheus/tests/api_runs.rs::approvals_are_pending_controls_answered_with_their_generation"]
+"Unknown run resolved" = { tests = ["crates/prometheus/tests/api_runs.rs::an_unknown_run_is_resolved_and_its_session_follower_runs"], note = "unix only: the test kills the daemon with SIGKILL to leave the run unknown" }
+
+[api-server."Unattended approvals and the API toolset"]
+"Approval over Chat Completions" = ["crates/prometheus/tests/api_server.rs::an_approval_without_an_answer_channel_is_denied_at_once"]
+
+[api-server."Per-request model selection"]
+"Generic client model ignored" = ["crates/prometheus/tests/api_server.rs::request_models_follow_the_selection_order"]
+"Route alias conflict" = ["crates/prometheus/tests/api_server.rs::request_models_follow_the_selection_order"]
+
+[api-server."Concurrent run cap"]
+"Eleventh run refused" = ["crates/pmt-api/src/limits.rs::the_run_past_the_cap_is_refused_until_one_exits", "crates/prometheus/tests/api_server.rs::runs_past_the_concurrent_cap_are_refused"]
+
+[api-server."Sessions REST API"]
+"Fork and continue" = ["crates/prometheus/tests/api_sessions.rs::a_fork_continues_with_its_parents_history"]
+"Light transcript" = ["crates/prometheus/tests/api_sessions.rs::a_light_transcript_shows_image_placeholders"]
+
+[api-server."Jobs REST API"]
+"Past one-shot resume" = ["crates/prometheus/tests/api_sessions.rs::jobs_follow_the_cron_rules_over_rest"]
+
+[api-server."Discovery and readiness endpoints"]
+"Readiness hides secrets" = ["crates/prometheus/tests/api_sessions.rs::detailed_health_reports_failures_without_secrets_or_paths"]

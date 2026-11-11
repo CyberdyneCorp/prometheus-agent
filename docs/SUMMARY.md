@@ -45,6 +45,7 @@
 - [The python bridge](guide/python-bridge.md)
 - [The daemon and its client protocol](guide/client-protocol.md)
 - [The messaging gateway](guide/gateway.md)
+- [The OpenAI-compatible API server](guide/api-server.md)
 - [Migrating from Hermes and other agents](guide/migration.md)
 
 # Reference

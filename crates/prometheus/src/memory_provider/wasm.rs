@@ -40,6 +40,7 @@ fn info(session: &SessionInfo) -> wit::SessionInfo {
         session_id: session.session_id.clone(),
         profile: session.profile.clone(),
         platform: session.platform.clone(),
+        user_id: session.user_id.clone(),
     }
 }
 

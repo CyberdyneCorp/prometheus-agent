@@ -92,7 +92,10 @@ fn blobs_of(conn: &Connection, sessions: &[String]) -> Result<BTreeSet<String>, 
 
 fn delete_rows(tx: &Transaction<'_>, session: &str) -> Result<(), Error> {
     index::remove_session(tx, session)?;
+    crate::api::admissions::tombstone(tx, session)?;
     for statement in [
+        "DELETE FROM api_sessions WHERE session_id = ?1",
+        "DELETE FROM api_responses WHERE session_id = ?1",
         "DELETE FROM usage_ledger WHERE session_id = ?1",
         "DELETE FROM leases WHERE session_id = ?1",
         "DELETE FROM session_tool_surface WHERE session_id = ?1",

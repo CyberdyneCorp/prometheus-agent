@@ -127,6 +127,13 @@ impl SessionModel {
         (choice.map(|c| c.target), reasoning)
     }
 
+    /// Whether the session chose its own route with `/model` (it wins
+    /// over a route an API request names).
+    #[must_use]
+    pub fn overridden(&self) -> bool {
+        self.session.is_some()
+    }
+
     /// Whether the next turn uses a `--once` choice, after which the
     /// session goes back to the route it had before.
     #[must_use]

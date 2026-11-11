@@ -136,7 +136,7 @@ name = "write_file"
 arguments = { path = "AGENTS.md", content = "be nice" }
 
 [[rule]]
-tool_result = "DENIED"
+tool_result = "BLOCKED"
 text = "denied"
 
 [[rule]]

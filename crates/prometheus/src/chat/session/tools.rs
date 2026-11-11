@@ -184,7 +184,10 @@ pub fn selection(
     plugins: &[String],
     surface: &SessionSurface,
 ) -> Result<Selection, Error> {
-    let mut enabled = surface.starting_toolsets(registry, &config.tools, &config.toolsets);
+    let mut enabled = match (surface, &config.api_server.toolsets) {
+        (SessionSurface::Api, Some(listed)) => api_toolsets(registry, config, listed),
+        _ => surface.starting_toolsets(registry, &config.tools, &config.toolsets),
+    };
     crate::tools_cmd::opt_in(&mut enabled, plugins, surface);
     let selection = Selection::resolve(registry, &enabled, &config.tools.disabled_toolsets)?;
     Ok(if interactive {
@@ -192,6 +195,39 @@ pub fn selection(
     } else {
         selection.without_interactive(registry)
     })
+}
+
+/// `api_server.toolsets`, keeping only toolsets whose tools the profile
+/// enables (`tools.enabled_toolsets`, `core` standing for the API
+/// surface's own default); the others are dropped with a warning (spec:
+/// api-server, Unattended approvals and the API toolset).
+fn api_toolsets(registry: &ToolRegistry, config: &Config, listed: &[String]) -> Vec<String> {
+    let profile = SessionSurface::Api.starting_toolsets(
+        registry,
+        &config.tools,
+        &pmt_config::schema::ToolsetsConfig::default(),
+    );
+    let allowed: std::collections::BTreeSet<String> = profile
+        .iter()
+        .filter_map(|name| registry.members(name).ok())
+        .flatten()
+        .collect();
+    listed
+        .iter()
+        .filter(|name| {
+            let within = registry
+                .members(name)
+                .is_ok_and(|members| members.iter().all(|m| allowed.contains(m)));
+            if !within {
+                tracing::warn!(
+                    toolset = name.as_str(),
+                    "api_server.toolsets names a toolset the profile does not enable; dropped"
+                );
+            }
+            within
+        })
+        .cloned()
+        .collect()
 }
 
 /// The surface stored session `session` was started from: a messaging

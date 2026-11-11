@@ -22,6 +22,12 @@ impl Turn<'_> {
         {
             boundary.refresh_tools().await;
         }
+        if pending.is_none()
+            && self.agent.keeps_prompt()
+            && let Some(kept) = frozen::stored_any_route(&setup.store, setup.session)?
+        {
+            return Ok(kept);
+        }
         let (why, stored) =
             match frozen::stored(&setup.store, setup.session, &route.provider, &route.model)? {
                 Ok(stored) => match pending {

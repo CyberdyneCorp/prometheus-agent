@@ -15,6 +15,39 @@
         }
       ]
     },
+    "ApiListener": {
+      "additionalProperties": false,
+      "description": "`daemon.toml [api_server]`.",
+      "properties": {
+        "cors_origins": {
+          "default": [],
+          "description": "Exact browser origins (`https://chat.example.com`) allowed to call\nthe API; empty sends no CORS headers and refuses every request\ncarrying an `Origin`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "listen": {
+          "default": "127.0.0.1:8642",
+          "description": "Where the API server listens.",
+          "type": "string"
+        },
+        "public": {
+          "default": false,
+          "description": "Allow a non-loopback `listen` address (logged at WARN on every\nstart).",
+          "type": "boolean"
+        },
+        "public_host": {
+          "default": null,
+          "description": "A host name accepted in the `Host` header besides the loopback\nnames (a reverse proxy's name for a loopback listener).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "DaemonGateway": {
       "additionalProperties": false,
       "description": "`daemon.toml [gateway]`: the messaging gateway keys every served\nprofile shares.",
@@ -498,6 +531,16 @@
   "additionalProperties": false,
   "description": "Root of `daemon.toml`.",
   "properties": {
+    "api_server": {
+      "$ref": "#/$defs/ApiListener",
+      "default": {
+        "cors_origins": [],
+        "listen": "127.0.0.1:8642",
+        "public": false,
+        "public_host": null
+      },
+      "description": "The OpenAI-compatible API server's listener (spec: api-server)."
+    },
     "daemon": {
       "$ref": "#/$defs/DaemonSection",
       "default": {

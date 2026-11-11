@@ -117,6 +117,7 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result
                 ctx.launch,
                 enabled_adapters(&scopes_of(&server, &host)),
             );
+            start_api(&config, &server, &host).await;
             if let Some(systemd) = &systemd {
                 systemd.notify("READY=1");
             }
@@ -137,6 +138,19 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result
     // Turns still running past the drain are abandoned with the runtime.
     runtime.shutdown_timeout(Duration::from_secs(1));
     Ok(exit)
+}
+
+/// Starts the API server when a served profile enables it; a listener
+/// that cannot start is logged and the rest of the daemon (chats,
+/// adapters, schedulers) keeps running (spec: api-server, Opt-in
+/// listener that fails closed).
+async fn start_api(config: &DaemonConfig, server: &Arc<Server>, host: &Arc<DaemonHost>) {
+    let api_host = Arc::clone(host) as Arc<dyn pmt_api::ApiHost>;
+    match pmt_api::ApiServer::start(&config.api_server, Arc::clone(server), api_host).await {
+        Ok(Some(api)) => host.set_api(api),
+        Ok(None) => {}
+        Err(err) => tracing::error!("api server not started: {err}"),
+    }
 }
 
 /// The liveness side of a new daemon: a degraded predecessor's record is

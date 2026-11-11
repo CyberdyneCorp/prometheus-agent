@@ -120,6 +120,14 @@ impl Factory {
         let (mut prompt, sections) = self.session_prompt(id, skills, memory, notices).await;
         if let Some(spec) = child {
             spec.shape_prompt(&mut prompt);
+        } else if let Ok(Some(api)) = self.store.api_session(id) {
+            // An API caller's instructions, fixed when the session was
+            // created, come after the profile's own prompt and never
+            // replace it (spec: api-server, Caller instructions and
+            // long-term memory scoping).
+            prompt.caller_system = api
+                .instructions
+                .map(|text| format!("# Instructions from the API caller\n{text}"));
         }
         (prompt, sections)
     }

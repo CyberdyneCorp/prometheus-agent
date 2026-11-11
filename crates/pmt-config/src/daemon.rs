@@ -48,6 +48,9 @@ pub struct DaemonConfig {
     /// local`).
     #[serde(default)]
     pub local_runtime: crate::daemon_local::LocalRuntimeConfig,
+    /// The OpenAI-compatible API server's listener (spec: api-server).
+    #[serde(default)]
+    pub api_server: crate::daemon_api::ApiListener,
 }
 
 /// `daemon.toml [gateway]`: the messaging gateway keys every served
@@ -496,6 +499,10 @@ impl DaemonConfig {
             .gateway
             .http
             .listen_addr()
+            .map_err(|message| parse_error(&message))?;
+        config
+            .api_server
+            .validate()
             .map_err(|message| parse_error(&message))?;
         if let Some(unknown) = config
             .runtimes
