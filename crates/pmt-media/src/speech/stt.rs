@@ -638,12 +638,19 @@ async fn run_command_stt(
     path: &Path,
     dir: &Path,
 ) -> Result<String, String> {
+    // The command reads its input from the per-call directory: the
+    // recording may live where the sandbox denies it (the blob store).
     let input = if config.normalize {
         let out = dir.join("normalized.wav");
         state.ffmpeg.normalize(path, &out).await?;
         out
     } else {
-        path.to_path_buf()
+        let extension = path.extension().and_then(OsStr::to_str).unwrap_or("wav");
+        let staged = dir.join(format!("input.{extension}"));
+        tokio::fs::copy(path, &staged)
+            .await
+            .map_err(|e| format!("cannot stage {}: {e}", path.display()))?;
+        staged
     };
     let format = config.format.extension();
     let output = dir.join(format!("transcript.{format}"));

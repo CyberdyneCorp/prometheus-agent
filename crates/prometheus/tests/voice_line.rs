@@ -58,9 +58,13 @@ fn audio_dir(home: &Path, device: Option<&str>, recordings: &[&str]) -> PathBuf 
 }
 
 fn spawn(home: &Path, audio: &Path) -> OsSession {
+    spawn_in(home, audio, home)
+}
+
+fn spawn_in(home: &Path, audio: &Path, cwd: &Path) -> OsSession {
     let mut cmd: Command = common::command(home);
     cmd.args(["--set", "ui.interface=line"])
-        .current_dir(home)
+        .current_dir(cwd)
         .env("TERM", "xterm")
         .env("PMT_TEST_AUDIO_DIR", audio);
     let mut session = OsSession::spawn(cmd).unwrap();
@@ -163,6 +167,41 @@ fn a_spoken_question_is_answered_aloud_and_listening_resumes_until_silence() {
         .count()
     });
     assert_eq!(left, 0);
+}
+
+/// Regression: voice mode's command providers run in the profile's
+/// sandbox, whose workspace (here a directory outside the Prometheus
+/// home) does not hold the recording or the text to speak; they still
+/// read their input and write their output (spec: web-and-media-tools,
+/// Command-template speech providers).
+#[test]
+fn sandboxed_command_providers_read_the_recording_and_write_the_speech() {
+    let heard = "Read me back";
+    let home = voice_home(heard, "fake");
+    let config = home.path().join("profiles/default/config.toml");
+    let text = std::fs::read_to_string(&config).unwrap().replace(
+        &format!("command = \"printf '{heard}'\""),
+        &format!("command = \"head -c 4 {{input_path}} | grep -q RIFF && printf '{heard}'\""),
+    );
+    std::fs::write(&config, text).unwrap();
+    let work = home.path().join("work");
+    std::fs::create_dir_all(&work).unwrap();
+    let audio = audio_dir(home.path(), Some("Desk Microphone"), &["question.wav"]);
+    let mut p = spawn_in(home.path(), &audio, &work);
+    prompt(&mut p);
+    p.send_line("/voice on").unwrap();
+    p.expect("Voice mode on").unwrap();
+    prompt(&mut p);
+    p.send_line("/voice tts").unwrap();
+    p.expect("spoken replies: on").unwrap();
+    prompt(&mut p);
+    p.send("\x02").unwrap();
+    p.expect(format!("mock: {heard}").as_str()).unwrap();
+    p.expect("Listening stopped").unwrap();
+    prompt(&mut p);
+    exit(p);
+    let played = std::fs::read_to_string(audio.join("played.log")).unwrap();
+    assert!(played.contains(&format!("mock: {heard}")), "{played}");
 }
 
 /// The scripted reply of the daemon tests: three sentences streamed a

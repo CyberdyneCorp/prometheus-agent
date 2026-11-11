@@ -3420,7 +3420,7 @@ capabilities = [
 "Unset provider picks local first" = ["crates/pmt-media/tests/speech.rs::an_unset_stt_provider_picks_local_whisper_first"]
 
 [web-and-media-tools."Command-template speech providers"]
-"Paths with spaces" = ["crates/pmt-media/tests/speech.rs::a_command_provider_receives_paths_with_spaces_as_one_argument", "crates/pmt-media/src/speech/command.rs::posix_values_are_quoted_for_their_context", "crates/pmt-media/src/speech/command.rs::powershell_values_are_literal_in_every_context", "crates/pmt-media/src/speech/command.rs::cmd_values_keep_metacharacters_and_percent_literal"]
+"Paths with spaces" = ["crates/pmt-media/tests/speech.rs::a_command_provider_receives_paths_with_spaces_as_one_argument", "crates/pmt-media/src/speech/command.rs::posix_values_are_quoted_for_their_context", "crates/pmt-media/src/speech/command.rs::powershell_values_are_literal_in_every_context", "crates/pmt-media/src/speech/command.rs::cmd_values_keep_metacharacters_and_percent_literal", "crates/prometheus/tests/media_tts_writes.rs::a_command_voice_speaks_inside_the_session_sandbox", "crates/prometheus/tests/voice_line.rs::sandboxed_command_providers_read_the_recording_and_write_the_speech"]
 "Built-in name wins" = ["crates/pmt-media/tests/speech.rs::a_built_in_stt_name_wins_over_a_same_named_command"]
 
 [web-and-media-tools."Media tool credentials and billing are explicit"]

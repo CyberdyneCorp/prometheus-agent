@@ -39,7 +39,7 @@ pub fn sandboxed(
     cwd: Option<&str>,
 ) -> Result<Command, Error> {
     let config = scope.config();
-    let scratch = scope.dir().join("cache/hooks");
+    let scratch = scratch(scope);
     let _ = std::fs::create_dir_all(&scratch);
     let workspace = cwd.map_or_else(|| scope.dir().to_path_buf(), Into::into);
     let paths = Paths {
@@ -68,6 +68,12 @@ pub fn sandboxed(
     // The one place a hook may write besides the workspace.
     command.env("TMPDIR", &scratch);
     Ok(command)
+}
+
+/// The directory a [`sandboxed`] child may write besides its workspace.
+#[must_use]
+pub fn scratch(scope: &ProfileScope) -> std::path::PathBuf {
+    scope.dir().join("cache/hooks")
 }
 
 fn dirs_home() -> Option<std::path::PathBuf> {

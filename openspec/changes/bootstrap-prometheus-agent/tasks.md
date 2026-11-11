@@ -473,7 +473,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 - [x] 49.1 Implement the built-in web backends with capability flags, explicit opt-in keyless web search rotation (one-shot rescue only when opted in), web result caching shared across subagents and the `x_search` tool (future windows refused, uncited answers degraded); verify with mock backends (spec: web-and-media-tools)
 - [x] 49.2 Implement `video_analyze` (oversized videos refused or sampled), `image_generate` with the built-in image generation providers and models (editing advertised only when supported, results as media) and explicit media tool credentials and billing; verify with mock provider fixtures (spec: web-and-media-tools)
-- [ ] 49.3 Implement the `text_to_speech` tool with delivery (chunking, voice bubbles), the built-in text-to-speech providers, built-in speech-to-text providers with resolution (explicit provider strict, local first when unset) and command-template speech providers; verify with mock speech providers (spec: web-and-media-tools)
+- [x] 49.3 Implement the `text_to_speech` tool with delivery (chunking, voice bubbles), the built-in text-to-speech providers, built-in speech-to-text providers with resolution (explicit provider strict, local first when unset) and command-template speech providers; verify with mock speech providers (spec: web-and-media-tools)
 
 ## 50. M2 Voice mode
 

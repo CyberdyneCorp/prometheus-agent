@@ -188,6 +188,10 @@ impl pmt_media::speech::command::CommandRunner for SandboxRunner {
         command.current_dir(cwd);
         Ok(tokio::process::Command::from(command))
     }
+
+    fn scratch(&self) -> Option<PathBuf> {
+        Some(self.0.scratch.clone())
+    }
 }
 
 /// Command speech providers run outside a session (gateway voice notes,
@@ -214,6 +218,10 @@ impl CommandRunner for ProfileRunner {
             .map_err(|e| e.message().to_owned())?;
         command.args([flag, line]);
         Ok(tokio::process::Command::from(command))
+    }
+
+    fn scratch(&self) -> Option<PathBuf> {
+        Some(crate::hooks_host::scratch(&self.0))
     }
 }
 

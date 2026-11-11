@@ -13,7 +13,7 @@
 //! non-zero exit, empty output or timeout fails with the stderr tail.
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 
@@ -32,6 +32,14 @@ pub trait CommandRunner: Send + Sync {
     ///
     /// The sandbox or shell cannot be set up.
     fn command(&self, line: &str, cwd: &Path) -> Result<tokio::process::Command, String>;
+
+    /// A directory the confined command may read and write. The per-call
+    /// speech files (`{input_path}`, `{output_path}`) are made under it,
+    /// as the sandbox denies the rest of the Prometheus home. `None` (an
+    /// unconfined runner): the profile's audio cache.
+    fn scratch(&self) -> Option<PathBuf> {
+        None
+    }
 }
 
 /// The quoting rules of the shell a command line runs in.

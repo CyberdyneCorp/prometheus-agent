@@ -103,3 +103,17 @@ fn a_command_voice_is_refused_without_a_sandbox() {
     assert!(!h.join("work/ran-unconfined").exists(), "the command ran");
     assert!(!h.join("work/greeting.mp3").exists());
 }
+
+/// Regression: a command voice runs inside the session's sandbox and can
+/// still read the text it is given and write the audio it makes (spec:
+/// web-and-media-tools, Command-template speech providers).
+#[test]
+fn a_command_voice_speaks_inside_the_session_sandbox() {
+    let home = tts_home();
+    let h = home.path();
+    let (out, result) = speak_to(h, "greeting.mp3");
+    assert!(out.status.success(), "{}", stderr(&out));
+    let spoken = h.join("work/greeting.mp3");
+    assert!(spoken.exists(), "{result}");
+    assert_eq!(std::fs::read_to_string(spoken).unwrap(), "hello");
+}

@@ -154,6 +154,9 @@ pub struct Commands {
     pub env: ChildEnv,
     /// The shell.
     pub shell: Shell,
+    /// The session's scratch directory, which the sandbox lets children
+    /// read and write.
+    pub scratch: PathBuf,
 }
 
 /// Builds and attaches the environment of one session; the returned
@@ -196,7 +199,7 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         .and_then(|(sandbox, env)| browser_exec(inputs, sandbox, env, &scratch));
     let downgrades = downgrades(inputs, process.as_ref(), browser.as_deref());
     let child_env = process.as_ref().map(|(_, env)| env.clone());
-    let commands = process.and_then(|(sandbox, env)| commands(inputs, sandbox, env));
+    let commands = process.and_then(|(sandbox, env)| commands(inputs, sandbox, env, &scratch));
     let previewer = commands.as_ref().and_then(|c| previewer(inputs, &paths, c));
     let remote = remote(inputs, user_home.as_deref());
     let snapshots = inputs
@@ -262,7 +265,12 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
 
 /// The session's command parts: its sandbox and child environment with
 /// the local shell, when one resolves.
-fn commands(inputs: &EnvInputs<'_>, sandbox: Arc<Sandbox>, env: ChildEnv) -> Option<Commands> {
+fn commands(
+    inputs: &EnvInputs<'_>,
+    sandbox: Arc<Sandbox>,
+    env: ChildEnv,
+    scratch: &Path,
+) -> Option<Commands> {
     let config = inputs.scope.config();
     pmt_tools::terminal::doctor::local_shell(&config.terminal, inputs.launch, &sandbox)
         .inspect_err(|err| tracing::warn!(error = %err, "terminal unavailable this session"))
@@ -271,6 +279,7 @@ fn commands(inputs: &EnvInputs<'_>, sandbox: Arc<Sandbox>, env: ChildEnv) -> Opt
             sandbox,
             env,
             shell,
+            scratch: scratch.to_path_buf(),
         })
 }
 
