@@ -214,7 +214,7 @@ mod tests {
 
     use pmt_config::schema::{BusyIndicator, TuiTheme};
 
-    use super::Status;
+    use super::{Status, Strings};
     use crate::theme::Theme;
     use pmt_core::battery::Battery;
 
@@ -304,5 +304,20 @@ mod tests {
             .take(columns.len())
             .collect();
         assert_eq!(picked, "2 live");
+    }
+
+    /// Scenario: Static UI string catalogs (the status line in a bundled
+    /// non-English language).
+    #[test]
+    fn the_status_line_speaks_the_profile_language() {
+        let dir = tempfile::tempdir().unwrap();
+        let sources = pmt_i18n::Sources::of_profile("de", dir.path(), Vec::new());
+        let german = Strings::load(&sources, pmt_i18n::Surface::Tui);
+        let mut status = full();
+        status.live = 2;
+        let shown = status.text(120, &german);
+        assert!(shown.contains("2 Genehmigungen"), "{shown}");
+        assert!(shown.contains("2 aktiv"), "{shown}");
+        assert!(!shown.contains("approvals"), "{shown}");
     }
 }

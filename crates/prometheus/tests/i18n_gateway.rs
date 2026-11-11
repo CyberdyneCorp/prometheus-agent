@@ -91,3 +91,30 @@ fn an_overlay_edit_shows_in_the_next_notice_without_a_restart() {
         );
     }
 }
+
+/// Scenario: Static UI string catalogs (chat notices, slash replies and
+/// `/help` follow the profile's language).
+#[test]
+fn notices_replies_and_help_follow_the_profile_language() {
+    let home = gateway_home("");
+    let home = home.path();
+    ok(&run(home, &["config", "set", "gateway.multiplex", "true"]));
+    profile_in(home, "a", "es");
+    let _daemon = Daemon::start(home);
+    send(home, "a", "u1", "/queue");
+    wait_said(home, "a", "Uso: /queue <texto>");
+    send(home, "a", "u1", "/whoami");
+    send(home, "a", "u1", "/help");
+    wait_said(home, "a", "Lista los comandos disponibles aquí");
+    let said = texts(home, "a");
+    assert!(
+        said.iter().any(|t| t.starts_with("Eres u1 en test")),
+        "{said:?}"
+    );
+    let help = said
+        .iter()
+        .find(|t| t.contains("Lista los comandos disponibles aquí"))
+        .unwrap();
+    assert!(help.contains("Información:"), "{help}");
+    assert!(!help.contains("List the commands available here"), "{help}");
+}

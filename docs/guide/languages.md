@@ -12,6 +12,14 @@ names are not, nor are the reports of non-interactive `prometheus
 <command>` runs (scripts read them). Localized text never enters a model
 request, so changing the language never breaks a session's prompt cache.
 
+Not yet translated: replies a subsystem renders itself (`/insights`,
+`/context`, `/toolsets`, `/skills`, `/bundles`, `/reload-skills`,
+`/memory`, `/journey`, `/goal`, `/subgoal`, `/loop`, `/heartbeat`,
+`/egress`, `/curator`, `/debug`, the `/suggestions` list, the
+`/personality` list, the `/model` switch notice) and the notices the agent
+adds to a turn (fast-mode tier, budget warnings, context pressure,
+guardrail stops, scheduled-job failures) still show in English.
+
 ## Choosing a language
 
 ```console
