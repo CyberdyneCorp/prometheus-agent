@@ -150,6 +150,7 @@ pub fn eject(profile_dir: &Path, catalog: &Catalog, name: &str) -> Result<Ejecte
         content_digest: tree.digest(&prefix),
         trust: Some(Trust::Builtin),
         installed_at: lockfile::now(),
+        ..Entry::default()
     })?;
     Ok(Ejected {
         name: name.to_owned(),

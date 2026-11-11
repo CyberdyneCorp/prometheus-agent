@@ -48,9 +48,9 @@ where
 async fn edge_server(seen: Arc<Mutex<Vec<String>>>) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         while let Ok((stream, _)) = listener.accept().await {
-            tokio::spawn(serve_edge(stream, Arc::clone(&seen)));
+            pmt_core::spawn::spawn(serve_edge(stream, Arc::clone(&seen)));
         }
     });
     format!("ws://{address}/readaloud")
@@ -80,10 +80,10 @@ async fn private_ca_edge_server(seen: Arc<Mutex<Vec<String>>>) -> (u16, String) 
     let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(config));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         while let Ok((tcp, _)) = listener.accept().await {
             let (acceptor, seen) = (acceptor.clone(), Arc::clone(&seen));
-            tokio::spawn(async move {
+            pmt_core::spawn::spawn(async move {
                 if let Ok(tls) = acceptor.accept(tcp).await {
                     serve_edge(tls, seen).await;
                 }
@@ -99,10 +99,10 @@ async fn connect_proxy(port: u16, targets: Arc<Mutex<Vec<String>>>) -> String {
     use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         while let Ok((mut client, _)) = listener.accept().await {
             let targets = Arc::clone(&targets);
-            tokio::spawn(async move {
+            pmt_core::spawn::spawn(async move {
                 let mut head = Vec::new();
                 let mut byte = [0u8; 1];
                 while !head.ends_with(b"\r\n\r\n") {
@@ -528,5 +528,80 @@ async fn a_command_stt_reads_its_output_file_then_stdout() {
     assert_eq!(
         rig.session().transcribe(&clip).await.unwrap_err(),
         "stt is configured to use mine, but command STT provider wrote no output file and produced no stdout"
+    );
+}
+
+/// `pre_transcription` callbacks answering in registration order.
+struct Rewriting(Vec<Value>);
+
+impl pmt_media::plugin::MediaPlugins for Rewriting {
+    fn plugin_of(&self, _: pmt_media::plugin::Kind, _: &str) -> Option<String> {
+        None
+    }
+
+    fn invoke<'a>(
+        &'a self,
+        kind: pmt_media::plugin::Kind,
+        id: &'a str,
+        _: Value,
+    ) -> pmt_media::plugin::PluginFuture<'a> {
+        Box::pin(async move { Err(pmt_media::plugin::not_installed(kind, id)) })
+    }
+
+    fn pre_transcription(
+        &self,
+        mut request: pmt_media::plugin::SttRequest,
+    ) -> pmt_media::plugin::SttFuture<'_> {
+        Box::pin(async move {
+            for answer in &self.0 {
+                request.apply(answer);
+            }
+            request
+        })
+    }
+}
+
+/// `pre_transcription` (spec: plugin-system, Streaming and lifecycle
+/// observer hooks): fired after the provider is resolved, its `prompt`,
+/// `language` and `model` reach the request (last writer wins) and every
+/// other field is ignored.
+#[tokio::test]
+async fn pre_transcription_changes_reach_the_stt_request() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/audio/transcriptions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"text": "ola"})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let mut config = Config::default();
+    config.stt.provider = Some("groq".into());
+    let mut rig = Rig::new(config)
+        .secret("GROQ_API_KEY")
+        .at("groq", &server.uri());
+    rig.plugins = Arc::new(Rewriting(vec![
+        json!({"language": "es", "model": "whisper-x", "provider": "openai"}),
+        json!({"language": "pt", "prompt": "Lisboa, Porto"}),
+    ]));
+    let clip = rig.workspace().join("note.ogg");
+    std::fs::write(&clip, b"OggS").unwrap();
+    let transcript = rig
+        .session()
+        .with_ffmpeg(Ffmpeg::none())
+        .transcribe(&clip)
+        .await
+        .unwrap();
+    assert_eq!(
+        (transcript.provider.as_str(), transcript.model.as_str()),
+        ("groq", "whisper-x"),
+        "the provider never moves"
+    );
+    let body = &server.received_requests().await.unwrap()[0].body;
+    let text = String::from_utf8_lossy(body);
+    assert!(text.contains("name=\"language\"\r\n\r\npt"), "{text}");
+    assert!(text.contains("name=\"model\"\r\n\r\nwhisper-x"), "{text}");
+    assert!(
+        text.contains("name=\"prompt\"\r\n\r\nLisboa, Porto"),
+        "{text}"
     );
 }

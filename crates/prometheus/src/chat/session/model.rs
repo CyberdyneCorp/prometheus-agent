@@ -130,6 +130,39 @@ impl ProviderSetupParts {
     }
 }
 
+/// The plugin `pre_auxiliary_call` and `post_auxiliary_call` hooks of a
+/// profile, fired for the session that made each auxiliary call.
+struct AuxHooks {
+    plugins: crate::plugins_host::ProfilePlugins,
+    call: pmt_plugins::host::CallInfo,
+}
+
+impl pmt_providers::auxiliary::AuxObserver for AuxHooks {
+    fn observe(
+        &self,
+        hook: &'static str,
+        fields: serde_json::Map<String, serde_json::Value>,
+    ) -> pmt_providers::resolve::BoxFuture<'_, ()> {
+        Box::pin(async move {
+            let mut call = self.call.clone();
+            call.session_id = fields
+                .get("session_id")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned);
+            self.plugins.fire_observer(&call, hook, fields).await;
+        })
+    }
+}
+
+/// An owner of a session's route that may scope its fallback chain.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Owner<'a> {
+    /// It pinned its own provider or model.
+    pub pinned: bool,
+    /// The chain it declares (`Some(&[])`: fallback disabled).
+    pub declared: Option<&'a [pmt_config::schema::FallbackEntry]>,
+}
+
 /// Builds model ports of a profile's routes.
 #[derive(Clone)]
 pub(crate) struct PortMaker {
@@ -148,14 +181,29 @@ impl PortMaker {
         Ok(Arc::new(model))
     }
 
-    /// The port serving `target` alone, without the fallback chain.
+    /// The port serving `target` with the chain of its owner (spec:
+    /// model-providers, Scoped fallback chains for pinned owners).
     ///
     /// # Errors
     ///
-    /// Resolution errors of the target.
-    pub(crate) async fn port_pinned(&self, target: &Target) -> Result<Arc<ProviderModel>, Error> {
+    /// Resolution errors of the target and of the chain's providers.
+    pub(crate) async fn port_scoped(
+        &self,
+        target: &Target,
+        owners: &[Owner<'_>],
+    ) -> Result<Arc<ProviderModel>, Error> {
+        let setup = self.setup.setup();
+        let mut chain = pmt_providers::fallback::chain(&setup.config, &setup.registry)?;
+        for owner in owners {
+            chain = pmt_providers::fallback::scoped_chain(
+                owner.pinned,
+                owner.declared,
+                chain,
+                &setup.registry,
+            )?;
+        }
         let model =
-            ProviderModel::start_pinned(self.setup.setup(), self.caller.clone(), target).await?;
+            ProviderModel::start_with_chain(setup, self.caller.clone(), target, chain).await?;
         Ok(Arc::new(model))
     }
 }
@@ -355,7 +403,14 @@ impl Models {
             surface: "cli".to_owned(),
             cwd: Some(cwd.display().to_string()),
         };
-        self.caller = self.caller.with_classifier(plugins.error_classifier(call));
+        self.caller = self
+            .caller
+            .with_classifier(plugins.error_classifier(call.clone()));
+        let observer = AuxHooks {
+            plugins: plugins.clone(),
+            call,
+        };
+        self.aux = Arc::new((*self.aux).clone().with_observer(Arc::new(observer)));
         Ok(self)
     }
 
@@ -462,14 +517,20 @@ impl Models {
         Ok(target_of(&route))
     }
 
-    /// The port of `target` without the fallback chain (a delegated child
-    /// that pinned its model).
+    /// The port of `target` whose chain is scoped by `owners`, outermost
+    /// first (a scheduled run, then a delegated child of it): each owner
+    /// keeps the chain it inherits unless it pinned its route (none) or
+    /// declared its own (that one; `[]` disables fallback).
     ///
     /// # Errors
     ///
-    /// Resolution errors of the target.
-    pub async fn port_pinned(&self, target: &Target) -> Result<Arc<ProviderModel>, Error> {
-        self.maker().port_pinned(target).await
+    /// Resolution errors of the target and of a declared chain.
+    pub async fn port_scoped(
+        &self,
+        target: &Target,
+        owners: &[Owner<'_>],
+    ) -> Result<Arc<ProviderModel>, Error> {
+        self.maker().port_scoped(target, owners).await
     }
 
     /// The route `model` (`[<provider>/]<model>`, as `/model` reads it)
@@ -582,6 +643,33 @@ impl Models {
     ) -> Result<Option<String>, Error> {
         const SYSTEM: &str = "Write a short title (at most 6 words) for the conversation \
             below. Answer with the title only, no quotes or punctuation at the end.";
+        let reply = self
+            .ask_auxiliary(AuxTask::Title, session, SYSTEM, conversation, 40)
+            .await?;
+        Ok(reply.and_then(|text| {
+            text.lines()
+                .map(|l| l.trim().trim_matches(['"', '\'', '.']).trim())
+                .find(|l| !l.is_empty())
+                .map(str::to_owned)
+        }))
+    }
+
+    /// One answer of the `task` auxiliary route (default: the profile's
+    /// main route) to `user` under `system`, accounted to `session`;
+    /// `None` when no route answers.
+    ///
+    /// # Errors
+    ///
+    /// The resolution error of a pinned route; the call's failure or
+    /// timeout.
+    pub async fn ask_auxiliary(
+        &self,
+        task: AuxTask,
+        session: pmt_core::id::SessionId,
+        system: &str,
+        user: &str,
+        max_output_tokens: u64,
+    ) -> Result<Option<String>, Error> {
         let main_target = self.primary(&RouteFlags::default()).await?;
         let resolver = self.resolver();
         let main = resolver
@@ -593,38 +681,31 @@ impl Models {
             main: main.as_ref(),
             health: &*self.setup.health,
         };
-        let Some(route) = auxiliary::resolve(AuxTask::Title, &AuxArgs::default(), &ctx).await?
-        else {
+        let Some(route) = auxiliary::resolve(task, &AuxArgs::default(), &ctx).await? else {
             return Ok(None);
         };
         let request = Request {
             system: vec![pmt_providers::request::SystemBlock {
-                text: SYSTEM.to_owned(),
+                text: system.to_owned(),
                 cache_breakpoint: false,
             }],
             messages: vec![pmt_providers::request::Message::text(
                 pmt_providers::request::Role::User,
-                conversation,
+                user,
             )],
-            max_output_tokens: Some(40),
+            max_output_tokens: Some(max_output_tokens),
             ..Request::default()
         };
-        let context = CallContext::new(session, &AuxTask::Title.purpose());
+        let context = CallContext::new(session, &task.purpose());
         let reply = tokio::time::timeout(route.timeout, self.aux.call(&route, &request, &context))
             .await
             .map_err(|_| {
                 Error::new(
                     &pmt_core::error::codes::PROVIDER_CALL_FAILED,
-                    "the title model did not answer in time",
+                    format!("the {} model did not answer in time", task.as_str()),
                 )
             })??;
-        let title = reply
-            .text
-            .lines()
-            .map(|l| l.trim().trim_matches(['"', '\'', '.']).trim())
-            .find(|l| !l.is_empty())
-            .map(str::to_owned);
-        Ok(title)
+        Ok(Some(reply.text))
     }
 
     /// The session's approval guardian on its `approval` auxiliary route.

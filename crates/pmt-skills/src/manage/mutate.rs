@@ -22,7 +22,9 @@ pub enum Change {
 }
 
 impl Change {
-    fn rel(&self) -> &str {
+    /// The file it touches, relative to the skill directory.
+    #[must_use]
+    pub fn rel(&self) -> &str {
         match self {
             Self::Write(rel, _) | Self::Remove(rel) => rel,
         }

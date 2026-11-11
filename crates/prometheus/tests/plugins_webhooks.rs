@@ -57,7 +57,7 @@ async fn a_signed_delivery_is_verifiable_by_the_receiver() {
     assert!(listed.contains("ci  "), "{listed}");
     assert!(listed.contains("on_session_end  signed"), "{listed}");
     let path = home.path().to_path_buf();
-    let out = tokio::task::spawn_blocking(move || run(&path, &["-z", "hi"]))
+    let out = pmt_core::spawn::blocking(move || run(&path, &["-z", "hi"]))
         .await
         .unwrap();
     assert!(out.status.success(), "{}", stderr(&out));

@@ -153,7 +153,7 @@ impl Client {
             hello: Arc::new(hello),
             ..client
         };
-        tokio::spawn(heartbeat(client.clone()));
+        pmt_core::spawn::spawn(heartbeat(client.clone()));
         Ok((client, inbox))
     }
 
@@ -164,8 +164,8 @@ impl Client {
         let (events_tx, events) = mpsc::unbounded_channel();
         let (requests_tx, requests) = mpsc::unbounded_channel();
         let pending: Pending = Arc::default();
-        tokio::spawn(write_loop(sink, rx));
-        tokio::spawn(read_loop(
+        pmt_core::spawn::spawn(write_loop(sink, rx));
+        pmt_core::spawn::spawn(read_loop(
             stream,
             Arc::clone(&pending),
             Routes {
@@ -416,7 +416,9 @@ async fn route(text: &str, pending: &Pending, routes: &Routes) {
                 let _ = routes.events.send(envelope);
             }
         }
-        Ok(Incoming::Request { id, method, params }) => {
+        Ok(Incoming::Request {
+            id, method, params, ..
+        }) => {
             let _ = routes.requests.send(ServerCall {
                 id: id.to_string(),
                 method,

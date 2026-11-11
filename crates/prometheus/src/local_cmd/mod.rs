@@ -167,7 +167,7 @@ where
         let control = Control::default();
         let watcher = {
             let control = control.clone();
-            tokio::spawn(async move {
+            pmt_core::spawn::spawn(async move {
                 if tokio::signal::ctrl_c().await.is_ok() {
                     control.pause();
                 }

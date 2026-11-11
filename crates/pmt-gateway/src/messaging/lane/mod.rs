@@ -61,8 +61,9 @@ pub(crate) enum Msg {
         seq: u64,
         routing: Box<Routing>,
         inbound: Box<Inbound>,
-        /// The user spoke (a voice note, now transcribed).
-        voice: bool,
+        /// The user spoke (a voice note, now transcribed), and the
+        /// metered transcriptions to bill.
+        voice: crate::messaging::inbound::Prepared,
     },
     /// A turn of the session ended.
     Finished(TurnFinished),
@@ -199,6 +200,8 @@ struct Pending {
     reply_to: Option<String>,
     /// The user spoke (the reply may be spoken back).
     voice: bool,
+    /// Its metered transcriptions, billed to the session it runs in.
+    billed: Vec<crate::messaging::voice::Billed>,
     /// When the person sent it (the model may see it).
     sent_at: jiff::Timestamp,
     /// The adapter did not mark it `not_addressed_to_bot`: an intentionally
@@ -267,6 +270,8 @@ struct Lane {
     mirrors: Vec<pmt_store::NewMessage>,
     /// The event being handled was a voice note.
     voice_input: bool,
+    /// Its metered transcriptions, billed with its input.
+    voice_billed: Vec<crate::messaging::voice::Billed>,
     /// The session whose thread already had its title offered (after its
     /// first turn).
     titled: Option<String>,
@@ -303,7 +308,7 @@ pub(crate) fn input(
     key: &SessionKey,
     routing: Routing,
     inbound: Inbound,
-    voice: bool,
+    voice: crate::messaging::inbound::Prepared,
 ) -> Admission {
     let handle = open(shared, key, &routing);
     let seq = handle.status.seq.fetch_add(1, Ordering::AcqRel) + 1;
@@ -354,6 +359,7 @@ pub(crate) fn open(shared: &Arc<Shared>, key: &SessionKey, routing: &Routing) ->
         policy: None,
         mirrors: Vec::new(),
         voice_input: false,
+        voice_billed: Vec::new(),
         held: None,
         confirms: Vec::new(),
         progress_mode: None,
@@ -367,7 +373,7 @@ pub(crate) fn open(shared: &Arc<Shared>, key: &SessionKey, routing: &Routing) ->
         profile = routing.profile,
         platform = routing.platform
     );
-    tokio::spawn(lane.run(rx).instrument(span));
+    pmt_core::spawn::spawn(lane.run(rx).instrument(span));
     lanes.insert(key.as_str().to_owned(), handle.clone());
     handle
 }
@@ -494,7 +500,8 @@ impl Lane {
                 inbound,
                 voice,
             } => {
-                self.voice_input = voice;
+                self.voice_input = voice.voice;
+                self.voice_billed = voice.billed;
                 self.answering = Some(inbound.message_id.clone())
                     .filter(|id| !id.is_empty() && inbound.text.trim_start().starts_with('/'));
                 self.interaction.clone_from(&inbound.interaction);
@@ -612,6 +619,7 @@ impl Lane {
             routing: self.routing.clone(),
             reply_to: None,
             voice: false,
+            billed: Vec::new(),
             sent_at: jiff::Timestamp::now(),
             addressed: true,
         });
@@ -630,6 +638,7 @@ impl Lane {
                 routing: self.routing.clone(),
                 reply_to: None,
                 voice: false,
+                billed: Vec::new(),
                 sent_at: jiff::Timestamp::now(),
                 addressed: true,
             });

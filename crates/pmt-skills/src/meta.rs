@@ -30,6 +30,16 @@ pub struct SecretDecl {
     pub prompt: Option<String>,
 }
 
+/// A credential file a skill needs on the execution backend (spec:
+/// skills, Skill credential file passthrough).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CredentialFile {
+    /// The path relative to the profile home (no `..`, never absolute).
+    pub path: String,
+    /// What it is.
+    pub description: Option<String>,
+}
+
 /// The typed fields.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Meta {
@@ -59,6 +69,8 @@ pub struct Meta {
     /// The `blueprint` block, as written: a suggested scheduled job, never
     /// one created without an accept (scheduled-jobs reads it).
     pub blueprint: Option<Value>,
+    /// `credential_files` (alias `required_credential_files`).
+    pub credential_files: Vec<CredentialFile>,
 }
 
 impl Meta {
@@ -86,11 +98,49 @@ impl Meta {
             config: config_decls(field(front, "config")),
             secrets: secret_decls(front),
             blueprint: field(front, "blueprint").filter(|v| !v.is_null()).cloned(),
+            credential_files: credential_files(front),
         }
     }
 }
 
 /// A string or a list of strings.
+/// `credential_files` (alias `required_credential_files`): strings or
+/// `{path, description}`; absolute paths and paths with `..` are dropped.
+fn credential_files(front: &Map<String, Value>) -> Vec<CredentialFile> {
+    let value =
+        field(front, "credential_files").or_else(|| field(front, "required_credential_files"));
+    let Some(Value::Array(items)) = value else {
+        return Vec::new();
+    };
+    items
+        .iter()
+        .filter_map(|item| match item {
+            Value::String(path) => Some(CredentialFile {
+                path: path.clone(),
+                description: None,
+            }),
+            Value::Object(map) => text(map, &["path"]).map(|path| CredentialFile {
+                path,
+                description: text(map, &["description"]),
+            }),
+            _ => None,
+        })
+        .filter(|f| safe_relative(&f.path))
+        .collect()
+}
+
+/// Relative, `/`-separated, without `..` or empty segments.
+#[must_use]
+pub fn safe_relative(path: &str) -> bool {
+    !path.is_empty()
+        && !path.starts_with('/')
+        && !path.contains('\\')
+        && !path.contains(':')
+        && path
+            .split('/')
+            .all(|p| !p.is_empty() && p != "." && p != "..")
+}
+
 fn strings(value: Option<&Value>) -> Vec<String> {
     match value {
         Some(Value::String(s)) => vec![s.clone()],

@@ -74,6 +74,8 @@ pub struct EnvInputs<'a> {
     /// Host directories whose files a command on a backend without the
     /// host filesystem may name (attachments, skills): uploaded on demand.
     pub input_roots: Vec<std::path::PathBuf>,
+    /// The session's skills (credential files for remote backends).
+    pub skills: Arc<pmt_skills::session::SkillsSession>,
     /// The working directory's git root is trusted for language servers
     /// (not for cron jobs and kanban workers).
     pub automatic_trust: bool,
@@ -100,7 +102,7 @@ impl pmt_tools::browser::vault::MaskedPrompt for VaultPrompt {
         let prompt = Arc::clone(&self.0);
         let (name, question) = (name.to_owned(), question.to_owned());
         Box::pin(async move {
-            tokio::task::spawn_blocking(move || prompt.ask("browser_vault", &name, Some(&question)))
+            pmt_core::spawn::blocking(move || prompt.ask("browser_vault", &name, Some(&question)))
                 .await
                 .ok()
                 .flatten()
@@ -152,6 +154,9 @@ pub struct Commands {
     pub env: ChildEnv,
     /// The shell.
     pub shell: Shell,
+    /// The session's scratch directory, which the sandbox lets children
+    /// read and write.
+    pub scratch: PathBuf,
 }
 
 /// Builds and attaches the environment of one session; the returned
@@ -194,7 +199,7 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         .and_then(|(sandbox, env)| browser_exec(inputs, sandbox, env, &scratch));
     let downgrades = downgrades(inputs, process.as_ref(), browser.as_deref());
     let child_env = process.as_ref().map(|(_, env)| env.clone());
-    let commands = process.and_then(|(sandbox, env)| commands(inputs, sandbox, env));
+    let commands = process.and_then(|(sandbox, env)| commands(inputs, sandbox, env, &scratch));
     let previewer = commands.as_ref().and_then(|c| previewer(inputs, &paths, c));
     let remote = remote(inputs, user_home.as_deref());
     let snapshots = inputs
@@ -260,7 +265,12 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
 
 /// The session's command parts: its sandbox and child environment with
 /// the local shell, when one resolves.
-fn commands(inputs: &EnvInputs<'_>, sandbox: Arc<Sandbox>, env: ChildEnv) -> Option<Commands> {
+fn commands(
+    inputs: &EnvInputs<'_>,
+    sandbox: Arc<Sandbox>,
+    env: ChildEnv,
+    scratch: &Path,
+) -> Option<Commands> {
     let config = inputs.scope.config();
     pmt_tools::terminal::doctor::local_shell(&config.terminal, inputs.launch, &sandbox)
         .inspect_err(|err| tracing::warn!(error = %err, "terminal unavailable this session"))
@@ -269,6 +279,7 @@ fn commands(inputs: &EnvInputs<'_>, sandbox: Arc<Sandbox>, env: ChildEnv) -> Opt
             sandbox,
             env,
             shell,
+            scratch: scratch.to_path_buf(),
         })
 }
 
@@ -386,6 +397,16 @@ fn remote_parts(
     if let (Some(terminal), Some(container)) = (terminal, &remote.container) {
         let activity: Arc<dyn pmt_sandbox::container::Activity> = Arc::clone(terminal) as _;
         container.attach(Arc::downgrade(&activity));
+    }
+    if let Some(terminal) = terminal {
+        let hook = match &remote.container {
+            Some(container) => super::credentials::container_hook(
+                &inputs.skills,
+                super::credentials::staging_dir(inputs.scope, container.container().name()),
+            ),
+            None => super::credentials::remote_hook(&inputs.skills, Arc::clone(&remote.exec)),
+        };
+        terminal.add_before_command(hook);
     }
     if let Some(terminal) = terminal
         && !remote.target.descriptor().uses_host_filesystem
@@ -555,7 +576,7 @@ fn media(
         fetcher: fetcher.map(|f| Arc::new(f.for_requester("media"))),
         video: inputs.vision.video(),
         plugins: super::media_plugins::PluginMedia::shared(
-            inputs.providers.clone(),
+            &inputs.plugins.current(),
             inputs.plugin_call.clone(),
         ),
     })

@@ -115,7 +115,7 @@ async fn a_transcript_is_prepended_and_echoed_once() {
     let h = Harness::start(Setup::new(&open("telegram"))).await;
     let speech = Arc::new(FakeSpeech::default());
     *speech.transcript.lock().unwrap() = Some(Ok("book a table".into()));
-    *h.agents.speech.lock().unwrap() = Some(speech);
+    *h.agents.speech.lock().unwrap() = Some(Arc::clone(&speech) as _);
     h.adapter("telegram")
         .media
         .lock()
@@ -129,6 +129,12 @@ async fn a_transcript_is_prepended_and_echoed_once() {
     said(&h.adapter("telegram"), "Heard: \"book a table\"").await;
     eventually("a turn", || !h.agents.texts().is_empty()).await;
     assert_eq!(h.agents.texts(), ["book a table\nfor two"]);
+    // The transcription is billed to the session the turn ran in, which
+    // did not exist when the note was transcribed.
+    let billed = speech.billed.lock().unwrap().clone();
+    assert_eq!(billed.len(), 1, "{billed:?}");
+    assert_eq!(billed[0].1, "transcribe");
+    assert!(billed[0].0.starts_with("ses_"), "{billed:?}");
 }
 
 #[tokio::test]

@@ -223,9 +223,9 @@ impl Detector {
             .map(|url| {
                 let (client, url, key, timeout) =
                     (self.client.clone(), url.clone(), key.clone(), self.timeout);
-                tokio::spawn(
-                    async move { probe(&client, &url, &key, timeout).await.then_some(url) },
-                )
+                pmt_core::spawn::spawn(async move {
+                    probe(&client, &url, &key, timeout).await.then_some(url)
+                })
             })
             .collect();
         let mut found = None;

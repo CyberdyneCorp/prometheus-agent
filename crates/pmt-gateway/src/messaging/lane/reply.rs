@@ -315,8 +315,11 @@ impl Lane {
         };
         let dir = media::cache_dir(scope.dir());
         let _ = std::fs::create_dir_all(&dir);
-        match speech.synthesize(text, &dir).await {
-            Ok(path) => {
+        match speech.synthesize_billed(text, &dir).await {
+            Ok((path, billed)) => {
+                if let Some(billed) = &billed {
+                    speech.bill(answer.session, billed);
+                }
                 let mut file = OutboundAttachment::new(&path.to_string_lossy());
                 // A voice bubble where the platform sends them, else the
                 // audio as a file.
@@ -392,9 +395,15 @@ impl Lane {
         let speech = self.shared.agents.speech(&self.profile).ok_or(())?;
         let dir = self.config().map(|s| media::cache_dir(s.dir())).ok_or(())?;
         let _ = std::fs::create_dir_all(&dir);
-        let path = speech.synthesize(sentence, &dir).await.map_err(|err| {
-            tracing::warn!("streamed speech not synthesized: {err}");
-        })?;
+        let (path, billed) = speech
+            .synthesize_billed(sentence, &dir)
+            .await
+            .map_err(|err| {
+                tracing::warn!("streamed speech not synthesized: {err}");
+            })?;
+        if let (Some(billed), Some(session)) = (&billed, self.session.as_deref()) {
+            speech.bill(session, billed);
+        }
         let bytes = std::fs::read(&path).map_err(drop)?;
         let _ = std::fs::remove_file(&path);
         if !spoken.began {

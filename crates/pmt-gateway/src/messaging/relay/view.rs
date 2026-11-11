@@ -33,6 +33,13 @@ impl RelayView {
 }
 
 impl Adapter for RelayView {
+    fn reach(&self) -> Result<crate::messaging::probe::Reach, String> {
+        let relay = self.relay.upgrade().ok_or("the relay stopped")?;
+        Ok(crate::messaging::probe::Reach::Endpoints(vec![
+            crate::messaging::probe::Endpoint::Http(relay.url().to_owned()),
+        ]))
+    }
+
     fn describe(&self) -> Descriptor {
         let declared = self.relay.upgrade().and_then(|r| r.descriptor());
         Descriptor {

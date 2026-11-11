@@ -257,7 +257,7 @@ mod tests {
     async fn forged_callback_is_answered_400_and_the_wait_goes_on() {
         let listener = Listener::bind(0).await.unwrap();
         let port = listener.port();
-        let browser = tokio::spawn(async move {
+        let browser = pmt_core::spawn::spawn(async move {
             let forged = get(port, "/callback?code=evil&state=forged").await;
             let stray = get(port, "/favicon.ico").await;
             let genuine = get(port, "/callback?code=good&state=s3cr3t").await;

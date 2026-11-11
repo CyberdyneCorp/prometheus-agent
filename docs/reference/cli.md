@@ -14,10 +14,11 @@ Commands:
   version      Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
   setup        Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
   doctor       Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
-  debug        Diagnostics: `debug summary` prints a plain-text setup summary for support threads
+  debug        Diagnostics: a setup summary for support threads, a redacted debug bundle, an opt-in report upload and a daemon task dump
   config       Read, change, validate and explain the profile's config.toml
   secrets      Store, list and remove the profile's secrets (values never on the command line)
   skills       List, inspect, enable, lint and maintain the profile's skills and skill bundles
+  curator      The skill curator: status, passes, pins, archive and restore, ledger and rollback
   journey      The skills and memories the agent learned, as a timeline; list, delete, edit [aliases: learning, memory-graph]
   memory       Inspect, edit, export and import what the agent remembers (built-in memory)
   grants       List and revoke the profile's permanent capability grants and approvals
@@ -36,10 +37,11 @@ Commands:
   profile      List, create, select, rename and delete profiles
   sessions     List, search, export and manage the profile's sessions
   logs         Show structured log records of a component (`list` names them)
+  status       Whether the daemon runs and how: components, sessions, the next scheduled job and today's spend (`--check` for scripts)
   usage        Totals of model and metered tool calls from the usage ledger
   prompt       Measure the system prompt and tool schemas a new session would send
   demo         Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
-  trajectory   Render the recorded trajectory of a session
+  trajectory   Render a session's recorded trajectory, or export sessions as `ShareGPT` training records
   model        Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
   providers    Provider routing state: per-route health scores
   moa          List, create, update and delete Mixture of Agents presets (`[moa.presets.<name>]`)
@@ -512,13 +514,17 @@ Options:
 ## `prometheus debug`
 
 ```text
-Diagnostics: `debug summary` prints a plain-text setup summary for support threads
+Diagnostics: a setup summary for support threads, a redacted debug bundle, an opt-in report upload and a daemon task dump
 
 Usage: prometheus debug [OPTIONS] <COMMAND>
 
 Commands:
-  summary  A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
-  help     Print this message or the help of the given subcommand(s)
+  summary     A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
+  bundle      Write a redacted `tar.zst` of the window's logs, the configuration, `doctor --json`, `version --json`, crash reports and optionally a session's trajectory (nothing is uploaded)
+  share       Upload a redacted report (setup summary and recent log records) to a paste service after an explicit yes, or write it locally
+  delete      Delete a share recorded in `logs/shares.json` where the target supports deletion
+  dump-tasks  Ask the running daemon to write a dump of every thread and task to `logs/task-dump-<UTC>.txt` without stopping it
+  help        Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -594,6 +600,206 @@ Options:
           Print help
 ```
 
+## `prometheus debug bundle`
+
+```text
+Write a redacted `tar.zst` of the window's logs, the configuration, `doctor --json`, `version --json`, crash reports and optionally a session's trajectory (nothing is uploaded)
+
+Usage: prometheus debug bundle [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --session <ID>
+          Include this session's trajectory (id, id prefix or title)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --since <S>
+          Log records since `<N>[smhd]` ago or an RFC 3339 time
+
+          [default: 24h]
+
+  -o, --output <PATH>
+          Where to write the bundle (default: `./prometheus-debug-<UTC>.tar.zst`)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus debug share`
+
+```text
+Upload a redacted report (setup summary and recent log records) to a paste service after an explicit yes, or write it locally
+
+Usage: prometheus debug share [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --lines <N>
+          Log records of the daemon and of the profile to include, each
+
+          [default: 200]
+
+      --expire-days <D>
+          Days until the paste expires, where the target supports expiry
+
+          [default: 7]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --target <TARGET>
+          Where to upload
+
+          Possible values:
+          - paste_rs: `https://paste.rs` (no expiry; deletable)
+          - dpaste:   `https://dpaste.com` (expires after `--expire-days`; not deletable)
+          - custom:   `debug.share.endpoint`, a private support endpoint
+
+          [default: paste_rs]
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --no-redact
+          Upload without redaction (asks a second time; never unattended)
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -y, --yes
+          Upload without asking
+
+      --local
+          Write the report to a file instead (no network access at all)
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus debug delete`
+
+```text
+Delete a share recorded in `logs/shares.json` where the target supports deletion
+
+Usage: prometheus debug delete [OPTIONS] <URL>
+
+Arguments:
+  <URL>
+          The share's URL
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus debug dump-tasks`
+
+```text
+Ask the running daemon to write a dump of every thread and task to `logs/task-dump-<UTC>.txt` without stopping it
+
+Usage: prometheus debug dump-tasks [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus debug help`
 
 ```text
@@ -602,8 +808,12 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus debug help [COMMAND]
 
 Commands:
-  summary  A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
-  help     Print this message or the help of the given subcommand(s)
+  summary     A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
+  bundle      Write a redacted `tar.zst` of the window's logs, the configuration, `doctor --json`, `version --json`, crash reports and optionally a session's trajectory (nothing is uploaded)
+  share       Upload a redacted report (setup summary and recent log records) to a paste service after an explicit yes, or write it locally
+  delete      Delete a share recorded in `logs/shares.json` where the target supports deletion
+  dump-tasks  Ask the running daemon to write a dump of every thread and task to `logs/task-dump-<UTC>.txt` without stopping it
+  help        Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus debug help summary`
@@ -612,6 +822,38 @@ Commands:
 A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
 
 Usage: prometheus debug help summary
+```
+
+## `prometheus debug help bundle`
+
+```text
+Write a redacted `tar.zst` of the window's logs, the configuration, `doctor --json`, `version --json`, crash reports and optionally a session's trajectory (nothing is uploaded)
+
+Usage: prometheus debug help bundle
+```
+
+## `prometheus debug help share`
+
+```text
+Upload a redacted report (setup summary and recent log records) to a paste service after an explicit yes, or write it locally
+
+Usage: prometheus debug help share
+```
+
+## `prometheus debug help delete`
+
+```text
+Delete a share recorded in `logs/shares.json` where the target supports deletion
+
+Usage: prometheus debug help delete
+```
+
+## `prometheus debug help dump-tasks`
+
+```text
+Ask the running daemon to write a dump of every thread and task to `logs/task-dump-<UTC>.txt` without stopping it
+
+Usage: prometheus debug help dump-tasks
 ```
 
 ## `prometheus debug help help`
@@ -1590,6 +1832,21 @@ Usage: prometheus skills [OPTIONS] <COMMAND>
 
 Commands:
   list             List the profile's skills with category, source and status (shadowed copies marked)
+  install          Install a skill from the hub (official/<category>/<name>, <owner>/<repo>/<path>, skills-sh/..., clawhub:..., a SKILL.md URL...)
+  uninstall        Remove a hub-installed skill
+  browse           List installable skills: the official catalog first, then the hub index and taps
+  search           Search the hub (the cached index first, live sources only when it has no match)
+  inspect          Preview a hub skill (SKILL.md, files, scan verdict, upstream metadata) without installing it
+  check            Report hub skills whose upstream changed, orphaned installs and unsafe recorded paths
+  update           Reinstall hub skills whose upstream changed (locally modified ones need --force)
+  audit            Re-scan every hub skill and quarantine dangerous ones
+  accept           Accept the current files of a quarantined hub skill (re-scans and re-records its digest)
+  sign             Sign a skill directory: writes SKILL.sig over its content digest
+  tap              Manage skill taps (GitHub repositories of skills)
+  publish          Lint, scan and sign a skill, then open a pull request or registry submission
+  snapshot         Export or import the hub skills and taps of the profile
+  config           Pick which skills are enabled, globally and per surface or adapter (interactive)
+  untrust          Remove a trusted project root
   show             Show one skill: where it comes from, its status, its files and its SKILL.md
   enable           Enable a skill (from the next session)
   disable          Disable a skill (from the next session); `prometheus-agent` cannot be disabled
@@ -1597,7 +1854,7 @@ Commands:
   trust            Load the skills of a git checkout (`.prometheus/skills`, `.agents/skills`) in new sessions
   eject            Copy a bundled skill into the profile as an editable copy that shadows it
   diff             Show how an ejected copy differs from the current bundled version
-  reset            Remove an ejected copy so the name resolves to the bundled skill again
+  reset            Remove an ejected copy so the name resolves to the bundled skill again, or restore a hub skill to its locked content
   doctor           Report skills that do not load (path, line, reason) and quarantined project skills
   reload           Rescan every skill root and bundle; report added, removed and changed skills since the last reload
   bundles          Manage skill bundles (`<profile>/skill-bundles/<slug>.toml`)
@@ -1653,6 +1910,976 @@ Options:
 
       --outdated
           Only ejected skills whose bundled origin changed in this release
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills install`
+
+```text
+Install a skill from the hub (official/<category>/<name>, <owner>/<repo>/<path>, skills-sh/..., clawhub:..., a SKILL.md URL...)
+
+Usage: prometheus skills install [OPTIONS] [IDENTIFIER]
+
+Arguments:
+  [IDENTIFIER]
+          The skill identifier (omit with --locked)
+
+Options:
+      --force
+          Override a non-dangerous block and replace an installed copy
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --name <N>
+          The skill name when the source gives none (a bare SKILL.md URL)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --locked
+          Reproduce exactly the skills in skills.lock; fail on any digest mismatch
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills uninstall`
+
+```text
+Remove a hub-installed skill
+
+Usage: prometheus skills uninstall [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The skill
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills browse`
+
+```text
+List installable skills: the official catalog first, then the hub index and taps
+
+Usage: prometheus skills browse [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --source <S>
+          Only this source (official, github, skills-sh, clawhub, lobehub, browse-sh, well-known, url)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills search`
+
+```text
+Search the hub (the cached index first, live sources only when it has no match)
+
+Usage: prometheus skills search [OPTIONS] <QUERY>
+
+Arguments:
+  <QUERY>
+          What to look for
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --source <S>
+          Only this source
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills inspect`
+
+```text
+Preview a hub skill (SKILL.md, files, scan verdict, upstream metadata) without installing it
+
+Usage: prometheus skills inspect [OPTIONS] <IDENTIFIER>
+
+Arguments:
+  <IDENTIFIER>
+          The skill identifier
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills check`
+
+```text
+Report hub skills whose upstream changed, orphaned installs and unsafe recorded paths
+
+Usage: prometheus skills check [OPTIONS] [NAME]
+
+Arguments:
+  [NAME]
+          One skill
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills update`
+
+```text
+Reinstall hub skills whose upstream changed (locally modified ones need --force)
+
+Usage: prometheus skills update [OPTIONS] [NAME]
+
+Arguments:
+  [NAME]
+          One skill
+
+Options:
+      --force
+          Also replace locally modified skills
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills audit`
+
+```text
+Re-scan every hub skill and quarantine dangerous ones
+
+Usage: prometheus skills audit [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills accept`
+
+```text
+Accept the current files of a quarantined hub skill (re-scans and re-records its digest)
+
+Usage: prometheus skills accept [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The skill
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills sign`
+
+```text
+Sign a skill directory: writes SKILL.sig over its content digest
+
+Usage: prometheus skills sign [OPTIONS] <DIR>
+
+Arguments:
+  <DIR>
+          The skill directory
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --key <PATH>
+          A minisign secret key (default: `skills.signing_key`)
+
+      --keyless
+          Sign with a Sigstore keyless identity (OpenID sign-in)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills tap`
+
+```text
+Manage skill taps (GitHub repositories of skills)
+
+Usage: prometheus skills tap [OPTIONS] <COMMAND>
+
+Commands:
+  list    List the taps
+  add     Add a tap
+  remove  Remove a tap
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills tap list`
+
+```text
+List the taps
+
+Usage: prometheus skills tap list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills tap add`
+
+```text
+Add a tap
+
+Usage: prometheus skills tap add [OPTIONS] <REPO>
+
+Arguments:
+  <REPO>
+          `owner/repo`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --path <P>
+          Where its skills live in the repository
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills tap remove`
+
+```text
+Remove a tap
+
+Usage: prometheus skills tap remove [OPTIONS] <REPO>
+
+Arguments:
+  <REPO>
+          `owner/repo`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills tap help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus skills tap help [COMMAND]
+
+Commands:
+  list    List the taps
+  add     Add a tap
+  remove  Remove a tap
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus skills tap help list`
+
+```text
+List the taps
+
+Usage: prometheus skills tap help list
+```
+
+## `prometheus skills tap help add`
+
+```text
+Add a tap
+
+Usage: prometheus skills tap help add
+```
+
+## `prometheus skills tap help remove`
+
+```text
+Remove a tap
+
+Usage: prometheus skills tap help remove
+```
+
+## `prometheus skills tap help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus skills tap help help
+```
+
+## `prometheus skills publish`
+
+```text
+Lint, scan and sign a skill, then open a pull request or registry submission
+
+Usage: prometheus skills publish [OPTIONS] --to <TO> <DIR>
+
+Arguments:
+  <DIR>
+          The skill directory
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --to <TO>
+          Where to publish
+
+          Possible values:
+          - github:  A pull request to a GitHub repository
+          - clawhub: The ClawHub registry
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --repo <owner/repo>
+          The repository the pull request targets (GitHub)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus skills snapshot`
+
+```text
+Export or import the hub skills and taps of the profile
+
+Usage: prometheus skills snapshot [OPTIONS] <COMMAND>
+
+Commands:
+  export  Write the snapshot to a file (`-` for stdout)
+  import  Add the taps and install every skill of a snapshot
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills snapshot export`
+
+```text
+Write the snapshot to a file (`-` for stdout)
+
+Usage: prometheus skills snapshot export [OPTIONS] <FILE>
+
+Arguments:
+  <FILE>
+          The file, or `-`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills snapshot import`
+
+```text
+Add the taps and install every skill of a snapshot
+
+Usage: prometheus skills snapshot import [OPTIONS] <FILE>
+
+Arguments:
+  <FILE>
+          The snapshot file
+
+Options:
+      --force
+          Reinstall skills already present
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills snapshot help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus skills snapshot help [COMMAND]
+
+Commands:
+  export  Write the snapshot to a file (`-` for stdout)
+  import  Add the taps and install every skill of a snapshot
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus skills snapshot help export`
+
+```text
+Write the snapshot to a file (`-` for stdout)
+
+Usage: prometheus skills snapshot help export
+```
+
+## `prometheus skills snapshot help import`
+
+```text
+Add the taps and install every skill of a snapshot
+
+Usage: prometheus skills snapshot help import
+```
+
+## `prometheus skills snapshot help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus skills snapshot help help
+```
+
+## `prometheus skills config`
+
+```text
+Pick which skills are enabled, globally and per surface or adapter (interactive)
+
+Usage: prometheus skills config [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills untrust`
+
+```text
+Remove a trusted project root
+
+Usage: prometheus skills untrust [OPTIONS] <ROOT>
+
+Arguments:
+  <ROOT>
+          The repository root
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
@@ -1995,13 +3222,13 @@ Options:
 ## `prometheus skills reset`
 
 ```text
-Remove an ejected copy so the name resolves to the bundled skill again
+Remove an ejected copy so the name resolves to the bundled skill again, or restore a hub skill to its locked content
 
 Usage: prometheus skills reset [OPTIONS] <NAME>
 
 Arguments:
   <NAME>
-          The ejected skill
+          The ejected or hub skill
 
 Options:
       --home <PATH>
@@ -2946,6 +4173,21 @@ Usage: prometheus skills help [COMMAND]
 
 Commands:
   list             List the profile's skills with category, source and status (shadowed copies marked)
+  install          Install a skill from the hub (official/<category>/<name>, <owner>/<repo>/<path>, skills-sh/..., clawhub:..., a SKILL.md URL...)
+  uninstall        Remove a hub-installed skill
+  browse           List installable skills: the official catalog first, then the hub index and taps
+  search           Search the hub (the cached index first, live sources only when it has no match)
+  inspect          Preview a hub skill (SKILL.md, files, scan verdict, upstream metadata) without installing it
+  check            Report hub skills whose upstream changed, orphaned installs and unsafe recorded paths
+  update           Reinstall hub skills whose upstream changed (locally modified ones need --force)
+  audit            Re-scan every hub skill and quarantine dangerous ones
+  accept           Accept the current files of a quarantined hub skill (re-scans and re-records its digest)
+  sign             Sign a skill directory: writes SKILL.sig over its content digest
+  tap              Manage skill taps (GitHub repositories of skills)
+  publish          Lint, scan and sign a skill, then open a pull request or registry submission
+  snapshot         Export or import the hub skills and taps of the profile
+  config           Pick which skills are enabled, globally and per surface or adapter (interactive)
+  untrust          Remove a trusted project root
   show             Show one skill: where it comes from, its status, its files and its SKILL.md
   enable           Enable a skill (from the next session)
   disable          Disable a skill (from the next session); `prometheus-agent` cannot be disabled
@@ -2953,7 +4195,7 @@ Commands:
   trust            Load the skills of a git checkout (`.prometheus/skills`, `.agents/skills`) in new sessions
   eject            Copy a bundled skill into the profile as an editable copy that shadows it
   diff             Show how an ejected copy differs from the current bundled version
-  reset            Remove an ejected copy so the name resolves to the bundled skill again
+  reset            Remove an ejected copy so the name resolves to the bundled skill again, or restore a hub skill to its locked content
   doctor           Report skills that do not load (path, line, reason) and quarantined project skills
   reload           Rescan every skill root and bundle; report added, removed and changed skills since the last reload
   bundles          Manage skill bundles (`<profile>/skill-bundles/<slug>.toml`)
@@ -2971,6 +4213,175 @@ Commands:
 List the profile's skills with category, source and status (shadowed copies marked)
 
 Usage: prometheus skills help list
+```
+
+## `prometheus skills help install`
+
+```text
+Install a skill from the hub (official/<category>/<name>, <owner>/<repo>/<path>, skills-sh/..., clawhub:..., a SKILL.md URL...)
+
+Usage: prometheus skills help install
+```
+
+## `prometheus skills help uninstall`
+
+```text
+Remove a hub-installed skill
+
+Usage: prometheus skills help uninstall
+```
+
+## `prometheus skills help browse`
+
+```text
+List installable skills: the official catalog first, then the hub index and taps
+
+Usage: prometheus skills help browse
+```
+
+## `prometheus skills help search`
+
+```text
+Search the hub (the cached index first, live sources only when it has no match)
+
+Usage: prometheus skills help search
+```
+
+## `prometheus skills help inspect`
+
+```text
+Preview a hub skill (SKILL.md, files, scan verdict, upstream metadata) without installing it
+
+Usage: prometheus skills help inspect
+```
+
+## `prometheus skills help check`
+
+```text
+Report hub skills whose upstream changed, orphaned installs and unsafe recorded paths
+
+Usage: prometheus skills help check
+```
+
+## `prometheus skills help update`
+
+```text
+Reinstall hub skills whose upstream changed (locally modified ones need --force)
+
+Usage: prometheus skills help update
+```
+
+## `prometheus skills help audit`
+
+```text
+Re-scan every hub skill and quarantine dangerous ones
+
+Usage: prometheus skills help audit
+```
+
+## `prometheus skills help accept`
+
+```text
+Accept the current files of a quarantined hub skill (re-scans and re-records its digest)
+
+Usage: prometheus skills help accept
+```
+
+## `prometheus skills help sign`
+
+```text
+Sign a skill directory: writes SKILL.sig over its content digest
+
+Usage: prometheus skills help sign
+```
+
+## `prometheus skills help tap`
+
+```text
+Manage skill taps (GitHub repositories of skills)
+
+Usage: prometheus skills help tap [COMMAND]
+
+Commands:
+  list    List the taps
+  add     Add a tap
+  remove  Remove a tap
+```
+
+## `prometheus skills help tap list`
+
+```text
+List the taps
+
+Usage: prometheus skills help tap list
+```
+
+## `prometheus skills help tap add`
+
+```text
+Add a tap
+
+Usage: prometheus skills help tap add
+```
+
+## `prometheus skills help tap remove`
+
+```text
+Remove a tap
+
+Usage: prometheus skills help tap remove
+```
+
+## `prometheus skills help publish`
+
+```text
+Lint, scan and sign a skill, then open a pull request or registry submission
+
+Usage: prometheus skills help publish
+```
+
+## `prometheus skills help snapshot`
+
+```text
+Export or import the hub skills and taps of the profile
+
+Usage: prometheus skills help snapshot [COMMAND]
+
+Commands:
+  export  Write the snapshot to a file (`-` for stdout)
+  import  Add the taps and install every skill of a snapshot
+```
+
+## `prometheus skills help snapshot export`
+
+```text
+Write the snapshot to a file (`-` for stdout)
+
+Usage: prometheus skills help snapshot export
+```
+
+## `prometheus skills help snapshot import`
+
+```text
+Add the taps and install every skill of a snapshot
+
+Usage: prometheus skills help snapshot import
+```
+
+## `prometheus skills help config`
+
+```text
+Pick which skills are enabled, globally and per surface or adapter (interactive)
+
+Usage: prometheus skills help config
+```
+
+## `prometheus skills help untrust`
+
+```text
+Remove a trusted project root
+
+Usage: prometheus skills help untrust
 ```
 
 ## `prometheus skills help show`
@@ -3032,7 +4443,7 @@ Usage: prometheus skills help diff
 ## `prometheus skills help reset`
 
 ```text
-Remove an ejected copy so the name resolves to the bundled skill again
+Remove an ejected copy so the name resolves to the bundled skill again, or restore a hub skill to its locked content
 
 Usage: prometheus skills help reset
 ```
@@ -3201,6 +4612,904 @@ Usage: prometheus skills help repair-official
 Print this message or the help of the given subcommand(s)
 
 Usage: prometheus skills help help
+```
+
+## `prometheus curator`
+
+```text
+The skill curator: status, passes, pins, archive and restore, ledger and rollback
+
+Usage: prometheus curator [OPTIONS] <COMMAND>
+
+Commands:
+  status          Show whether automatic passes run, the managed skills and what a pass would do now
+  run             Run a pass now (in the background unless --sync)
+  pause           Stop automatic passes
+  resume          Allow automatic passes again
+  pin             Keep a skill out of every curator transition
+  unpin           Let the curator manage a pinned skill again
+  adopt           Put one of the profile's own skills under curator management
+  list-unmanaged  List the profile's own skills the curator does not manage
+  list-archived   List archived skills
+  archive         Move a skill into `skills/.archive/`
+  restore         Move an archived skill back
+  prune           Archive managed skills idle for at least N days
+  purge           Delete archived skills older than `curator.archive_ttl_secs` (or --days); never automatic
+  backup          Write a backup of the skills tree to `skills/.backups/`
+  rollback        Undo one ledger entry (`L<n>`), or restore the newest backup without one
+  ledger          List skill mutations, newest first
+  help            Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus curator status`
+
+```text
+Show whether automatic passes run, the managed skills and what a pass would do now
+
+Usage: prometheus curator status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus curator run`
+
+```text
+Run a pass now (in the background unless --sync)
+
+Usage: prometheus curator run [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --sync
+          Wait for the pass and print its summary
+
+      --dry-run
+          Print the planned transitions and change nothing
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --consolidate
+          Also merge overlapping skills (a model review on `auxiliary.curator`)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus curator pause`
+
+```text
+Stop automatic passes
+
+Usage: prometheus curator pause [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus curator resume`
+
+```text
+Allow automatic passes again
+
+Usage: prometheus curator resume [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus curator pin`
+
+```text
+Keep a skill out of every curator transition
+
+Usage: prometheus curator pin [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The skill
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus curator unpin`
+
+```text
+Let the curator manage a pinned skill again
+
+Usage: prometheus curator unpin [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The skill
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus curator adopt`
+
+```text
+Put one of the profile's own skills under curator management
+
+Usage: prometheus curator adopt [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The skill
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus curator list-unmanaged`
+
+```text
+List the profile's own skills the curator does not manage
+
+Usage: prometheus curator list-unmanaged [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus curator list-archived`
+
+```text
+List archived skills
+
+Usage: prometheus curator list-archived [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus curator archive`
+
+```text
+Move a skill into `skills/.archive/`
+
+Usage: prometheus curator archive [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The skill
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus curator restore`
+
+```text
+Move an archived skill back
+
+Usage: prometheus curator restore [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The skill
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus curator prune`
+
+```text
+Archive managed skills idle for at least N days
+
+Usage: prometheus curator prune [OPTIONS] --days <N>
+
+Options:
+      --days <N>
+          Idle days
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --dry-run
+          List them and change nothing
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus curator purge`
+
+```text
+Delete archived skills older than `curator.archive_ttl_secs` (or --days); never automatic
+
+Usage: prometheus curator purge [OPTIONS]
+
+Options:
+      --days <N>
+          Age in days instead of `curator.archive_ttl_secs`
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --dry-run
+          List them and delete nothing
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus curator backup`
+
+```text
+Write a backup of the skills tree to `skills/.backups/`
+
+Usage: prometheus curator backup [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus curator rollback`
+
+```text
+Undo one ledger entry (`L<n>`), or restore the newest backup without one
+
+Usage: prometheus curator rollback [OPTIONS] [ENTRY]
+
+Arguments:
+  [ENTRY]
+          The ledger entry
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus curator ledger`
+
+```text
+List skill mutations, newest first
+
+Usage: prometheus curator ledger [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --skill <S>
+          Only this skill
+
+      --limit <N>
+          At most this many entries
+
+          [default: 20]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus curator help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus curator help [COMMAND]
+
+Commands:
+  status          Show whether automatic passes run, the managed skills and what a pass would do now
+  run             Run a pass now (in the background unless --sync)
+  pause           Stop automatic passes
+  resume          Allow automatic passes again
+  pin             Keep a skill out of every curator transition
+  unpin           Let the curator manage a pinned skill again
+  adopt           Put one of the profile's own skills under curator management
+  list-unmanaged  List the profile's own skills the curator does not manage
+  list-archived   List archived skills
+  archive         Move a skill into `skills/.archive/`
+  restore         Move an archived skill back
+  prune           Archive managed skills idle for at least N days
+  purge           Delete archived skills older than `curator.archive_ttl_secs` (or --days); never automatic
+  backup          Write a backup of the skills tree to `skills/.backups/`
+  rollback        Undo one ledger entry (`L<n>`), or restore the newest backup without one
+  ledger          List skill mutations, newest first
+  help            Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus curator help status`
+
+```text
+Show whether automatic passes run, the managed skills and what a pass would do now
+
+Usage: prometheus curator help status
+```
+
+## `prometheus curator help run`
+
+```text
+Run a pass now (in the background unless --sync)
+
+Usage: prometheus curator help run
+```
+
+## `prometheus curator help pause`
+
+```text
+Stop automatic passes
+
+Usage: prometheus curator help pause
+```
+
+## `prometheus curator help resume`
+
+```text
+Allow automatic passes again
+
+Usage: prometheus curator help resume
+```
+
+## `prometheus curator help pin`
+
+```text
+Keep a skill out of every curator transition
+
+Usage: prometheus curator help pin
+```
+
+## `prometheus curator help unpin`
+
+```text
+Let the curator manage a pinned skill again
+
+Usage: prometheus curator help unpin
+```
+
+## `prometheus curator help adopt`
+
+```text
+Put one of the profile's own skills under curator management
+
+Usage: prometheus curator help adopt
+```
+
+## `prometheus curator help list-unmanaged`
+
+```text
+List the profile's own skills the curator does not manage
+
+Usage: prometheus curator help list-unmanaged
+```
+
+## `prometheus curator help list-archived`
+
+```text
+List archived skills
+
+Usage: prometheus curator help list-archived
+```
+
+## `prometheus curator help archive`
+
+```text
+Move a skill into `skills/.archive/`
+
+Usage: prometheus curator help archive
+```
+
+## `prometheus curator help restore`
+
+```text
+Move an archived skill back
+
+Usage: prometheus curator help restore
+```
+
+## `prometheus curator help prune`
+
+```text
+Archive managed skills idle for at least N days
+
+Usage: prometheus curator help prune
+```
+
+## `prometheus curator help purge`
+
+```text
+Delete archived skills older than `curator.archive_ttl_secs` (or --days); never automatic
+
+Usage: prometheus curator help purge
+```
+
+## `prometheus curator help backup`
+
+```text
+Write a backup of the skills tree to `skills/.backups/`
+
+Usage: prometheus curator help backup
+```
+
+## `prometheus curator help rollback`
+
+```text
+Undo one ledger entry (`L<n>`), or restore the newest backup without one
+
+Usage: prometheus curator help rollback
+```
+
+## `prometheus curator help ledger`
+
+```text
+List skill mutations, newest first
+
+Usage: prometheus curator help ledger
+```
+
+## `prometheus curator help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus curator help help
 ```
 
 ## `prometheus journey`
@@ -4679,6 +6988,7 @@ Usage: prometheus grants [OPTIONS] <COMMAND>
 
 Commands:
   list    List grants (id, subject, capability, surface, time) and approved command patterns
+  add     Grant a capability for good (for example `skill:gcloud-ops credential_files`)
   revoke  Remove a grant; running sessions lose it at their next tool call
   help    Print this message or the help of the given subcommand(s)
 
@@ -4727,6 +7037,52 @@ Options:
 
       --subject <SUBJECT>
           Only grants of this subject (`plugin:<id>@<digest>`, `mcp:<server>`, `skill:<name>`, `profile`)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus grants add`
+
+```text
+Grant a capability for good (for example `skill:gcloud-ops credential_files`)
+
+Usage: prometheus grants add [OPTIONS] <SUBJECT> <CAPABILITY>
+
+Arguments:
+  <SUBJECT>
+          The holder (`skill:<name>`, `mcp:<server>`, `plugin:<id>@<digest>`, `profile`)
+
+  <CAPABILITY>
+          The capability (`credential_files`, `secrets.read:<NAME>`, ...)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
@@ -4808,6 +7164,7 @@ Usage: prometheus grants help [COMMAND]
 
 Commands:
   list    List grants (id, subject, capability, surface, time) and approved command patterns
+  add     Grant a capability for good (for example `skill:gcloud-ops credential_files`)
   revoke  Remove a grant; running sessions lose it at their next tool call
   help    Print this message or the help of the given subcommand(s)
 ```
@@ -4818,6 +7175,14 @@ Commands:
 List grants (id, subject, capability, surface, time) and approved command patterns
 
 Usage: prometheus grants help list
+```
+
+## `prometheus grants help add`
+
+```text
+Grant a capability for good (for example `skill:gcloud-ops credential_files`)
+
+Usage: prometheus grants help add
 ```
 
 ## `prometheus grants help revoke`
@@ -5558,6 +7923,9 @@ Options:
       --unpin
           Follow `cron.model` (else the main model) again
 
+      --fallback <PROVIDER/MODEL>
+          The run's own fallback chain entry, `provider/model` (repeatable; `none` disables fallback, `""` removes the declaration). Without one a pinned job has no fallback and an unpinned one the profile's
+
       --reasoning-effort <LEVEL>
           Pin a reasoning level: none, minimal, low, medium, high, xhigh or max (`""` clears)
 
@@ -5701,6 +8069,9 @@ Options:
 
       --unpin
           Follow `cron.model` (else the main model) again
+
+      --fallback <PROVIDER/MODEL>
+          The run's own fallback chain entry, `provider/model` (repeatable; `none` disables fallback, `""` removes the declaration). Without one a pinned job has no fallback and an unpinned one the profile's
 
       --reasoning-effort <LEVEL>
           Pin a reasoning level: none, minimal, low, medium, high, xhigh or max (`""` clears)
@@ -11653,24 +14024,86 @@ Options:
           Print help (see a summary with '-h')
 ```
 
+## `prometheus status`
+
+```text
+Whether the daemon runs and how: components, sessions, the next scheduled job and today's spend (`--check` for scripts)
+
+Usage: prometheus status [OPTIONS]
+
+Options:
+      --check
+          Exit 1 when the daemon is not running or a component is down
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --full
+          Add the profile's model, providers with credentials, adapters, scheduled jobs, terminal backend, sandbox and session counts
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --deep
+          With `--full`: probe each provider, adapter and MCP server live (10 s each); the only mode that makes outbound requests
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --liveness
+          Ask the daemon's `/healthz`: exit 0 on 200 (printing nothing), 1 otherwise
+
+      --exports
+          Report every telemetry exporter and what can leave this host
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus usage`
 
 ```text
 Totals of model and metered tool calls from the usage ledger
 
 Usage: prometheus usage [OPTIONS]
+       prometheus usage <COMMAND>
+
+Commands:
+  insights  What the profile did: sessions, messages, turns, tools, tokens, cost, breakdowns by model, provider and source, top tools, skills, activity by weekday and hour, and the costliest lineages (no model call)
+  help      Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
 
       --since <S>
           Calls since `<N>[smhd]` ago or an RFC 3339 time
 
           [default: 30d]
 
-  -p, --profile <NAME>
-          Profile to use (default: the home's active_profile, else default)
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
 
       --until <S>
           Calls before `<N>[smhd]` ago or an RFC 3339 time (default: now)
@@ -11690,17 +14123,64 @@ Options:
 
           [default: day]
 
-      --set <KEY=VALUE>
-          Override a config key for this invocation only; repeatable, never saved
-
       --json
           Print one JSON document on stdout; errors go to stderr as JSON
 
       --session <ID>
           Only this session and its descendants (a root: its whole lineage)
 
+  -v, --verbose...
+          More detail; repeatable
+
       --all-profiles
           Every profile, each through its own scope, with a grand total
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus usage insights`
+
+```text
+What the profile did: sessions, messages, turns, tools, tokens, cost, breakdowns by model, provider and source, top tools, skills, activity by weekday and hour, and the costliest lineages (no model call)
+
+Usage: prometheus usage insights [OPTIONS]
+
+Options:
+      --days <N>
+          The last N days
+
+          [default: 30]
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --source <S>
+          Only lineages started from this surface or platform (`cli`, `tui`, `cron`, `telegram`...)
+
+      --all-profiles
+          Every profile, each through its own scope
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
 
   -v, --verbose...
           More detail; repeatable
@@ -11718,7 +14198,35 @@ Options:
           Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
-          Print help (see a summary with '-h')
+          Print help
+```
+
+## `prometheus usage help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus usage help [COMMAND]
+
+Commands:
+  insights  What the profile did: sessions, messages, turns, tools, tokens, cost, breakdowns by model, provider and source, top tools, skills, activity by weekday and hour, and the costliest lineages (no model call)
+  help      Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus usage help insights`
+
+```text
+What the profile did: sessions, messages, turns, tools, tokens, cost, breakdowns by model, provider and source, top tools, skills, activity by weekday and hour, and the costliest lineages (no model call)
+
+Usage: prometheus usage help insights
+```
+
+## `prometheus usage help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus usage help help
 ```
 
 ## `prometheus prompt`
@@ -11890,13 +14398,14 @@ Options:
 ## `prometheus trajectory`
 
 ```text
-Render the recorded trajectory of a session
+Render a session's recorded trajectory, or export sessions as `ShareGPT` training records
 
 Usage: prometheus trajectory [OPTIONS] <COMMAND>
 
 Commands:
-  show  Render a session's trajectory as canonical text or its JSONL lines
-  help  Print this message or the help of the given subcommand(s)
+  show    Render a session's trajectory as canonical text or its JSONL lines
+  export  Write sessions as `ShareGPT` conversations (or their events), one JSON line per session, redacted; sessions that ended in an error are left out unless `--include-failed`
+  help    Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -11995,6 +14504,67 @@ Options:
           Print help (see a summary with '-h')
 ```
 
+## `prometheus trajectory export`
+
+```text
+Write sessions as `ShareGPT` conversations (or their events), one JSON line per session, redacted; sessions that ended in an error are left out unless `--include-failed`
+
+Usage: prometheus trajectory export [OPTIONS] --format <FORMAT> --output <FILE>
+
+Options:
+      --format <FORMAT>
+          Record format
+
+          Possible values:
+          - sharegpt: `ShareGPT` `conversations` records
+          - jsonl:    The session's redacted trajectory events, one record per session
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --session <ID>
+          Sessions to export (id, id prefix or title; repeatable)
+
+      --eval-run <ID>
+          Sessions of this evaluation run
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --since <S>
+          Sessions started since `<N>[smhd]` ago or an RFC 3339 time
+
+      --include-failed
+          Also sessions that ended in an error
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -o, --output <FILE>
+          The JSON-lines file to write
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
 ## `prometheus trajectory help`
 
 ```text
@@ -12003,8 +14573,9 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus trajectory help [COMMAND]
 
 Commands:
-  show  Render a session's trajectory as canonical text or its JSONL lines
-  help  Print this message or the help of the given subcommand(s)
+  show    Render a session's trajectory as canonical text or its JSONL lines
+  export  Write sessions as `ShareGPT` conversations (or their events), one JSON line per session, redacted; sessions that ended in an error are left out unless `--include-failed`
+  help    Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus trajectory help show`
@@ -12013,6 +14584,14 @@ Commands:
 Render a session's trajectory as canonical text or its JSONL lines
 
 Usage: prometheus trajectory help show
+```
+
+## `prometheus trajectory help export`
+
+```text
+Write sessions as `ShareGPT` conversations (or their events), one JSON line per session, redacted; sessions that ended in an error are left out unless `--include-failed`
+
+Usage: prometheus trajectory help export
 ```
 
 ## `prometheus trajectory help help`
@@ -21897,10 +24476,11 @@ Commands:
   version      Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
   setup        Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
   doctor       Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
-  debug        Diagnostics: `debug summary` prints a plain-text setup summary for support threads
+  debug        Diagnostics: a setup summary for support threads, a redacted debug bundle, an opt-in report upload and a daemon task dump
   config       Read, change, validate and explain the profile's config.toml
   secrets      Store, list and remove the profile's secrets (values never on the command line)
   skills       List, inspect, enable, lint and maintain the profile's skills and skill bundles
+  curator      The skill curator: status, passes, pins, archive and restore, ledger and rollback
   journey      The skills and memories the agent learned, as a timeline; list, delete, edit
   memory       Inspect, edit, export and import what the agent remembers (built-in memory)
   grants       List and revoke the profile's permanent capability grants and approvals
@@ -21919,10 +24499,11 @@ Commands:
   profile      List, create, select, rename and delete profiles
   sessions     List, search, export and manage the profile's sessions
   logs         Show structured log records of a component (`list` names them)
+  status       Whether the daemon runs and how: components, sessions, the next scheduled job and today's spend (`--check` for scripts)
   usage        Totals of model and metered tool calls from the usage ledger
   prompt       Measure the system prompt and tool schemas a new session would send
   demo         Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
-  trajectory   Render the recorded trajectory of a session
+  trajectory   Render a session's recorded trajectory, or export sessions as `ShareGPT` training records
   model        Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
   providers    Provider routing state: per-route health scores
   moa          List, create, update and delete Mixture of Agents presets (`[moa.presets.<name>]`)
@@ -21985,12 +24566,16 @@ Usage: prometheus help doctor
 ## `prometheus help debug`
 
 ```text
-Diagnostics: `debug summary` prints a plain-text setup summary for support threads
+Diagnostics: a setup summary for support threads, a redacted debug bundle, an opt-in report upload and a daemon task dump
 
 Usage: prometheus help debug [COMMAND]
 
 Commands:
-  summary  A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
+  summary     A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
+  bundle      Write a redacted `tar.zst` of the window's logs, the configuration, `doctor --json`, `version --json`, crash reports and optionally a session's trajectory (nothing is uploaded)
+  share       Upload a redacted report (setup summary and recent log records) to a paste service after an explicit yes, or write it locally
+  delete      Delete a share recorded in `logs/shares.json` where the target supports deletion
+  dump-tasks  Ask the running daemon to write a dump of every thread and task to `logs/task-dump-<UTC>.txt` without stopping it
 ```
 
 ## `prometheus help debug summary`
@@ -21999,6 +24584,38 @@ Commands:
 A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
 
 Usage: prometheus help debug summary
+```
+
+## `prometheus help debug bundle`
+
+```text
+Write a redacted `tar.zst` of the window's logs, the configuration, `doctor --json`, `version --json`, crash reports and optionally a session's trajectory (nothing is uploaded)
+
+Usage: prometheus help debug bundle
+```
+
+## `prometheus help debug share`
+
+```text
+Upload a redacted report (setup summary and recent log records) to a paste service after an explicit yes, or write it locally
+
+Usage: prometheus help debug share
+```
+
+## `prometheus help debug delete`
+
+```text
+Delete a share recorded in `logs/shares.json` where the target supports deletion
+
+Usage: prometheus help debug delete
+```
+
+## `prometheus help debug dump-tasks`
+
+```text
+Ask the running daemon to write a dump of every thread and task to `logs/task-dump-<UTC>.txt` without stopping it
+
+Usage: prometheus help debug dump-tasks
 ```
 
 ## `prometheus help config`
@@ -22174,6 +24791,21 @@ Usage: prometheus help skills [COMMAND]
 
 Commands:
   list             List the profile's skills with category, source and status (shadowed copies marked)
+  install          Install a skill from the hub (official/<category>/<name>, <owner>/<repo>/<path>, skills-sh/..., clawhub:..., a SKILL.md URL...)
+  uninstall        Remove a hub-installed skill
+  browse           List installable skills: the official catalog first, then the hub index and taps
+  search           Search the hub (the cached index first, live sources only when it has no match)
+  inspect          Preview a hub skill (SKILL.md, files, scan verdict, upstream metadata) without installing it
+  check            Report hub skills whose upstream changed, orphaned installs and unsafe recorded paths
+  update           Reinstall hub skills whose upstream changed (locally modified ones need --force)
+  audit            Re-scan every hub skill and quarantine dangerous ones
+  accept           Accept the current files of a quarantined hub skill (re-scans and re-records its digest)
+  sign             Sign a skill directory: writes SKILL.sig over its content digest
+  tap              Manage skill taps (GitHub repositories of skills)
+  publish          Lint, scan and sign a skill, then open a pull request or registry submission
+  snapshot         Export or import the hub skills and taps of the profile
+  config           Pick which skills are enabled, globally and per surface or adapter (interactive)
+  untrust          Remove a trusted project root
   show             Show one skill: where it comes from, its status, its files and its SKILL.md
   enable           Enable a skill (from the next session)
   disable          Disable a skill (from the next session); `prometheus-agent` cannot be disabled
@@ -22181,7 +24813,7 @@ Commands:
   trust            Load the skills of a git checkout (`.prometheus/skills`, `.agents/skills`) in new sessions
   eject            Copy a bundled skill into the profile as an editable copy that shadows it
   diff             Show how an ejected copy differs from the current bundled version
-  reset            Remove an ejected copy so the name resolves to the bundled skill again
+  reset            Remove an ejected copy so the name resolves to the bundled skill again, or restore a hub skill to its locked content
   doctor           Report skills that do not load (path, line, reason) and quarantined project skills
   reload           Rescan every skill root and bundle; report added, removed and changed skills since the last reload
   bundles          Manage skill bundles (`<profile>/skill-bundles/<slug>.toml`)
@@ -22198,6 +24830,175 @@ Commands:
 List the profile's skills with category, source and status (shadowed copies marked)
 
 Usage: prometheus help skills list
+```
+
+## `prometheus help skills install`
+
+```text
+Install a skill from the hub (official/<category>/<name>, <owner>/<repo>/<path>, skills-sh/..., clawhub:..., a SKILL.md URL...)
+
+Usage: prometheus help skills install
+```
+
+## `prometheus help skills uninstall`
+
+```text
+Remove a hub-installed skill
+
+Usage: prometheus help skills uninstall
+```
+
+## `prometheus help skills browse`
+
+```text
+List installable skills: the official catalog first, then the hub index and taps
+
+Usage: prometheus help skills browse
+```
+
+## `prometheus help skills search`
+
+```text
+Search the hub (the cached index first, live sources only when it has no match)
+
+Usage: prometheus help skills search
+```
+
+## `prometheus help skills inspect`
+
+```text
+Preview a hub skill (SKILL.md, files, scan verdict, upstream metadata) without installing it
+
+Usage: prometheus help skills inspect
+```
+
+## `prometheus help skills check`
+
+```text
+Report hub skills whose upstream changed, orphaned installs and unsafe recorded paths
+
+Usage: prometheus help skills check
+```
+
+## `prometheus help skills update`
+
+```text
+Reinstall hub skills whose upstream changed (locally modified ones need --force)
+
+Usage: prometheus help skills update
+```
+
+## `prometheus help skills audit`
+
+```text
+Re-scan every hub skill and quarantine dangerous ones
+
+Usage: prometheus help skills audit
+```
+
+## `prometheus help skills accept`
+
+```text
+Accept the current files of a quarantined hub skill (re-scans and re-records its digest)
+
+Usage: prometheus help skills accept
+```
+
+## `prometheus help skills sign`
+
+```text
+Sign a skill directory: writes SKILL.sig over its content digest
+
+Usage: prometheus help skills sign
+```
+
+## `prometheus help skills tap`
+
+```text
+Manage skill taps (GitHub repositories of skills)
+
+Usage: prometheus help skills tap [COMMAND]
+
+Commands:
+  list    List the taps
+  add     Add a tap
+  remove  Remove a tap
+```
+
+## `prometheus help skills tap list`
+
+```text
+List the taps
+
+Usage: prometheus help skills tap list
+```
+
+## `prometheus help skills tap add`
+
+```text
+Add a tap
+
+Usage: prometheus help skills tap add
+```
+
+## `prometheus help skills tap remove`
+
+```text
+Remove a tap
+
+Usage: prometheus help skills tap remove
+```
+
+## `prometheus help skills publish`
+
+```text
+Lint, scan and sign a skill, then open a pull request or registry submission
+
+Usage: prometheus help skills publish
+```
+
+## `prometheus help skills snapshot`
+
+```text
+Export or import the hub skills and taps of the profile
+
+Usage: prometheus help skills snapshot [COMMAND]
+
+Commands:
+  export  Write the snapshot to a file (`-` for stdout)
+  import  Add the taps and install every skill of a snapshot
+```
+
+## `prometheus help skills snapshot export`
+
+```text
+Write the snapshot to a file (`-` for stdout)
+
+Usage: prometheus help skills snapshot export
+```
+
+## `prometheus help skills snapshot import`
+
+```text
+Add the taps and install every skill of a snapshot
+
+Usage: prometheus help skills snapshot import
+```
+
+## `prometheus help skills config`
+
+```text
+Pick which skills are enabled, globally and per surface or adapter (interactive)
+
+Usage: prometheus help skills config
+```
+
+## `prometheus help skills untrust`
+
+```text
+Remove a trusted project root
+
+Usage: prometheus help skills untrust
 ```
 
 ## `prometheus help skills show`
@@ -22259,7 +25060,7 @@ Usage: prometheus help skills diff
 ## `prometheus help skills reset`
 
 ```text
-Remove an ejected copy so the name resolves to the bundled skill again
+Remove an ejected copy so the name resolves to the bundled skill again, or restore a hub skill to its locked content
 
 Usage: prometheus help skills reset
 ```
@@ -22420,6 +25221,160 @@ Usage: prometheus help skills list-modified
 Re-record the provenance of official catalog installs that match the embedded copy
 
 Usage: prometheus help skills repair-official
+```
+
+## `prometheus help curator`
+
+```text
+The skill curator: status, passes, pins, archive and restore, ledger and rollback
+
+Usage: prometheus help curator [COMMAND]
+
+Commands:
+  status          Show whether automatic passes run, the managed skills and what a pass would do now
+  run             Run a pass now (in the background unless --sync)
+  pause           Stop automatic passes
+  resume          Allow automatic passes again
+  pin             Keep a skill out of every curator transition
+  unpin           Let the curator manage a pinned skill again
+  adopt           Put one of the profile's own skills under curator management
+  list-unmanaged  List the profile's own skills the curator does not manage
+  list-archived   List archived skills
+  archive         Move a skill into `skills/.archive/`
+  restore         Move an archived skill back
+  prune           Archive managed skills idle for at least N days
+  purge           Delete archived skills older than `curator.archive_ttl_secs` (or --days); never automatic
+  backup          Write a backup of the skills tree to `skills/.backups/`
+  rollback        Undo one ledger entry (`L<n>`), or restore the newest backup without one
+  ledger          List skill mutations, newest first
+```
+
+## `prometheus help curator status`
+
+```text
+Show whether automatic passes run, the managed skills and what a pass would do now
+
+Usage: prometheus help curator status
+```
+
+## `prometheus help curator run`
+
+```text
+Run a pass now (in the background unless --sync)
+
+Usage: prometheus help curator run
+```
+
+## `prometheus help curator pause`
+
+```text
+Stop automatic passes
+
+Usage: prometheus help curator pause
+```
+
+## `prometheus help curator resume`
+
+```text
+Allow automatic passes again
+
+Usage: prometheus help curator resume
+```
+
+## `prometheus help curator pin`
+
+```text
+Keep a skill out of every curator transition
+
+Usage: prometheus help curator pin
+```
+
+## `prometheus help curator unpin`
+
+```text
+Let the curator manage a pinned skill again
+
+Usage: prometheus help curator unpin
+```
+
+## `prometheus help curator adopt`
+
+```text
+Put one of the profile's own skills under curator management
+
+Usage: prometheus help curator adopt
+```
+
+## `prometheus help curator list-unmanaged`
+
+```text
+List the profile's own skills the curator does not manage
+
+Usage: prometheus help curator list-unmanaged
+```
+
+## `prometheus help curator list-archived`
+
+```text
+List archived skills
+
+Usage: prometheus help curator list-archived
+```
+
+## `prometheus help curator archive`
+
+```text
+Move a skill into `skills/.archive/`
+
+Usage: prometheus help curator archive
+```
+
+## `prometheus help curator restore`
+
+```text
+Move an archived skill back
+
+Usage: prometheus help curator restore
+```
+
+## `prometheus help curator prune`
+
+```text
+Archive managed skills idle for at least N days
+
+Usage: prometheus help curator prune
+```
+
+## `prometheus help curator purge`
+
+```text
+Delete archived skills older than `curator.archive_ttl_secs` (or --days); never automatic
+
+Usage: prometheus help curator purge
+```
+
+## `prometheus help curator backup`
+
+```text
+Write a backup of the skills tree to `skills/.backups/`
+
+Usage: prometheus help curator backup
+```
+
+## `prometheus help curator rollback`
+
+```text
+Undo one ledger entry (`L<n>`), or restore the newest backup without one
+
+Usage: prometheus help curator rollback
+```
+
+## `prometheus help curator ledger`
+
+```text
+List skill mutations, newest first
+
+Usage: prometheus help curator ledger
 ```
 
 ## `prometheus help journey`
@@ -22658,6 +25613,7 @@ Usage: prometheus help grants [COMMAND]
 
 Commands:
   list    List grants (id, subject, capability, surface, time) and approved command patterns
+  add     Grant a capability for good (for example `skill:gcloud-ops credential_files`)
   revoke  Remove a grant; running sessions lose it at their next tool call
 ```
 
@@ -22667,6 +25623,14 @@ Commands:
 List grants (id, subject, capability, surface, time) and approved command patterns
 
 Usage: prometheus help grants list
+```
+
+## `prometheus help grants add`
+
+```text
+Grant a capability for good (for example `skill:gcloud-ops credential_files`)
+
+Usage: prometheus help grants add
 ```
 
 ## `prometheus help grants revoke`
@@ -23708,12 +26672,31 @@ Show structured log records of a component (`list` names them)
 Usage: prometheus help logs
 ```
 
+## `prometheus help status`
+
+```text
+Whether the daemon runs and how: components, sessions, the next scheduled job and today's spend (`--check` for scripts)
+
+Usage: prometheus help status
+```
+
 ## `prometheus help usage`
 
 ```text
 Totals of model and metered tool calls from the usage ledger
 
-Usage: prometheus help usage
+Usage: prometheus help usage [COMMAND]
+
+Commands:
+  insights  What the profile did: sessions, messages, turns, tools, tokens, cost, breakdowns by model, provider and source, top tools, skills, activity by weekday and hour, and the costliest lineages (no model call)
+```
+
+## `prometheus help usage insights`
+
+```text
+What the profile did: sessions, messages, turns, tools, tokens, cost, breakdowns by model, provider and source, top tools, skills, activity by weekday and hour, and the costliest lineages (no model call)
+
+Usage: prometheus help usage insights
 ```
 
 ## `prometheus help prompt`
@@ -23746,12 +26729,13 @@ Usage: prometheus help demo
 ## `prometheus help trajectory`
 
 ```text
-Render the recorded trajectory of a session
+Render a session's recorded trajectory, or export sessions as `ShareGPT` training records
 
 Usage: prometheus help trajectory [COMMAND]
 
 Commands:
-  show  Render a session's trajectory as canonical text or its JSONL lines
+  show    Render a session's trajectory as canonical text or its JSONL lines
+  export  Write sessions as `ShareGPT` conversations (or their events), one JSON line per session, redacted; sessions that ended in an error are left out unless `--include-failed`
 ```
 
 ## `prometheus help trajectory show`
@@ -23760,6 +26744,14 @@ Commands:
 Render a session's trajectory as canonical text or its JSONL lines
 
 Usage: prometheus help trajectory show
+```
+
+## `prometheus help trajectory export`
+
+```text
+Write sessions as `ShareGPT` conversations (or their events), one JSON line per session, redacted; sessions that ended in an error are left out unless `--include-failed`
+
+Usage: prometheus help trajectory export
 ```
 
 ## `prometheus help model`
@@ -25384,6 +28376,13 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | Schema | Command |
 |---|---|
 | `prometheus.cache_stats.v1` | `prometheus cache stats` |
+| `prometheus.status.v1` | `prometheus status` |
+| `prometheus.debug_bundle.v1` | `prometheus debug bundle` |
+| `prometheus.debug_share.v1` | `prometheus debug share` |
+| `prometheus.debug_dump_tasks.v1` | `prometheus debug dump-tasks` |
+| `prometheus.usage_insights.v1` | `prometheus usage insights` |
+| `prometheus.trajectory_export.v1` | `prometheus trajectory export` |
+| `prometheus.status_exports.v1` | `prometheus status exports` |
 | `prometheus.cache_prune.v1` | `prometheus cache prune` |
 | `prometheus.cache_clear.v1` | `prometheus cache clear` |
 | `prometheus.profile_export.v1` | `prometheus profile export` |

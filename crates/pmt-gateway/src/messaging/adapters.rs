@@ -78,6 +78,8 @@ pub(crate) struct Slot {
     /// Since when the adapter is outside `connected` (an unconfirmed
     /// fresh connection counts as connected).
     pub(crate) outside_since: Mutex<Option<tokio::time::Instant>>,
+    /// Failed connections or polls since the last connection (health).
+    failures: std::sync::atomic::AtomicU32,
 }
 
 impl Slot {
@@ -145,6 +147,11 @@ impl Slot {
                 (false, Some(_)) => {}
             }
         }
+        let (profile, platform) = {
+            let status = self.status.lock().expect("status poisoned");
+            (status.profile.clone(), status.platform.clone())
+        };
+        super::adapter_health::report(&profile, &platform, state, error, &self.failures);
         let announced = {
             let mut status = self.status.lock().expect("status poisoned");
             let changed = status.state != state
@@ -400,6 +407,13 @@ fn record_failure(shared: &Shared, key: (String, String), error: &AdapterError) 
         paused: false,
         descriptor: None,
     };
+    super::adapter_health::report(
+        &key.0,
+        &key.1,
+        AdapterState::Fatal,
+        Some(error),
+        &std::sync::atomic::AtomicU32::new(0),
+    );
     shared
         .adapters
         .failed
@@ -454,6 +468,7 @@ fn launch_slot(
         stop: shared.stop.child_token(),
         shared: Arc::downgrade(shared),
         outside_since: Mutex::new(Some(tokio::time::Instant::now())),
+        failures: std::sync::atomic::AtomicU32::new(0),
     });
     shared
         .adapters
@@ -462,7 +477,7 @@ fn launch_slot(
         .expect("adapters poisoned")
         .insert(key.clone(), Arc::clone(&slot));
     let span = tracing::info_span!("adapter", profile = key.0, platform = key.1);
-    tokio::spawn(supervise(Arc::downgrade(shared), key, slot).instrument(span));
+    pmt_core::spawn::spawn(supervise(Arc::downgrade(shared), key, slot).instrument(span));
 }
 
 /// Connects the adapter and reconnects it after a retryable loss.
@@ -731,7 +746,7 @@ fn front_profile(
                 );
                 slot.stop.cancel();
                 let adapter = Arc::clone(&slot.adapter);
-                tokio::spawn(async move { adapter.disconnect().await });
+                pmt_core::spawn::spawn(async move { adapter.disconnect().await });
             }
             None => {
                 let direct = shared.agents.scope(profile).is_some_and(|scope| {

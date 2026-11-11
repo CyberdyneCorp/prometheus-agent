@@ -15,6 +15,7 @@ minisign.workspace = true
 minisign-verify.workspace = true
 pmt-config.workspace = true
 pmt-core.workspace = true
+pmt-obs.workspace = true
 # Model-provider plugins register `model-providers` descriptors.
 pmt-providers.workspace = true
 pmt-sandbox.workspace = true

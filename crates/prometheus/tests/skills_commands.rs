@@ -59,6 +59,12 @@ fn json(home: &Path, args: &[&str]) -> Value {
 fn list_shows_source_status_and_shadowed_copies() {
     let home = temp_home();
     let h = home.path();
+    // Only the essential bundled skill: the rest of the bundled tree
+    // depends on the host platform.
+    ok(&run(
+        h,
+        &["config", "set", "skills.include_bundled", "false"],
+    ));
     skill(h, "devops/deploy", "deploy", "Deploy the service.");
     skill(h, "notes/journal", "journal", "Write a journal entry.");
     skill(h, "notes/old-notes", "old-notes", "Old notes.");

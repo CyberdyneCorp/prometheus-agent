@@ -192,3 +192,94 @@ fn a_container_session_write_is_undone_from_the_host() {
     );
     assert!(!work.join("notes.txt").exists());
 }
+
+/// A profile skill `gcloud-ops` declaring `creds/gcp.json`, which exists.
+fn credential_skill(home: &Path) {
+    let profile = home.join("profiles/default");
+    std::fs::create_dir_all(profile.join("skills/gcloud-ops")).unwrap();
+    std::fs::write(
+        profile.join("skills/gcloud-ops/SKILL.md"),
+        "---\nname: gcloud-ops\ndescription: Operate Google Cloud.\nmetadata:\n  prometheus:\n    credential_files:\n      - path: creds/gcp.json\n        description: Service account key.\n---\nUse gcloud.\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(profile.join("creds")).unwrap();
+    std::fs::write(profile.join("creds/gcp.json"), "{\"key\": \"s3cret\"}").unwrap();
+}
+
+/// A one-shot chat that loads the skill, then runs `command` in the
+/// container and reads the host copy with `read_file`; the tool results.
+fn load_and_run(home: &Path, command: &str) -> Vec<String> {
+    let profile = home.join("profiles/default");
+    let host_copy = profile.join("creds/gcp.json");
+    std::fs::write(
+        profile.join("mock.toml"),
+        format!(
+            "[[rule]]\nuser = \"go\"\n[[rule.tool_calls]]\nname = \"skill_view\"\narguments = {{ name = \"gcloud-ops\" }}\n\n\
+             [[rule]]\ntool_result = \"Use gcloud\"\n[[rule.tool_calls]]\nname = \"terminal\"\narguments = {{ command = {command:?} }}\n\n\
+             [[rule]]\ntool_result_regex = \".\"\n[[rule.tool_calls]]\nname = \"read_file\"\narguments = {{ path = {:?} }}\n\n\
+             [[rule]]\ntool_result_regex = \".\"\ntext = \"done\"\n",
+            host_copy.display().to_string()
+        ),
+    )
+    .unwrap();
+    append_config(home, "\n[providers.mock]\nscript = \"mock.toml\"\n");
+    let out = run(home, &["-z", "go"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    common::active_messages(home)
+        .iter()
+        .filter(|m| m["role"] == "tool")
+        .map(|m| m["content"].as_str().unwrap_or_default().to_owned())
+        .collect()
+}
+
+/// Scenario: Read-only mount into Docker (spec: skills, Skill credential
+/// file passthrough).
+#[test]
+fn a_granted_credential_file_is_mounted_read_only() {
+    let Some(setting) = runtime_setting() else {
+        return;
+    };
+    let home = container_home(&setting);
+    credential_skill(home.path());
+    common::ok(&run(
+        home.path(),
+        &["grants", "add", "skill:gcloud-ops", "credential_files"],
+    ));
+    let results = load_and_run(
+        home.path(),
+        "cat /prometheus/creds/gcp.json; echo x > /prometheus/creds/gcp.json || echo read-only",
+    );
+    assert!(
+        results[1].contains("s3cret") && results[1].contains("read-only"),
+        "{results:?}"
+    );
+    assert!(
+        !results[2].contains("s3cret"),
+        "read_file reached the host copy: {results:?}"
+    );
+}
+
+/// Scenario: No grant, no file.
+#[test]
+fn without_the_grant_no_credential_file_is_passed() {
+    let Some(setting) = runtime_setting() else {
+        return;
+    };
+    let home = container_home(&setting);
+    credential_skill(home.path());
+    let results = load_and_run(home.path(), "cat /prometheus/creds/gcp.json || echo absent");
+    let notice = "they are passed only with the grant skill:gcloud-ops credential_files";
+    assert_eq!(
+        results.iter().filter(|r| r.contains(notice)).count(),
+        1,
+        "{results:?}"
+    );
+    assert!(
+        results[1].contains("absent") && !results[1].contains("s3cret"),
+        "{results:?}"
+    );
+}

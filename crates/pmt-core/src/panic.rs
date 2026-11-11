@@ -205,7 +205,7 @@ where
     F::Output: Send + 'static,
 {
     let task = task.into();
-    tokio::spawn(async move { isolate(&task, &reporter, work).await })
+    crate::spawn::spawn(async move { isolate(&task, &reporter, work).await })
 }
 
 /// Runs the main-thread body `f`, which returns the process exit status.

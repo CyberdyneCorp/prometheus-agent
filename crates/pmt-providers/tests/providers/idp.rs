@@ -53,11 +53,11 @@ impl Idp {
         let received: Arc<Mutex<Vec<Received>>> = Arc::default();
         let handler: Arc<Handler> = Arc::new(handler);
         let log = Arc::clone(&received);
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             while let Ok((stream, _)) = listener.accept().await {
                 let handler = Arc::clone(&handler);
                 let log = Arc::clone(&log);
-                tokio::spawn(serve(stream, handler, log));
+                pmt_core::spawn::spawn(serve(stream, handler, log));
             }
         });
         Self { base, received }

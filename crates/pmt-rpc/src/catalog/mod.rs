@@ -157,6 +157,8 @@ pub fn declare_builtin(d: &mut Declarations) {
         .method::<c::WorktreeStatusCall>()
         .method::<c::WorktreeList>()
         .method::<c::WorktreePrune>()
+        .method::<c::SystemMetricsCall>()
+        .method::<c::SystemHealthCall>()
         .server_request::<c::ApprovalAsk>()
         .server_request::<c::ClarifyAsk>()
         .server_request::<c::SecretAsk>()
@@ -166,7 +168,9 @@ pub fn declare_builtin(d: &mut Declarations) {
         .event::<c::RequestCancelled>()
         .event::<c::RequestDone>()
         .event::<c::SessionEvent>()
-        .event::<c::TurnEnded>();
+        .event::<c::TurnEnded>()
+        .event::<c::UsageUpdatedEvent>()
+        .event::<c::HealthChangedEvent>();
 }
 
 impl Catalog {

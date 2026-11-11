@@ -38,6 +38,13 @@ const VOICE: &[Surface] = &[
     Surface::Desktop,
     Surface::Gateway,
 ];
+/// Profile-wide reports: the interactive surfaces, never a chat.
+const INTERACTIVE: &[Surface] = &[
+    Surface::Cli,
+    Surface::Tui,
+    Surface::Desktop,
+    Surface::Dashboard,
+];
 const CHATS: &[Surface] = &[
     Surface::Cli,
     Surface::Tui,
@@ -380,6 +387,26 @@ pub static BUILTINS: &[Command] = &[
         Effect::None,
     ),
     command(
+        "insights",
+        &[],
+        Info,
+        "Usage insights of the last N days (default 30): sessions, turns, tools, tokens, cost, sources and activity; no model call",
+        &[text("days")],
+        INTERACTIVE,
+        Immediate,
+        Effect::None,
+    ),
+    command(
+        "debug",
+        &[],
+        Info,
+        "Write a redacted debug report (/debug), or upload it after an explicit yes (/debug share, then /debug share yes)",
+        &[text("action")],
+        super::TERMINALS,
+        Immediate,
+        Effect::None,
+    ),
+    command(
         "login",
         &[],
         Info,
@@ -660,6 +687,16 @@ pub static BUILTINS: &[Command] = &[
         &[text("focus")],
         CHATS,
         BusyPolicy::Reject,
+        Effect::None,
+    ),
+    command(
+        "curator",
+        &[],
+        Tools,
+        "The skill curator: status, run [--consolidate] [--dry-run], pause, resume, pin, unpin, archive, restore, ledger",
+        &[text("args")],
+        CHATS,
+        Immediate,
         Effect::None,
     ),
     command(

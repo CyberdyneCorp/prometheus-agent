@@ -127,6 +127,11 @@ and per file ≤ 1,500 lines.
 `unsafe impl` needs a `// SAFETY:` comment directly above it explaining why it
 is sound.
 
+Spawn async tasks and blocking jobs through `pmt_core::spawn` (`spawn`,
+`spawn_on`, `spawn_in`, `blocking`, `blocking_on`), never tokio's spawn
+functions directly (clippy's `disallowed-methods` refuses them): task dumps
+list every tracked task with its spawn site and await point.
+
 Code that already exceeds a limit is listed in `health.toml` as an
 `[[exception]]` with a reason. Exceptions may only shrink: a new entry, a
 raised `max` or code that grows past its `max` fails the gate, and a `max`

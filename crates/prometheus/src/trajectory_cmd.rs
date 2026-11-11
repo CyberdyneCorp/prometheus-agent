@@ -24,13 +24,16 @@ use crate::output::{document, print_raw};
 /// `trajectory.grammar_too_new` (76), `trajectory.malformed`,
 /// `trajectory.io`, `output.io`.
 pub fn run(command: &TrajectoryCommand, ctx: &Context<'_>) -> Result<u8, Error> {
-    let TrajectoryCommand::Show {
-        session,
-        format,
-        args_trunc,
-        obs_trunc,
-        max_chars,
-    } = command;
+    let (session, format, args_trunc, obs_trunc, max_chars) = match command {
+        TrajectoryCommand::Show {
+            session,
+            format,
+            args_trunc,
+            obs_trunc,
+            max_chars,
+        } => (session, format, args_trunc, obs_trunc, max_chars),
+        TrajectoryCommand::Export(args) => return crate::trajectory_export::run(args, ctx),
+    };
     let scope = ctx.scope()?;
     let id = match SessionId::parse(session) {
         Ok(id) => id,

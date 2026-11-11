@@ -44,7 +44,7 @@ impl Tui<'_> {
             }
         };
         self.background(async move {
-            let read = tokio::task::spawn_blocking(move || {
+            let read = pmt_core::spawn::blocking(move || {
                 if text_first && let Some(text) = clipboard.text() {
                     return Ok(Grabbed::Text(text));
                 }

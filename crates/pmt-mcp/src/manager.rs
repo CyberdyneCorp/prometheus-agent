@@ -131,7 +131,7 @@ impl Manager {
                 .map(|server| {
                     let permits = Arc::clone(&permits);
                     let name = server.name().to_owned();
-                    let handle = tokio::spawn(async move {
+                    let handle = pmt_core::spawn::spawn(async move {
                         let _permit = permits.acquire_owned().await.ok();
                         server.ensure().await
                     });

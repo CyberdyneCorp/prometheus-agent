@@ -13,6 +13,105 @@ pub enum SkillsCommand {
         #[arg(long)]
         outdated: bool,
     },
+    /// Install a skill from the hub (official/<category>/<name>, <owner>/<repo>/<path>, skills-sh/..., clawhub:..., a SKILL.md URL...).
+    Install {
+        /// The skill identifier (omit with --locked).
+        identifier: Option<String>,
+        /// Override a non-dangerous block and replace an installed copy.
+        #[arg(long)]
+        force: bool,
+        /// The skill name when the source gives none (a bare SKILL.md URL).
+        #[arg(long, value_name = "N")]
+        name: Option<String>,
+        /// Reproduce exactly the skills in skills.lock; fail on any digest mismatch.
+        #[arg(long, conflicts_with = "identifier")]
+        locked: bool,
+    },
+    /// Remove a hub-installed skill.
+    Uninstall {
+        /// The skill.
+        name: String,
+    },
+    /// List installable skills: the official catalog first, then the hub index and taps.
+    Browse {
+        /// Only this source (official, github, skills-sh, clawhub, lobehub, browse-sh, well-known, url).
+        #[arg(long, value_name = "S")]
+        source: Option<String>,
+    },
+    /// Search the hub (the cached index first, live sources only when it has no match).
+    Search {
+        /// What to look for.
+        query: String,
+        /// Only this source.
+        #[arg(long, value_name = "S")]
+        source: Option<String>,
+    },
+    /// Preview a hub skill (SKILL.md, files, scan verdict, upstream metadata) without installing it.
+    Inspect {
+        /// The skill identifier.
+        identifier: String,
+    },
+    /// Report hub skills whose upstream changed, orphaned installs and unsafe recorded paths.
+    Check {
+        /// One skill.
+        name: Option<String>,
+    },
+    /// Reinstall hub skills whose upstream changed (locally modified ones need --force).
+    Update {
+        /// One skill.
+        name: Option<String>,
+        /// Also replace locally modified skills.
+        #[arg(long)]
+        force: bool,
+    },
+    /// Re-scan every hub skill and quarantine dangerous ones.
+    Audit,
+    /// Accept the current files of a quarantined hub skill (re-scans and re-records its digest).
+    Accept {
+        /// The skill.
+        name: String,
+    },
+    /// Sign a skill directory: writes SKILL.sig over its content digest.
+    Sign {
+        /// The skill directory.
+        dir: PathBuf,
+        /// A minisign secret key (default: `skills.signing_key`).
+        #[arg(long, value_name = "PATH", conflicts_with = "keyless")]
+        key: Option<PathBuf>,
+        /// Sign with a Sigstore keyless identity (OpenID sign-in).
+        #[arg(long)]
+        keyless: bool,
+    },
+    /// Manage skill taps (GitHub repositories of skills).
+    Tap {
+        /// The tap subcommand.
+        #[command(subcommand)]
+        command: TapCommand,
+    },
+    /// Lint, scan and sign a skill, then open a pull request or registry submission.
+    Publish {
+        /// The skill directory.
+        dir: PathBuf,
+        /// Where to publish.
+        #[arg(long, value_enum)]
+        to: PublishTo,
+        /// The repository the pull request targets (GitHub).
+        #[arg(long, value_name = "owner/repo")]
+        repo: Option<String>,
+    },
+    /// Export or import the hub skills and taps of the profile.
+    Snapshot {
+        /// The snapshot subcommand.
+        #[command(subcommand)]
+        command: SnapshotCommand,
+    },
+    /// Pick which skills are enabled, globally and per surface or adapter (interactive).
+    Config,
+    /// Remove a trusted project root.
+    Untrust {
+        /// The repository root.
+        root: PathBuf,
+    },
     /// Show one skill: where it comes from, its status, its files and its SKILL.md.
     Show {
         /// The skill.
@@ -57,9 +156,9 @@ pub enum SkillsCommand {
         /// The ejected skill.
         name: String,
     },
-    /// Remove an ejected copy so the name resolves to the bundled skill again.
+    /// Remove an ejected copy so the name resolves to the bundled skill again, or restore a hub skill to its locked content.
     Reset {
-        /// The ejected skill.
+        /// The ejected or hub skill.
         name: String,
     },
     /// Report skills that do not load (path, line, reason) and quarantined project skills.
@@ -101,6 +200,53 @@ pub enum SkillsCommand {
         /// Do not ask before restoring.
         #[arg(long)]
         yes: bool,
+    },
+}
+
+/// `prometheus skills tap` subcommands.
+#[derive(Debug, Subcommand)]
+pub enum TapCommand {
+    /// List the taps.
+    List,
+    /// Add a tap.
+    Add {
+        /// `owner/repo`.
+        repo: String,
+        /// Where its skills live in the repository.
+        #[arg(long, value_name = "P")]
+        path: Option<String>,
+    },
+    /// Remove a tap.
+    Remove {
+        /// `owner/repo`.
+        repo: String,
+    },
+}
+
+/// `prometheus skills publish --to`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum PublishTo {
+    /// A pull request to a GitHub repository.
+    Github,
+    /// The ClawHub registry.
+    Clawhub,
+}
+
+/// `prometheus skills snapshot` subcommands.
+#[derive(Debug, Subcommand)]
+pub enum SnapshotCommand {
+    /// Write the snapshot to a file (`-` for stdout).
+    Export {
+        /// The file, or `-`.
+        file: String,
+    },
+    /// Add the taps and install every skill of a snapshot.
+    Import {
+        /// The snapshot file.
+        file: PathBuf,
+        /// Reinstall skills already present.
+        #[arg(long)]
+        force: bool,
     },
 }
 

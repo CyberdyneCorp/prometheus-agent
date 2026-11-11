@@ -101,9 +101,9 @@ impl SignalMock {
             addr: listener.local_addr().unwrap(),
         });
         let server = Arc::clone(&mock);
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             while let Ok((stream, _)) = listener.accept().await {
-                tokio::spawn(Arc::clone(&server).connection(stream));
+                pmt_core::spawn::spawn(Arc::clone(&server).connection(stream));
             }
         });
         mock

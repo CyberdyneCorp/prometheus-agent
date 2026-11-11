@@ -42,22 +42,22 @@ pub fn catalog_job(
         .iter()
         .find(|q| q.quant == priced.quant)
         .expect("a priced quant is one of the entry's");
-    let dir = library.dir(&entry.id);
+    let dir = library.dir(&entry.id)?;
     let mut files: Vec<(FileSpec, Role)> = quant
         .files
         .iter()
         .enumerate()
         .map(|(i, f)| {
             let role = if i == 0 { Role::Weights } else { Role::Part };
-            (
-                spec(catalog.url(entry, f), &f.path, f.size, &f.sha256, &dir),
+            Ok((
+                spec(catalog.url(entry, f), &f.path, f.size, &f.sha256, &dir)?,
                 role,
-            )
+            ))
         })
-        .collect();
+        .collect::<Result<_, Error>>()?;
     if let Some(p) = &entry.projector {
         files.push((
-            spec(catalog.url(entry, p), &p.path, p.size, &p.sha256, &dir),
+            spec(catalog.url(entry, p), &p.path, p.size, &p.sha256, &dir)?,
             Role::Projector,
         ));
     }
@@ -95,16 +95,33 @@ pub fn create(jobs: &Jobs, model: &Model, files: Vec<FileSpec>) -> Result<Job, E
 }
 
 /// A file of a model, staged into the model's directory.
-#[must_use]
-pub fn spec(url: String, path: &str, size: u64, sha256: &str, dir: &std::path::Path) -> FileSpec {
+///
+/// # Errors
+///
+/// `config.invalid_argument` (2) for a remote file name that could leave
+/// `dir` (`..`, a backslash, `:`, empty): hub repositories are untrusted, and on
+/// Windows a backslash name would traverse through `dir.join`.
+pub fn spec(
+    url: String,
+    path: &str,
+    size: u64,
+    sha256: &str,
+    dir: &std::path::Path,
+) -> Result<FileSpec, Error> {
     let name = path.rsplit('/').next().unwrap_or(path).to_owned();
-    FileSpec {
+    if name.is_empty() || name == "." || name.contains("..") || name.contains(['\\', ':']) {
+        return Err(Error::new(
+            &codes::CONFIG_INVALID_ARGUMENT,
+            format!("refusing remote file name '{path}'"),
+        ));
+    }
+    Ok(FileSpec {
         target: dir.join(&name),
         name,
         url,
         size,
         sha256: sha256.to_owned(),
-    }
+    })
 }
 
 /// Runs a model job; once done, publishes its record and deletes the job.

@@ -375,7 +375,7 @@ impl Repl {
     /// cancels its command.
     pub(super) async fn answer(&mut self, pending: Pending, line: &str) -> Flow {
         match pending {
-            Pending::Confirm { line: command } => self.confirmed(&command, line).await,
+            Pending::Confirm { line: command } => Box::pin(self.confirmed(&command, line)).await,
             Pending::Resume(unfinished) => {
                 let yes = matches!(line.trim().to_lowercase().as_str(), "y" | "yes");
                 self.run_work(Work::Resume(unfinished, yes)).await;

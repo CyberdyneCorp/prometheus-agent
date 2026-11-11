@@ -1,0 +1,21 @@
+# The OpenTelemetry Collector the OTLP export is verified against (spec:
+# observability, Opt-in OpenTelemetry export): both OTLP receivers, every
+# trace and metric written as OTLP JSON lines for the test to read.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+exporters:
+  file:
+    path: /out/otlp.jsonl
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [file]
+    metrics:
+      receivers: [otlp]
+      exporters: [file]

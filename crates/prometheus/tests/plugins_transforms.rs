@@ -421,11 +421,11 @@ text = "it was shouted"
 #[test]
 fn delete_load_and_unfired_hooks_are_reported() {
     let home = mock_home();
-    let names = "on_session_delete,on_plugin_loaded,pre_auxiliary_call";
+    let names = "on_session_delete,on_plugin_loaded,on_room_member_activity";
     hooks_plugin(
         home.path(),
         "audit",
-        "hooks = [\"on_session_delete\", \"on_plugin_loaded\", \"pre_auxiliary_call\"]",
+        "hooks = [\"on_session_delete\", \"on_plugin_loaded\", \"on_room_member_activity\"]",
         &[("hooks", &format!("\"{names}\""))],
     );
     let out = one_shot(home.path(), &["-z", "hi"]);
@@ -441,9 +441,46 @@ fn delete_load_and_unfired_hooks_are_reported() {
     assert!(deleted.contains(&session), "{deleted}");
     let doctor = ok(&run(home.path(), &["plugins", "doctor"]));
     assert!(
-        doctor.contains("warn  audit: hook 'pre_auxiliary_call' never fires in this build"),
+        doctor.contains("warn  audit: hook 'on_room_member_activity' never fires in this build"),
         "{doctor}"
     );
+}
+
+/// An auxiliary call (here the `vision` route describing an image for a
+/// model without vision) fires `pre_auxiliary_call` before it and
+/// `post_auxiliary_call` after it, naming the session, task and route.
+#[test]
+fn an_auxiliary_call_fires_pre_and_post_auxiliary_call() {
+    let home = mock_home();
+    common::append_config(
+        home.path(),
+        "\n[models.\"mock/mock\"]\nsupports_vision = false\n\n[auxiliary.vision]\nprovider = \"mock\"\n",
+    );
+    let names = "pre_auxiliary_call,post_auxiliary_call";
+    hooks_plugin(
+        home.path(),
+        "aux",
+        "hooks = [\"pre_auxiliary_call\", \"post_auxiliary_call\"]",
+        &[("hooks", &format!("\"{names}\""))],
+    );
+    let shot = home.path().join("shot.png");
+    std::fs::write(&shot, common::PNG).unwrap();
+    let out = one_shot(
+        home.path(),
+        &["-z", "what is it", "--image", shot.to_str().unwrap()],
+    );
+    assert!(out.status.success(), "{}", stderr(&out));
+    assert_eq!(
+        seen(home.path(), "aux"),
+        names.split(',').collect::<Vec<_>>()
+    );
+    let session = newest_session(home.path());
+    let before = plugin_state(home.path(), "aux", "last_pre_auxiliary_call");
+    assert!(before.contains("\"task\":\"vision\""), "{before}");
+    assert!(before.contains(&session), "{before}");
+    let after = plugin_state(home.path(), "aux", "last_post_auxiliary_call");
+    assert!(after.contains("\"ok\":true"), "{after}");
+    assert!(after.contains("\"provider\":\"mock\""), "{after}");
 }
 
 #[cfg(all(unix, feature = "gateway"))]

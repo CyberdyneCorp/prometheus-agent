@@ -118,6 +118,26 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     written
 }
 
+/// Commits `file`'s data to the drive the way SQLite does by default:
+/// `fsync(2)`. On Apple systems [`File::sync_all`] is `F_FULLFSYNC`, which
+/// also flushes the drive's own cache and costs milliseconds; files written
+/// at the end of every session (trajectories) use this instead, matching
+/// the durability of the session store beside them.
+///
+/// # Errors
+///
+/// The sync's I/O error.
+pub fn sync(file: &File) -> io::Result<()> {
+    #[cfg(target_vendor = "apple")]
+    {
+        nix::unistd::fsync(file).map_err(io::Error::from)
+    }
+    #[cfg(not(target_vendor = "apple"))]
+    {
+        file.sync_all()
+    }
+}
+
 /// Takes an exclusive lock on `<path>.lock` (created 0600 when missing),
 /// held until the returned file is dropped: the read-modify-write of a
 /// private file (secrets, grants) runs under it so concurrent writers never

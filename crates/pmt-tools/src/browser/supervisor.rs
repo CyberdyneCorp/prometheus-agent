@@ -144,7 +144,7 @@ impl Supervisor {
             policy,
             dialog_timeout: Duration::from_secs(dialog_timeout_secs),
         });
-        let task = tokio::spawn(run(Arc::downgrade(&state)));
+        let task = pmt_core::spawn::spawn(run(Arc::downgrade(&state)));
         Self { state, task }
     }
 
@@ -282,7 +282,7 @@ async fn opened(state: &Arc<State>, cdp: &Arc<Cdp>, session: String, params: &Va
 fn schedule_dismissal(state: &Arc<State>, id: u64) {
     let weak = Arc::downgrade(state);
     let after = state.dialog_timeout;
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         tokio::time::sleep(after).await;
         let Some(state) = weak.upgrade() else {
             return;

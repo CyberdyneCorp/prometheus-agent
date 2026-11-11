@@ -25,6 +25,9 @@ use crate::output::{document, print_raw};
 /// `usage.invalid_time` (2), home, profile, config and store errors,
 /// `session.not_found`, `output.io`.
 pub fn run(args: &UsageArgs, ctx: &Context<'_>) -> Result<u8, Error> {
+    if let Some(crate::cli::UsageCommand::Insights(insights)) = &args.command {
+        return crate::insights_cmd::run(insights, ctx);
+    }
     let now = Timestamp::now();
     let since = point("--since", &args.since, now)?;
     let until = args
@@ -82,7 +85,7 @@ const fn group(by: UsageBy) -> GroupBy {
 }
 
 /// Every live profile, each opened through its own `ProfileScope`.
-fn every_profile(ctx: &Context<'_>) -> Result<Vec<ProfileScope>, Error> {
+pub(crate) fn every_profile(ctx: &Context<'_>) -> Result<Vec<ProfileScope>, Error> {
     let home = ctx.home()?;
     let mut scopes = Vec::new();
     for name in home.profiles()? {

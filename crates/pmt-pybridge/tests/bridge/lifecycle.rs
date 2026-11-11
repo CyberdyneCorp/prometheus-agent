@@ -80,7 +80,12 @@ fn a_stall_is_killed_after_three_ping_periods_not_more() {
 
 #[test]
 fn a_crash_loop_marks_the_plugin_failed_and_spares_the_rest() {
-    let rig = rig("echo", quick());
+    // The ping watchdog stays out of the way: on a slow runner its 600 ms
+    // of unanswered pings can beat the abort to the kill, and this test
+    // counts crashes, not stalls.
+    let mut settings = quick();
+    settings.ping_every = Duration::from_mins(10);
+    let rig = rig("echo", settings);
     for _ in 0..5 {
         assert!(eventually(Duration::from_secs(10), || rig
             .supervisor

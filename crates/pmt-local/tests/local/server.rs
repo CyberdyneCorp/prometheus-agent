@@ -29,8 +29,8 @@ fn stub_engine(home: &Path) {
 /// A library model `id` (its weights are never read by the stub).
 fn stub_model(home: &Path, id: &str) {
     let library = Library::open(home);
-    let weights = library.dir(id).join("w.gguf");
-    std::fs::create_dir_all(library.dir(id)).unwrap();
+    let weights = library.dir(id).unwrap().join("w.gguf");
+    std::fs::create_dir_all(library.dir(id).unwrap()).unwrap();
     std::fs::write(&weights, b"GGUF").unwrap();
     library
         .publish(&Model {

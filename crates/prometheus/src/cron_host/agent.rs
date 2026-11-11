@@ -80,6 +80,7 @@ fn factory(
     job: &Job,
     replay: bool,
     notepad: Option<&std::path::Path>,
+    run_id: Option<&str>,
 ) -> Result<Factory, Error> {
     let config = &scope.config().cron;
     let workspace = super::script::cwd(scope, job)
@@ -103,7 +104,9 @@ fn factory(
             memory_write: job.spec.memory == MemoryMode::ReadWrite,
             allow_scheduling: config.allow_agent_scheduling,
             pinned: job.spec.pinned(),
+            fallback_chain: job.spec.fallback_chain.clone(),
             notepad: notepad.map(std::path::Path::to_path_buf),
+            trace: run_id.map(pmt_obs::otel::context::cron_run),
         }),
         ..Options::default()
     };
@@ -125,8 +128,8 @@ pub(super) async fn credential(
     job: &Job,
 ) -> Result<(), String> {
     let store = Arc::new(Store::open(scope).map_err(|e| e.message().to_owned())?);
-    let factory =
-        factory(scope, launch, store, job, false, None).map_err(|e| e.message().to_owned())?;
+    let factory = factory(scope, launch, store, job, false, None, None)
+        .map_err(|e| e.message().to_owned())?;
     match factory
         .models
         .primary(&flags(job, &scope.config().cron))
@@ -274,6 +277,7 @@ async fn agent(
         job,
         request.replay,
         Some(channel.dir()),
+        Some(&request.run_id),
     )?;
     let target = factory
         .models

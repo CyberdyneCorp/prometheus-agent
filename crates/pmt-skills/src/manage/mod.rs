@@ -27,6 +27,7 @@ use crate::catalog::{Catalog, Missing, Skill};
 use crate::frontmatter::Document;
 use crate::hints;
 use crate::layout::SKILL_FILE;
+use crate::ledger::{Actor, Evidence, Ledger};
 use crate::lint::{self, LintContext};
 use crate::pending;
 use crate::review;
@@ -149,6 +150,31 @@ impl Ctx<'_> {
         }
     }
 
+    /// The profile's skill ledger.
+    pub(crate) fn ledger(&self) -> Ledger<'_> {
+        Ledger::new(
+            self.session.store(),
+            &self.skills_dir,
+            self.config.skills.ledger_max_bytes,
+        )
+    }
+
+    /// `dir` relative to the skills directory (`/`-separated).
+    pub(crate) fn rel(&self, dir: &Path) -> String {
+        dir.strip_prefix(&self.skills_dir)
+            .unwrap_or(dir)
+            .to_string_lossy()
+            .replace('\\', "/")
+    }
+
+    /// The ledger evidence of this session's writes.
+    pub(crate) fn evidence(&self) -> Evidence {
+        Evidence {
+            absorbed_into: None,
+            session_id: Some(self.session.setup().session_id.clone()),
+        }
+    }
+
     fn record(&self, name: &str, created_by: CreatedBy) {
         if let Err(err) =
             self.session
@@ -244,7 +270,10 @@ fn create(ctx: &Ctx<'_>, request: &Request) -> Result<Outcome, String> {
     }
     let _lock = mutate::lock(&ctx.skills_dir, &request.name)?;
     let changes = [Change::Write(SKILL_FILE.to_owned(), content.to_owned())];
+    let ledger = ctx.ledger();
+    let before = ledger.capture([format!("{}/{SKILL_FILE}", ctx.rel(&dir))]);
     let report = mutate::commit(&dir, &changes, ctx.session.setup().scanner.as_ref())?;
+    ledger.record(Actor::Agent, "create", &doc.name, &before, &ctx.evidence());
     ctx.record(&doc.name, CreatedBy::Agent);
     Ok(Outcome {
         message: format!("Created skill '{}'.", doc.name),
@@ -271,6 +300,7 @@ fn edit(ctx: &Ctx<'_>, request: &Request) -> Result<Outcome, String> {
         &changes,
         before.as_deref(),
         Some(content),
+        "edit",
     )
 }
 
@@ -295,7 +325,7 @@ fn patch(ctx: &Ctx<'_>, request: &Request) -> Result<Outcome, String> {
     } else {
         (None, None)
     };
-    finish(ctx, &skill, &dir, &changes, before, after)
+    finish(ctx, &skill, &dir, &changes, before, after, "patch")
 }
 
 /// `current` with `old` replaced by `new`: exactly one match unless
@@ -327,6 +357,7 @@ fn write_file(ctx: &Ctx<'_>, request: &Request) -> Result<Outcome, String> {
         &[Change::Write(file, content)],
         None,
         None,
+        "write_file",
     )
 }
 
@@ -339,7 +370,17 @@ fn remove_file(ctx: &Ctx<'_>, request: &Request) -> Result<Outcome, String> {
     }
     let _lock = mutate::lock(&ctx.skills_dir, &skill.name)?;
     if ctx.session.review().is_some() {
+        let ledger = ctx.ledger();
+        let before = ledger.capture([format!("{}/{file}", ctx.rel(&dir))]);
         let archived = mutate::archive(&ctx.skills_dir, &skill.name, &path, &file)?;
+        let before = before.with_new([ctx.rel(&archived)]);
+        ledger.record(
+            Actor::Agent,
+            "remove_file",
+            &skill.name,
+            &before,
+            &ctx.evidence(),
+        );
         ctx.record(&skill.name, CreatedBy::User);
         return Ok(Outcome::message(format!(
             "Archived {file} of '{}' to {}.",
@@ -347,11 +388,20 @@ fn remove_file(ctx: &Ctx<'_>, request: &Request) -> Result<Outcome, String> {
             ctx.display(&archived)
         )));
     }
-    finish(ctx, &skill, &dir, &[Change::Remove(file)], None, None)
+    finish(
+        ctx,
+        &skill,
+        &dir,
+        &[Change::Remove(file)],
+        None,
+        None,
+        "remove_file",
+    )
 }
 
-/// Commits `changes` and builds the outcome; lint warnings compare the
-/// `SKILL.md` text before and after (none for supporting files).
+/// Commits `changes`, records them in the ledger as `action` and builds
+/// the outcome; lint warnings compare the `SKILL.md` text before and
+/// after (none for supporting files).
 fn finish(
     ctx: &Ctx<'_>,
     skill: &Skill,
@@ -359,8 +409,19 @@ fn finish(
     changes: &[Change],
     before: Option<&str>,
     after: Option<&str>,
+    action: &str,
 ) -> Result<Outcome, String> {
+    let ledger = ctx.ledger();
+    let rel = ctx.rel(dir);
+    let captured = ledger.capture(changes.iter().map(|c| format!("{rel}/{}", c.rel())));
     let report = mutate::commit(dir, changes, ctx.session.setup().scanner.as_ref())?;
+    ledger.record(
+        Actor::Agent,
+        action,
+        &skill.name,
+        &captured,
+        &ctx.evidence(),
+    );
     ctx.record(&skill.name, CreatedBy::User);
     let warnings = lint::introduced(
         &ctx.lint(before, &skill.dir_name),

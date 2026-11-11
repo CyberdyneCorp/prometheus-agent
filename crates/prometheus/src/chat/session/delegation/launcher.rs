@@ -168,7 +168,7 @@ impl ChildLauncher {
         let parent_cwd = self.parent_cwd(plan.parent);
         let place = {
             let (scope, cwd, id) = (scope.clone(), parent_cwd.clone(), plan.subagent_id.clone());
-            tokio::task::spawn_blocking(move || isolation::prepare(&scope, &cwd, &id))
+            pmt_core::spawn::blocking(move || isolation::prepare(&scope, &cwd, &id))
                 .await
                 .map_err(|e| Error::new(&codes::TASK_PANICKED, e.to_string()))?
         };
@@ -196,6 +196,7 @@ impl ChildLauncher {
             subagent_id: plan.subagent_id.clone(),
             depth: plan.depth,
             pinned,
+            fallback_chain: delegation.fallback_chain.clone(),
             tools: plan.grant.tools.clone(),
             capabilities,
             system: format!(
@@ -373,9 +374,7 @@ impl ChildSession for LiveChild {
                 Some(place) => {
                     let note = place.note;
                     let report = match place.tree {
-                        Some(tree) => tokio::task::spawn_blocking(move || tree.finish())
-                            .await
-                            .ok(),
+                        Some(tree) => pmt_core::spawn::blocking(move || tree.finish()).await.ok(),
                         None => None,
                     };
                     (report, note)

@@ -171,7 +171,7 @@ impl Runtime {
             return Err(down(config, "this process cannot start the managed server"));
         };
         let home = self.home.clone();
-        let started = tokio::task::spawn_blocking(move || start(&home, &helper, &engine))
+        let started = pmt_core::spawn::blocking(move || start(&home, &helper, &engine))
             .await
             .map_err(|e| {
                 Error::new(&codes::PROVIDER_LOCAL_RUNTIME_DOWN, format!("{DOWN}: {e}"))

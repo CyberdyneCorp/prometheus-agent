@@ -1,5 +1,5 @@
 # Product and protocol names that pedantic `doc_markdown` would otherwise ask to backtick.
-doc-valid-idents = ["DevTools", "OpenAI", "CPython", "SQLite", "WebAssembly", "JavaScript", "TypeScript", "..", "GitHub", "AppContainer", "SonarSource", "ChatGPT", "OpenID", "SearXNG", "OpenRouter", "SuperGrok", "MiniMax", "MoA", "ROCm"]
+doc-valid-idents = ["DevTools", "OpenAI", "CPython", "SQLite", "WebAssembly", "JavaScript", "TypeScript", "..", "GitHub", "AppContainer", "SonarSource", "ChatGPT", "OpenID", "SearXNG", "OpenRouter", "SuperGrok", "MiniMax", "MoA", "ROCm", "ClawHub", "LobeHub", "UTF8String"]
 
 # std's file locks are unsupported on Android (Termux, a Tier 2 target).
 disallowed-methods = [
@@ -7,4 +7,14 @@ disallowed-methods = [
     { path = "std::fs::File::lock", reason = "unsupported on Android; use pmt_core::file_lock::lock" },
     { path = "std::fs::File::try_lock_shared", reason = "unsupported on Android; extend pmt_core::file_lock" },
     { path = "std::fs::File::lock_shared", reason = "unsupported on Android; extend pmt_core::file_lock" },
+    # Task dumps list every task the agent spawns (spec: observability).
+    { path = "tokio::task::spawn", reason = "untracked in task dumps; use pmt_core::spawn::spawn" },
+    { path = "tokio::task::spawn_blocking", reason = "untracked in task dumps; use pmt_core::spawn::blocking" },
+    { path = "tokio::task::spawn_local", reason = "untracked in task dumps; extend pmt_core::spawn" },
+    { path = "tokio::runtime::Handle::spawn", reason = "untracked in task dumps; use pmt_core::spawn::spawn_on" },
+    { path = "tokio::runtime::Handle::spawn_blocking", reason = "untracked in task dumps; use pmt_core::spawn::blocking_on" },
+    { path = "tokio::runtime::Runtime::spawn", reason = "untracked in task dumps; use pmt_core::spawn::spawn_on(runtime.handle(), ..)" },
+    { path = "tokio::runtime::Runtime::spawn_blocking", reason = "untracked in task dumps; use pmt_core::spawn::blocking_on(runtime.handle(), ..)" },
+    { path = "tokio::task::JoinSet::spawn", reason = "untracked in task dumps; use pmt_core::spawn::spawn_in" },
+    { path = "tokio::task::JoinSet::spawn_blocking", reason = "untracked in task dumps; extend pmt_core::spawn" },
 ]

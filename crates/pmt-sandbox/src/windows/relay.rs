@@ -80,7 +80,10 @@ pub(super) fn start(container: &Sid, proxy_port: u16) -> Result<Running, String>
                 .map_err(|_| "the egress relay did not start".to_owned())?
         })
         .map_err(|e| format!("egress relay: {e}"))?;
-    runtime.spawn(forward(control, name, security, proxy_port));
+    pmt_core::spawn::spawn_on(
+        runtime.handle(),
+        forward(control, name, security, proxy_port),
+    );
     Ok(Running {
         port,
         _process: process,
@@ -116,7 +119,7 @@ async fn forward(control: NamedPipeServer, name: OsString, security: Arc<Securit
         if server.connect().await.is_err() {
             continue;
         }
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             let mut server = server;
             if let Ok(mut proxy) = TcpStream::connect((Ipv4Addr::LOCALHOST, port)).await {
                 let _ = copy_bidirectional(&mut server, &mut proxy).await;
@@ -149,7 +152,7 @@ pub(crate) fn serve(pipe: &OsStr) -> Result<i32, String> {
                 _ = control.read(&mut closed) => return Ok(0),
                 accepted = listener.accept() => {
                     let Ok((stream, _)) = accepted else { continue };
-                    tokio::spawn(relay(stream, pipe.to_os_string()));
+                    pmt_core::spawn::spawn(relay(stream, pipe.to_os_string()));
                 }
             }
         }

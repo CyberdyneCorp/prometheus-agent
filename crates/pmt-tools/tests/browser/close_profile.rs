@@ -163,7 +163,7 @@ async fn closing_the_users_browser_asks_every_time_and_ends_it_once_approved() {
     for (answer, ends) in [(Decision::Deny, false), (Decision::Once, true)] {
         let pending = {
             let attended = attended.clone();
-            tokio::spawn(async move { call(&attended, NAME, json!({})).await })
+            pmt_core::spawn::spawn(async move { call(&attended, NAME, json!({})).await })
         };
         let prompt = prompts.next().await.expect("asked under YOLO");
         assert_eq!(prompt.request().remember, None, "never remembered");

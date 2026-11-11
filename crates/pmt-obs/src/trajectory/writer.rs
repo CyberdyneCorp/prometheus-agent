@@ -14,6 +14,8 @@
 use std::fs::File;
 use std::io::{self, BufRead as _, BufWriter, Write as _};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
 
 use pmt_core::error::{Error, codes};
@@ -117,6 +119,11 @@ pub struct TrajectoryWriter {
     path: PathBuf,
     sender: Option<mpsc::Sender<Emit>>,
     worker: Option<JoinHandle<Result<(), Error>>>,
+    /// Whether the worker syncs the plain file when it stops: not when
+    /// [`TrajectoryWriter::finish`] replaces it with a synced compressed
+    /// copy (a second sync is a full flush of the disk cache on macOS, a
+    /// few milliseconds at the end of every session).
+    sync_plain: Arc<AtomicBool>,
 }
 
 impl TrajectoryWriter {
@@ -140,14 +147,17 @@ impl TrajectoryWriter {
     pub fn with_capacity(options: WriterOptions, capacity: usize) -> Result<Self, Error> {
         let (worker, path) = Worker::open(options).map_err(|err| io_error(&err))?;
         let (sender, receiver) = mpsc::channel(capacity);
+        let sync_plain = Arc::new(AtomicBool::new(true));
+        let sync = Arc::clone(&sync_plain);
         let thread = std::thread::Builder::new()
             .name("trajectory-writer".to_owned())
-            .spawn(move || worker.run(receiver))
+            .spawn(move || worker.run(receiver, &sync))
             .map_err(|err| io_error(&err))?;
         Ok(Self {
             path,
             sender: Some(sender),
             worker: Some(thread),
+            sync_plain,
         })
     }
 
@@ -202,6 +212,7 @@ impl TrajectoryWriter {
     /// The I/O error that stopped the writer; `trajectory.io` when
     /// compression fails (the plain file is kept).
     pub fn finish(mut self) -> Result<PathBuf, Error> {
+        self.sync_plain.store(false, Ordering::Release);
         self.stop()?;
         files::compress(&self.path).map_err(|err| io_error(&err))
     }
@@ -265,7 +276,7 @@ impl Worker {
         Ok((worker, path))
     }
 
-    fn run(mut self, mut receiver: mpsc::Receiver<Emit>) -> Result<(), Error> {
+    fn run(mut self, mut receiver: mpsc::Receiver<Emit>, sync: &AtomicBool) -> Result<(), Error> {
         let result = (|| {
             while let Some(emit) = receiver.blocking_recv() {
                 self.write(&emit)?;
@@ -274,7 +285,10 @@ impl Worker {
                 }
             }
             self.file.flush()?;
-            self.file.get_ref().sync_all()
+            if sync.load(Ordering::Acquire) {
+                self.file.get_ref().sync_all()?;
+            }
+            Ok(())
         })();
         result.map_err(|err| io_error(&err))
     }

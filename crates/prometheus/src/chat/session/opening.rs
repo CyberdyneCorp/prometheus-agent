@@ -10,14 +10,14 @@ use pmt_core::capability::CapabilitySet;
 use pmt_core::error::Error;
 use pmt_core::id::SessionId;
 use pmt_memory::session::MemorySession;
-use pmt_obs::trajectory::writer::TrajectoryWriter;
 use pmt_skills::session::SkillsSession;
 
 use super::delegation::{ChildSpec, Wiring};
-use super::model::SwitchableModel;
+use super::model::{Owner, SwitchableModel};
 use super::tool_state::ToolState;
 use super::tools::SwappableTools;
-use super::{Factory, code, env, events_to, progress, summarize, tools};
+use super::trace::events_to;
+use super::{Factory, code, env, progress, summarize, tools};
 
 /// What the agent of an opening session is assembled from.
 pub(super) struct AgentInputs<'a> {
@@ -30,7 +30,7 @@ pub(super) struct AgentInputs<'a> {
     pub tools: &'a Arc<SwappableTools>,
     pub tool_state: &'a Arc<ToolState>,
     pub prompt: PromptSetup,
-    pub trajectory: Option<&'a Arc<TrajectoryWriter>>,
+    pub recording: &'a super::trace::Recording,
     pub environment: &'a env::Attached,
     pub agent_tools: &'a Arc<AgentTools>,
     pub delegation: &'a Wiring,
@@ -125,21 +125,26 @@ impl Factory {
     }
 
     /// The session's model port (spec: model-providers, Scoped fallback
-    /// chains for pinned owners): a child that pinned its model, and a
-    /// scheduled run of a pinned job, get no fallback chain. Neither
-    /// declares a chain of its own, so the profile's is not inherited; a
-    /// child of a pinned run inherits the run's (none).
+    /// chains for pinned owners): a scheduled run and a delegated child
+    /// each keep the chain they inherit (the profile's, then the run's)
+    /// unless they pinned their route (no chain) or declared one of their
+    /// own (the job's `fallback_chain`, `delegation.fallback_chain`; an
+    /// empty one disables fallback).
     pub(super) async fn model_for(
         &self,
         target: &pmt_providers::resolve::Target,
         child: Option<&ChildSpec>,
     ) -> Result<Arc<SwitchableModel>, Error> {
-        let pinned_run = self.options.cron.as_ref().is_some_and(|run| run.pinned);
-        let port = if pinned_run || child.is_some_and(|spec| spec.pinned) {
-            self.models.port_pinned(target).await?
-        } else {
-            self.models.port(target).await?
-        };
+        let run = self.options.cron.as_ref().map(|run| Owner {
+            pinned: run.pinned,
+            declared: run.fallback_chain.as_deref(),
+        });
+        let child_owner = child.map(|spec| Owner {
+            pinned: spec.pinned,
+            declared: spec.fallback_chain.as_deref(),
+        });
+        let owners: Vec<Owner<'_>> = run.into_iter().chain(child_owner).collect();
+        let port = self.models.port_scoped(target, &owners).await?;
         if let Some(spec) = child {
             port.set_body_overrides(spec.body_overrides.clone());
         }
@@ -209,7 +214,7 @@ impl Factory {
         );
         self.record_and_replay(&mut setup, inputs.tools, id);
         let in_process = inputs.clients.is_none() && child.is_none();
-        let events = events_to(inputs.trajectory.cloned(), inputs.clients);
+        let events = events_to(inputs.recording, inputs.clients);
         let _ = inputs.environment.denials.set(Arc::downgrade(&events));
         let events = self.with_lifecycle_hooks(id, inputs.session, events);
         let (tee, progress) = progress::Tee::new(events, self.options.interactive);

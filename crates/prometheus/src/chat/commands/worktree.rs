@@ -63,7 +63,7 @@ pub async fn new(
     let request_name = name.map(str::to_owned);
     let sync_remote = scope.config().worktrees.sync_remote;
     let profile = scope.dir().to_path_buf();
-    let created = tokio::task::spawn_blocking(move || {
+    let created = pmt_core::spawn::blocking(move || {
         let request = Request {
             name: request_name.as_deref(),
             kind: Kind::Named,

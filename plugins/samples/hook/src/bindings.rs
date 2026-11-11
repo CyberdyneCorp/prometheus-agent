@@ -3395,7 +3395,9 @@ pub mod exports {
                 /// `modify` as its `{reason, retryable?, should_compress?,
                 /// should_rotate_credential?, should_fallback?, message?}` object;
                 /// `pre_verify` reads `modify` as `{action = "continue", message}`
-                /// (or `{decision = "block", reason}`).
+                /// (or `{decision = "block", reason}`); `pre_transcription` reads
+                /// `modify` as a table whose `prompt`, `language` and `model` replace
+                /// the resolved request's (other keys are ignored).
                 #[derive(Clone)]
                 pub enum Reply {
                     None,

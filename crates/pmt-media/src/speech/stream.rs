@@ -90,7 +90,7 @@ async fn open(request: reqwest::RequestBuilder) -> Result<PcmStream, String> {
         return Err(status_error(status.as_u16(), &body));
     }
     let (chunks, received) = mpsc::channel(BUFFERED);
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         loop {
             match response.chunk().await {
                 Ok(Some(chunk)) => {

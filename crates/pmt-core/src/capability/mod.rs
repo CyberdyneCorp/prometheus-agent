@@ -57,6 +57,9 @@ pub enum Capability {
     Ui(String),
     /// `browser.real_profile`.
     BrowserRealProfile,
+    /// `credential_files`: a skill's declared credential files reach the
+    /// session's container or remote backend (granted to `skill:<name>`).
+    CredentialFiles,
     /// `plugin.<right>[:<target>]`: a right only plugins hold.
     Plugin {
         /// Which right.
@@ -100,7 +103,7 @@ impl Capability {
                 "capabilities are fs.read:<glob>, fs.write:<glob>, net.connect:<host>[:<port>], \
                  net.listen:loopback[:<port>], process.spawn:<program|*>, secrets.read:<NAME>, \
                  llm.call[:<role>], tools.call:<tool>, tools.override:<tool>, ui.<surface>, \
-                 browser.real_profile, plugin.<right>[:<target>]",
+                 browser.real_profile, credential_files, plugin.<right>[:<target>]",
             )
         })
     }
@@ -191,6 +194,7 @@ impl fmt::Display for Capability {
             Self::ToolsOverride(tool) => write!(f, "tools.override:{tool}"),
             Self::Ui(surface) => write!(f, "ui.{surface}"),
             Self::BrowserRealProfile => f.write_str("browser.real_profile"),
+            Self::CredentialFiles => f.write_str("credential_files"),
             Self::Plugin {
                 right,
                 target: None,
@@ -224,6 +228,7 @@ fn parse(text: &str) -> Option<Capability> {
         return match text {
             "llm.call" => Some(Capability::LlmCall(None)),
             "browser.real_profile" => Some(Capability::BrowserRealProfile),
+            "credential_files" => Some(Capability::CredentialFiles),
             ui => ui
                 .strip_prefix("ui.")
                 .filter(|s| is_word(s))

@@ -91,13 +91,22 @@ pub(crate) const TOOLS_REFERENCE: &str = "docs/reference/tools.md";
 /// would restate defaults and drift (`cargo xtask gen --check` rejects them).
 pub(crate) const REFERENCE_DIR: &str = "docs/reference";
 
+/// The config schema derived from the types, not the checked-in file
+/// `catalog::schema` reads, so a stale file is regenerated rather than
+/// copied.
+fn generated_config_schema() -> &'static serde_json::Value {
+    static SCHEMA: std::sync::LazyLock<serde_json::Value> =
+        std::sync::LazyLock::new(pmt_config::catalog::generate);
+    &SCHEMA
+}
+
 fn config_schema() -> String {
-    pretty_schema(pmt_config::catalog::schema())
+    pretty_schema(generated_config_schema())
 }
 
 fn config_reference() -> String {
     pmt_config::reference::render(
-        pmt_config::catalog::schema(),
+        generated_config_schema(),
         HEADER,
         "Configuration reference",
         "Every key a profile's `config.toml` accepts. Unknown keys are rejected, \

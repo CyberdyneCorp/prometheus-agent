@@ -1,11 +1,13 @@
-//! Python skill scripts in a session's terminal (spec: python-bridge,
-//! Python skill scripts; skills, Skill scripts run sandboxed with managed
+//! Skill scripts in a session's terminal (spec: python-bridge, Python
+//! skill scripts; skills, Skill scripts run sandboxed with managed
 //! runtimes): a command that runs a file of a skill directory gets that
 //! skill's pinned environment (or, for a skill without a `python`
 //! declaration, the managed interpreter with no extra packages) first on
-//! `PATH`, so `python`, `python3` and `pip` resolve there. It still runs
-//! under the session's sandbox, which may read the environments and the
-//! managed runtime; plugin environments are never on that path.
+//! `PATH`, so `python`, `python3` and `pip` resolve there; a skill
+//! declaring `metadata.prometheus.node` also gets the managed Node
+//! runtime's `bin` first, so `node` and `npx` resolve to it. It still
+//! runs under the session's sandbox, which may read the environments and
+//! the managed runtimes; plugin environments are never on that path.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -29,6 +31,7 @@ pub fn sandbox_reads(scope: &ProfileScope) -> CapabilitySet {
         skills::root(scope.dir()),
         runtimes.join("python"),
         runtimes.join("uv"),
+        runtimes.join("node"),
     ];
     let resolved: Vec<PathBuf> = dirs
         .iter()
@@ -57,6 +60,9 @@ pub fn path_source(scope: &ProfileScope, skills: &Arc<SkillsSession>) -> PathSou
             if !command.contains(&dir.display().to_string()) {
                 continue;
             }
+            if pmt_skills::frontmatter::field(&skill.front, "node").is_some_and(|v| !v.is_null()) {
+                dirs.extend(node_bin(&scope, &skill.name));
+            }
             let mut cache = built.lock().unwrap_or_else(PoisonError::into_inner);
             let bin = cache
                 .entry(skill.name.clone())
@@ -66,6 +72,24 @@ pub fn path_source(scope: &ProfileScope, skills: &Arc<SkillsSession>) -> PathSou
         }
         dirs
     })
+}
+
+/// The managed Node runtime's `bin` directory (the pinned version, else
+/// the newest installed); `None` (with a warning) when none is installed,
+/// since sessions never download runtimes.
+fn node_bin(scope: &ProfileScope, skill: &str) -> Option<PathBuf> {
+    let store = pmt_update::runtimes::Store::open(scope.home());
+    let installed = store
+        .installed("node")
+        .or_else(|| store.installed_versions("node").into_iter().last());
+    let Some(installed) = installed else {
+        tracing::warn!(
+            skill = %skill,
+            "the skill declares node but the managed Node runtime is not installed (prometheus runtimes install node)"
+        );
+        return None;
+    };
+    installed.exe().parent().map(std::path::Path::to_path_buf)
 }
 
 /// The `bin` directory a skill's scripts run with.

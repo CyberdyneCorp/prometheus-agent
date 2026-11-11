@@ -117,7 +117,7 @@ async fn an_ungranted_platform_verb_returns_a_structured_error_without_an_adapte
     fake.set("acts", "commands", "\"react,retitle\"");
     let loaded = profile.load(&Runtime::new().unwrap(), &fake.ports());
     let command = loaded.contributions.command("retitle").unwrap().clone();
-    let answer = tokio::task::spawn_blocking(move || command.run(&session(), "discord c1 t1"))
+    let answer = pmt_core::spawn::blocking(move || command.run(&session(), "discord c1 t1"))
         .await
         .unwrap()
         .unwrap()
@@ -128,7 +128,7 @@ async fn an_ungranted_platform_verb_returns_a_structured_error_without_an_adapte
     );
     assert!(fake.seen.messaging.lock().unwrap().is_empty());
     let command = loaded.contributions.command("react").unwrap().clone();
-    let answer = tokio::task::spawn_blocking(move || command.run(&session(), "discord c1 m1"))
+    let answer = pmt_core::spawn::blocking(move || command.run(&session(), "discord c1 m1"))
         .await
         .unwrap()
         .unwrap()
@@ -153,14 +153,14 @@ async fn injection_needs_its_grant_and_live_messages_bind_to_the_calling_session
     fake.set("talk", "commands", "\"inject,post\"");
     let loaded = profile.load(&Runtime::new().unwrap(), &fake.ports());
     let inject = loaded.contributions.command("inject").unwrap().clone();
-    let answer = tokio::task::spawn_blocking(move || inject.run(&session(), "ses_2"))
+    let answer = pmt_core::spawn::blocking(move || inject.run(&session(), "ses_2"))
         .await
         .unwrap()
         .unwrap()
         .unwrap();
     assert_eq!(answer, "injected=false");
     let post = loaded.contributions.command("post").unwrap().clone();
-    let answer = tokio::task::spawn_blocking(move || post.run(&session(), "Migrating"))
+    let answer = pmt_core::spawn::blocking(move || post.run(&session(), "Migrating"))
         .await
         .unwrap()
         .unwrap()
@@ -177,7 +177,7 @@ async fn injection_needs_its_grant_and_live_messages_bind_to_the_calling_session
     );
     // Without a session there is no conversation to post to.
     let post = loaded.contributions.command("post").unwrap().clone();
-    let answer = tokio::task::spawn_blocking(move || post.run(&CallInfo::default(), "x"))
+    let answer = pmt_core::spawn::blocking(move || post.run(&CallInfo::default(), "x"))
         .await
         .unwrap()
         .unwrap()
@@ -222,7 +222,7 @@ async fn cli_commands_transports_and_held_streams_need_their_grants() {
     assert!(loaded.surfaces.transports.is_empty());
     assert!(loaded.hooks.holds_stream());
     let tools = instance(&loaded, "tools");
-    let output = tokio::task::spawn_blocking(move || {
+    let output = pmt_core::spawn::blocking(move || {
         tools.run_cli(
             &CallInfo::default(),
             "status",
@@ -294,7 +294,7 @@ async fn a_cli_command_streams_its_output_while_it_runs() {
         release: Some(profile.path().join("plugin-data/tools")),
     });
     let sink: Arc<dyn Console> = console.clone();
-    let output = tokio::task::spawn_blocking(move || {
+    let output = pmt_core::spawn::blocking(move || {
         tools.run_cli(
             &CallInfo::default(),
             "stream",

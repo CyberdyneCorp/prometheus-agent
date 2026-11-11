@@ -20,6 +20,10 @@ pub struct SessionStart {
     /// The parent session, for a continuation, fork or delegation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_session_id: Option<String>,
+    /// The session's trace id (32 hex digits), the same as in its log
+    /// records and exported spans.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trace_id: Option<String>,
 }
 
 /// `session.end`.

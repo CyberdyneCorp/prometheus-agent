@@ -141,6 +141,31 @@ impl MediaSession {
     pub fn setup(&self) -> &MediaSetup {
         &self.setup
     }
+
+    /// Records a speech call made outside a tool call (voice mode,
+    /// messaging voice notes and spoken replies) for `session_id`: a
+    /// metered one reaches the usage ledger as `tool.<tool>` like the
+    /// tools' own calls; a local or keyless-free one records nothing.
+    pub fn bill(&self, session_id: &str, tool: &str, served: (&str, &str, &str)) {
+        let (provider, model, billing_source) = served;
+        let Some(sink) = &self.setup.usage else {
+            return;
+        };
+        if billing_source.is_empty() || billing_source == "local" {
+            return;
+        }
+        sink(pmt_tools::usage::ToolUsage {
+            call_id: format!(
+                "{tool}-{}",
+                ulid::Ulid::generate().to_string().to_lowercase()
+            ),
+            session_id: session_id.to_owned(),
+            purpose: format!("tool.{tool}"),
+            provider: provider.to_owned(),
+            model: model.to_owned(),
+            billing_source: billing_source.to_owned(),
+        });
+    }
 }
 
 /// The attached media sessions of a process, by session id.
@@ -217,12 +242,16 @@ impl Drop for Attachment {
 }
 
 /// `image_generate`, `video_analyze`, `text_to_speech` and `x_search`,
-/// their handlers bound to `sessions`.
+/// their handlers bound to `sessions` (and, for the files they read, the
+/// sessions' environments in `environments`).
 #[must_use]
-pub fn tools(sessions: &Arc<MediaSessions>) -> Vec<RegisteredTool> {
+pub fn tools(
+    sessions: &Arc<MediaSessions>,
+    environments: &Arc<pmt_tools::environments::Environments>,
+) -> Vec<RegisteredTool> {
     vec![
         image::tool::registered(sessions),
-        video::registered(sessions),
+        video::registered(sessions, environments),
         speech::tool::registered(sessions),
         x_search::registered(sessions),
     ]

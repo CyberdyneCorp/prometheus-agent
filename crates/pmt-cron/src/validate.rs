@@ -115,6 +115,11 @@ pub fn validate(spec: &JobSpec, scripts_dir: &Path, catalog: &dyn Catalog) -> Re
             .check_model(spec.provider.as_deref(), spec.model.as_deref())
             .map_err(invalid)?;
     }
+    for (i, entry) in spec.fallback_chain.iter().flatten().enumerate() {
+        catalog
+            .check_model(Some(&entry.provider), Some(&entry.model))
+            .map_err(|why| invalid(format!("fallback_chain[{i}]: {why}")))?;
+    }
     check_limits(spec)
 }
 

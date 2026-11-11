@@ -159,6 +159,7 @@ fn run_recorded(
     } else {
         ctx.scope()?
     };
+    crate::startup::start_export(&scope);
     if scope.config().plugins.safe_mode && !ui.quiet {
         eprintln!("{SAFE_MODE_BANNER}");
     }

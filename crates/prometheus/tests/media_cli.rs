@@ -82,7 +82,7 @@ fn doctor_lists_media_categories_and_keyless_traffic() {
         "{text}"
     );
     assert!(
-        text.contains("web.provider_tier.exa = \"paid\" without its key"),
+        text.contains("web.provider_tier.exa = \"paid\" but EXA_API_KEY is not set"),
         "{text}"
     );
 }

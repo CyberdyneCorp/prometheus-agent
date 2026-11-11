@@ -261,9 +261,10 @@ async fn an_oversized_video_is_refused_before_any_provider_call() {
         .unwrap()
         .set_len(70 << 20)
         .unwrap();
+    let files = rig.files();
     let result = rig
         .session()
-        .analyze_video("big.mp4", "what happens?")
+        .analyze_video(Some(&files), "big.mp4", "what happens?")
         .await;
     assert_eq!(result.status, Status::Error);
     assert!(
@@ -280,7 +281,7 @@ async fn an_oversized_video_is_refused_before_any_provider_call() {
         .unwrap();
     let result = rig
         .session()
-        .analyze_video("medium.webm", "what happens?")
+        .analyze_video(Some(&files), "medium.webm", "what happens?")
         .await;
     assert_eq!(result.status, Status::Ok, "{}", result.text_content());
     assert!(
@@ -290,14 +291,56 @@ async fn an_oversized_video_is_refused_before_any_provider_call() {
     );
     assert!(result.text_content().contains("of video/webm"));
     assert_eq!(result.metadata[BILLING_SOURCE], "api_key:google");
-    let other = rig.session().analyze_video("clip.gif", "?").await;
+    let other = rig
+        .session()
+        .analyze_video(Some(&files), "clip.gif", "?")
+        .await;
     assert!(other.text_content().contains("unsupported video type"));
+}
+
+/// Regression: a local video is read through the file tools' guards,
+/// like `vision_analyze`'s images: a path outside the workspace, a
+/// symlinked `.mp4` naming a dotenv file and a device-namespace (UNC)
+/// path are refused before any provider call.
+#[tokio::test]
+async fn a_local_video_outside_the_files_guards_is_refused() {
+    let describer = Arc::new(Counting(AtomicUsize::new(0)));
+    let mut rig = Rig::new(Config::default());
+    rig.video = Some(describer.clone());
+    let files = rig.files();
+    let outside = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let elsewhere = outside.path().join("private.mp4");
+    std::fs::write(&elsewhere, b"not yours").unwrap();
+    let mut refused = vec![
+        elsewhere.to_string_lossy().into_owned(),
+        r"\\host\share\a.mp4".to_owned(),
+    ];
+    #[cfg(unix)]
+    {
+        let secrets = rig.workspace().join(".env");
+        std::fs::write(&secrets, "API_KEY=sk-123").unwrap();
+        std::os::unix::fs::symlink(&secrets, rig.workspace().join("x.mp4")).unwrap();
+        refused.push("x.mp4".to_owned());
+    }
+    let session = rig.session();
+    for path in &refused {
+        let result = session.analyze_video(Some(&files), path, "?").await;
+        assert_eq!(
+            result.status,
+            Status::Error,
+            "{path}: {}",
+            result.text_content()
+        );
+    }
+    let without = session.analyze_video(None, "clip.mp4", "?").await;
+    assert_eq!(without.status, Status::Error);
+    assert_eq!(describer.0.load(Ordering::SeqCst), 0, "no provider call");
 }
 
 #[test]
 fn video_analyze_needs_a_video_capable_route() {
     let sessions = Arc::new(pmt_media::MediaSessions::default());
-    let tool = pmt_media::video::registered(&sessions);
+    let tool = pmt_media::video::registered(&sessions, &Arc::default());
     let check = tool.route_check.as_ref().unwrap();
     let config = Config::default();
     assert_eq!(

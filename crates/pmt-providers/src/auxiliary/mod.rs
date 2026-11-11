@@ -20,7 +20,7 @@ use pmt_config::schema::{AuxiliaryConfig, AuxiliaryTask};
 use pmt_core::error::Error;
 use serde::Serialize;
 
-pub use call::{AuxCaller, AuxEvents, AuxResponse};
+pub use call::{AuxCaller, AuxEvents, AuxObserver, AuxResponse};
 
 use crate::fallback::{self, RouteHealth};
 use crate::resolve::{Resolver, Route, Target, Trace};

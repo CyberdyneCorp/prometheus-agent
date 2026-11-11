@@ -35,10 +35,9 @@ impl Turn<'_> {
         // The blocking pool does not inherit the span: its records (a
         // blocked context file) must keep the session's profile and ids.
         let span = tracing::Span::current();
-        let mut built =
-            tokio::task::spawn_blocking(move || span.in_scope(|| prompt::build(&inputs)))
-                .await
-                .map_err(|e| Error::new(&codes::TASK_PANICKED, format!("prompt build: {e}")))??;
+        let mut built = pmt_core::spawn::blocking(move || span.in_scope(|| prompt::build(&inputs)))
+            .await
+            .map_err(|e| Error::new(&codes::TASK_PANICKED, format!("prompt build: {e}")))??;
         self.pin_and_record(&mut built);
         // Rebuilt bytes equal to the stored ones keep the stored prompt.
         let frozen = match stored {

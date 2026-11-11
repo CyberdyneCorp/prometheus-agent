@@ -131,7 +131,7 @@ async fn include_beats_exclude_and_full_trust_asks_for_nothing() {
 async fn a_streamable_http_server_needs_its_bearer_token() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}/mcp", listener.local_addr().unwrap());
-    tokio::spawn(pmt_mcp::fixture::serve_http(
+    pmt_core::spawn::spawn(pmt_mcp::fixture::serve_http(
         pmt_mcp::fixture::Fixture::default(),
         listener,
         Some("s3cret".into()),

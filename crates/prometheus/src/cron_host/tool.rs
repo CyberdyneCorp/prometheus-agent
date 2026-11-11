@@ -133,6 +133,9 @@ fn fields(arguments: &Value, scope: &ProfileScope) -> Result<Fields, Error> {
         monitor_url: text(arguments, "monitor_url"),
         context_from: list(arguments, "context_from"),
         continuity: arguments["continuity"].as_bool(),
+        // The chain is the owner's routing decision: `cron create/edit
+        // --fallback`, not the agent's.
+        fallback: None,
     })
 }
 
@@ -419,7 +422,7 @@ impl ToolPort {
         }
         let store = Arc::clone(&self.store);
         let run_id = run.id.clone();
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             let text = match runner.execute(&job, &run).await {
                 Ok(finished) => {
                     let job = ops::find(&store, job.id()).unwrap_or(job);

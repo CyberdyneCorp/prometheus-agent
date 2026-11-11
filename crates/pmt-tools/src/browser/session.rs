@@ -503,7 +503,7 @@ impl BrowserManager {
             );
         }
         let detect = Arc::clone(&self.setup.detect);
-        let (name, ended) = tokio::task::spawn_blocking(move || {
+        let (name, ended) = pmt_core::spawn::blocking(move || {
             let name = detect.default_browser()?.name;
             real_profile::close_profile(detect.as_ref()).map(|ended| (name, ended))
         })
@@ -736,7 +736,7 @@ impl BrowserManager {
             return;
         }
         let manager: Weak<Self> = Arc::downgrade(self);
-        *reaper = Some(tokio::spawn(async move {
+        *reaper = Some(pmt_core::spawn::spawn(async move {
             loop {
                 tokio::time::sleep(REAP_EVERY).await;
                 let Some(manager) = manager.upgrade() else {

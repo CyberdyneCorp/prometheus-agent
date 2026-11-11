@@ -87,7 +87,7 @@ pub(crate) async fn run_line(live: &Live, typed: &str, surface: &str) -> Result<
         return Err(format!("Unknown command: /{name}"));
     };
     let call = live.plugin_call(surface);
-    let outcome = tokio::task::spawn_blocking(move || command.run(&call, &args))
+    let outcome = pmt_core::spawn::blocking(move || command.run(&call, &args))
         .await
         .map_err(|e| e.to_string())?;
     match outcome {

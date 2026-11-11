@@ -262,6 +262,12 @@ fn emoji_name(emoji: &str) -> Option<&'static str> {
 }
 
 impl Adapter for Slack {
+    fn reach(&self) -> Result<pmt_gateway::messaging::probe::Reach, String> {
+        Ok(pmt_gateway::messaging::probe::Reach::Endpoints(vec![
+            pmt_gateway::messaging::probe::Endpoint::Http(self.endpoints.api.clone()),
+        ]))
+    }
+
     fn describe(&self) -> Descriptor {
         let all: BTreeSet<MediaKind> = [
             MediaKind::Image,

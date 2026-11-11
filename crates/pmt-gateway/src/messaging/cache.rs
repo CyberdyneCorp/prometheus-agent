@@ -116,7 +116,7 @@ fn resident_bytes() -> Option<u64> {
 /// Starts the sweeper.
 pub(crate) fn spawn(shared: &Arc<Shared>) {
     let span = tracing::info_span!("agent_cache");
-    tokio::spawn(run(Arc::clone(shared)).instrument(span));
+    pmt_core::spawn::spawn(run(Arc::clone(shared)).instrument(span));
 }
 
 async fn run(shared: Arc<Shared>) {

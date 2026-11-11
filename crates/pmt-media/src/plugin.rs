@@ -74,6 +74,42 @@ impl Kind {
 /// The answer of one plugin provider call.
 pub type PluginFuture<'a> = Pin<Box<dyn Future<Output = Result<Value, String>> + Send + 'a>>;
 
+/// A resolved transcription as `pre_transcription` callbacks see it.
+pub type SttFuture<'a> = Pin<Box<dyn Future<Output = SttRequest> + Send + 'a>>;
+
+/// A transcription after provider resolution (spec: plugin-system,
+/// `pre_transcription`): what callbacks see, and the only fields they may
+/// change are `prompt`, `language` and `model`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SttRequest {
+    /// The resolved provider (never changed by a callback).
+    pub provider: String,
+    /// Its model.
+    pub model: String,
+    /// The spoken language (`None`: detected).
+    pub language: Option<String>,
+    /// A hint of vocabulary and style for the recogniser.
+    pub prompt: Option<String>,
+}
+
+impl SttRequest {
+    /// Applies one callback's answer: its string `prompt`, `language`
+    /// and `model` replace the current values (an empty `prompt` or
+    /// `language` clears it); every other field is ignored.
+    pub fn apply(&mut self, answer: &Value) {
+        let text = |key: &str| answer.get(key).and_then(Value::as_str).map(str::to_owned);
+        if let Some(model) = text("model").filter(|m| !m.is_empty()) {
+            self.model = model;
+        }
+        if let Some(language) = text("language") {
+            self.language = Some(language).filter(|l| !l.is_empty());
+        }
+        if let Some(prompt) = text("prompt") {
+            self.prompt = Some(prompt).filter(|p| !p.is_empty());
+        }
+    }
+}
+
 /// The providers enabled plugins registered.
 pub trait MediaPlugins: Send + Sync {
     /// The plugin that registered provider `id` of `kind`, if one did.
@@ -82,6 +118,13 @@ pub trait MediaPlugins: Send + Sync {
     /// Sends `request` to provider `id` of `kind` and returns its JSON
     /// answer.
     fn invoke<'a>(&'a self, kind: Kind, id: &'a str, request: Value) -> PluginFuture<'a>;
+
+    /// Fires `pre_transcription` with `request` and returns it as the
+    /// callbacks left it, applied in registration order (last writer
+    /// wins). Without hooks it is returned unchanged.
+    fn pre_transcription(&self, request: SttRequest) -> SttFuture<'_> {
+        Box::pin(async move { request })
+    }
 }
 
 /// No plugin providers (inspection, tests).
@@ -371,6 +414,7 @@ pub async fn transcribe(
     setup: &MediaSetup,
     selected: &Selected,
     path: &Path,
+    request: &SttRequest,
 ) -> Result<Transcript, String> {
     let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("ogg");
     let copy = exchange(setup, &selected.plugin, extension)?;
@@ -378,9 +422,14 @@ pub async fn transcribe(
         .await
         .map_err(|e| format!("{}: {e}", path.display()))?;
     let mut body = json!({"file_path": copy.path, "state_path": copy.state_path});
-    let language = &setup.config().stt.language;
-    if !language.is_empty() {
+    if let Some(language) = &request.language {
         body["language"] = json!(language);
+    }
+    if !request.model.is_empty() {
+        body["model"] = json!(request.model);
+    }
+    if let Some(prompt) = &request.prompt {
+        body["prompt"] = json!(prompt);
     }
     let answer = setup.plugins.invoke(Kind::Stt, &selected.id, body).await;
     let _ = tokio::fs::remove_file(&copy.path).await;
@@ -396,7 +445,7 @@ pub async fn transcribe(
     Ok(Transcript {
         text: said.trim().to_owned(),
         provider: selected.id.clone(),
-        model: text(&answer, "model").unwrap_or_default().to_owned(),
+        model: text(&answer, "model").unwrap_or(&request.model).to_owned(),
         billing_source: billing(&answer),
     })
 }

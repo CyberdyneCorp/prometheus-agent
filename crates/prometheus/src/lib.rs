@@ -25,6 +25,7 @@ pub mod context;
 pub mod context_engine;
 pub mod cron_cmd;
 pub mod cron_host;
+pub mod curator_cmd;
 pub mod daemon_client;
 #[cfg(feature = "gateway")]
 pub mod daemon_cmd;
@@ -36,6 +37,7 @@ pub mod fallback_cmd;
 pub mod files_cmd;
 pub mod grants_cmd;
 pub mod hooks_host;
+pub mod insights_cmd;
 pub mod journey_cmd;
 pub mod local_cmd;
 pub mod logs_cmd;
@@ -75,9 +77,11 @@ pub mod slash;
 pub mod slash_handlers;
 pub mod smoke_suite;
 pub mod startup;
+pub mod status_cmd;
 pub mod surface;
 pub mod tools_cmd;
 pub mod trajectory_cmd;
+pub mod trajectory_export;
 #[cfg(feature = "tui")]
 pub mod tui_cmd;
 pub mod update_cmd;

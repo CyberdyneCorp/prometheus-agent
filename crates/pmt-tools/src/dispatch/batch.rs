@@ -87,7 +87,7 @@ impl Dispatcher {
                     plan.deps(i).iter().map(|&d| done_rx[d].clone()).collect();
                 let (this, call, cancel) = (self.clone(), call.clone(), cancel.clone());
                 let (permits, agent) = (Arc::clone(&permits), agent.clone());
-                tokio::spawn(async move {
+                pmt_core::spawn::spawn(async move {
                     for mut wait in waits {
                         // A dependency whose task died still lets us go.
                         let _ = wait.wait_for(|finished| *finished).await;

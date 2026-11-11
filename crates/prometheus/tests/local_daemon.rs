@@ -104,6 +104,17 @@ fn local_start_hands_the_server_to_the_daemon_and_local_methods_serve_it() {
             .await
             .unwrap_err();
         assert_eq!(missing.data.unwrap().code, "local.not_found");
+        // `..` would name the whole home: refused, nothing deleted.
+        let escaped = client
+            .call("local.rm", json!({"model": ".."}))
+            .await
+            .unwrap_err();
+        assert_eq!(escaped.data.unwrap().code, "local.not_found");
+        assert!(h.join("models/qwen-x/model.json").is_file());
+        assert!(
+            h.join("profiles/default/config.toml").is_file(),
+            "the home survives"
+        );
         let used = client
             .call("local.use", json!({"model": "qwen-x"}))
             .await

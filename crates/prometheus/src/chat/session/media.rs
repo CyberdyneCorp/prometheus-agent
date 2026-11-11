@@ -98,34 +98,53 @@ impl MediaHost for BlobHost {
 #[must_use]
 pub fn usage_sink(store: &Arc<Store>, session: SessionId) -> UsageSink {
     let store = Arc::clone(store);
+    Arc::new(move |usage: ToolUsage| record_usage(&store, session, usage))
+}
+
+/// The usage ledger of the profile as a sink for calls made outside a
+/// session's tools (voice mode, messaging speech): each row goes to the
+/// session the call names.
+#[must_use]
+pub fn profile_usage_sink(store: Arc<Store>) -> UsageSink {
     Arc::new(move |usage: ToolUsage| {
-        let cost_status = if usage.billing_source.starts_with("subscription:") {
-            pmt_store::CostStatus::Subscription
+        if let Ok(session) = SessionId::parse(&usage.session_id) {
+            record_usage(&store, session, usage);
         } else {
-            pmt_store::CostStatus::Unknown
-        };
-        let event = pmt_store::usage::UsageEvent {
-            call_id: format!("tool:{}:{}", usage.session_id, usage.call_id),
-            ts: jiff::Timestamp::now(),
-            session_id: session,
-            turn_id: None,
-            parent_call_id: None,
-            purpose: usage.purpose,
-            purpose_detail: None,
-            provider: usage.provider,
-            model: usage.model,
-            service_tier: None,
-            tokens: pmt_store::usage::Tokens::default(),
-            cost_usd: None,
-            cost_status,
-            billing_source: usage.billing_source,
-            request_hash: None,
-            cache_hit: false,
-        };
-        if let Err(err) = store.record_usage(&event) {
-            tracing::warn!(error = %err, "tool usage not recorded");
+            tracing::warn!(
+                session = usage.session_id,
+                "speech usage not recorded: no session"
+            );
         }
     })
+}
+
+fn record_usage(store: &Store, session: SessionId, usage: ToolUsage) {
+    let cost_status = if usage.billing_source.starts_with("subscription:") {
+        pmt_store::CostStatus::Subscription
+    } else {
+        pmt_store::CostStatus::Unknown
+    };
+    let event = pmt_store::usage::UsageEvent {
+        call_id: format!("tool:{}:{}", usage.session_id, usage.call_id),
+        ts: jiff::Timestamp::now(),
+        session_id: session,
+        turn_id: None,
+        parent_call_id: None,
+        purpose: usage.purpose,
+        purpose_detail: None,
+        provider: usage.provider,
+        model: usage.model,
+        service_tier: None,
+        tokens: pmt_store::usage::Tokens::default(),
+        cost_usd: None,
+        cost_status,
+        billing_source: usage.billing_source,
+        request_hash: None,
+        cache_hit: false,
+    };
+    if let Err(err) = store.record_usage(&event) {
+        tracing::warn!(error = %err, "tool usage not recorded");
+    }
 }
 
 /// The profile's credentials for the media tools.
@@ -169,6 +188,10 @@ impl pmt_media::speech::command::CommandRunner for SandboxRunner {
         command.current_dir(cwd);
         Ok(tokio::process::Command::from(command))
     }
+
+    fn scratch(&self) -> Option<PathBuf> {
+        Some(self.0.scratch.clone())
+    }
 }
 
 /// Command speech providers run outside a session (gateway voice notes,
@@ -196,6 +219,10 @@ impl CommandRunner for ProfileRunner {
         command.args([flag, line]);
         Ok(tokio::process::Command::from(command))
     }
+
+    fn scratch(&self) -> Option<PathBuf> {
+        Some(crate::hooks_host::scratch(&self.0))
+    }
 }
 
 /// Starts the local speech engines with the managed `uv` runtime.
@@ -213,6 +240,10 @@ impl UvEngines {
 }
 
 impl pmt_media::speech::local::Launcher for UvEngines {
+    fn scope(&self) -> String {
+        self.models.display().to_string()
+    }
+
     fn available(&self, _engine: &str) -> bool {
         self.uv().is_some()
     }
@@ -296,9 +327,12 @@ pub fn attach(inputs: MediaInputs<'_>) -> Option<pmt_media::Attachment> {
         proxy: config.network.proxy.clone(),
     };
     let client = pmt_net::client(&outbound).ok()?;
+    // Without the session's sandboxed commands (its sandbox could not be
+    // set up) command providers still run confined, or are refused: never
+    // through a plain shell with the parent's environment.
     let runner: Arc<dyn pmt_media::speech::command::CommandRunner> = match inputs.commands {
         Some(commands) => Arc::new(SandboxRunner(commands.clone())),
-        None => Arc::new(pmt_media::speech::command::PlainShell),
+        None => Arc::new(ProfileRunner(scope.clone())),
     };
     let session = MediaSession::new(MediaSetup {
         credentials: credentials(scope),

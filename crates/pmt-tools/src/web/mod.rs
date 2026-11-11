@@ -232,22 +232,6 @@ impl WebSession {
             usage: None,
         }
     }
-
-    /// Why the keyless ring lost vendors (`doctor`).
-    #[must_use]
-    pub fn keyless_problems(&self) -> Vec<String> {
-        let mut problems: Vec<String> = Vec::new();
-        for source in [&self.search, &self.extract] {
-            if let Ok(Source::Keyless(ring)) = source {
-                problems.extend(ring.problems().iter().cloned());
-            }
-        }
-        if let Some(ring) = &self.rescue {
-            problems.extend(ring.problems().iter().cloned());
-        }
-        problems.dedup();
-        problems
-    }
 }
 
 /// Whether `name` is present: a secret, or a sign-in standing for the

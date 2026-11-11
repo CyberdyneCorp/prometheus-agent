@@ -40,7 +40,7 @@ where
     F: Future + Send + 'static,
     F::Output: Send + 'static,
 {
-    match handle().spawn(future).await {
+    match pmt_core::spawn::spawn_on(&handle(), future).await {
         Ok(output) => output,
         Err(err) => std::panic::resume_unwind(err.into_panic()),
     }

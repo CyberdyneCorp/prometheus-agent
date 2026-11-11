@@ -155,7 +155,9 @@ async fn a_failing_hook_does_not_block_the_next_one() {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_slow_hook_counts_as_no_result_and_is_skipped_for_a_while() {
     let mut profile = Profile::new("default");
-    profile.config.hook_timeout_ms = 200;
+    // A timeout far above a skipped call's cost, so the second call's
+    // bound tells "skipped" from "waited out again" on a loaded runner.
+    profile.config.hook_timeout_ms = 1_000;
     let fake = Fake::new();
     hook_plugin(&mut profile, &fake, "a-slow", "pre_tool_call", "spin");
     hook_plugin(&mut profile, &fake, "b-block", "pre_tool_call", "block");
@@ -165,7 +167,7 @@ async fn a_slow_hook_counts_as_no_result_and_is_skipped_for_a_while() {
     let started = Instant::now();
     let decision = pre_tool_call(&loaded).await;
     assert!(
-        started.elapsed() < Duration::from_secs(3),
+        started.elapsed() < Duration::from_secs(5),
         "{:?}",
         started.elapsed()
     );
@@ -176,7 +178,7 @@ async fn a_slow_hook_counts_as_no_result_and_is_skipped_for_a_while() {
     let started = Instant::now();
     pre_tool_call(&loaded).await;
     assert!(
-        started.elapsed() < Duration::from_millis(150),
+        started.elapsed() < Duration::from_millis(600),
         "the suspended callback was skipped: {:?}",
         started.elapsed()
     );

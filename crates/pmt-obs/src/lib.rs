@@ -8,14 +8,26 @@
 //! - [`usage`]: pricing, the ledger writer and grouped reports;
 //! - [`budget`]: pre-call budget checks, warnings and the agent-write
 //!   guard on `budgets.*`;
+//! - [`health`]: the component health model;
+//! - [`sharegpt`]: sessions as `ShareGPT` training records;
+//! - [`taskdump`]: the open spans of the process, for task dumps;
 //! - [`telemetry`]: the opt-in telemetry gate (nothing is sent by default);
+//! - [`metrics`]: the metrics catalog (process-wide registry, Prometheus
+//!   text rendering);
+//! - [`otel`]: opt-in OpenTelemetry export, the span model and trace
+//!   context;
 //! - [`recording`]: the per-session journal session recordings are built
 //!   from (prompt builds, model calls, tool results).
 
 pub mod budget;
+pub mod health;
 pub mod logs;
+pub mod metrics;
+pub mod otel;
 pub mod recording;
 pub mod redaction;
+pub mod sharegpt;
+pub mod taskdump;
 pub mod telemetry;
 pub mod time;
 pub mod trajectory;

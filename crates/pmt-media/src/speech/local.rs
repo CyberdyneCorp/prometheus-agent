@@ -4,7 +4,8 @@
 //!
 //! Each engine runs as a worker process that loads its model once and
 //! answers one JSON line per request on stdin/stdout. Workers are shared
-//! by every session of the process: a surface holds a [`Lease`] while it
+//! by every session of the process that uses the same launcher scope (a
+//! profile's models directory and runtime; profiles never share one): a surface holds a [`Lease`] while it
 //! may speak or listen, and when the last lease is released the worker
 //! stays loaded for the keep-warm time (`tts.keep_warm_secs`, or
 //! `stt.local.unload_after_idle_secs` where `0` means never) before it is
@@ -21,6 +22,11 @@ use tokio::process::{Child, ChildStdin, ChildStdout};
 
 /// Starts engine workers.
 pub trait Launcher: Send + Sync {
+    /// What its workers belong to (the profile's models directory):
+    /// workers of different scopes are different processes.
+    fn scope(&self) -> String {
+        String::new()
+    }
     /// Whether `engine` can be started (its runtime is installed).
     fn available(&self, engine: &str) -> bool;
     /// The worker command of `engine`: the `package` installed, running
@@ -37,12 +43,14 @@ pub trait Launcher: Send + Sync {
     ) -> Result<tokio::process::Command, String>;
 }
 
-/// The engines and the Python package and driver of each.
+/// The engines and the Python package and driver of each. Packages are
+/// pinned to exact releases: the worker runs outside the session sandbox,
+/// so a newer upload never runs unreviewed.
 pub const DRIVERS: &[(&str, &str, &str)] = &[
-    ("piper", "piper-tts", PIPER),
-    ("kittentts", "kittentts", KITTEN),
-    ("neutts", "neuttsair", NEUTTS),
-    ("whisper", "faster-whisper", WHISPER),
+    ("piper", "piper-tts==1.3.0", PIPER),
+    ("kittentts", "kittentts==0.1.3", KITTEN),
+    ("neutts", "neutts==1.4.1", NEUTTS),
+    ("whisper", "faster-whisper==1.2.1", WHISPER),
 ];
 
 const PIPER: &str = r#"
@@ -90,8 +98,9 @@ for line in sys.stdin:
 const NEUTTS: &str = r#"
 import json, sys
 import soundfile
-from neuttsair.neutts import NeuTTSAir
-tts = NeuTTSAir(backbone_repo="neuphonic/neutts-air-q4-gguf", codec_repo="neuphonic/neucodec")
+from neutts import NeuTTS
+tts = NeuTTS(backbone_repo="neuphonic/neutts-air", backbone_device="cpu",
+             codec_repo="neuphonic/neucodec", codec_device="cpu")
 refs = {}
 for line in sys.stdin:
     req = json.loads(line)
@@ -120,6 +129,7 @@ for line in sys.stdin:
         segments, _ = model.transcribe(
             req["input"],
             language=req.get("language") or None,
+            initial_prompt=req.get("prompt") or None,
             vad_filter=req.get("vad", True),
             vad_parameters={"min_silence_duration_ms": req.get("vad_min_silence_ms", 500)},
         )
@@ -150,12 +160,16 @@ struct Worker {
     leases: Mutex<(usize, u64)>,
 }
 
-/// The process-wide workers by engine.
-static WORKERS: LazyLock<Mutex<HashMap<String, Arc<Worker>>>> = LazyLock::new(Mutex::default);
+/// A worker's key: its launcher scope and engine.
+type WorkerKey = (String, String);
 
-fn worker(engine: &str) -> Arc<Worker> {
+/// The process-wide workers by launcher scope and engine.
+static WORKERS: LazyLock<Mutex<HashMap<WorkerKey, Arc<Worker>>>> = LazyLock::new(Mutex::default);
+
+fn worker(launcher: &dyn Launcher, engine: &str) -> Arc<Worker> {
+    let key = (launcher.scope(), engine.to_owned());
     let mut map = WORKERS.lock().unwrap_or_else(PoisonError::into_inner);
-    Arc::clone(map.entry(engine.to_owned()).or_insert_with(|| {
+    Arc::clone(map.entry(key).or_insert_with(|| {
         Arc::new(Worker {
             process: tokio::sync::Mutex::new(None),
             leases: Mutex::new((0, 0)),
@@ -163,37 +177,36 @@ fn worker(engine: &str) -> Arc<Worker> {
     }))
 }
 
-/// Whether `engine`'s worker process is running now.
-pub async fn loaded(engine: &str) -> bool {
-    worker(engine).process.lock().await.is_some()
+/// Whether `engine`'s worker process of `launcher` is running now.
+pub async fn loaded(launcher: &dyn Launcher, engine: &str) -> bool {
+    worker(launcher, engine).process.lock().await.is_some()
 }
 
 /// A surface's hold on an engine: while any lease is held the worker
 /// stays loaded.
 pub struct Lease {
-    engine: String,
+    worker: Arc<Worker>,
     keep_warm: Option<Duration>,
 }
 
 impl Lease {
-    /// Holds `engine`; after the last release it stays loaded for
-    /// `keep_warm` (`None`: until the process exits).
+    /// Holds `launcher`'s `engine`; after the last release it stays loaded
+    /// for `keep_warm` (`None`: until the process exits).
     #[must_use]
-    pub fn acquire(engine: &str, keep_warm: Option<Duration>) -> Self {
-        let worker = worker(engine);
-        let mut leases = worker.leases.lock().unwrap_or_else(PoisonError::into_inner);
-        leases.0 += 1;
-        leases.1 += 1;
-        Self {
-            engine: engine.to_owned(),
-            keep_warm,
+    pub fn acquire(launcher: &dyn Launcher, engine: &str, keep_warm: Option<Duration>) -> Self {
+        let worker = worker(launcher, engine);
+        {
+            let mut leases = worker.leases.lock().unwrap_or_else(PoisonError::into_inner);
+            leases.0 += 1;
+            leases.1 += 1;
         }
+        Self { worker, keep_warm }
     }
 }
 
 impl Drop for Lease {
     fn drop(&mut self) {
-        let worker = worker(&self.engine);
+        let worker = Arc::clone(&self.worker);
         let generation = {
             let mut leases = worker.leases.lock().unwrap_or_else(PoisonError::into_inner);
             leases.0 = leases.0.saturating_sub(1);
@@ -208,7 +221,7 @@ impl Drop for Lease {
         let Ok(runtime) = tokio::runtime::Handle::try_current() else {
             return;
         };
-        runtime.spawn(async move {
+        pmt_core::spawn::spawn_on(&runtime, async move {
             tokio::time::sleep(keep_warm).await;
             // A lease taken meanwhile (a new generation) keeps it loaded.
             let idle = {
@@ -235,7 +248,7 @@ pub async fn request(
     request: &Value,
 ) -> Result<Value, String> {
     let (package, script) = driver(engine).ok_or_else(|| format!("unknown engine '{engine}'"))?;
-    let worker = worker(engine);
+    let worker = worker(launcher, engine);
     let mut slot = worker.process.lock().await;
     if slot.is_none() {
         let mut command = launcher.worker(engine, package, script)?;
@@ -293,10 +306,14 @@ mod tests {
     use super::*;
 
     /// A worker that answers every line with `{"ok":true,"text":"heard"}`
-    /// and touches the requested output file.
-    struct Fake;
+    /// and touches the requested output file; its scope is the name.
+    struct Fake(&'static str);
 
     impl Launcher for Fake {
+        fn scope(&self) -> String {
+            self.0.to_owned()
+        }
+
         fn available(&self, _: &str) -> bool {
             true
         }
@@ -313,19 +330,43 @@ mod tests {
 
     #[tokio::test]
     async fn workers_stay_warm_until_the_last_lease_and_keep_warm_pass() {
-        let first = Lease::acquire("kittentts", Some(Duration::from_millis(200)));
-        let second = Lease::acquire("kittentts", Some(Duration::from_millis(200)));
-        let answer = request(&Fake, "kittentts", &serde_json::json!({"text": "hi"}))
+        let fake = Fake("warm");
+        let first = Lease::acquire(&fake, "kittentts", Some(Duration::from_millis(200)));
+        let second = Lease::acquire(&fake, "kittentts", Some(Duration::from_millis(200)));
+        let answer = request(&fake, "kittentts", &serde_json::json!({"text": "hi"}))
             .await
             .unwrap();
         assert_eq!(answer["text"], "heard");
         drop(first);
         tokio::time::sleep(Duration::from_millis(400)).await;
-        assert!(loaded("kittentts").await, "a lease is still held");
+        assert!(loaded(&fake, "kittentts").await, "a lease is still held");
         drop(second);
         tokio::time::sleep(Duration::from_millis(50)).await;
-        assert!(loaded("kittentts").await, "kept warm");
+        assert!(loaded(&fake, "kittentts").await, "kept warm");
         tokio::time::sleep(Duration::from_millis(400)).await;
-        assert!(!loaded("kittentts").await, "unloaded after keep-warm");
+        assert!(
+            !loaded(&fake, "kittentts").await,
+            "unloaded after keep-warm"
+        );
+    }
+
+    /// Profiles never share a worker: another launcher scope starts its
+    /// own process for the same engine.
+    #[tokio::test]
+    async fn another_profile_gets_its_own_worker() {
+        let (a, b) = (Fake("profile-a"), Fake("profile-b"));
+        request(&a, "piper", &serde_json::json!({})).await.unwrap();
+        assert!(loaded(&a, "piper").await);
+        assert!(!loaded(&b, "piper").await, "b reuses nothing of a");
+    }
+
+    #[test]
+    fn every_driver_package_is_pinned_to_one_release() {
+        for (engine, package, _) in DRIVERS {
+            let (name, version) = package
+                .split_once("==")
+                .unwrap_or_else(|| panic!("{engine}"));
+            assert!(!name.is_empty() && version.split('.').all(|n| n.parse::<u32>().is_ok()));
+        }
     }
 }

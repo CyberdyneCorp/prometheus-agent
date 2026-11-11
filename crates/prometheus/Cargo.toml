@@ -95,6 +95,7 @@ pmt-providers.workspace = true
 pmt-rpc.workspace = true
 pmt-sandbox.workspace = true
 pmt-skills.workspace = true
+pmt-skillhub.workspace = true
 pmt-store.workspace = true
 pmt-tools.workspace = true
 pmt-tui = { workspace = true, optional = true }
@@ -129,6 +130,9 @@ ulid.workspace = true
 tokio = { workspace = true, features = ["signal"] }
 tracing.workspace = true
 unicode-width.workspace = true
+# `debug bundle` archives (`.tar.zst`).
+tar.workspace = true
+zstd.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 # The controlling terminal's device and session leader (`-c` per terminal);
@@ -142,6 +146,8 @@ sha2.workspace = true
 
 [dev-dependencies]
 flate2.workspace = true
+# Decodes what the fake OTLP collector of the export tests receives.
+prost.workspace = true
 # Large test images for the vision embed budget.
 image.workspace = true
 pmt-local = { workspace = true, features = ["testkit"] }
@@ -150,6 +156,7 @@ pmt-mcp = { workspace = true, features = ["testkit"] }
 rmcp = { workspace = true, features = ["client", "transport-async-rw", "transport-streamable-http-client-reqwest"] }
 pmt-plugins = { workspace = true, features = ["testkit"] }
 pmt-pybridge = { workspace = true, features = ["testkit"] }
+pmt-skillhub = { workspace = true, features = ["testkit"] }
 # The fake Nous connector gateway of the connectors tests.
 pmt-tools = { workspace = true, features = ["connectors-fake"] }
 minisign.workspace = true

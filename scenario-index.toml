@@ -317,6 +317,9 @@ capabilities = [
 "Window around a hit" = ["crates/pmt-agent/tests/agent_tools.rs::session_search_returns_the_window_around_a_hit"]
 "Profile isolation" = ["crates/pmt-agent/tests/agent_tools.rs::session_search_never_sees_another_profile"]
 
+[observability."Gateway sessions share the trajectory grammar"]
+"Same script, different surface" = ["crates/prometheus/tests/trajectory_gateway.rs::a_webhook_session_records_the_same_trajectory_as_chat"]
+
 [observability."One trajectory grammar for every surface"]
 "Same script, interactive and one-shot" = ["crates/prometheus/tests/trajectory_surfaces.rs::the_interactive_and_one_shot_trajectories_match"]
 
@@ -364,7 +367,7 @@ capabilities = [
 "Fresh install network audit" = ["crates/prometheus/tests/no_telemetry.rs::a_mock_chat_session_makes_no_connection"]
 
 [observability."Plain-text setup summary"]
-"URL credentials redacted" = ["crates/prometheus/src/debug_cmd.rs::url_credentials_are_replaced"]
+"URL credentials redacted" = ["crates/prometheus/src/debug_cmd/mod.rs::url_credentials_are_replaced"]
 
 [security-boundaries."Declared trust model"]
 "Approval regex bypass report" = ["crates/prometheus/tests/security_policy.rs::every_spec_boundary_and_heuristic_is_classified"]
@@ -2371,7 +2374,7 @@ capabilities = [
 "Stdout is only the path" = ["crates/prometheus/tests/python_bridge_cli.rs::a_named_environment_prints_only_its_path_and_is_reused_offline"]
 
 [skills."Skill scripts run sandboxed with managed runtimes"]
-"Skill script gets its pinned environment" = ["crates/prometheus/tests/python_bridge.rs::a_skill_script_gets_its_environment_and_no_plugin_environment"]
+"Skill script gets its pinned environment" = ["crates/prometheus/tests/python_bridge.rs::a_skill_script_gets_its_environment_and_no_plugin_environment", "crates/prometheus/tests/skill_scripts.rs::a_node_skill_script_runs_with_the_managed_node"]
 
 # Group 34.1-34.3 (security hardening for extensions: egress proxy and
 # per-session egress policy, surface-only secrets and sidecar isolation,
@@ -2937,7 +2940,7 @@ capabilities = [
 "Burst does not double-fire" = ["crates/prometheus/tests/cron_webhooks.rs::a_signed_review_event_fires_the_sweeper_job_once"]
 
 [skills."Blueprint skills never auto-schedule"]
-"Install does not create a job" = { tests = ["crates/prometheus/tests/cron_automations.rs::the_inbox_offers_starters_and_skill_blueprints_without_creating_jobs"], note = "the skill is placed in the profile's skills directory (what an install writes); the inbox offers its blueprint and no job exists" }
+"Install does not create a job" = ["crates/prometheus/tests/skills_hub.rs::installing_a_blueprint_skill_creates_no_job", "crates/prometheus/tests/cron_automations.rs::the_inbox_offers_starters_and_skill_blueprints_without_creating_jobs"]
 
 [session-automation."Persisted per-session automation state"]
 "Goal survives resume" = ["crates/prometheus/tests/automation_line.rs::a_goal_survives_resume_with_its_turn_count", "crates/pmt-store/tests/store/automation.rs::rows_are_kept_per_kind_across_reopening_and_go_with_the_session"]
@@ -3048,7 +3051,7 @@ capabilities = [
 "Ledger distinguishes subscription calls" = ["crates/prometheus/tests/provider_routing_cli.rs::ledger_distinguishes_subscription_calls"]
 
 [model-providers."Scoped fallback chains for pinned owners"]
-"Pinned cron job" = ["crates/prometheus/tests/cron_upgrades.rs::a_pinned_job_does_not_inherit_the_profile_fallback_chain", "crates/pmt-providers/tests/providers/routing.rs::pinned_cron_job_gets_no_inherited_chain"]
+"Pinned cron job" = ["crates/prometheus/tests/cron_upgrades.rs::a_pinned_job_does_not_inherit_the_profile_fallback_chain", "crates/pmt-providers/tests/providers/routing.rs::pinned_cron_job_gets_no_inherited_chain", "crates/prometheus/tests/cron_upgrades.rs::a_declared_job_chain_is_used_and_an_empty_one_disables_fallback", "crates/prometheus/tests/delegation_chat.rs::a_pinned_child_uses_the_declared_child_chain_and_an_empty_one_disables_it"]
 
 [model-providers."Provider health scoring (upgrade)"]
 "Repeated overloads lower the score" = ["crates/prometheus/tests/provider_routing_cli.rs::repeated_overloads_lower_the_score", "crates/pmt-providers/tests/providers/routing.rs::repeated_overloads_lower_the_score"]
@@ -3417,7 +3420,7 @@ capabilities = [
 "Unset provider picks local first" = ["crates/pmt-media/tests/speech.rs::an_unset_stt_provider_picks_local_whisper_first"]
 
 [web-and-media-tools."Command-template speech providers"]
-"Paths with spaces" = ["crates/pmt-media/tests/speech.rs::a_command_provider_receives_paths_with_spaces_as_one_argument", "crates/pmt-media/src/speech/command.rs::posix_values_are_quoted_for_their_context", "crates/pmt-media/src/speech/command.rs::powershell_values_are_literal_in_every_context", "crates/pmt-media/src/speech/command.rs::cmd_values_keep_metacharacters_and_percent_literal"]
+"Paths with spaces" = ["crates/pmt-media/tests/speech.rs::a_command_provider_receives_paths_with_spaces_as_one_argument", "crates/pmt-media/src/speech/command.rs::posix_values_are_quoted_for_their_context", "crates/pmt-media/src/speech/command.rs::powershell_values_are_literal_in_every_context", "crates/pmt-media/src/speech/command.rs::cmd_values_keep_metacharacters_and_percent_literal", "crates/prometheus/tests/media_tts_writes.rs::a_command_voice_speaks_inside_the_session_sandbox", "crates/prometheus/tests/voice_line.rs::sandboxed_command_providers_read_the_recording_and_write_the_speech"]
 "Built-in name wins" = ["crates/pmt-media/tests/speech.rs::a_built_in_stt_name_wins_over_a_same_named_command"]
 
 [web-and-media-tools."Media tool credentials and billing are explicit"]
@@ -3482,3 +3485,117 @@ capabilities = [
 
 [replay-and-evaluation."Built-in smoke suite"]
 "Regression in tool dispatch" = ["crates/prometheus/tests/smoke_suite.rs::a_broken_parallel_dispatch_misses_the_smoke_grade"]
+
+# Group 52 (observability upgrades)
+
+[observability."Opt-in OpenTelemetry export"]
+"Collector down" = ["crates/pmt-obs/tests/obs/otel.rs::collector_down_adds_no_latency_and_counts_dropped_items", "crates/pmt-obs/tests/obs/otel.rs::a_full_queue_drops_the_oldest_and_counts_it"]
+
+[observability."Span model"]
+"Content not exported by default" = ["crates/prometheus/tests/obs_otel.rs::a_turn_exports_its_span_tree_under_the_session_trace_without_content", "crates/pmt-obs/tests/obs/otel.rs::content_is_not_exported_by_default"]
+
+[observability."Trace context propagation"]
+"Subagent spans join the parent trace" = ["crates/prometheus/tests/obs_otel.rs::subagent_session_spans_hang_under_the_delegating_tool_call", "crates/pmt-obs/tests/obs/otel.rs::subagent_spans_join_the_parent_trace"]
+
+[observability."Metrics catalog"]
+"Error counted by kind" = ["crates/pmt-providers/tests/providers/metrics.rs::an_authentication_failure_counts_one_auth_error"]
+
+[observability."Local metrics scrape endpoint (upgrade)"]
+"Scrape disabled by default" = ["crates/prometheus/tests/obs_daemon.rs::scrape_is_disabled_by_default"]
+
+[observability."Live usage events"]
+"TUI and desktop agree" = ["crates/prometheus/tests/obs_daemon.rs::every_attached_client_receives_the_same_usage_update"]
+
+[observability."Health endpoints"]
+"Store migration in progress" = ["crates/prometheus/tests/obs_daemon.rs::readyz_names_the_store_while_it_opens_and_turns_ready"]
+
+[observability."Component health model"]
+"Adapter loses its connection" = ["crates/pmt-gateway/tests/messaging/component_health.rs::three_failed_polls_in_a_row_degrade_the_adapter_and_announce_it", "crates/prometheus/tests/obs_daemon.rs::system_health_returns_the_components_of_the_connections_profile"]
+
+[observability."Status command"]
+"Scripted health check" = ["crates/prometheus/tests/obs_daemon.rs::status_check_exits_1_naming_a_down_adapter", "crates/prometheus/tests/obs_daemon.rs::status_without_a_daemon_says_so_and_check_exits_1"]
+
+[observability."Crash and debug bundle (upgrade)"]
+"Bundle contains no secret values" = ["crates/prometheus/tests/obs_reports.rs::a_debug_bundle_contains_none_of_the_profiles_secret_values"]
+
+[observability."Observability overhead budget"]
+"Overhead gate" = ["xtask/src/perf/overhead.rs::recording_more_than_3_percent_slower_fails_the_gate"]
+
+[observability."Usage insights report"]
+"Insights for one platform" = ["crates/prometheus/tests/obs_reports.rs::insights_for_one_platform_count_only_its_sessions_and_calls"]
+"Slash command in a chat" = ["crates/prometheus/tests/obs_daemon.rs::insights_in_a_session_shows_the_report_and_adds_no_ledger_row"]
+
+[observability."Configuration-centric status"]
+"Offline full status" = ["crates/prometheus/tests/obs_reports.rs::full_status_lists_credentials_offline_and_only_deep_probes_connect"]
+"Deep status probes every adapter endpoint" = ["crates/prometheus/tests/obs_reports.rs::deep_status_probes_every_configured_adapter_endpoint"]
+
+[observability."Export posture status"]
+"Content capture is visible" = ["crates/prometheus/tests/obs_reports.rs::export_posture_states_what_leaves_the_host"]
+
+[observability."Runtime liveness watchdog and task dump"]
+"Stalled runtime restarts" = ["crates/prometheus/tests/obs_watchdog.rs::a_stalled_runtime_is_dumped_marked_degraded_and_exits_75"]
+"Dump without restart" = ["crates/prometheus/tests/obs_watchdog.rs::sigusr2_writes_a_dump_and_the_daemon_keeps_serving", "crates/prometheus/tests/obs_watchdog.rs::debug_dump_tasks_writes_a_dump_over_the_control_channel"]
+"Dump shows every thread and task" = ["crates/pmt-obs/src/taskdump/tests.rs::a_dump_lists_every_thread_and_every_task_with_its_await_point", "crates/pmt-core/src/os_threads/mod.rs::the_list_has_every_thread_with_its_name_and_the_callers_id"]
+
+[observability."Opt-in debug share upload"]
+"Declined upload sends nothing" = ["crates/prometheus/tests/obs_reports.rs::a_declined_upload_makes_no_connection_and_exits_1"]
+"Unattended share refused" = ["crates/prometheus/tests/obs_reports.rs::an_unattended_share_without_yes_uploads_nothing_and_exits_4"]
+
+[observability."ShareGPT trajectory export"]
+"Tool call rendering" = ["crates/pmt-obs/tests/obs/sharegpt.rs::a_tool_using_session_renders_to_the_golden_sharegpt_record", "crates/prometheus/tests/obs_reports.rs::an_exported_session_renders_its_tool_call_and_response"]
+
+# Group 53.1-53.4 (skills hub: install pipeline and trust policy, lockfile
+# and tamper detection, signatures, discovery/inspection/updates/audit,
+# identifiers, taps, publishing and snapshots)
+[skills."Hub install pipeline and trust policy"]
+"Dangerous community skill is blocked even with --force" = ["crates/pmt-skillhub/tests/hub/install.rs::dangerous_community_skill_is_blocked_even_with_force", "crates/prometheus/tests/skills_hub.rs::dangerous_community_skill_is_blocked_even_with_force"]
+
+[skills."Skills lockfile and tamper detection (upgrade)"]
+"Silent modification of a hub skill is caught" = ["crates/pmt-skillhub/tests/hub/maintain.rs::silent_modification_of_a_hub_skill_is_caught", "crates/prometheus/tests/skills_hub.rs::a_silently_modified_hub_skill_is_quarantined_until_accepted"]
+
+[skills."Skill signatures and provenance (upgrade)"]
+"Invalid signature is never accepted" = ["crates/pmt-skillhub/tests/hub/install.rs::invalid_signature_is_never_accepted", "crates/pmt-skillhub/tests/hub/keyless.rs::a_keyless_signature_verifies_offline_and_tampering_breaks_it"]
+"Untrusted signer under require" = ["crates/pmt-skillhub/tests/hub/install.rs::require_accepts_only_trusted_signers"]
+
+[skills."Hub discovery, inspection, updates and audit"]
+"Local edits survive update" = ["crates/pmt-skillhub/tests/hub/maintain.rs::local_edits_survive_update", "crates/prometheus/tests/skills_hub.rs::local_edits_survive_update_and_inspect_installs_nothing"]
+"Inspect installs nothing" = ["crates/pmt-skillhub/tests/hub/discover.rs::inspect_installs_nothing", "crates/prometheus/tests/skills_hub.rs::local_edits_survive_update_and_inspect_installs_nothing"]
+
+[skills."Hub source identifiers"]
+"Direct URL without a name" = ["crates/pmt-skillhub/tests/hub/install.rs::direct_url_without_a_name_asks_for_one", "crates/prometheus/tests/skills_hub.rs::identifiers_are_checked_and_a_nameless_url_asks_for_a_name"]
+
+[skills."Custom skill taps"]
+"Install from a team tap" = ["crates/pmt-skillhub/tests/hub/install.rs::install_from_a_team_tap", "crates/prometheus/tests/skills_hub.rs::taps_and_snapshots_round_trip_between_profiles"]
+
+[skills."Skill publishing and snapshots"]
+"Snapshot round trip" = ["crates/pmt-skillhub/tests/hub/discover.rs::snapshot_round_trip", "crates/prometheus/tests/skills_hub.rs::taps_and_snapshots_round_trip_between_profiles"]
+
+# Group 53.3 + 53.5 curator parts (configuration, scheduling, transitions,
+# backups, CLI, /curator, ledger, rollback, purge, reports)
+[skills."Curator configuration and scheduling"]
+"Invalid interval is a validation error" = ["crates/pmt-config/src/validate.rs::curator_seconds_below_one_name_their_key"]
+
+[skills."Curator transitions, scope and backups"]
+"Every real pass is backed up" = ["crates/pmt-skills/tests/skills/curator.rs::every_real_pass_is_backed_up_and_only_managed_skills_move", "crates/prometheus/tests/curator_cli.rs::every_real_pass_is_backed_up_and_purge_is_explicit"]
+
+[skills."Curator CLI"]
+"Dry run changes nothing" = ["crates/pmt-skills/tests/skills/curator.rs::dry_run_changes_nothing", "crates/prometheus/tests/curator_cli.rs::dry_run_changes_nothing_and_prints_the_plan"]
+
+[skills."/curator slash command"]
+"Pin from a messaging chat" = { tests = ["crates/prometheus/tests/curator_cli.rs::pin_from_a_messaging_chat"], note = "proven on the debug-build file adapter's platform (`test`), the gateway path every adapter (Telegram included) shares" }
+
+[skills."Curator audit ledger, single-edit rollback, purge and reports"]
+"Undo one agent edit" = ["crates/pmt-skills/tests/skills/curator.rs::undo_one_agent_edit", "crates/prometheus/tests/curator_cli.rs::rollback_undoes_one_entry_and_restore_brings_a_skill_back"]
+"Purge is never automatic" = ["crates/pmt-skills/tests/skills/curator.rs::purge_is_never_automatic", "crates/prometheus/tests/curator_cli.rs::every_real_pass_is_backed_up_and_purge_is_explicit"]
+
+# Group 53.5 (skill enablement, credential files, catalog content)
+[skills."Interactive per-surface skill enablement"]
+"Disable a skill for Telegram only" = ["crates/prometheus/tests/skills_hub.rs::disable_a_skill_for_telegram_only", "crates/prometheus/tests/skills_hub.rs::skills_config_needs_a_terminal"]
+
+[skills."Skill credential file passthrough"]
+"Read-only mount into Docker" = ["crates/prometheus/tests/container_backend.rs::a_granted_credential_file_is_mounted_read_only"]
+"No grant, no file" = ["crates/prometheus/tests/container_backend.rs::without_the_grant_no_credential_file_is_passed"]
+
+[skills."Bundled and official skill catalog content"]
+"Official catalog is browsable offline" = ["crates/prometheus/tests/skills_hub.rs::official_catalog_is_browsable_offline", "crates/pmt-skills/tests/skills/catalog_content.rs::the_required_skills_are_embedded"]
+"Hermes name alias resolves" = ["crates/pmt-skills/tests/skills/catalog_content.rs::hermes_name_alias_resolves"]

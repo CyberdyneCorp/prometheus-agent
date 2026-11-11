@@ -234,7 +234,7 @@ impl Servers {
         }
         let idle = self.idle;
         let weak: Weak<Running> = Arc::downgrade(server);
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             loop {
                 tokio::time::sleep(idle / 4 + Duration::from_millis(10)).await;
                 let Some(server) = weak.upgrade() else { return };

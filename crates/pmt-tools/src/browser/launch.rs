@@ -567,7 +567,7 @@ impl StderrTail {
         let lines: Arc<std::sync::Mutex<Kept>> = Arc::default();
         let reader = stderr.map(|stderr| {
             let kept = Arc::clone(&lines);
-            tokio::spawn(async move {
+            pmt_core::spawn::spawn(async move {
                 let mut reader = tokio::io::BufReader::new(stderr).lines();
                 while let Ok(Some(line)) = reader.next_line().await {
                     kept.lock()

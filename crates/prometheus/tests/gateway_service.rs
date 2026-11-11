@@ -337,7 +337,7 @@ async fn a_reused_enrollment_token_changes_nothing() {
     let before = daemon_toml(home.path());
     let url = connector.uri();
     let home_path = home.path().to_path_buf();
-    let out = tokio::task::spawn_blocking(move || {
+    let out = pmt_core::spawn::blocking(move || {
         run(
             &home_path,
             &["gateway", "enroll", "--token", "T", "--connector-url", &url],
@@ -366,7 +366,7 @@ async fn enrollment_stores_the_credential_and_writes_the_relay() {
     let home = temp_home();
     let url = connector.uri();
     let home_path = home.path().to_path_buf();
-    let out = tokio::task::spawn_blocking(move || {
+    let out = pmt_core::spawn::blocking(move || {
         run(
             &home_path,
             &[

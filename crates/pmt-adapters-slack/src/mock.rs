@@ -103,10 +103,10 @@ impl SlackMock {
         .unwrap();
         *mock.api.lock().unwrap() = Some(api);
         let server = Arc::clone(&mock);
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             while let Ok((stream, _)) = sockets.accept().await {
                 let server = Arc::clone(&server);
-                tokio::spawn(async move { server.socket_mode(stream).await });
+                pmt_core::spawn::spawn(async move { server.socket_mode(stream).await });
             }
         });
         mock

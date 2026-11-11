@@ -430,7 +430,7 @@ fn run_now(ctx: &Ctx<'_>, key: &str, now: Timestamp) -> Result<String, Error> {
         job.id(),
         job.row.name
     );
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         let text = match runner.execute(&job, &run).await {
             Ok(done) => {
                 let mut text = format!("cron run {} of {}: {}", done.id, job.row.name, done.status);

@@ -81,14 +81,14 @@ impl SpeechState {
         }
     }
 
-    /// Takes the session's lease on `engine` once.
-    fn hold(&self, engine: &str, keep_warm: Option<Duration>) {
+    /// Takes the session's lease on `launcher`'s `engine` once.
+    fn hold(&self, launcher: &dyn local::Launcher, engine: &str, keep_warm: Option<Duration>) {
         let mut held = self.held.lock().unwrap_or_else(PoisonError::into_inner);
         if held.insert(engine.to_owned()) {
             self.leases
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
-                .push(local::Lease::acquire(engine, keep_warm));
+                .push(local::Lease::acquire(launcher, engine, keep_warm));
         }
     }
 
@@ -122,7 +122,7 @@ impl SpeechState {
                 voice.provider
             )
         })?;
-        self.hold(&voice.provider, self.keep_warm);
+        self.hold(launcher.as_ref(), &voice.provider, self.keep_warm);
         let dir = tempdir(setup)?;
         let out = dir.join("out.wav");
         let request = json!({"op": "speak", "text": text, "voice": voice.voice, "model": voice.model,
@@ -144,7 +144,7 @@ impl Drop for SpeechState {
             return;
         };
         for (line, cwd, runner) in releases {
-            runtime.spawn(async move {
+            pmt_core::spawn::spawn_on(&runtime, async move {
                 if let Err(why) =
                     command::run(runner.as_ref(), &line, &cwd, Duration::from_mins(1), false).await
                 {
@@ -155,9 +155,15 @@ impl Drop for SpeechState {
     }
 }
 
-/// A private scratch directory under the profile's audio cache.
+/// A private per-call directory under the runner's scratch, which a
+/// sandboxed speech command can read and write, else under the profile's
+/// audio cache.
 fn tempdir(setup: &MediaSetup) -> Result<PathBuf, String> {
-    let dir = audio_dir(&setup.profile_dir).join(format!("tmp-{}", ulid::Ulid::generate()));
+    let base = setup
+        .runner
+        .scratch()
+        .unwrap_or_else(|| audio_dir(&setup.profile_dir));
+    let dir = base.join(format!("speech-{}", ulid::Ulid::generate()));
     pmt_core::private_fs::create_dir(&dir).map_err(|e| e.to_string())?;
     Ok(dir)
 }

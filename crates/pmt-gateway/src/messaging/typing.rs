@@ -40,7 +40,7 @@ pub(crate) fn start(
     let stop = CancellationToken::new();
     let (chat, thread) = (chat_id.to_owned(), thread_id.map(str::to_owned));
     let token = stop.clone();
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         let mut ticker = tokio::time::interval(EVERY);
         loop {
             tokio::select! {

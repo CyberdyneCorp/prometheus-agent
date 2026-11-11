@@ -176,7 +176,7 @@ async fn a_lost_lease_interrupts_the_turn() {
     let model = mock_model(&profile, SLOW, "mock").await;
     let run = agent(&profile, s, model, FakeTools::new(), |_| {});
     let db = profile.dir().join("state.db");
-    let operator = tokio::spawn(async move {
+    let operator = pmt_core::spawn::spawn(async move {
         tokio::time::sleep(Duration::from_millis(300)).await;
         let conn = rusqlite::Connection::open(db).unwrap();
         conn.busy_timeout(Duration::from_secs(5)).unwrap();
@@ -198,7 +198,7 @@ async fn a_user_interrupt_ends_the_turn() {
     let run = agent(&profile, s, model, FakeTools::new(), |_| {});
     let options = options();
     let interrupt = options.interrupt.clone();
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         tokio::time::sleep(Duration::from_millis(200)).await;
         interrupt.stop(Issuer::User);
     });

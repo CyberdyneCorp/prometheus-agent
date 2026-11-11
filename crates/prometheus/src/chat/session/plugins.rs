@@ -177,7 +177,7 @@ impl Factory {
     pub(super) async fn plugin_sections(&self, id: SessionId) -> Vec<String> {
         let loaded = self.plugins.current();
         let call = self.plugin_call(id);
-        tokio::task::spawn_blocking(move || loaded.contributions.render_sections(&call))
+        pmt_core::spawn::blocking(move || loaded.contributions.render_sections(&call))
             .await
             .unwrap_or_default()
     }

@@ -39,7 +39,7 @@ impl ToolHandler for FileHandler {
                 call_id: context.call_id.clone(),
                 tool: self.tool.clone(),
             };
-            tokio::task::spawn_blocking(move || {
+            pmt_core::spawn::blocking(move || {
                 super::edits::with_call(call, || operation(&files, &arguments))
             })
             .await

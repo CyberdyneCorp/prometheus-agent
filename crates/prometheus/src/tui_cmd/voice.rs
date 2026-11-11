@@ -151,13 +151,14 @@ impl Tui<'_> {
         let asks = self.done.clone();
         let client = Arc::clone(&self.voice.client);
         let key = pmt_voice::mode::record_key(&self.open.scope.config().voice);
+        let session = self.link.session.clone();
         self.notice(format!("listening… ({key} stops)"));
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             let levels = asks.clone();
             let meter: pmt_voice::record::Meter = Arc::new(move |level| {
                 let _ = levels.send(Done::Voice(Ask::Level(level)));
             });
-            let kit = client.lock().await.kit(meter).await;
+            let kit = client.lock().await.kit(meter, &session).await;
             let ended = match kit {
                 Ok(kit) => {
                     let mut host = Channel {

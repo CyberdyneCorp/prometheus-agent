@@ -1,4 +1,4 @@
-//! `prometheus grants list|revoke` (spec: security-boundaries, Grants are
+//! `prometheus grants list|add|revoke` (spec: security-boundaries, Grants are
 //! stored, reviewable and revocable). Both work on the selected profile's
 //! `grants.toml`; a revocation reaches running sessions at their next tool
 //! call because sessions re-read the file when it changes.
@@ -23,7 +23,29 @@ pub fn run(command: &GrantsCommand, ctx: &Context<'_>) -> Result<u8, Error> {
     match command {
         GrantsCommand::List { subject } => list(ctx, subject.as_deref()),
         GrantsCommand::Revoke { id } => revoke(ctx, id),
+        GrantsCommand::Add {
+            subject,
+            capability,
+        } => add(ctx, subject, capability),
     }
+}
+
+fn add(ctx: &Context<'_>, subject: &str, capability: &str) -> Result<u8, Error> {
+    let subject: Subject = subject.parse()?;
+    let capability = pmt_core::capability::Capability::parse(capability)?;
+    let file = GrantsFile::of(ctx.scope()?.profile());
+    let added = file.add(&subject, &std::iter::once(capability).collect(), "cli")?;
+    if ctx.json {
+        return json(&serde_json::json!({"added": added}));
+    }
+    if added.is_empty() {
+        return print_raw(&format!("{subject} already holds it\n"));
+    }
+    let mut text = String::new();
+    for g in &added {
+        let _ = writeln!(text, "{} {} {}", g.id, g.subject, g.capability);
+    }
+    print_raw(&text)
 }
 
 fn list(ctx: &Context<'_>, subject: Option<&str>) -> Result<u8, Error> {

@@ -387,7 +387,7 @@ impl Server {
             shared.connection_seq
         };
         if self.settings.recycle != Recycle::default() {
-            tokio::spawn(recycle(Arc::downgrade(self), seq));
+            pmt_core::spawn::spawn(recycle(Arc::downgrade(self), seq));
         }
         connection
     }

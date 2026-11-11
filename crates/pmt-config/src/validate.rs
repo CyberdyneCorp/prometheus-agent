@@ -697,6 +697,26 @@ mod tests {
         );
     }
 
+    /// Scenario: Invalid interval is a validation error (spec: skills,
+    /// Curator configuration and scheduling).
+    #[test]
+    fn curator_seconds_below_one_name_their_key() {
+        for key in [
+            "interval_secs",
+            "min_idle_secs",
+            "stale_after_secs",
+            "archive_after_secs",
+        ] {
+            let found = messages(&format!("[curator]\n{key} = 0\n"));
+            assert_eq!(found.len(), 1, "{found:?}");
+            assert!(
+                found[0].starts_with(&format!("curator.{key}: ")),
+                "{found:?}"
+            );
+        }
+        assert!(messages("[curator]\ninterval_secs = 60\n").is_empty());
+    }
+
     #[test]
     fn unknown_tail_mode_names_lean_and_ratio() {
         assert_eq!(

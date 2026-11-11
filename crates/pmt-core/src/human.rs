@@ -160,7 +160,7 @@ mod tests {
     #[tokio::test]
     async fn only_the_surface_answers() {
         let (channel, mut surface) = Channel::<&str, bool>::attached(Duration::from_secs(5));
-        let asking = tokio::spawn(async move { channel.ask("net.connect:*?").await });
+        let asking = crate::spawn::spawn(async move { channel.ask("net.connect:*?").await });
         let prompt = surface.next().await.unwrap();
         assert_eq!(*prompt.request(), "net.connect:*?");
         prompt.respond(true);
@@ -172,12 +172,12 @@ mod tests {
         let (channel, mut surface) = Channel::<(), bool>::attached(Duration::from_secs(5));
         let channel = std::sync::Arc::new(channel);
         let asker = channel.clone();
-        let asking = tokio::spawn(async move { asker.ask(()).await });
+        let asking = crate::spawn::spawn(async move { asker.ask(()).await });
         drop(surface.next().await.unwrap());
         assert_eq!(asking.await.unwrap(), Err(Unanswered::Dismissed));
 
         let asker = channel.clone();
-        let asking = tokio::spawn(async move { asker.ask(()).await });
+        let asking = crate::spawn::spawn(async move { asker.ask(()).await });
         tokio::task::yield_now().await;
         drop(surface);
         assert_eq!(asking.await.unwrap(), Err(Unanswered::Detached));
@@ -193,7 +193,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn an_unanswered_prompt_times_out_as_denied() {
         let (channel, mut surface) = Channel::<(), bool>::attached(super::DEFAULT_TIMEOUT);
-        let asking = tokio::spawn(async move { channel.ask(()).await });
+        let asking = crate::spawn::spawn(async move { channel.ask(()).await });
         let prompt = surface.next().await.unwrap();
         let result = asking.await.unwrap();
         assert_eq!(result, Err(Unanswered::TimedOut(Duration::from_mins(5))));

@@ -58,8 +58,12 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result
                 format!("cannot start the runtime: {e}"),
             )
         })?;
+    let (systemd, _watchdog) = liveness(home, ctx, &config, &runtime);
+    let health_stop = pmt_core::cancel::CancelToken::new();
     let exit = runtime.block_on(
         async {
+            super::health::starting(&scopes);
+            let health_url = super::health::listen(&scopes[0], health_stop.clone()).await?;
             let host = Arc::new(
                 DaemonHost::new(
                     scopes,
@@ -77,11 +81,17 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result
                 Some(&home.to_path_buf()),
                 ctx.launch,
             )));
-            let watcher = tokio::spawn(super::host::watch(Arc::clone(&host)));
-            let sweeper = tokio::spawn(super::host::sweep_worktrees(Arc::clone(&host)));
-            let scheduler = tokio::spawn(super::host::schedule_cron(Arc::clone(&host)));
-            let automation = tokio::spawn(super::host::schedule_automation(Arc::clone(&host)));
+            options.health_url = Some(health_url);
+            options.home = Some(home.to_path_buf());
+            let watcher = pmt_core::spawn::spawn(super::host::watch(Arc::clone(&host)));
+            let sweeper = pmt_core::spawn::spawn(super::host::sweep_worktrees(Arc::clone(&host)));
+            let scheduler = pmt_core::spawn::spawn(super::host::schedule_cron(Arc::clone(&host)));
+            let automation =
+                pmt_core::spawn::spawn(super::host::schedule_automation(Arc::clone(&host)));
+            let sampler = pmt_core::spawn::spawn(super::host::sample_health(Arc::clone(&host)));
+            let liveness = super::watchdog::background(home, ctx.launch);
             let server = Server::new(options, Arc::clone(&host) as Arc<dyn pmt_gateway::Host>)?;
+            super::host::publish_usage(&host, &server);
             let mut messaging =
                 super::messaging::options(home, &config, &host, launch_profile.as_str(), ctx)?;
             messaging.replace_locks = replace_locks;
@@ -96,6 +106,8 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result
                     sweeper.abort();
                     scheduler.abort();
                     automation.abort();
+                    sampler.abort();
+                    liveness.abort();
                     return Ok(pmt_core::exit::FAILURE);
                 }
             }
@@ -104,6 +116,9 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result
                 ctx.launch,
                 enabled_adapters(&scopes_of(&server, &host)),
             );
+            if let Some(systemd) = &systemd {
+                systemd.notify("READY=1");
+            }
             let drain = Duration::from_secs(config.daemon.restart_drain_secs);
             let exit = pmt_gateway::run(&lock, home, server, drain, shutdown_signal()).await;
             super::inventory::unregister(home, ctx.launch);
@@ -111,13 +126,35 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result
             sweeper.abort();
             scheduler.abort();
             automation.abort();
+            sampler.abort();
+            liveness.abort();
             exit.map(exit_code)
         }
         .in_current_span(),
     )?;
+    health_stop.cancel();
     // Turns still running past the drain are abandoned with the runtime.
     runtime.shutdown_timeout(Duration::from_secs(1));
     Ok(exit)
+}
+
+/// The liveness side of a new daemon: a degraded predecessor's record is
+/// forgotten, and the watchdog (with its systemd heartbeats) starts.
+fn liveness(
+    home: &Path,
+    ctx: &Context<'_>,
+    config: &DaemonConfig,
+    runtime: &tokio::runtime::Runtime,
+) -> (Option<super::systemd::Notifier>, super::watchdog::Guard) {
+    super::record::forget_last_exit(home);
+    let systemd = super::systemd::Notifier::from(ctx.launch, config.daemon.systemd_watchdog_secs);
+    let guard = super::watchdog::start(
+        home.to_path_buf(),
+        &config.daemon.watchdog,
+        runtime.handle().clone(),
+        systemd.clone(),
+    );
+    (systemd, guard)
 }
 
 /// The served profiles' scopes.
@@ -187,6 +224,7 @@ fn served_profiles(
     if let Some(handle) = pmt_obs::logs::handle() {
         handle.set_level(first.config().logging.level);
     }
+    crate::startup::start_export(&first);
     crate::startup::register_profile(&first);
     if !first.config().gateway.multiplex {
         return Ok(vec![first]);

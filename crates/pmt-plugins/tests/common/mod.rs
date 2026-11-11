@@ -429,7 +429,7 @@ pub(crate) async fn call(
     let instance = Arc::clone(instance);
     let name = name.to_owned();
     let args = format!(r#"{{"v":"{v}"}}"#);
-    tokio::task::spawn_blocking(move || {
+    pmt_core::spawn::blocking(move || {
         let call = CallInfo {
             session_id: Some("ses_test".to_owned()),
             surface: "cli".to_owned(),

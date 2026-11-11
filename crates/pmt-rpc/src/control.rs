@@ -115,6 +115,10 @@ pub enum ControlRequest {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         plugin: Option<String>,
     },
+    /// Writes a dump of every thread and task to
+    /// `<home>/logs/task-dump-<UTC>.txt` without stopping (`prometheus
+    /// debug dump-tasks`); answers its path.
+    DumpTasks,
     /// A graceful drain and exit; `restart` marks the daemon retiring so
     /// it refuses new work while it drains.
     Stop {
@@ -197,6 +201,57 @@ pub struct DaemonStatus {
     /// daemon per home; platform-adapters, Adapter state reporting).
     #[serde(default)]
     pub adapters: Vec<AdapterReport>,
+    /// Every component's health (spec: observability, Component health
+    /// model).
+    #[serde(default)]
+    pub health: Vec<ComponentReport>,
+    /// Subagents running now.
+    #[serde(default)]
+    pub subagents: usize,
+    /// The OTLP exporter's posture and counters, when export is on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub export: Option<ExportReport>,
+}
+
+/// One component in `status`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ComponentReport {
+    /// `store`, `scheduler`, `adapter:<platform>`, `mcp:<server>`...
+    pub component: String,
+    /// The owning profile; `None` for daemon-wide components.
+    #[serde(default)]
+    pub profile: Option<String>,
+    /// `ok`, `degraded` or `down`.
+    pub state: String,
+    /// Why.
+    pub reason: String,
+    /// Since when (RFC 3339).
+    pub since: String,
+}
+
+/// The running OTLP exporter (`status --exports`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExportReport {
+    /// The collector's host (never credentials).
+    pub host: String,
+    /// `http/protobuf` or `grpc`.
+    pub protocol: String,
+    /// Message content, tool arguments and output are exported.
+    pub capture_content: bool,
+    /// `traceparent` goes to external hosts.
+    pub propagate_external: bool,
+    /// Items waiting.
+    pub queued: u64,
+    /// Items dropped since start.
+    pub dropped: u64,
+    /// Items exported since start.
+    pub exported: u64,
+    /// The last successful export (RFC 3339).
+    #[serde(default)]
+    pub last_success: Option<String>,
+    /// The last failure.
+    #[serde(default)]
+    pub last_error: Option<String>,
 }
 
 /// One messaging adapter in `daemon status` and `gateway status`.
@@ -274,6 +329,9 @@ pub struct ControlResponse {
     /// `PluginsReload`: the reload report.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reloaded: Option<String>,
+    /// `DumpTasks`: the dump's path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dumped: Option<String>,
 }
 
 /// How long a control exchange may take.

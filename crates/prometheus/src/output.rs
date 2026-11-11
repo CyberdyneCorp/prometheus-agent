@@ -31,6 +31,34 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "cache stats",
     },
     JsonShape {
+        schema: "prometheus.status.v1",
+        command: "status",
+    },
+    JsonShape {
+        schema: "prometheus.debug_bundle.v1",
+        command: "debug bundle",
+    },
+    JsonShape {
+        schema: "prometheus.debug_share.v1",
+        command: "debug share",
+    },
+    JsonShape {
+        schema: "prometheus.debug_dump_tasks.v1",
+        command: "debug dump-tasks",
+    },
+    JsonShape {
+        schema: "prometheus.usage_insights.v1",
+        command: "usage insights",
+    },
+    JsonShape {
+        schema: "prometheus.trajectory_export.v1",
+        command: "trajectory export",
+    },
+    JsonShape {
+        schema: "prometheus.status_exports.v1",
+        command: "status exports",
+    },
+    JsonShape {
         schema: "prometheus.cache_prune.v1",
         command: "cache prune",
     },

@@ -20,6 +20,7 @@ jiff.workspace = true
 pmt-config.workspace = true
 pmt-core.workspace = true
 pmt-net.workspace = true
+pmt-obs.workspace = true
 pmt-rpc.workspace = true
 # Conversation routes, pairing and the outbox live in each profile's state.db.
 pmt-store.workspace = true

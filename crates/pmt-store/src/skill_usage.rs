@@ -53,10 +53,12 @@ pub struct SkillUsage {
     pub pinned: bool,
     /// Who created it.
     pub created_by: CreatedBy,
+    /// Put under curator management with `prometheus curator adopt`.
+    pub adopted: bool,
 }
 
-const COLUMNS: &str =
-    "name, use_count, view_count, patch_count, last_activity_at, state, pinned, created_by";
+const COLUMNS: &str = "name, use_count, view_count, patch_count, last_activity_at, state, \
+                       pinned, created_by, adopted";
 
 fn count(row: &Row<'_>, index: usize, column: &str) -> Result<u64, Error> {
     let value: i64 = row.get(index).map_err(sql)?;
@@ -81,6 +83,7 @@ fn usage_from_row(row: &Row<'_>) -> Result<SkillUsage, Error> {
         state: state.parse()?,
         pinned: row.get::<_, i64>(6).map_err(sql)? != 0,
         created_by: created_by.parse()?,
+        adopted: row.get::<_, i64>(8).map_err(sql)? != 0,
     })
 }
 
@@ -122,6 +125,43 @@ impl Store {
                 "INSERT INTO skill_usage (name, pinned) VALUES (?1, ?2) \
                  ON CONFLICT (name) DO UPDATE SET pinned = excluded.pinned",
                 params![name, i64::from(pinned)],
+            )
+            .map_err(sql)?;
+            Ok(())
+        })
+    }
+
+    /// Sets whether skill `name` is under curator management although
+    /// not agent-created (creating its record).
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`, `store.busy`.
+    pub fn set_skill_adopted(&self, name: &str, adopted: bool) -> Result<(), Error> {
+        self.write(|tx| {
+            tx.execute(
+                "INSERT INTO skill_usage (name, adopted) VALUES (?1, ?2) \
+                 ON CONFLICT (name) DO UPDATE SET adopted = excluded.adopted",
+                params![name, i64::from(adopted)],
+            )
+            .map_err(sql)?;
+            Ok(())
+        })
+    }
+
+    /// Records `name` as created by `created_by` (creating its record),
+    /// for a skill whose creation is not a counted activity (a hub
+    /// install).
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`, `store.busy`.
+    pub fn set_skill_created_by(&self, name: &str, created_by: CreatedBy) -> Result<(), Error> {
+        self.write(|tx| {
+            tx.execute(
+                "INSERT INTO skill_usage (name, created_by) VALUES (?1, ?2) \
+                 ON CONFLICT (name) DO UPDATE SET created_by = excluded.created_by",
+                params![name, created_by.as_str()],
             )
             .map_err(sql)?;
             Ok(())

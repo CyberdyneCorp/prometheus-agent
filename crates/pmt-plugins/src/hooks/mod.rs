@@ -42,16 +42,13 @@ pub use turn::{Observers, Rewrite, continuation};
 /// Hooks of the closed registry that nothing in this build fires yet: a
 /// callback registered for one loads but never runs, so registration warns
 /// and `plugins doctor` names it. The owner of a firing point removes the
-/// name when it lands (subagents: delegation; `pre_transcription`: speech;
-/// room activity: group rooms; kanban: the kanban dispatcher).
+/// name when it lands (subagents: delegation; room activity: group rooms;
+/// kanban: the kanban dispatcher).
 pub const NOT_FIRED: &[&str] = &[
-    "pre_auxiliary_call",
-    "post_auxiliary_call",
     "on_session_finalize",
     "subagent_start",
     "subagent_stop",
     "on_room_member_activity",
-    "pre_transcription",
     "kanban_task_claimed",
     "kanban_task_completed",
     "kanban_task_blocked",
@@ -299,6 +296,8 @@ impl Hooks {
         let Some(callbacks) = self.callbacks.get(hook) else {
             return Vec::new();
         };
+        let traced = payload.traced(call.session_id.as_deref());
+        let payload = &traced;
         let mut answers = Vec::new();
         for callback in callbacks {
             if self.is_suspended(&callback.plugin, hook) {
@@ -360,7 +359,7 @@ impl Hooks {
         let instance = Arc::clone(instance);
         let bound = self.settings.timeout;
         let call = call.clone();
-        let task = tokio::task::spawn_blocking(move || instance.on_hook(&call, &event, bound));
+        let task = pmt_core::spawn::blocking(move || instance.on_hook(&call, &event, bound));
         let outcome = match tokio::time::timeout(bound + WAIT_SLACK, task).await {
             Err(_) => Err(timed_out(plugin)),
             Ok(Err(join)) => Err(Error::new(&codes::PLUGINS_CALL, join.to_string())),

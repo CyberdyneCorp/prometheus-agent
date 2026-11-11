@@ -120,7 +120,7 @@ mod tests {
         for n in 0..2 {
             let slots = slots.clone();
             let tx = tx.clone();
-            tokio::spawn(async move {
+            pmt_core::spawn::spawn(async move {
                 let told = tx.clone();
                 let permit = slots
                     .acquire(move |ahead| {

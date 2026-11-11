@@ -16,9 +16,9 @@ async fn collector() -> (String, Arc<Mutex<Vec<String>>>) {
     let url = format!("http://{}/v1/metrics", listener.local_addr().unwrap());
     let bodies = Arc::new(Mutex::new(Vec::new()));
     let kept = Arc::clone(&bodies);
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         while let Ok((tcp, _)) = listener.accept().await {
-            tokio::spawn(serve(tcp, Arc::clone(&kept)));
+            pmt_core::spawn::spawn(serve(tcp, Arc::clone(&kept)));
         }
     });
     (url, bodies)

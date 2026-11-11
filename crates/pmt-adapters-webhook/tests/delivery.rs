@@ -113,7 +113,7 @@ impl Route {
     ) -> HttpResponse {
         let webhook = Arc::clone(&self.webhook);
         let request = signed(name, delivery, body);
-        let posted = tokio::spawn(async move { webhook.handle_http(&request).await });
+        let posted = pmt_core::spawn::spawn(async move { webhook.handle_http(&request).await });
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(10);
         while self.gateway.events.lock().unwrap().is_empty() {
             assert!(tokio::time::Instant::now() < deadline, "no turn submitted");

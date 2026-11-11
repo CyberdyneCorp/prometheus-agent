@@ -1843,6 +1843,72 @@
         }
       ]
     },
+    "CuratorConfig": {
+      "additionalProperties": false,
+      "description": "The `[curator]` section: the background pass that marks unused\nagent-created skills stale and archives them (never deletes).",
+      "properties": {
+        "archive_after_secs": {
+          "default": 2592000,
+          "description": "A skill without activity this long is archived.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "archive_ttl_secs": {
+          "default": 0,
+          "description": "Archived skills older than this may be deleted by an explicit\n`prometheus curator purge` (0 = never; a pass never purges).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "backup_keep": {
+          "default": 2,
+          "description": "Backup archives kept under `skills/.backups/`.",
+          "format": "uint32",
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "consolidate": {
+          "default": false,
+          "description": "Let a pass merge overlapping skills (a model review through the\n`auxiliary.curator` slot).",
+          "type": "boolean"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Run automatic passes.",
+          "type": "boolean"
+        },
+        "interval_secs": {
+          "default": 604800,
+          "description": "Least time between two automatic passes.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "min_idle_secs": {
+          "default": 7200,
+          "description": "The profile must have been idle this long before an automatic pass.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "prune_builtins": {
+          "default": false,
+          "description": "Also manage ejected bundled copies.",
+          "type": "boolean"
+        },
+        "stale_after_secs": {
+          "default": 1209600,
+          "description": "An active skill without activity this long becomes stale.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
     "DataCollection": {
       "description": "Whether upstream providers that store or train on prompts may serve.",
       "oneOf": [
@@ -1857,6 +1923,43 @@
           "type": "string"
         }
       ]
+    },
+    "DebugConfig": {
+      "additionalProperties": false,
+      "description": "The `[debug]` section (spec: observability, Opt-in debug share upload).",
+      "properties": {
+        "share": {
+          "$ref": "#/$defs/DebugShareConfig",
+          "default": {
+            "header_secrets": []
+          },
+          "description": "`prometheus debug share --target custom`."
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
+    "DebugShareConfig": {
+      "additionalProperties": false,
+      "description": "The `[debug.share]` section: a private support endpoint.",
+      "properties": {
+        "endpoint": {
+          "description": "The URL `--target custom` POSTs the report to (`https://`, or\n`http://` to a loopback host).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "header_secrets": {
+          "default": [],
+          "description": "Names of secrets sent as request headers (`X_API_KEY` ->\n`x-api-key`).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
     },
     "DedupConfig": {
       "additionalProperties": false,
@@ -1995,6 +2098,16 @@
           "maximum": 86400,
           "minimum": 1,
           "type": "integer"
+        },
+        "fallback_chain": {
+          "description": "The fallback chain of children that pin a route of their own (a\ntask's or agent's model, `delegation.model`, a direct endpoint),\nentries as in `[[fallback.chain]]`; unset: such children get no\nchain, `[]`: fallback off. Unpinned children inherit the parent's.",
+          "items": {
+            "$ref": "#/$defs/FallbackEntry"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
         },
         "gateway_mode": {
           "$ref": "#/$defs/GatewayDelegationMode",
@@ -3444,6 +3557,18 @@
         }
       ]
     },
+    "HealthListenerConfig": {
+      "additionalProperties": false,
+      "description": "The `[observability.health]` section (spec: observability, Health\nendpoints).",
+      "properties": {
+        "bind": {
+          "default": "127.0.0.1:0",
+          "description": "Loopback listen address; port `0` picks a free port, recorded as\n`health_url` in `run/gateway.json`.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "HeartbeatConfig": {
       "additionalProperties": false,
       "description": "The `[heartbeat]` section.",
@@ -4867,6 +4992,18 @@
       },
       "type": "object"
     },
+    "MetricsEndpointConfig": {
+      "additionalProperties": false,
+      "description": "The `[observability.metrics_endpoint]` section (spec: observability,\nLocal metrics scrape endpoint).",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Serve `GET /metrics` on the health listener (no authentication, no\nper-session or per-user labels). Off by default: 404.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
     "MoaConfig": {
       "additionalProperties": false,
       "description": "The `[moa]` section.",
@@ -5491,6 +5628,34 @@
           "description": "The gateway daemon's health export (read from the launch profile).",
           "x-apply": "restart"
         },
+        "health": {
+          "$ref": "#/$defs/HealthListenerConfig",
+          "default": {
+            "bind": "127.0.0.1:0"
+          },
+          "description": "The daemon's loopback health listener (`/healthz`, `/readyz`).",
+          "x-apply": "restart"
+        },
+        "metrics_endpoint": {
+          "$ref": "#/$defs/MetricsEndpointConfig",
+          "default": {
+            "enabled": false
+          },
+          "description": "The daemon's local Prometheus-format scrape endpoint.",
+          "x-apply": "restart"
+        },
+        "otel": {
+          "$ref": "#/$defs/OtelConfig",
+          "default": {
+            "capture_content": false,
+            "enabled": false,
+            "header_secrets": [],
+            "propagate_external": false,
+            "protocol": "http/protobuf"
+          },
+          "description": "Opt-in OpenTelemetry export (traces and metrics).",
+          "x-apply": "restart"
+        },
         "trajectories": {
           "$ref": "#/$defs/TrajectoriesConfig",
           "default": {
@@ -5564,6 +5729,63 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "OtelConfig": {
+      "additionalProperties": false,
+      "description": "The `[observability.otel]` section (spec: observability, Opt-in\nOpenTelemetry export; Span model; Trace context propagation). Nothing\nis exported unless `enabled`; `OTEL_*` environment variables never\nconfigure export.",
+      "properties": {
+        "capture_content": {
+          "default": false,
+          "description": "Attach message content, tool arguments and tool output to spans.",
+          "type": "boolean"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Export traces and metrics over OTLP. Off by default.",
+          "type": "boolean"
+        },
+        "endpoint": {
+          "description": "The collector's OTLP base URL (`https://`, or `http://` to a\nloopback collector), e.g. `http://127.0.0.1:4318`; required when\nenabled. `/v1/traces` and `/v1/metrics` are appended for\n`http/protobuf`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "header_secrets": {
+          "default": [],
+          "description": "Names of secrets sent as request headers: the secret `NAME` becomes\nthe header `name` with `_` as `-` (`X_API_KEY` -> `x-api-key`).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "propagate_external": {
+          "default": false,
+          "description": "Send `traceparent` to model providers, MCP servers and other\nexternal hosts.",
+          "type": "boolean"
+        },
+        "protocol": {
+          "$ref": "#/$defs/OtelProtocol",
+          "default": "http/protobuf",
+          "description": "Wire protocol."
+        }
+      },
+      "type": "object"
+    },
+    "OtelProtocol": {
+      "description": "`observability.otel.protocol`.",
+      "oneOf": [
+        {
+          "const": "http/protobuf",
+          "description": "OTLP over HTTP with protobuf bodies.",
+          "type": "string"
+        },
+        {
+          "const": "grpc",
+          "description": "OTLP over gRPC.",
+          "type": "string"
+        }
+      ]
     },
     "OutboundHook": {
       "additionalProperties": false,
@@ -7847,6 +8069,26 @@
       },
       "type": "object"
     },
+    "SkillSignaturePolicy": {
+      "description": "`skills.signature_policy`: what a hub install does with `SKILL.sig`.",
+      "oneOf": [
+        {
+          "const": "off",
+          "description": "Signatures are not checked.",
+          "type": "string"
+        },
+        {
+          "const": "warn",
+          "description": "Unsigned skills install with a warning; an invalid signature is\nalways refused.",
+          "type": "string"
+        },
+        {
+          "const": "require",
+          "description": "Unsigned and invalidly signed skills are refused (exit 77).",
+          "type": "string"
+        }
+      ]
+    },
     "SkillsConfig": {
       "additionalProperties": false,
       "description": "The `[skills]` section.",
@@ -7915,6 +8157,13 @@
           "minimum": 0,
           "type": "integer"
         },
+        "ledger_max_bytes": {
+          "default": 5242880,
+          "description": "Size of the skill ledger before its oldest entries are compacted\n(0 = unbounded).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
         "platform_disabled": {
           "additionalProperties": {
             "items": {
@@ -7931,6 +8180,16 @@
           "description": "Scan for untrusted project skills and show a notice.",
           "type": "boolean"
         },
+        "signature_policy": {
+          "$ref": "#/$defs/SkillSignaturePolicy",
+          "default": "warn",
+          "description": "What a hub install does with a skill's `SKILL.sig`."
+        },
+        "signing_key": {
+          "default": "",
+          "description": "The minisign secret key `skills publish` signs with (empty: none).",
+          "type": "string"
+        },
         "template_vars": {
           "default": true,
           "description": "Substitute `${PROMETHEUS_SKILL_DIR}`-style tokens at load.",
@@ -7939,6 +8198,25 @@
         "trusted_project_dirs": {
           "default": [],
           "description": "Git roots whose project-local skills are trusted.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "trusted_signers": {
+          "default": [],
+          "description": "The signers whose valid `SKILL.sig` counts as verified: minisign\nkey ids (`minisign:<KEYID>` or the bare 16 hex digits) or public\nkeys, and Sigstore identities (`sigstore:<subject> via <issuer>`).\nA valid signature by anyone else is `untrusted`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "trusted_sources": {
+          "default": [
+            "anthropics/skills",
+            "openai/skills"
+          ],
+          "description": "Hub sources (`owner/repo`) whose skills install with trust\n`trusted` (`safe` and `caution` verdicts allowed).",
           "items": {
             "type": "string"
           },
@@ -10667,6 +10945,30 @@
       },
       "description": "Profile time zone (scheduler keys arrive with M2)."
     },
+    "curator": {
+      "$ref": "#/$defs/CuratorConfig",
+      "default": {
+        "archive_after_secs": 2592000,
+        "archive_ttl_secs": 0,
+        "backup_keep": 2,
+        "consolidate": false,
+        "enabled": true,
+        "interval_secs": 604800,
+        "min_idle_secs": 7200,
+        "prune_builtins": false,
+        "stale_after_secs": 1209600
+      },
+      "description": "The skill curator."
+    },
+    "debug": {
+      "$ref": "#/$defs/DebugConfig",
+      "default": {
+        "share": {
+          "header_secrets": []
+        }
+      },
+      "description": "Diagnostics: the debug share target."
+    },
     "delegation": {
       "$ref": "#/$defs/DelegationConfig",
       "default": {
@@ -11000,6 +11302,19 @@
           "enabled": false,
           "interval_secs": 60
         },
+        "health": {
+          "bind": "127.0.0.1:0"
+        },
+        "metrics_endpoint": {
+          "enabled": false
+        },
+        "otel": {
+          "capture_content": false,
+          "enabled": false,
+          "header_secrets": [],
+          "propagate_external": false,
+          "protocol": "http/protobuf"
+        },
         "trajectories": {
           "enabled": true,
           "max_bytes_per_session": 268435456,
@@ -11194,10 +11509,18 @@
         "index_description_chars": 60,
         "inline_shell": false,
         "inline_shell_timeout_ms": 10000,
+        "ledger_max_bytes": 5242880,
         "platform_disabled": {},
         "project_discovery": true,
+        "signature_policy": "warn",
+        "signing_key": "",
         "template_vars": true,
         "trusted_project_dirs": [],
+        "trusted_signers": [],
+        "trusted_sources": [
+          "anthropics/skills",
+          "openai/skills"
+        ],
         "write_approval": false
       },
       "description": "Skills discovery and authoring."

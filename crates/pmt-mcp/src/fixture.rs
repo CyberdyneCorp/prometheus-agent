@@ -445,7 +445,7 @@ pub async fn serve_http(
     loop {
         let (stream, _) = listener.accept().await.map_err(|e| e.to_string())?;
         let (service, bearer, log) = (service.clone(), bearer.clone(), log.clone());
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             let handler = hyper::service::service_fn(
                 move |request: hyper::Request<hyper::body::Incoming>| {
                     let (service, bearer) = (service.clone(), bearer.clone());

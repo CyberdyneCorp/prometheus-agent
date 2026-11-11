@@ -336,7 +336,7 @@ fn authored(message: &Message) -> bool {
 pub async fn platforms(ctx: &Ctx<'_>) -> Result<String, Error> {
     let home = ctx.scope.home().to_path_buf();
     let profile = ctx.scope.name().to_string();
-    let record = tokio::task::spawn_blocking(move || crate::daemon_client::running(&home))
+    let record = pmt_core::spawn::blocking(move || crate::daemon_client::running(&home))
         .await
         .map_err(|e| Error::new(&codes::RPC_INTERNAL, format!("daemon lookup failed: {e}")))??;
     let Some(record) = record else {

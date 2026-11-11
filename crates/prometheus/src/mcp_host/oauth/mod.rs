@@ -189,7 +189,7 @@ async fn refresh(
 ) -> Result<String, String> {
     let lock_dir = pmt_providers::auth::refresh::Refresher::lock_dir_of(scope.dir());
     let lock_path = lock_dir.join(format!("refresh-mcp-{name}"));
-    let _lock = tokio::task::spawn_blocking(move || {
+    let _lock = pmt_core::spawn::blocking(move || {
         pmt_core::private_fs::create_dir(&lock_dir)?;
         pmt_core::private_fs::lock_beside(&lock_path)
     })

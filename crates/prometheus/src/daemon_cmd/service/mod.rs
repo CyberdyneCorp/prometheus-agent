@@ -123,6 +123,8 @@ struct Host {
     /// The home is the default one (no `PROMETHEUS_HOME` in the unit).
     default_home: bool,
     exe: PathBuf,
+    /// `daemon.systemd_watchdog_secs`.
+    watchdog_secs: u64,
 }
 
 impl Host {
@@ -142,6 +144,9 @@ impl Host {
             )
         })?;
         let runner = test_dir(ctx).map_or(Runner::Real, Runner::Recorded);
+        let watchdog_secs = pmt_config::DaemonConfig::load(&home)?
+            .daemon
+            .systemd_watchdog_secs;
         Ok(Self {
             runner,
             user_home,
@@ -149,6 +154,7 @@ impl Host {
             home,
             default_home,
             exe,
+            watchdog_secs,
         })
     }
 
@@ -157,6 +163,7 @@ impl Host {
             exe: &self.exe,
             home: (!self.default_home).then_some(self.home.as_path()),
             run_as,
+            watchdog_secs: self.watchdog_secs,
         }
     }
 

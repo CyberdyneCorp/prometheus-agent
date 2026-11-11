@@ -410,6 +410,10 @@ error_codes! {
     /// A `prometheus usage --since/--until` value does not parse.
     USAGE_INVALID_TIME = ("usage.invalid_time", Usage,
         "`prometheus usage --since/--until` take `<N>[smhd]` (30m, 2h, 7d) or an RFC 3339 time.");
+    /// `usage insights --source` names a source with no activity in the
+    /// window.
+    USAGE_UNKNOWN_SOURCE = ("usage.unknown_source", Usage,
+        "`prometheus usage insights --source` names a surface or platform with no activity in the window; the message lists the sources present.");
     /// A model call would exceed a configured budget.
     BUDGET_EXCEEDED = ("budget.exceeded", BudgetExceeded,
         "A model call was not sent because its worst-case cost or tokens would exceed a `budgets.*` limit; raise it with `prometheus config set budgets.<key>` or `/budget set`.");
@@ -801,9 +805,30 @@ error_codes! {
     /// A skill file could not be read or written.
     SKILL_IO = ("skill.io", Io,
         "A skill file or directory could not be read or written.");
-    /// The skills hub is not part of this build.
+    /// A skills hub source could not be reached or answered badly.
     SKILL_HUB_UNAVAILABLE = ("skill.hub_unavailable", Unavailable,
-        "Installing and removing hub skills ships with the skills hub in M2; create skills with `skill_manage` or copy them into the profile's `skills/` directory.");
+        "A skills hub source (GitHub, skills.sh, ClawHub, LobeHub, browse.sh, a well-known endpoint, a URL or the central index) could not be reached or gave an answer that cannot be used; check the network settings (`network.proxy`) and retry. The embedded official catalog works offline.");
+    /// The skill is already installed.
+    SKILL_ALREADY_INSTALLED = ("skill.already_installed", Tool,
+        "`prometheus skills install` found the skill installed (`Already installed. Use --force to reinstall.`), or a skill of that name that is not a hub install, which is never replaced.");
+    /// A skill signature is invalid or required and missing.
+    SKILL_SIGNATURE = ("skill.signature", PermissionDenied,
+        "A hub skill's `SKILL.sig` does not verify (`invalid signature`, never accepted), or `skills.signature_policy = \"require\"` met an unsigned skill; nothing was installed.");
+    /// Locked content differs from what the source serves now.
+    SKILL_LOCK_MISMATCH = ("skill.lock_mismatch", Conflict,
+        "`prometheus skills install --locked` fetched content whose digest differs from `skills.lock` (`content digest mismatch`); the locked set cannot be reproduced from the source as it is now.");
+    /// The skill is not a hub install.
+    SKILL_NOT_HUB = ("skill.not_hub", InvalidInput,
+        "The command works on hub-installed skills only (recorded in `skills.lock`); user, agent, bundled and plugin skills are managed with their own commands.");
+    /// A skill publish was refused.
+    SKILL_PUBLISH_REFUSED = ("skill.publish_refused", PermissionDenied,
+        "`prometheus skills publish` refused the skill: lint findings or a `dangerous` scan verdict; fix them with `prometheus skills lint --strict <dir>` first.");
+    /// A curator pass is already running for the profile.
+    CURATOR_BUSY = ("curator.busy", Conflict,
+        "Another curator pass of this profile is running; at most one runs at a time. Try again when it has finished.");
+    /// A curator operation was refused.
+    CURATOR_REFUSED = ("curator.refused", Conflict,
+        "The curator refused: a restore whose name is now taken by a hub, plugin or bundled skill, a skill it does not manage, or a rollback whose safety capture failed (rollbacks fail closed).");
     /// No pending skill write has that id.
     SKILL_PENDING_NOT_FOUND = ("skill.pending_not_found", NotFound,
         "No staged skill write has that id; `/skills pending` lists them.");
@@ -870,6 +895,15 @@ error_codes! {
     /// The demo could not write its directory.
     DEMO_IO = ("demo.io", Io,
         "`prometheus demo` could not create its directory, home, ledger repository or mock script.");
+    /// A debug bundle, share report or task dump could not be written.
+    DEBUG_IO = ("debug.io", Io,
+        "`prometheus debug bundle`, `debug share --local` or `debug dump-tasks` could not write its file (the message names it).");
+    /// A debug share upload failed.
+    DEBUG_SHARE_FAILED = ("debug.share_failed", Unavailable,
+        "`prometheus debug share` (or `debug delete`) could not reach the paste target, or the target refused the report; nothing is recorded in `logs/shares.json`.");
+    /// A debug share cannot be uploaded as asked.
+    DEBUG_SHARE_INVALID = ("debug.share_invalid", Config,
+        "`prometheus debug share --target custom` needs `debug.share.endpoint` (`https://`, or `http://` to a loopback host), or `debug delete` names a URL `logs/shares.json` does not record or whose target cannot delete.");
     /// A recording's members do not match its manifest.
     REPLAY_INTEGRITY = ("replay.integrity", InvalidInput,
         "A member of the `.pmtrec` recording is missing, unlisted or no longer matches the sha256 its manifest records (the message names it); the recording was changed after export and is not replayed.");
@@ -1392,109 +1426,4 @@ fn copy_io(err: &std::io::Error) -> std::io::Error {
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[cfg(test)]
-mod tests {
-    use std::collections::HashSet;
-
-    use super::{ERROR_CODES, Error, ErrorKind, codes};
-    use crate::exit::EXIT_CODES;
-
-    #[test]
-    fn every_kind_maps_to_exactly_one_documented_exit_code() {
-        for kind in ErrorKind::ALL {
-            let documented = EXIT_CODES
-                .iter()
-                .filter(|e| e.code == kind.exit_code())
-                .count();
-            assert_eq!(documented, 1, "{kind} -> {}", kind.exit_code());
-        }
-    }
-
-    #[test]
-    fn kind_table_is_the_spec_table() {
-        let expected = [
-            ("usage", 2),
-            ("invalid_input", 65),
-            ("not_found", 66),
-            ("config", 78),
-            ("auth", 78),
-            ("permission_denied", 77),
-            ("budget_exceeded", 3),
-            ("provider", 69),
-            ("tool", 1),
-            ("sandbox", 77),
-            ("conflict", 75),
-            ("unavailable", 69),
-            ("protocol", 76),
-            ("cancelled", 130),
-            ("io", 74),
-            ("internal", 70),
-        ];
-        let actual: Vec<_> = ErrorKind::ALL
-            .iter()
-            .map(|k| (k.as_str(), k.exit_code()))
-            .collect();
-        assert_eq!(actual, expected);
-    }
-
-    #[test]
-    fn serialized_kind_is_the_wire_name() {
-        for kind in ErrorKind::ALL {
-            let json = serde_json::to_value(kind).unwrap();
-            assert_eq!(json, kind.as_str());
-        }
-    }
-
-    #[test]
-    fn catalog_codes_are_unique_and_dotted() {
-        let mut seen = HashSet::new();
-        for entry in ERROR_CODES {
-            assert!(seen.insert(entry.code), "duplicate code {}", entry.code);
-            let parts: Vec<_> = entry.code.split('.').collect();
-            let well_formed = parts.len() >= 2
-                && parts.iter().all(|p| {
-                    !p.is_empty() && p.bytes().all(|b| b.is_ascii_lowercase() || b == b'_')
-                });
-            assert!(well_formed, "code {} is not dotted snake_case", entry.code);
-        }
-    }
-
-    #[test]
-    fn json_document_carries_kind_code_message_and_hint() {
-        let err = Error::new(&codes::REGISTRY_UNKNOWN_NAME, "unknown provider 'x'")
-            .with_hint("available providers: a, b");
-        let doc: serde_json::Value = serde_json::from_str(&err.to_json()).unwrap();
-        assert_eq!(
-            doc,
-            serde_json::json!({"error": {
-                "kind": "config",
-                "code": "registry.unknown_name",
-                "message": "unknown provider 'x'",
-                "hint": "available providers: a, b",
-            }})
-        );
-        assert_eq!(err.exit_code(), 78);
-    }
-
-    #[test]
-    fn json_document_has_null_hint_when_absent() {
-        let err = Error::new(&codes::TASK_PANICKED, "task 'x' panicked");
-        let doc: serde_json::Value = serde_json::from_str(&err.to_json()).unwrap();
-        assert_eq!(doc["error"]["hint"], serde_json::Value::Null);
-        assert_eq!(doc["error"]["kind"], "internal");
-    }
-
-    #[test]
-    fn an_io_error_names_the_path_and_keeps_the_io_error_as_source() {
-        let err = Error::io_doing(
-            &codes::HOME_IO,
-            "cannot write",
-            std::path::Path::new("/x/config.toml"),
-            &std::io::Error::from(std::io::ErrorKind::PermissionDenied),
-        );
-        assert!(err.message().starts_with("cannot write /x/config.toml: "));
-        let source = std::error::Error::source(&err)
-            .and_then(|s| s.downcast_ref::<std::io::Error>())
-            .map(std::io::Error::kind);
-        assert_eq!(source, Some(std::io::ErrorKind::PermissionDenied));
-    }
-}
+mod tests;

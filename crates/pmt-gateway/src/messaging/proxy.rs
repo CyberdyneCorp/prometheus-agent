@@ -238,7 +238,7 @@ mod tests {
         let (proxy, log) = crate::messaging::mock_server::proxy().await.unwrap();
         let target = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = target.local_addr().unwrap();
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             while let Ok((mut socket, _)) = target.accept().await {
                 let mut buf = [0u8; 1024];
                 let _ = socket.read(&mut buf).await;

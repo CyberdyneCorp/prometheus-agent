@@ -520,7 +520,7 @@ async fn a_turn_interrupt_stops_synchronous_children_only() {
     let fg = f.delegator(DelegationConfig::default(), sync());
     let turn = CancelToken::new();
     let cancel = turn.clone();
-    let canceller = tokio::spawn(async move {
+    let canceller = pmt_core::spawn::spawn(async move {
         tokio::time::sleep(Duration::from_millis(50)).await;
         cancel.cancel();
     });

@@ -6,8 +6,12 @@
 
 pub mod args;
 mod bundles;
+mod config;
+pub(crate) mod hub;
 mod list;
 mod maintain;
+mod share;
+pub(crate) mod slash;
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -30,6 +34,7 @@ pub(crate) struct Env {
     pub(crate) cwd: Option<PathBuf>,
     pub(crate) bundled: Arc<Bundled>,
     pub(crate) json: bool,
+    pub(crate) launch: pmt_core::env::LaunchEnv,
 }
 
 impl Env {
@@ -90,7 +95,11 @@ pub fn run(command: &SkillsCommand, ctx: &Context<'_>) -> Result<u8, Error> {
         cwd: std::env::current_dir().ok(),
         bundled: Bundled::builtin(),
         json: ctx.json,
+        launch: ctx.launch.clone(),
     };
+    if let Some(code) = run_hub(command, &env, ctx) {
+        return code;
+    }
     match command {
         SkillsCommand::List { outdated } => list::list(&env, *outdated),
         SkillsCommand::Show { name } => list::show(&env, name),
@@ -114,6 +123,9 @@ pub fn run(command: &SkillsCommand, ctx: &Context<'_>) -> Result<u8, Error> {
         )?),
         SkillsCommand::Doctor => doctor(&env),
         SkillsCommand::Reset { name } => {
+            if let Some(done) = hub::reset(&env, name) {
+                return done;
+            }
             eject::reset(env.scope.dir(), &env.profile_catalog(), name)?;
             if env.json {
                 return json(&json!({"name": name, "reset": true}));
@@ -132,7 +144,46 @@ pub fn run(command: &SkillsCommand, ctx: &Context<'_>) -> Result<u8, Error> {
             restore,
             yes,
         } => maintain::repair_official(&env, target, *restore, *yes),
+        _ => unreachable!("hub commands are run by run_hub"),
     }
+}
+
+/// The hub commands; `None` for the others.
+fn run_hub(command: &SkillsCommand, env: &Env, ctx: &Context<'_>) -> Option<Result<u8, Error>> {
+    Some(match command {
+        SkillsCommand::Install {
+            identifier,
+            force,
+            name,
+            locked,
+        } => hub::install(env, identifier.as_deref(), *force, name.as_deref(), *locked),
+        SkillsCommand::Uninstall { name } => hub::uninstall(env, name),
+        SkillsCommand::Browse { source } => hub::browse(env, source.as_deref()),
+        SkillsCommand::Search { query, source } => hub::search(env, query, source.as_deref()),
+        SkillsCommand::Inspect { identifier } => hub::inspect(env, identifier),
+        SkillsCommand::Check { name } => hub::check(env, name.as_deref()),
+        SkillsCommand::Update { name, force } => hub::update(env, name.as_deref(), *force),
+        SkillsCommand::Audit => hub::audit(env),
+        SkillsCommand::Accept { name } => hub::accept(env, name),
+        SkillsCommand::Sign { dir, key, keyless } => {
+            share::sign(env, ctx, dir, key.as_deref(), *keyless)
+        }
+        SkillsCommand::Tap { command } => share::tap(env, command),
+        SkillsCommand::Publish { dir, to, repo } => share::publish(env, dir, *to, repo.as_deref()),
+        SkillsCommand::Snapshot { command } => share::snapshot(env, command),
+        SkillsCommand::Untrust { root } => untrust(env, root),
+        SkillsCommand::Config => config::config(env),
+        _ => return None,
+    })
+}
+
+fn untrust(env: &Env, root: &Path) -> Result<u8, Error> {
+    let message = activation::untrust(env.scope.profile(), root)?;
+    if env.json {
+        return json(&json!({"profile": env.scope.name().as_str(), "untrusted": root}));
+    }
+    eprintln!("{message}");
+    Ok(0)
 }
 
 fn trust(env: &Env, root: &Path) -> Result<u8, Error> {

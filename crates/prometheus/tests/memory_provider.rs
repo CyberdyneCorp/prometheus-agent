@@ -414,9 +414,19 @@ fn a_plugin_engines_selection_shapes_only_the_request() {
     let session = newest_session(home.path());
     ok(&run(home.path(), &["-z", "second", "--resume", &session]));
     ok(&run(home.path(), &["-z", "third", "--resume", &session]));
+    // The conversation turns only (the system prompt lists skills whose
+    // descriptions may hold any word).
     let sent: Vec<String> = bodies
         .try_iter()
-        .map(|b| b["messages"].to_string())
+        .map(|b| {
+            let turns: Vec<&serde_json::Value> = b["messages"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|m| m["role"] != "system")
+                .collect();
+            serde_json::to_string(&turns).unwrap()
+        })
         .collect();
     assert_eq!(sent.len(), 3);
     assert!(sent[2].contains("third"), "{}", sent[2]);
@@ -467,9 +477,19 @@ fn an_engine_that_fails_to_start_leaves_the_session_on_the_built_in_engine() {
     chat(&["-z", "second", "--resume", &session]);
     chat(&["config", "set", "context.engine", "engine"]);
     chat(&["-z", "third", "--resume", &session]);
+    // The conversation turns only (the system prompt lists skills whose
+    // descriptions may hold any word).
     let sent: Vec<String> = bodies
         .try_iter()
-        .map(|b| b["messages"].to_string())
+        .map(|b| {
+            let turns: Vec<&serde_json::Value> = b["messages"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|m| m["role"] != "system")
+                .collect();
+            serde_json::to_string(&turns).unwrap()
+        })
         .collect();
     assert_eq!(sent.len(), 3);
     assert!(

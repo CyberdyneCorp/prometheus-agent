@@ -17,6 +17,8 @@
 //! (see `perf/README.md`).
 
 mod budget;
+mod overhead;
+mod pair;
 mod sample;
 
 use std::path::{Path, PathBuf};
@@ -31,17 +33,20 @@ pub(crate) fn run(
     runs: usize,
     baseline_path: &Path,
     update: bool,
+    base_binary: Option<&Path>,
 ) -> Result<(), String> {
-    let current = measure(root, runs)?;
+    let (current, base) = measure(root, runs, base_binary)?;
     let mut baseline = load_baseline(baseline_path)?;
     let platform = platform();
-    report(&platform, &current, baseline.get(&platform));
+    if let Some(base) = &base {
+        report(&format!("{platform}, base binary"), base, Some(base));
+    }
+    let reference = base.as_ref().or_else(|| baseline.get(&platform));
+    // Reported before the overhead gate, which may fail first.
+    report(&platform, &current, reference);
+    check_overhead(root)?;
+    let stored = if update { None } else { reference };
 
-    let stored = if update {
-        None
-    } else {
-        baseline.get(&platform)
-    };
     let violations = budget::evaluate(&current, stored);
     if !violations.is_empty() {
         for violation in &violations {
@@ -55,6 +60,36 @@ pub(crate) fn run(
         println!("perf: recorded {platform} in {}", baseline_path.display());
     }
     Ok(())
+}
+
+/// The observability overhead gate on the release binary.
+fn check_overhead(root: &Path) -> Result<(), String> {
+    let binary = cargo_build_bin(
+        root,
+        &["--release", "--package", "prometheus"],
+        "prometheus",
+    )?;
+    let tasks = overhead::tasks(root)?;
+    let measured = overhead::measure(&binary, &root.join("target/perf-overhead"), &tasks)?;
+    println!(
+        "perf: smoke suite {:.3}s with recording off, {:.3}s with recording and logging, {:.3}s with OTLP export (sum of each task's median of {})",
+        measured.off,
+        measured.recording,
+        measured.export,
+        overhead::RUNS
+    );
+    let violations = overhead::evaluate(&measured);
+    for violation in &violations {
+        eprintln!("perf: {violation}");
+    }
+    if violations.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "{} observability overhead violation(s)",
+            violations.len()
+        ))
+    }
 }
 
 /// Builds `name` with `cargo build <args>` and returns the executable cargo
@@ -97,7 +132,13 @@ fn bin_artifact(line: &str, name: &str) -> Option<PathBuf> {
     message["executable"].as_str().map(PathBuf::from)
 }
 
-fn measure(root: &Path, runs: usize) -> Result<Metrics, String> {
+/// Builds the release binary and measures it, and `base` (another
+/// release binary) alternately with it when given.
+fn measure(
+    root: &Path,
+    runs: usize,
+    base: Option<&Path>,
+) -> Result<(Metrics, Option<Metrics>), String> {
     let binary = cargo_build_bin(
         root,
         &["--release", "--package", "prometheus"],
@@ -108,41 +149,7 @@ fn measure(root: &Path, runs: usize) -> Result<Metrics, String> {
         &["--package", "xtask", "--bin", "perf-sampler"],
         "perf-sampler",
     )?;
-    let measured = sample::collect(&sampler, &binary, runs, &[])?;
-    let (startup_median_ms, startup_p95_ms) = budget::summarize(measured.startup_ms);
-    let binary_bytes = std::fs::metadata(&binary)
-        .map_err(|e| format!("{}: {e}", binary.display()))?
-        .len();
-    let chat = if cfg!(unix) {
-        Some(measure_chat(root, &sampler, &binary, runs)?)
-    } else {
-        None
-    };
-    Ok(Metrics {
-        startup_median_ms: round2(startup_median_ms),
-        startup_p95_ms: round2(startup_p95_ms),
-        peak_rss_bytes: measured.peak_rss_bytes,
-        binary_bytes,
-        chat_prompt_median_ms: chat.as_ref().map(|c| round2(c.0)),
-        chat_prompt_p95_ms: chat.as_ref().map(|c| round2(c.1)),
-        chat_peak_rss_bytes: chat.and_then(|c| c.2),
-    })
-}
-
-/// `prometheus chat` with the mock provider in a fresh home: the median and
-/// p95 milliseconds until the prompt, and the peak RSS of those starts and
-/// of `chat -z` runs.
-fn measure_chat(
-    root: &Path,
-    sampler: &Path,
-    binary: &Path,
-    runs: usize,
-) -> Result<(f64, f64, Option<u64>), String> {
-    let home = root.join("target/perf-chat-home");
-    let _ = std::fs::remove_dir_all(&home);
-    let chat = sample::collect(sampler, binary, runs, &["chat".as_ref(), home.as_os_str()])?;
-    let (median, p95) = budget::summarize(chat.startup_ms);
-    Ok((median, p95, chat.peak_rss_bytes))
+    pair::measure(root, &sampler, &binary, base, runs)
 }
 
 fn report(platform: &str, current: &Metrics, stored: Option<&Metrics>) {

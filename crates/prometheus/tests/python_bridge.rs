@@ -285,7 +285,7 @@ async fn a_copilot_provider_plugin_works_unchanged() {
     let home = copilot_home(&server.uri());
     let usage = home.path().join("usage.json");
     let (home_path, usage_path) = (home.path().to_path_buf(), usage.clone());
-    let out = tokio::task::spawn_blocking(move || {
+    let out = pmt_core::spawn::blocking(move || {
         run(
             &home_path,
             &[
@@ -328,7 +328,7 @@ async fn a_sidecar_crash_fails_the_call_and_the_fallback_chain_answers() {
     std::fs::create_dir_all(&data).unwrap();
     std::fs::write(data.join("crash_headers"), "").unwrap();
     let home_path = home.path().to_path_buf();
-    let out = tokio::task::spawn_blocking(move || {
+    let out = pmt_core::spawn::blocking(move || {
         run(
             &home_path,
             &["-z", "hi", "--provider", "copilot", "--model", "gpt-4.1"],
@@ -744,7 +744,7 @@ fn a_bridged_transcription_provider_transcribes_voice_input() {
     )
     .unwrap();
     setup.plugins = prometheus::chat::session::media_plugins::PluginMedia::shared(
-        plugins.current().providers.clone(),
+        &plugins.current(),
         pmt_plugins::host::CallInfo {
             session_id: None,
             surface: "gateway".to_owned(),

@@ -234,6 +234,11 @@ posts the outcome in the chat when the run ends.
   freeze the profile's current main model; `--unpin` releases it), else
   `cron.model` / `cron.model_provider`, else the main model at fire time.
   `--reasoning-effort` pins a reasoning level. `cron list` shows pins.
+  A pinned job gets no fallback chain unless it declares one: `--fallback
+  provider/model` (repeatable) sets the job's own chain, `--fallback none`
+  disables fallback even for an unpinned job (which otherwise inherits the
+  profile's `[[fallback.chain]]`), and `--fallback ""` removes the
+  declaration.
 - `--paused [--paused-reason TEXT]` creates the job disabled with nothing
   armed (default reason `Created paused; awaiting operator approval.`);
   `cron resume` arms it.

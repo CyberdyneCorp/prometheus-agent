@@ -121,7 +121,7 @@ pub(super) fn tick(env: &Env<'_>) -> Result<u8, Error> {
     let store = Arc::clone(&env.store);
     let runner = Arc::new(env.runner());
     let outcome = crate::model_cmd::block_on(async move {
-        let renew = tokio::spawn({
+        let renew = pmt_core::spawn::spawn({
             let store = Arc::clone(&store);
             let lease = lease.clone();
             async move {
@@ -136,6 +136,11 @@ pub(super) fn tick(env: &Env<'_>) -> Result<u8, Error> {
         let _ = store.cron_release_lease(&lease);
         result
     })??;
+    // A due automatic curator pass runs with the tick (and finishes
+    // before this short-lived process exits).
+    if let Some(pass) = crate::curator_cmd::auto::check(&env.scope, &env.store, env.ctx.launch) {
+        let _ = pass.join();
+    }
     let runs: Vec<_> = outcome
         .iter()
         .map(|r| json!({"run_id": r.id, "job_id": r.job_id, "status": r.status, "error": r.error}))

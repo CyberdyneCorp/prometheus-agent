@@ -120,10 +120,10 @@ impl DiscordMock {
             gateway: gateway.local_addr().unwrap(),
         });
         let server = Arc::clone(&mock);
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             while let Ok((stream, _)) = rest.accept().await {
                 let server = Arc::clone(&server);
-                tokio::spawn(async move {
+                pmt_core::spawn::spawn(async move {
                     let service = service_fn(move |req| {
                         let server = Arc::clone(&server);
                         async move { Ok::<_, Infallible>(server.rest(req).await) }
@@ -135,10 +135,10 @@ impl DiscordMock {
             }
         });
         let server = Arc::clone(&mock);
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             while let Ok((stream, _)) = gateway.accept().await {
                 let server = Arc::clone(&server);
-                tokio::spawn(async move { server.socket(stream).await });
+                pmt_core::spawn::spawn(async move { server.socket(stream).await });
             }
         });
         mock

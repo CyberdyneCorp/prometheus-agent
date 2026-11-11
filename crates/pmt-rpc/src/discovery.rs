@@ -25,6 +25,10 @@ pub struct Endpoint {
     pub rpc_protocol: String,
     /// When the daemon started (RFC 3339).
     pub started_at: String,
+    /// The loopback health listener (`http://127.0.0.1:<port>`: `/healthz`,
+    /// `/readyz`, `/metrics`), when it runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub health_url: Option<String>,
 }
 
 /// A running daemon's discovery record.
@@ -85,6 +89,7 @@ mod tests {
             control: "c".into(),
             rpc_protocol: "1.0".into(),
             started_at: "2026-01-01T00:00:00Z".into(),
+            health_url: None,
         }
     }
 

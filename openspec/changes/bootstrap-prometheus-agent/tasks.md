@@ -488,19 +488,19 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 52. M2 Observability upgrades
 
-- [ ] 52.1 Implement opt-in OpenTelemetry export, the span model, trace context propagation and the metrics catalog with an optional local scrape endpoint; verify against an OTLP collector container (spec: observability)
-- [ ] 52.2 Implement live usage events, health endpoints (`/healthz`, `/readyz`), the component health model and `prometheus status [--check]`; verify with daemon tests (spec: observability)
-- [ ] 52.3 Implement the crash/debug bundle (redacted) and the observability overhead budget gate; verify that the bundle contains no secrets (spec: observability)
-- [ ] 52.4 Implement the usage insights report (CLI and slash command, per-platform filters), configuration-centric status, export posture status (content capture visible) and the runtime liveness watchdog with a task dump; verify with daemon tests (spec: observability)
-- [ ] 52.5 Implement the opt-in debug share upload (declined uploads send nothing, unattended shares refused) and ShareGPT trajectory export; verify with a mock upload endpoint and golden exports (spec: observability)
+- [x] 52.1 Implement opt-in OpenTelemetry export, the span model, trace context propagation and the metrics catalog with an optional local scrape endpoint; verify against an OTLP collector container (spec: observability)
+- [x] 52.2 Implement live usage events, health endpoints (`/healthz`, `/readyz`), the component health model and `prometheus status [--check]`, and prove gateway sessions share the trajectory grammar (a webhook session and `chat -z` record the same normalised events); verify with daemon tests (spec: observability)
+- [x] 52.3 Implement the crash/debug bundle (redacted) and the observability overhead budget gate; verify that the bundle contains no secrets (spec: observability)
+- [x] 52.4 Implement the usage insights report (CLI and slash command, per-platform filters), configuration-centric status, export posture status (content capture visible) and the runtime liveness watchdog with a task dump; verify with daemon tests (spec: observability)
+- [x] 52.5 Implement the opt-in debug share upload (declined uploads send nothing, unattended shares refused) and ShareGPT trajectory export; verify with a mock upload endpoint and golden exports (spec: observability)
 
 ## 53. M2 Skills hub and curator
 
-- [ ] 53.1 Implement sandboxed skill scripts with managed runtimes and the hub install pipeline with trust policy; verify with a local hub fixture (spec: skills)
-- [ ] 53.2 Implement the skills lockfile with tamper detection, signatures and provenance, and blueprint skills that never auto-schedule; verify that a modified installed skill is detected (spec: skills)
-- [ ] 53.3 Implement the curator (configuration, scheduling, transitions, scope, backups, CLI); verify with curator tests (spec: skills)
-- [ ] 53.4 Implement hub discovery, inspection, updates and audit (local edits survive updates, inspect installs nothing), hub source identifiers, custom skill taps and skill publishing with snapshots; verify with a local hub fixture (spec: skills)
-- [ ] 53.5 Implement the `/curator` slash command, the curator audit ledger with single-edit rollback, purge and reports (purge never automatic), interactive per-surface skill enablement, skill credential file passthrough (read-only mounts only with a grant) and the bundled and official skill catalog content (browsable offline, Hermes name aliases); verify with curator and catalog tests (spec: skills)
+- [x] 53.1 Implement sandboxed skill scripts with managed runtimes and the hub install pipeline with trust policy; verify with a local hub fixture (spec: skills)
+- [x] 53.2 Implement the skills lockfile with tamper detection, signatures and provenance, and blueprint skills that never auto-schedule; verify that a modified installed skill is detected (spec: skills)
+- [x] 53.3 Implement the curator (configuration, scheduling, transitions, scope, backups, CLI); verify with curator tests (spec: skills)
+- [x] 53.4 Implement hub discovery, inspection, updates and audit (local edits survive updates, inspect installs nothing), hub source identifiers, custom skill taps and skill publishing with snapshots; verify with a local hub fixture (spec: skills)
+- [x] 53.5 Implement the `/curator` slash command, the curator audit ledger with single-edit rollback, purge and reports (purge never automatic), interactive per-surface skill enablement, skill credential file passthrough (read-only mounts only with a grant) and the bundled and official skill catalog content (browsable offline, Hermes name aliases); verify with curator and catalog tests (spec: skills)
 
 ## 54. M2 Distribution channels
 

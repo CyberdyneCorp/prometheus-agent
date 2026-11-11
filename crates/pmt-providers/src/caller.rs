@@ -306,8 +306,9 @@ impl ModelCaller {
         self
     }
 
-    /// Reports a failed attempt to the observer.
+    /// Reports a failed attempt to the metrics catalog and the observer.
     fn observe_failure(&self, route: &Route, error: &ProviderError) {
+        pmt_obs::metrics::record_model_failure(&route.provider, &route.model, error.class.as_str());
         if let Some(observer) = &self.observer {
             observer.observed(
                 route,
@@ -320,12 +321,26 @@ impl ModelCaller {
         }
     }
 
-    /// Reports `stream`'s outcome to the observer when it ends.
+    /// Reports `stream`'s time to first token and a failure mid-stream to
+    /// the metrics catalog, and its outcome to the observer when it ends.
     fn observe_stream(&self, stream: &mut ModelStream, route: &Route, sent: std::time::Instant) {
+        let ttft = sent.elapsed();
+        if !stream.is_served() {
+            pmt_obs::metrics::global().observe(
+                pmt_obs::metrics::MODEL_TTFT_MS,
+                &[("provider", &route.provider), ("model", &route.model)],
+                ttft.as_secs_f64() * 1000.0,
+            );
+        }
+        let (provider, model) = (route.provider.clone(), route.model.clone());
+        stream.on_end(crate::transport::OnEnd::new(move |failure, _| {
+            if let Some(failure) = failure {
+                pmt_obs::metrics::record_model_failure(&provider, &model, failure.class.as_str());
+            }
+        }));
         let Some(observer) = self.observer.clone() else {
             return;
         };
-        let ttft = sent.elapsed();
         let first = std::time::Instant::now();
         let route = route.clone();
         stream.on_end(crate::transport::OnEnd::new(move |failure, usage| {

@@ -23,6 +23,7 @@
 //! client alike, and the first valid answer from any of them wins.
 
 pub mod adapter;
+mod adapter_health;
 mod adapters;
 mod admit;
 mod admit_groups;
@@ -63,6 +64,7 @@ mod outbox;
 mod peer;
 pub mod plugin_ops;
 pub mod policy;
+pub mod probe;
 mod profile_routes;
 pub mod proxy;
 pub mod proxy_env;
@@ -370,7 +372,7 @@ impl Gateway {
             options,
             conn,
         });
-        tokio::spawn(peer::read(Arc::clone(&shared), rx).in_current_span());
+        pmt_core::spawn::spawn(peer::read(Arc::clone(&shared), rx).in_current_span());
         let profiles = server.profiles();
         let resumes: Vec<_> = if clean {
             Vec::new()

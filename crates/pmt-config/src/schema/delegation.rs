@@ -67,6 +67,12 @@ pub struct DelegationConfig {
     /// (`provider/model`); unset: the parent's current route.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// The fallback chain of children that pin a route of their own (a
+    /// task's or agent's model, `delegation.model`, a direct endpoint),
+    /// entries as in `[[fallback.chain]]`; unset: such children get no
+    /// chain, `[]`: fallback off. Unpinned children inherit the parent's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback_chain: Option<Vec<super::FallbackEntry>>,
     /// Run each child in its own git worktree and branch when the parent
     /// uses the local terminal backend inside a git repository.
     pub worktree_isolation: bool,
@@ -142,6 +148,7 @@ impl Default for DelegationConfig {
             progress_events: true,
             router: "default".to_owned(),
             model: None,
+            fallback_chain: None,
             worktree_isolation: false,
             worktree_branch_prefix: "prometheus".to_owned(),
             base_url: None,

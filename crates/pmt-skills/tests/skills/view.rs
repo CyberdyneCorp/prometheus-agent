@@ -176,9 +176,10 @@ async fn community_skill_never_runs_inline_shell() {
         lock.upsert(Entry {
             name: name.into(),
             source: format!("someone/skills/{name}"),
-            content_digest: "sha256:0".into(),
+            content_digest: pmt_skills::digest::dir(&profile.skills().join(name)),
             trust,
             installed_at: "2026-01-01T00:00:00Z".into(),
+            ..Entry::default()
         })
         .unwrap();
     }

@@ -220,7 +220,7 @@ impl Matrix {
         }
         *self.user_id.lock().expect("user poisoned") = Some(user_id);
         *self.api.lock().expect("api poisoned") = Some(api);
-        tokio::spawn(run.poll());
+        pmt_core::spawn::spawn(run.poll());
         Ok(())
     }
 
@@ -304,6 +304,16 @@ fn text_content(message: &Outgoing) -> Value {
 }
 
 impl Adapter for Matrix {
+    fn reach(&self) -> Result<pmt_gateway::messaging::probe::Reach, String> {
+        let homeserver = self
+            .homeserver
+            .clone()
+            .ok_or("options.homeserver is not set")?;
+        Ok(pmt_gateway::messaging::probe::Reach::Endpoints(vec![
+            pmt_gateway::messaging::probe::Endpoint::Http(homeserver),
+        ]))
+    }
+
     fn describe(&self) -> Descriptor {
         let all: BTreeSet<MediaKind> = [
             MediaKind::Image,

@@ -14,6 +14,7 @@ mod external;
 mod faults;
 mod idp;
 mod local;
+mod metrics;
 mod minting;
 mod moa;
 mod moa_accounting;

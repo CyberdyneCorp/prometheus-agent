@@ -5,6 +5,7 @@
 //! provider, label, kind, source and status — never key or token material.
 
 mod add;
+pub(crate) use add::place;
 pub mod args;
 mod import;
 mod list;
@@ -111,8 +112,8 @@ impl Profile {
 }
 
 /// Sign-in messages on stderr (stdout stays for `--json`).
-struct TerminalUi<'a> {
-    launch: &'a LaunchEnv,
+pub(crate) struct TerminalUi<'a> {
+    pub(crate) launch: &'a LaunchEnv,
 }
 
 impl SignInUi for TerminalUi<'_> {

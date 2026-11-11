@@ -168,3 +168,50 @@ fn fix_models_covers_the_cron_default_and_pinned_jobs() {
         "{again}"
     );
 }
+
+/// A MoA preset's aggregator and references are model-holding keys:
+/// the doctor warns, the dry run lists them and `--apply` rewrites them in
+/// place (the hint a retired preset slot's error gives).
+#[test]
+fn fix_models_covers_moa_preset_aggregators_and_references() {
+    let home = temp_home();
+    write_config(
+        home.path(),
+        "# presets\n[moa.presets.old]\naggregator = { provider = \"xai\", model = \"grok-2\" }\n\
+         reference_models = [{ provider = \"xai\", model = \"grok-2\" }]\n",
+    );
+    let doctor = run(home.path(), &["--json", "doctor", "providers"]);
+    let report: serde_json::Value = serde_json::from_str(&stdout(&doctor)).unwrap();
+    let retired = report["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "retired_model")
+        .unwrap_or_else(|| panic!("{report}"))
+        .clone();
+    assert_eq!(retired["status"], "warn", "{retired}");
+    let dry = ok(&run(home.path(), &["config", "fix-models"]));
+    assert!(
+        dry.contains("moa.presets.old.aggregator.model: grok-2 -> grok-4"),
+        "{dry}"
+    );
+    assert!(
+        dry.contains("moa.presets.old.reference_models[0].model: grok-2 -> grok-4"),
+        "{dry}"
+    );
+    ok(&run(home.path(), &["config", "fix-models", "--apply"]));
+    let written = std::fs::read_to_string(config_path(home.path())).unwrap();
+    assert!(written.contains("# presets"), "{written}");
+    let config: toml::Value = toml::from_str(&written).unwrap();
+    let preset = &config["moa"]["presets"]["old"];
+    assert_eq!(preset["aggregator"]["model"].as_str(), Some("grok-4"));
+    assert_eq!(
+        preset["reference_models"][0]["model"].as_str(),
+        Some("grok-4")
+    );
+    let again = ok(&run(home.path(), &["config", "fix-models"]));
+    assert!(
+        again.contains("no deprecated or retired model ids"),
+        "{again}"
+    );
+}

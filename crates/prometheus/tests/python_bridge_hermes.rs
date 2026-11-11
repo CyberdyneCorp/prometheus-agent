@@ -71,7 +71,7 @@ async fn the_hermes_nvidia_provider_plugin_serves_a_session() {
     assert!(!listing.contains("error"), "{listing}");
     let usage = home.path().join("usage.json");
     let (home_path, usage_path) = (home.path().to_path_buf(), usage.clone());
-    let out = tokio::task::spawn_blocking(move || {
+    let out = pmt_core::spawn::blocking(move || {
         run(
             &home_path,
             &[

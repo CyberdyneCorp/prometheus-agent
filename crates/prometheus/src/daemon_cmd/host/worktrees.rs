@@ -51,7 +51,7 @@ pub(in crate::daemon_cmd) async fn sweep_worktrees(host: Arc<DaemonHost>) {
             let scope = profile.scope();
             let settings = settings_of(&scope);
             let dir = scope.dir().to_path_buf();
-            let swept = tokio::task::spawn_blocking(move || {
+            let swept = pmt_core::spawn::blocking(move || {
                 registry::sweep_all(
                     &dir,
                     &settings,

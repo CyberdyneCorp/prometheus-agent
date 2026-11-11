@@ -166,6 +166,29 @@ impl FileSession {
     ///
     /// The refusal or I/O failure as text.
     pub fn read_binary(&self, raw: &str) -> Result<Vec<u8>, String> {
+        let path = self.guarded(raw)?;
+        self.read_bytes(&path, raw)
+            .map_err(|result| result.text_content())
+    }
+
+    /// The size of a file [`read_binary`](Self::read_binary) would read,
+    /// under the same guards, without reading it (a size limit is checked
+    /// before the bytes are loaded).
+    ///
+    /// # Errors
+    ///
+    /// The refusal or I/O failure as text.
+    pub fn binary_len(&self, raw: &str) -> Result<u64, String> {
+        let path = self.guarded(raw)?;
+        self.backend()
+            .metadata(&path)
+            .map(|meta| meta.len)
+            .map_err(|err| io_message(raw, &err))
+    }
+
+    /// The path of `raw` once the device-namespace and protected-file
+    /// guards let it through.
+    fn guarded(&self, raw: &str) -> Result<PathBuf, String> {
         if let Some(refusal) = guards::device_namespace(raw) {
             return Err(refusal);
         }
@@ -173,8 +196,7 @@ impl FileSession {
         if let Some(refusal) = guards::read_refusal(&path, raw) {
             return Err(refusal);
         }
-        self.read_bytes(&path, raw)
-            .map_err(|result| result.text_content())
+        Ok(path)
     }
 
     fn backend(&self) -> &dyn FileBackend {

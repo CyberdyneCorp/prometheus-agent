@@ -178,7 +178,7 @@ pub(super) fn login(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
     let client = crate::model_cmd::client(ctx.scope.config())?;
     let credentials = Credentials::new(ctx.scope.secrets().store().clone());
     let post = Arc::clone(&ctx.post);
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         let ui = Posted(Arc::clone(&post));
         let place = auth::browser::Place {
             remote: true,

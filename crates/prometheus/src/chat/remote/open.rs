@@ -119,7 +119,7 @@ pub(super) async fn offer(owned: &Error) -> Result<Choice, Error> {
     let _ = write!(out, "[f]ollow it read-only, fork it [k], or [c]ancel? ");
     let _ = out.flush();
     drop(out);
-    let answer = tokio::task::spawn_blocking(|| {
+    let answer = pmt_core::spawn::blocking(|| {
         let mut line = String::new();
         std::io::stdin().read_line(&mut line).map(|_| line)
     })

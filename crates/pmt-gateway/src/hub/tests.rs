@@ -182,7 +182,7 @@ async fn the_first_answer_wins_and_the_others_see_it_resolved() {
     hub.attach(2, S, b, None);
     let asking = {
         let hub = Arc::clone(&hub);
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             hub.ask(
                 S,
                 "sudo.request",
@@ -358,7 +358,7 @@ async fn an_open_request_is_resent_to_a_driver_that_reattaches() {
     hub.attach(1, S, a, None);
     let asking = {
         let hub = Arc::clone(&hub);
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             hub.ask(
                 S,
                 "sudo.request",
@@ -429,7 +429,7 @@ async fn a_driver_that_reattaches_as_observer_can_no_longer_answer() {
     hub.attach(1, S, driver.clone(), None);
     let asking = {
         let hub = Arc::clone(&hub);
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             hub.ask(
                 S,
                 "sudo.request",
@@ -479,7 +479,7 @@ async fn detaching_one_session_keeps_another_sessions_requests() {
     hub.attach(1, OTHER, driver, None);
     let asking = {
         let hub = Arc::clone(&hub);
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             hub.ask(
                 OTHER,
                 "sudo.request",

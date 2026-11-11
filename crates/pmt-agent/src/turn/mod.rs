@@ -63,7 +63,7 @@ use pmt_store::Store;
 
 pub use compression::CONTEXT_FULL;
 
-pub use events::{EventSink, NoEvents, Recorded};
+pub use events::{EventSink, NoEvents, Recorded, Traced, stamp};
 pub use exit::{ExitReason, TurnId, TurnResult, TurnUsage};
 pub use interrupt::{Interrupt, Issuer};
 pub use iteration::IterationBudget;
@@ -604,7 +604,28 @@ impl Agent {
         options: TurnOptions,
     ) -> Result<TurnResult, Error> {
         let scope = self.check_scope(scope, session)?;
-        run::run(self, scope, input, options).await
+        // Every record of the turn carries the session and its trace id
+        // (spec: observability, Structured logs; Trace context propagation).
+        let id = session.to_string();
+        let span = tracing::info_span!(
+            "turn",
+            profile = scope.name().as_str(),
+            session_id = id.as_str(),
+            trace_id = pmt_obs::otel::context::trace_hex_of(&id).as_str(),
+            turn_id = tracing::field::Empty,
+        );
+        let run = async {
+            let result = run::run(self, scope, input, options).await;
+            if let Ok(done) = &result {
+                tracing::debug!(
+                    exit_reason = done.exit_reason.as_str(),
+                    iterations = done.iterations,
+                    "turn finished"
+                );
+            }
+            result
+        };
+        tracing::Instrument::instrument(run, span).await
     }
 
     /// `scope` when it is this agent's profile and `session` its session.

@@ -2989,6 +2989,7 @@ dependencies = [
  "base64 0.23.1",
  "glob",
  "jiff",
+ "libc",
  "nix 0.31.3",
  "proptest",
  "regex",
@@ -3002,6 +3003,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "ulid",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3081,6 +3083,7 @@ dependencies = [
  "pmt-config",
  "pmt-core",
  "pmt-net",
+ "pmt-obs",
  "pmt-rpc",
  "pmt-store",
  "pmt-vault",
@@ -3240,6 +3243,7 @@ dependencies = [
  "pmt-core",
  "pmt-net",
  "pmt-store",
+ "prost",
  "reqwest",
  "schemars",
  "serde",
@@ -3265,6 +3269,7 @@ dependencies = [
  "minisign-verify",
  "pmt-config",
  "pmt-core",
+ "pmt-obs",
  "pmt-plugins",
  "pmt-providers",
  "pmt-sandbox",
@@ -3326,6 +3331,7 @@ dependencies = [
  "nix 0.31.3",
  "pmt-config",
  "pmt-core",
+ "pmt-obs",
  "pmt-plugins",
  "pmt-providers",
  "pmt-pybridge",
@@ -3379,9 +3385,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "pmt-skillhub"
+version = "0.1.0"
+dependencies = [
+ "base64 0.23.1",
+ "jiff",
+ "minisign",
+ "minisign-verify",
+ "pmt-config",
+ "pmt-core",
+ "pmt-net",
+ "pmt-skillhub",
+ "pmt-skills",
+ "rcgen",
+ "regex",
+ "reqwest",
+ "ring",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tempfile",
+ "tokio",
+ "toml",
+ "tracing",
+ "ulid",
+ "x509-parser",
+ "zip",
+]
+
+[[package]]
 name = "pmt-skills"
 version = "0.1.0"
 dependencies = [
+ "flate2",
  "jiff",
  "pmt-agent",
  "pmt-config",
@@ -3398,12 +3434,14 @@ dependencies = [
  "serde_json",
  "sha2 0.11.1",
  "similar",
+ "tar",
  "tempfile",
  "tokio",
  "toml",
  "tracing",
  "tracing-subscriber",
  "ulid",
+ "zstd",
 ]
 
 [[package]]
@@ -3540,6 +3578,7 @@ name = "pmt-voice"
 version = "0.1.0"
 dependencies = [
  "pmt-config",
+ "pmt-core",
  "tempfile",
  "tokio",
  "tracing",
@@ -3690,6 +3729,7 @@ dependencies = [
  "pmt-pybridge",
  "pmt-rpc",
  "pmt-sandbox",
+ "pmt-skillhub",
  "pmt-skills",
  "pmt-store",
  "pmt-tools",
@@ -3698,6 +3738,7 @@ dependencies = [
  "pmt-vault",
  "pmt-voice",
  "pmt-worktrees",
+ "prost",
  "pulldown-cmark",
  "qrcode",
  "ratatui",
@@ -3742,6 +3783,29 @@ dependencies = [
  "rand_xorshift",
  "regex-syntax",
  "unarray",
+]
+
+[[package]]
+name = "prost"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "528ac67416ff8646872a3c02cad9cc4ee5dc9f9540c9b10771855c95cb2e5ae1"
+dependencies = [
+ "bytes",
+ "prost-derive",
+]
+
+[[package]]
+name = "prost-derive"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b570b25f7617e43d59005d0990ccb79e950a423952cea19671b7a876da390adf"
+dependencies = [
+ "anyhow",
+ "itertools",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]

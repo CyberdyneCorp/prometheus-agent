@@ -272,7 +272,7 @@ async fn killing_a_background_command_cancels_it_inside_the_plugin() {
         })
         .await;
     assert_eq!(killed["state"], "killed", "{killed}");
-    let quiet = tokio::task::spawn_blocking(move || {
+    let quiet = pmt_core::spawn::blocking(move || {
         slow.wait_until_quiet();
         slow
     });

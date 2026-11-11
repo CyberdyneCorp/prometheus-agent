@@ -39,7 +39,7 @@ pub(super) async fn refine(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
         digest: false,
     };
     let post = Arc::clone(&ctx.post);
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         let (skills, memory) = tokio::join!(
             pmt_skills::refine::refine_held(skills, running),
             pmt_memory::review::refine(memory),

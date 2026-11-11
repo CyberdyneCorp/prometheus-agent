@@ -27,12 +27,15 @@ const PRUNE_EVERY: Duration = Duration::from_hours(1);
 /// serves later) until the daemon stops.
 pub(in crate::daemon_cmd) async fn schedule(host: Arc<DaemonHost>) {
     let mut started = BTreeSet::new();
+    pmt_obs::health::global().report(None, "scheduler", pmt_obs::health::State::Ok, "running");
     loop {
         for (name, profile) in host.all_profiles() {
             if started.insert(name.clone()) {
                 let span =
                     tracing::info_span!("cron", component = "agent", profile = name.as_str());
-                tokio::spawn(profile_loop(Arc::clone(&host), name, profile).instrument(span));
+                pmt_core::spawn::spawn(
+                    profile_loop(Arc::clone(&host), name, profile).instrument(span),
+                );
             }
         }
         tokio::time::sleep(PROFILES_EVERY).await;
@@ -107,6 +110,8 @@ async fn profile_loop(host: Arc<DaemonHost>, name: String, profile: Arc<Profile>
                 pruned = Some(std::time::Instant::now());
             }
             tick(&runner, &permits, &sender).await;
+            // A due automatic curator pass runs on its own thread.
+            let _ = crate::curator_cmd::auto::check(&scope, &profile.store, &host.launch);
         }
         // A webhook's queued run wakes the loop early.
         tokio::select! {
@@ -126,7 +131,7 @@ async fn tick(
     let now = Timestamp::now();
     match cron_host::dispatch(runner, now, permits) {
         Ok(running) if !running.is_empty() => {
-            tokio::spawn(finish(running));
+            pmt_core::spawn::spawn(finish(running));
         }
         Ok(_) => {}
         Err(err) => tracing::warn!(error = %err, "cron tick failed"),

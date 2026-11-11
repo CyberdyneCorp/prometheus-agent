@@ -102,7 +102,7 @@ mod tests {
         let seen = Arc::new(Mutex::new(Vec::new()));
         let sink = Arc::clone(&seen);
         let start = tokio::time::Instant::now();
-        let pacer = tokio::spawn(pace(rx, move |s: Snapshot| {
+        let pacer = pmt_core::spawn::spawn(pace(rx, move |s: Snapshot| {
             sink.lock().unwrap().push((start.elapsed(), s.tool_calls));
         }));
         for call in 1..=40u32 {

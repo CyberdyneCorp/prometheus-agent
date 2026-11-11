@@ -165,7 +165,7 @@ impl ProfilePlugins {
         let Ok(runtime) = tokio::runtime::Handle::try_current() else {
             return;
         };
-        runtime.spawn(async move {
+        pmt_core::spawn::spawn_on(&runtime, async move {
             hooks.fire(hook, &Payload::new(fields), &call).await;
         });
     }

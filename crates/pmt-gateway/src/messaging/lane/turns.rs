@@ -59,6 +59,19 @@ impl Lane {
     /// The key's session, created or replaced when needed: a suspended
     /// session or an ended one is replaced (`suspended`, `stale_route`),
     /// and a key whose route was pruned starts over (`stale_route`).
+    /// Records the metered speech calls of an input in `session`'s usage
+    /// ledger (a voice note is transcribed before its session is known).
+    fn bill(&self, session: &str, billed: &[crate::messaging::voice::Billed]) {
+        if billed.is_empty() {
+            return;
+        }
+        if let Some(speech) = self.shared.agents.speech(&self.profile) {
+            for call in billed {
+                speech.bill(session, call);
+            }
+        }
+    }
+
     pub(super) async fn ensure_session(&mut self, routing: &Routing) -> Result<String, Error> {
         let store = self
             .shared
@@ -215,6 +228,7 @@ impl Lane {
         if self.hold(&session, &pending) {
             return;
         }
+        self.bill(&session, &pending.billed);
         self.add_observed(&session, &pending.routing);
         self.record_start(&session, &pending.routing);
         self.shared.cache.touch(&self.profile, &session);

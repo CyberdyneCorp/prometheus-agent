@@ -12,6 +12,7 @@ use pmt_config::essential::ESSENTIAL_SKILL;
 use pmt_store::SkillState;
 
 use super::{Ctx, Outcome, inside, mutate, read_only};
+use crate::ledger::Actor;
 use crate::roots::Tier;
 
 pub(super) fn delete(ctx: &Ctx<'_>, name: &str) -> Result<Outcome, String> {
@@ -48,8 +49,20 @@ pub(super) fn delete(ctx: &Ctx<'_>, name: &str) -> Result<Outcome, String> {
         ));
     }
     let _lock = mutate::lock(&ctx.skills_dir, &skill.name)?;
+    let ledger = ctx.ledger();
+    let rel = ctx.rel(&dir);
+    let before = ledger.capture_dir(&rel);
     if ctx.session.review().is_some() {
         let archived = mutate::archive(&ctx.skills_dir, &skill.name, &dir, "")?;
+        let moved = ctx.rel(&archived);
+        let before = before.with_new(ledger.files_below(&moved));
+        ledger.record(
+            Actor::Agent,
+            "archive",
+            &skill.name,
+            &before,
+            &ctx.evidence(),
+        );
         if let Err(err) = ctx
             .session
             .store()
@@ -64,5 +77,12 @@ pub(super) fn delete(ctx: &Ctx<'_>, name: &str) -> Result<Outcome, String> {
         )));
     }
     fs::remove_dir_all(&dir).map_err(|e| format!("{}: {e}", ctx.display(&dir)))?;
+    ledger.record(
+        Actor::Agent,
+        "delete",
+        &skill.name,
+        &before,
+        &ctx.evidence(),
+    );
     Ok(Outcome::message(format!("Deleted skill '{}'.", skill.name)))
 }

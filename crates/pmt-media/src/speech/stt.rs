@@ -25,6 +25,7 @@ use super::command::{self, render};
 use super::{SpeechState, tempdir};
 use crate::access::Access;
 use crate::http::{Multipart, b64, ok_json};
+use crate::plugin::SttRequest;
 use crate::{MediaSession, MediaSetup};
 
 /// The providers tried, in order, when `stt.provider` is unset.
@@ -77,6 +78,8 @@ struct Listener {
     provider: String,
     model: String,
     language: Option<String>,
+    /// Set only by a `pre_transcription` callback.
+    prompt: Option<String>,
     access: Access,
     base_url: String,
     timeout: Duration,
@@ -217,6 +220,7 @@ fn listener(setup: &MediaSetup, provider: &str) -> Result<Listener, String> {
         provider: provider.to_owned(),
         model: model.unwrap_or_else(|| default_model(provider).to_owned()),
         language,
+        prompt: None,
         base_url: match provider {
             "nous" => access.gateway_url.clone().unwrap_or_default(),
             other => setup.endpoint(other, default_base(other)),
@@ -289,23 +293,58 @@ impl MediaSession {
                 .iter()
                 .find_map(|p| listener(setup, p).ok())
                 .ok_or_else(|| NONE_AVAILABLE.to_owned())?;
-            return self.listen(&listener, path).await;
+            return self.listen(&self.hooked(listener).await, path).await;
         };
         let strict = |why: String| format!("stt is configured to use {provider}, but {why}");
         if !BUILTIN.contains(&provider.as_str())
             && let Some(command) = stt.providers.get(&provider)
         {
-            return command_stt(setup, &self.speech, &provider, command, path)
+            let request = self.fire(command_request(stt, &provider, command)).await;
+            return command_stt(setup, &self.speech, command, &request, path)
                 .await
                 .map_err(strict);
         }
         if let Some(selected) = crate::plugin::selected(setup, crate::plugin::Kind::Stt) {
-            return crate::plugin::transcribe(setup, &selected, path)
+            let request = self
+                .fire(SttRequest {
+                    provider: selected.id.clone(),
+                    language: Some(stt.language.clone()).filter(|l| !l.is_empty()),
+                    ..SttRequest::default()
+                })
+                .await;
+            return crate::plugin::transcribe(setup, &selected, path, &request)
                 .await
                 .map_err(strict);
         }
         let listener = listener(setup, &provider).map_err(strict)?;
-        self.listen(&listener, path).await.map_err(strict)
+        self.listen(&self.hooked(listener).await, path)
+            .await
+            .map_err(strict)
+    }
+
+    /// Fires `pre_transcription` with the resolved `request`.
+    async fn fire(&self, request: SttRequest) -> SttRequest {
+        let provider = request.provider.clone();
+        let mut fired = self.setup().plugins.pre_transcription(request).await;
+        // The provider was resolved before the hook; it never moves.
+        fired.provider = provider;
+        fired
+    }
+
+    /// `listener` with the `pre_transcription` changes applied.
+    async fn hooked(&self, mut listener: Listener) -> Listener {
+        let request = self
+            .fire(SttRequest {
+                provider: listener.provider.clone(),
+                model: listener.model.clone(),
+                language: listener.language.clone(),
+                prompt: None,
+            })
+            .await;
+        listener.model = request.model;
+        listener.language = request.language;
+        listener.prompt = request.prompt;
+        listener
     }
 
     async fn listen(&self, listener: &Listener, path: &Path) -> Result<Transcript, String> {
@@ -329,10 +368,12 @@ impl MediaSession {
             .local
             .as_ref()
             .ok_or("the local Whisper runtime is not installed")?;
-        self.speech.hold("whisper", self.speech.stt_idle);
+        self.speech
+            .hold(launcher.as_ref(), "whisper", self.speech.stt_idle);
         let local = &setup.config().stt.local;
         let request = json!({"op": "transcribe", "input": path, "model": listener.model,
-            "language": listener.language, "vad": local.vad, "vad_min_silence_ms": local.vad_min_silence_ms});
+            "language": listener.language, "prompt": listener.prompt, "vad": local.vad,
+            "vad_min_silence_ms": local.vad_min_silence_ms});
         let answer = super::local::request(launcher.as_ref(), "whisper", &request).await?;
         Ok(answer["text"].as_str().unwrap_or_default().to_owned())
     }
@@ -444,7 +485,7 @@ async fn upload_audio(
             billing_source: listener.access.billing_source.clone(),
         };
         let body = json!({"audio": b64(bytes), "file_name": name, "model": listener.model,
-            "language": listener.language});
+            "language": listener.language, "prompt": listener.prompt});
         let reply = pmt_providers::auth::gateway::post(
             &setup.client,
             &routing,
@@ -473,6 +514,9 @@ async fn upload_audio(
         form = form.text("model", &listener.model);
         if let Some(language) = &listener.language {
             form = form.text("language", language);
+        }
+        if let Some(prompt) = &listener.prompt {
+            form = form.text("prompt", prompt);
         }
         setup
             .client
@@ -503,7 +547,11 @@ async fn whisper_cpp(
         .arg("-f")
         .arg(path)
         .arg("-l")
-        .arg(listener.language.as_deref().unwrap_or("auto"))
+        .arg(listener.language.as_deref().unwrap_or("auto"));
+    if let Some(prompt) = &listener.prompt {
+        command.arg("--prompt").arg(prompt);
+    }
+    command
         .args(["-otxt", "-nt", "-of"])
         .arg(&base)
         .kill_on_drop(true);
@@ -548,21 +596,37 @@ pub fn transcript_text(raw: &str, format: TranscriptFormat) -> String {
     }
 }
 
-/// Runs a `[stt.providers.<name>]` command.
+/// A `[stt.providers.<name>]` command as resolved, before the hook.
+fn command_request(stt: &SttConfig, name: &str, config: &CommandSttConfig) -> SttRequest {
+    SttRequest {
+        provider: name.to_owned(),
+        model: config.model.clone().unwrap_or_default(),
+        language: Some(
+            config
+                .language
+                .clone()
+                .unwrap_or_else(|| stt.language.clone()),
+        )
+        .filter(|l| !l.is_empty()),
+        prompt: None,
+    }
+}
+
+/// Runs a `[stt.providers.<name>]` command for `request`.
 async fn command_stt(
     setup: &MediaSetup,
     state: &SpeechState,
-    name: &str,
     config: &CommandSttConfig,
+    request: &SttRequest,
     path: &Path,
 ) -> Result<Transcript, String> {
     let dir = tempdir(setup)?;
-    let result = run_command_stt(setup, state, config, path, &dir).await;
+    let result = run_command_stt(setup, state, (config, request), path, &dir).await;
     let _ = tokio::fs::remove_dir_all(&dir).await;
     Ok(Transcript {
         text: result?,
-        provider: name.to_owned(),
-        model: config.model.clone().unwrap_or_default(),
+        provider: request.provider.clone(),
+        model: request.model.clone(),
         billing_source: "local".to_owned(),
     })
 }
@@ -570,30 +634,34 @@ async fn command_stt(
 async fn run_command_stt(
     setup: &MediaSetup,
     state: &SpeechState,
-    config: &CommandSttConfig,
+    (config, request): (&CommandSttConfig, &SttRequest),
     path: &Path,
     dir: &Path,
 ) -> Result<String, String> {
+    // The command reads its input from the per-call directory: the
+    // recording may live where the sandbox denies it (the blob store).
     let input = if config.normalize {
         let out = dir.join("normalized.wav");
         state.ffmpeg.normalize(path, &out).await?;
         out
     } else {
-        path.to_path_buf()
+        let extension = path.extension().and_then(OsStr::to_str).unwrap_or("wav");
+        let staged = dir.join(format!("input.{extension}"));
+        tokio::fs::copy(path, &staged)
+            .await
+            .map_err(|e| format!("cannot stage {}: {e}", path.display()))?;
+        staged
     };
     let format = config.format.extension();
     let output = dir.join(format!("transcript.{format}"));
-    let language = config
-        .language
-        .clone()
-        .unwrap_or_else(|| setup.config().stt.language.clone());
     let values = BTreeMap::from([
         ("input_path", input.display().to_string()),
         ("output_path", output.display().to_string()),
         ("output_dir", dir.display().to_string()),
         ("format", format.to_owned()),
-        ("language", language),
-        ("model", config.model.clone().unwrap_or_default()),
+        ("language", request.language.clone().unwrap_or_default()),
+        ("model", request.model.clone()),
+        ("prompt", request.prompt.clone().unwrap_or_default()),
     ]);
     let line = render(&config.command, &values, setup.runner.syntax())?;
     let idle = Duration::from_secs(config.timeout_secs);

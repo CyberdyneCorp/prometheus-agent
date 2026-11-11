@@ -20,6 +20,7 @@ mod agent;
 mod automation;
 mod connectors;
 mod cron;
+mod curator;
 mod delegation;
 mod gateway;
 mod gateway_display;
@@ -57,6 +58,9 @@ pub use agent::{
 pub use automation::{GoalsConfig, HeartbeatConfig, LoopsConfig};
 pub use connectors::{ConnectorsConfig, DEFAULT_CONNECTOR_GATEWAY};
 pub use cron::{ContinuableSurface, CronConfig, CronDeliveryConfig, CronProvider};
+pub use curator::{
+    CuratorConfig, DEFAULT_LEDGER_MAX_BYTES, DEFAULT_TRUSTED_SOURCES, SkillSignaturePolicy,
+};
 pub use delegation::{
     BackgroundMode, CODE_EXECUTION_TOOLS, ChildApproval, CodeExecutionConfig, CodeExecutionMode,
     DelegationConfig, GatewayDelegationMode, ReviewConfig,
@@ -102,10 +106,12 @@ pub use models::{
     PoolStrategy, PreferCredential, ProviderAuth, ProviderConfig, RoutingConfig, WireFormat,
 };
 pub use operations::{
-    BudgetsConfig, DegradedFeature, EgressConfig, EgressMode, GatewayHealthConfig, LogLevel,
-    LoggingConfig, NetworkConfig, ObservabilityConfig, PrivacyConfig, SandboxConfig, SandboxMode,
-    SecretCommandConfig, SecretsBackend, SecretsConfig, SecurityConfig, TelemetryConfig,
-    TrajectoriesConfig, VaultConfig, VaultKeyStorage, VaultSourceConfig, WorktreesConfig,
+    BudgetsConfig, DebugConfig, DebugShareConfig, DegradedFeature, EgressConfig, EgressMode,
+    GatewayHealthConfig, HealthListenerConfig, LogLevel, LoggingConfig, MetricsEndpointConfig,
+    NetworkConfig, ObservabilityConfig, OtelConfig, OtelProtocol, PrivacyConfig, SandboxConfig,
+    SandboxMode, SecretCommandConfig, SecretsBackend, SecretsConfig, SecurityConfig,
+    TelemetryConfig, TrajectoriesConfig, VaultConfig, VaultKeyStorage, VaultSourceConfig,
+    WorktreesConfig,
 };
 pub use plugins::{
     DEFAULT_CATALOG_URL, GuidanceMode, PluginsConfig, PluginsWasmConfig, SecurityGuidanceConfig,
@@ -176,8 +182,12 @@ pub struct Config {
     pub context: ContextConfig,
     /// Profile time zone (scheduler keys arrive with M2).
     pub cron: CronConfig,
+    /// The skill curator.
+    pub curator: CuratorConfig,
     /// Subagent delegation.
     pub delegation: DelegationConfig,
+    /// Diagnostics: the debug share target.
+    pub debug: DebugConfig,
     /// Display preferences of interactive surfaces.
     pub display: DisplayConfig,
     /// Provider fallback.
@@ -308,7 +318,9 @@ impl Default for Config {
             connectors: ConnectorsConfig::default(),
             context: ContextConfig::default(),
             cron: CronConfig::default(),
+            curator: CuratorConfig::default(),
             delegation: DelegationConfig::default(),
+            debug: DebugConfig::default(),
             display: DisplayConfig::default(),
             fallback: FallbackConfig::default(),
             files: FilesConfig::default(),

@@ -84,7 +84,7 @@ async fn call(
     let call = {
         let plugin = Arc::clone(plugin);
         let request = request.clone();
-        tokio::task::spawn_blocking(move || plugin.execute(&request))
+        pmt_core::spawn::blocking(move || plugin.execute(&request))
     };
     let joined = match limit {
         Some(limit) => {

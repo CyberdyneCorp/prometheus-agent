@@ -215,7 +215,7 @@ impl Signal {
         {
             old.cancel();
         }
-        tokio::spawn(events::follow(
+        pmt_core::spawn::spawn(events::follow(
             response,
             link,
             self.reader.clone(),
@@ -227,6 +227,18 @@ impl Signal {
 }
 
 impl Adapter for Signal {
+    fn reach(&self) -> Result<pmt_gateway::messaging::probe::Reach, String> {
+        match (&self.rpc, self.missing) {
+            (Some(rpc), _) => Ok(pmt_gateway::messaging::probe::Reach::Endpoints(vec![
+                pmt_gateway::messaging::probe::Endpoint::Http(rpc.url.clone()),
+            ])),
+            (None, missing) => Err(format!(
+                "options.{} is not set",
+                missing.unwrap_or("http_url")
+            )),
+        }
+    }
+
     fn describe(&self) -> Descriptor {
         let all: BTreeSet<MediaKind> = [
             MediaKind::Image,

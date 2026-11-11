@@ -72,6 +72,10 @@ pub struct ServerOptions {
     /// Tickets only for the client process with this pid (an in-process
     /// gateway that serves its own TUI: `prometheus tui --standalone`).
     pub only_pid: Option<u32>,
+    /// The health listener's URL, published in `run/gateway.json`.
+    pub health_url: Option<String>,
+    /// The Prometheus home (task dumps go to its `logs/`).
+    pub home: Option<std::path::PathBuf>,
 }
 
 impl ServerOptions {
@@ -91,6 +95,8 @@ impl ServerOptions {
             max_live_client_sessions: 16,
             crash_reporter: None,
             only_pid: None,
+            health_url: None,
+            home: None,
         }
     }
 }
@@ -193,6 +199,8 @@ pub struct Server {
     max_live_client_sessions: u32,
     crash_reporter: Option<Arc<CrashReporter>>,
     only_pid: Option<u32>,
+    health_url: Option<String>,
+    home: Option<std::path::PathBuf>,
     /// Sessions created with an idempotency key: (profile, key) to the
     /// session and when it was created.
     pub(crate) created: tokio::sync::Mutex<HashMap<(String, String), (String, Instant)>>,
@@ -270,12 +278,16 @@ impl Server {
             max_live_client_sessions: options.max_live_client_sessions,
             crash_reporter: options.crash_reporter,
             only_pid: options.only_pid,
+            health_url: options.health_url,
+            home: options.home,
             created: tokio::sync::Mutex::default(),
             admitted: tokio::sync::Mutex::default(),
             messaging: OnceLock::new(),
             adapters_down: AtomicBool::new(false),
         };
-        Ok(Arc::new(server))
+        let server = Arc::new(server);
+        crate::observability::announce_health(&server);
+        Ok(server)
     }
 
     /// What the binary is.
@@ -385,6 +397,18 @@ impl Server {
     #[must_use]
     pub fn started_at(&self) -> &str {
         &self.started_at
+    }
+
+    /// The Prometheus home, when known.
+    #[must_use]
+    pub fn home(&self) -> Option<&std::path::Path> {
+        self.home.as_deref()
+    }
+
+    /// The health listener's URL.
+    #[must_use]
+    pub fn health_url(&self) -> Option<&str> {
+        self.health_url.as_deref()
     }
 
     /// Records where the daemon listens.
@@ -544,6 +568,9 @@ impl Server {
                         .collect()
                 })
                 .unwrap_or_default(),
+            health: crate::observability::component_reports(),
+            subagents: crate::observability::subagents(),
+            export: crate::observability::export_report(),
         }
     }
 }

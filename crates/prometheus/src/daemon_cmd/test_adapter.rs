@@ -3,7 +3,8 @@
 //! messages from `<dir>/<profile>/inbox/*.json` and appends what it sends
 //! to `<dir>/<profile>/sent.jsonl`, so a test drives the real daemon's
 //! gateway end to end; a file `<dir>/<profile>/down` makes every send
-//! fail as a network error.
+//! fail as a network error, and `<dir>/<profile>/fatal` every connect
+//! fail for good.
 
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
@@ -99,6 +100,11 @@ fn append(root: &Path, file: &str, value: &Value) {
 }
 
 impl Adapter for FileAdapter {
+    fn reach(&self) -> Result<pmt_gateway::messaging::probe::Reach, String> {
+        // File-backed: nothing to connect to.
+        Ok(pmt_gateway::messaging::probe::Reach::InboundOnly)
+    }
+
     fn describe(&self) -> Descriptor {
         Descriptor {
             supports_edit: true,
@@ -112,7 +118,18 @@ impl Adapter for FileAdapter {
     }
 
     fn connect(&self, link: Arc<dyn AdapterLink>) -> AdapterFuture<'_, Result<(), AdapterError>> {
-        let task = tokio::spawn(read(self.root.clone(), link));
+        // `<dir>/<profile>/fatal`: the platform refuses the credential for
+        // good (the adapter stops, its health is `down`).
+        if self.root.join("fatal").exists() {
+            return Box::pin(async {
+                Err(AdapterError {
+                    retryable: false,
+                    code: "test_refused".into(),
+                    message: "the test platform refused the credential".into(),
+                })
+            });
+        }
+        let task = pmt_core::spawn::spawn(read(self.root.clone(), link));
         if let Some(old) = self.reader.lock().expect("reader poisoned").replace(task) {
             old.abort();
         }

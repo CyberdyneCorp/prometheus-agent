@@ -135,6 +135,35 @@ impl Rig {
     }
 }
 
+impl Rig {
+    /// The session's file tools over its workspace, with the baseline
+    /// capabilities a session starts with.
+    pub(crate) fn files(&self) -> pmt_tools::files::FileSession {
+        use pmt_core::capability::{BASELINE, CapabilitySet, Places};
+        use pmt_tools::files::{ControlPaths, FileSetup, Linter, LocalBackend};
+        let work = self.workspace();
+        let places = Places {
+            workspace: work.clone(),
+            ..Places::default()
+        };
+        pmt_tools::files::FileSession::new(FileSetup {
+            backend: Arc::new(LocalBackend::new(
+                CapabilitySet::parse(BASELINE).unwrap(),
+                places,
+            )),
+            cwd: Arc::new(move || work.clone()),
+            user_home: None,
+            control: ControlPaths {
+                prometheus_home: self.profile.join("no-home"),
+            },
+            read_max_chars: pmt_tools::setting::fixed(100_000),
+            linter: Linter::builtin(),
+            documents: None,
+            edits: None,
+        })
+    }
+}
+
 /// The `MEDIA:` path of a result.
 pub(crate) fn media_path(text: &str) -> PathBuf {
     let line = text.lines().next().unwrap();

@@ -2,11 +2,15 @@
 //! came from (spec: skills, Bundled skills are read-only and ejectable;
 //! Load-time template substitution and inline shell: trust level).
 //!
-//! M1 records ejected bundled skills (`source = "bundled:<path>"`, the
-//! bundled tree's digest at eject time) and reads `trust` for the inline
-//! shell rule; hub installs (M2) add their entries with the same fields.
-//! A file that does not parse makes every profile skill's provenance
-//! unreadable, which only ever withholds privileges.
+//! Ejected bundled skills are recorded with `source = "bundled:<path>"`
+//! and the bundled tree's digest at eject time; hub installs (spec:
+//! skills, Skills lockfile and tamper detection; Skill signatures and
+//! provenance) with their identifier, the resolved upstream ref, the
+//! installed tree's digest, the signature state and the install path. A
+//! hub skill whose files no longer match `content_digest`, or that the
+//! audit flagged, is quarantined at index build. A file that does not
+//! parse makes every profile skill's provenance unreadable, which only
+//! ever withholds privileges.
 
 use std::path::{Path, PathBuf};
 
@@ -33,19 +37,35 @@ pub enum Trust {
 }
 
 /// One entry.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Entry {
     /// The skill name.
     pub name: String,
     /// `bundled:<path>` or a hub identifier.
     pub source: String,
+    /// The upstream ref the install resolved to: a full commit SHA, a
+    /// version or the content URL (hub installs).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved_ref: Option<String>,
     /// The origin's digest when recorded.
     pub content_digest: String,
     /// The trust level (`None` when unreadable).
     #[serde(default, deserialize_with = "lenient_trust")]
     pub trust: Option<Trust>,
+    /// `verified:<identity>`, `unsigned` or `invalid` (hub installs).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signature: Option<String>,
     /// RFC 3339 time of the install or eject.
     pub installed_at: String,
+    /// The skill's category (hub installs).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+    /// The install directory, relative to the profile's `skills/`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    /// Why the skill is quarantined (the audit found it `dangerous`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quarantined: Option<String>,
 }
 
 fn lenient_trust<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Trust>, D::Error> {
@@ -59,7 +79,16 @@ impl Entry {
     pub fn bundled_path(&self) -> Option<&str> {
         self.source.strip_prefix(BUNDLED_SOURCE)
     }
+
+    /// Whether the entry records a hub install (not an ejected copy).
+    #[must_use]
+    pub fn is_hub(&self) -> bool {
+        self.bundled_path().is_none()
+    }
 }
+
+/// The text of the tamper-detection quarantine reason.
+pub const DIGEST_MISMATCH: &str = "content digest mismatch";
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct File {
@@ -83,6 +112,15 @@ pub enum Contents {
 }
 
 impl Contents {
+    /// The entries (none when unreadable).
+    #[must_use]
+    pub fn entries(&self) -> &[Entry] {
+        match self {
+            Self::Entries(entries) => entries,
+            Self::Unreadable(_) => &[],
+        }
+    }
+
     /// The entry of `name`; `Err` when provenance is unreadable.
     ///
     /// # Errors
@@ -134,6 +172,22 @@ impl LockFile {
             entries.retain(|e| e.name != entry.name);
             entries.push(entry);
         })
+    }
+
+    /// Changes the entry of `name` in place; `false` when there is none.
+    ///
+    /// # Errors
+    ///
+    /// `skill.io`.
+    pub fn modify(&self, name: &str, change: impl FnOnce(&mut Entry)) -> Result<bool, Error> {
+        let mut found = false;
+        self.update(|entries| {
+            if let Some(entry) = entries.iter_mut().find(|e| e.name == name) {
+                change(entry);
+                found = true;
+            }
+        })?;
+        Ok(found)
     }
 
     /// Removes the entry of `name`.

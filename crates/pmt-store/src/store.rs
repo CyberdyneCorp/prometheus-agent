@@ -120,12 +120,6 @@ impl Store {
         let profile_id = profile.id()?;
         let database = location.database().to_path_buf();
         files::private_dir(location.blobs())?;
-        // `sessions journal-mode` recorded in the store wins over config.
-        let journal = crate::recover::recorded_journal_mode(&database)
-            .unwrap_or(scope.config().storage.journal_mode);
-        if journal == JournalMode::Wal {
-            files::check_wal_supported(scope.dir())?;
-        }
         let supported = migrations.last().map_or(0, |m| m.version);
         let quarantined = if database.exists() {
             integrity::check_at_open(&database, location.quarantine(), supported)?
@@ -136,6 +130,7 @@ impl Store {
         for path in sidecars(&database) {
             files::tighten(&path, 0o600);
         }
+        let journal = scope.config().storage.journal_mode;
         let conn = open_writer(&database, &profile_id, &profile, migrations, journal)?;
         let newer_schema = conn.newer_schema;
         let mut store = Self {
@@ -394,6 +389,7 @@ fn open_writer(
     profile_id: &ProfileId,
     profile: &ProfileDir,
     migrations: &[Migration],
+    // The configured mode (`storage.journal_mode`).
     journal: JournalMode,
 ) -> Result<Opened, Error> {
     let mut conn = Connection::open(database).map_err(sql)?;
@@ -413,6 +409,15 @@ fn open_writer(
     if newer_schema.is_some() {
         conn.pragma_update(None, "query_only", true).map_err(sql)?;
     } else {
+        // `sessions journal-mode` recorded in the store wins over config;
+        // read on this connection, as a second open costs every start.
+        let journal = meta
+            .as_ref()
+            .and_then(|m| crate::recover::recorded_journal_mode(m.journal_mode.as_deref()))
+            .unwrap_or(journal);
+        if journal == JournalMode::Wal {
+            files::check_wal_supported(profile.path())?;
+        }
         set_journal_mode(&conn, journal)?;
         // Checkpoints follow CHECKPOINT_EVERY, not page counts.
         conn.pragma_update(None, "wal_autocheckpoint", 0)

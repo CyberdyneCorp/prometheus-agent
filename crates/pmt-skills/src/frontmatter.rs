@@ -117,6 +117,18 @@ pub fn parse(text: &str) -> Result<Document, Invalid> {
     })
 }
 
+/// The frontmatter mapping of `text` without the field checks of
+/// [`parse`] (a hub `SKILL.md` that names no skill yet); `None` when
+/// there is no frontmatter mapping.
+#[must_use]
+pub fn mapping(text: &str) -> Option<Map<String, Value>> {
+    let (yaml_text, _) = split(text).ok()?;
+    match yaml::parse(yaml_text).ok()? {
+        Value::Object(front) => Some(front),
+        _ => None,
+    }
+}
+
 fn required(front: &Map<String, Value>, key: &str) -> Result<String, Invalid> {
     match front.get(key) {
         Some(Value::String(s)) if !s.trim().is_empty() => Ok(s.trim().to_owned()),

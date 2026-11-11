@@ -340,22 +340,6 @@ impl ProviderModel {
         Ok(Self::new(setup, caller, state))
     }
 
-    /// Like [`ProviderModel::start`] with no fallback chain: a delegated
-    /// child that pinned its own model fails on that model instead of
-    /// moving to the parent's chain (spec: subagent-delegation, Child model
-    /// routing).
-    ///
-    /// # Errors
-    ///
-    /// Resolution errors of `primary`.
-    pub async fn start_pinned(
-        setup: ProviderSetup,
-        caller: ModelCaller,
-        primary: &Target,
-    ) -> Result<Self, Error> {
-        Self::start_with_chain(setup, caller, primary, Vec::new()).await
-    }
-
     fn info(&self, route: &Route) -> RouteInfo {
         // A MoA preset reports its aggregator's window and price.
         let acting = route.acting();

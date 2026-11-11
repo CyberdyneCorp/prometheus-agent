@@ -76,7 +76,7 @@ impl Opener<'_> {
         ));
         let pruning = Arc::clone(&snapshots);
         if let Ok(runtime) = tokio::runtime::Handle::try_current() {
-            runtime.spawn_blocking(move || pruning.auto_prune());
+            pmt_core::spawn::blocking_on(&runtime, move || pruning.auto_prune());
         }
         snapshots
     }

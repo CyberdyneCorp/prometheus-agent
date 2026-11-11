@@ -3,10 +3,12 @@
 //! replay).
 //!
 //! The replay runs in a home of its own under the output directory: its
-//! profile's `config.toml` is the recorded one (with plugins, MCP servers
-//! and language servers off), its secrets are placeholders that are never
-//! sent (only `model-live` gets the invoking profile's values for the
-//! names the config references), its working directory is the output's
+//! profile's `config.toml` is the recorded one with every outward-facing
+//! table (provider routes, security, extensions) taken from the invoking
+//! profile instead ([`super::trust`]; plugins and language servers off),
+//! its secrets are placeholders that are never sent (only `model-live`
+//! gets the invoking profile's values for the names its own model route
+//! references), its working directory is the output's
 //! `workspace/` (the recorded files with `--include-workspace`), and its
 //! session takes its recorded id. Each recorded user message runs as one
 //! turn through the same session factory as `prometheus chat`, with the
@@ -157,14 +159,18 @@ pub fn run(recording: &Recording, settings: &Settings<'_>) -> Result<Report, Err
         .root()
         .ok_or_else(|| malformed("no session"))?
         .to_owned();
-    let workspace = prepare(recording, &state, settings)?;
+    let trusted = settings
+        .secrets_from
+        .map_or_else(pmt_config::Config::default, |scope| scope.config().clone());
+    let config = super::trust::config(&state.config, &trusted)?;
+    let workspace = prepare(recording, &state, &config, settings)?;
     let stop = CancelToken::new();
     let source = Arc::new(Replayer::new(
         recording,
         (settings.mode, settings.on_divergence),
         stop.clone(),
     )?);
-    let launch = launch(&state, settings);
+    let launch = launch(&config, &trusted, settings);
     let home = settings.out.join("home");
     let set: Vec<String> = ISOLATED.iter().map(|s| (*s).to_owned()).collect();
     let ctx = Context {
@@ -225,6 +231,7 @@ pub fn run(recording: &Recording, settings: &Settings<'_>) -> Result<Report, Err
 fn prepare(
     recording: &Recording,
     state: &State,
+    config: &pmt_config::Config,
     settings: &Settings<'_>,
 ) -> Result<PathBuf, Error> {
     let out = settings.out;
@@ -236,9 +243,9 @@ fn prepare(
     }
     let home = Home::open(&out.join("home"))?;
     let profile = home.profile(&ProfileName::default_profile())?;
-    let config = profile.path().join("config.toml");
-    pmt_core::private_fs::write_atomic(&config, state.config.as_bytes())
-        .map_err(|e| io_error(&config, &e))?;
+    let path = profile.path().join("config.toml");
+    let text = toml::to_string(config).map_err(|e| malformed(&e.to_string()))?;
+    pmt_core::private_fs::write_atomic(&path, text.as_bytes()).map_err(|e| io_error(&path, &e))?;
     let workspace = out.join("workspace");
     pmt_core::private_fs::create_dir(&workspace).map_err(|e| io_error(&workspace, &e))?;
     for (name, bytes) in recording.members() {
@@ -269,17 +276,26 @@ fn unpack(workspace: &Path, relative: &str, bytes: &[u8]) -> Result<(), Error> {
 }
 
 /// The replay's launch environment: placeholders for every secret the
-/// config names, or (model-live) the invoking profile's values.
-fn launch(state: &State, settings: &Settings<'_>) -> LaunchEnv {
-    let live = settings.mode == Mode::ModelLive;
+/// replay's config names, except that `model-live` gets the invoking
+/// profile's values for the names its own model route references (never
+/// a name only the recording chose).
+fn launch(
+    config: &pmt_config::Config,
+    trusted: &pmt_config::Config,
+    settings: &Settings<'_>,
+) -> LaunchEnv {
+    let live = settings
+        .secrets_from
+        .filter(|_| settings.mode == Mode::ModelLive);
+    let real = super::trust::route_secret_names(trusted);
     let mut secrets = Vec::new();
-    for name in &state.secret_names {
-        let value = match settings.secrets_from.filter(|_| live) {
-            Some(scope) => scope.secrets().resolve(name).ok(),
-            None => Some(SecretString::new(PLACEHOLDER)),
+    for name in super::trust::all_secret_names(config) {
+        let value = match live {
+            Some(scope) if real.contains(&name) => scope.secrets().resolve(&name).ok(),
+            _ => Some(SecretString::new(PLACEHOLDER)),
         };
         if let Some(value) = value {
-            secrets.push((name.clone(), value));
+            secrets.push((name, value));
         }
     }
     settings.launch.clone().with_secrets(secrets)
@@ -376,7 +392,8 @@ pub fn cron(
             on_divergence: OnDivergence::Stop,
             out: &scratch,
             launch,
-            secrets_from: None,
+            // Strict: only the profile's settings, never its secrets.
+            secrets_from: Some(scope),
         },
     );
     let _ = std::fs::remove_dir_all(&scratch);

@@ -79,7 +79,7 @@ pub(crate) async fn open(run: Run) -> Result<(), AdapterError> {
         .await
         .map_err(|e| lost("slack_unreachable", e, true))?;
     let (ready_tx, ready_rx) = oneshot::channel();
-    tokio::spawn(run.drive(socket, ready_tx));
+    pmt_core::spawn::spawn(run.drive(socket, ready_tx));
     match tokio::time::timeout(HELLO_TIMEOUT, ready_rx).await {
         Ok(Ok(())) => Ok(()),
         _ => Err(lost(

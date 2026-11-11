@@ -28,6 +28,19 @@ pub trait AuxEvents: Send + Sync {
     fn emit(&self, event: Event);
 }
 
+/// Hears every auxiliary call before its first attempt and after its last
+/// (the plugin `pre_auxiliary_call` and `post_auxiliary_call` hooks);
+/// what it does cannot change the call.
+pub trait AuxObserver: Send + Sync {
+    /// `hook` with `fields` (`session_id`, `task`, `provider`, `model`,
+    /// and after the call `ok`, `attempts`, `error`).
+    fn observe(
+        &self,
+        hook: &'static str,
+        fields: serde_json::Map<String, serde_json::Value>,
+    ) -> crate::resolve::BoxFuture<'_, ()>;
+}
+
 /// A completed auxiliary call.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AuxResponse {
@@ -49,6 +62,7 @@ pub struct AuxCaller {
     events: Option<Arc<dyn AuxEvents>>,
     hooks: Option<Arc<dyn CredentialHooks>>,
     limits: Option<Arc<super::limits::AuxLimits>>,
+    observer: Option<Arc<dyn AuxObserver>>,
 }
 
 impl std::fmt::Debug for AuxCaller {
@@ -103,7 +117,15 @@ impl AuxCaller {
             events: None,
             hooks: None,
             limits: None,
+            observer: None,
         }
+    }
+
+    /// Tells `observer` about every call.
+    #[must_use]
+    pub fn with_observer(mut self, observer: Arc<dyn AuxObserver>) -> Self {
+        self.observer = Some(observer);
+        self
     }
 
     /// Waits for a slot of `limits` before each call (the profile's
@@ -176,6 +198,34 @@ impl AuxCaller {
     ///
     /// The last attempt's classified failure (`provider.*`).
     pub async fn call(
+        &self,
+        aux: &AuxRoute,
+        request: &Request,
+        ctx: &CallContext,
+    ) -> Result<AuxResponse, Error> {
+        let Some(observer) = &self.observer else {
+            return self.attempts(aux, request, ctx).await;
+        };
+        let mut fields = serde_json::Map::new();
+        fields.insert("session_id".into(), ctx.session_id.to_string().into());
+        fields.insert("task".into(), aux.task.as_str().into());
+        fields.insert("provider".into(), aux.route.provider.clone().into());
+        fields.insert("model".into(), aux.route.model.clone().into());
+        observer.observe("pre_auxiliary_call", fields.clone()).await;
+        let result = self.attempts(aux, request, ctx).await;
+        fields.insert("ok".into(), result.is_ok().into());
+        fields.insert(
+            "attempts".into(),
+            result.as_ref().map_or(0, |r| r.attempts).into(),
+        );
+        if let Err(error) = &result {
+            fields.insert("error".into(), error.code().code.into());
+        }
+        observer.observe("post_auxiliary_call", fields).await;
+        result
+    }
+
+    async fn attempts(
         &self,
         aux: &AuxRoute,
         request: &Request,

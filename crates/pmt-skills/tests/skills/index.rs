@@ -11,7 +11,7 @@ use pmt_skills::activation::{self, DEFERRED};
 use pmt_skills::index::{NOTE_PREFIX, Posture};
 use pmt_store::{Role, Visibility};
 
-use crate::support::{Profile, Session, add_skill, mock_model, skill_md, write};
+use crate::support::{Profile, Session, add_skill, mock_model};
 
 const SCRIPT: &str = r#"
 [[rule]]
@@ -247,18 +247,4 @@ async fn skills_change_is_deferred_unless_now() {
     assert_eq!(rebuild_reasons(&events), ["new_session", "skills --now"]);
     assert!(prompt_text(&profile, session.id).contains("- terraform:"));
     assert!(!last_user_text(&profile, session.id).contains(NOTE_PREFIX));
-}
-
-#[tokio::test]
-async fn hub_install_is_m2() {
-    let profile = Profile::new("");
-    write(&profile.skills(), "x/SKILL.md", &skill_md("x", "X.", ""));
-    let session = Session::open(&profile).await;
-    let err = activation::run(
-        &session.skills,
-        "install official/devops/terraform --now",
-        &[],
-    )
-    .unwrap_err();
-    assert_eq!(err.code().code, "skill.hub_unavailable");
 }

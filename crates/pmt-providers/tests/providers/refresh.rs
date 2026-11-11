@@ -328,7 +328,7 @@ async fn concurrent_refresh_uses_the_token_once() {
     tokio::time::sleep(Duration::from_millis(300)).await;
     std::fs::write(&go, "").unwrap();
     for child in children {
-        let out = tokio::task::spawn_blocking(move || child.wait_with_output().unwrap())
+        let out = pmt_core::spawn::blocking(move || child.wait_with_output().unwrap())
             .await
             .unwrap();
         let stdout = String::from_utf8_lossy(&out.stdout);

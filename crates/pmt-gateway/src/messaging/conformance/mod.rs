@@ -354,7 +354,7 @@ pub async fn run(adapter: Arc<dyn Adapter>, platform: Arc<dyn MockPlatform>) -> 
         link,
         descriptor,
     };
-    let keeper = tokio::spawn(kit.reconnecting());
+    let keeper = pmt_core::spawn::spawn(kit.reconnecting());
     report.add("inbound normalization", kit.inbound().await);
     report.add("deduplication", kit.deduplication().await);
     report.add("reconnect", kit.reconnect().await);
@@ -400,9 +400,9 @@ async fn listen(adapter: Arc<dyn Adapter>) -> Result<String, String> {
         .map_err(|e| format!("cannot listen for the adapter: {e}"))?;
     let prefix = format!("/p/kit/{}", adapter.describe().platform);
     let base = format!("http://{addr}{prefix}");
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         while let Ok((stream, _)) = listener.accept().await {
-            tokio::spawn(serve_connection(
+            pmt_core::spawn::spawn(serve_connection(
                 Arc::clone(&adapter),
                 prefix.clone(),
                 stream,

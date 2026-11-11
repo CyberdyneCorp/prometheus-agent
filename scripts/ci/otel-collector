@@ -1,0 +1,33 @@
+#!/bin/sh
+# Verifies the OTLP export against a real OpenTelemetry Collector container
+# (spec: observability, Opt-in OpenTelemetry export): starts the collector
+# with both OTLP receivers and a file exporter, runs the ignored
+# `real_collector` test of pmt-obs against it (http/protobuf and gRPC),
+# then stops it.
+#
+# usage: scripts/ci/otel-collector
+set -eu
+
+image=otel/opentelemetry-collector-contrib:0.115.1@sha256:d2da12c4336a79758826700be9e21ecf4a9f7d945b7f8a58ba55ee3fa45427c8
+root=$(cd "$(dirname "$0")/../.." && pwd)
+out="$root/target/otel-collector"
+rm -rf "$out"
+mkdir -p "$out"
+chmod 777 "$out"
+name="pmt-otel-collector-$$"
+docker run -d --rm --name "$name" \
+    -p 127.0.0.1:4317:4317 -p 127.0.0.1:4318:4318 \
+    -v "$root/scripts/ci/otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro" \
+    -v "$out:/out" "$image" >/dev/null
+trap 'docker stop "$name" >/dev/null 2>&1 || true' EXIT
+i=0
+until curl -s -o /dev/null -X POST -H 'content-type: application/x-protobuf' \
+    --data-binary '' http://127.0.0.1:4318/v1/traces; do
+    i=$((i + 1))
+    [ "$i" -lt 60 ] || { docker logs "$name" >&2; echo "otel-collector: the collector did not start" >&2; exit 1; }
+    sleep 1
+done
+PMT_TEST_OTEL_HTTP=http://127.0.0.1:4318 \
+PMT_TEST_OTEL_GRPC=http://127.0.0.1:4317 \
+PMT_TEST_OTEL_OUTPUT="$out/otlp.jsonl" \
+    cargo nextest run -p pmt-obs --run-ignored only -E 'test(real_collector)'

@@ -75,7 +75,10 @@ pub fn builtin_tools(home: &Path) -> Vec<RegisteredTool> {
     ));
     tools.push(pmt_memory::tool::registered());
     tools.push(crate::connectors_host::registered_tool());
-    tools.extend(pmt_media::tools(&pmt_media::MediaSessions::process()));
+    tools.extend(pmt_media::tools(
+        &pmt_media::MediaSessions::process(),
+        &pmt_tools::environments::Environments::process(),
+    ));
     tools
 }
 
@@ -182,10 +185,7 @@ pub fn media_categories(
     )?;
     let cwd = std::env::current_dir().unwrap_or_default();
     setup.plugins = crate::chat::session::media_plugins::PluginMedia::shared(
-        crate::plugins_host::for_session(scope, &cwd)
-            .current()
-            .providers
-            .clone(),
+        &crate::plugins_host::for_session(scope, &cwd).current(),
         pmt_plugins::host::CallInfo {
             session_id: None,
             surface: "cli".to_owned(),

@@ -101,7 +101,7 @@ pub(super) async fn background(ctx: &Ctx<'_>, args: &str) -> Result<String, Erro
         prompt: prompt.to_owned(),
     };
     let post = Arc::clone(&ctx.post);
-    tokio::spawn(async move {
+    pmt_core::spawn::spawn(async move {
         let _slot = slot;
         let notice = run.run(admission).await;
         post(notice);

@@ -111,7 +111,7 @@ pub(crate) async fn open(run: Run, url: &str) -> Result<(), AdapterError> {
         .await
         .map_err(|e| lost("discord_unreachable", e, true))?;
     let (ready_tx, ready_rx) = oneshot::channel();
-    tokio::spawn(run.drive(socket, ready_tx));
+    pmt_core::spawn::spawn(run.drive(socket, ready_tx));
     match tokio::time::timeout(READY_TIMEOUT, ready_rx).await {
         Ok(Ok(result)) => result,
         _ => Err(lost(

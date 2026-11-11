@@ -463,7 +463,7 @@ impl ProcessRegistry {
         let id = entry.id.clone();
         let mut tasks = vec![supervisor];
         if let Some(every) = tracking.heartbeat {
-            tasks.push(tokio::spawn(heartbeat(
+            tasks.push(pmt_core::spawn::spawn(heartbeat(
                 Arc::clone(&entry),
                 every,
                 (self.options.max_chars)(),
@@ -487,7 +487,7 @@ impl ProcessRegistry {
         .into_iter()
         .flatten()
         .collect();
-        let supervisor = tokio::spawn(supervise(
+        let supervisor = pmt_core::spawn::spawn(supervise(
             Arc::clone(&entry),
             child,
             readers,
@@ -502,7 +502,7 @@ impl ProcessRegistry {
     pub fn track_job(&self, job: Job, tracking: &Tracking) -> String {
         let Job { run, group } = job;
         let (entry, kill_rx) = self.entry(tracking, (None, group, None));
-        let supervisor = tokio::spawn(supervise_job(Arc::clone(&entry), run, kill_rx));
+        let supervisor = pmt_core::spawn::spawn(supervise_job(Arc::clone(&entry), run, kill_rx));
         self.register(entry, supervisor, tracking)
     }
 
@@ -830,7 +830,7 @@ fn reader(
     stream: impl tokio::io::AsyncRead + Unpin + Send + 'static,
 ) -> JoinHandle<()> {
     let entry = Arc::clone(entry);
-    tokio::spawn(async move { spawn::pump(stream, |bytes| entry.on_output(bytes)).await })
+    pmt_core::spawn::spawn(async move { spawn::pump(stream, |bytes| entry.on_output(bytes)).await })
 }
 
 async fn supervise(

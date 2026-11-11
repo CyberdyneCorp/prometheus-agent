@@ -88,6 +88,19 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "btw" => side::btw(ctx, args),
         "autoprune" => crate::chat::autoprune::command(ctx.scope, &ctx.factory.store, args),
         "usage" => account::usage(ctx, args).await,
+        "insights" => crate::insights_cmd::slash(ctx.scope, &ctx.factory.store, args),
+        "debug" => crate::debug_cmd::share::slash(
+            &crate::context::Context {
+                home_flag: Some(ctx.scope.home()),
+                launch: ctx.factory.launch(),
+                profile: Some(ctx.scope.name().as_str()),
+                set: &[],
+                json: false,
+            },
+            &ctx.live.id.to_string(),
+            args,
+        )
+        .await,
         "login" => account::login(ctx, args),
         "subscription" => account::subscription(ctx).await,
         "topup" => account::topup(ctx).await,
@@ -114,6 +127,12 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "reload-secrets" => crate::slash_handlers::reload_secrets(ctx.scope),
         "reload-skills" => Ok(pmt_skills::reload::reload(&ctx.live.skills).render()),
         "refine" => refine::refine(ctx, args).await,
+        "curator" => crate::curator_cmd::slash::run(
+            ctx.scope,
+            ctx.factory.launch(),
+            args,
+            &ctx.post,
+        ),
         "background" => background::background(ctx, args).await,
         "agents" => agents::agents(ctx, args).await,
         "review" => review::review(ctx, args).await,
@@ -162,12 +181,19 @@ fn state_command(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<String,
     let live = ctx.live;
     let core = ctx.registry.builtin_names();
     Some(match name {
-        "skills" => pmt_skills::activation::run(&live.skills, args, &core).map(|reply| {
-            if reply.rebuild_now {
-                live.agent.rebuild_prompt(Rebuild::Now("skills".to_owned()));
+        "skills" => {
+            if let Some(reply) =
+                crate::skills_cmd::slash::run(ctx.scope, ctx.factory.launch(), args)
+            {
+                return Some(reply);
             }
-            reply.text
-        }),
+            pmt_skills::activation::run(&live.skills, args, &core).map(|reply| {
+                if reply.rebuild_now {
+                    live.agent.rebuild_prompt(Rebuild::Now("skills".to_owned()));
+                }
+                reply.text
+            })
+        }
         "memory" => pmt_memory::slash::run(
             &ctx.factory.store,
             &ctx.scope.config().memory,

@@ -15,6 +15,10 @@ Every key `<PROMETHEUS_HOME>/daemon.toml` accepts: machine-wide settings shared 
 | `daemon.rpc.max_frame_bytes` | integer | `16777216` | ≥ 1024 | `restart` | Largest accepted frame; a larger one closes the connection with 4413. |
 | `daemon.rpc.request_timeout_secs` | integer | `600` | ≥ 1 | `restart` | Deadline of server-to-client requests other than approvals (which use the profile's `approvals.timeout_secs`). |
 | `daemon.rpc.workers` | integer | `8` | 1 to 256 | `restart` | Requests run concurrently per connection; `rpc.ping` never waits for one. |
+| `daemon.systemd_watchdog_secs` | integer | `0` | ≥ 0 | `restart` | Linux: `> 0` makes the generated systemd unit `Type=notify` with this `WatchdogSec`; the daemon notifies only while its watchdog probes succeed. `0` (default): no systemd watchdog. |
+| `daemon.watchdog.enabled` | boolean | `true` | any | `restart` | Run the watchdog. |
+| `daemon.watchdog.max_strikes` | integer | `3` | 1 to 100 | `restart` | Consecutive strikes before the dump and exit. |
+| `daemon.watchdog.probe_interval_secs` | integer | `30` | 1 to 3600 | `restart` | Seconds between probes; a probe not answered within this is a strike. |
 | `gateway.http.listen` | string | `"127.0.0.1:8644"` | any | `restart` | Where every webhook-style adapter is served, at `/p/<profile>/<platform>/`. |
 | `gateway.http.public` | boolean | `false` | any | `restart` | Allow a non-loopback `listen` address (logged at WARN on every start). |
 | `gateway.limits.max_concurrent_sessions` | integer | `0` | ≥ 0 | `restart` | Sessions with a running turn at once, across every profile and surface; further turns wait first in, first out ("Waiting for a free slot"). `0`: unbounded. |

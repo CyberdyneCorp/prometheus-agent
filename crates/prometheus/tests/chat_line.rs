@@ -112,7 +112,7 @@ fn help_prefix_and_argument_case() {
     p.expect("/compress").unwrap();
     p.expect("Exit:").unwrap();
     prompt(&mut p);
-    p.send_line("/comp").unwrap();
+    p.send_line("/compr").unwrap();
     p.expect("compress: ").unwrap();
     prompt(&mut p);
     p.send_line("/TITLE My Project").unwrap();

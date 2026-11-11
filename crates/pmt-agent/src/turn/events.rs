@@ -4,6 +4,7 @@
 
 use std::sync::{Arc, Mutex, PoisonError};
 
+use pmt_obs::otel::SessionTrace;
 use pmt_obs::trajectory::events::Event;
 use pmt_obs::trajectory::writer::{Emit, TrajectoryWriter};
 
@@ -72,6 +73,36 @@ impl EventSink for Recorded {
             .push(emit);
         Box::pin(async { Ok(()) })
     }
+}
+
+/// Shows every event to the session's trace (spans and event metrics)
+/// before `inner` records it; `session.start` gets the trace id.
+pub struct Traced {
+    inner: Arc<dyn EventSink>,
+    trace: Arc<SessionTrace>,
+}
+
+impl Traced {
+    /// `inner`, traced by `trace`.
+    #[must_use]
+    pub fn new(inner: Arc<dyn EventSink>, trace: Arc<SessionTrace>) -> Self {
+        Self { inner, trace }
+    }
+}
+
+impl EventSink for Traced {
+    fn emit(&self, mut emit: Emit) -> BoxFuture<'_, Result<(), pmt_core::Error>> {
+        stamp(&self.trace, &mut emit);
+        self.inner.emit(emit)
+    }
+}
+
+/// Shows `emit` to `trace`, recording the trace id on `session.start`.
+pub fn stamp(trace: &SessionTrace, emit: &mut Emit) {
+    if let Event::SessionStart(start) = &mut emit.event {
+        start.trace_id.get_or_insert_with(|| trace.trace_hex());
+    }
+    trace.observe(emit);
 }
 
 /// Emits `event` inside `turn` and logs a subscriber failure.

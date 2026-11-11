@@ -136,7 +136,10 @@ pub fn config_changed(scope: &ProfileScope) {
     let manager = manager(scope);
     for server in manager.servers() {
         if !before.iter().any(|b| Arc::ptr_eq(b, server)) {
-            pmt_mcp::runtime::handle().spawn(connect_with_cooldown(Arc::downgrade(server)));
+            pmt_core::spawn::spawn_on(
+                &pmt_mcp::runtime::handle(),
+                connect_with_cooldown(Arc::downgrade(server)),
+            );
         }
     }
 }

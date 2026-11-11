@@ -57,7 +57,7 @@ fn send(shared: &Shared, key: &(String, String), slot: &Arc<Slot>, commands: Vec
     shared.menus.record(&key.0, &commands);
     let adapter = Arc::clone(&slot.adapter);
     let platform = key.1.clone();
-    tokio::spawn(
+    pmt_core::spawn::spawn(
         async move {
             if let Err(err) = adapter.register_commands(&commands).await {
                 tracing::warn!(
@@ -84,7 +84,7 @@ pub(crate) fn refresh(shared: &Arc<Shared>) {
 /// commands changed.
 pub(crate) fn spawn(shared: &Arc<Shared>) {
     let span = tracing::info_span!("command_menus");
-    tokio::spawn(watch(Arc::clone(shared)).instrument(span));
+    pmt_core::spawn::spawn(watch(Arc::clone(shared)).instrument(span));
 }
 
 async fn watch(shared: Arc<Shared>) {
@@ -99,8 +99,7 @@ async fn watch(shared: Arc<Shared>) {
             // The registry is read from disk (skills, config).
             let agents = Arc::clone(&shared.agents);
             let name = profile.clone();
-            let Ok(commands) =
-                tokio::task::spawn_blocking(move || agents.menu_commands(&name)).await
+            let Ok(commands) = pmt_core::spawn::blocking(move || agents.menu_commands(&name)).await
             else {
                 continue;
             };

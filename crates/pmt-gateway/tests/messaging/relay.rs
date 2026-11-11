@@ -39,7 +39,7 @@ impl Connector {
         let authorization = Arc::new(Mutex::new(None));
         let (inbound, mut pushed) = mpsc::unbounded_channel::<Value>();
         let (seen, auth) = (Arc::clone(&frames), Arc::clone(&authorization));
-        tokio::spawn(async move {
+        pmt_core::spawn::spawn(async move {
             let (tcp, _) = listener.accept().await.unwrap();
             #[allow(clippy::result_large_err)] // the handshake callback's fixed signature
             let header = |req: &Request, resp: Response| {

@@ -9,6 +9,7 @@ pub mod api_hooks;
 pub mod backend;
 pub mod browser;
 pub mod code;
+pub mod credentials;
 pub mod cron;
 pub mod delegation;
 pub mod documents;
@@ -39,6 +40,7 @@ pub mod sudo;
 pub mod summarize;
 mod tool_state;
 pub mod tools;
+mod trace;
 pub mod vision;
 
 use std::path::{Path, PathBuf};
@@ -47,9 +49,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use jiff::Timestamp;
 use pmt_agent::tools::clarify::{Clarifier, ClarifyAnswer, ClarifyRequest};
 use pmt_agent::tools::{AgentTools, SessionSearch};
-use pmt_agent::turn::{
-    Agent, AgentSetup, EventSink, NoEvents, PromptSetup, RefreshPrompt, SessionTools,
-};
+use pmt_agent::turn::{Agent, AgentSetup, EventSink, PromptSetup, RefreshPrompt, SessionTools};
 use pmt_config::grants::{GrantsFile, SessionGrants, Subject, baseline};
 use pmt_config::{ProfileScope, SharedScope};
 use pmt_core::capability::CapabilitySet;
@@ -61,7 +61,7 @@ use pmt_core::secret::Redactor;
 use pmt_memory::session::{Approver, MemorySession};
 use pmt_obs::trajectory::events::Event;
 use pmt_obs::trajectory::payload::{SessionEnd, SessionStart};
-use pmt_obs::trajectory::writer::{Emit, TrajectoryWriter};
+use pmt_obs::trajectory::writer::Emit;
 use pmt_skills::review::Nudge;
 use pmt_skills::secrets::SecretPrompt;
 use pmt_skills::session::{SessionSetup, SkillSessions, SkillsSession};
@@ -241,7 +241,7 @@ pub struct Live {
     /// read it at use.
     pub config: SharedScope,
     capabilities: CapabilitySet,
-    trajectory: Option<Arc<TrajectoryWriter>>,
+    recording: trace::Recording,
     /// The session's egress policy (`/egress`, `egress.set`).
     pub egress: crate::egress::Running,
     /// Its allowed hardening downgrades (banner marker, `security.downgrade`).
@@ -449,7 +449,7 @@ impl Factory {
             return;
         }
         let (store, scope) = (Arc::clone(&self.store), self.scope.clone());
-        tokio::task::spawn_blocking(move || {
+        pmt_core::spawn::blocking(move || {
             match pmt_obs::trajectory::retention::daily(&store, &scope) {
                 Ok(Some(swept)) => tracing::debug!(
                     purged = swept.purged.len(),
@@ -590,7 +590,7 @@ impl Factory {
         let tool_state = Box::pin(self.tool_state(id, built, ports)).await?;
         let tool_port = tool_state.tools();
         delegation.parent_is(&tool_port, &capabilities, &gate.gate);
-        let trajectory = self.trajectory(&session)?;
+        let recording = self.recording(&session, child)?;
         let mut notices = Vec::new();
         let (prompt, plugin_sections) = self
             .prompt_for(id, (&skills, &memory), &mut notices, child)
@@ -605,7 +605,7 @@ impl Factory {
             tools: &tool_port,
             tool_state: &tool_state,
             prompt,
-            trajectory: trajectory.as_ref(),
+            recording: &recording,
             environment: &environment,
             agent_tools: &agent_tools,
             delegation: &delegation,
@@ -641,7 +641,7 @@ impl Factory {
             config: current,
             record: Arc::clone(&self.record),
             capabilities,
-            trajectory,
+            recording,
             egress,
             downgrades,
             delegation: delegation.delegator(),
@@ -800,7 +800,7 @@ impl Factory {
                     reason: denial.reason.as_str().to_owned(),
                 },
             );
-            runtime.spawn(async move {
+            pmt_core::spawn::spawn_on(&runtime, async move {
                 let emit = pmt_obs::trajectory::writer::Emit::now(event);
                 if let Err(err) = sink.emit(emit).await {
                     tracing::debug!(error = %err, "egress.denied event not recorded");
@@ -813,17 +813,22 @@ impl Factory {
         }
     }
 
-    /// The trajectory writer of `session`, when trajectories are on.
-    fn trajectory(
+    /// The trajectory writer of `session` (when trajectories are on) and
+    /// its trace, under a scheduled run's `cron.run` span.
+    fn recording(
         &self,
         session: &pmt_store::Session,
-    ) -> Result<Option<Arc<TrajectoryWriter>>, Error> {
-        Ok(pmt_obs::trajectory::writer::open_for_session(
+        child: Option<&delegation::ChildSpec>,
+    ) -> Result<trace::Recording, Error> {
+        let trajectory = pmt_obs::trajectory::writer::open_for_session(
             &self.scope,
             &session.id.to_string(),
             &session.root_session_id.to_string(),
         )?
-        .map(Arc::new))
+        .map(Arc::new);
+        let parent = self.options.cron.as_ref().and_then(|run| run.trace);
+        let trace = trace::open(&self.scope_for(child), session, parent);
+        Ok(trace::Recording { trajectory, trace })
     }
 
     /// Attaches the session's execution environment (its terminal reports
@@ -874,6 +879,7 @@ impl Factory {
             processes: &processes,
             snapshots: snapshots::opener(&self.scope, &self.store, id),
             input_roots: input_roots(&self.scope, skills),
+            skills: Arc::clone(skills),
             automatic_trust: automatic_trust(session),
             cron_notepad: cron.and_then(|c| c.notepad.as_deref()),
             store: &self.store,
@@ -1223,19 +1229,6 @@ fn shows_cards(interactive: bool, surface: &pmt_tools::SessionSurface) -> bool {
 
 /// Announces each borrowed login's first use in the session (spec:
 /// model-providers, Borrowed CLI logins).
-/// Where a session's events go: its trajectory (when on) and its daemon
-/// clients (when attached).
-fn events_to(
-    trajectory: Option<Arc<TrajectoryWriter>>,
-    clients: Option<Arc<dyn EventSink>>,
-) -> Arc<dyn EventSink> {
-    let events = trajectory.map_or_else(|| Arc::new(NoEvents) as Arc<dyn EventSink>, |t| t as _);
-    match clients {
-        Some(clients) => Arc::new(progress::Both(events, clients)),
-        None => events,
-    }
-}
-
 fn borrowed_watch(notices: progress::Notices) -> pmt_agent::turn::model::CredentialWatch {
     let announced = Mutex::new(pmt_providers::auth::borrowed::Announcements::default());
     Arc::new(move |credential| {
@@ -1333,6 +1326,7 @@ impl Live {
             title: session.title.clone(),
             model: target.model.clone(),
             parent_session_id: session.parent_session_id.map(|p| p.to_string()),
+            trace_id: None, // stamped from the session's trace
         }))
         .await;
         for event in self.downgrades.events() {
@@ -1353,15 +1347,10 @@ impl Live {
 
     /// Emits `event` outside any turn.
     pub async fn emit(&self, event: Event) {
-        let Some(writer) = &self.trajectory else {
+        let mut emit = Emit::now(event);
+        pmt_agent::turn::stamp(&self.recording.trace, &mut emit);
+        let Some(writer) = &self.recording.trajectory else {
             return;
-        };
-        let emit = Emit {
-            ts: Timestamp::now(),
-            turn_id: None,
-            span_id: pmt_obs::trajectory::new_span_id(),
-            parent_span_id: None,
-            event,
         };
         if let Err(err) = writer.emit(emit).await {
             tracing::debug!(error = %err, "trajectory event dropped");
@@ -1378,7 +1367,7 @@ impl Live {
         // Everything else the session holds (its agent, tools, delegation)
         // may reach the writer through its event sinks: it is dropped
         // first so the writer can be finished.
-        let trajectory = self.trajectory.clone();
+        let trajectory = self.recording.trajectory.clone();
         drop(self);
         if let Some(writer) = trajectory.and_then(|t| Arc::try_unwrap(t).ok())
             && let Err(err) = writer.finish()
@@ -1400,7 +1389,7 @@ impl Live {
         // Everything else the session holds (its agent, tools, delegation)
         // may reach the writer through its event sinks: it is dropped
         // first so the writer can be finished.
-        let trajectory = self.trajectory.clone();
+        let trajectory = self.recording.trajectory.clone();
         drop(self);
         if let Some(writer) = trajectory.and_then(|t| Arc::try_unwrap(t).ok())
             && let Err(err) = writer.finish()
@@ -1452,7 +1441,7 @@ impl Live {
     pub async fn sync_back(&self) -> Option<String> {
         let sync = self.place.sync()?;
         let budget = self.config.get().config().terminal.sync_back_max_bytes;
-        let done = tokio::task::spawn_blocking(move || sync.sync()).await;
+        let done = pmt_core::spawn::blocking(move || sync.sync()).await;
         Some(match done {
             Ok(Ok(report)) => {
                 let copied = format!("sync-back copied {} files", report.copied.len());

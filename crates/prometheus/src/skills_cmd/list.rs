@@ -4,6 +4,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use pmt_core::error::{Error, codes};
+use pmt_skills::bundled::Bundled;
 use pmt_skills::catalog::{Missing, Provenance};
 use pmt_skills::layout::{self, SKILL_FILE};
 use pmt_skills::lint::{self, Finding, LintContext};
@@ -182,6 +183,7 @@ pub(super) fn show(env: &Env, name: &str) -> Result<u8, Error> {
         .unwrap_or_default();
     let status = status(env.scope.config(), &skill);
     let files = skill.dir.files();
+    let origin = origin(env, &skill.name);
     if env.json {
         return document(
             "skills show",
@@ -189,7 +191,7 @@ pub(super) fn show(env: &Env, name: &str) -> Result<u8, Error> {
                 "name": skill.name, "description": skill.description, "category": skill.category,
                 "source": skill.tier.as_str(), "path": skill.dir.display(),
                 "provenance": provenance(skill.provenance), "status": status,
-                "files": files, "content": text,
+                "files": files, "content": text, "origin": origin,
             }),
         );
     }
@@ -205,9 +207,42 @@ pub(super) fn show(env: &Env, name: &str) -> Result<u8, Error> {
     );
     let _ = writeln!(out, "provenance: {}", provenance(skill.provenance));
     let _ = writeln!(out, "status: {status}");
+    if let Some(origin) = &origin {
+        for key in [
+            "source",
+            "resolved_ref",
+            "content_digest",
+            "signature",
+            "trust",
+            "installed_at",
+        ] {
+            if let Some(value) = origin.get(key).and_then(|v| v.as_str()) {
+                let label = if key == "source" {
+                    "installed from"
+                } else {
+                    key
+                };
+                let _ = writeln!(out, "{label}: {value}");
+            }
+        }
+    }
     let _ = writeln!(out, "files: {}", files.join(", "));
     let _ = write!(out, "\n{text}");
     print_raw(&out)
+}
+
+/// The lockfile record of `name` (where a hub or ejected skill came
+/// from: source, ref, digest, signer, trust).
+fn origin(env: &Env, name: &str) -> Option<serde_json::Value> {
+    let lock =
+        pmt_skills::lockfile::LockFile::in_dir(&pmt_skills::roots::profile_skills(env.scope.dir()));
+    let entry = lock.read().entry(name).ok().flatten().cloned()?;
+    let mut value = serde_json::to_value(&entry).ok()?;
+    if let Some(trust) = entry.trust {
+        value["trust"] =
+            serde_json::Value::String(pmt_skillhub::sources::trust_text(trust).to_owned());
+    }
+    Some(value)
 }
 
 /// One linted skill.
@@ -244,13 +279,47 @@ fn skill_dirs(paths: &[PathBuf]) -> Result<Vec<PathBuf>, Error> {
     Ok(dirs)
 }
 
+/// Lints the skills found below `paths`.
+fn lint_paths(
+    paths: &[PathBuf],
+    lint_one: &dyn Fn(&str, &str) -> Vec<Finding>,
+) -> Result<Vec<Linted>, Error> {
+    let mut results = Vec::new();
+    for dir in skill_dirs(paths)? {
+        let file = dir.join(SKILL_FILE);
+        let text = std::fs::read_to_string(&file)
+            .map_err(|e| Error::new(&codes::SKILL_IO, format!("{}: {e}", file.display())))?;
+        let dir_name = dir
+            .canonicalize()
+            .unwrap_or_else(|_| dir.clone())
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        results.push(Linted {
+            path: file.display().to_string(),
+            findings: lint_one(&text, &dir_name),
+        });
+    }
+    Ok(results)
+}
+
+/// The official catalog's skill names: a related skill resolves when the
+/// profile has it or the catalog offers it.
+fn official_names() -> std::collections::BTreeSet<String> {
+    pmt_skills::official::skills(&Bundled::official())
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect()
+}
+
 /// `prometheus skills lint [<path>...] [--strict]`; without paths, every
 /// skill of the profile (bundled included).
 pub(super) fn lint(env: &Env, paths: &[PathBuf], strict: bool) -> Result<u8, Error> {
     let catalog = env.catalog();
     let chars =
         usize::try_from(env.scope.config().skills.index_description_chars).unwrap_or(usize::MAX);
-    let resolves = |n: &str| catalog.lookup(n).is_ok();
+    let official = official_names();
+    let resolves = |n: &str| catalog.lookup(n).is_ok() || official.contains(n);
     let lint_one = |text: &str, dir_name: &str| {
         lint::lint(
             text,
@@ -271,21 +340,7 @@ pub(super) fn lint(env: &Env, paths: &[PathBuf], strict: bool) -> Result<u8, Err
             });
         }
     } else {
-        for dir in skill_dirs(paths)? {
-            let file = dir.join(SKILL_FILE);
-            let text = std::fs::read_to_string(&file)
-                .map_err(|e| Error::new(&codes::SKILL_IO, format!("{}: {e}", file.display())))?;
-            let dir_name = dir
-                .canonicalize()
-                .unwrap_or_else(|_| dir.clone())
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default();
-            results.push(Linted {
-                path: file.display().to_string(),
-                findings: lint_one(&text, &dir_name),
-            });
-        }
+        results = lint_paths(paths, &lint_one)?;
     }
     let found = results.iter().any(|r| !r.findings.is_empty());
     let code = u8::from(strict && found);

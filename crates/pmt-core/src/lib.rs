@@ -19,6 +19,7 @@ pub mod human;
 pub mod id;
 pub mod inventory;
 pub mod nofile;
+pub mod os_threads;
 pub mod panic;
 pub mod pause;
 pub mod pii;
@@ -29,6 +30,7 @@ pub mod registry;
 pub mod runtime;
 pub mod secret;
 pub mod secret_paths;
+pub mod spawn;
 pub mod subagent_tree;
 pub mod tasks;
 

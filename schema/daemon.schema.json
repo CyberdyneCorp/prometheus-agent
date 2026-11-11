@@ -83,6 +83,22 @@
             "workers": 8
           },
           "description": "The local client protocol listener."
+        },
+        "systemd_watchdog_secs": {
+          "default": 0,
+          "description": "Linux: `> 0` makes the generated systemd unit `Type=notify` with\nthis `WatchdogSec`; the daemon notifies only while its watchdog\nprobes succeed. `0` (default): no systemd watchdog.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "watchdog": {
+          "$ref": "#/$defs/WatchdogConfig",
+          "default": {
+            "enabled": true,
+            "max_strikes": 3,
+            "probe_interval_secs": 30
+          },
+          "description": "The runtime liveness watchdog (spec: observability, Runtime liveness\nwatchdog and task dump)."
         }
       },
       "type": "object"
@@ -440,6 +456,34 @@
         }
       },
       "type": "object"
+    },
+    "WatchdogConfig": {
+      "additionalProperties": false,
+      "description": "`[daemon.watchdog]`: a thread outside the async runtime probes it; a\nruntime that misses `max_strikes` probes in a row is dumped and the\ndaemon exits 75 so its supervisor restarts it.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Run the watchdog.",
+          "type": "boolean"
+        },
+        "max_strikes": {
+          "default": 3,
+          "description": "Consecutive strikes before the dump and exit.",
+          "format": "uint32",
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "probe_interval_secs": {
+          "default": 30,
+          "description": "Seconds between probes; a probe not answered within this is a\nstrike.",
+          "format": "uint64",
+          "maximum": 3600,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -457,6 +501,12 @@
           "max_frame_bytes": 16777216,
           "request_timeout_secs": 600,
           "workers": 8
+        },
+        "systemd_watchdog_secs": 0,
+        "watchdog": {
+          "enabled": true,
+          "max_strikes": 3,
+          "probe_interval_secs": 30
         }
       },
       "description": "The gateway daemon: its client listener and lifecycle."

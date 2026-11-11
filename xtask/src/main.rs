@@ -107,6 +107,11 @@ enum Command {
         /// comparing with it; the absolute budgets still apply.
         #[arg(long)]
         update_baseline: bool,
+        /// Compare with this release binary (the base branch's), measured
+        /// in rounds alternating with the head, instead of the baseline
+        /// file; the absolute budgets still apply.
+        #[arg(long, conflicts_with = "update_baseline")]
+        base_binary: Option<PathBuf>,
     },
     /// Reject crate versions locked since BASE that were published less
     /// than `release_age_days` (deps-policy.toml) before they were locked.
@@ -151,10 +156,17 @@ fn main() -> ExitCode {
             runs,
             baseline,
             update_baseline,
+            base_binary,
         } => {
             let root = repo_root();
             let baseline = baseline.unwrap_or_else(|| root.join("perf/baseline.json"));
-            perf::run(&root, runs.into(), &baseline, update_baseline)
+            perf::run(
+                &root,
+                runs.into(),
+                &baseline,
+                update_baseline,
+                base_binary.as_deref(),
+            )
         }
         Command::DepsAge { base } => deps_age::run(&repo_root(), &base),
         Command::Scenarios => scenarios::run(&repo_root()),

@@ -95,19 +95,23 @@ pub async fn facts(media: Option<&MediaSession>, mic: &dyn Microphone) -> Facts 
     }
 }
 
-/// Speech-to-text through the session's provider.
+/// Speech-to-text through the session's provider; metered calls are
+/// billed to `session` (the conversation the words go to).
 pub struct Ears {
     media: Arc<MediaSession>,
     dir: PathBuf,
+    session: String,
 }
 
 impl Ears {
-    /// Transcribes with `media`, writing recordings under `profile`.
+    /// Transcribes with `media` for `session`, writing recordings under
+    /// `profile`.
     #[must_use]
-    pub fn new(media: Arc<MediaSession>, profile: &Path) -> Self {
+    pub fn new(media: Arc<MediaSession>, profile: &Path, session: String) -> Self {
         Self {
             media,
             dir: voice_dir(profile),
+            session,
         }
     }
 }
@@ -130,22 +134,32 @@ impl Transcriber for Ears {
             write_private(&path, &pcm::wav(samples, pcm::RATE)).map_err(|e| e.to_string())?;
             let heard = self.media.transcribe(&path).await;
             let _ = std::fs::remove_file(&path);
-            heard.map(|transcript| transcript.text)
+            heard.map(|t| {
+                let served = (
+                    t.provider.as_str(),
+                    t.model.as_str(),
+                    t.billing_source.as_str(),
+                );
+                self.media.bill(&self.session, "transcribe", served);
+                t.text
+            })
         })
     }
 }
 
 /// Text-to-speech through the session's provider: streamed PCM when it
-/// streams, else one file per sentence.
+/// streams, else one file per sentence; metered calls are billed to
+/// `session`.
 pub struct Voice {
     media: Arc<MediaSession>,
+    session: String,
 }
 
 impl Voice {
-    /// Speaks with `media`.
+    /// Speaks with `media` for `session`.
     #[must_use]
-    pub fn new(media: Arc<MediaSession>) -> Self {
-        Self { media }
+    pub fn new(media: Arc<MediaSession>, session: String) -> Self {
+        Self { media, session }
     }
 }
 
@@ -154,9 +168,25 @@ impl Synth for Voice {
         Box::pin(async move {
             let options = Speak::default();
             if let Some(streamed) = self.media.speak_streaming(sentence, &options).await {
-                return streamed.map(|(rate, chunks)| Sound::Stream { rate, chunks });
+                let streamed = streamed?;
+                if let Ok(voice) = tts::resolve(self.media.setup()) {
+                    let served = (
+                        voice.provider.as_str(),
+                        voice.model.as_str(),
+                        voice.access.billing_source.as_str(),
+                    );
+                    self.media.bill(&self.session, "text_to_speech", served);
+                }
+                let (rate, chunks) = streamed;
+                return Ok(Sound::Stream { rate, chunks });
             }
             let spoken = self.media.synthesize(sentence, &options, None).await?;
+            let served = (
+                spoken.provider.as_str(),
+                spoken.model.as_str(),
+                spoken.billing_source.as_str(),
+            );
+            self.media.bill(&self.session, "text_to_speech", served);
             Ok(Sound::Scratch(spoken.path))
         })
     }
@@ -184,11 +214,11 @@ pub fn media(scope: &ProfileScope, surface: &str, cwd: &Path) -> Option<Arc<Medi
     surface.clone_into(&mut setup.surface);
     setup.workspace = cwd.to_path_buf();
     setup.runner = Arc::new(media::ProfileRunner(scope.clone()));
+    setup.usage = pmt_store::Store::open(scope)
+        .ok()
+        .map(|store| media::profile_usage_sink(Arc::new(store)));
     setup.plugins = crate::chat::session::media_plugins::PluginMedia::shared(
-        crate::plugins_host::for_session(scope, cwd)
-            .current()
-            .providers
-            .clone(),
+        &crate::plugins_host::for_session(scope, cwd).current(),
         pmt_plugins::host::CallInfo {
             session_id: None,
             surface: surface.to_owned(),
@@ -258,22 +288,27 @@ impl VoiceClient {
         self.mode.run(command, facts.as_ref(), &config)
     }
 
-    /// What a conversation runs with, `meter` showing the input level.
+    /// What a conversation with `session` runs with, `meter` showing the
+    /// input level.
     ///
     /// # Errors
     ///
     /// The profile cannot build its speech providers.
-    pub async fn kit(&mut self, meter: Meter) -> Result<Kit, String> {
+    pub async fn kit(&mut self, meter: Meter, session: &str) -> Result<Kit, String> {
         let (audio, media) = self.parts().await;
         let media = media.ok_or("the profile cannot reach its speech providers")?;
         Ok(Kit {
             mic: audio.mic,
-            ears: Arc::new(Ears::new(Arc::clone(&media), self.scope.dir())),
+            ears: Arc::new(Ears::new(
+                Arc::clone(&media),
+                self.scope.dir(),
+                session.to_owned(),
+            )),
             player: audio.player,
             voice: self
                 .mode
                 .spoken
-                .then(|| Arc::new(Voice::new(media)) as Arc<dyn Synth>),
+                .then(|| Arc::new(Voice::new(media, session.to_owned())) as Arc<dyn Synth>),
             meter,
             config: self.scope.config().voice.clone(),
         })

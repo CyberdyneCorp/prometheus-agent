@@ -168,12 +168,12 @@ async fn decide(
         return limited;
     }
     let mut inbound = inbound;
-    let voice = match shared.agents.scope(owner) {
+    let prepared = match shared.agents.scope(owner) {
         Some(scope) => inbound::prepare(shared, owner, platform, &scope, &mut inbound).await,
-        None => false,
+        None => inbound::Prepared::default(),
     };
     let (routing, key) = super::profile_routes::routing(shared, owner, platform, &inbound, gateway);
-    lane::input(shared, &key, routing, inbound, voice)
+    lane::input(shared, &key, routing, inbound, prepared)
 }
 
 /// The routing of an admitted event and its conversation key.

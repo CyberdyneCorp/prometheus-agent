@@ -36,6 +36,7 @@ cargo xtask perf                          # check against perf/baseline.json
 cargo xtask perf --runs 100               # more samples
 cargo xtask perf --update-baseline        # record this platform's entry (budgets still apply)
 cargo xtask perf --baseline PATH          # compare with another baseline file
+cargo xtask perf --base-binary PATH       # compare with another release binary, measured alternately
 ```
 
 `scripts/check --perf [ARGS...]` runs exactly `cargo xtask perf [ARGS...]`.
@@ -53,16 +54,20 @@ kind of machine:
 
 1. On every push to `main`, run `scripts/check --perf --update-baseline --baseline target/perf-main.json`,
    which checks the absolute budgets.
-2. On every pull request, check out the base branch in a worktree, record
-   its measurements with `scripts/check --perf --update-baseline --baseline target/perf-base.json`,
-   then run `scripts/check --perf --baseline target/perf-base.json` on the
-   head; a non-zero exit fails the job. Both measurements come from the same
-   machine minutes apart. A baseline recorded by another run lands on another
-   runner: the chat prompt median of one M2 branch moved between 22.6 and
-   32.5 ms across its runs, so comparing across runners failed the 15% gate
-   at random. Stacked pull requests compare with the branch they target.
-   Without a base branch (`workflow_dispatch`) the checked-in
-   `perf/baseline.json` applies.
+2. On every pull request, check out the base branch in a worktree, build
+   its release binary, then run `scripts/check --perf --base-binary PATH`
+   on the head: the head and base binaries are measured in four rounds
+   that alternate between them (`xtask/src/perf/pair.rs`), and the head is
+   compared with the base's numbers from those rounds; a non-zero exit
+   fails the job. Measuring the base in one step and the head after its
+   ~20-minute build let the runner's drift through: one run measured the
+   head's `--version` 29% slower than the base's on untouched code, and
+   its chat prompt median crossed the gate. A baseline recorded by another
+   run lands on another runner: the chat prompt median of one M2 branch
+   moved between 22.6 and 32.5 ms across its runs, so comparing across
+   runners failed the 15% gate at random. Stacked pull requests compare
+   with the branch they target. Without a base branch (`workflow_dispatch`)
+   the checked-in `perf/baseline.json` applies.
 3. A pull request whose growth is deliberate re-baselines in the open: it
    commits the reference runner's measurements (the `perf (linux-x86_64):`
    line of its own perf job) to `perf/reference.json`, and while the pull

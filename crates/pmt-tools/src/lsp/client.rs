@@ -86,7 +86,7 @@ impl Client {
         let stdin = child.stdin.take().ok_or("no stdin")?;
         let stdout = child.stdout.take().ok_or("no stdout")?;
         if let Some(stderr) = child.stderr.take() {
-            tokio::spawn(log_stderr(id.to_owned(), stderr));
+            pmt_core::spawn::spawn(log_stderr(id.to_owned(), stderr));
         }
         let (seq_tx, seq) = watch::channel(0);
         let pending = Pending::default();
@@ -113,7 +113,7 @@ impl Client {
             settings: settings.clone(),
             folders: json!([{"uri": protocol::uri(root), "name": folder_name(root)}]),
         };
-        tokio::spawn(reader.run(BufReader::new(stdout)));
+        pmt_core::spawn::spawn(reader.run(BufReader::new(stdout)));
         client
             .initialize(root, initialization_options, settings, timeout)
             .await
