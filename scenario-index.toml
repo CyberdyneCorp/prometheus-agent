@@ -3815,6 +3815,7 @@ capabilities = [
 
 [cli."Exit with delete and profile archive slash forms"]
 "Exit and delete" = ["crates/prometheus/tests/cli_upgrades.rs::exit_with_delete_removes_the_session", "crates/prometheus/tests/cli_upgrades.rs::exit_with_delete_removes_a_daemon_session", "crates/prometheus/tests/cli_upgrades.rs::export_and_import_slash_forms_copy_a_profile"]
+"Exit and delete asks first" = ["crates/prometheus/tests/cli_upgrades.rs::exit_with_delete_removes_the_session", "crates/prometheus/tests/cli_upgrades.rs::exit_with_delete_asks_first_and_always_stops_asking"]
 
 [cli."Theme commands and branding keys"]
 "Custom prompt symbol" = ["crates/prometheus/tests/themes_cli.rs::a_custom_prompt_symbol_leads_the_repl_prompt", "crates/prometheus/tests/themes_cli.rs::themes_set_branding_keys_in_a_custom_theme_that_extends_the_active_one"]
@@ -3822,6 +3823,8 @@ capabilities = [
 [cli."Setup wizard modes"]
 "Quick setup asks only unset values" = ["crates/prometheus/tests/setup_modes.rs::quick_setup_asks_only_for_unset_values"]
 "Adapter fields from schema" = ["crates/prometheus/tests/setup_modes.rs::gateway_setup_asks_every_schema_field_and_stores_the_token_as_a_secret", "crates/prometheus/src/setup_cmd/gateway.rs::telegram_options_become_scalar_fields"]
+"Portal setup shows the change before writing" = ["crates/prometheus/tests/setup_modes.rs::portal_setup_shows_the_diff_and_routes_model_and_tools_to_nous", "crates/prometheus/tests/setup_modes.rs::declining_the_portal_change_writes_nothing"]
+"First setup offers an import" = ["crates/prometheus/tests/setup_modes.rs::the_first_setup_offers_to_import_a_detected_agent_home"]
 
 [cli."Windows console behaviour"]
 "Code page restored" = { tests = ["crates/prometheus/tests/cli_windows.rs::the_console_code_page_is_restored_when_prometheus_exits", "crates/pmt-sandbox/src/console.rs::code_pages_are_utf8_while_enabled_and_restored_after"], note = "Windows only (CI's Windows jobs): a new console set to code page 437 runs prometheus, then chcp reports 437" }

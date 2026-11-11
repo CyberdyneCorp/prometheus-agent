@@ -98,7 +98,7 @@ worktree_unpushed = "{count} nicht gepushte(r) Commit(s)"
 worktree_dirty_unpushed = "nicht committete Änderungen und {count} nicht gepushte(r) Commit(s)"
 worktree_question = "Worktree {path} hat {what}: [k] behalten (Standard), [a] archivieren und entfernen, [r] entfernen und verwerfen "
 session_deleted = "Sitzung {id} gelöscht"
-confirm_exit_delete = "/exit --delete löscht diese Sitzung endgültig; gib /exit --delete --yes ein, um es zu bestätigen"
+exit_delete_cancelled = "abgebrochen; die Sitzung bleibt erhalten"
 
 [gateway]
 stopped = "Gestoppt. Du kannst diese Sitzung fortsetzen."

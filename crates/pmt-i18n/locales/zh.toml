@@ -98,7 +98,7 @@ worktree_unpushed = "{count} 个未推送的提交"
 worktree_dirty_unpushed = "未提交的更改和 {count} 个未推送的提交"
 worktree_question = "worktree {path} 有{what}：[k] 保留（默认）、[a] 归档并移除、[r] 移除并丢弃 "
 session_deleted = "会话 {id} 已删除"
-confirm_exit_delete = "/exit --delete 会永久删除此会话；输入 /exit --delete --yes 以确认"
+exit_delete_cancelled = "已取消；会话保留"
 
 [gateway]
 stopped = "已停止。你可以继续此会话。"

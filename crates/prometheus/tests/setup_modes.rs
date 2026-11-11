@@ -1,6 +1,7 @@
 //! `prometheus setup` modes of M2, scripted on a temporary home (spec: cli,
 //! Setup wizard modes): `--quick`, the `tts` and `agent` sections,
-//! `--reset`, and `setup gateway <platform>` from the adapter's schema.
+//! `--reset`, `--portal` against a fake Nous Portal, the first-run import
+//! offer, and `setup gateway <platform>` from the adapter's schema.
 //! The wizard's questions are compared with snapshots.
 
 mod common;
@@ -163,4 +164,153 @@ fn gateway_setup_asks_every_schema_field_and_stores_the_token_as_a_secret() {
     // An unknown platform is refused.
     let out = run(home.path(), &["setup", "gateway", "carrier-pigeon"]);
     assert_eq!(out.status.code(), Some(2), "{}", stderr(&out));
+}
+
+/// A fake Nous Portal sign-in (device code, then tokens) and the profile
+/// config pointing the `nous` sign-in at it. The server lives as long as
+/// the returned value.
+async fn fake_portal(home: &Path) -> wiremock::MockServer {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/device"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "device_code": "dc-portal", "user_code": "NOUS-SETUP",
+            "verification_uri": "https://portal.example/device", "interval": 0, "expires_in": 600
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "access_token": "portal-access", "refresh_token": "portal-refresh-0123456789",
+            "expires_in": 3600
+        })))
+        .mount(&server)
+        .await;
+    common::append_config(
+        home,
+        &format!(
+            "[providers.nous.oauth]\ntoken_url = \"{0}/token\"\n\
+             device_authorization_url = \"{0}/device\"\nallowed_hosts = [\"127.0.0.1\"]\n",
+            server.uri()
+        ),
+    );
+    server
+}
+
+/// The keys `setup --portal` writes, all at their portal values.
+fn assert_portal_config(home: &Path) {
+    let text = config(home);
+    for line in [
+        "provider = \"nous\"",
+        "default = \"Hermes-4-405B\"",
+        "search_backend = \"nous\"",
+        "extract_backend = \"nous\"",
+    ] {
+        assert!(text.contains(line), "{line} missing:\n{text}");
+    }
+    for key in ["image_gen.provider", "tts.provider"] {
+        let got = ok(&run(home, &["config", "get", key]));
+        assert_eq!(got.trim(), "nous", "{key}");
+    }
+}
+
+/// `setup --portal` signs in, shows the change (`key: old -> new`) and
+/// writes it: `nous` with its default model as the main route, and web
+/// search, web extract, image and speech through the tool gateway. A
+/// second run finds nothing to change.
+#[tokio::test(flavor = "multi_thread")]
+async fn portal_setup_shows_the_diff_and_routes_model_and_tools_to_nous() {
+    let home = configured_home();
+    ok(&run(
+        home.path(),
+        &["config", "set", "tts.provider", "edge"],
+    ));
+    let _portal = fake_portal(home.path()).await;
+    let out = run(home.path(), &["setup", "--portal"]);
+    assert_eq!(out.status.code(), Some(0), "{}", stderr(&out));
+    let shown = stderr(&out);
+    assert!(
+        shown.contains("NOUS-SETUP"),
+        "the device code is shown:\n{shown}"
+    );
+    let diff = &shown[shown.find("config.toml changes:").expect(&shown)..];
+    for line in [
+        "  model.provider: mock -> nous",
+        "  model.default: mock -> Hermes-4-405B",
+        "  tts.provider: edge -> nous",
+    ] {
+        assert!(diff.contains(line), "{line} not in the diff:\n{diff}");
+    }
+    snapshot("setup-portal.txt", diff);
+    assert_portal_config(home.path());
+    let again = run(home.path(), &["setup", "--portal"]);
+    assert_eq!(again.status.code(), Some(0), "{}", stderr(&again));
+    assert!(
+        stderr(&again).contains("nothing to change"),
+        "{}",
+        stderr(&again)
+    );
+}
+
+/// Declining the shown change on a terminal writes nothing (exit 1).
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn declining_the_portal_change_writes_nothing() {
+    use expectrl::{Eof, Expect as _};
+    let home = configured_home();
+    let _portal = fake_portal(home.path()).await;
+    let before = config(home.path());
+    let mut p = common::pty::spawn(home.path(), &["setup", "--portal"]);
+    p.expect("model.provider: mock -> nous").unwrap();
+    p.expect("Write these changes? [y/N]").unwrap();
+    p.send_line("n").unwrap();
+    p.expect("nothing written").unwrap();
+    p.expect(Eof).unwrap();
+    let status = p.get_process_mut().wait().unwrap();
+    assert!(format!("{status:?}").ends_with(", 1)"), "{status:?}");
+    assert_eq!(config(home.path()), before, "config.toml is untouched");
+}
+
+/// The first full `setup` of a profile offers to import each agent home
+/// it finds; a `y` runs `prometheus migrate` into the profile, and the
+/// offer is not made again on the next `setup`.
+#[test]
+fn the_first_setup_offers_to_import_a_detected_agent_home() {
+    let home = temp_home();
+    let user = common::user_home(home.path());
+    let hermes = common::hermes::Hermes::new(&user.join(".hermes"));
+    hermes.write("default", "SOUL.md", "You are calm and precise.\n");
+    hermes.write("default", "memories/MEMORY.md", "prefers rust\n");
+    let claude = user.join(".claude");
+    std::fs::create_dir_all(&claude).unwrap();
+    std::fs::write(claude.join("CLAUDE.md"), "# Style\n\nUse tabs.\n").unwrap();
+    // Hermes: yes; Claude Code: no; Enter for every wizard question.
+    let answers = format!("y\nn\n{}", "\n".repeat(40));
+    let out = run_with_stdin(home.path(), &["setup"], &answers);
+    assert_eq!(out.status.code(), Some(0), "{}", stderr(&out));
+    let asked = stderr(&out);
+    assert!(asked.contains("Import from Hermes ("), "{asked}");
+    assert!(asked.contains("Import from Claude Code ("), "{asked}");
+    assert!(!asked.contains("did not finish"), "{asked}");
+    let soul = std::fs::read_to_string(home.path().join("profiles/default/SOUL.md")).unwrap();
+    assert_eq!(
+        soul, "You are calm and precise.\n",
+        "Hermes' identity imported"
+    );
+    let memory = ok(&run(home.path(), &["memory", "list"]));
+    assert!(memory.contains("prefers rust"), "{memory}");
+    assert!(
+        !memory.contains("Use tabs"),
+        "the declined Claude Code home is not imported: {memory}"
+    );
+    let again = run_with_stdin(home.path(), &["setup"], &"\n".repeat(40));
+    assert_eq!(again.status.code(), Some(0), "{}", stderr(&again));
+    assert!(
+        !stderr(&again).contains("Import from"),
+        "asked once per profile: {}",
+        stderr(&again)
+    );
 }

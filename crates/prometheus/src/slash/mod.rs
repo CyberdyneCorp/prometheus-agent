@@ -65,6 +65,28 @@ pub fn exit_deletes(args: &str) -> bool {
     args.split_whitespace().any(|w| w == "--delete")
 }
 
+/// What a confirmation line chose.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Confirmation {
+    /// Run it this time.
+    Once,
+    /// Run it and stop asking.
+    Always,
+    /// Leave everything as it is.
+    Cancel,
+}
+
+/// The choice of a destructive confirmation's answer line (anything else
+/// cancels).
+#[must_use]
+pub fn confirmation(line: &str) -> Confirmation {
+    match line.trim().to_lowercase().as_str() {
+        "o" | "once" | "y" | "yes" => Confirmation::Once,
+        "a" | "always" => Confirmation::Always,
+        _ => Confirmation::Cancel,
+    }
+}
+
 /// What a command typed while a turn runs does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BusyPolicy {

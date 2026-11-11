@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 #[serde(default, deny_unknown_fields)]
 #[schemars(extend("x-apply" = "live"))]
 pub struct CliConfig {
-    /// Ask `once / always / cancel` before `/clear`, `/new`, `/undo` and
-    /// `/rewind`.
+    /// Ask `once / always / cancel` before `/clear`, `/new`, `/undo`,
+    /// `/rewind` and `/exit --delete`.
     pub confirm_destructive: bool,
 }
 

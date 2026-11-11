@@ -1,0 +1,8 @@
+config.toml changes:
+  model.provider: mock -> nous
+  model.default: mock -> Hermes-4-405B
+  web.search_backend: unset -> nous
+  web.extract_backend: unset -> nous
+  image_gen.provider: unset -> nous
+  tts.provider: edge -> nous
+the main route and the web, image and speech tools now use the Nous Portal

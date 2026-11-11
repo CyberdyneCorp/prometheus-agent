@@ -163,9 +163,18 @@ fn importable(ctx: &Context<'_>, scope: &ProfileScope) -> Vec<(String, Vec<Strin
     let mut found = Vec::new();
     let local = ctx.launch.local_app_data().map(std::path::PathBuf::as_path);
     let hermes = pmt_migrate::default_hermes_home(user, local);
-    if hermes.is_dir() {
-        // `-p` names Hermes profiles there: the target is `--into-profile`.
-        let args = ["migrate", "from-hermes", "--into-profile", &profile];
+    if let Ok(source) = pmt_migrate::source::HermesHome::open(&hermes) {
+        // For `from-hermes` `-p` names the Hermes profile (its active one)
+        // and `--into-profile` the Prometheus profile it goes to.
+        let active = source.active_profile();
+        let args = [
+            "-p",
+            &active,
+            "migrate",
+            "from-hermes",
+            "--into-profile",
+            &profile,
+        ];
         found.push((
             format!("Hermes ({})", hermes.display()),
             args.map(str::to_owned).to_vec(),
@@ -198,10 +207,15 @@ pub(super) fn offer_import(ctx: &Context<'_>, wizard: &mut Wizard<'_>) -> Result
         }
         let exe = std::env::current_exe()
             .map_err(|e| Error::new(&codes::OUTPUT_IO, format!("cannot find this binary: {e}")))?;
+        // The answer above is the confirmation: `--yes` keeps the child
+        // from asking again, and a closed stdin keeps it off the answers
+        // the wizard still has to read.
         let status = std::process::Command::new(exe)
             .arg("--home")
             .arg(scope.home())
             .args(&args)
+            .arg("--yes")
+            .stdin(std::process::Stdio::null())
             .status()
             .map_err(|e| super::io_error(&e))?;
         if !status.success() {

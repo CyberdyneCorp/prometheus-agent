@@ -98,7 +98,7 @@ worktree_unpushed = "{count} gönderilmemiş commit"
 worktree_dirty_unpushed = "commit edilmemiş değişiklikler ve {count} gönderilmemiş commit"
 worktree_question = "{path} worktree'sinde {what} var: [k] tut (varsayılan), [a] arşivle ve kaldır, [r] kaldır ve at "
 session_deleted = "{id} oturumu silindi"
-confirm_exit_delete = "/exit --delete bu oturumu kalıcı olarak siler; onaylamak için /exit --delete --yes yazın"
+exit_delete_cancelled = "iptal edildi; oturum korunuyor"
 
 [gateway]
 stopped = "Durduruldu. Bu oturuma devam edebilirsiniz."

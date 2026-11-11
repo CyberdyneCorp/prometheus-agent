@@ -98,7 +98,7 @@ worktree_unpushed = "未プッシュのコミット {count} 件"
 worktree_dirty_unpushed = "未コミットの変更と未プッシュのコミット {count} 件"
 worktree_question = "worktree {path} に {what} があります: [k] 残す（既定）、[a] アーカイブして削除、[r] 削除して破棄 "
 session_deleted = "セッション {id} を削除しました"
-confirm_exit_delete = "/exit --delete はこのセッションを完全に削除します。確定するには /exit --delete --yes と入力してください"
+exit_delete_cancelled = "キャンセルしました。セッションは残ります"
 
 [gateway]
 stopped = "停止しました。このセッションは続けられます。"

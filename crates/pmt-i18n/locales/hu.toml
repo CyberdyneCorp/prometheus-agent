@@ -98,7 +98,7 @@ worktree_unpushed = "{count} fel nem töltött commit"
 worktree_dirty_unpushed = "nem véglegesített módosítások és {count} fel nem töltött commit"
 worktree_question = "a(z) {path} worktree-ben van {what}: [k] megtartás (alapértelmezett), [a] archiválás és eltávolítás, [r] eltávolítás és elvetés "
 session_deleted = "a(z) {id} munkamenet törölve"
-confirm_exit_delete = "a /exit --delete végleg törli ezt a munkamenetet; a megerősítéshez írd be: /exit --delete --yes"
+exit_delete_cancelled = "megszakítva; a munkamenet megmarad"
 
 [gateway]
 stopped = "Leállítva. Folytathatod ezt a munkamenetet."

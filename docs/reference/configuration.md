@@ -139,7 +139,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `budgets.unattended_root_usd` | number | `5.0` | ≥ 0.0 | `live` | USD per root lineage of cron, unattended gateway sessions, background delegations and harness evolution. |
 | `budgets.warn_ratio` | number | `0.8` | 0.0 to 1.0 | `live` | Fraction of a limit at which a budget warning is emitted. |
 | `busy.input_mode` | one of "queue", "steer", "interrupt" | `"queue"` | `"queue"`, `"steer"`, `"interrupt"` | `live` | What plain text typed while a turn runs does: `queue` runs it as the next turn, `steer` hands it to the running turn after its current tool step, `interrupt` stops the turn and then runs it. |
-| `cli.confirm_destructive` | boolean | `true` | any | `live` | Ask `once / always / cancel` before `/clear`, `/new`, `/undo` and `/rewind`. |
+| `cli.confirm_destructive` | boolean | `true` | any | `live` | Ask `once / always / cancel` before `/clear`, `/new`, `/undo`, `/rewind` and `/exit --delete`. |
 | `code_execution.allowed_tools` | array of string | `["read_file","write_file","search_files","patch","terminal","web_search","web_extract"]` | any | `next_session` | Tools a script may call through its stubs; a session sees the intersection with its own granted tools. |
 | `code_execution.kernel_idle_timeout_secs` | integer | `1800` | 1 to 604800 | `next_session` | Seconds an unused Python kernel stays alive before it is stopped. |
 | `code_execution.max_session_kernels` | integer | `4` | 1 to 64 | `next_session` | Top-level sessions keeping a Python kernel at once; the least recently used one loses its kernel beyond this (children's kernels are not counted). |

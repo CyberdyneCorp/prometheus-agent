@@ -98,7 +98,7 @@ worktree_unpushed = "{count} ongestoote commit(s)"
 worktree_dirty_unpushed = "ongekommitteerde veranderinge en {count} ongestoote commit(s)"
 worktree_question = "worktree {path} het {what}: [k] behou (verstek), [a] argiveer en verwyder, [r] verwyder en weggooi "
 session_deleted = "sessie {id} geskrap"
-confirm_exit_delete = "/exit --delete skrap hierdie sessie permanent; tik /exit --delete --yes om te bevestig"
+exit_delete_cancelled = "gekanselleer; die sessie word behou"
 
 [gateway]
 stopped = "Gestop. Jy kan hierdie sessie voortsit."

@@ -1,7 +1,8 @@
 //! Questions the session asks the person and the line that answers them:
 //! command approvals, clarify questions, memory approvals, a skill's
 //! missing secrets (read with the input hidden) and the
-//! `once / always / cancel` confirmation of destructive commands.
+//! `once / always / cancel` confirmation of destructive commands (its
+//! answers are read by `crate::slash::confirmation`).
 
 use std::fmt::Write as _;
 
@@ -267,26 +268,6 @@ pub(super) fn clarify_answer(request: &ClarifyRequest, index: usize, line: &str)
     }
 }
 
-/// What a confirmation line chose.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Confirmation {
-    /// Run it this time.
-    Once,
-    /// Run it and stop asking.
-    Always,
-    /// Leave everything as it is.
-    Cancel,
-}
-
-/// The choice of a confirmation line (anything else cancels).
-pub(super) fn confirmation(line: &str) -> Confirmation {
-    match line.trim().to_lowercase().as_str() {
-        "o" | "once" | "y" | "yes" => Confirmation::Once,
-        "a" | "always" => Confirmation::Always,
-        _ => Confirmation::Cancel,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use pmt_agent::tools::clarify::Question;
@@ -317,8 +298,6 @@ mod tests {
     fn lines_map_to_answers() {
         assert_eq!(decision(" S "), Some(Decision::Session));
         assert_eq!(decision("maybe"), None);
-        assert_eq!(confirmation("always"), Confirmation::Always);
-        assert_eq!(confirmation(""), Confirmation::Cancel);
         let request = ClarifyRequest {
             questions: vec![Question {
                 question: "Which?".into(),

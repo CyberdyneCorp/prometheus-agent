@@ -151,7 +151,8 @@ impl Tui<'_> {
     fn submit_line(&mut self) {
         let line = self.app.composer.text().to_owned();
         let answered = if self.asking.is_empty() {
-            (self.setup.is_some() && self.answer_setup(&line))
+            (self.exit_delete.asked && self.answer_delete(&line))
+                || (self.setup.is_some() && self.answer_setup(&line))
                 || (self.prune && self.answer_prune(&line))
         } else {
             self.answer(line.trim())
@@ -213,19 +214,6 @@ impl Tui<'_> {
                     .map_err(|e| pmt_rpc::client::error_of(&e)),
             )
         });
-    }
-
-    /// `/exit --delete`: with `--yes` the TUI leaves and deletes the
-    /// session; without it, it says how to confirm (the destructive
-    /// confirmation).
-    fn quit_deleting(&mut self, args: &str) {
-        if args.split_whitespace().any(|w| matches!(w, "--yes" | "-y")) {
-            self.ending = Some(Ending::Delete(self.link.session.clone()));
-        } else {
-            let strings =
-                pmt_config::language::strings(self.open.scope.dir(), pmt_i18n::Surface::Core);
-            self.notice(pmt_i18n::t!(strings, "cli.confirm_exit_delete"));
-        }
     }
 
     /// A client-local command: no round-trip for the screen's own ones.

@@ -98,7 +98,7 @@ worktree_unpushed = "неотправленных коммитов: {count}"
 worktree_dirty_unpushed = "незакоммиченные изменения и неотправленных коммитов: {count}"
 worktree_question = "в worktree {path} есть {what}: [k] оставить (по умолчанию), [a] заархивировать и удалить, [r] удалить без сохранения "
 session_deleted = "сеанс {id} удалён"
-confirm_exit_delete = "/exit --delete навсегда удаляет этот сеанс; введите /exit --delete --yes для подтверждения"
+exit_delete_cancelled = "отменено; сеанс сохранён"
 
 [gateway]
 stopped = "Остановлено. Вы можете продолжить эту сессию."

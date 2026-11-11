@@ -100,7 +100,7 @@ worktree_unpushed = "{count} unpushed commit(s)"
 worktree_dirty_unpushed = "uncommitted changes and {count} unpushed commit(s)"
 worktree_question = "worktree {path} has {what}: [k]eep (default), [a]rchive and remove, [r]emove and discard "
 session_deleted = "session {id} deleted"
-confirm_exit_delete = "/exit --delete deletes this session for good; type /exit --delete --yes to confirm"
+exit_delete_cancelled = "cancelled; the session is kept"
 
 [gateway]
 stopped = "Stopped. You can continue this session."

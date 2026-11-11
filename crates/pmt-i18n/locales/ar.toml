@@ -98,7 +98,7 @@ worktree_unpushed = "{count} إيداع غير مدفوع"
 worktree_dirty_unpushed = "تغييرات غير مودَعة و{count} إيداع غير مدفوع"
 worktree_question = "شجرة العمل {path} فيها {what}: [k] إبقاء (افتراضي)، [a] أرشفة وإزالة، [r] إزالة وتجاهل "
 session_deleted = "حُذفت الجلسة {id}"
-confirm_exit_delete = "‏/exit --delete يحذف هذه الجلسة نهائيًا؛ اكتب ‎/exit --delete --yes للتأكيد"
+exit_delete_cancelled = "أُلغي؛ الجلسة محفوظة"
 
 [gateway]
 stopped = "تم الإيقاف. يمكنك متابعة هذه الجلسة."

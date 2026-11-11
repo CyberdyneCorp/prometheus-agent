@@ -12,6 +12,7 @@
 
 mod clipboard;
 mod display;
+mod exit_delete;
 mod input;
 mod link;
 mod masked;

@@ -1093,7 +1093,7 @@
       "properties": {
         "confirm_destructive": {
           "default": true,
-          "description": "Ask `once / always / cancel` before `/clear`, `/new`, `/undo` and\n`/rewind`.",
+          "description": "Ask `once / always / cancel` before `/clear`, `/new`, `/undo`,\n`/rewind` and `/exit --delete`.",
           "type": "boolean"
         }
       },

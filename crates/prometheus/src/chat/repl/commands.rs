@@ -6,11 +6,13 @@
 use pmt_agent::turn::TurnInput;
 use pmt_core::error::Error;
 
-use super::prompts::{Confirmation, Pending};
+use super::prompts::Pending;
 use super::{Flow, Repl};
 use crate::chat::commands::{self, Reply};
 use crate::chat::session::Live;
-use crate::slash::{Command, Resolution, Source, Surface, exit_deletes, is_destructive};
+use crate::slash::{
+    Command, Confirmation, Resolution, Source, Surface, confirmation, exit_deletes, is_destructive,
+};
 
 /// `args` without `--yes`/`-y`, and whether one was there.
 fn take_yes(args: &str) -> (String, bool) {
@@ -74,7 +76,7 @@ impl Repl {
 
     /// The answer to a destructive command's confirmation.
     pub(super) async fn confirmed(&mut self, line: &str, answer: &str) -> Flow {
-        match super::prompts::confirmation(answer) {
+        match confirmation(answer) {
             Confirmation::Cancel => {
                 self.notice("cancelled");
                 Flow::Continue

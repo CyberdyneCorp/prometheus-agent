@@ -98,7 +98,7 @@ worktree_unpushed = "{count} tiomantas nár brúdh"
 worktree_dirty_unpushed = "athruithe neamhthiomnaithe agus {count} tiomantas nár brúdh"
 worktree_question = "tá {what} ag an worktree {path}: [k] coinnigh (réamhshocrú), [a] cartlannaigh agus bain, [r] bain agus caith amach "
 session_deleted = "scriosadh an seisiún {id}"
-confirm_exit_delete = "scriosann /exit --delete an seisiún seo go buan; clóscríobh /exit --delete --yes chun é a dheimhniú"
+exit_delete_cancelled = "cealaithe; coinnítear an seisiún"
 
 [gateway]
 stopped = "Stoptha. Is féidir leat leanúint leis an seisiún seo."

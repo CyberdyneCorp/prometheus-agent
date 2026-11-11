@@ -392,6 +392,16 @@ The `setup` command SHALL also accept sections `tts` and `agent` (identity file,
 - **WHEN** the user runs `prometheus setup gateway telegram`
 - **THEN** the wizard SHALL prompt for every required field of the Telegram adapter schema and store the bot token only in the secrets store
 
+#### Scenario: Portal setup shows the change before writing
+- **GIVEN** a profile whose main route is another provider
+- **WHEN** the user runs `prometheus setup --portal` and signs in
+- **THEN** the wizard SHALL show each changed key as `<key>: <old> -> <new>` (`model.provider`, `model.default` with the portal's default model, and the web search, web extract, image and TTS providers), SHALL write them only when confirmed, SHALL leave `config.toml` unchanged when the user declines, and SHALL report nothing to change when the profile already uses the portal
+
+#### Scenario: First setup offers an import
+- **GIVEN** a Hermes home and a Claude Code home in the user's home directory
+- **WHEN** the user runs the first full `prometheus setup` of a profile, accepts the Hermes import and declines the Claude Code one
+- **THEN** the Hermes data SHALL be migrated into that profile through `prometheus migrate`, the Claude Code data SHALL NOT, and a later `prometheus setup` of that profile SHALL NOT offer either again
+
 ### Requirement: Safe command console
 The system SHALL provide `prometheus console`, a REPL that executes only an allowlist of `prometheus` subcommands (`status`, `doctor`, `logs`, `sessions list|show|export`, `config show|get|validate`, `usage`, `version`, `update --check`, `daemon status|restart`, `gateway status`), parses each line with the CLI parser without invoking any shell, rejects other input with `not available in the console`, inherits the `-p` profile, and SHALL refuse `!` escapes, pipes and redirection.
 **Milestone:** M2
@@ -474,12 +484,17 @@ The system SHALL provide `/plan [task]`, which runs one turn whose effective too
 - **THEN** the call SHALL be refused with `not allowed in /plan` and only `.prometheus/plans/add-caching.md` SHALL be written
 
 ### Requirement: Exit with delete and profile archive slash forms
-The `/exit` command SHALL accept `--delete`, which after a destructive confirmation (skipped by `--yes`) ends the session and permanently deletes it per `session-storage` › Deletion semantics, and the registry SHALL provide `/export [profile] [-o <file>]` and `/import <archive> [--name <name>]` on `cli`, `tui` and `desktop` surfaces mapping to `prometheus profile export` and `profile import` with the same defaults and exclusions.
+The `/exit` command SHALL accept `--delete`, which after a destructive confirmation (skipped by `--yes` or `cli.confirm_destructive = false`, as in Destructive command confirmation, on every terminal surface) ends the session and permanently deletes it per `session-storage` › Deletion semantics, and the registry SHALL provide `/export [profile] [-o <file>]` and `/import <archive> [--name <name>]` on `cli`, `tui` and `desktop` surfaces mapping to `prometheus profile export` and `profile import` with the same defaults and exclusions.
 **Milestone:** M2
 
 #### Scenario: Exit and delete
 - **WHEN** the user types `/exit --delete --yes`
 - **THEN** the REPL SHALL exit 0 and `prometheus sessions show <id>` SHALL exit 66
+
+#### Scenario: Exit and delete asks first
+- **GIVEN** `cli.confirm_destructive = true`
+- **WHEN** the user types `/exit --delete` without `--yes` in the REPL or the TUI
+- **THEN** the surface SHALL ask `once / always / cancel`, `cancel` SHALL keep the session, `always` SHALL delete it and persist `cli.confirm_destructive = false`, and with it `false` a later `/exit --delete` SHALL delete without asking
 
 ### Requirement: Onboarding state
 The system SHALL store first-run onboarding progress (offered setup, shown one-time tips by id, completed tour steps) in the profile's state store rather than `config.toml`, SHALL show each one-time tip at most once per profile, and SHALL provide `prometheus setup --reset-onboarding` to clear it.

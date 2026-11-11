@@ -98,7 +98,7 @@ worktree_unpushed = "{count} 個未推送的提交"
 worktree_dirty_unpushed = "未提交的變更和 {count} 個未推送的提交"
 worktree_question = "worktree {path} 有{what}：[k] 保留（預設）、[a] 封存並移除、[r] 移除並捨棄 "
 session_deleted = "工作階段 {id} 已刪除"
-confirm_exit_delete = "/exit --delete 會永久刪除此工作階段；輸入 /exit --delete --yes 以確認"
+exit_delete_cancelled = "已取消；工作階段保留"
 
 [gateway]
 stopped = "已停止。你可以繼續此工作階段。"

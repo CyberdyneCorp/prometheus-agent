@@ -288,8 +288,10 @@ The tools sent to the provider do not change, so the prompt cache stays
 warm; the plan's path is printed when the turn ends.
 
 `/exit --delete` leaves and deletes the session for good after the
-destructive confirmation (`--yes` skips it); `prometheus sessions show
-<id>` then exits 66. `/export [profile] [-o <file>]` and `/import
+destructive confirmation (`once / always / cancel`, in the REPL, the
+attached line interface and the TUI alike; `--yes` or
+`cli.confirm_destructive = false` skips it, and `always` sets that);
+`prometheus sessions show <id>` then exits 66. `/export [profile] [-o <file>]` and `/import
 <archive> [--name <name>]` are `prometheus profile export` and `profile
 import` with their defaults (no sessions, no secrets; `<profile>.tar.zst`
 in the working directory without `-o`); an archive with sealed secrets is

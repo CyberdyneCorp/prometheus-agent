@@ -98,7 +98,7 @@ worktree_unpushed = "푸시되지 않은 커밋 {count}개"
 worktree_dirty_unpushed = "커밋되지 않은 변경 사항과 푸시되지 않은 커밋 {count}개"
 worktree_question = "worktree {path}에 {what}이(가) 있습니다: [k] 유지(기본), [a] 보관 후 제거, [r] 제거 후 버리기 "
 session_deleted = "세션 {id}을(를) 삭제했습니다"
-confirm_exit_delete = "/exit --delete는 이 세션을 영구히 삭제합니다. 확인하려면 /exit --delete --yes를 입력하세요"
+exit_delete_cancelled = "취소했습니다. 세션은 유지됩니다"
 
 [gateway]
 stopped = "중지되었습니다. 이 세션을 계속할 수 있습니다."

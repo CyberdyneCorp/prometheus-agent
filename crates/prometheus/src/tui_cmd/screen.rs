@@ -119,6 +119,8 @@ pub(super) struct Tui<'a> {
     pub(super) setup: Option<Vec<super::terminal_setup::Target>>,
     /// The low-disk prune question waiting for `on`, `off` or `later`.
     pub(super) prune: bool,
+    /// `/exit --delete`'s confirmation.
+    pub(super) exit_delete: super::exit_delete::ExitDelete,
     /// `/redraw`: clear the terminal before the next frame.
     pub(super) clear_next: bool,
     /// When a paste collapses into a chip.
@@ -285,6 +287,10 @@ impl<'a> Tui<'a> {
             models: Vec::new(),
             setup: None,
             prune: false,
+            exit_delete: super::exit_delete::ExitDelete {
+                confirm: config.cli.confirm_destructive,
+                asked: false,
+            },
             clear_next: false,
             collapse: Collapse {
                 lines: composer.paste_collapse_lines,

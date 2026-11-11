@@ -196,3 +196,12 @@ fn browser_is_refused_on_messaging_platforms() {
         "/browser is not available here"
     );
 }
+
+#[test]
+fn confirmation_answers_choose_once_always_or_cancel() {
+    assert_eq!(confirmation(" Once "), Confirmation::Once);
+    assert_eq!(confirmation("y"), Confirmation::Once);
+    assert_eq!(confirmation("always"), Confirmation::Always);
+    assert_eq!(confirmation(""), Confirmation::Cancel);
+    assert_eq!(confirmation("maybe"), Confirmation::Cancel);
+}

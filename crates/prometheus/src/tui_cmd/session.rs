@@ -202,6 +202,7 @@ impl Tui<'_> {
             .asking
             .front()
             .map(|a| card(a, asked, typed, &strings))
+            .or_else(|| self.delete_card())
             .or_else(|| self.setup_card())
             .or_else(|| self.prune_card());
     }

@@ -1,5 +1,6 @@
 //! M2 CLI upgrades of the chat (spec: cli, Streaming JSONL output;
-//! Planning-only turn; Exit with delete and profile archive slash forms),
+//! Planning-only turn; Exit with delete and profile archive slash forms,
+//! in the line interfaces and the TUI),
 //! against the built binary on a temp home with the mock provider.
 
 mod common;
@@ -323,5 +324,59 @@ text = "edited"
         assert!(format!("{status:?}").ends_with(", 0)"), "{status:?}");
         let shown = run(home.path(), &["sessions", "show", &id]);
         assert_eq!(shown.status.code(), Some(66), "{}", stderr(&shown));
+    }
+}
+
+/// `/exit --delete` in the TUI asks the same `once / always / cancel` as
+/// the line interfaces: `cancel` keeps the session, `always` deletes it
+/// and turns `cli.confirm_destructive` off, after which the next TUI
+/// deletes without asking.
+#[cfg(all(unix, feature = "gateway"))]
+mod tui {
+    use super::common::tui::{enter, finish, opened, see, tui};
+    use super::common::{daemon, newest_session};
+    use super::*;
+
+    /// Opens a TUI, sends one prompt and returns it with the session id.
+    fn chatted(home: &Path) -> (expectrl::session::OsSession, String) {
+        let mut p = tui(home, &["chat"], &[]);
+        opened(&mut p);
+        enter(&mut p, "keep me");
+        see(&mut p, "mock: keep me");
+        (p, newest_session(home))
+    }
+
+    fn gone(home: &Path, id: &str) -> bool {
+        run(home, &["sessions", "show", id]).status.code() == Some(66)
+    }
+
+    /// Scenario: Exit and delete, in the TUI.
+    #[test]
+    fn exit_with_delete_asks_first_and_always_stops_asking() {
+        let home = mock_home();
+        let _daemon = daemon::start(home.path(), &[]);
+        let (mut p, id) = chatted(home.path());
+        enter(&mut p, "/exit --delete");
+        see(&mut p, "/exit --delete changes this session");
+        enter(&mut p, "cancel");
+        see(&mut p, "cancelled; the session is kept");
+        assert!(!gone(home.path(), &id), "cancel keeps the session");
+        enter(&mut p, "/exit --delete");
+        see(&mut p, "/exit --delete changes this session");
+        enter(&mut p, "always");
+        let (_, code) = finish(p);
+        assert_eq!(code, Some(0));
+        assert!(gone(home.path(), &id), "always deletes it");
+        let setting = ok(&run(
+            home.path(),
+            &["config", "get", "cli.confirm_destructive"],
+        ));
+        assert_eq!(setting.trim(), "false");
+        // With the confirmation off, the next TUI deletes without asking.
+        let (mut p, id) = chatted(home.path());
+        enter(&mut p, "/exit --delete");
+        let (_, code) = finish(p);
+        assert_eq!(code, Some(0));
+        assert!(gone(home.path(), &id), "deleted without a question");
     }
 }
