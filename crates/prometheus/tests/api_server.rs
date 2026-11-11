@@ -9,10 +9,12 @@
 mod common;
 
 use std::path::Path;
+use std::time::Duration;
 
 use serde_json::{Value, json};
 
 use self::common::api::{self, Request, chat};
+use self::common::gateway::{Daemon, gateway_home, send, texts, wait};
 use self::common::{append_config, daemon, mock_home, run, stderr};
 
 /// Points the default profile's mock provider at a script with `rules`.
@@ -452,6 +454,18 @@ fn request_models_follow_the_selection_order() {
         generic.json()["choices"][0]["message"]["content"],
         "default model"
     );
+    let runtime = &generic.json()["prometheus"]["runtime"];
+    assert_eq!(runtime["route_source"], "global", "{runtime}");
+    assert_eq!(runtime["model"], "mock");
+    assert_eq!(runtime["requested"]["model"], "gpt-4o");
+    let generic = Request::new("POST", "/v1/responses")
+        .auth("default")
+        .json(&json!({"model": "gpt-4o", "input": "a"}))
+        .send(port);
+    assert_eq!(generic.status, 200, "{}", generic.body);
+    let runtime = &generic.json()["prometheus"]["runtime"];
+    assert_eq!(runtime["route_source"], "global", "{runtime}");
+    assert_eq!(runtime["model"], "mock");
     // A request's model changes the model call only: the session's
     // system prompt and tool list stay byte-identical.
     let session = generic
@@ -521,6 +535,79 @@ fn request_models_follow_the_selection_order() {
     let id = run.json()["run_id"].as_str().unwrap().to_owned();
     let done = api::run_until_terminal(port, "default", &id);
     assert_eq!(done["runtime"]["route_source"], "global");
+}
+
+/// Scenario: Port collision isolated (distribution-and-update): another
+/// process holds the API port while `work` and `home` enable the API
+/// server; only the listener is down, every profile's adapter runs.
+#[test]
+fn a_taken_api_port_marks_only_the_listener_down() {
+    let home = gateway_home("");
+    let home = home.path();
+    api::enable(home, "default", "");
+    api::multiplex(home);
+    for name in ["work", "home"] {
+        api::profile(home, name, "");
+        append_config_of(
+            home,
+            name,
+            "\n[gateway.platforms.test]\nenabled = true\nallow_all = true\n",
+        );
+    }
+    let taken = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = taken.local_addr().unwrap().port();
+    std::fs::write(
+        home.join("daemon.toml"),
+        format!("[api_server]\nlisten = \"127.0.0.1:{port}\"\n"),
+    )
+    .unwrap();
+    let daemon = Daemon::start(home);
+    let reason = format!("port {port} already in use");
+    let status = || -> Value {
+        let out = run(home, &["--json", "daemon", "status"]);
+        serde_json::from_slice::<Value>(&out.stdout).unwrap_or_default()["daemon"].clone()
+    };
+    wait(
+        "every profile's adapter runs",
+        Duration::from_secs(30),
+        || {
+            let adapters = status()["adapters"].as_array().cloned().unwrap_or_default();
+            ["default", "work", "home"].iter().all(|profile| {
+                adapters.iter().any(|a| {
+                    // The file adapter stays `degraded` (unconfirmed) until it
+                    // has carried a message; both states mean it runs.
+                    a["profile"] == *profile
+                        && a["platform"] == "test"
+                        && matches!(a["state"].as_str(), Some("connected" | "degraded"))
+                })
+            })
+        },
+    );
+    let health = status()["health"].clone();
+    let listener = health
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["component"] == "listener:api_server")
+        .cloned()
+        .unwrap_or_else(|| panic!("no API listener component: {health}"));
+    assert_eq!(listener["state"], "down", "{listener}");
+    assert_eq!(listener["reason"], reason.as_str(), "{listener}");
+    send(home, "work", "u1", "hello");
+    wait(
+        "work answers on its adapter",
+        Duration::from_mins(1),
+        || !texts(home, "work").is_empty(),
+    );
+    drop(taken);
+    assert_eq!(daemon.stop(home), Some(0));
+}
+
+fn append_config_of(home: &Path, profile: &str, text: &str) {
+    let config = home.join("profiles").join(profile).join("config.toml");
+    let mut current = std::fs::read_to_string(&config).unwrap();
+    current.push_str(text);
+    std::fs::write(&config, current).unwrap();
 }
 
 /// Scenario: Eleventh run refused (with a cap of one).

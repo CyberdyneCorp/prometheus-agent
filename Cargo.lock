@@ -3096,6 +3096,7 @@ dependencies = [
  "pmt-core",
  "pmt-gateway",
  "pmt-net",
+ "pmt-obs",
  "pmt-rpc",
  "pmt-store",
  "serde",

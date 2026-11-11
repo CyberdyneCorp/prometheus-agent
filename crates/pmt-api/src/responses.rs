@@ -139,6 +139,7 @@ async fn run(shared: &Arc<Shared>, caller: &Caller, req: &Req) -> Result<Reply, 
                 return Err(from_error(&err));
             }
         };
+    let route = selected.route();
     let turn = ApiTurn {
         session_id: session_id.clone(),
         text: input.last.text,
@@ -159,6 +160,7 @@ async fn run(shared: &Arc<Shared>, caller: &Caller, req: &Req) -> Result<Reply, 
         store: body["store"].as_bool().unwrap_or(true),
         max_stored: config.responses.max_stored,
         tool_output_max: config.responses.history_tool_output_max_chars,
+        route,
     };
     let (out, reply) = if stream {
         let (out, reply) = sse_reply();
@@ -250,6 +252,8 @@ pub(crate) struct Head {
     pub store: bool,
     pub max_stored: u32,
     pub tool_output_max: u64,
+    /// [`crate::model::Selected::route`] of the request.
+    pub route: Value,
 }
 
 async fn respond(

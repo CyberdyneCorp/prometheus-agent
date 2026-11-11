@@ -12,6 +12,7 @@ use crate::Shared;
 use crate::auth::Caller;
 use crate::host::{ModelChoice, ModelOptions};
 use crate::http::{Reply, bad_request};
+use crate::turn::Runtime;
 
 /// The route a request asked for.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -23,6 +24,27 @@ pub(crate) struct Selected {
     /// What the request named, for `runtime.requested`.
     pub requested: Option<Value>,
     pub options: ModelOptions,
+}
+
+impl Selected {
+    /// Where the route came from, as stored with a run and reported in
+    /// `runtime`: `{"route_source", "requested"}`.
+    pub(crate) fn route(&self) -> Value {
+        json!({"route_source": self.route_source, "requested": self.requested})
+    }
+}
+
+/// The `runtime` block of a finished turn: the provider and model that
+/// answered, where that route came from and what the request named, so a
+/// generic client can see its own `model` was ignored (spec: api-server,
+/// Per-request model selection).
+pub(crate) fn runtime(runtime: &Runtime, route: &Value) -> Value {
+    let mut block = json!({"provider": runtime.provider, "model": runtime.model,
+        "route_source": route["route_source"]});
+    if !route["requested"].is_null() {
+        block["requested"] = route["requested"].clone();
+    }
+    block
 }
 
 /// Picks the route of a request with `body`; `generic` for Chat

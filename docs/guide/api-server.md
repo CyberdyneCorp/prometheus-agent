@@ -36,6 +36,11 @@ cors_origins = []           # exact browser origins, never "*"
 public_host = "agent.example.com"  # a Host name accepted behind a proxy
 ```
 
+If the port is taken, only the API server is missing: `daemon status`
+reports the health component `listener:api_server` as `down` with reason
+`port <n> already in use`, and chats, adapters and every profile keep
+running.
+
 On a loopback bind a request whose `Host` is not a loopback name (or
 `public_host`) is refused with 403, so a web page that rebinds its DNS
 name to 127.0.0.1 cannot reach the server. A request carrying an `Origin`
@@ -106,7 +111,11 @@ and Responses unless `api_server.direct_model_requests = true`. A
 `provider` that contradicts a route alias, or an unknown provider, answers
 400. `model_options.reasoning_effort` and `service_tier` (`priority` asks
 for the fast tier) apply to that request only; the session's system prompt
-and tool list stay the same.
+and tool list stay the same. Every answer reports what served it in
+`prometheus.runtime` (on runs, `runtime`): `provider`, `model`,
+`route_source` (`session`, `route`, `request` or `global`) and, when the
+request named one, `requested {model, provider}`, so a generic client can
+see its `gpt-4o` was ignored (`route_source: "global"`).
 
 ## Responses
 

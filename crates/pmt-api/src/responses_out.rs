@@ -17,6 +17,8 @@ pub(crate) struct Builder {
     id: String,
     model: String,
     head: Value,
+    /// Where the request's route came from, for `prometheus.runtime`.
+    route: Value,
     out: Option<mpsc::UnboundedSender<Sse>>,
     sequence: u64,
     items: Vec<Value>,
@@ -38,6 +40,7 @@ impl Builder {
                 "store": head.store,
                 "prometheus": session::stamp(&head.session, head.key.as_deref()),
             }),
+            route: head.route.clone(),
             out,
             sequence: 0,
             items: Vec::new(),
@@ -251,8 +254,7 @@ impl Builder {
             response["error"] = json!({"code": code, "message": outcome.error_text()});
         }
         if let Some(runtime) = &outcome.runtime {
-            response["prometheus"]["runtime"] =
-                json!({"provider": runtime.provider, "model": runtime.model});
+            response["prometheus"]["runtime"] = crate::model::runtime(runtime, &self.route);
         }
         let kind = match status {
             "completed" => "response.completed",
@@ -365,6 +367,7 @@ mod tests {
             store: true,
             max_stored: 100,
             tool_output_max: 0,
+            route: json!({"route_source": "global", "requested": null}),
         }
     }
 

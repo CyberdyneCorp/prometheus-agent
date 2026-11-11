@@ -129,6 +129,7 @@ async fn run(shared: &std::sync::Arc<Shared>, caller: &Caller, req: &Req) -> Res
     let (session_id, additions) = target(shared, caller, &conversation, header, key.clone())
         .await
         .inspect_err(|_| finish.release())?;
+    let route = selected.route();
     let turn = ApiTurn {
         session_id: session_id.clone(),
         text: conversation.last.text,
@@ -143,6 +144,7 @@ async fn run(shared: &std::sync::Arc<Shared>, caller: &Caller, req: &Req) -> Res
         session: session_id,
         key,
         progress: config.tool_progress_events,
+        route,
     };
     if stream {
         Ok(streamed(
@@ -239,6 +241,8 @@ pub(crate) struct Shape {
     pub session: String,
     pub key: Option<String>,
     pub progress: bool,
+    /// [`model::Selected::route`] of the request.
+    pub route: Value,
 }
 
 /// `finish_reason` and the `prometheus.error_code` of an outcome.
@@ -269,7 +273,7 @@ fn prometheus_block(shape: &Shape, outcome: &Outcome, error_code: Option<String>
         }
     }
     if let Some(runtime) = &outcome.runtime {
-        block["runtime"] = json!({"provider": runtime.provider, "model": runtime.model});
+        block["runtime"] = model::runtime(runtime, &shape.route);
     }
     block
 }
@@ -487,6 +491,7 @@ mod tests {
             session: "s1".into(),
             key: None,
             progress: true,
+            route: json!({"route_source": "global", "requested": null}),
         }
     }
 

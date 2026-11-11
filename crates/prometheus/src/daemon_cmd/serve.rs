@@ -141,9 +141,11 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result
 }
 
 /// Starts the API server when a served profile enables it; a listener
-/// that cannot start is logged and the rest of the daemon (chats,
-/// adapters, schedulers) keeps running (spec: api-server, Opt-in
-/// listener that fails closed).
+/// that cannot start is logged and reported `down` as health component
+/// `listener:api_server`, and the rest of the daemon (chats, adapters,
+/// schedulers) keeps running (spec: api-server, Opt-in listener that
+/// fails closed; distribution-and-update, Multiple profiles in one
+/// container).
 async fn start_api(config: &DaemonConfig, server: &Arc<Server>, host: &Arc<DaemonHost>) {
     let api_host = Arc::clone(host) as Arc<dyn pmt_api::ApiHost>;
     match pmt_api::ApiServer::start(&config.api_server, Arc::clone(server), api_host).await {

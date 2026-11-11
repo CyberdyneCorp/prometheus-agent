@@ -78,6 +78,19 @@ pub async fn bind(
     })
 }
 
+/// Why a listener could not bind `addr`: `port <n> already in use` when
+/// another process holds the port, so every listener reports a collision
+/// the same way (spec: distribution-and-update, Multiple profiles in one
+/// container).
+#[must_use]
+pub fn bind_failure(addr: SocketAddr, e: &std::io::Error) -> String {
+    if e.kind() == std::io::ErrorKind::AddrInUse {
+        format!("port {} already in use", addr.port())
+    } else {
+        format!("cannot listen on {addr}: {e}")
+    }
+}
+
 /// The outcome of [`SurfaceGate::admit`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Admission {

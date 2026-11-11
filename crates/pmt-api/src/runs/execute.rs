@@ -198,14 +198,10 @@ fn record_end(run: &Run, outcome: Result<Outcome, pmt_core::Error>, requested: &
                 _ => "failed",
             };
             let error = (status != "completed").then(|| outcome.error_text());
-            let runtime = outcome.runtime.as_ref().map(|r| {
-                let mut runtime = json!({"provider": r.provider, "model": r.model,
-                    "route_source": requested["route_source"]});
-                if !requested["requested"].is_null() {
-                    runtime["requested"] = requested["requested"].clone();
-                }
-                runtime
-            });
+            let runtime = outcome
+                .runtime
+                .as_ref()
+                .map(|r| crate::model::runtime(r, requested));
             let mut usage = outcome.openai_usage();
             if outcome.status() == "incomplete" {
                 usage["error_code"] = "iteration_budget_exhausted".into();

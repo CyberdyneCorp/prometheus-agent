@@ -78,7 +78,7 @@ fn start(shared: &Arc<Shared>) -> Result<SocketAddr, String> {
     let (listener, addr) = match bound {
         Ok(bound) => bound,
         Err(e) => {
-            let reason = bind_failure(options.listen, &e);
+            let reason = pmt_net::listen::bind_failure(options.listen, &e);
             // Only this listener is down: every other listener, adapter
             // and profile keeps running (spec: distribution-and-update,
             // Multiple profiles in one container).
@@ -119,16 +119,6 @@ pub(crate) const LISTENER_COMPONENT: &str = "listener:gateway.http";
 
 fn listener_health(state: pmt_obs::health::State, reason: &str) {
     pmt_obs::health::global().report(None, LISTENER_COMPONENT, state, reason);
-}
-
-/// Why a listener could not bind: `port <n> already in use` when another
-/// process holds the port.
-pub(crate) fn bind_failure(addr: SocketAddr, e: &std::io::Error) -> String {
-    if e.kind() == std::io::ErrorKind::AddrInUse {
-        format!("port {} already in use", addr.port())
-    } else {
-        format!("cannot listen on {addr}: {e}")
-    }
 }
 
 async fn serve(

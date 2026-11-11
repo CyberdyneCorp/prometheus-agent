@@ -19,6 +19,7 @@ pmt-config.workspace = true
 pmt-core.workspace = true
 pmt-gateway.workspace = true
 pmt-net.workspace = true
+pmt-obs.workspace = true
 pmt-rpc.workspace = true
 pmt-store.workspace = true
 serde.workspace = true

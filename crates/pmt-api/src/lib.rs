@@ -47,6 +47,7 @@ use pmt_config::daemon_api::ApiListener;
 use pmt_core::cancel::CancelToken;
 use pmt_core::error::Error;
 use pmt_gateway::Server;
+use tokio::net::TcpListener;
 use tracing::Instrument as _;
 
 pub use host::{
@@ -114,7 +115,9 @@ impl ApiServer {
     ///
     /// # Errors
     ///
-    /// `net.listen_refused` / `net.listen` when the listener cannot bind.
+    /// `net.listen_refused` / `net.listen` when the listener cannot bind;
+    /// the health component `listener:api_server` is then `down` with the
+    /// reason (`port <n> already in use` on a collision).
     pub async fn start(
         listener: &ApiListener,
         server: Arc<Server>,
@@ -149,7 +152,7 @@ impl ApiServer {
             explicit_address: listener.public,
             authenticated: true,
         };
-        let bound = pmt_net::listen::bind("api server", addr, exposure).await?;
+        let bound = bind(addr, exposure).await?;
         let addr = bound.local_addr().unwrap_or(addr);
         let peer = peer::Peer::start(&server);
         let shared = Arc::new(Shared {
@@ -230,4 +233,48 @@ fn serve(listener: tokio::net::TcpListener, shared: Arc<Shared>, stop: CancelTok
         }
         .in_current_span(),
     );
+}
+
+/// The API listener's health component.
+const LISTENER_COMPONENT: &str = "listener:api_server";
+
+/// Binds the listener and reports it: a port another process holds marks
+/// only this listener `down` (`port <n> already in use`), while chats,
+/// adapters and every profile keep running (spec: distribution-and-update,
+/// Multiple profiles in one container).
+async fn bind(addr: SocketAddr, exposure: pmt_net::listen::Exposure) -> Result<TcpListener, Error> {
+    let bound = match pmt_net::listen::check_bind("api server", addr, exposure) {
+        Err(err) => Err((err.message().to_owned(), err)),
+        Ok(()) => TcpListener::bind(addr).await.map_err(|e| {
+            let reason = pmt_net::listen::bind_failure(addr, &e);
+            let err = Error::new(
+                &pmt_core::error::codes::NET_LISTEN,
+                format!("api server: {reason}"),
+            )
+            .with_source(e);
+            (reason, err)
+        }),
+    };
+    let health = pmt_obs::health::global();
+    match bound {
+        Ok(listener) => {
+            let at = listener.local_addr().unwrap_or(addr);
+            health.report(
+                None,
+                LISTENER_COMPONENT,
+                pmt_obs::health::State::Ok,
+                &format!("listening on {at}"),
+            );
+            Ok(listener)
+        }
+        Err((reason, err)) => {
+            health.report(
+                None,
+                LISTENER_COMPONENT,
+                pmt_obs::health::State::Down,
+                &reason,
+            );
+            Err(err)
+        }
+    }
 }

@@ -290,10 +290,7 @@ fn new_run(
         ),
         execution_generation: 1,
         owner: shared.server.instance_id().to_owned(),
-        requested: Some(
-            json!({"route_source": selected.route_source, "requested": selected.requested})
-                .to_string(),
-        ),
+        requested: Some(selected.route().to_string()),
         output: None,
         usage: None,
         runtime: None,
