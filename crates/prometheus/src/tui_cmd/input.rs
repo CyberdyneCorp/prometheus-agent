@@ -4,6 +4,7 @@
 //! without a round-trip, a command for `command.dispatch`, or a prompt.
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseEventKind};
+use pmt_i18n::t;
 use pmt_rpc::contracts::{
     CommandDispatch, CompleteParams, CompletePath, CompleteSlash, DispatchParams, ResolveKind,
     SessionInterrupt, SessionRef,
@@ -139,9 +140,9 @@ impl Tui<'_> {
             pmt_core::spawn::spawn(async move {
                 let _ = client.call_typed::<SessionInterrupt>(&params).await;
             });
-            self.notice("interrupting the running turn");
+            self.notice(t!(self.strings(), "tui.interrupting"));
         } else if self.app.composer.is_empty() {
-            self.notice("Ctrl+D or /quit leaves");
+            self.notice(t!(self.strings(), "tui.how_to_leave"));
         } else {
             self.app.composer.take();
         }
@@ -251,15 +252,18 @@ impl Tui<'_> {
     /// daemon moved the session, the TUI leaves.
     fn handoff(&mut self, args: &str) {
         if self.app.status.busy {
-            self.notice("/handoff is unavailable while the agent is working; stop it first");
+            self.notice(t!(self.strings(), "tui.handoff_busy"));
             return;
         }
         let home = self.open.home.clone();
         let profile = self.open.scope.name().to_string();
         let session = self.link.session.clone();
         let target = args.to_owned();
+        let strings = pmt_config::language::strings(self.open.scope.dir(), pmt_i18n::Surface::Core);
         self.background(async move {
-            Done::HandedOff(crate::chat::handoff::handoff(&home, &profile, &session, &target).await)
+            let handed =
+                crate::chat::handoff::handoff(&home, &profile, &session, &target, strings).await;
+            Done::HandedOff(handed)
         });
     }
 
@@ -269,14 +273,14 @@ impl Tui<'_> {
         use base64::Engine as _;
         use std::io::Write as _;
         let Some(answer) = self.app.transcript.last_answer().map(str::to_owned) else {
-            self.notice("nothing to copy yet");
+            self.notice(t!(self.strings(), "tui.nothing_to_copy"));
             return;
         };
         let encoded = base64::engine::general_purpose::STANDARD.encode(answer.as_bytes());
         let mut out = std::io::stdout();
         let _ = write!(out, "\u{1b}]52;c;{encoded}\u{7}");
         let _ = out.flush();
-        self.notice("copied the last answer");
+        self.notice(t!(self.strings(), "tui.copied"));
     }
 
     /// `/new`, `/resume <ref>`, `/fork`: opens another session and shows
@@ -321,7 +325,7 @@ impl Tui<'_> {
         let local = if path {
             Vec::new()
         } else {
-            local_matches(word)
+            local_matches(word, &self.strings())
         };
         self.background(async move {
             let mut found = if path {
@@ -365,14 +369,14 @@ impl Tui<'_> {
 }
 
 /// The TUI's own commands whose name starts with `typed` (`/` included).
-fn local_matches(typed: &str) -> Vec<pmt_rpc::contracts::Completion> {
+fn local_matches(typed: &str, strings: &pmt_i18n::Strings) -> Vec<pmt_rpc::contracts::Completion> {
     let name = typed.trim_start_matches('/');
     LOCAL
         .iter()
         .filter(|c| c.name.starts_with(name))
         .map(|c| pmt_rpc::contracts::Completion {
             text: format!("/{}", c.name),
-            description: Some(c.description.to_owned()),
+            description: Some(c.description(strings).to_owned()),
             dir: false,
         })
         .collect()

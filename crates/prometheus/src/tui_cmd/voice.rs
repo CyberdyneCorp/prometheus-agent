@@ -152,7 +152,7 @@ impl Tui<'_> {
         let client = Arc::clone(&self.voice.client);
         let key = pmt_voice::mode::record_key(&self.open.scope.config().voice);
         let session = self.link.session.clone();
-        self.notice(format!("listening… ({key} stops)"));
+        self.notice(pmt_i18n::t!(self.strings(), "tui.listening", 0 = key));
         pmt_core::spawn::spawn(async move {
             let levels = asks.clone();
             let meter: pmt_voice::record::Meter = Arc::new(move |level| {
@@ -213,7 +213,14 @@ impl Tui<'_> {
                 let key = pmt_voice::mode::record_key(&self.open.scope.config().voice);
                 self.app.status.automation.insert(
                     METER_ROW.to_owned(),
-                    crate::chat::voice::meter_line(level, &key),
+                    crate::chat::voice::meter_line(
+                        &pmt_config::language::strings(
+                            self.open.scope.dir(),
+                            pmt_i18n::Surface::Core,
+                        ),
+                        level,
+                        &key,
+                    ),
                 );
             }
             Ask::Ended(ended) => {

@@ -7,6 +7,9 @@
 //! (banner headers, the `<n> live` status item) landed, for the mouse.
 
 use std::cell::RefCell;
+use std::sync::Arc;
+
+use pmt_i18n::{Strings, Surface};
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Position, Rect};
@@ -85,6 +88,8 @@ pub struct App {
     pub overlay: Option<Overlay>,
     /// The status line is shown (`ui.status_bar`).
     pub status_visible: bool,
+    /// The profile's TUI strings (spec: i18n).
+    pub strings: Arc<Strings>,
     /// Where the last frame drew clickable parts: `(row, columns, hit)`.
     hits: RefCell<Vec<(u16, std::ops::Range<u16>, Hit)>>,
 }
@@ -104,6 +109,7 @@ impl App {
             banner: None,
             overlay: None,
             status_visible: true,
+            strings: Strings::english(Surface::Tui),
             hits: RefCell::new(Vec::new()),
         }
     }
@@ -162,10 +168,10 @@ impl App {
         self.render_composer(frame, composer);
         if status_rows > 0 {
             frame.render_widget(
-                Paragraph::new(self.status.line(status.width, &self.theme)),
+                Paragraph::new(self.status.line(status.width, &self.theme, &self.strings)),
                 status,
             );
-            if let Some(columns) = self.status.live_columns(status.width) {
+            if let Some(columns) = self.status.live_columns(status.width, &self.strings) {
                 self.hits.borrow_mut().push((status.y, columns, Hit::Live));
             }
         }
@@ -174,8 +180,12 @@ impl App {
     /// Rows of the overlay, else of the completion list.
     fn below_rows(&self, width: u16) -> usize {
         match &self.overlay {
-            Some(Overlay::Palette(p)) => p.lines(width, OVERLAY_ROWS, &self.theme).len(),
-            Some(Overlay::Switcher(s)) => s.lines(width, OVERLAY_ROWS, &self.theme).len(),
+            Some(Overlay::Palette(p)) => p
+                .lines(width, OVERLAY_ROWS, &self.theme, &self.strings)
+                .len(),
+            Some(Overlay::Switcher(s)) => s
+                .lines(width, OVERLAY_ROWS, &self.theme, &self.strings)
+                .len(),
             None => self.completions.len().min(COMPLETION_ROWS),
         }
     }
@@ -183,8 +193,8 @@ impl App {
     fn render_below(&self, frame: &mut Frame<'_>, area: Rect) {
         let rows = usize::from(area.height);
         let lines = match &self.overlay {
-            Some(Overlay::Palette(p)) => p.lines(area.width, rows, &self.theme),
-            Some(Overlay::Switcher(s)) => s.lines(area.width, rows, &self.theme),
+            Some(Overlay::Palette(p)) => p.lines(area.width, rows, &self.theme, &self.strings),
+            Some(Overlay::Switcher(s)) => s.lines(area.width, rows, &self.theme, &self.strings),
             None => return self.render_completions(frame, area),
         };
         frame.render_widget(Paragraph::new(lines), area);
@@ -194,7 +204,7 @@ impl App {
         let mut lines: Vec<(Line<'static>, Option<usize>)> = self
             .banner
             .as_ref()
-            .map(|b| b.lines(area.width, &self.theme))
+            .map(|b| b.lines(area.width, &self.theme, &self.strings))
             .unwrap_or_default();
         if !lines.is_empty() && !self.transcript.entries().is_empty() {
             lines.push((Line::default(), None));

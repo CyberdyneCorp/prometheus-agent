@@ -22,7 +22,7 @@ const RESUME_REPORT_WAIT: Duration = Duration::from_secs(5);
 
 /// One adapter as `/platforms` shows it.
 #[must_use]
-pub fn platform_line(status: &AdapterStatus) -> String {
+pub fn platform_line(strings: &pmt_i18n::Strings, status: &AdapterStatus) -> String {
     let state = serde_json::to_value(status.state)
         .ok()
         .and_then(|v| v.as_str().map(str::to_owned))
@@ -32,10 +32,10 @@ pub fn platform_line(status: &AdapterStatus) -> String {
         let _ = write!(line, " ({code})");
     }
     if status.paused {
-        line.push_str(" [paused]");
+        let _ = write!(line, " {}", strings.get("gateway.platform_paused"));
     }
     if status.attention {
-        line.push_str(" [needs attention]");
+        let _ = write!(line, " {}", strings.get("gateway.platform_attention"));
     }
     line
 }
@@ -63,12 +63,13 @@ pub(crate) fn statuses_of(shared: &Shared, profile: &str) -> Vec<AdapterStatus> 
 
 /// `/platforms`: one line per adapter of `profile`.
 pub(crate) fn listing(shared: &Shared, profile: &str) -> String {
+    let strings = shared.strings(profile);
     let lines: Vec<String> = statuses_of(shared, profile)
         .iter()
-        .map(platform_line)
+        .map(|status| platform_line(&strings, status))
         .collect();
     if lines.is_empty() {
-        "No messaging adapters are enabled for this profile.".to_owned()
+        pmt_i18n::t!(strings, "gateway.no_adapters")
     } else {
         lines.join("\n")
     }

@@ -23,10 +23,6 @@ const UPDATE_NOTICE_FILE: &str = "update_notice.json";
 /// How long the new daemon waits for the update that started it to finish.
 const UPDATE_WAIT: std::time::Duration = std::time::Duration::from_mins(5);
 
-/// What the home channels hear after a restart that interrupted turns.
-pub(crate) const INTERRUPTED: &str = "The gateway restarted while turns were running; \
-    the interrupted chats can /retry their last message.";
-
 /// The chat a `/restart` came from.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Requester {
@@ -41,9 +37,14 @@ fn run_dir(home: &Path) -> PathBuf {
 }
 
 /// What the restarted daemon posts to the requester.
-pub(crate) fn restarted(version: &str, build_id: &str) -> String {
+pub(crate) fn restarted(strings: &pmt_i18n::Strings, version: &str, build_id: &str) -> String {
     let build: String = build_id.chars().take(12).collect();
-    format!("Gateway restarted ({version}, build {build})")
+    pmt_i18n::t!(
+        strings,
+        "gateway.restart_done",
+        version = version,
+        build = build
+    )
 }
 
 /// Records the chat a `/restart` came from.
@@ -107,7 +108,11 @@ pub(crate) fn announce(shared: &std::sync::Arc<Shared>) {
                 reply_to: None,
                 edit_of: None,
                 kind: OutboundKind::System,
-                body: restarted(&identity.version, &identity.build_id),
+                body: restarted(
+                    &shared.strings(&requester.profile),
+                    &identity.version,
+                    &identity.build_id,
+                ),
                 attachments: Vec::new(),
                 notify: None,
             };
@@ -158,7 +163,11 @@ fn announce_update(shared: &std::sync::Arc<Shared>) {
             reply_to: None,
             edit_of: None,
             kind: OutboundKind::System,
-            body: format!("updated to {version}"),
+            body: pmt_i18n::t!(
+                shared.strings(&requester.profile),
+                "gateway.updated_to",
+                version = version
+            ),
             attachments: Vec::new(),
             notify: None,
         };
@@ -212,7 +221,7 @@ fn tell_home_channels(shared: &Shared, profile: &str, stamp: &str) {
             reply_to: None,
             edit_of: None,
             kind: OutboundKind::System,
-            body: INTERRUPTED.to_owned(),
+            body: pmt_i18n::t!(shared.strings(profile), "gateway.restart_interrupted"),
             attachments: Vec::new(),
             notify: None,
         };
@@ -227,7 +236,11 @@ mod tests {
     #[test]
     fn the_build_is_named_short() {
         assert_eq!(
-            restarted("1.4.1", "0123456789abcdef0123"),
+            restarted(
+                &pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+                "1.4.1",
+                "0123456789abcdef0123"
+            ),
             "Gateway restarted (1.4.1, build 0123456789ab)"
         );
     }

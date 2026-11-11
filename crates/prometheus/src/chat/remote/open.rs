@@ -113,10 +113,10 @@ pub(super) enum Choice {
 /// # Errors
 ///
 /// `output.io` when the terminal cannot be read.
-pub(super) async fn offer(owned: &Error) -> Result<Choice, Error> {
+pub(super) async fn offer(owned: &Error, strings: &pmt_i18n::Strings) -> Result<Choice, Error> {
     let mut out = std::io::stdout().lock();
     let _ = writeln!(out, "{}", owned.message());
-    let _ = write!(out, "[f]ollow it read-only, fork it [k], or [c]ancel? ");
+    let _ = write!(out, "{}", strings.get("cli.busy_choice"));
     let _ = out.flush();
     drop(out);
     let answer = pmt_core::spawn::blocking(|| {

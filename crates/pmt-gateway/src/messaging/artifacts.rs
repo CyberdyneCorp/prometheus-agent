@@ -58,7 +58,13 @@ impl Gateway {
                     )
                 })
                 .collect();
-            let _ = write!(body, "\n\nSkipped missing artifacts: {}", names.join(", "));
+            let names = names.join(", ");
+            let note = pmt_i18n::t!(
+                self.shared.strings(profile),
+                "gateway.artifacts_skipped",
+                names = names
+            );
+            let _ = write!(body, "\n\n{note}");
         }
         self.enqueue(profile, &resolved, &body, &files)
     }

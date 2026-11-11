@@ -44,9 +44,6 @@ const SILENCE: &[&str] = &[
     "[silent]", "silent", "no_reply", "no reply", "[静默]", "静默", "[沉默]", "沉默",
 ];
 
-/// What an addressed message answered with silence gets instead.
-pub(crate) const NOTHING_TO_ADD: &str = "(nothing to add)";
-
 /// Whether `text` is exactly an intentional silence token.
 pub(crate) fn is_silence(text: &str) -> bool {
     let normalized = text.trim().to_lowercase();
@@ -87,17 +84,21 @@ fn fit_kinds(files: &mut [OutboundAttachment], descriptor: &Descriptor) {
 
 impl Lane {
     /// The text of a finished turn, or nothing to say.
-    fn answer_text(finished: &TurnFinished) -> Option<String> {
+    fn answer_text(&self, finished: &TurnFinished) -> Option<String> {
         match (&finished.final_response, &finished.error) {
             (Some(answer), _) if !answer.trim().is_empty() => Some(answer.clone()),
-            (_, Some(error)) => Some(format!("The turn failed: {}", error.message)),
+            (_, Some(error)) => Some(pmt_i18n::t!(
+                self.strings(),
+                "gateway.turn_failed",
+                why = error.message
+            )),
             _ => None,
         }
     }
 
     /// Delivers the answer of a finished turn.
     pub(super) async fn deliver_answer(&self, answer: Answer<'_>) {
-        let Some(text) = Self::answer_text(answer.finished) else {
+        let Some(text) = self.answer_text(answer.finished) else {
             return;
         };
         if answer.finished.error.is_none() && is_silence(&text) {
@@ -179,7 +180,9 @@ impl Lane {
             notify: None,
         };
         if answer.addressed {
-            NOTHING_TO_ADD.clone_into(&mut new.body);
+            self.strings()
+                .get("gateway.nothing_to_add")
+                .clone_into(&mut new.body);
             self.shared.deliver(&self.profile, &new);
             return;
         }
@@ -217,7 +220,12 @@ impl Lane {
         if let Ok(usage) = usage
             && let Some(window) = usage.context_window.filter(|w| *w > 0)
         {
-            parts.push(format!("{}% context", usage.tokens * 100 / window));
+            let percent = usage.tokens * 100 / window;
+            parts.push(pmt_i18n::t!(
+                self.strings(),
+                "gateway.footer_context",
+                percent = percent
+            ));
         }
         if let Some(dir) = row.and_then(|s| s.cwd).and_then(|cwd| {
             PathBuf::from(cwd)

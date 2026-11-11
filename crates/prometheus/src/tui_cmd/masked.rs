@@ -6,6 +6,7 @@
 //! Ctrl+C declines (`None`).
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use pmt_i18n::t;
 use pmt_rpc::contracts::{SecretAnswer, SudoAnswer};
 use pmt_tui::app::Card;
 use pmt_tui::keys::Action;
@@ -18,9 +19,6 @@ pub(super) const SECRET: &str = "secret.request";
 /// The request for the sudo password.
 pub(super) const SUDO: &str = "sudo.request";
 
-/// How to answer a masked card.
-const HINT: &str = "input hidden; Enter sends, Esc or an empty input declines";
-
 /// Whether requests of `method` are answered on a masked card.
 pub(super) fn is_masked(method: &str) -> bool {
     method == SECRET || method == SUDO
@@ -28,16 +26,25 @@ pub(super) fn is_masked(method: &str) -> bool {
 
 /// The card of a secret or sudo request holding `typed` characters, with
 /// the countdown `within` after the hint.
-pub(super) fn card(method: &str, p: &Value, typed: usize, within: &str) -> Card {
+pub(super) fn card(
+    strings: &pmt_i18n::Strings,
+    method: &str,
+    p: &Value,
+    typed: usize,
+    within: &str,
+) -> Card {
     let (title, why) = if method == SECRET {
+        let name = p["name"].as_str().unwrap_or_default();
         (
-            format!("secret needed: {}", p["name"].as_str().unwrap_or_default()),
+            t!(strings, "tui.secret_needed", 0 = name),
             p["reason"].as_str().map(str::to_owned),
         )
     } else {
         (
-            "sudo password needed".to_owned(),
-            p["command"].as_str().map(|c| format!("for: {c}")),
+            t!(strings, "tui.sudo_needed"),
+            p["command"]
+                .as_str()
+                .map(|c| t!(strings, "tui.sudo_for", 0 = c)),
         )
     };
     let input = format!("› {}", "•".repeat(typed));
@@ -45,7 +52,7 @@ pub(super) fn card(method: &str, p: &Value, typed: usize, within: &str) -> Card 
     Card {
         title,
         body,
-        hint: format!("{HINT}{within}"),
+        hint: format!("{}{within}", strings.get("tui.masked_hint")),
     }
 }
 
@@ -97,23 +104,33 @@ impl Tui<'_> {
         let typed = std::mem::take(&mut self.masked);
         let value = (!decline && !typed.is_empty()).then_some(typed);
         let sent = value.is_some();
-        let (answer, what) = if asked.method() == SECRET {
+        let strings = self.strings();
+        let (answer, said) = if asked.method() == SECRET {
             let name = asked.call.params["name"].as_str().unwrap_or_default();
+            let key = if sent {
+                "tui.secret_sent"
+            } else {
+                "tui.secret_declined"
+            };
             (
                 serde_json::to_value(SecretAnswer { value }),
-                format!("secret {name}"),
+                strings.fmt(key, &[("0", &name)]),
             )
         } else {
+            let key = if sent {
+                "tui.sudo_sent"
+            } else {
+                "tui.sudo_declined"
+            };
             (
                 serde_json::to_value(SudoAnswer { password: value }),
-                "sudo password".to_owned(),
+                strings.get(key).to_owned(),
             )
         };
         if let Ok(answer) = answer {
             self.link.client.respond(&asked.call.id, Ok(answer));
         }
-        let outcome = if sent { "sent" } else { "declined" };
-        self.notice(format!("({what} {outcome})"));
+        self.notice(said);
         self.show_question();
     }
 }

@@ -44,7 +44,7 @@ impl Repl {
         crate::automation::clear(&self.factory.store, self.live().id);
         self.wakeup = None;
         let id = self.switch_to(None, EndReason::NewSession).await?;
-        Ok(format!("new session {id}"))
+        Ok(pmt_i18n::t!(self.strings(), "cli.new_session", id = id))
     }
 
     /// `/fork [title]`: continues in a copy of this session.
@@ -74,7 +74,12 @@ impl Repl {
             store.set_title(child, Some(title), pmt_store::TitleSource::User)?;
         }
         self.switch_to(Some(child), EndReason::NewSession).await?;
-        Ok(format!("forked {parent} into {child}"))
+        Ok(pmt_i18n::t!(
+            self.strings(),
+            "cli.forked",
+            parent = parent,
+            child = child
+        ))
     }
 
     /// `/resume <ref>`: switches to another session and shows its recap.

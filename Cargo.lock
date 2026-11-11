@@ -3568,6 +3568,7 @@ dependencies = [
  "nix 0.31.3",
  "pmt-config",
  "pmt-core",
+ "pmt-i18n",
  "ratatui",
  "tempfile",
  "unicode-width",

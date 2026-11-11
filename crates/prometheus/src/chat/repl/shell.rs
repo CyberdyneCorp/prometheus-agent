@@ -18,9 +18,6 @@ use crate::chat::theme::Role;
 /// Largest command-and-output block `!!` passes to the model.
 pub const MAX_CONTEXT: usize = 16 * 1024;
 
-/// What a `!` line typed while a turn runs gets.
-pub const BUSY: &str = "shell escape is unavailable while the agent is working";
-
 /// The call id approval prompts and logs show for an escape.
 const CALL_ID: &str = "shell-escape";
 
@@ -32,14 +29,14 @@ impl Repl {
             None => (false, line.trim_start_matches('!').trim()),
         };
         if command.is_empty() {
-            self.notice("usage: !<command> (output stays here) or !!<command> (also sent with your next message)");
+            self.notice(self.strings().get("cli.shell_usage"));
             return;
         }
         let Some(terminal) = Environments::process()
             .session(&self.live().id.to_string())
             .and_then(|env| env.terminal.clone())
         else {
-            self.notice("the shell escape needs the terminal, which is unavailable");
+            self.notice(self.strings().get("cli.shell_no_terminal"));
             return;
         };
         match self.gate(command).await {
@@ -60,7 +57,7 @@ impl Repl {
         if share {
             let block = context_block(command, &output);
             self.shell_context.push(block);
-            self.notice("the command and its output go with your next message");
+            self.notice(self.strings().get("cli.shell_shared"));
         }
     }
 

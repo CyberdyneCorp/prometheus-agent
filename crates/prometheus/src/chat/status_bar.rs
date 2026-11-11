@@ -98,12 +98,12 @@ impl StatusBar {
         };
         persist(scope, "ui.status_bar", shown)?;
         self.shown = shown;
-        Ok(if shown {
-            "status bar shown (ui.status_bar = true)"
+        let key = if shown {
+            "cli.statusbar_shown"
         } else {
-            "status bar hidden (ui.status_bar = false)"
-        }
-        .to_owned())
+            "cli.statusbar_hidden"
+        };
+        Ok(pmt_i18n::t!(strings(scope), key))
     }
 
     /// `/battery [on|off|status]`: sets or flips `ui.status_bar_battery`,
@@ -115,9 +115,11 @@ impl StatusBar {
     pub fn battery_command(&mut self, scope: &ProfileScope, args: &str) -> Result<String, Error> {
         let on = match args.trim() {
             "status" => {
-                return Ok(self
-                    .read_now()
-                    .map_or_else(|| battery::NONE.to_owned(), Battery::describe));
+                let strings = strings(scope);
+                return Ok(self.read_now().map_or_else(
+                    || pmt_i18n::t!(strings, "cli.battery_none"),
+                    |b| b.describe(&*strings),
+                ));
             }
             "" => !self.battery,
             "on" => true,
@@ -130,17 +132,14 @@ impl StatusBar {
         };
         persist(scope, "ui.status_bar_battery", on)?;
         self.battery = on;
-        if !on {
-            return Ok("battery hidden (ui.status_bar_battery = false)".to_owned());
-        }
-        let missing = if self.read_now().is_none() {
-            "; no battery detected, so none is shown"
+        let key = if !on {
+            "cli.battery_hidden"
+        } else if self.read_now().is_none() {
+            "cli.battery_shown_missing"
         } else {
-            ""
+            "cli.battery_shown"
         };
-        Ok(format!(
-            "battery shown (ui.status_bar_battery = true){missing}"
-        ))
+        Ok(pmt_i18n::t!(strings(scope), key))
     }
 }
 
@@ -166,6 +165,10 @@ fn refreshed(probe: &Arc<Mutex<Probe>>) -> Option<Battery> {
         });
     }
     probing.reading.and_then(|(_, found)| found)
+}
+
+fn strings(scope: &ProfileScope) -> Arc<pmt_i18n::Strings> {
+    pmt_config::language::strings(scope.dir(), pmt_i18n::Surface::Core)
 }
 
 fn persist(scope: &ProfileScope, key: &str, value: bool) -> Result<(), Error> {

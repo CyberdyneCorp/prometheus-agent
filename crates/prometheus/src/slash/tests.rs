@@ -66,8 +66,20 @@ fn ambiguous_and_unknown_tokens_are_explained() {
 #[test]
 fn a_command_of_other_surfaces_is_hidden_and_refused() {
     let r = registry();
-    assert!(!r.help(Surface::Gateway).contains("/theme"));
-    assert!(r.help(Surface::Cli).contains("/theme"));
+    assert!(
+        !r.help(
+            Surface::Gateway,
+            &pmt_i18n::Strings::english(pmt_i18n::Surface::Core)
+        )
+        .contains("/theme")
+    );
+    assert!(
+        r.help(
+            Surface::Cli,
+            &pmt_i18n::Strings::english(pmt_i18n::Surface::Core)
+        )
+        .contains("/theme")
+    );
     assert_eq!(
         r.resolve("/theme", Surface::Gateway).message().unwrap(),
         "/theme is not available here"
@@ -77,7 +89,10 @@ fn a_command_of_other_surfaces_is_hidden_and_refused() {
 #[test]
 fn help_is_generated_from_the_registry_grouped_by_category() {
     let r = registry();
-    let help = r.help(Surface::Cli);
+    let help = r.help(
+        Surface::Cli,
+        &pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+    );
     for command in builtins::BUILTINS.iter().filter(|c| c.on(Surface::Cli)) {
         assert!(
             help.contains(&command.usage()),
@@ -153,9 +168,27 @@ fn a_quick_command_shadows_a_skill_of_the_same_name() {
 #[test]
 fn browser_is_refused_on_messaging_platforms() {
     let r = registry();
-    assert!(r.help(Surface::Cli).contains("/browser"));
-    assert!(r.help(Surface::Tui).contains("/browser"));
-    assert!(!r.help(Surface::Gateway).contains("/browser"));
+    assert!(
+        r.help(
+            Surface::Cli,
+            &pmt_i18n::Strings::english(pmt_i18n::Surface::Core)
+        )
+        .contains("/browser")
+    );
+    assert!(
+        r.help(
+            Surface::Tui,
+            &pmt_i18n::Strings::english(pmt_i18n::Surface::Core)
+        )
+        .contains("/browser")
+    );
+    assert!(
+        !r.help(
+            Surface::Gateway,
+            &pmt_i18n::Strings::english(pmt_i18n::Surface::Core)
+        )
+        .contains("/browser")
+    );
     assert_eq!(
         r.resolve("/browser connect", Surface::Gateway)
             .message()

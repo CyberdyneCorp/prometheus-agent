@@ -13,6 +13,8 @@ use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use unicode_width::UnicodeWidthStr as _;
 
+use pmt_i18n::{Strings, t};
+
 use crate::busy;
 use crate::theme::Theme;
 use crate::wrap::truncate;
@@ -61,8 +63,8 @@ pub struct Status {
 
 /// The status item that opens the session switcher when clicked.
 #[must_use]
-pub fn live_item(live: usize) -> String {
-    format!("{live} live")
+pub fn live_item(strings: &Strings, live: usize) -> String {
+    t!(strings, "tui.live", 0 = live)
 }
 
 impl Status {
@@ -74,13 +76,13 @@ impl Status {
     }
 
     /// The items after the battery, in order.
-    fn items(&self) -> Vec<String> {
+    fn items(&self, strings: &Strings) -> Vec<String> {
         let mut items = vec![self.profile.clone()];
         if let Some(model) = &self.model {
             items.push(model.clone());
         }
         if let Some(percent) = self.context_percent() {
-            items.push(format!("ctx {percent}%"));
+            items.push(t!(strings, "tui.ctx", 0 = percent));
         }
         if let Some(cost) = self.cost_usd {
             items.push(format!("${cost:.4}"));
@@ -91,12 +93,13 @@ impl Status {
         if let Some(quota) = &self.quota {
             items.push(quota.clone());
         }
-        if self.approvals > 0 {
-            let s = if self.approvals == 1 { "" } else { "s" };
-            items.push(format!("{} approval{s}", self.approvals));
+        if self.approvals == 1 {
+            items.push(t!(strings, "tui.approvals_one", 0 = self.approvals));
+        } else if self.approvals > 1 {
+            items.push(t!(strings, "tui.approvals", 0 = self.approvals));
         }
         if self.live > 1 {
-            items.push(live_item(self.live));
+            items.push(live_item(strings, self.live));
         }
         if let Some(note) = &self.note {
             items.push(note.clone());
@@ -123,11 +126,11 @@ impl Status {
 
     /// The items that fit `room` columns, as `(text, is_battery)` spans
     /// with their separators.
-    fn fitted(&self, room: usize) -> Vec<(String, bool)> {
+    fn fitted(&self, strings: &Strings, room: usize) -> Vec<(String, bool)> {
         let mut spans: Vec<(String, bool)> = Vec::new();
         let mut used = 0;
         let battery = self.battery.map(|b| (b.item(), true));
-        let rest = self.items().into_iter().map(|item| (item, false));
+        let rest = self.items(strings).into_iter().map(|item| (item, false));
         for (item, is_battery) in battery.into_iter().chain(rest) {
             let sep = if spans.is_empty() {
                 0
@@ -149,23 +152,27 @@ impl Status {
     /// The status line as plain text for `width` columns (the line
     /// interface's bottom line).
     #[must_use]
-    pub fn text(&self, width: u16) -> String {
+    pub fn text(&self, width: u16, strings: &Strings) -> String {
         let width = usize::from(width);
         let lead = self.lead();
         let room = width.saturating_sub(lead.width());
-        let text: String = self.fitted(room).into_iter().map(|(t, _)| t).collect();
+        let text: String = self
+            .fitted(strings, room)
+            .into_iter()
+            .map(|(t, _)| t)
+            .collect();
         truncate(&format!("{lead}{}", truncate(&text, room)), width)
     }
 
     /// The status line for `width` columns.
     #[must_use]
-    pub fn line(&self, width: u16, theme: &Theme) -> Line<'static> {
+    pub fn line(&self, width: u16, theme: &Theme, strings: &Strings) -> Line<'static> {
         let width = usize::from(width);
         let lead = self.lead();
         let room = width.saturating_sub(lead.width());
         let mut spans = vec![Span::styled(lead, theme.status.patch(theme.busy))];
         let mut used = 0;
-        for (text, is_battery) in self.fitted(room) {
+        for (text, is_battery) in self.fitted(strings, room) {
             let text = truncate(&text, room - used);
             used += text.width();
             let style: Style = match self.battery {
@@ -184,12 +191,12 @@ impl Status {
     /// The column range of the `<n> live` item on a line of `width`, for
     /// a click on it.
     #[must_use]
-    pub fn live_columns(&self, width: u16) -> Option<std::ops::Range<u16>> {
-        let wanted = live_item(self.live);
+    pub fn live_columns(&self, width: u16, strings: &Strings) -> Option<std::ops::Range<u16>> {
+        let wanted = live_item(strings, self.live);
         let lead = self.lead().width();
         let room = usize::from(width).saturating_sub(lead);
         let mut at = lead;
-        for (text, _) in self.fitted(room) {
+        for (text, _) in self.fitted(strings, room) {
             if text == wanted {
                 let start = u16::try_from(at).ok()?;
                 let end = u16::try_from(at + text.width()).ok()?;
@@ -212,7 +219,11 @@ mod tests {
     use pmt_core::battery::Battery;
 
     fn text(status: &Status, width: u16) -> String {
-        let line = status.line(width, &Theme::new(TuiTheme::Dark, true));
+        let line = status.line(
+            width,
+            &Theme::new(TuiTheme::Dark, true),
+            &pmt_i18n::Strings::english(pmt_i18n::Surface::Tui),
+        );
         line.spans.iter().map(|s| s.content.as_ref()).collect()
     }
 
@@ -249,7 +260,10 @@ mod tests {
             text(&full(), 70).trim_end(),
             "  work │ mock/m1 │ ctx 18% │ $0.0123 │ 2 approvals"
         );
-        assert_eq!(text(&full(), 70).trim_end(), full().text(70));
+        assert_eq!(
+            text(&full(), 70).trim_end(),
+            full().text(70, &pmt_i18n::Strings::english(pmt_i18n::Surface::Tui))
+        );
     }
 
     #[test]
@@ -280,7 +294,9 @@ mod tests {
             text(&status, 90).trim_end(),
             "  ▮ 9% │ work │ mock/m1 │ ctx 18% │ $0.0123 │ 2 approvals │ 2 live"
         );
-        let columns = status.live_columns(90).unwrap();
+        let columns = status
+            .live_columns(90, &pmt_i18n::Strings::english(pmt_i18n::Surface::Tui))
+            .unwrap();
         let shown = text(&status, 90);
         let picked: String = shown
             .chars()

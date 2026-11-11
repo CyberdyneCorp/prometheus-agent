@@ -27,14 +27,6 @@ use super::Shared;
 /// The clean-shutdown marker's file name under `<home>/run/`.
 pub const CLEAN_SHUTDOWN: &str = "clean_shutdown";
 
-/// What an interrupted conversation is told after a restart.
-pub const RESTARTED: &str = "The agent restarted while working on your last message. \
-    Reply /retry to run it again.";
-
-/// What a chat is told when its interrupted turn resumes by itself.
-pub const RESUMING: &str = "The agent restarted while working on your last message; \
-    resuming where it stopped.";
-
 /// The `origin` of the lane turn that resumes an interrupted one: the
 /// host resumes the session's unfinished turn instead of storing input.
 pub const RESUME_ORIGIN: &str = "resume";
@@ -124,7 +116,7 @@ pub(crate) fn recover(shared: &Shared, profile: &str) -> Vec<SessionId> {
             reply_to: None,
             edit_of: None,
             kind: OutboundKind::System,
-            body: RESTARTED.to_owned(),
+            body: pmt_i18n::t!(shared.strings(profile), "gateway.restarted_retry"),
             attachments: Vec::new(),
             notify: None,
         };

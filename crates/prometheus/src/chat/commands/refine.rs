@@ -39,14 +39,16 @@ pub(super) async fn refine(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
         digest: false,
     };
     let post = Arc::clone(&ctx.post);
+    let strings = ctx.strings();
+    let said = Arc::clone(&strings);
     pmt_core::spawn::spawn(async move {
         let (skills, memory) = tokio::join!(
             pmt_skills::refine::refine_held(skills, running),
             pmt_memory::review::refine(memory),
         );
-        post(summary(skills, memory));
+        post(summary(&said, skills, memory));
     });
-    Ok("Self-improvement review started; its summary is posted here when it finishes.".to_owned())
+    Ok(pmt_i18n::t!(strings, "slash.refine.started"))
 }
 
 /// A background skill review of `live` in a new hidden child session,
@@ -74,19 +76,17 @@ pub(crate) async fn skill_review(
 
 /// The chat message of the finished reviews.
 fn summary(
+    strings: &pmt_i18n::Strings,
     skills: Result<pmt_skills::refine::Refined, Error>,
     memory: Result<(pmt_memory::review::Changes, TurnResult), Error>,
 ) -> String {
     let mut text = match skills {
         Ok(refined) => refined.summary,
-        Err(err) => format!(
-            "Self-improvement review: the skill review failed: {}",
-            err.message()
-        ),
+        Err(err) => pmt_i18n::t!(strings, "slash.refine.skills_failed", why = err.message()),
     };
     let memory = match memory {
         Ok((changes, _)) => changes.summary(),
-        Err(err) => format!("Memory: the review failed: {}", err.message()),
+        Err(err) => pmt_i18n::t!(strings, "slash.refine.memory_failed", why = err.message()),
     };
     text.push('\n');
     text.push_str(&memory);

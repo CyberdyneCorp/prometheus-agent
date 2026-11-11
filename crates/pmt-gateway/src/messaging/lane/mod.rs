@@ -606,10 +606,7 @@ impl Lane {
     /// this gateway speaks its own language, and a language, overlay or
     /// pack change shows in the next notice without a restart.
     fn strings(&self) -> std::sync::Arc<pmt_i18n::Strings> {
-        self.config().map_or_else(
-            || pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
-            |scope| pmt_config::language::strings(scope.dir(), pmt_i18n::Surface::Core),
-        )
+        self.shared.strings(&self.profile)
     }
 
     /// Appends the waiting mirrored messages to the session (never while

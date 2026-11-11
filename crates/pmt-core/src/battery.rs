@@ -47,18 +47,15 @@ impl Battery {
 
     /// `/battery status`.
     #[must_use]
-    pub fn describe(self) -> String {
-        let state = if self.charging {
-            "charging"
+    pub fn describe(self, text: &dyn crate::text::Catalog) -> String {
+        let key = if self.charging {
+            "cli.battery_charging"
         } else {
-            "on battery"
+            "cli.battery_discharging"
         };
-        format!("battery: {}% ({state})", self.percent)
+        text.text(key, &[("percent", &self.percent)])
     }
 }
-
-/// What `/battery status` prints without a battery.
-pub const NONE: &str = "no battery detected";
 
 /// The battery a test seam describes: `none`, or `<percent>[,charging]`.
 /// `None` for a value that is neither.
@@ -154,6 +151,15 @@ fn read_sysfs(root: &Path) -> Option<Battery> {
 mod tests {
     use super::{Battery, Level, from_seam, parse_pmset, parse_win32, read_sysfs};
 
+    /// Shows the key and the first argument a describe asks for.
+    struct Keys;
+
+    impl crate::text::Catalog for Keys {
+        fn text(&self, key: &str, args: &[(&str, &dyn std::fmt::Display)]) -> String {
+            format!("{key} {}", args[0].1)
+        }
+    }
+
     #[test]
     fn pmset_reports_a_laptop_battery_and_nothing_on_a_desktop() {
         let laptop = "Now drawing from 'Battery Power'\n -InternalBattery-0 (id=4653155)\t83%; discharging; 5:21 remaining present: true\n";
@@ -211,6 +217,6 @@ mod tests {
         };
         assert_eq!(half.level(), Level::Medium);
         assert_eq!(half.item(), "▮ 50%");
-        assert_eq!(half.describe(), "battery: 50% (on battery)");
+        assert_eq!(half.describe(&Keys), "cli.battery_discharging 50");
     }
 }

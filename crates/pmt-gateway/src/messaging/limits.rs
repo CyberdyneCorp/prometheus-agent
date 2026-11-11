@@ -14,18 +14,20 @@ use tokio::time::Instant;
 
 /// What the sender is told when a limit drops their message.
 #[must_use]
-pub(crate) fn slow_down(wait: Duration) -> String {
-    let secs = wait.as_secs() + u64::from(wait.subsec_nanos() > 0);
-    format!(
-        "Slow down: rate limit reached, try again in {}s.",
-        secs.max(1)
-    )
+pub(crate) fn slow_down(strings: &pmt_i18n::Strings, wait: Duration) -> String {
+    let secs = (wait.as_secs() + u64::from(wait.subsec_nanos() > 0)).max(1);
+    pmt_i18n::t!(strings, "gateway.slow_down", secs = secs)
 }
 
 /// What the sender is told when their daily spend reached the cap.
 #[must_use]
-pub(crate) fn daily_budget(spent: f64, cap: f64) -> String {
-    format!("Daily budget reached ({spent:.2} of {cap:.2} USD); it resets at local midnight.")
+pub(crate) fn daily_budget(strings: &pmt_i18n::Strings, spent: f64, cap: f64) -> String {
+    pmt_i18n::t!(
+        strings,
+        "gateway.daily_budget",
+        spent = format!("{spent:.2}"),
+        cap = format!("{cap:.2}")
+    )
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -234,7 +236,10 @@ mod tests {
     #[test]
     fn the_notice_rounds_up() {
         assert_eq!(
-            slow_down(Duration::from_millis(2100)),
+            slow_down(
+                &pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+                Duration::from_millis(2100)
+            ),
             "Slow down: rate limit reached, try again in 3s."
         );
     }

@@ -7,6 +7,7 @@
 use std::collections::HashMap;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use pmt_i18n::t;
 use pmt_rpc::contracts::{
     CommandSource, Disposition, SessionListParams, SessionListing, SessionSetup,
 };
@@ -67,9 +68,10 @@ impl Tui<'_> {
                 }
                 .to_owned(),
             });
+        let strings = self.strings();
         let local = LOCAL.iter().map(|c| Entry {
             name: c.name.to_owned(),
-            description: c.description.to_owned(),
+            description: c.description(&strings).to_owned(),
             disposition: "client".to_owned(),
         });
         self.app.overlay = Some(Overlay::Palette(Palette::new(
@@ -192,7 +194,7 @@ impl Tui<'_> {
             return;
         };
         if self.link.live.len() < 2 {
-            self.notice("the only live session stays; /quit leaves");
+            self.notice(t!(self.strings(), "tui.only_session"));
             return;
         }
         switcher.rows.retain(|r| r.id != row.id);
@@ -210,7 +212,7 @@ impl Tui<'_> {
         self.link.show(id).await;
         self.shown_changed();
         self.reload().await;
-        self.notice(format!("session {id}"));
+        self.notice(t!(self.strings(), "tui.session_shown", 0 = id));
     }
 
     /// `Done::Close`: detaches from `id`; another live session is shown
@@ -224,7 +226,7 @@ impl Tui<'_> {
         if was_shown {
             self.reload().await;
         }
-        self.notice(format!("closed session {id}"));
+        self.notice(t!(self.strings(), "tui.session_closed", 0 = id));
         if let Some(line) = summary {
             self.notice(line);
         }

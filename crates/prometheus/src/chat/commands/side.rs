@@ -11,9 +11,6 @@ use pmt_store::Visibility;
 
 use super::Ctx;
 
-/// The label of every side answer.
-const LABEL: &str = "side answer";
-
 pub(super) fn btw(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
     let question = args.trim();
     if question.is_empty() {
@@ -25,12 +22,18 @@ pub(super) fn btw(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
     let asker = ctx.factory.models.side(&live.model, live.id);
     let post = Arc::clone(&ctx.post);
     let pending = question.to_owned();
+    let strings = ctx.strings();
+    let said = Arc::clone(&strings);
     pmt_core::spawn::spawn(async move {
         let text = match asker.ask(transcript, &pending).await {
-            Ok(answer) => format!("{LABEL}: {}", answer.trim()),
-            Err(why) => format!("{LABEL} failed: {why}"),
+            Ok(answer) => pmt_i18n::t!(said, "slash.side.answer", answer = answer.trim()),
+            Err(why) => pmt_i18n::t!(said, "slash.side.failed", why = why),
         };
         post(text);
     });
-    Ok(format!("{LABEL} pending: {question}"))
+    Ok(pmt_i18n::t!(
+        strings,
+        "slash.side.pending",
+        question = question
+    ))
 }

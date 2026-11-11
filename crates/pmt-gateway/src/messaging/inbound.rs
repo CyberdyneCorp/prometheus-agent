@@ -76,7 +76,7 @@ pub(crate) async fn prepare(
                     adapter_profile,
                     platform,
                     inbound,
-                    &refused.notice(),
+                    &refused.notice(&shared.strings(adapter_profile)),
                 )
                 .await;
                 continue;
@@ -93,6 +93,7 @@ pub(crate) async fn prepare(
         }
         prepared.voice |= attachment.kind == MediaKind::Voice;
         let clip = voice::hear(
+            &shared.strings(scope.name().as_str()),
             speech.as_deref(),
             &config.voice,
             std::path::Path::new(&attachment.location),

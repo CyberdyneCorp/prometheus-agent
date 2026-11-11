@@ -150,14 +150,16 @@ async fn decide(
         return Admission::Duplicate;
     }
     if is_start_ping(&inbound) {
-        reply(shared, owner, platform, &inbound, GREETING).await;
+        let greeting = pmt_i18n::t!(shared.strings(owner), "gateway.greeting");
+        reply(shared, owner, platform, &inbound, &greeting).await;
         return Admission::Handled;
     }
     let topics = shared
         .topics
         .enabled(&descriptor, owner, platform, &inbound.chat_id);
     if super::topics::in_lobby(topics, &inbound) {
-        reply(shared, owner, platform, &inbound, super::topics::LOBBY).await;
+        let lobby = pmt_i18n::t!(shared.strings(owner), "gateway.topic_lobby");
+        reply(shared, owner, platform, &inbound, &lobby).await;
         return Admission::Handled;
     }
     let inbound = match super::admit_groups::gate(shared, owner, platform, inbound, gateway).await {
@@ -201,9 +203,6 @@ pub(crate) fn routing_of(
     });
     (routing, key)
 }
-
-/// What a start ping answers.
-pub(crate) const GREETING: &str = "Hi! Send me a message to start, or /help to see what I can do.";
 
 /// A platform's start ping (spec: messaging-gateway, Platform start pings
 /// and paginated command browser): Telegram's `/start` (with an optional
@@ -262,7 +261,8 @@ async fn limit(
     if let Verdict::Limited { wait, notify } = shared.limits.check(&sender, &config, turn, now) {
         tracing::info!(profile = owner, platform, "message dropped: rate limit");
         if notify {
-            reply(shared, owner, platform, inbound, &limits::slow_down(wait)).await;
+            let text = limits::slow_down(&shared.strings(owner), wait);
+            reply(shared, owner, platform, inbound, &text).await;
         }
         return Some(Admission::RateLimited);
     }
@@ -299,7 +299,7 @@ async fn limit(
             owner,
             platform,
             inbound,
-            &limits::daily_budget(spent, cap),
+            &limits::daily_budget(&shared.strings(owner), spent, cap),
         )
         .await;
     }
@@ -321,14 +321,13 @@ async fn unauthorized(
     match gateway.unauthorized_dm(platform) {
         UnauthorizedDm::Ignore => Admission::Unauthorized,
         UnauthorizedDm::Decline => {
-            reply(shared, owner, platform, inbound, DECLINED).await;
+            let declined = pmt_i18n::t!(shared.strings(owner), "gateway.declined");
+            reply(shared, owner, platform, inbound, &declined).await;
             Admission::Unauthorized
         }
         UnauthorizedDm::Pair => pair(shared, owner, platform, inbound).await,
     }
 }
-
-const DECLINED: &str = "You are not authorized to use this assistant.";
 
 async fn pair(shared: &Shared, owner: &str, platform: &str, inbound: &Inbound) -> Admission {
     let Some(store) = shared.store(owner) else {
@@ -344,7 +343,7 @@ async fn pair(shared: &Shared, owner: &str, platform: &str, inbound: &Inbound) -
         Ok(Requested::Issued(code)) => {
             // Sent directly, never through the outbox: the code is stored
             // nowhere in plain text.
-            let text = pairing_text(owner, platform, &code);
+            let text = pairing_text(&shared.strings(owner), owner, platform, &code);
             reply(shared, owner, platform, inbound, &text).await;
             tracing::info!(profile = owner, platform, "pairing code issued");
             Admission::PairingIssued
@@ -364,15 +363,18 @@ async fn pair(shared: &Shared, owner: &str, platform: &str, inbound: &Inbound) -
     }
 }
 
-fn pairing_text(owner: &str, platform: &str, code: &str) -> String {
+fn pairing_text(strings: &pmt_i18n::Strings, owner: &str, platform: &str, code: &str) -> String {
     let profile = if owner == "default" {
         String::new()
     } else {
         format!("-p {owner} ")
     };
-    format!(
-        "This assistant does not know you yet. Your pairing code is {code} (valid for one hour). \
-         Ask its owner to approve it with: prometheus {profile}pairing approve {platform} {code}"
+    let command = format!("prometheus {profile}pairing approve {platform} {code}");
+    pmt_i18n::t!(
+        strings,
+        "gateway.pairing_code",
+        code = code,
+        command = command
     )
 }
 

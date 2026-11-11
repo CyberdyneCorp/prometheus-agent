@@ -45,13 +45,24 @@ fn voice_mode(key: &str) -> Option<VoiceReplyMode> {
     }
 }
 
+/// The source [`Lane::chat_voice`] names for a mode stored with the chat.
+const CHAT_SOURCE: &str = "chat";
+
 /// What `/voice status` calls a mode.
-fn voice_label(mode: VoiceReplyMode) -> &'static str {
-    match mode {
-        VoiceReplyMode::Off => "off (text only)",
-        VoiceReplyMode::Mirror => "on (spoken to voice messages)",
-        VoiceReplyMode::Always => "tts (every reply spoken)",
-    }
+fn voice_label(strings: &pmt_i18n::Strings, mode: VoiceReplyMode) -> String {
+    let key = match mode {
+        VoiceReplyMode::Off => "gateway.voice_off",
+        VoiceReplyMode::Mirror => "gateway.voice_mirror",
+        VoiceReplyMode::Always => "gateway.voice_always",
+    };
+    strings.get(key).to_owned()
+}
+
+/// `on` or `off` in the chat's language.
+fn on_off(strings: &pmt_i18n::Strings, on: bool) -> String {
+    strings
+        .get(if on { "gateway.on" } else { "gateway.off" })
+        .to_owned()
 }
 
 impl Lane {
@@ -59,25 +70,29 @@ impl Lane {
     pub(super) async fn platform_command(&self, routing: &Routing, args: &str) {
         let words: Vec<&str> = args.split_whitespace().collect();
         let shared = &self.shared;
+        let strings = self.strings();
         let reply = match words.as_slice() {
             [] | ["list"] => operate::listing(shared, &self.profile),
             ["pause", name] => {
                 let actor = format!("{}:{}", routing.platform, routing.sender_id);
                 match operate::pause(shared, &self.profile, &name.to_lowercase(), &actor) {
-                    Ok(true) => format!(
-                        "Paused {name}: its messages are acknowledged and dropped until /platform resume {name}."
-                    ),
-                    Ok(false) => format!("{name} is already paused."),
+                    Ok(true) => pmt_i18n::t!(strings, "gateway.platform_paused_now", name = name),
+                    Ok(false) => {
+                        pmt_i18n::t!(strings, "gateway.platform_already_paused", name = name)
+                    }
                     Err(err) => err.message().to_owned(),
                 }
             }
             ["resume", name] => {
                 match operate::resume(shared, &self.profile, &name.to_lowercase()).await {
-                    Ok(status) => format!("Resumed. {}", operate::platform_line(&status)),
+                    Ok(status) => {
+                        let line = operate::platform_line(&strings, &status);
+                        pmt_i18n::t!(strings, "gateway.platform_resumed", line = line)
+                    }
                     Err(err) => err.message().to_owned(),
                 }
             }
-            _ => "Usage: /platform [list | pause <name> | resume <name>]".to_owned(),
+            _ => pmt_i18n::t!(strings, "gateway.platform_usage"),
         };
         self.say(&reply);
     }
@@ -88,6 +103,7 @@ impl Lane {
         let Some(store) = self.shared.store(&self.profile) else {
             return;
         };
+        let strings = self.strings();
         let chosen = match args.trim() {
             "on" => Some(true),
             "off" => Some(false),
@@ -97,27 +113,30 @@ impl Lane {
                     .unwrap_or_default()
                     .footer;
                 let on = stored.unwrap_or_else(|| self.display().runtime_footer);
-                let source = if stored.is_some() {
-                    "this chat"
+                let source = strings.get(if stored.is_some() {
+                    "gateway.source_chat"
                 } else {
-                    "display policy"
-                };
-                self.say(&format!(
-                    "Footer: {} ({source})",
-                    if on { "on" } else { "off" }
+                    "gateway.source_policy"
+                });
+                let state = on_off(&strings, on);
+                self.say(&pmt_i18n::t!(
+                    strings,
+                    "gateway.footer_status",
+                    state = state,
+                    source = source
                 ));
                 return;
             }
             _ => {
-                self.say("Usage: /footer [on | off | status]");
+                self.say(strings.get("gateway.footer_usage"));
                 return;
             }
         };
         match store.set_chat_footer(&routing.platform, &routing.chat_id, chosen) {
-            Ok(()) => self.say(&format!(
-                "Footer {} for this chat.",
-                if chosen == Some(true) { "on" } else { "off" }
-            )),
+            Ok(()) => {
+                let state = on_off(&strings, chosen == Some(true));
+                self.say(&pmt_i18n::t!(strings, "gateway.footer_set", state = state));
+            }
             Err(err) => self.say(err.message()),
         }
     }
@@ -128,25 +147,37 @@ impl Lane {
         let Some(store) = self.shared.store(&self.profile) else {
             return;
         };
+        let strings = self.strings();
         let chosen = match args.trim() {
             "on" => VoiceReplyMode::Mirror,
             "tts" => VoiceReplyMode::Always,
             "off" => VoiceReplyMode::Off,
             "" | "status" => {
                 let (mode, source) = self.chat_voice(routing);
-                self.say(&format!("Voice replies: {} ({source})", voice_label(mode)));
+                let source = if source == CHAT_SOURCE {
+                    strings.get("gateway.source_chat")
+                } else {
+                    source
+                };
+                let mode = voice_label(&strings, mode);
+                self.say(&pmt_i18n::t!(
+                    strings,
+                    "gateway.voice_status",
+                    mode = mode,
+                    source = source
+                ));
                 return;
             }
             _ => {
-                self.say("Usage: /voice [on | tts | off | status]");
+                self.say(strings.get("gateway.voice_usage"));
                 return;
             }
         };
         match store.set_chat_voice(&routing.platform, &routing.chat_id, Some(voice_key(chosen))) {
-            Ok(()) => self.say(&format!(
-                "Voice replies: {} for this chat.",
-                voice_label(chosen)
-            )),
+            Ok(()) => {
+                let mode = voice_label(&strings, chosen);
+                self.say(&pmt_i18n::t!(strings, "gateway.voice_set", mode = mode));
+            }
             Err(err) => self.say(err.message()),
         }
     }
@@ -160,7 +191,7 @@ impl Lane {
             .and_then(|prefs| prefs.voice)
             .and_then(|key| voice_mode(&key));
         match stored {
-            Some(mode) => (mode, "this chat"),
+            Some(mode) => (mode, CHAT_SOURCE),
             None => (
                 self.config().map_or(VoiceReplyMode::Mirror, |s| {
                     s.config().gateway.voice.reply_mode
@@ -175,7 +206,7 @@ impl Lane {
         match args.trim() {
             "" | "status" => self.busy_status(routing),
             mode @ ("queue" | "steer" | "interrupt") => self.set_busy(routing, mode),
-            _ => self.say("Usage: /busy [queue | steer | interrupt | status]"),
+            _ => self.say(self.strings().get("gateway.busy_usage")),
         }
     }
 
@@ -186,7 +217,11 @@ impl Lane {
         let config = scope.config();
         let platform = config.gateway.platform(&routing.platform);
         let reply = match platform.busy.input_mode {
-            Some(mode) => format!("{} (platform override)", mode_name(mode)),
+            Some(mode) => pmt_i18n::t!(
+                self.strings(),
+                "gateway.busy_platform",
+                mode = mode_name(mode)
+            ),
             None => format!("{} (busy.input_mode)", mode_name(config.busy.input_mode)),
         };
         self.say(&reply);
@@ -206,12 +241,18 @@ impl Lane {
                     mode,
                     "busy mode set"
                 );
-                self.say(&format!(
-                    "Busy mode on {} is now {mode}; it applies from the next message.",
-                    routing.platform
+                self.say(&pmt_i18n::t!(
+                    self.strings(),
+                    "gateway.busy_set",
+                    platform = routing.platform,
+                    mode = mode
                 ));
             }
-            Err(err) => self.say(&format!("Busy mode not set: {}", err.message())),
+            Err(err) => {
+                let text =
+                    pmt_i18n::t!(self.strings(), "gateway.busy_not_set", why = err.message());
+                self.say(&text);
+            }
         }
     }
 }

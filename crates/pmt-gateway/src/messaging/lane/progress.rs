@@ -37,12 +37,34 @@ const LOG_BACKUPS: usize = 3;
 /// Phrases a status phrase file may hold, and their length.
 pub(crate) const MAX_PHRASES: usize = 80;
 pub(crate) const MAX_PHRASE_CHARS: usize = 160;
-/// The built-in working-status phrases.
-const PHRASES: &[&str] = &["Working on it…"];
-
 /// What the long-running bubble says after `minutes`.
-pub(crate) fn working(minutes: u64) -> String {
-    format!("Working \u{2014} {minutes} min")
+pub(crate) fn working(strings: &pmt_i18n::Strings, minutes: u64) -> String {
+    pmt_i18n::t!(strings, "gateway.working", minutes = minutes)
+}
+
+/// What the running turn is doing, for a detailed busy acknowledgement.
+pub(crate) enum Activity {
+    /// A tool runs.
+    Tool(String, u64),
+    /// The model thinks.
+    Thinking(u64),
+}
+
+impl Activity {
+    /// The activity in the language of `strings`.
+    pub(crate) fn render(&self, strings: &pmt_i18n::Strings) -> String {
+        match self {
+            Self::Tool(tool, minutes) => pmt_i18n::t!(
+                strings,
+                "gateway.activity_tool",
+                tool = tool,
+                minutes = minutes
+            ),
+            Self::Thinking(minutes) => {
+                pmt_i18n::t!(strings, "gateway.activity_thinking", minutes = minutes)
+            }
+        }
+    }
 }
 
 /// A tool call's arguments as one line of at most `limit` characters.
@@ -115,11 +137,11 @@ impl Progress {
 
     /// What the running turn is doing, for a detailed busy
     /// acknowledgement.
-    pub(super) fn activity(&self, now: Instant) -> String {
+    pub(super) fn activity(&self, now: Instant) -> Activity {
         let minutes = now.duration_since(self.started).as_secs() / 60;
         match &self.last_tool {
-            Some(tool) => format!("running {tool}, {minutes} min in"),
-            None => format!("thinking, {minutes} min in"),
+            Some(tool) => Activity::Tool(tool.clone(), minutes),
+            None => Activity::Thinking(minutes),
         }
     }
 }
@@ -173,12 +195,13 @@ impl Lane {
                 }
             }
             "tool.result" if display.tool_progress == ChatToolProgress::Verbose => {
-                let line = if payload.get("error").is_some_and(|e| !e.is_null()) {
-                    "  \u{21b3} failed"
+                let key = if payload.get("error").is_some_and(|e| !e.is_null()) {
+                    "gateway.tool_failed"
                 } else {
-                    "  \u{21b3} done"
+                    "gateway.tool_done"
                 };
-                self.progress_line(&display, line.to_owned()).await;
+                let line = format!("  \u{21b3} {}", self.strings().get(key));
+                self.progress_line(&display, line).await;
             }
             _ => {}
         }
@@ -333,7 +356,7 @@ impl Lane {
     /// The working-status phrase for the next bubble update (the
     /// profile's phrase file appends to or replaces the built-in ones).
     fn phrase(&self, display: &EffectiveDisplay) -> String {
-        let mut phrases: Vec<String> = PHRASES.iter().map(|p| (*p).to_owned()).collect();
+        let mut phrases = vec![pmt_i18n::t!(self.strings(), "gateway.working_phrase")];
         if let (Some(spec), Some(scope)) = (&display.status_phrases, self.config())
             && let Ok(text) = std::fs::read_to_string(scope.dir().join(&spec.path))
         {
@@ -386,12 +409,13 @@ impl Lane {
         if self.working_due().is_none_or(|due| due > now) || !self.display().long_running {
             return;
         }
+        let strings = self.strings();
         let Some(running) = self.running.as_mut() else {
             return;
         };
         let minutes = now.duration_since(running.progress.started).as_secs() / 60;
         running.progress.working_minutes = minutes.max(running.progress.working_minutes + 3);
-        let text = working(running.progress.working_minutes);
+        let text = working(&strings, running.progress.working_minutes);
         let existing = running.progress.working.clone();
         let id = self.put_progress(existing, &text).await;
         if let Some(running) = self.running.as_mut() {
@@ -430,14 +454,13 @@ impl Lane {
     pub(super) fn verbose_command(&mut self) {
         let display = self.display();
         if !display.tool_progress_command {
-            self.say(
-                "Tool progress is set by the display policy here (tool_progress_command = false).",
-            );
+            self.say(self.strings().get("gateway.verbose_locked"));
             return;
         }
         let next = display.tool_progress.next();
         self.progress_mode = Some(next);
-        self.say(&format!("Tool progress: {}", next.as_str()));
+        let text = pmt_i18n::t!(self.strings(), "gateway.verbose_set", mode = next.as_str());
+        self.say(&text);
     }
 }
 
@@ -495,6 +518,7 @@ mod tests {
 
     #[test]
     fn working_names_the_minutes() {
-        assert_eq!(working(6), "Working \u{2014} 6 min");
+        let english = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
+        assert_eq!(working(&english, 6), "Working \u{2014} 6 min");
     }
 }

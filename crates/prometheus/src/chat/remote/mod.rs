@@ -201,10 +201,17 @@ async fn open_session(attached: &mut Attached, start: &Start<'_>) -> Result<Open
         Err(err) => return Err(err),
     };
     let session = target.unwrap_or_default();
-    match open::offer(&owned).await? {
+    let strings = attached.strings();
+    match open::offer(&owned, &strings).await? {
         open::Choice::Fork => {
             let fork = open::fork(client, &session, &start.setup).await?;
-            println!("forked session {session} as {fork}");
+            let text = pmt_i18n::t!(
+                strings,
+                "cli.forked_session",
+                session = session,
+                fork = fork
+            );
+            println!("{text}");
             Ok(Opened::Session(fork))
         }
         open::Choice::Follow => {

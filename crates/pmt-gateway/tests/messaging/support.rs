@@ -1191,6 +1191,13 @@ impl Setup {
 /// A `config.toml` enabling `platform` with `table` keys (allowing every
 /// sender unless `table` says otherwise), no debounce, and group messages
 /// answered without a mention (the gating tests set their own).
+/// The bundled English text of core catalog key `key`.
+pub fn en(key: &str) -> String {
+    pmt_i18n::Strings::english(pmt_i18n::Surface::Core)
+        .get(key)
+        .to_owned()
+}
+
 pub fn config(platform: &str, table: &str) -> String {
     format!(
         "[gateway.busy]\ndebounce_ms = 0\n\n[gateway.groups]\nrequire_mention = false\n\n\

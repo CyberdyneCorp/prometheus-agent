@@ -44,18 +44,27 @@ pub(super) fn suggestions(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
         }
         Some("dismiss") => {
             let row = suggest::dismiss(store, number(words.get(1))?)?;
-            Ok(format!("dismissed {}; it is not offered again", row.title))
+            Ok(pmt_i18n::t!(
+                ctx.strings(),
+                "slash.suggestions.dismissed",
+                title = row.title
+            ))
         }
         Some("catalog") => {
             let added = suggest::offer_catalog(store)?;
+            let head = pmt_i18n::t!(ctx.strings(), "slash.suggestions.added", count = added);
             Ok(format!(
-                "added {added} starter suggestion(s)\n{}",
+                "{head}\n{}",
                 suggest::render(&suggest::pending(store)?)
             ))
         }
         Some("clear") => {
             let dropped = store.cron_clear_suggestions()?;
-            Ok(format!("cleared {dropped} accepted suggestion(s)"))
+            Ok(pmt_i18n::t!(
+                ctx.strings(),
+                "slash.suggestions.cleared",
+                count = dropped
+            ))
         }
         Some(_) => Err(usage()),
     }

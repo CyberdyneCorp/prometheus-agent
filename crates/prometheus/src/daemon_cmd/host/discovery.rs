@@ -45,7 +45,11 @@ fn disposition(runs: bool) -> (Disposition, Option<String>) {
 }
 
 /// Every command of `registry` with its disposition on `surface`.
-pub(super) fn catalog(registry: &Registry, surface: Surface) -> CommandCatalog {
+pub(super) fn catalog(
+    registry: &Registry,
+    surface: Surface,
+    strings: &pmt_i18n::Strings,
+) -> CommandCatalog {
     let mut commands: Vec<CommandEntry> = registry
         .builtins()
         .iter()
@@ -55,7 +59,7 @@ pub(super) fn catalog(registry: &Registry, surface: Surface) -> CommandCatalog {
             CommandEntry {
                 name: command.name.to_owned(),
                 aliases: command.aliases.iter().map(|a| (*a).to_owned()).collect(),
-                description: command.description.to_owned(),
+                description: command.description(strings).to_owned(),
                 args: (!command.args.is_empty()).then(|| command.usage()),
                 source: if client {
                     CommandSource::Client
@@ -110,7 +114,8 @@ impl DaemonHost {
             Some(session) => commands::registry(&scope, &session.live),
             None => commands::profile_registry(&scope),
         };
-        Ok(catalog(&registry, surface(client)))
+        let strings = pmt_config::language::strings(scope.dir(), pmt_i18n::Surface::Core);
+        Ok(catalog(&registry, surface(client), &strings))
     }
 
     /// Entries of a typed path, listed by the session's file backend (its

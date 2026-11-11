@@ -62,14 +62,15 @@ impl Lane {
             other => match other.parse::<usize>() {
                 Ok(n) if n > 0 => n,
                 _ => {
-                    self.say("Usage: /sessions [page]");
+                    self.say(self.strings().get("gateway.sessions_usage"));
                     return;
                 }
             },
         };
+        let strings = self.strings();
         let sessions = self.chat_sessions(routing);
         let entries: Vec<String> = sessions.iter().map(label).collect();
-        let (shown, pages) = match super::pages::page_of(&entries, wanted, PER_PAGE) {
+        let (shown, pages) = match super::pages::page_of(&strings, &entries, wanted, PER_PAGE) {
             Ok(found) => found,
             Err(refusal) => {
                 self.say(&refusal);
@@ -77,17 +78,20 @@ impl Lane {
             }
         };
         let current = self.current_session();
-        let mut text = String::from("Sessions in this chat (/resume <n> switches):");
+        let mut text = pmt_i18n::t!(strings, "gateway.sessions_heading");
         for (i, entry) in shown.iter().enumerate() {
             let n = (wanted - 1) * PER_PAGE + i + 1;
             let here = sessions
                 .get(n - 1)
                 .is_some_and(|s| Some(s.id.to_string()) == current);
-            let mark = if here { "  (current)" } else { "" };
-            let _ = write!(text, "\n{n}. {entry}{mark}");
+            let _ = write!(text, "\n{n}. {entry}");
+            if here {
+                let _ = write!(text, "  {}", strings.get("gateway.current_mark"));
+            }
         }
         if pages > 1 {
-            let _ = write!(text, "\npage {wanted}/{pages}");
+            let page = pmt_i18n::t!(strings, "gateway.page_of", page = wanted, pages = pages);
+            let _ = write!(text, "\n{page}");
         }
         self.say(&text);
     }
@@ -106,13 +110,17 @@ impl Lane {
             Err(_) => sessions.iter().find(|s| s.id.to_string() == wanted),
         };
         let Some(session) = found else {
-            self.say("Usage: /resume <n> (a number from /sessions)");
+            self.say(self.strings().get("gateway.resume_usage"));
             return;
         };
         let (id, text) = (session.id, label(session));
         match self.route_to(routing, id) {
             Ok(()) => {
-                self.say(&format!("Resumed {text}."));
+                self.say(&pmt_i18n::t!(
+                    self.strings(),
+                    "gateway.resumed",
+                    label = text
+                ));
                 self.say_memory_summary(&id.to_string());
             }
             Err(err) => self.say(err.message()),

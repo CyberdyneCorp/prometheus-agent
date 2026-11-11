@@ -229,6 +229,12 @@ impl Strings {
     }
 }
 
+impl pmt_core::text::Catalog for Strings {
+    fn text(&self, key: &str, args: &[(&str, &dyn std::fmt::Display)]) -> String {
+        self.fmt(key, args)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

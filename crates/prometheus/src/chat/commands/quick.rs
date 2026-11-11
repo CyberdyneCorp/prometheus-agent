@@ -18,14 +18,20 @@ use crate::slash::{Declaration, Registry, Source};
 pub(crate) const MAX_DEPTH: u8 = 8;
 
 /// Registers the profile's quick commands.
-pub(super) fn register(registry: &mut Registry, commands: &BTreeMap<String, QuickCommand>) {
+pub(super) fn register(
+    registry: &mut Registry,
+    commands: &BTreeMap<String, QuickCommand>,
+    strings: &pmt_i18n::Strings,
+) {
     for (name, command) in commands {
         let description = match command.kind {
             QuickCommandKind::Alias => {
-                format!("alias of {}", command.target.as_deref().unwrap_or(""))
+                let target = command.target.as_deref().unwrap_or("");
+                pmt_i18n::t!(strings, "slash.quick.alias", target = target)
             }
             QuickCommandKind::Exec => {
-                format!("runs `{}`", command.command.as_deref().unwrap_or(""))
+                let line = command.command.as_deref().unwrap_or("");
+                pmt_i18n::t!(strings, "slash.quick.runs", command = line)
             }
         };
         let declaration = Declaration {
@@ -54,11 +60,12 @@ pub(crate) fn alias_line(command: &QuickCommand, args: &str) -> String {
 /// Runs `exec` quick command `name` on the session's terminal: its
 /// redacted output, then a note when it timed out or failed.
 pub(crate) async fn exec(ctx: &Ctx<'_>, name: &str, command: &QuickCommand, args: &str) -> String {
+    let strings = ctx.strings();
     let Some(terminal) = Environments::process()
         .session(&ctx.live.id.to_string())
         .and_then(|env| env.terminal.clone())
     else {
-        return format!("quick command '{name}' needs the terminal, which is unavailable");
+        return pmt_i18n::t!(strings, "slash.quick.no_terminal", name = name);
     };
     let line = command.command.as_deref().unwrap_or_default();
     let line = if args.is_empty() {
@@ -73,14 +80,16 @@ pub(crate) async fn exec(ctx: &Ctx<'_>, name: &str, command: &QuickCommand, args
     let result = terminal.run(run).await;
     let mut text = ctx.factory.redactor().redact_all(result.output.trim_end());
     let note = match result.status {
-        Status::Timeout => Some(format!(
-            "quick command '{name}' timed out after {}s",
-            command.timeout_secs
+        Status::Timeout => Some(pmt_i18n::t!(
+            strings,
+            "slash.quick.timed_out",
+            name = name,
+            secs = command.timeout_secs
         )),
-        Status::Error => Some(format!(
-            "quick command '{name}' failed{}",
-            result.error.map(|e| format!(": {e}")).unwrap_or_default()
-        )),
+        Status::Error => Some(match result.error {
+            Some(why) => pmt_i18n::t!(strings, "slash.quick.failed_why", name = name, why = why),
+            None => pmt_i18n::t!(strings, "slash.quick.failed", name = name),
+        }),
         _ => None,
     };
     if let Some(note) = note {

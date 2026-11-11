@@ -4,7 +4,7 @@
 //! deadline, and a request settled elsewhere (answered by another window,
 //! timed out, no responder) withdraws its card.
 
-use pmt_i18n::{Strings, Surface};
+use pmt_i18n::{Strings, Surface, t};
 use pmt_rpc::RpcError;
 use pmt_rpc::client::ServerCall;
 use pmt_rpc::contracts::{
@@ -21,7 +21,7 @@ use super::screen::{Asked, Done, Tui};
 impl Tui<'_> {
     /// The profile's TUI strings now (spec: i18n): a language, overlay or
     /// pack change shows at the next redraw.
-    fn strings(&self) -> std::sync::Arc<Strings> {
+    pub(super) fn strings(&self) -> std::sync::Arc<Strings> {
         pmt_config::language::strings(self.open.scope.dir(), Surface::Tui)
     }
 
@@ -157,9 +157,7 @@ impl Tui<'_> {
             turns.remove(&finished.turn_id);
         }
         if !shown {
-            self.notice(format!(
-                "(session {session} finished a turn in the background)"
-            ));
+            self.notice(t!(self.strings(), "tui.background_finished", 0 = session));
             return;
         }
         self.voice_turn_finished(finished);
@@ -216,7 +214,7 @@ impl Tui<'_> {
         }
         self.asking.retain(|a| a.call.id != id);
         if self.asking.len() != before {
-            self.notice(format!("(the question {why})"));
+            self.notice(t!(self.strings(), "tui.question_withdrawn", 0 = why));
             self.show_question();
         }
     }
@@ -307,7 +305,7 @@ impl Tui<'_> {
                 self.shown_changed();
                 self.reload().await;
                 let shown = self.link.session.clone();
-                self.notice(format!("session {shown}"));
+                self.notice(t!(self.strings(), "tui.session_shown", 0 = shown));
                 // `/resume` of a stored session; a new or forked one has none.
                 self.memory_summary(&shown).await;
                 if let Some(prompt) = prompt {
@@ -327,9 +325,9 @@ impl Tui<'_> {
     fn admitted(&mut self, session: &str, turn: &str, admission: Admission) {
         match admission {
             Admission::Started => {}
-            Admission::Queued => self.notice("queued; it runs when the current turn ends"),
+            Admission::Queued => self.notice(t!(self.strings(), "tui.queued")),
             Admission::Steered => {
-                self.notice("steering the running turn");
+                self.notice(t!(self.strings(), "tui.steering"));
                 return;
             }
             // No turn runs (its notice was shown).
@@ -368,7 +366,7 @@ fn card(asked: &Asked, index: usize, typed: usize, strings: &Strings) -> Card {
     let p = &asked.call.params;
     match asked.method() {
         "approval.request" => approval_card(p, &within, strings),
-        masked::SECRET | masked::SUDO => masked::card(asked.method(), p, typed, &within),
+        masked::SECRET | masked::SUDO => masked::card(strings, asked.method(), p, typed, &within),
         _ => clarify_card(&p["questions"][index], &within, strings),
     }
 }

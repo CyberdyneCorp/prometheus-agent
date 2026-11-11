@@ -26,21 +26,25 @@ fn per_page(platform: &str) -> usize {
 }
 
 /// What asking for a page that does not exist answers.
-pub(crate) fn no_such_page(page: usize, pages: usize) -> String {
-    let plural = if pages == 1 { "" } else { "s" };
-    format!("page {page} does not exist ({pages} page{plural})")
+pub(crate) fn no_such_page(strings: &pmt_i18n::Strings, page: usize, pages: usize) -> String {
+    if pages == 1 {
+        pmt_i18n::t!(strings, "gateway.no_such_page_one", page = page)
+    } else {
+        pmt_i18n::t!(strings, "gateway.no_such_page", page = page, pages = pages)
+    }
 }
 
 /// Page `page` (1-based) of `entries`, and the page count; `Err` with the
 /// refusal when the page does not exist.
 pub(crate) fn page_of(
+    strings: &pmt_i18n::Strings,
     entries: &[String],
     page: usize,
     per_page: usize,
 ) -> Result<(Vec<String>, usize), String> {
     let pages = entries.len().div_ceil(per_page).max(1);
     if page == 0 || page > pages {
-        return Err(no_such_page(page, pages));
+        return Err(no_such_page(strings, page, pages));
     }
     let start = (page - 1) * per_page;
     let shown = entries.iter().skip(start).take(per_page).cloned().collect();
@@ -49,7 +53,7 @@ pub(crate) fn page_of(
 
 /// A requested page number: none is page 1, anything not a positive
 /// number is refused.
-fn requested(args: &str) -> Result<usize, String> {
+fn requested(strings: &pmt_i18n::Strings, args: &str) -> Result<usize, String> {
     let args = args.trim();
     if args.is_empty() {
         return Ok(1);
@@ -57,13 +61,13 @@ fn requested(args: &str) -> Result<usize, String> {
     args.parse::<usize>()
         .ok()
         .filter(|n| *n > 0)
-        .ok_or_else(|| "Usage: /commands [page]".to_owned())
+        .ok_or_else(|| pmt_i18n::t!(strings, "gateway.commands_usage"))
 }
 
 impl Lane {
     /// `/commands [page]`.
     pub(super) fn commands_command(&mut self, routing: &Routing, args: &str) {
-        match requested(args) {
+        match requested(&self.strings(), args) {
             Ok(page) => self.commands_page(routing, page, None),
             Err(usage) => self.say(&usage),
         }
@@ -96,8 +100,9 @@ impl Lane {
     /// Shows page `page` of the command list; `listing` is the key of the
     /// message a paging button edits.
     fn commands_page(&mut self, routing: &Routing, page: usize, listing: Option<String>) {
+        let strings = self.strings();
         let entries = self.available_commands(routing);
-        let (shown, pages) = match page_of(&entries, page, per_page(&routing.platform)) {
+        let (shown, pages) = match page_of(&strings, &entries, page, per_page(&routing.platform)) {
             Ok(found) => found,
             Err(refusal) => {
                 self.say(&refusal);
@@ -105,9 +110,11 @@ impl Lane {
             }
         };
         let native = self.tier() == Interactive::Native;
-        let mut text = format!("Commands you can use here:\n{}", shown.join("\n"));
+        let heading = strings.get("gateway.commands_heading");
+        let mut text = format!("{heading}\n{}", shown.join("\n"));
         if !native && pages > 1 {
-            let _ = write!(text, "\npage {page}/{pages}");
+            let line = pmt_i18n::t!(strings, "gateway.page_of", page = page, pages = pages);
+            let _ = write!(text, "\n{line}");
         }
         let id = listing
             .clone()
@@ -133,16 +140,17 @@ impl Lane {
 
     fn paging_buttons(&self, id: &str, page: usize, pages: usize) -> Vec<Button> {
         let key = &self.shared.card_key;
+        let strings = self.strings();
         let mut buttons = Vec::new();
         if page > 1 {
             buttons.push(Button {
-                label: "\u{2039} Previous".to_owned(),
+                label: pmt_i18n::t!(strings, "gateway.previous_button"),
                 data: key.data(CardKind::Page, id, &(page - 1).to_string()),
             });
         }
         if page < pages {
             buttons.push(Button {
-                label: "Next \u{203a}".to_owned(),
+                label: pmt_i18n::t!(strings, "gateway.next_button"),
                 data: key.data(CardKind::Page, id, &(page + 1).to_string()),
             });
         }
@@ -170,23 +178,28 @@ mod tests {
 
     #[test]
     fn thirty_seven_commands_make_two_pages_of_twenty() {
+        let en = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
         let entries: Vec<String> = (0..37).map(|i| format!("/c{i}")).collect();
-        let (first, pages) = page_of(&entries, 1, 20).unwrap();
+        let (first, pages) = page_of(&en, &entries, 1, 20).unwrap();
         assert_eq!((first.len(), pages), (20, 2));
-        let (second, _) = page_of(&entries, 2, 20).unwrap();
+        let (second, _) = page_of(&en, &entries, 2, 20).unwrap();
         assert_eq!(second.len(), 17);
         assert_eq!(
-            page_of(&entries, 3, 20).unwrap_err(),
+            page_of(&en, &entries, 3, 20).unwrap_err(),
             "page 3 does not exist (2 pages)"
         );
-        assert_eq!(page_of(&entries, 0, 20).unwrap_err(), no_such_page(0, 2));
+        assert_eq!(
+            page_of(&en, &entries, 0, 20).unwrap_err(),
+            no_such_page(&en, 0, 2)
+        );
     }
 
     #[test]
     fn telegram_pages_hold_fifteen() {
         assert_eq!(per_page("telegram"), 15);
         assert_eq!(per_page("discord"), 20);
-        assert!(requested("x").is_err());
-        assert_eq!(requested(" 2 ").unwrap(), 2);
+        let en = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
+        assert!(requested(&en, "x").is_err());
+        assert_eq!(requested(&en, " 2 ").unwrap(), 2);
     }
 }

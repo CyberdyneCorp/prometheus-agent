@@ -53,7 +53,8 @@ fn retry_after_a_restart_resumes_the_turn_from_its_journal() {
     daemon.kill();
 
     let daemon = Daemon::start(home);
-    wait_said(home, "default", pmt_gateway::messaging::RESTARTED);
+    let restarted = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
+    wait_said(home, "default", restarted.get("gateway.restarted_retry"));
     send(home, "default", "u1", "/retry");
     wait_said(home, "default", "checked the deploy");
     daemon.stop(home);

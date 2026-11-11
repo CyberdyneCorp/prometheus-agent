@@ -213,6 +213,7 @@ fn the_banner_heads_the_transcript_and_answers_render_math() {
     app.banner = Some(Banner::new(
         "Prometheus 0.1.0 · default · mock/m1".into(),
         contents,
+        &pmt_i18n::Strings::english(pmt_i18n::Surface::Tui),
     ));
     app.transcript.push(
         Kind::Assistant,
@@ -240,9 +241,12 @@ fn a_long_paste_shows_as_one_chip_and_an_image_as_a_badge() {
             lines: 5,
             chars: 2000,
         },
+        &pmt_i18n::Strings::english(pmt_i18n::Surface::Tui),
     );
-    app.composer
-        .attach_image(std::path::PathBuf::from("shot.png"));
+    app.composer.attach_image(
+        std::path::PathBuf::from("shot.png"),
+        &pmt_i18n::Strings::english(pmt_i18n::Surface::Tui),
+    );
     app.composer.insert_str("what failed?");
     check("chips-70x10", &screen(&app, 70, 10));
 }

@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use pmt_agent::turn::model::ModelPort;
 use pmt_core::error::{Error, codes};
+use pmt_i18n::t;
 use pmt_providers::account::AccountUsage;
 use pmt_providers::auth::{self, Credentials, FlowChoice, SignInUi};
 use pmt_providers::registry::Provider;
@@ -31,10 +32,16 @@ pub(super) async fn usage(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
             ));
         }
     }
+    let strings = ctx.strings();
     let mut text = super::session::usage(ctx)?;
     let session = ctx.factory.store.session(ctx.live.id)?;
     let elapsed = jiff::Timestamp::now().duration_since(session.started_at);
-    let _ = write!(text, "\nsession  {}", duration(elapsed.as_secs()));
+    let line = t!(
+        strings,
+        "slash.usage.session",
+        duration = duration(&strings, elapsed.as_secs())
+    );
+    let _ = write!(text, "\n{line}");
     if let Some(line) = context_line(ctx).await? {
         let _ = write!(text, "\n{line}");
     }
@@ -44,11 +51,16 @@ pub(super) async fn usage(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
     Ok(text)
 }
 
-fn duration(secs: i64) -> String {
+fn duration(strings: &pmt_i18n::Strings, secs: i64) -> String {
     let secs = secs.max(0);
     match (secs / 3600, (secs % 3600) / 60) {
-        (0, m) => format!("{m}m {}s", secs % 60),
-        (h, m) => format!("{h}h {m}m"),
+        (0, m) => t!(
+            strings,
+            "slash.usage.minutes",
+            minutes = m,
+            seconds = secs % 60
+        ),
+        (h, m) => t!(strings, "slash.usage.hours", hours = h, minutes = m),
     }
 }
 
@@ -84,8 +96,12 @@ async fn context_line(ctx: &Ctx<'_>) -> Result<Option<String>, Error> {
     };
     let used = last.tokens.input + last.tokens.cache_read + last.tokens.cache_write;
     let percent = used.saturating_mul(100) / window.max(1);
-    Ok(Some(format!(
-        "context  {used} / {window} tokens ({percent}%)"
+    Ok(Some(t!(
+        ctx.strings(),
+        "slash.usage.context",
+        used = used,
+        window = window,
+        percent = percent
     )))
 }
 
@@ -96,36 +112,42 @@ fn account_block(ctx: &Ctx<'_>) -> Option<String> {
     let last = store.usage_events(ctx.live.id).ok()?.pop()?;
     let (_, quota) =
         pmt_providers::quota::for_session(store, &last.provider, &last.billing_source)?;
+    let strings = ctx.strings();
     let usage = match quota {
         Some(quota) => AccountUsage::from_quota(&last.provider, &last.billing_source, &quota),
-        None => AccountUsage::unavailable(&last.provider, "not reported yet"),
+        None => AccountUsage::unavailable(&last.provider, strings.get("slash.usage.not_reported")),
     };
-    Some(format!("account  {}", usage.render()))
+    Some(t!(strings, "slash.usage.account", usage = usage.render()))
 }
 
 /// `/usage reset [--force]`: redeems a banked limit reset of the session's
 /// ChatGPT plan, after a confirmation (`--force` skips it).
 async fn reset(ctx: &Ctx<'_>, force: bool) -> Result<String, Error> {
     let route = ctx.live.model.route().await;
+    let strings = ctx.strings();
     let Some(label) = route
         .billing_source
         .strip_prefix(&format!("subscription:{}/", route.provider))
     else {
-        return Ok(format!(
-            "limit resets are not available for {} (the session does not bill a subscription)",
-            route.provider
+        return Ok(t!(
+            strings,
+            "slash.usage.reset_no_subscription",
+            provider = route.provider
         ));
     };
     if !pmt_providers::quota::resets(&route.provider) {
-        return Ok(format!(
-            "limit resets are not available for {}",
-            route.provider
+        return Ok(t!(
+            strings,
+            "slash.usage.reset_unavailable",
+            provider = route.provider
         ));
     }
     if !force {
-        return Ok(format!(
-            "this redeems a banked usage limit reset of {} sign-in '{label}'; confirm with: /usage reset --force",
-            route.provider
+        return Ok(t!(
+            strings,
+            "slash.usage.reset_confirm",
+            provider = route.provider,
+            label = label
         ));
     }
     let resolver = ctx.factory.models.resolver();
@@ -147,9 +169,10 @@ async fn reset(ctx: &Ctx<'_>, force: bool) -> Result<String, Error> {
         sub.account_id.as_deref(),
     )
     .await?;
-    Ok(format!(
-        "redeemed a banked limit reset of {}",
-        provider.id()
+    Ok(t!(
+        strings,
+        "slash.usage.reset_done",
+        provider = provider.id()
     ))
 }
 
@@ -168,16 +191,18 @@ impl SignInUi for Posted {
 pub(super) fn login(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
     let name = args.split_whitespace().next().unwrap_or(DEFAULT_LOGIN);
     let provider = ctx.factory.models.resolver().registry.lookup(name)?.clone();
+    let strings = ctx.strings();
     if provider.login_flows().is_empty() {
-        return Ok(format!(
-            "{} has no sign-in; add a key with: prometheus auth add {}",
-            provider.id(),
-            provider.id()
+        return Ok(t!(
+            strings,
+            "slash.login.no_sign_in",
+            provider = provider.id()
         ));
     }
     let client = crate::model_cmd::client(ctx.scope.config())?;
     let credentials = Credentials::new(ctx.scope.secrets().store().clone());
     let post = Arc::clone(&ctx.post);
+    let said = Arc::clone(&strings);
     pmt_core::spawn::spawn(async move {
         let ui = Posted(Arc::clone(&post));
         let place = auth::browser::Place {
@@ -194,16 +219,26 @@ pub(super) fn login(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
                 &done.obtained,
             )
         });
+        let id = provider.id();
         post(match outcome {
-            Ok(sub) => format!(
-                "signed in to {}{}",
-                provider.id(),
-                sub.plan.map(|p| format!(" (plan {p})")).unwrap_or_default()
+            Ok(sub) => match sub.plan {
+                Some(plan) => t!(
+                    said,
+                    "slash.login.signed_in_plan",
+                    provider = id,
+                    plan = plan
+                ),
+                None => t!(said, "slash.login.signed_in", provider = id),
+            },
+            Err(err) => t!(
+                said,
+                "slash.login.failed",
+                provider = id,
+                why = err.message()
             ),
-            Err(err) => format!("sign-in to {} failed: {}", provider.id(), err.message()),
         });
     });
-    Ok(format!("signing in to {name}: the device code follows"))
+    Ok(t!(strings, "slash.login.started", provider = name))
 }
 
 /// The provider whose account `/subscription` and `/topup` show: the
@@ -227,30 +262,45 @@ async fn account_provider(ctx: &Ctx<'_>) -> Result<Option<Provider>, Error> {
 
 /// `/subscription` (`/upgrade`): the plan label and where to change it.
 pub(super) async fn subscription(ctx: &Ctx<'_>) -> Result<String, Error> {
+    let strings = ctx.strings();
     let Some(provider) = account_provider(ctx).await? else {
-        return Ok("no subscription sign-in; sign in with /login".to_owned());
+        return Ok(t!(strings, "slash.account.no_sign_in"));
     };
     let Some(url) = provider.descriptor().account_urls.plan.clone() else {
-        return Ok(format!("not available for {}", provider.id()));
+        return Ok(t!(
+            strings,
+            "slash.account.unavailable",
+            provider = provider.id()
+        ));
     };
-    let plan = plan_of(ctx, &provider).unwrap_or_else(|| "plan not reported".to_owned());
-    Ok(format!(
-        "{} ({plan})\nmanage the plan: {url}",
-        pmt_providers::account::title(provider.id())
+    let plan = plan_of(ctx, &provider).unwrap_or_else(|| t!(strings, "slash.account.plan_unknown"));
+    Ok(t!(
+        strings,
+        "slash.account.plan",
+        title = pmt_providers::account::title(provider.id()),
+        plan = plan,
+        url = url
     ))
 }
 
 /// `/topup`: the prepaid balance where reported, and the billing page.
 pub(super) async fn topup(ctx: &Ctx<'_>) -> Result<String, Error> {
+    let strings = ctx.strings();
     let Some(provider) = account_provider(ctx).await? else {
-        return Ok("no subscription sign-in; sign in with /login".to_owned());
+        return Ok(t!(strings, "slash.account.no_sign_in"));
     };
     let Some(url) = provider.descriptor().account_urls.billing.clone() else {
-        return Ok(format!("not available for {}", provider.id()));
+        return Ok(t!(
+            strings,
+            "slash.account.unavailable",
+            provider = provider.id()
+        ));
     };
-    Ok(format!(
-        "{}: balance not reported by the provider\ntop up: {url}",
-        pmt_providers::account::title(provider.id())
+    Ok(t!(
+        strings,
+        "slash.account.topup",
+        title = pmt_providers::account::title(provider.id()),
+        url = url
     ))
 }
 

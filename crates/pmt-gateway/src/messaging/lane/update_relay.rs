@@ -8,6 +8,7 @@
 //! daemon is gone; the new one says `updated to <version>`
 //! (`messaging::restart`).
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::mpsc;
@@ -28,14 +29,16 @@ pub(super) fn spawn(
     lane: mpsc::WeakUnboundedSender<Msg>,
     routing: Routing,
     events: mpsc::UnboundedReceiver<UpdateEvent>,
+    strings: Arc<pmt_i18n::Strings>,
 ) {
-    pmt_core::spawn::spawn(relay(lane, routing, events));
+    pmt_core::spawn::spawn(relay(lane, routing, events, strings));
 }
 
 async fn relay(
     lane: mpsc::WeakUnboundedSender<Msg>,
     routing: Routing,
     mut events: mpsc::UnboundedReceiver<UpdateEvent>,
+    strings: Arc<pmt_i18n::Strings>,
 ) {
     let mut last: Option<Instant> = None;
     let mut waiting: Option<String> = None;
@@ -62,7 +65,7 @@ async fn relay(
             }
             Some(UpdateEvent::Finished { code, last_line }) => {
                 tokio::time::sleep_until(due).await;
-                say(&lane, finished(code, &last_line, &routing));
+                say(&lane, finished(&strings, code, &last_line, &routing));
                 return;
             }
             None => return,
@@ -71,7 +74,7 @@ async fn relay(
 }
 
 /// The final message, or the busy-daemon question.
-fn finished(code: i32, last_line: &str, routing: &Routing) -> Msg {
+fn finished(strings: &pmt_i18n::Strings, code: i32, last_line: &str, routing: &Routing) -> Msg {
     let line = last_line.trim().trim_start_matches("error: ").to_owned();
     match code {
         0 => Msg::Say(line),
@@ -79,7 +82,11 @@ fn finished(code: i32, last_line: &str, routing: &Routing) -> Msg {
             routing: Box::new(routing.clone()),
             question: line,
         },
-        _ => Msg::Say(format!("update not applied: {line}")),
+        _ => Msg::Say(pmt_i18n::t!(
+            strings,
+            "gateway.update_not_applied",
+            line = line
+        )),
     }
 }
 
@@ -123,7 +130,12 @@ mod tests {
     async fn stages_are_relayed_at_most_every_two_seconds() {
         let (lane, mut chat) = mpsc::unbounded_channel();
         let (tx, events) = mpsc::unbounded_channel();
-        let task = pmt_core::spawn::spawn(relay(lane.downgrade(), routing(), events));
+        let task = pmt_core::spawn::spawn(relay(
+            lane.downgrade(),
+            routing(),
+            events,
+            pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+        ));
         for line in [
             "checking the stable channel",
             "downloading 10%",
@@ -163,7 +175,13 @@ mod tests {
             last_line: "error: the daemon (pid 7) has 1 running turn(s); restart it?".to_owned(),
         })
         .unwrap();
-        relay(lane.downgrade(), routing(), events).await;
+        relay(
+            lane.downgrade(),
+            routing(),
+            events,
+            pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+        )
+        .await;
         match chat.recv().await.unwrap() {
             Msg::UpdateBusy { question, .. } => {
                 assert_eq!(

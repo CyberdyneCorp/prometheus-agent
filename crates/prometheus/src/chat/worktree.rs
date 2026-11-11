@@ -67,8 +67,12 @@ pub fn enter(args: &ChatArgs, scope: &ProfileScope, quiet: bool) -> Result<Optio
         };
         let created = create::create(&cwd, &request)?;
         if !quiet {
+            let strings = strings(scope);
             for notice in &created.notices {
-                eprintln!("note: {notice}");
+                eprintln!(
+                    "{}",
+                    pmt_i18n::t!(strings, "cli.worktree_note", notice = notice)
+                );
             }
         }
         created.tree
@@ -85,6 +89,10 @@ pub fn enter(args: &ChatArgs, scope: &ProfileScope, quiet: bool) -> Result<Optio
     let mut args = args.clone();
     args.cwd = Some(tree.path.clone());
     Ok(Some(Entered { repo, tree, args }))
+}
+
+fn strings(scope: &ProfileScope) -> std::sync::Arc<pmt_i18n::Strings> {
+    pmt_config::language::strings(scope.dir(), pmt_i18n::Surface::Core)
 }
 
 /// The sweep every `chat -w` start runs over the recorded repositories.
@@ -151,42 +159,55 @@ fn owned_by_resumed(
 /// with unfinished work; every other run keeps it for the sweep.
 pub fn finish(entered: &Entered, mode: ChatMode, scope: &ProfileScope, quiet: bool) {
     let interactive = mode != ChatMode::OneShot && super::terminal::interactive();
+    let strings = strings(scope);
+    let path = entered.tree.path.display();
     // The process leaves the tree before anything may remove it.
     let _ = std::env::set_current_dir(&entered.repo.root);
     if !interactive {
         if !quiet {
-            eprintln!("worktree kept at {}", entered.tree.path.display());
+            eprintln!(
+                "{}",
+                pmt_i18n::t!(strings, "cli.worktree_kept", path = path)
+            );
         }
         return;
     }
     let choice = match exit::assess(&entered.repo, &entered.tree) {
         Disposition::Remove => Choice::RemoveDiscard,
         Disposition::Unknown => Choice::Keep,
-        Disposition::Unfinished { dirty, unpushed } => ask(&entered.tree, dirty, unpushed),
+        Disposition::Unfinished { dirty, unpushed } => {
+            ask(&strings, &entered.tree, dirty, unpushed)
+        }
     };
     match exit::apply(&entered.repo, &entered.tree, choice, &settings_of(scope)) {
         Ok(text) => println!("{text}"),
         Err(err) => eprintln!(
-            "{}: worktree kept at {}",
-            err.message(),
-            entered.tree.path.display()
+            "{}",
+            pmt_i18n::t!(
+                strings,
+                "cli.worktree_kept_error",
+                why = err.message(),
+                path = path
+            )
         ),
     }
 }
 
 /// Asks what to do with unfinished work; Enter, Esc, end of input and
 /// anything unrecognized keep the tree.
-fn ask(tree: &Tree, dirty: bool, unpushed: u32) -> Choice {
+fn ask(strings: &pmt_i18n::Strings, tree: &Tree, dirty: bool, unpushed: u32) -> Choice {
     let what = match (dirty, unpushed) {
-        (true, 0) => "uncommitted changes".to_owned(),
-        (false, n) => format!("{n} unpushed commit(s)"),
-        (true, n) => format!("uncommitted changes and {n} unpushed commit(s)"),
+        (true, 0) => pmt_i18n::t!(strings, "cli.worktree_dirty"),
+        (false, n) => pmt_i18n::t!(strings, "cli.worktree_unpushed", count = n),
+        (true, n) => pmt_i18n::t!(strings, "cli.worktree_dirty_unpushed", count = n),
     };
-    print!(
-        "worktree {} has {what}: {} ",
-        tree.path.display(),
-        Choice::PROMPT
+    let question = pmt_i18n::t!(
+        strings,
+        "cli.worktree_question",
+        path = tree.path.display(),
+        what = what
     );
+    print!("{question}");
     let _ = std::io::stdout().flush();
     let mut answer = String::new();
     match std::io::stdin().lock().read_line(&mut answer) {

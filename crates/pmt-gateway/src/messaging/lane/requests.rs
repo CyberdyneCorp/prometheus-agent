@@ -21,11 +21,6 @@ use crate::messaging::auth;
 use crate::messaging::cards::{self, Card, CardKind};
 use crate::messaging::key::{ChatType, Routing};
 
-/// Told to a bystander who tries to decide.
-pub(crate) const NOT_YOURS: &str = "Only the person who asked or an admin may decide this.";
-/// `/approve` or `/deny` with nothing pending.
-pub(crate) const NOTHING_PENDING: &str = "No pending approval";
-
 #[derive(Debug, Clone)]
 struct Approval {
     id: String,
@@ -97,13 +92,13 @@ fn card_text(
         deadline_ms: params.deadline_ms,
         on_expiry: strings.get("approval.on_expiry").to_owned(),
     };
-    let mut text = card.text(now);
+    let mut text = card.text(strings, now);
     match tier {
         Interactive::Native => {
             text.push('\n');
             text.push_str(strings.get("approval.reply_hint"));
         }
-        other => text.push_str(&cards::instructions(other, id)),
+        other => text.push_str(&cards::instructions(strings, other, id)),
     }
     text
 }
@@ -116,10 +111,7 @@ impl Lane {
             "clarify.request" => self.clarify_question(id, params),
             "secret.request" | "sudo.request" if !self.requests.secrets_told => {
                 self.requests.secrets_told = true;
-                self.say(
-                    "The agent needs a secret or password, which cannot be entered in a chat; \
-                     enter it in a local client (prometheus tui) or it will be skipped.",
-                );
+                self.say(self.strings().get("gateway.secret_in_chat"));
             }
             _ => {}
         }
@@ -134,11 +126,12 @@ impl Lane {
             .as_ref()
             .map_or_else(String::new, |r| r.requester.clone());
         let tier = self.tier();
+        let strings = self.strings();
         let buttons = if tier == Interactive::Native {
             cards::CHOICES
                 .iter()
                 .map(|choice| Button {
-                    label: choice[..1].to_uppercase() + &choice[1..],
+                    label: cards::choice_label(&strings, choice),
                     data: self.shared.card_key.data(CardKind::Approval, &id, choice),
                 })
                 .collect::<Vec<_>>()
@@ -148,7 +141,6 @@ impl Lane {
         let session = self.session.clone().unwrap_or_default();
         let card_key = format!("{session}:{id}:card");
         let cwd = self.session_cwd(&request.session_id);
-        let strings = self.strings();
         let text = card_text(&request, cwd.as_deref(), tier, &id, &Zoned::now(), &strings);
         let body = json!({"text": text, "buttons": buttons}).to_string();
         self.deliver(card_key.clone(), OutboundKind::Approval, body, None);
@@ -209,12 +201,12 @@ impl Lane {
         let word = rest.split_whitespace().next().unwrap_or_default();
         let Some(decision) = decision_of(&word.to_lowercase()).filter(|d| *d != Decision::Deny)
         else {
-            self.say("Usage: /approve [session|always]");
+            self.say(self.strings().get("gateway.approve_usage"));
             return;
         };
         let Some(approval) = approval else {
             if !self.answer_confirmation(routing, true) {
-                self.say(NOTHING_PENDING);
+                self.say(self.strings().get("gateway.nothing_pending"));
             }
             return;
         };
@@ -231,7 +223,7 @@ impl Lane {
         };
         if targets.is_empty() {
             if !self.answer_confirmation(routing, false) {
-                self.say(NOTHING_PENDING);
+                self.say(self.strings().get("gateway.nothing_pending"));
             }
             return;
         }
@@ -299,7 +291,7 @@ impl Lane {
 
     fn decide(&mut self, routing: &Routing, approval: &Approval, decision: Decision) {
         if !self.may_decide(routing, approval) {
-            self.say_privately(routing, NOT_YOURS);
+            self.say_privately(routing, self.strings().get("gateway.not_yours"));
             return;
         }
         let answer = json!({"decision": decision});
@@ -307,15 +299,21 @@ impl Lane {
         let by = &self.shared.peer.client_id;
         match hub.resolve(self.shared.conn, by, &approval.id, Ok(answer)) {
             Answered::Taken => {
-                let who = format!("{} via {}", routing.sender_id, routing.platform);
-                self.close_card(
-                    &approval.id,
-                    &format!("{} by {who}", outcome_text(decision, &self.strings())),
+                let strings = self.strings();
+                let who = pmt_i18n::t!(
+                    strings,
+                    "gateway.sender_via",
+                    sender = routing.sender_id,
+                    platform = routing.platform
                 );
+                let outcome = outcome_text(decision, &strings);
+                let text =
+                    pmt_i18n::t!(strings, "gateway.decided_by", outcome = outcome, who = who);
+                self.close_card(&approval.id, &text);
             }
             Answered::Settled | Answered::Unknown => {
                 self.requests.approvals.retain(|a| a.id != approval.id);
-                self.say("That approval was already decided.");
+                self.say(self.strings().get("gateway.already_decided"));
             }
         }
     }
@@ -346,6 +344,7 @@ impl Lane {
             return;
         }
         let surface = by_client.split('-').next().unwrap_or(by_client).to_owned();
+        let strings = self.strings();
         if self.requests.approvals.iter().any(|a| a.id == id) {
             let decision = self
                 .shared
@@ -355,16 +354,25 @@ impl Lane {
                 .and_then(|(value, _)| {
                     serde_json::from_value::<Decision>(value["decision"].clone()).ok()
                 });
-            let strings = self.strings();
             let outcome = decision.map_or_else(
-                || "Answered".to_owned(),
+                || strings.get("gateway.answered").to_owned(),
                 |decision| outcome_text(decision, &strings),
             );
-            self.close_card(id, &format!("{outcome} via {surface}"));
+            let text = pmt_i18n::t!(
+                strings,
+                "gateway.answered_via",
+                outcome = outcome,
+                surface = surface
+            );
+            self.close_card(id, &text);
         }
         if self.requests.clarify.as_ref().is_some_and(|c| c.id == id) {
             self.requests.clarify = None;
-            self.say(&format!("Answered via {surface}."));
+            self.say(&pmt_i18n::t!(
+                strings,
+                "gateway.answered_elsewhere",
+                surface = surface
+            ));
         }
     }
 

@@ -200,26 +200,17 @@ impl Lane {
         match busy.input_mode {
             BusyInputMode::Queue => {
                 self.queue_human(pending);
-                self.ack(
-                    &busy,
-                    "Still working on your previous message; this one is next.",
-                );
+                self.ack(&busy, "gateway.busy_queued");
             }
             BusyInputMode::Interrupt => {
                 self.queue_human(pending);
                 self.interrupt().await;
-                self.ack(
-                    &busy,
-                    "Stopping the current task to handle your new message.",
-                );
+                self.ack(&busy, "gateway.busy_interrupting");
             }
             BusyInputMode::Steer => {
                 let steered = pending.images.is_empty() && self.steer(&pending.text).await;
                 if steered {
-                    self.ack(
-                        &busy,
-                        "Got it; the current task will take that into account.",
-                    );
+                    self.ack(&busy, "gateway.busy_steered");
                 } else {
                     self.queue_human(pending);
                 }
@@ -258,7 +249,8 @@ impl Lane {
         }
     }
 
-    fn ack(&mut self, busy: &EffectiveBusy, text: &str) {
+    /// Acknowledges input that arrived while busy with catalog text `key`.
+    fn ack(&mut self, busy: &EffectiveBusy, key: &str) {
         let now = Instant::now();
         if !busy.ack
             || self
@@ -273,8 +265,18 @@ impl Lane {
             .as_ref()
             .filter(|_| self.display().busy_ack_detail)
             .map(|r| r.progress.activity(now));
+        let strings = self.strings();
+        let text = strings.get(key);
         match detail {
-            Some(detail) => self.say(&format!("{text} ({detail})")),
+            Some(detail) => {
+                let detail = detail.render(&strings);
+                self.say(&pmt_i18n::t!(
+                    strings,
+                    "gateway.busy_ack_detail",
+                    text = text,
+                    detail = detail
+                ));
+            }
             None => self.say(text),
         }
     }

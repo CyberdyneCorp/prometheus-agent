@@ -36,10 +36,12 @@ pub async fn model(
     args: &str,
 ) -> Result<String, Error> {
     if args.trim().is_empty() {
-        return Ok(format!(
-            "model: {} ({})\nusage: {MODEL_USAGE}",
-            ctx.current.label(),
-            ctx.current.billing_source()
+        return Ok(pmt_i18n::t!(
+            strings(scope),
+            "slash.model.current",
+            route = ctx.current.label(),
+            billing = ctx.current.billing_source(),
+            usage = MODEL_USAGE
         ));
     }
     let args = Args::parse(args)?;
@@ -60,6 +62,10 @@ pub async fn model(
     }
     *session = next;
     Ok(switched.notice)
+}
+
+fn strings(scope: &ProfileScope) -> std::sync::Arc<pmt_i18n::Strings> {
+    pmt_config::language::strings(scope.dir(), pmt_i18n::Surface::Core)
 }
 
 /// `/reasoning [<level>|show|hide|full|clamp] [--global]` on the session's
@@ -83,27 +89,29 @@ pub fn reasoning(
     let (global, rest): (Vec<&str>, Vec<&str>) = words.iter().partition(|w| **w == "--global");
     let global = !global.is_empty();
     let agent = &scope.config().agent;
+    let strings = strings(scope);
     let display = |key: &str, value: &str, text: &str| -> Result<String, Error> {
         scope.profile().config_file().set(key, value)?;
-        Ok(text.to_owned())
+        Ok(strings.get(text).to_owned())
     };
     match rest.as_slice() {
         [] => {
             let effort = reasoning::effort(agent, session.reasoning(), &route.model, meta)?;
-            Ok(format!(
-                "reasoning: {} on {}",
-                effort.describe(),
-                route.label()
+            Ok(pmt_i18n::t!(
+                strings,
+                "slash.reasoning.current",
+                effort = effort.describe(),
+                route = route.label()
             ))
         }
-        ["show"] => display("display.show_reasoning", "true", "reasoning is shown"),
-        ["hide"] => display("display.show_reasoning", "false", "reasoning is hidden"),
-        ["full"] => display(
+        ["show"] => display("display.show_reasoning", "true", "slash.reasoning.shown"),
+        ["hide"] => display("display.show_reasoning", "false", "slash.reasoning.hidden"),
+        ["full"] => display("display.reasoning_full", "true", "slash.reasoning.full"),
+        ["clamp"] => display(
             "display.reasoning_full",
-            "true",
-            "reasoning is shown in full",
+            "false",
+            "slash.reasoning.clamped_display",
         ),
-        ["clamp"] => display("display.reasoning_full", "false", "reasoning is clamped"),
         [level] => {
             let level = ReasoningLevel::parse(level).ok_or_else(usage)?;
             let effort = reasoning::effort(agent, Some(level), &route.model, meta)?;
@@ -114,19 +122,23 @@ pub fn reasoning(
                     .set("agent.reasoning_effort", level.as_str())?;
             }
             session.set_reasoning(Some(level));
-            let note = match effort.sent {
-                None => format!("; {} does not reason, so none is sent", route.label()),
-                Some(sent) if effort.clamped => format!(
-                    "; clamped to {}, the most {} supports",
-                    sent.as_str(),
-                    route.label()
+            let (level, route) = (level.as_str(), route.label());
+            Ok(match effort.sent {
+                None => pmt_i18n::t!(
+                    strings,
+                    "slash.reasoning.set_unsupported",
+                    level = level,
+                    route = route
                 ),
-                Some(_) => String::new(),
-            };
-            Ok(format!(
-                "reasoning: {} from the next request{note}",
-                level.as_str()
-            ))
+                Some(sent) if effort.clamped => pmt_i18n::t!(
+                    strings,
+                    "slash.reasoning.set_clamped",
+                    level = level,
+                    sent = sent.as_str(),
+                    route = route
+                ),
+                Some(_) => pmt_i18n::t!(strings, "slash.reasoning.set", level = level),
+            })
         }
         _ => Err(usage()),
     }

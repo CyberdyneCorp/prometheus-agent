@@ -67,12 +67,17 @@ fn settings_base(launch: &LaunchEnv) -> Option<PathBuf> {
 }
 
 /// What the change does, for the confirmation.
-pub(super) fn describe(targets: &[Target]) -> String {
-    let mut text =
-        String::from("/terminal-setup adds this keybinding so Ctrl+V reaches the TUI:\n");
+pub(super) fn describe(strings: &pmt_i18n::Strings, targets: &[Target]) -> String {
+    let mut text = format!("{}\n", strings.get("tui.setup_describe"));
     text.push_str(BINDING);
     for target in targets {
-        let _ = write!(text, "\nto {} ({})", target.file.display(), target.editor);
+        let line = pmt_i18n::t!(
+            strings,
+            "tui.setup_target",
+            0 = target.file.display(),
+            1 = target.editor
+        );
+        let _ = write!(text, "\n{line}");
     }
     text
 }
@@ -82,7 +87,7 @@ pub(super) fn describe(targets: &[Target]) -> String {
 /// # Errors
 ///
 /// The file cannot be read or written, or is not a JSON array.
-pub(super) fn apply(target: &Target) -> Result<String, String> {
+pub(super) fn apply(strings: &pmt_i18n::Strings, target: &Target) -> Result<String, String> {
     let file = &target.file;
     let text = match std::fs::read_to_string(file) {
         Ok(text) => text,
@@ -90,7 +95,11 @@ pub(super) fn apply(target: &Target) -> Result<String, String> {
         Err(e) => return Err(format!("cannot read {}: {e}", file.display())),
     };
     if text.contains("workbench.action.terminal.sendSequence") && text.contains("\\u0016") {
-        return Ok(format!("{}: already set up", target.editor));
+        return Ok(pmt_i18n::t!(
+            strings,
+            "tui.setup_already",
+            0 = target.editor
+        ));
     }
     let updated = with_binding(&text)
         .ok_or_else(|| format!("{} is not a JSON array of keybindings", file.display()))?;
@@ -100,10 +109,11 @@ pub(super) fn apply(target: &Target) -> Result<String, String> {
             .map_err(|e| format!("cannot back up {}: {e}", file.display()))?;
     }
     std::fs::write(file, updated).map_err(|e| format!("cannot write {}: {e}", file.display()))?;
-    Ok(format!(
-        "{}: added Ctrl+V to {}",
-        target.editor,
-        file.display()
+    Ok(pmt_i18n::t!(
+        strings,
+        "tui.setup_added",
+        0 = target.editor,
+        1 = file.display()
     ))
 }
 
@@ -165,11 +175,12 @@ mod tests {
             editor: "VS Code",
             file: file.clone(),
         };
-        assert!(apply(&target).unwrap().contains("added Ctrl+V"));
+        let en = pmt_i18n::Strings::english(pmt_i18n::Surface::Tui);
+        assert!(apply(&en, &target).unwrap().contains("added Ctrl+V"));
         assert_eq!(
             std::fs::read_to_string(file.with_extension("json.bak")).unwrap(),
             "[]"
         );
-        assert!(apply(&target).unwrap().contains("already set up"));
+        assert!(apply(&en, &target).unwrap().contains("already set up"));
     }
 }

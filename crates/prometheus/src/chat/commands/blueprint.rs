@@ -37,22 +37,24 @@ fn catalog(ctx: &Ctx<'_>) -> Vec<Blueprint> {
 }
 
 /// The catalog, one line per blueprint.
-fn listing(catalog: &[Blueprint]) -> String {
-    let mut text = String::from("Automation blueprints (`/blueprint <name> [slot=value ...]`):");
+fn listing(strings: &pmt_i18n::Strings, catalog: &[Blueprint]) -> String {
+    let mut text = pmt_i18n::t!(strings, "slash.blueprint.heading");
     for b in catalog {
         let slots: Vec<&str> = b.slots.iter().map(|s| s.name.as_str()).collect();
-        let _ = write!(
-            text,
-            "\n- {}: {} [{}] slots: {}",
-            b.key,
-            b.title,
-            b.category,
-            if slots.is_empty() {
-                "-".to_owned()
-            } else {
-                slots.join(", ")
-            }
+        let slots = if slots.is_empty() {
+            "-".to_owned()
+        } else {
+            slots.join(", ")
+        };
+        let line = pmt_i18n::t!(
+            strings,
+            "slash.blueprint.line",
+            key = b.key,
+            title = b.title,
+            category = b.category,
+            slots = slots
         );
+        let _ = write!(text, "\n{line}");
     }
     text
 }
@@ -70,7 +72,7 @@ pub(super) fn blueprint(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
     words.retain(|w| w != "--yes");
     let catalog = catalog(ctx);
     let Some((name, rest)) = words.split_first() else {
-        return Ok(listing(&catalog));
+        return Ok(listing(&ctx.strings(), &catalog));
     };
     let chosen = blueprint::resolve(&catalog, name)?;
     let values = blueprint::values(rest)?;

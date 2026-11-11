@@ -61,7 +61,12 @@ impl Repl {
     async fn builtin(&mut self, command: &'static Command, args: &str, line: &str) -> Flow {
         let (args, yes) = take_yes(args);
         if DESTRUCTIVE.contains(&command.name) && self.confirm_destructive && !yes {
-            self.notice(&format!("/{} changes this session.", command.name));
+            let text = pmt_i18n::t!(
+                self.strings(),
+                "cli.changes_session",
+                command = command.name
+            );
+            self.notice(&text);
             self.pending = Some(Pending::Confirm {
                 line: line.to_owned(),
             });
@@ -106,7 +111,7 @@ impl Repl {
         if let Some(delegation) = self.live.as_ref().and_then(|l| l.delegation.as_ref()) {
             delegation.stop_all();
         }
-        "Stopped every subagent of this session.".to_owned()
+        pmt_i18n::t!(self.strings(), "cli.stopped_all")
     }
 
     async fn run_builtin(&mut self, name: &str, args: &str) -> Flow {
@@ -119,7 +124,7 @@ impl Repl {
                 self.new_session(None, None).await
             }
             "stop" if args.trim() == "all" => Ok(self.stop_all()),
-            "stop" => Ok("nothing is running".to_owned()),
+            "stop" => Ok(pmt_i18n::t!(self.strings(), "cli.nothing_running")),
             "fork" => self.fork(args).await,
             "resume" => self.resume(args).await,
             "prompt" => return self.compose(args).await,
@@ -156,7 +161,8 @@ impl Repl {
         let scope = &self.factory.scope;
         let home = scope.home().to_path_buf();
         let profile = scope.name().to_string();
-        match crate::chat::handoff::handoff(&home, &profile, &session, args).await {
+        let strings = self.strings();
+        match crate::chat::handoff::handoff(&home, &profile, &session, args, strings).await {
             Ok(line) => {
                 self.notice(&line);
                 Flow::Exit
@@ -201,7 +207,7 @@ impl Repl {
     pub(super) async fn immediate(&mut self, name: &str, args: &str, live: &Live) {
         let result = match name {
             "queue" => super::queue::parse(args)
-                .and_then(|action| super::queue::apply(&mut self.queue, action)),
+                .and_then(|action| super::queue::apply(&self.strings(), &mut self.queue, action)),
             "image" => self.image(args),
             "theme" => self.theme(args),
             "verbose" => Ok(self.verbose()),

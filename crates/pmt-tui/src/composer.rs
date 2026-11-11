@@ -131,26 +131,23 @@ impl Composer {
     }
 
     /// A paste: collapsed into a chip when `collapse` says so, else typed.
-    pub fn paste(&mut self, text: &str, collapse: Collapse) {
+    pub fn paste(&mut self, text: &str, collapse: Collapse, strings: &pmt_i18n::Strings) {
         let text = text.replace("\r\n", "\n").replace('\r', "\n");
         if !collapse.applies(&text) {
             self.insert_str(&text);
             return;
         }
         self.pastes += 1;
-        let label = format!(
-            "[Pasted text #{}: {} lines]",
-            self.pastes,
-            text.lines().count()
-        );
+        let lines = text.lines().count();
+        let label = pmt_i18n::t!(strings, "tui.pasted", 0 = self.pastes, 1 = lines);
         self.insert_atom(label, AtomKind::Paste(text));
     }
 
     /// Attaches the image at `path` as a badge at the cursor; returns its
     /// label.
-    pub fn attach_image(&mut self, path: PathBuf) -> String {
+    pub fn attach_image(&mut self, path: PathBuf, strings: &pmt_i18n::Strings) -> String {
         self.images += 1;
-        let label = format!("[Image #{}]", self.images);
+        let label = pmt_i18n::t!(strings, "tui.image", 0 = self.images);
         self.insert_atom(label.clone(), AtomKind::Image(path));
         label
     }
@@ -330,7 +327,11 @@ mod tests {
             + "\n";
         let mut c = Composer::default();
         c.set("look at this:");
-        c.paste(&log, COLLAPSE);
+        c.paste(
+            &log,
+            COLLAPSE,
+            &pmt_i18n::Strings::english(pmt_i18n::Surface::Tui),
+        );
         assert_eq!(c.text(), "look at this: [Pasted text #1: 300 lines] ");
         c.insert_str("why?");
         let sent = c.submit();
@@ -348,34 +349,60 @@ mod tests {
     #[test]
     fn short_pastes_are_typed_and_zero_disables_a_threshold() {
         let mut c = Composer::default();
-        c.paste("two\nlines", COLLAPSE);
+        c.paste(
+            "two\nlines",
+            COLLAPSE,
+            &pmt_i18n::Strings::english(pmt_i18n::Surface::Tui),
+        );
         assert_eq!(c.text(), "two\nlines");
         let mut c = Composer::default();
         let off = Collapse { lines: 0, chars: 0 };
-        c.paste(&"x\n".repeat(50), off);
+        c.paste(
+            &"x\n".repeat(50),
+            off,
+            &pmt_i18n::Strings::english(pmt_i18n::Surface::Tui),
+        );
         assert!(!c.text().contains("Pasted"));
         let mut c = Composer::default();
-        c.paste(&"y".repeat(2000), COLLAPSE);
+        c.paste(
+            &"y".repeat(2000),
+            COLLAPSE,
+            &pmt_i18n::Strings::english(pmt_i18n::Surface::Tui),
+        );
         assert_eq!(c.text(), "[Pasted text #1: 1 lines] ");
     }
 
     #[test]
     fn chips_and_badges_delete_as_a_unit_and_chips_expand() {
         let mut c = Composer::default();
-        c.paste(&"a\n".repeat(6), COLLAPSE);
+        c.paste(
+            &"a\n".repeat(6),
+            COLLAPSE,
+            &pmt_i18n::Strings::english(pmt_i18n::Surface::Tui),
+        );
         c.backspace();
         c.backspace();
         assert_eq!(c.text(), "", "the space, then the whole chip");
-        c.paste(&"a\n".repeat(6), COLLAPSE);
+        c.paste(
+            &"a\n".repeat(6),
+            COLLAPSE,
+            &pmt_i18n::Strings::english(pmt_i18n::Surface::Tui),
+        );
         assert!(c.expand());
         assert_eq!(c.text(), "a\n".repeat(6) + " ");
-        let label = c.attach_image(PathBuf::from("/tmp/x.png"));
+        let label = c.attach_image(
+            PathBuf::from("/tmp/x.png"),
+            &pmt_i18n::Strings::english(pmt_i18n::Surface::Tui),
+        );
         assert_eq!(label, "[Image #1]");
         assert_eq!(c.images(), 1);
         c.backspace();
         c.backspace();
         assert_eq!(c.images(), 0);
-        c.attach_image(PathBuf::from("/tmp/y.png"));
+        c.attach_image(
+            PathBuf::from("/tmp/y.png"),
+            &pmt_i18n::Strings::english(pmt_i18n::Surface::Tui),
+        );
         c.insert_str("what is it");
         let sent = c.submit();
         assert_eq!(sent.images, [PathBuf::from("/tmp/y.png")]);

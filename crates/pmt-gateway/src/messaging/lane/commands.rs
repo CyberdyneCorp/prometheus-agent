@@ -311,7 +311,7 @@ impl Lane {
     /// entries before it), never merged.
     async fn queue_command(&mut self, routing: Routing, text: &str) {
         if text.trim().is_empty() {
-            self.say("Usage: /queue <text>");
+            self.say(self.strings().get("gateway.queue_usage"));
             return;
         }
         let pending = Pending {
@@ -337,23 +337,43 @@ impl Lane {
             .filter(|p| p.origin == Origin::Queued)
             .count();
         if queued >= usize::try_from(max).unwrap_or(usize::MAX) {
-            self.say(&format!("Queue full ({max}). Wait or /stop."));
+            self.say(&pmt_i18n::t!(
+                self.strings(),
+                "gateway.queue_full",
+                max = max
+            ));
             return;
         }
         self.pending.push_back(pending);
-        self.say(&format!("Queued ({} waiting).", queued + 1));
+        let count = queued + 1;
+        self.say(&pmt_i18n::t!(
+            self.strings(),
+            "gateway.queued",
+            count = count
+        ));
     }
 
     fn whoami(&self, routing: &Routing, table: &pmt_config::schema::PlatformConfig) {
-        let tier = match auth::is_admin(table, routing.chat_type, &routing.sender_id) {
-            Some(true) => "admin",
-            Some(false) => "user",
-            None => "every command (no admin list here)",
-        };
-        let session = self.session.as_deref().unwrap_or("none yet");
-        self.say(&format!(
-            "You are {} on {} (profile {}). Commands: {tier}. Session: {session}.",
-            routing.sender_id, routing.platform, self.profile
+        let strings = self.strings();
+        let tier = strings.get(
+            match auth::is_admin(table, routing.chat_type, &routing.sender_id) {
+                Some(true) => "gateway.tier_admin",
+                Some(false) => "gateway.tier_user",
+                None => "gateway.tier_open",
+            },
+        );
+        let session = self
+            .session
+            .as_deref()
+            .unwrap_or_else(|| strings.get("gateway.no_session_yet"));
+        self.say(&pmt_i18n::t!(
+            strings,
+            "gateway.whoami",
+            sender = routing.sender_id,
+            platform = routing.platform,
+            profile = self.profile,
+            tier = tier,
+            session = session
         ));
     }
 
@@ -365,7 +385,7 @@ impl Lane {
             return;
         }
         let Some(code) = args.trim().strip_prefix("approve") else {
-            self.say("Usage: /pair approve <code>");
+            self.say(self.strings().get("gateway.pair_usage"));
             return;
         };
         let Some(store) = self.shared.store(&self.profile) else {
@@ -373,12 +393,16 @@ impl Lane {
         };
         match store.approve_pairing(&routing.platform, code, Timestamp::now()) {
             Ok(pairing) => {
-                self.shared
-                    .deliver(&self.profile, &crate::messaging::paired_notice(&pairing));
-                self.say(&format!(
-                    "Approved {} on {}.",
-                    pairing.sender_name.as_deref().unwrap_or(&pairing.sender_id),
-                    pairing.platform
+                let strings = self.strings();
+                self.shared.deliver(
+                    &self.profile,
+                    &crate::messaging::paired_notice(&pairing, &strings),
+                );
+                self.say(&pmt_i18n::t!(
+                    strings,
+                    "gateway.pair_approved",
+                    who = pairing.sender_name.as_deref().unwrap_or(&pairing.sender_id),
+                    platform = pairing.platform
                 ));
             }
             Err(err) => self.say(err.message()),

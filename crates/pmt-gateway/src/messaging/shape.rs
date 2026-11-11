@@ -13,9 +13,6 @@ use super::adapter::MediaKind;
 use super::descriptor::Descriptor;
 use super::{media, split};
 
-/// The final part of a text too long for the platform.
-pub const TRUNCATED: &str = "... [truncated, full output attached]";
-
 /// What a text belongs to (names the saved full text).
 pub(crate) struct Owner<'a> {
     /// The session, for the `sessions show` hint.
@@ -46,8 +43,14 @@ pub(crate) fn parts(
     }
     let first = parts.into_iter().next().unwrap_or_default();
     let last = match full_text(shared, profile, descriptor, text, owner) {
-        Full::Attached(file) => (TRUNCATED.to_owned(), vec![file]),
-        Full::Saved(note) => (format!("... [truncated] {note}"), Vec::new()),
+        Full::Attached(file) => {
+            let strings = shared.strings(profile);
+            (
+                pmt_i18n::t!(strings, "gateway.truncated_attached"),
+                vec![file],
+            )
+        }
+        Full::Saved(note) => (note, Vec::new()),
     };
     vec![(first, Vec::new()), last]
 }
@@ -56,14 +59,23 @@ pub(crate) fn parts(
 enum Full {
     /// Attached as a document.
     Attached(OutboundAttachment),
-    /// In the blob store (or nowhere): the note says.
+    /// In the blob store (or nowhere): the final part says.
     Saved(String),
 }
 
-fn show_hint(owner: &Owner<'_>) -> String {
-    owner.session.map_or_else(String::new, |session| {
-        format!("; run `prometheus sessions show {session}`")
-    })
+/// `note` plus how to see the whole text, when it belongs to a session.
+fn with_show_hint(strings: &pmt_i18n::Strings, note: &str, owner: &Owner<'_>) -> String {
+    owner.session.map_or_else(
+        || note.to_owned(),
+        |session| {
+            pmt_i18n::t!(
+                strings,
+                "gateway.truncated_show",
+                note = note,
+                session = session
+            )
+        },
+    )
 }
 
 fn full_text(
@@ -89,14 +101,16 @@ fn full_text(
         store.reference_blob(&blob, "gateway_reply", owner.key)?;
         Ok::<_, pmt_core::error::Error>(blob)
     });
-    match saved {
-        Some(Ok(blob)) => Full::Saved(format!("full output saved as {blob}{}", show_hint(owner))),
+    let strings = shared.strings(profile);
+    let note = match saved {
+        Some(Ok(blob)) => pmt_i18n::t!(strings, "gateway.truncated_saved", blob = blob),
         Some(Err(err)) => {
             tracing::warn!("oversized text not saved: {err}");
-            Full::Saved(format!("full output not saved{}", show_hint(owner)))
+            pmt_i18n::t!(strings, "gateway.truncated_not_saved")
         }
-        None => Full::Saved(format!("full output not saved{}", show_hint(owner))),
-    }
+        None => pmt_i18n::t!(strings, "gateway.truncated_not_saved"),
+    };
+    Full::Saved(with_show_hint(&strings, &note, owner))
 }
 
 /// A key usable in a file name.

@@ -101,7 +101,10 @@ fn list(scope: &ProfileScope, only: Option<&Path>, json: bool) -> Result<u8, Err
     if listed.is_empty() {
         return print_raw("no recorded repositories\n");
     }
-    let text: Vec<String> = listed.iter().map(render_listing).collect();
+    // `prometheus worktrees` reports stay in English (spec: i18n covers
+    // the interactive surfaces).
+    let english = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
+    let text: Vec<String> = listed.iter().map(|l| render_listing(&english, l)).collect();
     print_raw(&format!("{}\n", text.join("\n")))
 }
 
@@ -126,7 +129,8 @@ fn prune(
     if swept.is_empty() {
         return print_raw("no recorded repositories\n");
     }
-    let text: Vec<String> = swept.iter().map(render_pruned).collect();
+    let english = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
+    let text: Vec<String> = swept.iter().map(|p| render_pruned(&english, p)).collect();
     print_raw(&format!("{}\n", text.join("\n")))
 }
 

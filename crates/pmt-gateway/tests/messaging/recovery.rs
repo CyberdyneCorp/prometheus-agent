@@ -10,13 +10,13 @@ use std::time::Duration;
 
 use pmt_core::error::Error;
 use pmt_gateway::messaging::{
-    AdapterError, AdapterState, CLEAN_SHUTDOWN, ChatType, Hook, Hooks, Inbound, RESTARTED,
+    AdapterError, AdapterState, CLEAN_SHUTDOWN, ChatType, Hook, Hooks, Inbound,
 };
 use pmt_store::gateway::outbox::{NewOutbound, OutboundKind, OutboundState};
 use pmt_store::gateway::routes::ResetReason;
 use serde_json::Value;
 
-use crate::support::{Harness, Setup, eventually, open, said};
+use crate::support::{Harness, Setup, en, eventually, open, said};
 
 /// Records the payloads of `on_session_end`.
 #[derive(Default)]
@@ -60,7 +60,7 @@ fn a_crash_mid_turn_is_recovered_on_the_next_start() {
     assert!(!home.path().join("run").join(CLEAN_SHUTDOWN).exists());
     phase(async {
         let h = Harness::start_in(home, Setup::new(&open("telegram"))).await;
-        said(&h.adapter("telegram"), RESTARTED).await;
+        said(&h.adapter("telegram"), &en("gateway.restarted_retry")).await;
         let session = h.sessions()[0];
         let state = h.store().routed_session(session).unwrap().unwrap();
         assert!(state.resume_pending);
@@ -79,7 +79,7 @@ fn a_crash_mid_turn_is_recovered_on_the_next_start() {
             .adapter("telegram")
             .texts()
             .iter()
-            .filter(|t| *t == RESTARTED)
+            .filter(|t| **t == en("gateway.restarted_retry"))
             .count();
         assert_eq!(notices, 1, "told once");
     });
@@ -114,7 +114,7 @@ fn a_clean_stop_skips_recovery_and_a_timed_out_drain_does_not() {
     );
     phase(async {
         let h = Harness::start_in(home, Setup::new(&open("telegram"))).await;
-        said(&h.adapter("telegram"), RESTARTED).await;
+        said(&h.adapter("telegram"), &en("gateway.restarted_retry")).await;
     });
 }
 

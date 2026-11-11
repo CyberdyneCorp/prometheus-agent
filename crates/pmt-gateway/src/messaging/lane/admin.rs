@@ -19,11 +19,6 @@ use pmt_store::gateway::routes::ResetReason;
 use super::Lane;
 use crate::messaging::key::Routing;
 
-/// What `/sethome` answers.
-pub(crate) fn home_set(label: &str) -> String {
-    format!("Home channel set to {label}")
-}
-
 impl Lane {
     /// The policy matching `routing` in the profile's current config.
     pub(super) fn current_policy(&self, routing: &Routing) -> Option<ChatPolicy> {
@@ -90,27 +85,28 @@ impl Lane {
     pub(super) fn pause_command(&self, routing: &Routing, args: &str) {
         let home = &self.shared.options.home;
         let args = args.trim();
+        let strings = self.strings();
         let reply = match args {
             "off" => match pmt_core::pause::resume(home) {
-                Ok(true) => "Pause lifted; new turns start again.".to_owned(),
-                Ok(false) => "Not paused.".to_owned(),
+                Ok(true) => pmt_i18n::t!(strings, "gateway.pause_lifted"),
+                Ok(false) => pmt_i18n::t!(strings, "gateway.not_paused"),
                 Err(err) => err.message().to_owned(),
             },
             "status" => match pmt_core::pause::active(home) {
-                Some(pause) => format!(
-                    "Paused since {} by {}: {}.",
-                    pause.at, pause.actor, pause.reason
+                Some(pause) => pmt_i18n::t!(
+                    strings,
+                    "gateway.paused_since",
+                    at = pause.at,
+                    actor = pause.actor,
+                    reason = pause.reason
                 ),
-                None => "Not paused.".to_owned(),
+                None => pmt_i18n::t!(strings, "gateway.not_paused"),
             },
             reason => {
                 let actor = format!("{}:{}", routing.platform, routing.sender_id);
                 let reason = (!reason.is_empty()).then_some(reason);
                 match pmt_core::pause::pause(home, reason, &actor) {
-                    Ok(pause) => format!(
-                        "Paused: {}. Running turns finish; new turns are refused until /pause off.",
-                        pause.reason
-                    ),
+                    Ok(pause) => pmt_i18n::t!(strings, "gateway.paused_now", reason = pause.reason),
                     Err(err) => err.message().to_owned(),
                 }
             }
@@ -152,25 +148,37 @@ impl Lane {
                     platform = routing.platform,
                     "home channel set"
                 );
-                self.say(&home_set(&label));
+                self.say(&pmt_i18n::t!(
+                    self.strings(),
+                    "gateway.home_set",
+                    label = label
+                ));
             }
-            Err(err) => self.say(&format!("Home channel not set: {}", err.message())),
+            Err(err) => {
+                let text =
+                    pmt_i18n::t!(self.strings(), "gateway.home_not_set", why = err.message());
+                self.say(&text);
+            }
         }
     }
 
     /// `/policy [show|apply --now]`.
     pub(super) async fn policy_command(&mut self, routing: &Routing, args: &str) {
         let args: Vec<&str> = args.split_whitespace().collect();
+        let strings = self.strings();
         match args.as_slice() {
             [] | ["show"] => {
-                let frozen = describe(self.policy.as_ref());
-                let current = describe(self.current_policy(routing).as_ref());
-                self.say(&format!(
-                    "This session's policy: {frozen}. Policy for new sessions here: {current}."
+                let frozen = describe(&strings, self.policy.as_ref());
+                let current = describe(&strings, self.current_policy(routing).as_ref());
+                self.say(&pmt_i18n::t!(
+                    strings,
+                    "gateway.policy_show",
+                    frozen = frozen,
+                    current = current
                 ));
             }
             ["apply", "--now"] if self.running.is_some() => {
-                self.say("A turn is running; wait for it or /stop, then /policy apply --now.");
+                self.say(strings.get("gateway.policy_busy"));
             }
             ["apply", "--now"] => {
                 let previous = self.current_session();
@@ -178,37 +186,43 @@ impl Lane {
                     .transition(routing, Some(ResetReason::Policy), previous)
                     .await
                 {
-                    Ok(_) => self.say("New session started with the current policy."),
+                    Ok(_) => self.say(strings.get("gateway.policy_applied")),
                     Err(err) => self.say(err.message()),
                 }
             }
-            _ => self.say("Usage: /policy [show | apply --now]"),
+            _ => self.say(strings.get("gateway.policy_usage")),
         }
     }
 }
 
-fn describe(policy: Option<&ChatPolicy>) -> String {
+fn describe(strings: &pmt_i18n::Strings, policy: Option<&ChatPolicy>) -> String {
     let Some(policy) = policy else {
-        return "none".to_owned();
+        return pmt_i18n::t!(strings, "gateway.policy_none");
     };
     let mut parts = Vec::new();
     if let Some(model) = &policy.model {
-        parts.push(format!("model {model}"));
+        parts.push(pmt_i18n::t!(strings, "gateway.policy_model", model = model));
     }
     if let Some(toolsets) = &policy.toolsets {
-        parts.push(format!("toolsets {}", toolsets.join(", ")));
+        let list = toolsets.join(", ");
+        parts.push(pmt_i18n::t!(
+            strings,
+            "gateway.policy_toolsets",
+            list = list
+        ));
     }
     if let Some(skills) = &policy.skills {
-        parts.push(format!("skills {}", skills.join(", ")));
+        let list = skills.join(", ");
+        parts.push(pmt_i18n::t!(strings, "gateway.policy_skills", list = list));
     }
     if policy.system_prompt_append.is_some() {
-        parts.push("a system prompt addition".to_owned());
+        parts.push(pmt_i18n::t!(strings, "gateway.policy_prompt"));
     }
     if let Some(cost) = policy.max_cost_usd_per_turn {
-        parts.push(format!("at most {cost} USD per turn"));
+        parts.push(pmt_i18n::t!(strings, "gateway.policy_cost", cost = cost));
     }
     if parts.is_empty() {
-        "limits only".to_owned()
+        pmt_i18n::t!(strings, "gateway.policy_limits_only")
     } else {
         parts.join("; ")
     }

@@ -14,14 +14,6 @@ use tokio::time::Instant;
 use super::{Lane, Origin, Pending};
 use crate::messaging::attention::span;
 
-/// What the chat is told the first time input waits behind the turn.
-pub(crate) const WAITING: &str = "Your message waits behind the turn the restart interrupted: \
-    reply /retry to run that turn again or /discard to drop it.";
-/// What `/discard` answers.
-pub(crate) const DISCARDED: &str = "Dropped the interrupted turn.";
-/// What `/discard` answers with nothing pending.
-pub(crate) const NOTHING_TO_DISCARD: &str = "No interrupted turn to discard.";
-
 /// The queue is held for a `resume_pending` turn.
 #[derive(Debug)]
 pub(crate) struct Held {
@@ -68,7 +60,7 @@ impl Lane {
         if self.held.is_none() {
             self.held = self.pending_resume(session);
             if self.held.is_some() {
-                self.say(WAITING);
+                self.say(self.strings().get("gateway.resume_waiting"));
             }
         }
         if self.held.is_none() {
@@ -94,10 +86,10 @@ impl Lane {
     pub(super) async fn discard_command(&mut self) {
         let session = self.current_session().unwrap_or_default();
         if self.release(&session) {
-            self.say(DISCARDED);
+            self.say(self.strings().get("gateway.discarded"));
             self.next().await;
         } else {
-            self.say(NOTHING_TO_DISCARD);
+            self.say(self.strings().get("gateway.nothing_to_discard"));
         }
     }
 
@@ -131,9 +123,12 @@ impl Lane {
         let ttl = held.ttl;
         let session = self.current_session().unwrap_or_default();
         self.release(&session);
-        self.say(&format!(
-            "The interrupted turn was dropped after {} without /retry.",
-            span(ttl)
+        let strings = self.strings();
+        let span = span(&strings, ttl);
+        self.say(&pmt_i18n::t!(
+            strings,
+            "gateway.resume_dropped",
+            span = span
         ));
         self.next().await;
     }

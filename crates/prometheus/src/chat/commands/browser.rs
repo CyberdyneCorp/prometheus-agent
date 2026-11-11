@@ -11,6 +11,7 @@
 //! Only terminal surfaces have the command; messaging platforms refuse it.
 
 use pmt_core::error::{Error, codes};
+use pmt_i18n::t;
 use pmt_tools::browser::connect::{self, Starter, Status};
 
 use super::Ctx;
@@ -58,6 +59,7 @@ fn configured_endpoint(ctx: &Ctx<'_>) -> bool {
 
 async fn connect(ctx: &Ctx<'_>, url: Option<&str>) -> Result<String, Error> {
     let manager = manager(ctx)?;
+    let strings = ctx.strings();
     let launch = ctx.factory.launch();
     let starter = Starter::new(
         connect::candidates(launch.inherited("PATH")),
@@ -69,31 +71,42 @@ async fn connect(ctx: &Ctx<'_>, url: Option<&str>) -> Result<String, Error> {
     manager.set_connect(&ctx.live.id.to_string(), Some(endpoint.clone()));
     let status = match Status::read(&endpoint).await {
         Ok(status) => status.render(),
-        Err(why) => format!("connected to {endpoint} ({why})"),
+        Err(why) => t!(
+            strings,
+            "slash.browser.connected_note",
+            endpoint = endpoint,
+            why = why
+        ),
     };
     if !configured_endpoint(ctx) {
         ctx.factory
             .apply_tools_now(ctx.live, "browser connect")
             .await?;
-        return Ok(format!(
-            "{status}\nbrowser_cdp and browser_dialog are available now (the prompt cache starts over)"
-        ));
+        let now = strings.get("slash.browser.tools_now");
+        return Ok(format!("{status}\n{now}"));
     }
     Ok(status)
 }
 
 async fn status(ctx: &Ctx<'_>) -> String {
+    let strings = ctx.strings();
     let Ok(manager) = manager(ctx) else {
-        return "the browser tools are unavailable in this profile".to_owned();
+        return t!(strings, "slash.browser.unavailable");
     };
     match manager.explicit_endpoint(&key(ctx)) {
         Some(endpoint) => match Status::read(&endpoint).await {
             Ok(status) => status.render(),
-            Err(why) => format!("connected to {endpoint}, which does not answer: {why}"),
+            Err(why) => t!(
+                strings,
+                "slash.browser.not_answering",
+                endpoint = endpoint,
+                why = why
+            ),
         },
-        None => format!(
-            "not connected; browser sessions use browser.provider = {}",
-            manager.config().provider
+        None => t!(
+            strings,
+            "slash.browser.not_connected_provider",
+            provider = manager.config().provider
         ),
     }
 }
@@ -101,22 +114,23 @@ async fn status(ctx: &Ctx<'_>) -> String {
 async fn disconnect(ctx: &Ctx<'_>) -> Result<String, Error> {
     let manager = manager(ctx)?;
     let session = ctx.live.id.to_string();
+    let strings = ctx.strings();
     if manager.explicit_endpoint(&key(ctx)).is_none() {
-        return Ok("not connected".to_owned());
+        return Ok(t!(strings, "slash.browser.not_connected"));
     }
     manager.set_connect(&session, None);
     // Detaches: a connected browser is never closed by its session's end.
     manager.close_prefixed(&format!("{session}/")).await;
     let provider = manager.config().provider;
     if configured_endpoint(ctx) {
-        return Ok(
-            "disconnected; browser.cdp_url still names an endpoint, so it is used next".to_owned(),
-        );
+        return Ok(t!(strings, "slash.browser.disconnected_configured"));
     }
     ctx.factory
         .apply_tools_now(ctx.live, "browser disconnect")
         .await?;
-    Ok(format!(
-        "disconnected (the browser keeps running); the next browser call uses browser.provider = {provider}"
+    Ok(t!(
+        strings,
+        "slash.browser.disconnected",
+        provider = provider
     ))
 }

@@ -83,15 +83,22 @@ impl Palette {
 
     /// The palette's rows for `width` columns and at most `rows` lines.
     #[must_use]
-    pub fn lines(&self, width: u16, rows: usize, theme: &Theme) -> Vec<Line<'static>> {
+    pub fn lines(
+        &self,
+        width: u16,
+        rows: usize,
+        theme: &Theme,
+        strings: &pmt_i18n::Strings,
+    ) -> Vec<Line<'static>> {
         let width = usize::from(width).max(1);
+        let title = pmt_i18n::t!(strings, "tui.palette", 0 = self.query);
         let mut lines = vec![Line::from(Span::styled(
-            truncate(&format!("palette › {}", self.query), width),
+            truncate(&title, width),
             theme.card,
         ))];
         let ranked = self.ranked();
         if ranked.is_empty() {
-            lines.push(Line::from("  no command matches"));
+            lines.push(Line::from(format!("  {}", strings.get("tui.no_match"))));
         }
         let shown = rows.saturating_sub(1).max(1);
         let first = (self.selected + 1).saturating_sub(shown);

@@ -66,6 +66,15 @@ pub struct Ctx<'a> {
     pub message_limit: Option<usize>,
 }
 
+impl Ctx<'_> {
+    /// The profile's UI strings now (spec: i18n): a language change shows
+    /// in the next reply.
+    #[must_use]
+    pub fn strings(&self) -> Arc<pmt_i18n::Strings> {
+        pmt_config::language::strings(self.scope.dir(), pmt_i18n::Surface::Core)
+    }
+}
+
 /// What a command produced.
 #[derive(Debug)]
 pub enum Reply {
@@ -84,23 +93,29 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "init" => return Some(Ok(Reply::Send(pmt_agent::init::input(args)))),
         "retry" => return Some(retry(ctx)),
         "moa" => return Some(moa::moa(ctx, args).await),
-        "help" => Ok(ctx.registry.help(ctx.surface).trim_end().to_owned()),
+        "help" => Ok(ctx
+            .registry
+            .help(ctx.surface, &ctx.strings())
+            .trim_end()
+            .to_owned()),
         "btw" => side::btw(ctx, args),
         "autoprune" => crate::chat::autoprune::command(ctx.scope, &ctx.factory.store, args),
         "usage" => account::usage(ctx, args).await,
         "insights" => crate::insights_cmd::slash(ctx.scope, &ctx.factory.store, args),
-        "debug" => crate::debug_cmd::share::slash(
-            &crate::context::Context {
-                home_flag: Some(ctx.scope.home()),
-                launch: ctx.factory.launch(),
-                profile: Some(ctx.scope.name().as_str()),
-                set: &[],
-                json: false,
-            },
-            &ctx.live.id.to_string(),
-            args,
-        )
-        .await,
+        "debug" => {
+            crate::debug_cmd::share::slash(
+                &crate::context::Context {
+                    home_flag: Some(ctx.scope.home()),
+                    launch: ctx.factory.launch(),
+                    profile: Some(ctx.scope.name().as_str()),
+                    set: &[],
+                    json: false,
+                },
+                &ctx.live.id.to_string(),
+                args,
+            )
+            .await
+        }
         "login" => account::login(ctx, args),
         "subscription" => account::subscription(ctx).await,
         "topup" => account::topup(ctx).await,
@@ -123,32 +138,22 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "bundles" => Ok(pmt_skills::bundles::listing(&pmt_skills::bundles::load(
             ctx.scope.dir(),
         ))),
-        "approvals" => Ok(approvals(ctx.live)),
+        "approvals" => Ok(approvals(&ctx.strings(), ctx.live)),
         "reload-secrets" => crate::slash_handlers::reload_secrets(ctx.scope),
         "reload-skills" => Ok(pmt_skills::reload::reload(&ctx.live.skills).render()),
         "refine" => refine::refine(ctx, args).await,
-        "curator" => crate::curator_cmd::slash::run(
-            ctx.scope,
-            ctx.factory.launch(),
-            args,
-            &ctx.post,
-        ),
+        "curator" => {
+            crate::curator_cmd::slash::run(ctx.scope, ctx.factory.launch(), args, &ctx.post)
+        }
         "background" => background::background(ctx, args).await,
         "agents" => agents::agents(ctx, args).await,
         "review" => review::review(ctx, args).await,
         "delegation" => delegation::delegation(ctx, args).await,
-        "profile" => Ok(format!(
-            "profile {} ({})",
-            ctx.scope.name(),
-            ctx.scope.dir().display()
-        )),
+        "profile" => Ok(profile(ctx)),
         "undo" => files::undo(ctx, args),
         "rollback" => files::rollback(ctx, args),
         "diff" => Ok(files::diff(ctx, args)),
-        "sync" => Ok(ctx.live.sync_back().await.unwrap_or_else(|| {
-            "nothing to sync: the terminal backend has no remote workspace or terminal.sync_back is off"
-                .to_owned()
-        })),
+        "sync" => Ok(sync(ctx).await),
         "rewind" => session::rewind(ctx, args),
         "compress" => session::compress(ctx, args).await,
         "pin" => session::pin(ctx, args),
@@ -221,9 +226,9 @@ fn state_command(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<String,
             }
             text
         }),
-        "yolo" => Ok(yolo(live, args)),
+        "yolo" => Ok(yolo(&ctx.strings(), live, args)),
         "egress" => egress(live, args),
-        "config" => config(ctx.scope, args),
+        "config" => config(&ctx.strings(), ctx.scope, args),
         _ => return None,
     })
 }
@@ -237,7 +242,8 @@ fn state_command(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<String,
 #[must_use]
 pub fn profile_registry(scope: &ProfileScope) -> Registry {
     let mut registry = Registry::new().expect("the built-in commands are unique");
-    quick::register(&mut registry, &scope.config().quick_commands);
+    let strings = pmt_config::language::strings(scope.dir(), pmt_i18n::Surface::Core);
+    quick::register(&mut registry, &scope.config().quick_commands, &strings);
     registry
 }
 
@@ -290,6 +296,24 @@ pub async fn skill_line(
     }
 }
 
+/// `/profile`: the session's profile and its directory.
+fn profile(ctx: &Ctx<'_>) -> String {
+    pmt_i18n::t!(
+        ctx.strings(),
+        "slash.profile",
+        name = ctx.scope.name(),
+        dir = ctx.scope.dir().display()
+    )
+}
+
+/// `/sync`: copies the remote workspace's changes back, when there is one.
+async fn sync(ctx: &Ctx<'_>) -> String {
+    match ctx.live.sync_back().await {
+        Some(report) => report,
+        None => pmt_i18n::t!(ctx.strings(), "slash.nothing_to_sync"),
+    }
+}
+
 /// `/learn [focus]`: the learn instruction as the next message.
 fn learn(ctx: &Ctx<'_>, args: &str) -> Result<Reply, Error> {
     let chars = ctx.scope.config().skills.index_description_chars;
@@ -300,21 +324,22 @@ fn learn(ctx: &Ctx<'_>, args: &str) -> Result<Reply, Error> {
 fn retry(ctx: &Ctx<'_>) -> Result<Reply, Error> {
     Ok(match session::retry(ctx.factory, ctx.live.id)? {
         Some(input) => Reply::Send(input),
-        None => Reply::Text("nothing to retry".to_owned()),
+        None => Reply::Text(pmt_i18n::t!(ctx.strings(), "slash.nothing_to_retry")),
     })
 }
 
 fn title(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
     let store = &ctx.factory.store;
+    let strings = ctx.strings();
     if args.is_empty() {
         let session = store.session(ctx.live.id)?;
         return Ok(session.title.map_or_else(
-            || "this session has no title".to_owned(),
-            |t| format!("title: {t}"),
+            || pmt_i18n::t!(strings, "slash.no_title"),
+            |t| pmt_i18n::t!(strings, "slash.title", title = t),
         ));
     }
     store.set_title(ctx.live.id, Some(args), pmt_store::TitleSource::User)?;
-    Ok(format!("title set to {args}"))
+    Ok(pmt_i18n::t!(strings, "slash.title_set", title = args))
 }
 
 fn budget(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
@@ -329,7 +354,7 @@ fn budget(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
     Ok(text)
 }
 
-fn approvals(live: &Live) -> String {
+fn approvals(strings: &pmt_i18n::Strings, live: &Live) -> String {
     let scope = live.config.get();
     let config = &scope.config().approvals;
     let mode = match config.mode {
@@ -337,12 +362,12 @@ fn approvals(live: &Live) -> String {
         pmt_config::schema::ApprovalMode::Smart => "smart",
         pmt_config::schema::ApprovalMode::Off => "off",
     };
-    let yolo = if live.gate.yolo() {
-        " (YOLO: every call allowed)"
+    let key = if live.gate.yolo() {
+        "slash.approvals_yolo"
     } else {
-        ""
+        "slash.approvals"
     };
-    format!("approvals: {mode}{yolo}; timeout {} s", config.timeout_secs)
+    pmt_i18n::t!(strings, key, mode = mode, secs = config.timeout_secs)
 }
 
 /// `/egress [status] | allow <host> | deny <host> | mode <m>`: changes the
@@ -356,26 +381,31 @@ fn egress(live: &Live, args: &str) -> Result<String, Error> {
     Ok(crate::egress::describe(&live.egress.hosts))
 }
 
-fn yolo(live: &Live, args: &str) -> String {
+fn yolo(strings: &pmt_i18n::Strings, live: &Live, args: &str) -> String {
     let on = match args.trim() {
         "on" => true,
         "off" => false,
         _ => !live.gate.yolo(),
     };
     live.gate.set_yolo(on);
-    if on {
-        "YOLO on: approval-gated calls run without asking (deny rules and hardline blocks still apply)".to_owned()
+    let key = if on {
+        "slash.yolo_on"
     } else {
-        "YOLO off".to_owned()
-    }
+        "slash.yolo_off"
+    };
+    pmt_i18n::t!(strings, key)
 }
 
 /// `/config` (the file's path), `/config get <key>`, `/config set <key>
 /// <value>` (validated like `prometheus config set`).
-fn config(scope: &ProfileScope, args: &str) -> Result<String, Error> {
+fn config(strings: &pmt_i18n::Strings, scope: &ProfileScope, args: &str) -> Result<String, Error> {
     let file = scope.profile().config_file();
     match args.split_once(' ').map(|(a, b)| (a, b.trim())) {
-        None if args.is_empty() => Ok(format!("config: {}", file.path().display())),
+        None if args.is_empty() => Ok(pmt_i18n::t!(
+            strings,
+            "slash.config_path",
+            path = file.path().display()
+        )),
         None if args.starts_with("get") => Err(config_usage()),
         Some(("get", key)) => match scope.layers().value(key) {
             Some(value) => Ok(format!("{key} = {value}")),
@@ -387,7 +417,12 @@ fn config(scope: &ProfileScope, args: &str) -> Result<String, Error> {
         Some(("set", rest)) => {
             let (key, value) = rest.split_once(' ').ok_or_else(config_usage)?;
             file.set(key, value.trim())?;
-            Ok(format!("{key} = {} (saved)", value.trim()))
+            Ok(pmt_i18n::t!(
+                strings,
+                "slash.config_saved",
+                key = key,
+                value = value.trim()
+            ))
         }
         _ => Err(config_usage()),
     }

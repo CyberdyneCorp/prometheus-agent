@@ -57,9 +57,9 @@ pub struct Contents {
 impl Banner {
     /// The banner with the default toggles: Tools open, the rest closed.
     #[must_use]
-    pub fn new(title: String, contents: Contents) -> Self {
-        let section = |title: &str, items: Vec<String>, joined: bool, open: bool| Section {
-            title: title.to_owned(),
+    pub fn new(title: String, contents: Contents, strings: &pmt_i18n::Strings) -> Self {
+        let section = |key: &str, items: Vec<String>, joined: bool, open: bool| Section {
+            title: strings.get(key).to_owned(),
             items,
             joined,
             open,
@@ -68,10 +68,10 @@ impl Banner {
             title,
             degraded: contents.degraded,
             sections: vec![
-                section("Tools", contents.tools, true, true),
-                section("Skills", contents.skills, true, false),
-                section("System Prompt", contents.system_prompt, false, false),
-                section("MCP Servers", contents.mcp_servers, true, false),
+                section("tui.banner_tools", contents.tools, true, true),
+                section("tui.banner_skills", contents.skills, true, false),
+                section("tui.banner_prompt", contents.system_prompt, false, false),
+                section("tui.banner_mcp", contents.mcp_servers, true, false),
             ],
             focus: None,
         }
@@ -96,7 +96,12 @@ impl Banner {
     /// The banner's lines for `width` columns; header lines carry their
     /// section's index (a click on one toggles it).
     #[must_use]
-    pub fn lines(&self, width: u16, theme: &Theme) -> Vec<(Line<'static>, Option<usize>)> {
+    pub fn lines(
+        &self,
+        width: u16,
+        theme: &Theme,
+        strings: &pmt_i18n::Strings,
+    ) -> Vec<(Line<'static>, Option<usize>)> {
         let width = usize::from(width).max(1);
         let mut lines = vec![(
             Line::from(Span::styled(
@@ -106,7 +111,7 @@ impl Banner {
             None,
         )];
         if let Some(marker) = &self.degraded {
-            let text = format!("degraded: {marker}");
+            let text = pmt_i18n::t!(strings, "tui.degraded", 0 = marker);
             lines.push((
                 Line::from(Span::styled(
                     truncate(&text, width),
@@ -128,7 +133,7 @@ impl Banner {
                 Some(index),
             ));
             if section.open {
-                for text in section.body(width.saturating_sub(2)) {
+                for text in section.body(width.saturating_sub(2), strings) {
                     lines.push((Line::from(format!("  {text}")), None));
                 }
             }
@@ -138,9 +143,9 @@ impl Banner {
 }
 
 impl Section {
-    fn body(&self, width: usize) -> Vec<String> {
+    fn body(&self, width: usize, strings: &pmt_i18n::Strings) -> Vec<String> {
         if self.items.is_empty() {
-            return vec!["(none)".to_owned()];
+            return vec![strings.get("tui.none").to_owned()];
         }
         if self.joined {
             return wrap(&self.items.join(", "), width);
@@ -161,7 +166,11 @@ mod tests {
 
     fn shown(banner: &Banner) -> Vec<String> {
         banner
-            .lines(60, &Theme::new(TuiTheme::Dark, true))
+            .lines(
+                60,
+                &Theme::new(TuiTheme::Dark, true),
+                &pmt_i18n::Strings::english(pmt_i18n::Surface::Tui),
+            )
             .iter()
             .map(|(line, _)| line.spans.iter().map(|s| s.content.as_ref()).collect())
             .collect()
@@ -175,7 +184,11 @@ mod tests {
             skills: (0..80).map(|n| format!("skill-{n}")).collect(),
             ..Contents::default()
         };
-        let mut banner = Banner::new("Prometheus".into(), contents);
+        let mut banner = Banner::new(
+            "Prometheus".into(),
+            contents,
+            &pmt_i18n::Strings::english(pmt_i18n::Surface::Tui),
+        );
         let lines = shown(&banner);
         assert_eq!(
             lines,
@@ -202,9 +215,17 @@ mod tests {
             degraded: Some("browser: degraded:web_security".into()),
             ..Contents::default()
         };
-        let lines = shown(&Banner::new("Prometheus".into(), contents));
+        let lines = shown(&Banner::new(
+            "Prometheus".into(),
+            contents,
+            &pmt_i18n::Strings::english(pmt_i18n::Surface::Tui),
+        ));
         assert_eq!(lines[1], "degraded: browser: degraded:web_security");
-        let full = shown(&Banner::new("Prometheus".into(), Contents::default()));
+        let full = shown(&Banner::new(
+            "Prometheus".into(),
+            Contents::default(),
+            &pmt_i18n::Strings::english(pmt_i18n::Surface::Tui),
+        ));
         assert!(full.iter().all(|l| !l.starts_with("degraded")), "{full:?}");
     }
 }

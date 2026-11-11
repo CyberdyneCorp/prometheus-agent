@@ -111,7 +111,7 @@ pub use hooks::{Hook, HookBridge, Hooks, PreCommand};
 pub use http::HttpOptions;
 pub use key::{ChatType, Isolation, KeyParts, Routing, SessionKey};
 pub use lane::{Background, BackgroundKind};
-pub use recovery::{CLEAN_SHUTDOWN, RESTARTED, RESUME_ORIGIN, RESUMING};
+pub use recovery::{CLEAN_SHUTDOWN, RESUME_ORIGIN};
 pub use relay::{RelayOptions, RelaySource};
 pub use restart::{forget_update, remember_update};
 pub use send::{KnownTarget, SendRequest, known_targets};
@@ -252,6 +252,16 @@ impl Shared {
         self.agents.store(profile)
     }
 
+    /// `profile`'s UI strings now (spec: i18n): each profile served by
+    /// this gateway speaks its own language, and a language, overlay or
+    /// pack change shows in the next notice without a restart.
+    pub(crate) fn strings(&self, profile: &str) -> Arc<pmt_i18n::Strings> {
+        self.agents.scope(profile).map_or_else(
+            || pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+            |scope| pmt_config::language::strings(scope.dir(), pmt_i18n::Surface::Core),
+        )
+    }
+
     /// Stores an outbound message and wakes the delivery worker.
     pub(crate) fn deliver(&self, profile: &str, new: &NewOutbound) {
         let Some(store) = self.store(profile) else {
@@ -285,9 +295,12 @@ impl Shared {
 
 /// The message that tells a newly paired sender they are in (queued in
 /// the profile's outbox by every approval path: the CLI, the RPC and
-/// `/pair approve`).
+/// `/pair approve`), in the language of `strings`.
 #[must_use]
-pub fn paired_notice(pairing: &pmt_store::gateway::pairing::Pairing) -> NewOutbound {
+pub fn paired_notice(
+    pairing: &pmt_store::gateway::pairing::Pairing,
+    strings: &pmt_i18n::Strings,
+) -> NewOutbound {
     NewOutbound {
         idempotency_key: format!(
             "paired:{}:{}:{}",
@@ -304,7 +317,7 @@ pub fn paired_notice(pairing: &pmt_store::gateway::pairing::Pairing) -> NewOutbo
         reply_to: None,
         edit_of: None,
         kind: pmt_store::gateway::outbox::OutboundKind::System,
-        body: "You are paired with this assistant now; send a message to start.".to_owned(),
+        body: pmt_i18n::t!(strings, "gateway.paired"),
         attachments: Vec::new(),
         notify: None,
     }
@@ -474,7 +487,9 @@ impl Gateway {
             )
         })?;
         let pairing = store.approve_pairing(platform, code, jiff::Timestamp::now())?;
-        self.shared.deliver(profile, &paired_notice(&pairing));
+        let strings = self.shared.strings(profile);
+        self.shared
+            .deliver(profile, &paired_notice(&pairing, &strings));
         Ok(pairing)
     }
 

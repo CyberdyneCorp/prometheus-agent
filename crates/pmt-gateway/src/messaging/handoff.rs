@@ -33,7 +33,7 @@ pub struct HandedOff {
 
 /// The replay of `messages` (role and text; user and assistant text
 /// only), oldest first.
-fn replay(session: &str, messages: &[(Role, &str)]) -> String {
+fn replay(strings: &pmt_i18n::Strings, session: &str, messages: &[(Role, &str)]) -> String {
     let shown: Vec<&(Role, &str)> = messages
         .iter()
         .filter(|(role, text)| {
@@ -41,13 +41,13 @@ fn replay(session: &str, messages: &[(Role, &str)]) -> String {
         })
         .collect();
     let start = shown.len().saturating_sub(REPLAY);
-    let mut text = format!("Continuing session {session} here. The conversation so far:");
+    let mut text = pmt_i18n::t!(strings, "gateway.handoff_intro", session = session);
     for (role, content) in &shown[start..] {
-        let who = if *role == Role::User {
-            "You"
+        let who = strings.get(if *role == Role::User {
+            "gateway.handoff_you"
         } else {
-            "Assistant"
-        };
+            "gateway.handoff_assistant"
+        });
         let _ = write!(text, "\n\n{who}: {}", content.trim());
     }
     text
@@ -82,10 +82,11 @@ impl Gateway {
         let store = shared.profile_store(profile)?;
         let id: pmt_core::id::SessionId = session.parse()?;
         let found = store.session(id)?;
+        let strings = shared.strings(profile);
         let title = found
             .title
             .as_deref()
-            .unwrap_or("Continued from the terminal");
+            .unwrap_or_else(|| strings.get("gateway.handoff_title"));
         let destination = self.thread_for(profile, resolved, title).await?;
         store.park_handoff(
             &destination.platform,
@@ -101,7 +102,7 @@ impl Gateway {
         self.enqueue_as(
             profile,
             &destination,
-            &replay(session, &lines),
+            &replay(&strings, session, &lines),
             &[],
             (OutboundKind::Notification, None),
         )?;
@@ -193,7 +194,8 @@ mod tests {
             messages.push((Role::Assistant, a.as_str()));
             messages.push((Role::Tool, "tool output"));
         }
-        let text = replay("ses_x", &messages);
+        let en = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
+        let text = replay(&en, "ses_x", &messages);
         assert!(text.starts_with("Continuing session ses_x here."));
         assert!(
             !text.contains("q4\n") && !text.contains("You: q4"),

@@ -19,6 +19,7 @@ use pmt_core::id::SessionId;
 use pmt_cron::job::Job;
 use pmt_cron::ops;
 use pmt_cron::target::JobOrigin;
+use pmt_i18n::{Strings, t};
 use pmt_store::Origin;
 
 use super::Ctx;
@@ -211,12 +212,12 @@ enum Shown {
 
 /// Cuts `text` to the platform's message limit with a pointer to the CLI.
 fn fit(ctx: &Ctx<'_>, text: String) -> String {
-    const MORE: &str = "\n… (truncated: `prometheus cron` shows everything)";
+    let more = format!("\n{}", ctx.strings().get("slash.cron.truncated"));
     match ctx.message_limit {
         Some(limit) if text.chars().count() > limit => {
-            let keep = limit.saturating_sub(MORE.chars().count());
+            let keep = limit.saturating_sub(more.chars().count());
             let mut cut: String = text.chars().take(keep).collect();
-            cut.push_str(MORE);
+            cut.push_str(&more);
             cut
         }
         _ => text,
@@ -248,17 +249,19 @@ fn runner(ctx: &Ctx<'_>) -> HostRunner {
     )
 }
 
-fn line(job: &Job) -> String {
-    format!(
-        "{}  {}  {}  {} {}  next {}  last {}",
-        job.id(),
-        job.row.name,
-        job.row.state,
-        job.spec.schedule.kind(),
-        job.spec.schedule.canonical(),
-        job.next_run()
+fn line(strings: &Strings, job: &Job) -> String {
+    t!(
+        strings,
+        "slash.cron.line",
+        id = job.id(),
+        name = job.row.name,
+        state = job.row.state,
+        kind = job.spec.schedule.kind(),
+        schedule = job.spec.schedule.canonical(),
+        next = job
+            .next_run()
             .map_or_else(|| "-".to_owned(), |t| t.to_string()),
-        job.row.last_status.as_deref().unwrap_or("-"),
+        last = job.row.last_status.as_deref().unwrap_or("-")
     )
 }
 
@@ -295,24 +298,31 @@ fn run(ctx: &Ctx<'_>, command: CronCommand) -> Result<Shown, Error> {
 /// The commands that never wait for a confirmation.
 fn operate(ctx: &Ctx<'_>, command: CronCommand, now: Timestamp) -> Result<String, Error> {
     let store = &ctx.factory.store;
+    let s = ctx.strings();
     match command {
         CronCommand::List { all } => list(ctx, all),
         CronCommand::Pause { job, reason } => {
             let job = ops::pause(store, &job, reason.as_deref(), now)?;
-            Ok(format!("paused job {} ({})", job.id(), job.row.name))
+            Ok(t!(
+                s,
+                "slash.cron.paused",
+                id = job.id(),
+                name = job.row.name
+            ))
         }
         CronCommand::Resume { job } => {
             let job = ops::resume(store, &job, now, &profile_zone(ctx.scope)?)?;
-            Ok(format!(
-                "resumed job {} ({})\n{}",
-                job.id(),
-                job.row.name,
-                line(&job)
-            ))
+            let head = t!(s, "slash.cron.resumed", id = job.id(), name = job.row.name);
+            Ok(format!("{head}\n{}", line(&s, &job)))
         }
         CronCommand::Remove { job } => {
             let job = ops::remove(store, &job)?;
-            Ok(format!("removed job {} ({})", job.id(), job.row.name))
+            Ok(t!(
+                s,
+                "slash.cron.removed",
+                id = job.id(),
+                name = job.row.name
+            ))
         }
         CronCommand::Run { job, .. } => run_now(ctx, &job, now),
         CronCommand::Runs { job, limit, status } => runs(ctx, &job, limit, status.as_deref()),
@@ -335,10 +345,15 @@ fn list(ctx: &Ctx<'_>, all: bool) -> Result<String, Error> {
         .filter(|r| all || r.state != "completed")
         .filter_map(|r| Job::from_row(r).ok())
         .collect();
+    let strings = ctx.strings();
     if jobs.is_empty() {
-        return Ok("no cron jobs".to_owned());
+        return Ok(t!(strings, "slash.cron.none"));
     }
-    Ok(jobs.iter().map(line).collect::<Vec<_>>().join("\n"))
+    Ok(jobs
+        .iter()
+        .map(|job| line(&strings, job))
+        .collect::<Vec<_>>()
+        .join("\n"))
 }
 
 fn add(
@@ -372,12 +387,13 @@ fn add(
         paused,
     };
     let job = ops::create(&profile, spec, new, now)?;
-    Ok(Shown::Done(format!(
-        "{}\ncreated job {} ({})",
-        echo.render(),
-        job.id(),
-        job.row.name
-    )))
+    let created = t!(
+        ctx.strings(),
+        "slash.cron.created",
+        id = job.id(),
+        name = job.row.name
+    );
+    Ok(Shown::Done(format!("{}\n{created}", echo.render())))
 }
 
 fn edit(
@@ -408,11 +424,9 @@ fn edit(
         |spec| fields.apply(spec, now, &profile.zone),
         now,
     )?;
-    Ok(Shown::Done(format!(
-        "updated job {}\n{}",
-        job.id(),
-        line(&job)
-    )))
+    let strings = ctx.strings();
+    let head = t!(strings, "slash.cron.updated", id = job.id());
+    Ok(Shown::Done(format!("{head}\n{}", line(&strings, &job))))
 }
 
 /// Starts the run in the background; its outcome is posted to the chat.
@@ -424,16 +438,24 @@ fn run_now(ctx: &Ctx<'_>, key: &str, now: Timestamp) -> Result<String, Error> {
     let (job, run) = ops::queue_run(&ctx.factory.store, key, now, &how)?;
     let runner = runner(ctx);
     let post = Arc::clone(&ctx.post);
-    let started = format!(
-        "started run {} of job {} ({})",
-        run.id,
-        job.id(),
-        job.row.name
+    let strings = ctx.strings();
+    let started = t!(
+        strings,
+        "slash.cron.started",
+        run = run.id,
+        id = job.id(),
+        name = job.row.name
     );
     pmt_core::spawn::spawn(async move {
         let text = match runner.execute(&job, &run).await {
             Ok(done) => {
-                let mut text = format!("cron run {} of {}: {}", done.id, job.row.name, done.status);
+                let mut text = t!(
+                    strings,
+                    "slash.cron.run_done",
+                    run = done.id,
+                    name = job.row.name,
+                    status = done.status
+                );
                 if let Some(error) = &done.error {
                     let _ = write!(text, " ({error})");
                 }
@@ -442,7 +464,12 @@ fn run_now(ctx: &Ctx<'_>, key: &str, now: Timestamp) -> Result<String, Error> {
                 }
                 text
             }
-            Err(err) => format!("cron run {} failed to record: {err}", run.id),
+            Err(err) => t!(
+                strings,
+                "slash.cron.run_unrecorded",
+                run = run.id,
+                why = err
+            ),
         };
         post(text);
     });
@@ -453,7 +480,7 @@ fn runs(ctx: &Ctx<'_>, key: &str, limit: usize, status: Option<&str>) -> Result<
     let job = ops::find(&ctx.factory.store, key)?;
     let runs = ctx.factory.store.cron_runs(job.id(), status, limit)?;
     if runs.is_empty() {
-        return Ok(format!("job {} has no runs", job.id()));
+        return Ok(t!(ctx.strings(), "slash.cron.no_runs", id = job.id()));
     }
     Ok(runs
         .iter()
@@ -483,9 +510,11 @@ fn incidents(
     let store = &ctx.factory.store;
     if let Some(IncidentAction::Ack { id }) = action {
         let row = store.cron_ack_incident(&id, now.as_millisecond())?;
-        return Ok(format!(
-            "acknowledged incident {} of job {}",
-            row.id, row.job_name
+        return Ok(t!(
+            ctx.strings(),
+            "slash.cron.acknowledged",
+            id = row.id,
+            name = row.job_name
         ));
     }
     let job_id = job
@@ -493,7 +522,7 @@ fn incidents(
         .transpose()?;
     let rows = store.cron_incidents(state, job_id.as_deref())?;
     if rows.is_empty() {
-        return Ok("no cron incidents".to_owned());
+        return Ok(t!(ctx.strings(), "slash.cron.no_incidents"));
     }
     Ok(rows
         .iter()

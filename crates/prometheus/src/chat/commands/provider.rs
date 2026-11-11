@@ -11,13 +11,10 @@ use pmt_obs::trajectory::payload::RegistryReloaded;
 
 use super::Ctx;
 
-/// What `/provider reload` without `--now` says.
-const NEXT_SESSION: &str = "provider registry changes apply to new sessions; run /provider reload --now to apply them to this session";
-
 pub(super) async fn provider(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
     let words: Vec<&str> = args.split_whitespace().collect();
     match words.as_slice() {
-        ["reload"] => Ok(NEXT_SESSION.to_owned()),
+        ["reload"] => Ok(pmt_i18n::t!(ctx.strings(), "slash.provider.next_session")),
         ["reload", "--now"] | ["--now", "reload"] => reload_now(ctx).await,
         _ => Err(Error::new(
             &codes::CLI_USAGE,
@@ -36,12 +33,11 @@ async fn reload_now(ctx: &Ctx<'_>) -> Result<String, Error> {
         changed: changed.clone(),
     }))
     .await;
+    let strings = ctx.strings();
     Ok(if changed.is_empty() {
-        "provider registry reloaded; nothing changed".to_owned()
+        pmt_i18n::t!(strings, "slash.provider.unchanged")
     } else {
-        format!(
-            "provider registry reloaded for this session; changed: {}",
-            changed.join(", ")
-        )
+        let list = changed.join(", ");
+        pmt_i18n::t!(strings, "slash.provider.changed", list = list)
     })
 }

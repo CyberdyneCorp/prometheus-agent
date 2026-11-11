@@ -116,10 +116,6 @@ pub fn run(args: &ChatArgs, ctx: &Context<'_>, ui: Ui) -> Result<u8, Error> {
     }
 }
 
-/// What every safe-mode start shows (spec: plugin-system, Safe mode).
-pub const SAFE_MODE_BANNER: &str =
-    "safe mode is active: no plugins, MCP servers, sidecars, hooks or webhooks are loaded";
-
 /// An interactive start on a profile with no model offers `setup model`
 /// (spec: cli, Setup wizard).
 fn offers_setup(args: &ChatArgs, outcome: &Result<u8, Error>) -> bool {
@@ -161,7 +157,9 @@ fn run_recorded(
     };
     crate::startup::start_export(&scope);
     if scope.config().plugins.safe_mode && !ui.quiet {
-        eprintln!("{SAFE_MODE_BANNER}");
+        // What every safe-mode start shows (spec: plugin-system, Safe mode).
+        let strings = pmt_config::language::strings(scope.dir(), pmt_i18n::Surface::Core);
+        eprintln!("{}", strings.get("cli.safe_mode"));
     }
     let mode = mode(
         args,
@@ -484,7 +482,8 @@ fn restore_cwd(factory: &mut Factory, id: SessionId, mode: Mode) -> Result<(), E
     }
     change_dir(&recorded)?;
     factory.options.cwd = current_dir()?;
-    let line = format!("cwd restored to {}", recorded.display());
+    let strings = pmt_config::language::strings(factory.scope.dir(), pmt_i18n::Surface::Core);
+    let line = pmt_i18n::t!(strings, "cli.cwd_restored", dir = recorded.display());
     match mode {
         Mode::Line | Mode::Tui => println!("{line}"),
         Mode::OneShot => eprintln!("{line}"),

@@ -16,16 +16,14 @@ use super::{Flow, Repl};
 use crate::chat::attach;
 use crate::config_cmd::edit::{DEFAULT_EDITOR, launch_editor};
 
-/// What an empty composition prints.
-pub(crate) const EMPTY: &str = "empty prompt; nothing sent";
-
 impl Repl {
     /// `/image <path>` attaches, bare `/image` lists, `/image clear` drops.
     pub(super) fn image(&mut self, args: &str) -> Result<String, Error> {
+        let strings = self.strings();
         match args.trim() {
-            "" if self.attachments.is_empty() => Ok("no pending images".to_owned()),
+            "" if self.attachments.is_empty() => Ok(pmt_i18n::t!(strings, "cli.no_images")),
             "" => {
-                let mut text = String::from("pending images (sent with the next prompt):");
+                let mut text = pmt_i18n::t!(strings, "cli.images_heading");
                 for image in &self.attachments {
                     let _ = write!(text, "\n  {}", image.path.display());
                 }
@@ -34,14 +32,15 @@ impl Repl {
             "clear" => {
                 let n = self.attachments.len();
                 self.attachments.clear();
-                Ok(format!("dropped {n} pending image(s)"))
+                Ok(pmt_i18n::t!(strings, "cli.images_dropped", count = n))
             }
             path => {
                 let image = attach::load(&resolve(path, &self.factory.options.cwd))?;
-                let line = format!(
-                    "attached {} to the next prompt ({} pending)",
-                    image.name,
-                    self.attachments.len() + 1
+                let line = pmt_i18n::t!(
+                    strings,
+                    "cli.image_attached",
+                    name = image.name,
+                    count = self.attachments.len() + 1
                 );
                 self.attachments.push(image);
                 Ok(line)
@@ -67,7 +66,7 @@ impl Repl {
     pub(super) async fn compose(&mut self, initial: &str) -> Flow {
         match self.edit_message(initial) {
             Ok(Some(text)) => self.user_turn(text).await,
-            Ok(None) => self.notice(EMPTY),
+            Ok(None) => self.notice(self.strings().get("cli.empty_prompt")),
             Err(err) => self.error(&err),
         }
         Flow::Continue

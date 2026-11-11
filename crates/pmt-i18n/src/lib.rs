@@ -20,6 +20,23 @@ pub use bundled::{BUNDLED, Bundled};
 pub use languages::{Language, Origin, check_available, check_id, languages};
 pub use strings::{PackLocale, Sources, Strings};
 
+/// The text of a catalog key, formatted: `t!(strings, "gateway.stopped")`,
+/// `t!(strings, "gateway.queued", count = n)` or, for the positional TUI
+/// strings, `t!(strings, "tui.session", 0 = id)`. Arguments only need
+/// `Display`.
+#[macro_export]
+macro_rules! t {
+    ($strings:expr, $key:expr $(,)?) => {
+        $strings.get($key).to_owned()
+    };
+    ($strings:expr, $key:expr, $($name:tt = $value:expr),+ $(,)?) => {
+        $strings.fmt(
+            $key,
+            &[$((stringify!($name), &$value as &dyn ::std::fmt::Display)),+],
+        )
+    };
+}
+
 /// The default language and the source of truth for keys and placeholders.
 pub const ENGLISH: &str = "en";
 

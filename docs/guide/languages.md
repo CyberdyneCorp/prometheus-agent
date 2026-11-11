@@ -1,12 +1,16 @@
 # UI languages
 
-Prometheus shows its own interface text (CLI and approval prompts, chat
-notices on messaging platforms, `/status` labels, TUI cards) in the
-language `display.language` selects, per profile. Only that static text is
-translated: the agent's replies, tool output, logs, error codes, config
-keys and slash-command names are not, and localized text never enters a
-model request, so changing the language never breaks a session's prompt
-cache.
+Prometheus shows its own interface text in the language
+`display.language` selects, per profile: the interactive CLI (prompts,
+notices, tool progress lines, the turn summary, one-time tips), the
+`/help` list and the replies of slash commands on every surface, chat
+notices, cards and buttons on messaging platforms, and the TUI (status
+bar, session switcher, command palette and its own commands' help,
+cards). Only that static text is translated: the agent's replies, tool
+output, logs, error messages and codes, config keys and slash-command
+names are not, nor are the reports of non-interactive `prometheus
+<command>` runs (scripts read them). Localized text never enters a model
+request, so changing the language never breaks a session's prompt cache.
 
 ## Choosing a language
 

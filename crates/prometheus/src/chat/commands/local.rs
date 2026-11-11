@@ -24,19 +24,25 @@ pub(super) async fn local(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
         }
         ["status"] => {
             let status = pmt_local::status::status(home, pmt_local::hardware::probe()).await?;
+            let strings = ctx.strings();
             let server = match (status.server.source, status.server.port) {
-                (Some(source), Some(port)) => format!("running ({source}) on 127.0.0.1:{port}"),
-                _ => "stopped".to_owned(),
-            };
-            Ok(format!(
-                "llama.cpp {} ({}); server {server}; resident: {}",
-                status.engine.pinned,
-                status.engine.backend,
-                if status.resident.is_empty() {
-                    "none".to_owned()
-                } else {
-                    status.resident.join(", ")
+                (Some(source), Some(port)) => {
+                    pmt_i18n::t!(strings, "slash.local.running", source = source, port = port)
                 }
+                _ => pmt_i18n::t!(strings, "slash.local.stopped"),
+            };
+            let resident = if status.resident.is_empty() {
+                pmt_i18n::t!(strings, "slash.local.none")
+            } else {
+                status.resident.join(", ")
+            };
+            Ok(pmt_i18n::t!(
+                strings,
+                "slash.local.status",
+                pinned = status.engine.pinned,
+                backend = status.engine.backend,
+                server = server,
+                resident = resident
             ))
         }
         _ => Ok(USAGE.to_owned()),

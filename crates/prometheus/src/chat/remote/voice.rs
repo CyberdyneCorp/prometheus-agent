@@ -33,9 +33,10 @@ impl Chat<'_, '_> {
         let status = self.lines.status_line();
         let quiet = self.start.ui.quiet;
         let key = pmt_voice::mode::record_key(&self.start.scope.config().voice);
+        let strings = self.strings();
         let meter: pmt_voice::record::Meter = Arc::new(move |level| {
             if !quiet {
-                status.show(Some(crate::chat::voice::meter_line(level, &key)));
+                status.show(Some(crate::chat::voice::meter_line(&strings, level, &key)));
             }
         });
         let session = self.attached.session.clone();

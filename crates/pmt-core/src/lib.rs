@@ -35,5 +35,6 @@ pub mod spawn;
 pub mod subagent_tree;
 pub mod supervisor;
 pub mod tasks;
+pub mod text;
 
 pub use error::{Error, ErrorKind, Result};

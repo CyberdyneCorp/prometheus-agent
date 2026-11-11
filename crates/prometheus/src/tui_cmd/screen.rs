@@ -16,6 +16,7 @@ use pmt_config::ProfileScope;
 use pmt_config::schema::{AutoResume, TuiTheme};
 use pmt_core::error::{Error, codes};
 use pmt_core::secret::Redactor;
+use pmt_i18n::t;
 use pmt_rpc::client::ServerCall;
 use pmt_rpc::contracts::{
     Attached, BannerInfo, Completions, ContextUsage, Dispatched, ModelOptions, PromptImage,
@@ -384,6 +385,7 @@ impl<'a> Tui<'a> {
             screen.swap_buffers();
         }
         self.app.status.battery = self.status_bar.battery_item();
+        self.app.strings = self.strings();
         screen
             .draw(|frame| {
                 assert!(!panic_now, "PMT_TEST_TUI_PANIC: a panic while drawing");
@@ -450,7 +452,7 @@ impl<'a> Tui<'a> {
     /// finds the daemon again.
     async fn connection_lost(&mut self) {
         let closed = self.link.client.wait_closed().await;
-        self.app.status.note = Some("reconnecting".to_owned());
+        self.app.status.note = Some(t!(self.strings(), "tui.reconnecting"));
         self.asking.clear();
         self.clarify.clear();
         self.masked.clear();

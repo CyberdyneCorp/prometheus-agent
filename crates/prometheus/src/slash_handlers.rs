@@ -12,6 +12,7 @@ use pmt_config::ProfileScope;
 use pmt_config::schema::BudgetsConfig;
 use pmt_core::error::{Error, codes};
 use pmt_core::id::SessionId;
+use pmt_i18n::t;
 use pmt_obs::budget::{self, Budgets, Place, Scope};
 use pmt_store::Store;
 
@@ -32,11 +33,16 @@ pub const SNAPSHOT_USAGE: &str = "/snapshot [create [label]|list|restore <id>|pr
 /// Secrets store errors.
 pub fn reload_secrets(scope: &ProfileScope) -> Result<String, Error> {
     let changed = scope.secrets().reload()?;
+    let strings = strings(scope);
     Ok(if changed.is_empty() {
-        "secrets reloaded; no value changed".to_owned()
+        t!(strings, "slash.secrets.unchanged")
     } else {
-        format!("secrets reloaded; changed: {}", changed.join(", "))
+        t!(strings, "slash.secrets.changed", list = changed.join(", "))
     })
+}
+
+fn strings(scope: &ProfileScope) -> std::sync::Arc<pmt_i18n::Strings> {
+    pmt_config::language::strings(scope.dir(), pmt_i18n::Surface::Core)
 }
 
 /// `/snapshot [create [label]|list|restore <id>|prune [n]]` (spec:
@@ -53,11 +59,12 @@ pub fn snapshot(scope: &ProfileScope, args: &str) -> Result<String, Error> {
     let mut words = args.split_whitespace();
     let action = words.next().unwrap_or("list");
     let rest: Vec<&str> = words.collect();
+    let strings = strings(scope);
     match (action, rest.as_slice()) {
         ("list", []) => {
             let list = snapshot::list(profile)?;
             Ok(if list.is_empty() {
-                "no snapshots".to_owned()
+                t!(strings, "slash.snapshot.none")
             } else {
                 render_list(&list).trim_end().to_owned()
             })
@@ -65,27 +72,33 @@ pub fn snapshot(scope: &ProfileScope, args: &str) -> Result<String, Error> {
         ("create", label) => {
             let label = (!label.is_empty()).then(|| label.join(" "));
             let (taken, _) = manual_snapshot(profile, label.as_deref(), keep)?;
-            Ok(format!("created {}", taken.id))
+            Ok(t!(strings, "slash.snapshot.created", id = taken.id))
         }
         ("restore", [id]) => {
             let restored = snapshot::restore(profile, id)?;
-            Ok(format!(
-                "restored {id}; the replaced state is snapshot {}",
-                restored.pre_restore.id
+            Ok(t!(
+                strings,
+                "slash.snapshot.restored",
+                id = id,
+                previous = restored.pre_restore.id
             ))
         }
-        ("prune", []) => prune(profile, keep),
+        ("prune", []) => prune(&strings, profile, keep),
         ("prune", [n]) => match n.parse() {
-            Ok(n) => prune(profile, n),
+            Ok(n) => prune(&strings, profile, n),
             Err(_) => Err(usage()),
         },
         _ => Err(usage()),
     }
 }
 
-fn prune(profile: &pmt_config::ProfileDir, keep: usize) -> Result<String, Error> {
+fn prune(
+    strings: &pmt_i18n::Strings,
+    profile: &pmt_config::ProfileDir,
+    keep: usize,
+) -> Result<String, Error> {
     let removed = snapshot::prune(profile, keep)?;
-    Ok(format!("removed {} snapshot(s)", removed.len()))
+    Ok(t!(strings, "slash.snapshot.removed", count = removed.len()))
 }
 
 fn usage() -> Error {
@@ -163,7 +176,7 @@ pub fn save(
         .map_err(|e| io_error(&e))?;
     session_export::export(store, &[session], options, &mut file)?;
     file.flush().map_err(|e| io_error(&e))?;
-    Ok(format!("saved {}", path.display()))
+    Ok(t!(strings(scope), "slash.save.done", path = path.display()))
 }
 
 fn default_save_path(
@@ -222,7 +235,11 @@ pub fn budget(
 ) -> Result<(String, Option<BudgetsConfig>), Error> {
     let words: Vec<&str> = args.split_whitespace().collect();
     match words.as_slice() {
-        [] => Ok((budget_status(scope, store, session, current)?, None)),
+        [] => {
+            let text = budget_lines(scope, store, session, current)?
+                .unwrap_or_else(|| t!(strings(scope), "slash.budget.none"));
+            Ok((text, None))
+        }
         ["set", name, usd] => {
             let budget_scope = Scope::parse(name).ok_or_else(budget_usage)?;
             let value: f64 = usd
@@ -236,38 +253,45 @@ pub fn budget(
                 .set(&key, &value.to_string())?;
             let mut updated = current.clone();
             budget::set_usd(&mut updated, budget_scope, value);
-            Ok((
-                format!("{key} = {value} (applies to the next call)"),
-                Some(updated),
-            ))
+            let text = t!(strings(scope), "slash.budget.set", key = key, value = value);
+            Ok((text, Some(updated)))
         }
         _ => Err(budget_usage()),
     }
 }
 
-fn budget_status(
+/// Every configured limit of `session` with its spend; `None` when no
+/// budget is set.
+///
+/// # Errors
+///
+/// Store errors, an invalid profile time zone.
+pub fn budget_lines(
     scope: &ProfileScope,
     store: &Store,
     session: SessionId,
     current: &BudgetsConfig,
-) -> Result<String, Error> {
+) -> Result<Option<String>, Error> {
     let zone = pmt_obs::time::profile_zone(&scope.config().cron)?;
     let place = Place::of(store, session, None)?;
     let rows = Budgets::new(zone).status(store, current, &place, false, jiff::Timestamp::now())?;
     if rows.is_empty() {
-        return Ok("no budgets set".to_owned());
+        return Ok(None);
     }
-    let mut text = format!("budgets (warning at {:.0}%):", current.warn_ratio * 100.0);
+    let strings = strings(scope);
+    let percent = format!("{:.0}", current.warn_ratio * 100.0);
+    let mut text = t!(strings, "slash.budget.heading", percent = percent);
     for (limit, spent) in rows {
-        let _ = write!(
-            text,
-            "\n  {:<10} {} of {}",
-            limit.scope.as_str(),
-            budget::format_amount(limit.unit, spent),
-            budget::format_amount(limit.unit, limit.limit)
+        let row = t!(
+            strings,
+            "slash.budget.row",
+            scope = format!("{:<10}", limit.scope.as_str()),
+            spent = budget::format_amount(limit.unit, spent),
+            limit = budget::format_amount(limit.unit, limit.limit)
         );
+        let _ = write!(text, "\n  {row}");
     }
-    Ok(text)
+    Ok(Some(text))
 }
 
 fn budget_usage() -> Error {
@@ -282,22 +306,28 @@ fn budget_usage() -> Error {
 /// # Errors
 ///
 /// `session.not_found`, store errors.
-pub fn session_usage(store: &Store, session: SessionId) -> Result<String, Error> {
+pub fn session_usage(
+    strings: &pmt_i18n::Strings,
+    store: &Store,
+    session: SessionId,
+) -> Result<String, Error> {
     let totals = store.usage_totals(pmt_store::UsageScope::Session(session))?;
     let t = &totals.tokens;
     let hit_rate = t
         .cache_hit_rate()
         .map_or_else(|| "—".to_owned(), |rate| format!("{:.0}%", rate * 100.0));
-    let mut text = format!(
-        "calls {}  input {}  cache read {}  cache write {}  output {}  cost {}\ncache hit rate {hit_rate}",
-        totals.calls,
-        t.input,
-        t.cache_read,
-        t.cache_write,
-        t.output,
-        pmt_obs::usage::format_total_cost(&totals)
+    let mut text = t!(
+        strings,
+        "slash.usage.session_totals",
+        calls = totals.calls,
+        input = t.input,
+        cache_read = t.cache_read,
+        cache_write = t.cache_write,
+        output = t.output,
+        cost = pmt_obs::usage::format_total_cost(&totals),
+        rate = hit_rate
     );
-    if let Some(billing) = billing_lines(store, session)? {
+    if let Some(billing) = billing_lines(strings, store, session)? {
         text.push('\n');
         text.push_str(&billing);
     }
@@ -311,17 +341,25 @@ pub fn session_usage(store: &Store, session: SessionId) -> Result<String, Error>
 /// # Errors
 ///
 /// Store errors.
-pub fn billing_lines(store: &Store, session: SessionId) -> Result<Option<String>, Error> {
+pub fn billing_lines(
+    strings: &pmt_i18n::Strings,
+    store: &Store,
+    session: SessionId,
+) -> Result<Option<String>, Error> {
     let Some(last) = store.usage_events(session)?.pop() else {
         return Ok(None);
     };
-    let mut text = format!("billing {}", last.billing_source);
+    let mut text = t!(
+        strings,
+        "slash.billing.source",
+        source = last.billing_source
+    );
     if let Some((reported, quota)) =
         pmt_providers::quota::for_session(store, &last.provider, &last.billing_source)
     {
         let line = match (quota, reported) {
-            (Some(quota), _) => format!("quota: {}", quota.describe()),
-            (None, true) => "quota: not fetched yet".to_owned(),
+            (Some(quota), _) => t!(strings, "slash.billing.quota", quota = quota.describe()),
+            (None, true) => t!(strings, "slash.billing.not_fetched"),
             (None, false) => pmt_providers::quota::NOT_REPORTED.to_owned(),
         };
         text.push('\n');
@@ -360,16 +398,12 @@ pub fn personality(scope: &ProfileScope, args: &str) -> Result<(String, Option<S
                 .profile()
                 .config_file()
                 .set("agent.personality", &selected)?;
+            let strings = strings(scope);
             if now {
-                let text = format!(
-                    "personality {selected} applied now (the system prompt is rebuilt: one prompt-cache break)"
-                );
+                let text = t!(strings, "slash.personality.now", name = selected);
                 return Ok((text, Some(selected)));
             }
-            Ok((
-                format!("personality {selected} applies from the next session"),
-                None,
-            ))
+            Ok((t!(strings, "slash.personality.next", name = selected), None))
         }
         _ => Err(Error::new(
             &codes::CLI_USAGE,

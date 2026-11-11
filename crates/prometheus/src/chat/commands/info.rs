@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 use pmt_core::error::{Error, codes};
+use pmt_i18n::{Strings, t};
 use pmt_store::{ListOptions, Message, Role, SearchOptions, Session, UsageScope, Visibility};
 use serde_json::Value;
 
@@ -89,8 +90,9 @@ pub(super) fn history(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
         .filter(|m| matches!(m.role, Role::User | Role::Assistant) && !authored(m))
         .filter(|m| !text_of(m).trim().is_empty())
         .collect();
+    let strings = ctx.strings();
     if messages.is_empty() {
-        return Ok("no messages yet".to_owned());
+        return Ok(t!(strings, "slash.history.empty"));
     }
     let format = &ctx.scope.config().display.timestamp_format;
     let skip = messages.len().saturating_sub(limit);
@@ -103,11 +105,11 @@ pub(super) fn history(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
             let local = message.created_at.to_zoned(jiff::tz::TimeZone::system());
             let _ = write!(text, "[{}] ", local.strftime(format.as_str()));
         }
-        let who = if message.role == Role::User {
-            "you"
+        let who = strings.get(if message.role == Role::User {
+            "slash.history.you"
         } else {
-            "assistant"
-        };
+            "slash.history.assistant"
+        });
         let _ = write!(text, "{who}: {}", text_of(message).trim());
     }
     Ok(text)
@@ -186,7 +188,7 @@ pub(super) fn status(ctx: &Ctx<'_>) -> Result<String, Error> {
     for (name, value) in &rows {
         let _ = writeln!(text, "{name:<width$}{value}");
     }
-    text.push_str(&recap(&messages));
+    text.push_str(&recap(&strings, &messages));
     Ok(text.trim_end().to_owned())
 }
 
@@ -207,14 +209,14 @@ pub(super) fn sessions(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
                 .filter(|s| s.cwd.as_deref() == Some(cwd.as_str()))
                 .take(LISTED)
                 .collect();
-            ("sessions in this directory", here)
+            ("slash.sessions.here", here)
         }
         SessionsQuery::All => {
             let all = store.list_sessions(&ListOptions {
                 limit: Some(u32::try_from(LISTED).unwrap_or(10)),
                 ..ListOptions::default()
             })?;
-            ("sessions of this profile", all)
+            ("slash.sessions.all", all)
         }
         SessionsQuery::Search(query) => {
             let options = SearchOptions {
@@ -232,30 +234,29 @@ pub(super) fn sessions(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
                 .take(LISTED)
                 .filter_map(|id| store.session(id).ok())
                 .collect();
-            ("sessions matching the search", found)
+            ("slash.sessions.search", found)
         }
     };
-    Ok(listing(heading, &sessions, live))
+    Ok(listing(&ctx.strings(), heading, &sessions, live))
 }
 
-fn listing(heading: &str, sessions: &[Session], live: &Live) -> String {
+/// The sessions under heading `key`.
+fn listing(strings: &Strings, key: &str, sessions: &[Session], live: &Live) -> String {
+    let heading = strings.get(key);
     if sessions.is_empty() {
-        return format!("{heading}: none");
+        return t!(strings, "slash.sessions.none", heading = heading);
     }
-    let mut text = format!("{heading} (/resume <id or title>):");
+    let mut text = t!(strings, "slash.sessions.heading", heading = heading);
     for session in sessions {
-        let current = if session.id == live.id {
-            " (current)"
-        } else {
-            ""
-        };
-        let _ = write!(
-            text,
-            "\n  {}  {}  {}{current}",
-            session.id,
-            minute(session.last_activity_at),
-            session.title.as_deref().unwrap_or("(untitled)")
-        );
+        let title = session
+            .title
+            .as_deref()
+            .unwrap_or_else(|| strings.get("slash.sessions.untitled"));
+        let at = minute(session.last_activity_at);
+        let _ = write!(text, "\n  {}  {at}  {title}", session.id);
+        if session.id == live.id {
+            let _ = write!(text, " {}", strings.get("slash.sessions.current"));
+        }
     }
     text
 }
@@ -267,7 +268,7 @@ fn minute(ts: jiff::Timestamp) -> String {
 }
 
 /// The recap block: turns, top tools, files touched, latest exchange.
-fn recap(messages: &[Message]) -> String {
+fn recap(strings: &Strings, messages: &[Message]) -> String {
     let users: Vec<&Message> = messages
         .iter()
         .filter(|m| m.role == Role::User && !authored(m))
@@ -292,15 +293,33 @@ fn recap(messages: &[Message]) -> String {
         .iter()
         .rev()
         .find(|m| m.role == Role::Assistant && !text_of(m).trim().is_empty());
-    let mut text = String::from("recap\n");
-    let _ = writeln!(text, "  turns         {}", users.len());
-    let _ = writeln!(text, "  top tools     {}", or_none(&top.join(", ")));
     let files: Vec<String> = files.into_iter().collect();
-    let _ = writeln!(text, "  files touched {}", or_none(&files.join(", ")));
     let prompt = users.last().map(|m| text_of(m)).unwrap_or_default();
     let reply = latest_reply.map(text_of).unwrap_or_default();
-    let _ = writeln!(text, "  last prompt   {}", or_none(&excerpt(&prompt)));
-    let _ = writeln!(text, "  last reply    {}", or_none(&excerpt(&reply)));
+    let rows = [
+        ("slash.recap.turns", users.len().to_string()),
+        ("slash.recap.top_tools", or_none(&top.join(", ")).to_owned()),
+        ("slash.recap.files", or_none(&files.join(", ")).to_owned()),
+        (
+            "slash.recap.last_prompt",
+            or_none(&excerpt(&prompt)).to_owned(),
+        ),
+        (
+            "slash.recap.last_reply",
+            or_none(&excerpt(&reply)).to_owned(),
+        ),
+    ];
+    // Labels are padded to the longest one in the profile's language.
+    let width = rows
+        .iter()
+        .map(|(key, _)| strings.get(key).chars().count() + 1)
+        .max()
+        .unwrap_or(0)
+        .max(14);
+    let mut text = format!("{}\n", strings.get("slash.recap.title"));
+    for (key, value) in &rows {
+        let _ = writeln!(text, "  {:<width$}{value}", strings.get(key));
+    }
     text
 }
 
@@ -403,7 +422,7 @@ pub async fn platforms(ctx: &Ctx<'_>) -> Result<String, Error> {
         .map(pmt_rpc::control::AdapterReport::line)
         .collect();
     Ok(if lines.is_empty() {
-        format!("No messaging adapters are enabled for profile '{profile}'.")
+        t!(ctx.strings(), "slash.platforms_none", profile = profile)
     } else {
         lines.join("\n")
     })

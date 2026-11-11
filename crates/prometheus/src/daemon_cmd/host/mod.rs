@@ -789,7 +789,7 @@ impl Host for DaemonHost {
         use crate::chat::autoprune;
         let served = self.profile(profile)?;
         let due = autoprune::due(&served.scope(), &served.store, jiff::Timestamp::now())?;
-        Ok(due.then(|| autoprune::QUESTION.to_owned()))
+        Ok(due.then(|| autoprune::question(&served.scope())))
     }
 
     fn cron_blueprints(&self, profile: &str) -> Result<pmt_rpc::contracts::BlueprintList, Error> {

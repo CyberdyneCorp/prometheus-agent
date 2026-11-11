@@ -13,19 +13,12 @@ use super::adapter::Inbound;
 use super::descriptor::Descriptor;
 use super::key::ChatType;
 
-/// What the lobby answers to anything but a command.
-pub(crate) const LOBBY: &str = "Open or create a topic to chat (/topic new <name>)";
-
-/// The name of a topic opened without one (renamed to the session's title
-/// once it has one).
-pub(crate) const DEFAULT_NAME: &str = "New chat";
-
 /// Topic state the gateway keeps across conversations.
 #[derive(Debug, Default)]
 pub(crate) struct TopicState {
     /// Chats where the platform refused to open a topic: single-session.
     unavailable: Mutex<HashSet<String>>,
-    /// Topics still carrying [`DEFAULT_NAME`].
+    /// Topics still carrying the default name (`gateway.topic_default_name`).
     default_named: Mutex<HashSet<String>>,
 }
 
@@ -71,7 +64,7 @@ impl TopicState {
         }
     }
 
-    /// Remembers a topic opened with [`DEFAULT_NAME`].
+    /// Remembers a topic opened with the default name.
     pub(crate) fn opened_unnamed(&self, profile: &str, platform: &str, chat: &str, thread: &str) {
         self.default_named
             .lock()

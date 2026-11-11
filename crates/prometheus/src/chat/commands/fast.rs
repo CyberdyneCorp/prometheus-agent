@@ -5,6 +5,7 @@
 use pmt_agent::turn::model::ModelPort;
 use pmt_config::schema::FastMode;
 use pmt_core::error::{Error, codes};
+use pmt_i18n::t;
 
 use super::Ctx;
 
@@ -30,15 +31,16 @@ pub(super) async fn fast(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
             .set("agent.fast_mode", mode.as_str())?;
     }
     agent.set_fast_mode(Some(mode));
-    let scope = if global {
-        "this session and new sessions (agent.fast_mode)"
+    let strings = ctx.strings();
+    let key = if global {
+        "slash.fast.set_global"
     } else {
-        "this session"
+        "slash.fast.set_session"
     };
-    let mut text = format!("fast mode {} for {scope}", mode.as_str());
+    let mut text = t!(strings, key, mode = mode.as_str());
     if mode != FastMode::Normal && !ctx.live.model.route().await.fast_tier {
         text.push('\n');
-        text.push_str(pmt_agent::turn::fast::NO_TIER_NOTICE);
+        text.push_str(strings.get("slash.fast.no_tier"));
     }
     Ok(text)
 }
@@ -46,16 +48,16 @@ pub(super) async fn fast(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
 async fn status(ctx: &Ctx<'_>) -> String {
     let mode = ctx.live.agent.fast_mode(ctx.scope.config());
     let route = ctx.live.model.route().await;
-    let tier = if route.fast_tier {
-        "the route has a priority tier"
+    let key = if route.fast_tier {
+        "slash.fast.status_tier"
     } else {
-        "the route has no priority tier"
+        "slash.fast.status_no_tier"
     };
-    format!(
-        "fast mode {} (window {} s); {}/{}: {tier}",
-        mode.as_str(),
-        ctx.scope.config().agent.fast_auto_secs,
-        route.provider,
-        route.model
+    t!(
+        ctx.strings(),
+        key,
+        mode = mode.as_str(),
+        secs = ctx.scope.config().agent.fast_auto_secs,
+        route = format!("{}/{}", route.provider, route.model)
     )
 }

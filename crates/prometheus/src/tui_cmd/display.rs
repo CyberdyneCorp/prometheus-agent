@@ -7,6 +7,7 @@
 
 use pmt_config::schema::TuiTheme;
 use pmt_core::error::{Error, codes};
+use pmt_i18n::t;
 use pmt_rpc::contracts::{BannerInfo, SessionBanner, SessionRef};
 use pmt_tui::banner::{Banner, Contents};
 use pmt_tui::busy;
@@ -47,12 +48,16 @@ impl Tui<'_> {
         let name = args.trim();
         if name.is_empty() {
             let current = busy::name(self.app.status.indicator);
-            self.notice(format!(
-                "busy indicator: {current} ({})",
-                busy::NAMES.join(", ")
+            let names = busy::NAMES.join(", ");
+            self.notice(t!(
+                self.strings(),
+                "tui.indicator_status",
+                0 = current,
+                1 = names
             ));
             return;
         }
+        let strings = self.strings();
         let result = busy::parse(name)
             .map_err(|message| Error::new(&codes::CLI_USAGE, message))
             .and_then(|style| {
@@ -62,7 +67,7 @@ impl Tui<'_> {
                     .config_file()
                     .set("ui.tui.busy_indicator", name)?;
                 self.app.status.indicator = style;
-                Ok(format!("busy indicator: {name} (ui.tui.busy_indicator)"))
+                Ok(t!(strings, "tui.indicator_set", 0 = name))
             });
         self.report(result);
     }
@@ -72,19 +77,18 @@ impl Tui<'_> {
     pub(super) fn theme(&mut self, args: &str) {
         let theme = match args.trim() {
             "" => {
+                let strings = self.strings();
                 let configured = self.open.scope.config().ui.tui.theme;
-                let source = if configured == TuiTheme::Auto {
-                    " (auto: detected)"
-                } else {
-                    " (ui.tui.theme)"
-                };
-                let colour = if self.app.theme.colored() {
-                    ""
-                } else {
-                    ", no colour"
-                };
                 let name = theme_name(self.theme_in_use);
-                self.notice(format!("theme: {name}{source}{colour}"));
+                let mut text = if configured == TuiTheme::Auto {
+                    t!(strings, "tui.theme_auto", 0 = name)
+                } else {
+                    t!(strings, "tui.theme_config", 0 = name)
+                };
+                if !self.app.theme.colored() {
+                    text.push_str(strings.get("tui.no_colour"));
+                }
+                self.notice(text);
                 return;
             }
             "dark" => TuiTheme::Dark,
@@ -127,8 +131,9 @@ impl Tui<'_> {
             crate::build_info::VERSION,
             self.app.status.profile
         );
+        let strings = self.strings();
         let system_prompt = info.system_prompt.map_or_else(
-            || vec!["(built on the first turn)".to_owned()],
+            || vec![t!(strings, "tui.prompt_pending")],
             |prompt| {
                 std::iter::once(prompt.sha256)
                     .chain(prompt.text.lines().map(str::to_owned))
@@ -142,11 +147,11 @@ impl Tui<'_> {
             mcp_servers: info
                 .mcp_servers
                 .into_iter()
-                .map(|s| format!("{} ({}, {} tools)", s.name, s.state, s.tools))
+                .map(|s| t!(strings, "tui.mcp_row", 0 = s.name, 1 = s.state, 2 = s.tools))
                 .collect(),
             degraded: info.degraded,
         };
-        self.app.banner = Some(Banner::new(title, contents));
+        self.app.banner = Some(Banner::new(title, contents, &strings));
     }
 }
 

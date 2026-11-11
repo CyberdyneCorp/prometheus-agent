@@ -16,20 +16,26 @@ struct Exchange<'a> {
 /// The recap of `session` (whose active messages are `messages`) under
 /// `display`; `None` for `resume_display = "off"`.
 #[must_use]
-pub fn render(session: &Session, messages: &[Message], display: &DisplayConfig) -> Option<String> {
+pub fn render(
+    strings: &pmt_i18n::Strings,
+    session: &Session,
+    messages: &[Message],
+    display: &DisplayConfig,
+) -> Option<String> {
     match display.resume_display {
         ResumeDisplay::Off => None,
-        ResumeDisplay::Minimal => Some(minimal(session, messages)),
-        ResumeDisplay::Full => Some(full(session, messages, display)),
+        ResumeDisplay::Minimal => Some(minimal(strings, session, messages)),
+        ResumeDisplay::Full => Some(full(strings, session, messages, display)),
     }
 }
 
-fn minimal(session: &Session, messages: &[Message]) -> String {
-    format!(
-        "Resumed {} — {} messages, last activity {}",
-        title(session),
-        messages.len(),
-        session.last_activity_at.strftime("%Y-%m-%d %H:%M UTC")
+fn minimal(strings: &pmt_i18n::Strings, session: &Session, messages: &[Message]) -> String {
+    pmt_i18n::t!(
+        strings,
+        "cli.resumed",
+        title = title(session),
+        count = messages.len(),
+        at = session.last_activity_at.strftime("%Y-%m-%d %H:%M UTC")
     )
 }
 
@@ -40,11 +46,16 @@ fn title(session: &Session) -> String {
         .map_or_else(|| session.id.to_string(), |t| format!("'{t}'"))
 }
 
-fn full(session: &Session, messages: &[Message], display: &DisplayConfig) -> String {
+fn full(
+    strings: &pmt_i18n::Strings,
+    session: &Session,
+    messages: &[Message],
+    display: &DisplayConfig,
+) -> String {
     let exchanges = exchanges(messages);
     let keep = usize::try_from(display.resume_exchanges).unwrap_or(usize::MAX);
     let shown = &exchanges[exchanges.len().saturating_sub(keep)..];
-    let mut text = format!("{}\n", minimal(session, messages));
+    let mut text = format!("{}\n", minimal(strings, session, messages));
     let last = shown.len().saturating_sub(1);
     for (index, exchange) in shown.iter().enumerate() {
         let user = clamp_chars(&exchange.user, display.resume_max_user_chars);

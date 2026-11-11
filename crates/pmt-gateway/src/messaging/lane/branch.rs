@@ -16,10 +16,6 @@ use super::Lane;
 use crate::messaging::adapter::SendError;
 use crate::messaging::key::{Isolation, Routing};
 
-/// What `/branch` answers while a turn runs.
-pub(crate) const BRANCH_BUSY: &str =
-    "/branch is unavailable while the agent is working; use /stop first";
-
 /// `--here` and the branch's name from the arguments.
 fn parse(args: &str) -> (bool, Option<String>) {
     let mut here = false;
@@ -39,7 +35,7 @@ impl Lane {
     /// `/branch [--here] [name]`.
     pub(super) async fn branch_command(&mut self, routing: &Routing, args: &str) {
         if self.running.is_some() {
-            self.say(BRANCH_BUSY);
+            self.say(self.strings().get("gateway.branch_busy"));
             return;
         }
         let (here, name) = parse(args);
@@ -56,7 +52,12 @@ impl Lane {
                 Ok(()) => return,
                 Err(SendError::Unsupported) => {}
                 Err(err) => {
-                    self.say(&format!("No thread for the branch: {}", err.describe()));
+                    let why = err.describe();
+                    self.say(&pmt_i18n::t!(
+                        self.strings(),
+                        "gateway.branch_no_thread",
+                        why = why
+                    ));
                     return;
                 }
             }
@@ -64,8 +65,10 @@ impl Lane {
         self.set_fork_origin(&fork, routing);
         match fork.parse() {
             Ok(id) => match self.route_to(routing, id) {
-                Ok(()) => self.say(&format!(
-                    "Switched to the branch {fork}; /resume goes back to the original."
+                Ok(()) => self.say(&pmt_i18n::t!(
+                    self.strings(),
+                    "gateway.branch_switched",
+                    id = fork
                 )),
                 Err(err) => self.say(err.message()),
             },
@@ -128,13 +131,13 @@ impl Lane {
         if let Err(err) = bound {
             return Err(SendError::Permanent(err.message().to_owned()));
         }
-        self.post_in(
-            &branch,
-            fork,
-            &format!("Branch \"{title}\": this thread continues a copy of the conversation."),
-        );
-        self.say(&format!(
-            "Branch \"{title}\" opened in a new thread; this one continues the original session."
+        let strings = self.strings();
+        let intro = pmt_i18n::t!(strings, "gateway.branch_thread_intro", title = title);
+        self.post_in(&branch, fork, &intro);
+        self.say(&pmt_i18n::t!(
+            strings,
+            "gateway.branch_opened",
+            title = title
         ));
         Ok(())
     }

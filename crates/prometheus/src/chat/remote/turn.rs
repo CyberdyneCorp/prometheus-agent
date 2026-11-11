@@ -114,7 +114,8 @@ pub(super) async fn run(
                 if event.event == "automation.state" {
                     render::automation(&mut attached.automation, &attached.session, &event.data);
                 }
-                if let Some(finished) = on_event(&event, &turn_id, out, &mut asking) {
+                let strings = attached.strings();
+                if let Some(finished) = on_event(&event, &turn_id, out, &mut asking, &strings) {
                     if let Some(report) = &finished.report {
                         attached.record.remote_turn(report);
                     }
@@ -163,6 +164,7 @@ fn on_event(
     turn_id: &str,
     out: &dyn Out,
     asking: &mut Option<Asking>,
+    strings: &Strings,
 ) -> Option<TurnFinished> {
     match event.event.as_str() {
         "session.event"
@@ -170,7 +172,7 @@ fn on_event(
         {
             out.delta(event.data["payload"]["text"].as_str().unwrap_or_default());
         }
-        "session.event" => render::event(out, &event.data),
+        "session.event" => render::event(out, &event.data, strings),
         "turn.finished" => {
             let finished: TurnFinished = serde_json::from_value(event.data.clone()).ok()?;
             return (finished.turn_id == turn_id).then_some(finished);
@@ -179,7 +181,7 @@ fn on_event(
             let id = event.data["id"].as_str().unwrap_or_default();
             if asking.as_ref().is_some_and(|a| a.id() == id) {
                 *asking = None;
-                out.notice("(the question was answered elsewhere or timed out)");
+                out.notice(strings.get("cli.question_elsewhere"));
             }
         }
         _ => {}
@@ -240,7 +242,7 @@ async fn ask(
                 .as_array()
                 .cloned()
                 .unwrap_or_default();
-            show_question(out, questions.first());
+            show_question(out, questions.first(), &attached.strings());
             Some(Asking::Clarify {
                 id: call.id,
                 questions,
@@ -256,7 +258,7 @@ async fn ask(
 
 impl Attached {
     /// The profile's UI strings now.
-    fn strings(&self) -> std::sync::Arc<Strings> {
+    pub(super) fn strings(&self) -> std::sync::Arc<Strings> {
         pmt_config::language::strings(&self.profile_dir, pmt_i18n::Surface::Core)
     }
 }
@@ -313,7 +315,7 @@ fn on_line(
             let question = &questions[answers.len()];
             answers.push(clarify_answer(question, &line));
             if answers.len() < questions.len() {
-                show_question(out, questions.get(answers.len()));
+                show_question(out, questions.get(answers.len()), &attached.strings());
                 return Some(Asking::Clarify {
                     id,
                     questions,
@@ -369,7 +371,7 @@ pub(crate) fn decision(line: &str) -> Option<&'static str> {
     }
 }
 
-fn show_question(out: &dyn Out, question: Option<&Value>) {
+fn show_question(out: &dyn Out, question: Option<&Value>, strings: &Strings) {
     use std::fmt::Write as _;
     let Some(question) = question else { return };
     let mut text = format!("? {}", question["question"].as_str().unwrap_or_default());
@@ -386,7 +388,8 @@ fn show_question(out: &dyn Out, question: Option<&Value>) {
             choice.as_str().unwrap_or_default()
         );
     }
-    text.push_str("\nanswer (a number, your own text, or empty to skip)");
+    text.push('\n');
+    text.push_str(strings.get("cli.clarify_answer"));
     out.ask(&text);
 }
 

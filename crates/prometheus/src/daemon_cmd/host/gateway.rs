@@ -32,13 +32,14 @@ fn menu_commands(
     user_home: Option<&Path>,
 ) -> Vec<MenuCommand> {
     let registry = commands::profile_registry(scope);
+    let strings = pmt_config::language::strings(scope.dir(), pmt_i18n::Surface::Core);
     let builtins = registry
         .builtins()
         .iter()
         .filter(|c| c.on(Surface::Gateway))
         .map(|c| MenuCommand {
             name: c.name.to_owned(),
-            description: c.description.to_owned(),
+            description: c.description(&strings).to_owned(),
             takes_args: !c.args.is_empty(),
         });
     let externals = registry

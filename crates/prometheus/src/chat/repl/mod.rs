@@ -169,10 +169,12 @@ async fn sleep_until(at: Option<tokio::time::Instant>) {
 fn print_notices(
     mut notices: mpsc::UnboundedReceiver<pmt_tools::terminal::process::Notice>,
     printer: input::Printer,
+    strings: std::sync::Arc<pmt_i18n::Strings>,
 ) -> tokio::task::JoinHandle<()> {
     pmt_core::spawn::spawn(async move {
         while let Some(notice) = notices.recv().await {
-            printer.print(&format!("[background] {}", notice.text()));
+            let line = pmt_i18n::t!(strings, "display.background", text = notice.text());
+            printer.print(&line);
         }
     })
 }
@@ -242,7 +244,7 @@ pub async fn run(
         mouth: None,
     };
     repl.attach(live);
-    let notices = print_notices(asks.notices, repl.input.printer());
+    let notices = print_notices(asks.notices, repl.input.printer(), repl.strings());
     if let Some(prompt) = &asks.secret_prompt {
         prompt.listen();
     }
@@ -308,7 +310,7 @@ impl Repl {
                 return Flow::Continue;
             }
             Some(completion) = self.completions.recv() => {
-                self.notice("Background subagents finished; their results go to the agent.");
+                self.notice(self.strings().get("cli.subagents_done"));
                 self.queue.push_back(completion);
                 return Flow::Continue;
             }
@@ -349,7 +351,7 @@ impl Repl {
             return Flow::Exit;
         }
         self.last_interrupt = Some(now);
-        self.notice("(press Ctrl+C again or Ctrl+D to exit)");
+        self.notice(self.strings().get("cli.press_again"));
         Flow::Continue
     }
 
@@ -488,7 +490,9 @@ impl Repl {
     fn prompt(&self) -> String {
         let symbol = match &self.pending {
             Some(pending) => pending.prompt(&self.strings()),
-            None if self.display.focus.is_some() => "focus › ".to_owned(),
+            None if self.display.focus.is_some() => {
+                pmt_i18n::t!(self.strings(), "display.focus_prompt")
+            }
             None => "› ".to_owned(),
         };
         self.display
@@ -509,32 +513,32 @@ impl Repl {
         let banner = if self.factory.scope.config().display.compact {
             format!("Prometheus {} · {model}", crate::build_info::VERSION)
         } else {
-            format!(
-                "Prometheus {} · profile {} · {model} · /help for commands",
-                crate::build_info::VERSION,
-                self.factory.scope.name()
+            pmt_i18n::t!(
+                self.strings(),
+                "display.banner",
+                version = crate::build_info::VERSION,
+                profile = self.factory.scope.name(),
+                model = model
             )
         };
         self.say(Role::Accent, &banner);
         // Spec: security-boundaries, Hardening downgrades are never silent.
         if let Some(marker) = self.live().downgrades.banner_marker() {
-            self.say(Role::Error, &format!("degraded: {marker}"));
+            let line = pmt_i18n::t!(self.strings(), "display.degraded", marker = marker);
+            self.say(Role::Error, &line);
         }
-        self.tip(
-            "slash-help",
-            "Tip: type /help for the commands, /status for this session",
-        );
+        self.tip("slash-help", "tips.slash_help");
     }
 
-    /// Shows the one-time tip `id` unless this profile has seen it (spec:
-    /// cli, Onboarding state).
-    fn tip(&self, id: &str, text: &str) {
+    /// Shows the one-time tip `id` (its text is catalog key `key`) unless
+    /// this profile has seen it (spec: cli, Onboarding state).
+    fn tip(&self, id: &str, key: &str) {
         match self
             .factory
             .store
             .mark_onboarding(pmt_store::onboarding::Step::Tip, id)
         {
-            Ok(true) => self.notice(text),
+            Ok(true) => self.notice(self.strings().get(key)),
             Ok(false) => {}
             Err(err) => tracing::warn!(error = %err, "cannot record the onboarding tip"),
         }
@@ -549,9 +553,12 @@ impl Repl {
         ) else {
             return;
         };
-        if let Some(text) =
-            super::recap::render(&session, &messages, &self.factory.scope.config().display)
-        {
+        if let Some(text) = super::recap::render(
+            &self.strings(),
+            &session,
+            &messages,
+            &self.factory.scope.config().display,
+        ) {
             self.say(Role::Notice, &text);
         }
     }

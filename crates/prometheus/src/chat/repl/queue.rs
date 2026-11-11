@@ -62,24 +62,28 @@ pub fn parse(args: &str) -> Result<Action, Error> {
 /// # Errors
 ///
 /// `cli.usage` with `no queued item <n>` for an index out of range.
-pub fn apply(queue: &mut VecDeque<String>, action: Action) -> Result<String, Error> {
+pub fn apply(
+    strings: &pmt_i18n::Strings,
+    queue: &mut VecDeque<String>,
+    action: Action,
+) -> Result<String, Error> {
     let missing = |n: usize| Error::new(&codes::CLI_USAGE, format!("no queued item {n}"));
     let slot = |n: usize, len: usize| (1..=len).contains(&n).then(|| n - 1);
     Ok(match action {
         Action::Add(text) => {
             queue.push_back(text);
-            format!("queued ({} in the queue)", queue.len())
+            pmt_i18n::t!(strings, "cli.queued_count", count = queue.len())
         }
-        Action::List => list(queue),
+        Action::List => list(strings, queue),
         Action::Edit(n, text) => {
             let at = slot(n, queue.len()).ok_or_else(|| missing(n))?;
             queue[at] = text;
-            list(queue)
+            list(strings, queue)
         }
         Action::Remove(n) => {
             let at = slot(n, queue.len()).ok_or_else(|| missing(n))?;
             queue.remove(at);
-            list(queue)
+            list(strings, queue)
         }
         Action::Move(a, b) => {
             let from = slot(a, queue.len()).ok_or_else(|| missing(a))?;
@@ -87,21 +91,21 @@ pub fn apply(queue: &mut VecDeque<String>, action: Action) -> Result<String, Err
             if let Some(item) = queue.remove(from) {
                 queue.insert(to, item);
             }
-            list(queue)
+            list(strings, queue)
         }
         Action::Clear => {
             let n = queue.len();
             queue.clear();
-            format!("dropped {n} queued item(s)")
+            pmt_i18n::t!(strings, "cli.queue_dropped", count = n)
         }
     })
 }
 
-fn list(queue: &VecDeque<String>) -> String {
+fn list(strings: &pmt_i18n::Strings, queue: &VecDeque<String>) -> String {
     if queue.is_empty() {
-        return "the queue is empty".to_owned();
+        return pmt_i18n::t!(strings, "cli.queue_empty");
     }
-    let mut text = String::from("queued:");
+    let mut text = pmt_i18n::t!(strings, "cli.queue_heading");
     for (n, item) in queue.iter().enumerate() {
         let first = item.lines().next().unwrap_or_default();
         let _ = write!(text, "\n  {}. {first}", n + 1);
@@ -121,10 +125,20 @@ mod tests {
     #[test]
     fn move_reorders_and_list_shows_the_new_order() {
         let mut q = queue(&["a", "b", "c"]);
-        apply(&mut q, parse("move 3 1").unwrap()).unwrap();
+        apply(
+            &pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+            &mut q,
+            parse("move 3 1").unwrap(),
+        )
+        .unwrap();
         assert_eq!(q, queue(&["c", "a", "b"]));
         assert_eq!(
-            apply(&mut q, parse("list").unwrap()).unwrap(),
+            apply(
+                &pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+                &mut q,
+                parse("list").unwrap()
+            )
+            .unwrap(),
             "queued:\n  1. c\n  2. a\n  3. b"
         );
     }
@@ -132,17 +146,37 @@ mod tests {
     #[test]
     fn edit_remove_clear_and_out_of_range() {
         let mut q = queue(&["a", "b"]);
-        apply(&mut q, parse("edit 2 B2").unwrap()).unwrap();
-        apply(&mut q, parse("rm 1").unwrap()).unwrap();
+        apply(
+            &pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+            &mut q,
+            parse("edit 2 B2").unwrap(),
+        )
+        .unwrap();
+        apply(
+            &pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+            &mut q,
+            parse("rm 1").unwrap(),
+        )
+        .unwrap();
         assert_eq!(q, queue(&["B2"]));
-        let err = apply(&mut q, parse("rm 5").unwrap()).unwrap_err();
+        let err = apply(
+            &pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+            &mut q,
+            parse("rm 5").unwrap(),
+        )
+        .unwrap_err();
         assert_eq!(err.message(), "no queued item 5");
         assert_eq!(
             parse("fix the tests").unwrap(),
             Action::Add("fix the tests".into())
         );
         assert_eq!(parse("add list").unwrap(), Action::Add("list".into()));
-        apply(&mut q, Action::Clear).unwrap();
+        apply(
+            &pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+            &mut q,
+            Action::Clear,
+        )
+        .unwrap();
         assert!(q.is_empty());
         assert!(parse("move 1").is_err());
     }

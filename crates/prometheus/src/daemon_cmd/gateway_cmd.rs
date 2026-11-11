@@ -353,7 +353,9 @@ pub(super) fn pairing(command: &PairingCommand, ctx: &Context<'_>) -> Result<u8,
         }
         PairingCommand::Approve { platform, code } => {
             let pairing = store.approve_pairing(platform, code, Timestamp::now())?;
-            store.enqueue_outbound(&pmt_gateway::messaging::paired_notice(&pairing))?;
+            let strings =
+                pmt_config::language::strings(ctx.scope()?.dir(), pmt_i18n::Surface::Core);
+            store.enqueue_outbound(&pmt_gateway::messaging::paired_notice(&pairing, &strings))?;
             eprintln!(
                 "approved {} on {}; they are told in their DM",
                 who(&pairing),
