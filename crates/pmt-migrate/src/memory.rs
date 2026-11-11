@@ -1,0 +1,153 @@
+//! The `memory` component (spec: hermes-migration, Memory and identity
+//! imported): `memories/MEMORY.md` and `memories/USER.md` split on the
+//! Hermes entry delimiter `\n§\n` into ordered entries of the agent and
+//! user stores. Every entry is imported even past the Prometheus budget
+//! (reported, `memory curate` trims it). An external memory provider is
+//! carried only when a Prometheus provider plugin of that name is
+//! installed.
+
+use pmt_core::error::Error;
+use pmt_memory::manage::{self, Item, Limits};
+use pmt_store::{MemoryKind, MemoryTarget, MemoryTier};
+use serde_json::Value;
+
+use crate::component::Component;
+use crate::host::Registry;
+use crate::plan::{Dest, Source, Step};
+use crate::report::{Disposition, Entry};
+
+/// The Hermes entry delimiter.
+pub const DELIMITER: &str = "\n§\n";
+
+/// The planned memory component.
+pub struct MemoryStep {
+    entries: Vec<Entry>,
+    items: Vec<(usize, Item)>,
+    provider: Option<(usize, String)>,
+}
+
+impl Step for MemoryStep {
+    fn component(&self) -> Component {
+        Component::Memory
+    }
+
+    fn entries(&mut self) -> &mut Vec<Entry> {
+        &mut self.entries
+    }
+
+    fn apply(&mut self, dest: &Dest<'_>) -> Result<(), Error> {
+        if let Some((index, name)) = &self.provider {
+            if dest
+                .host
+                .known(Registry::MemoryProvider, name, Some(dest.scope))
+            {
+                let mut writes = crate::writes::Writes::default();
+                writes.key("memory.provider", name.as_str(), *index);
+                writes.apply(dest.scope, &mut self.entries, dest.overwrite)?;
+            } else {
+                let e = &mut self.entries[*index];
+                e.disposition = Disposition::Unsupported;
+                e.reason = format!("no Prometheus memory provider plugin '{name}' is installed");
+            }
+        }
+        if self.items.is_empty() {
+            return Ok(());
+        }
+        let items: Vec<Item> = self.items.iter().map(|(_, i)| i.clone()).collect();
+        let redactor = dest.scope.secrets().redactor()?;
+        let summary = manage::import_with(
+            dest.store,
+            &dest.scope.config().memory,
+            &items,
+            &redactor,
+            Limits::Exceed,
+        )?;
+        if summary.over_budget {
+            for (index, _) in &self.items {
+                let e = &mut self.entries[*index];
+                if !e.reason.contains("over budget") {
+                    e.reason
+                        .push_str("; over budget; run prometheus memory curate");
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// The entries of a Hermes memory file, in order.
+#[must_use]
+pub fn split(text: &str) -> Vec<String> {
+    text.replace("\r\n", "\n")
+        .split(DELIMITER)
+        .map(str::trim)
+        .filter(|e| !e.is_empty() && *e != "§")
+        .map(str::to_owned)
+        .collect()
+}
+
+/// Plans the memory component.
+///
+/// # Errors
+///
+/// `migrate.component` when a memory file exists but cannot be read.
+pub fn plan(src: &Source<'_>) -> Result<MemoryStep, Error> {
+    let mut step = MemoryStep {
+        entries: Vec::new(),
+        items: Vec::new(),
+        provider: None,
+    };
+    for (file, target) in [
+        ("memories/MEMORY.md", MemoryTarget::Memory),
+        ("memories/USER.md", MemoryTarget::User),
+    ] {
+        let Some(text) = src.profile.read(file)? else {
+            continue;
+        };
+        let parts = split(&text);
+        let index = step.entries.len();
+        step.entries.push(
+            Entry::new(Component::Memory, file, Disposition::Mapped)
+                .to(format!("{target} memory"))
+                .because(format!("{} entries", parts.len())),
+        );
+        step.items.extend(parts.into_iter().map(|content| {
+            (
+                index,
+                Item {
+                    id: None,
+                    target,
+                    kind: MemoryKind::Fact,
+                    tier: MemoryTier::Core,
+                    pinned: false,
+                    content,
+                },
+            )
+        }));
+    }
+    if let Some(provider) = src.get("memory.provider").and_then(Value::as_str)
+        && !provider.trim().is_empty()
+    {
+        step.provider = Some((step.entries.len(), provider.trim().to_owned()));
+        step.entries.push(
+            Entry::new(Component::Memory, "memory.provider", Disposition::Mapped)
+                .to("memory.provider")
+                .showing(provider),
+        );
+    }
+    Ok(step)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn entries_split_on_the_section_sign() {
+        assert_eq!(
+            split("first\n§\nsecond line\nmore\n§\nthird\n"),
+            ["first", "second line\nmore", "third"]
+        );
+        assert!(split("").is_empty());
+    }
+}

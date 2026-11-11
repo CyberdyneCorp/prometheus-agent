@@ -53,6 +53,7 @@ Commands:
   approvals    Check how the approval gate treats a command, without running it
   update       Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
   bundle       Offline bundles: one file holding a signed release (and runtimes) for installs and updates without network access
+  migrate      Import another agent's home: `from-hermes` reads a Hermes Agent home (never changing it) into Prometheus profiles
   uninstall    Remove this install: the binary, its alias, `prometheus.prev` and its service units; the home only with `--purge` (`--dry-run` lists all)
   pause        Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
   portal       The Nous Portal subscription and its tool gateway routing
@@ -12474,7 +12475,7 @@ Commands:
   journal-mode     Switch state.db's journal mode offline (delete for filesystems without shared memory)
   refresh-prompts  Rebuild the stored system prompt of sessions at their next turn
   retitle          Regenerate automatic titles with the title model (user titles are kept)
-  stats            Show a session's and its lineage's message and token totals
+  stats            Show a session's and its lineage's message and token totals, or the whole profile's with --profile-total
   export           Export sessions (jsonl, md, html, prompts or trace)
   delete           Delete a session (asks for confirmation unless --yes)
   prune            Delete ended, unpinned sessions inactive for longer than --older-than days
@@ -13376,17 +13377,20 @@ Options:
 ## `prometheus sessions stats`
 
 ```text
-Show a session's and its lineage's message and token totals
+Show a session's and its lineage's message and token totals, or the whole profile's with --profile-total
 
-Usage: prometheus sessions stats [OPTIONS] <SESSION>
+Usage: prometheus sessions stats [OPTIONS] [SESSION]
 
 Arguments:
-  <SESSION>
+  [SESSION]
           Session id, id prefix or title
 
 Options:
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --profile-total
+          The totals of every session of the profile (imported history included)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
@@ -13739,7 +13743,7 @@ Commands:
   journal-mode     Switch state.db's journal mode offline (delete for filesystems without shared memory)
   refresh-prompts  Rebuild the stored system prompt of sessions at their next turn
   retitle          Regenerate automatic titles with the title model (user titles are kept)
-  stats            Show a session's and its lineage's message and token totals
+  stats            Show a session's and its lineage's message and token totals, or the whole profile's with --profile-total
   export           Export sessions (jsonl, md, html, prompts or trace)
   delete           Delete a session (asks for confirmation unless --yes)
   prune            Delete ended, unpinned sessions inactive for longer than --older-than days
@@ -13896,7 +13900,7 @@ Usage: prometheus sessions help retitle
 ## `prometheus sessions help stats`
 
 ```text
-Show a session's and its lineage's message and token totals
+Show a session's and its lineage's message and token totals, or the whole profile's with --profile-total
 
 Usage: prometheus sessions help stats
 ```
@@ -18060,6 +18064,143 @@ Usage: prometheus bundle help create
 Print this message or the help of the given subcommand(s)
 
 Usage: prometheus bundle help help
+```
+
+## `prometheus migrate`
+
+```text
+Import another agent's home: `from-hermes` reads a Hermes Agent home (never changing it) into Prometheus profiles
+
+Usage: prometheus migrate [OPTIONS] <COMMAND>
+
+Commands:
+  from-hermes  Import a Hermes Agent home (read-only on the source): config, secrets, identity, memory, skills, sessions, cron jobs, MCP servers, plugins and gateway settings
+  help         Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus migrate from-hermes`
+
+```text
+Import a Hermes Agent home (read-only on the source): config, secrets, identity, memory, skills, sessions, cron jobs, MCP servers, plugins and gateway settings
+
+Usage: prometheus migrate from-hermes [OPTIONS]
+
+Options:
+      --hermes-home <PATH>
+          The Hermes home (default `~/.hermes`, `%LOCALAPPDATA%\hermes` on Windows; `HERMES_HOME` is never read)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --all
+          Every live Hermes profile
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --into-profile <NAME>
+          The Prometheus profile a single `--profile` goes to
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --only <COMPONENTS>
+          Only these components (comma-separated, repeatable)
+
+      --skip <COMPONENTS>
+          All components but these (comma-separated, repeatable)
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --dry-run
+          Print the plan; write nothing (not even the Prometheus home)
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --yes
+          Do not ask before writing (required without a terminal)
+
+      --enable-cron
+          Keep the jobs Hermes had enabled enabled (stop the Hermes scheduler first)
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+      --overwrite
+          Replace destination values that differ instead of reporting a conflict
+
+  -h, --help
+          Print help
+```
+
+## `prometheus migrate help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus migrate help [COMMAND]
+
+Commands:
+  from-hermes  Import a Hermes Agent home (read-only on the source): config, secrets, identity, memory, skills, sessions, cron jobs, MCP servers, plugins and gateway settings
+  help         Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus migrate help from-hermes`
+
+```text
+Import a Hermes Agent home (read-only on the source): config, secrets, identity, memory, skills, sessions, cron jobs, MCP servers, plugins and gateway settings
+
+Usage: prometheus migrate help from-hermes
+```
+
+## `prometheus migrate help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus migrate help help
 ```
 
 ## `prometheus uninstall`
@@ -24766,6 +24907,7 @@ Commands:
   approvals    Check how the approval gate treats a command, without running it
   update       Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
   bundle       Offline bundles: one file holding a signed release (and runtimes) for installs and updates without network access
+  migrate      Import another agent's home: `from-hermes` reads a Hermes Agent home (never changing it) into Prometheus profiles
   uninstall    Remove this install: the binary, its alias, `prometheus.prev` and its service units; the home only with `--purge` (`--dry-run` lists all)
   pause        Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
   portal       The Nous Portal subscription and its tool gateway routing
@@ -26708,7 +26850,7 @@ Commands:
   journal-mode     Switch state.db's journal mode offline (delete for filesystems without shared memory)
   refresh-prompts  Rebuild the stored system prompt of sessions at their next turn
   retitle          Regenerate automatic titles with the title model (user titles are kept)
-  stats            Show a session's and its lineage's message and token totals
+  stats            Show a session's and its lineage's message and token totals, or the whole profile's with --profile-total
   export           Export sessions (jsonl, md, html, prompts or trace)
   delete           Delete a session (asks for confirmation unless --yes)
   prune            Delete ended, unpinned sessions inactive for longer than --older-than days
@@ -26864,7 +27006,7 @@ Usage: prometheus help sessions retitle
 ## `prometheus help sessions stats`
 
 ```text
-Show a session's and its lineage's message and token totals
+Show a session's and its lineage's message and token totals, or the whole profile's with --profile-total
 
 Usage: prometheus help sessions stats
 ```
@@ -27571,6 +27713,25 @@ Commands:
 Write an offline bundle for a target
 
 Usage: prometheus help bundle create
+```
+
+## `prometheus help migrate`
+
+```text
+Import another agent's home: `from-hermes` reads a Hermes Agent home (never changing it) into Prometheus profiles
+
+Usage: prometheus help migrate [COMMAND]
+
+Commands:
+  from-hermes  Import a Hermes Agent home (read-only on the source): config, secrets, identity, memory, skills, sessions, cron jobs, MCP servers, plugins and gateway settings
+```
+
+## `prometheus help migrate from-hermes`
+
+```text
+Import a Hermes Agent home (read-only on the source): config, secrets, identity, memory, skills, sessions, cron jobs, MCP servers, plugins and gateway settings
+
+Usage: prometheus help migrate from-hermes
 ```
 
 ## `prometheus help uninstall`
@@ -28678,6 +28839,7 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.update_status.v1` | `prometheus update --status` |
 | `prometheus.update_check.v1` | `prometheus update --check` |
 | `prometheus.update_dry_run.v1` | `prometheus update --dry-run` |
+| `prometheus.migration_report.v1` | `prometheus migrate from-hermes` |
 | `prometheus.runtimes.v1` | `prometheus runtimes list` |
 | `prometheus.runtimes_verify.v1` | `prometheus runtimes verify` |
 | `prometheus.runtimes_doctor.v1` | `prometheus runtimes doctor` |

@@ -266,6 +266,21 @@ impl Store {
     /// `store.constraint` (an id that exists: nothing is written),
     /// `store.io`, `store.sqlite`.
     pub fn import_portable(&self, sessions: &[Portable]) -> Result<(), Error> {
+        self.import_linked(sessions, &[])
+    }
+
+    /// [`Store::import_portable`] that also records, in the same
+    /// transaction, the id each session had in the agent it came from.
+    ///
+    /// # Errors
+    ///
+    /// As [`Store::import_portable`]; `store.constraint` for a legacy id
+    /// already recorded.
+    pub fn import_linked(
+        &self,
+        sessions: &[Portable],
+        links: &[crate::legacy::LegacyLink],
+    ) -> Result<(), Error> {
         self.ensure_writable()?;
         let blob_dir = self.location().blobs().to_path_buf();
         let redactor = self.redactor();
@@ -285,7 +300,7 @@ impl Store {
             for (portable, rows) in sessions.iter().zip(&prepared) {
                 write_one(tx, portable, rows, (&profile_id, &profile), &imported)?;
             }
-            Ok(())
+            crate::legacy::insert(tx, links)
         })
     }
 }

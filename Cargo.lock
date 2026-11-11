@@ -2198,6 +2198,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "md-5"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69b6441f590336821bb897fb28fc622898ccceb1d6cea3fde5ea86b090c4de98"
+dependencies = [
+ "cfg-if",
+ "digest 0.11.3",
+]
+
+[[package]]
 name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3213,6 +3223,26 @@ dependencies = [
 [[package]]
 name = "pmt-migrate"
 version = "0.1.0"
+dependencies = [
+ "jiff",
+ "md-5",
+ "pmt-config",
+ "pmt-core",
+ "pmt-cron",
+ "pmt-memory",
+ "pmt-obs",
+ "pmt-providers",
+ "pmt-skills",
+ "pmt-store",
+ "rusqlite",
+ "saphyr-parser",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "toml",
+ "toml_edit",
+ "tracing",
+]
 
 [[package]]
 name = "pmt-net"
@@ -3722,6 +3752,7 @@ dependencies = [
  "pmt-mcp",
  "pmt-media",
  "pmt-memory",
+ "pmt-migrate",
  "pmt-net",
  "pmt-obs",
  "pmt-plugins",

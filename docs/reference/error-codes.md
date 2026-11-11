@@ -121,6 +121,11 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `import.id_collision` | `conflict` | 75 | A session, message or usage id of the import file already exists in this profile; nothing was imported. Rerun with `--remap-ids` to import under new ids. |
 | `import.invalid` | `invalid_input` | 65 | The import file is not a valid `prometheus.sessions` version 1 export (or a record in it is malformed); nothing was imported. |
 | `import.too_large` | `invalid_input` | 65 | The import file holds more than 500 sessions, 50000 messages or 256 MiB; nothing was imported. Export fewer sessions per file. |
+| `migrate.unknown_component` | `usage` | 2 | `--only` and `--skip` take config, secrets, identity, memory, skills, sessions, cron, mcp, plugins and gateway. |
+| `migrate.source_missing` | `not_found` | 66 | No Hermes home exists at `--hermes-home` (default `~/.hermes`, `%LOCALAPPDATA%\hermes` on Windows). |
+| `migrate.usage` | `usage` | 2 | `--into-profile` needs exactly one `--profile`; `--profile` and `--all` exclude each other. |
+| `migrate.confirmation_required` | `permission_denied` | 77 | Without a terminal the migration cannot ask before writing; rerun with `--yes` (exit 4). Nothing was written. |
+| `migrate.component` | `invalid_input` | 65 | A component of the Hermes profile could not be imported (an unsupported config or state.db version, an unreadable file); the other components proceed and the report names the cause. |
 | `store.fork_target_invalid` | `invalid_input` | 65 | `session.fork` names an `at_message_id` that is not an active message of the forked session. |
 | `store.rewind_conflict` | `conflict` | 75 | The messages the rewind or restore expected changed in the meantime; nothing changed. Look at the transcript again and retry. |
 | `session.in_use` | `conflict` | 75 | A live turn lease or compaction lock is held on the session; retry when the turn or compaction finished. |

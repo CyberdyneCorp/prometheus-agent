@@ -165,12 +165,12 @@ fn global_set(cli: &Cli) -> Vec<String> {
 
 fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
     let set = global_set(cli);
-    let ctx = Context {
-        home_flag: cli.home.as_deref(),
-        launch,
-        profile: cli.profile.as_deref(),
-        set: &set,
-        json: cli.json,
+    let ctx = match context(cli, launch, &set) {
+        Ok(ctx) => ctx,
+        Err(err) => {
+            print_error(&err, cli.json);
+            return err.exit_code();
+        }
     };
     let result = match &cli.command {
         Some(Command::Version) => Ok(version::run(cli.json, cli.verbose > 0)),
@@ -215,6 +215,9 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Approvals { command }) => approvals_cmd::run(command, &ctx),
         Some(Command::Update(args)) => update_cmd::run(args, &ctx),
         Some(Command::Bundle { command }) => prometheus::bundle_cmd::run(command, &ctx),
+        Some(Command::Migrate { command }) => {
+            prometheus::migrate_cmd::run(command, &ctx, &cli.profile)
+        }
         Some(Command::Uninstall(args)) => prometheus::uninstall_cmd::run(args, &ctx),
         Some(Command::Pause(args)) => prometheus::pause_cmd::run(args, &ctx),
         Some(Command::Portal { command }) => prometheus::portal_cmd::run(command, &ctx),
@@ -261,6 +264,34 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         print_error(&err, cli.json);
         err.exit_code()
     })
+}
+
+fn context<'a>(
+    cli: &'a Cli,
+    launch: &'a LaunchEnv,
+    set: &'a [String],
+) -> Result<Context<'a>, Error> {
+    Ok(Context {
+        home_flag: cli.home.as_deref(),
+        launch,
+        profile: profile_flag(cli)?,
+        set,
+        json: cli.json,
+    })
+}
+
+/// The one `-p/--profile` of the command line; only `migrate from-hermes`
+/// takes several (the Hermes profiles to migrate).
+fn profile_flag(cli: &Cli) -> Result<Option<&str>, Error> {
+    match cli.profile.as_slice() {
+        [] => Ok(None),
+        [one] => Ok(Some(one.as_str())),
+        _ if matches!(cli.command, Some(Command::Migrate { .. })) => Ok(None),
+        _ => Err(Error::new(
+            &codes::CLI_USAGE,
+            "-p/--profile is given more than once",
+        )),
+    }
 }
 
 /// The chat flags with the global `--safe-mode`.

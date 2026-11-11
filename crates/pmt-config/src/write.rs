@@ -155,6 +155,27 @@ impl ConfigFile {
         })
     }
 
+    /// Sets every `(key, value)` already typed by the caller (tables
+    /// included: an MCP server, a platform) in one write that is validated
+    /// as a whole (all or none). `hermes-migration` writes this way.
+    ///
+    /// # Errors
+    ///
+    /// `config.managed_key` for a locked key, `config.invalid_argument`
+    /// when a parent is not a table, the validation errors of the result.
+    pub fn set_values(&self, values: &[(String, toml_edit::Value)]) -> Result<(), Error> {
+        for (key, _) in values {
+            crate::managed::check_writable(key)?;
+        }
+        self.modify(|doc| {
+            for (key, value) in values {
+                edit::set(doc, key, value.clone())
+                    .map_err(|message| Error::new(&codes::CONFIG_INVALID_ARGUMENT, message))?;
+            }
+            Ok(())
+        })
+    }
+
     /// Replaces `[[fallback.chain]]` with `chain` (an empty chain removes
     /// the array), keeping the rest of the file as it is.
     ///

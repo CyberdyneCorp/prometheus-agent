@@ -235,7 +235,8 @@ impl Store {
         })
     }
 
-    /// Resolves a session reference: a full id, then a title (a bare base
+    /// Resolves a session reference: a full id, then the id the session
+    /// had in an agent it was imported from, then a title (a bare base
     /// title picks the highest-numbered `#n` of its family), then an id
     /// prefix of at least [`MIN_PREFIX_CHARS`] characters (`ses_` optional).
     ///
@@ -249,6 +250,9 @@ impl Store {
             if let Ok(id) = SessionId::parse(reference)
                 && sessions::load(conn, id)?.is_some()
             {
+                return Ok(id);
+            }
+            if let Some(id) = crate::legacy::by_legacy(conn, reference)? {
                 return Ok(id);
             }
             if let Some(id) = by_title(conn, reference)? {

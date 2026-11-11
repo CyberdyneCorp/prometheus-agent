@@ -368,6 +368,21 @@ error_codes! {
     /// `sessions import` read a file over the import bounds.
     IMPORT_TOO_LARGE = ("import.too_large", InvalidInput,
         "The import file holds more than 500 sessions, 50000 messages or 256 MiB; nothing was imported. Export fewer sessions per file.");
+    /// `migrate from-hermes --only/--skip` named an unknown component.
+    MIGRATE_UNKNOWN_COMPONENT = ("migrate.unknown_component", Usage,
+        "`--only` and `--skip` take config, secrets, identity, memory, skills, sessions, cron, mcp, plugins and gateway.");
+    /// `migrate from-hermes` found no Hermes home.
+    MIGRATE_SOURCE_MISSING = ("migrate.source_missing", NotFound,
+        "No Hermes home exists at `--hermes-home` (default `~/.hermes`, `%LOCALAPPDATA%\\hermes` on Windows).");
+    /// `migrate from-hermes` options that do not go together.
+    MIGRATE_USAGE = ("migrate.usage", Usage,
+        "`--into-profile` needs exactly one `--profile`; `--profile` and `--all` exclude each other.");
+    /// `migrate from-hermes` needs `--yes` without a terminal.
+    MIGRATE_CONFIRMATION_REQUIRED = ("migrate.confirmation_required", PermissionDenied,
+        "Without a terminal the migration cannot ask before writing; rerun with `--yes` (exit 4). Nothing was written.");
+    /// A Hermes component could not be read or imported.
+    MIGRATE_COMPONENT = ("migrate.component", InvalidInput,
+        "A component of the Hermes profile could not be imported (an unsupported config or state.db version, an unreadable file); the other components proceed and the report names the cause.");
     /// The fork point is not an active message of the session.
     STORE_FORK_TARGET_INVALID = ("store.fork_target_invalid", InvalidInput,
         "`session.fork` names an `at_message_id` that is not an active message of the forked session.");

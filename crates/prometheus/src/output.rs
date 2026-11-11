@@ -88,6 +88,10 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "update --dry-run",
     },
     JsonShape {
+        schema: "prometheus.migration_report.v1",
+        command: "migrate from-hermes",
+    },
+    JsonShape {
         schema: "prometheus.runtimes.v1",
         command: "runtimes list",
     },

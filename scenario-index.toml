@@ -3645,3 +3645,76 @@ capabilities = [
 [distribution-and-update."NixOS and Home Manager modules"]
 "Nix-owned key is read-only" = ["crates/prometheus/tests/nix_module.rs::the_nixos_module_vm_test_passes", "crates/prometheus/tests/config_generated.rs::a_home_manager_generated_config_is_read_only"]
 "Bad config does not restart-loop" = ["crates/prometheus/tests/nix_module.rs::the_nixos_module_vm_test_passes", "crates/prometheus/tests/nix_module.rs::the_home_manager_module_evaluation_test_passes"]
+
+# Group 55.1-55.4 (Hermes migration: surface, read-only source, profiles,
+# dry run, report, config/secrets translation, sessions, memory, skills,
+# cron, MCP, plugins, gateway)
+[hermes-migration."Migration command surface"]
+"Unknown component rejected" = ["crates/prometheus/tests/migrate_hermes.rs::an_unknown_component_exits_2_listing_the_valid_names", "crates/pmt-migrate/src/component.rs::a_misspelled_component_lists_the_valid_names"]
+"Missing source" = ["crates/prometheus/tests/migrate_hermes.rs::a_missing_hermes_home_exits_66"]
+
+[hermes-migration."Source home is never modified"]
+"Source tree unchanged" = ["crates/prometheus/tests/migrate_hermes.rs::the_source_tree_is_unchanged_by_a_migration_and_a_rerun"]
+"Hermes running during migration" = ["crates/prometheus/tests/migrate_hermes.rs::a_running_hermes_is_snapshotted_without_blocking_it"]
+
+[hermes-migration."Profile discovery and mapping"]
+"All profiles" = ["crates/prometheus/tests/migrate_hermes.rs::all_profiles_map_by_name_and_tombstones_are_skipped"]
+"Reserved name needs a target" = ["crates/prometheus/tests/migrate_hermes.rs::a_reserved_profile_name_needs_a_target_and_the_others_proceed", "crates/pmt-migrate/src/source.rs::reserved_and_invalid_names_need_a_target"]
+
+[hermes-migration."Dry run writes nothing"]
+"Dry run on a fresh machine" = ["crates/prometheus/tests/migrate_hermes.rs::a_dry_run_on_a_fresh_machine_writes_nothing"]
+
+[hermes-migration."Mapping report"]
+"Unsupported key reported" = ["crates/prometheus/tests/migrate_hermes.rs::the_report_names_unsupported_keys_and_secrets_but_no_secret_value"]
+"No secret values in report" = ["crates/prometheus/tests/migrate_hermes.rs::the_report_names_unsupported_keys_and_secrets_but_no_secret_value"]
+
+[hermes-migration."Config translation from user-set values only"]
+"Model settings mapped" = ["crates/prometheus/tests/migrate_hermes.rs::model_settings_map_and_defaults_are_not_carried"]
+"Default value not carried" = ["crates/prometheus/tests/migrate_hermes.rs::model_settings_map_and_defaults_are_not_carried"]
+
+[hermes-migration."Supported Hermes config versions"]
+"Too old" = ["crates/prometheus/tests/migrate_hermes.rs::a_config_older_than_version_12_fails_alone"]
+
+[hermes-migration."Ambiguous YAML values resolve fail-closed"]
+"Unquoted off on cron approvals" = ["crates/prometheus/tests/migrate_hermes.rs::an_unquoted_off_on_cron_approvals_resolves_to_deny", "crates/pmt-migrate/src/yaml.rs::yaml_1_1_words_become_booleans_and_are_flagged", "crates/pmt-migrate/src/config/value.rs::a_non_security_enum_takes_what_hermes_applied"]
+
+[hermes-migration."Config references to environment values"]
+"Secret reference in MCP header" = ["crates/prometheus/tests/migrate_hermes.rs::a_secret_reference_in_an_mcp_header_stays_a_secret", "crates/pmt-migrate/src/config/value.rs::a_secret_reference_names_the_secret_in_the_sibling_key", "crates/pmt-migrate/src/config/value.rs::references_inline_settings_and_refuse_other_sources"]
+
+[hermes-migration."`.env` re-sorted into secrets and config"]
+"Non-secret moved into config" = ["crates/prometheus/tests/migrate_hermes.rs::env_settings_move_into_config_and_unknown_names_are_secrets"]
+"Unknown name treated as secret" = ["crates/prometheus/tests/migrate_hermes.rs::env_settings_move_into_config_and_unknown_names_are_secrets", "crates/pmt-migrate/src/env.rs::names_sort_into_classes"]
+
+[hermes-migration."Credential files imported"]
+"Credential pool preserved" = ["crates/prometheus/tests/migrate_hermes.rs::a_credential_pool_keeps_both_keys"]
+
+[hermes-migration."Typed names validated against Prometheus registries"]
+"Unknown skin falls back" = ["crates/prometheus/tests/migrate_hermes.rs::an_unknown_skin_is_reported_and_the_default_theme_applies", "crates/pmt-migrate/src/config/value.rs::toolsets_keep_known_names_and_report_the_rest"]
+
+[hermes-migration."Sessions imported with lineage"]
+"Compression chain preserved" = ["crates/prometheus/tests/migrate_hermes_data.rs::a_compression_chain_keeps_its_lineage", "crates/pmt-migrate/src/sessions/convert.rs::hermes_parent_links_become_typed_lineage"]
+"Resume by Hermes id" = ["crates/prometheus/tests/migrate_hermes_data.rs::a_hermes_session_id_resumes_the_imported_session"]
+"Unsupported schema" = ["crates/prometheus/tests/migrate_hermes_data.rs::an_unsupported_state_db_schema_fails_only_the_sessions"]
+
+[hermes-migration."Imported usage carried as events"]
+"Profile totals include Hermes history" = ["crates/prometheus/tests/migrate_hermes_data.rs::profile_totals_include_the_hermes_history", "crates/pmt-migrate/src/sessions/convert.rs::usage_is_per_model_when_hermes_has_the_rows"]
+
+[hermes-migration."Session import is streaming, verified and indexed"]
+"Imported messages searchable" = ["crates/prometheus/tests/migrate_hermes_data.rs::imported_messages_are_searchable"]
+
+[hermes-migration."Memory and identity imported"]
+"Entries preserved in order" = ["crates/prometheus/tests/migrate_hermes_data.rs::memory_entries_keep_their_order_and_text", "crates/pmt-migrate/src/memory.rs::entries_split_on_the_section_sign"]
+
+[hermes-migration."Skills imported with scanning"]
+"Modified bundled skill kept" = ["crates/prometheus/tests/migrate_hermes_data.rs::a_modified_bundled_skill_is_imported_and_a_hostile_one_quarantined", "crates/pmt-migrate/src/skills.rs::an_unchanged_bundled_skill_stays_behind"]
+"Scan failure quarantined" = ["crates/prometheus/tests/migrate_hermes_data.rs::a_modified_bundled_skill_is_imported_and_a_hostile_one_quarantined"]
+
+[hermes-migration."Scheduled jobs imported paused"]
+"Bare interval stays recurring" = ["crates/prometheus/tests/migrate_hermes_data.rs::a_bare_hermes_interval_stays_recurring_and_paused", "crates/pmt-migrate/src/cron.rs::a_bare_hermes_duration_stays_recurring"]
+"Enabled with opt-in" = ["crates/prometheus/tests/migrate_hermes_data.rs::enable_cron_keeps_hermes_enabled_jobs_enabled_and_warns"]
+
+[hermes-migration."MCP servers and plugins"]
+"Plugin imported disabled" = ["crates/prometheus/tests/migrate_hermes_data.rs::a_bridge_compatible_plugin_arrives_disabled_without_grants", "crates/prometheus/src/plugins_host/bridge/migrate.rs::an_incompatible_plugin_is_imported_disabled_and_cited"]
+
+[hermes-migration."Gateway settings and pairing allowlists"]
+"Approved Telegram user stays approved" = ["crates/prometheus/tests/migrate_hermes_data.rs::an_approved_telegram_user_stays_approved"]

@@ -381,6 +381,46 @@ impl Store {
         })
     }
 
+    /// Records `sender_id` on `platform` as approved without a code (a
+    /// pairing approved in another agent, imported by a migration); an
+    /// existing entry of the sender becomes approved. Returns whether it
+    /// was not approved before.
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`.
+    pub fn adopt_pairing(
+        &self,
+        platform: &str,
+        sender_id: &str,
+        sender_name: Option<&str>,
+        approved_at: Timestamp,
+    ) -> Result<bool, Error> {
+        let at = millis(approved_at);
+        self.write(|tx| {
+            let before: Option<String> = tx
+                .query_row(
+                    "SELECT state FROM gateway_pairing WHERE platform = ?1 AND sender_id = ?2",
+                    params![platform, sender_id],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(sql)?;
+            if before.as_deref() == Some("approved") {
+                return Ok(false);
+            }
+            tx.execute(
+                "INSERT INTO gateway_pairing (platform, sender_id, chat_id, sender_name, state, \
+                 requested_at, approved_at) VALUES (?1, ?2, ?2, ?3, 'approved', ?4, ?4) \
+                 ON CONFLICT (platform, sender_id) DO UPDATE SET state = 'approved', \
+                 code_salt = NULL, code_hash = NULL, expires_at = NULL, approved_at = ?4",
+                params![platform, sender_id, sender_name, at],
+            )
+            .map_err(sql)?;
+            Ok(true)
+        })
+    }
+
     /// Pending (unexpired) and approved entries, of one platform or all.
     ///
     /// # Errors

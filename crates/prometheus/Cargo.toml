@@ -86,6 +86,7 @@ pmt-mcp.workspace = true
 pmt-media.workspace = true
 pmt-voice.workspace = true
 pmt-memory.workspace = true
+pmt-migrate.workspace = true
 pmt-net.workspace = true
 pmt-plugins.workspace = true
 pmt-pybridge.workspace = true

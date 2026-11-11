@@ -92,7 +92,10 @@ pub fn run(command: &SessionsCommand, ctx: &Context<'_>, ui: crate::chat::Ui) ->
             "unarchived",
         ),
         SessionsCommand::Tree { session: r } => tree(ctx, &store, session(r)?),
-        SessionsCommand::Stats { session: r } => stats(ctx, &store, session(r)?),
+        SessionsCommand::Stats {
+            session: Some(r), ..
+        } => stats(ctx, &store, session(r)?),
+        SessionsCommand::Stats { session: None, .. } => profile_stats(ctx, &store),
         SessionsCommand::Fork { .. }
         | SessionsCommand::Siblings { .. }
         | SessionsCommand::Import { .. }
@@ -379,6 +382,17 @@ fn stats(ctx: &Context<'_>, store: &Store, id: SessionId) -> Result<u8, Error> {
         render_totals("lineage", &lineage)
     );
     print_raw(&text)
+}
+
+fn profile_stats(ctx: &Context<'_>, store: &Store) -> Result<u8, Error> {
+    let profile = store.usage_totals(UsageScope::Profile)?;
+    if ctx.json {
+        return document(
+            "sessions stats",
+            &json!({ "profile": totals_json(&profile) }),
+        );
+    }
+    print_raw(&render_totals("profile", &profile))
 }
 
 /// Known secret values of the profile (store and launch environment) for

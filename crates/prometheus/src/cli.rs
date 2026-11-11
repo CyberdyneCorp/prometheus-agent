@@ -39,10 +39,11 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "PATH")]
     #[arg(help = "Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)")]
     pub home: Option<PathBuf>,
-    /// Profile to use.
-    #[arg(short = 'p', long, global = true, value_name = "NAME")]
+    /// Profile to use (`migrate from-hermes` takes it repeatedly, naming
+    /// Hermes profiles).
+    #[arg(short = 'p', long, global = true, value_name = "NAME", action = ArgAction::Append)]
     #[arg(help = "Profile to use (default: the home's active_profile, else default)")]
-    pub profile: Option<String>,
+    pub profile: Vec<String>,
     /// `key=value` config overrides for this invocation only.
     #[arg(long = "set", global = true, value_name = "KEY=VALUE")]
     #[arg(help = "Override a config key for this invocation only; repeatable, never saved")]
@@ -318,6 +319,13 @@ pub enum Command {
         /// The bundle subcommand.
         #[command(subcommand)]
         command: crate::bundle_cmd::BundleCommand,
+    },
+    /// Import another agent's home: `from-hermes` reads a Hermes Agent home
+    /// (never changing it) into Prometheus profiles.
+    Migrate {
+        /// The migrate subcommand.
+        #[command(subcommand)]
+        command: crate::migrate_cmd::MigrateCommand,
     },
     /// Remove this install: the binary, its alias, `prometheus.prev` and its
     /// service units; the home only with `--purge` (`--dry-run` lists all).

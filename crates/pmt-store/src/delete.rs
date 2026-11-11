@@ -107,6 +107,7 @@ fn delete_rows(tx: &Transaction<'_>, session: &str) -> Result<(), Error> {
         "DELETE FROM session_compression WHERE session_id = ?1",
         "DELETE FROM process_receipts WHERE session_id = ?1",
         "DELETE FROM verification_runs WHERE session_id = ?1",
+        "DELETE FROM session_legacy_ids WHERE session_id = ?1",
         "DELETE FROM messages WHERE session_id = ?1",
         "DELETE FROM blob_refs WHERE owner_kind = 'session' AND owner_id = ?1",
         "DELETE FROM blob_refs WHERE owner_kind = 'turn_journal' AND owner_id = ?1",

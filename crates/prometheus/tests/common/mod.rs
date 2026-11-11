@@ -125,6 +125,8 @@ pub mod tui;
 
 pub mod release;
 
+pub mod hermes;
+
 #[cfg(feature = "gateway")]
 pub mod daemon;
 

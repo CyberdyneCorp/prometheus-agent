@@ -22,6 +22,7 @@ pmt-delegation = { path = "crates/pmt-delegation" }
 pmt-eval = { path = "crates/pmt-eval" }
 pmt-worktrees = { path = "crates/pmt-worktrees" }
 pmt-memory = { path = "crates/pmt-memory" }
+pmt-migrate = { path = "crates/pmt-migrate" }
 pmt-mcp = { path = "crates/pmt-mcp" }
 pmt-media = { path = "crates/pmt-media" }
 pmt-net = { path = "crates/pmt-net" }
@@ -80,6 +81,8 @@ prost = { version = "0.14", default-features = false, features = ["derive", "std
 sha2 = "0.11"
 # TOTP codes of vault logins (HMAC-SHA1, RFC 6238).
 sha1 = "0.11"
+# Content hashes of Hermes bundled skills (`skills/.bundled_manifest` is MD5).
+md-5 = "0.11"
 # Base32 TOTP seeds.
 data-encoding = "2.11"
 # Terminal QR codes for `gateway whatsapp pair` (no image rendering).
