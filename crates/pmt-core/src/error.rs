@@ -380,6 +380,15 @@ error_codes! {
     /// `migrate from-hermes` needs `--yes` without a terminal.
     MIGRATE_CONFIRMATION_REQUIRED = ("migrate.confirmation_required", PermissionDenied,
         "Without a terminal the migration cannot ask before writing; rerun with `--yes` (exit 4). Nothing was written.");
+    /// A migration was interrupted (Ctrl+C) between two commits.
+    MIGRATE_INTERRUPTED = ("migrate.interrupted", Cancelled,
+        "The migration stopped at a commit boundary: every committed component and session batch is kept and recorded in the ledger; rerun the same command to continue.");
+    /// `migrate cleanup` found the source agent running.
+    MIGRATE_SOURCE_BUSY = ("migrate.source_busy", Conflict,
+        "The other agent is running and holds the directory `migrate cleanup` would archive (exit 75); stop it and rerun. Nothing was renamed.");
+    /// The migration cannot write the Prometheus profile.
+    MIGRATE_DESTINATION = ("migrate.destination", Io,
+        "The Prometheus home or profile cannot be created or written (permissions, read-only file system); nothing of that profile was imported (exit 73).");
     /// A Hermes component could not be read or imported.
     MIGRATE_COMPONENT = ("migrate.component", InvalidInput,
         "A component of the Hermes profile could not be imported (an unsupported config or state.db version, an unreadable file); the other components proceed and the report names the cause.");

@@ -18,8 +18,10 @@ use pmt_cron::schedule::Schedule;
 use serde_json::Value;
 
 use crate::component::Component;
+use crate::ledger::{self, Decision};
 use crate::plan::{Dest, Source, Step};
 use crate::report::{Disposition, Entry};
+use crate::writes;
 
 /// Why an imported job is paused.
 pub const PAUSED_REASON: &str =
@@ -72,38 +74,104 @@ impl Step for CronStep {
             catalog: catalog.as_ref(),
         };
         for job in &self.jobs {
-            if ops::find(dest.store, &job.name).is_ok() {
-                let e = &mut self.entries[job.entry];
-                e.disposition = Disposition::Skipped;
-                e.reason = format!("a job named '{}' exists", job.name);
-                continue;
-            }
-            if let (Some(from), Some(rel)) = (&job.script, &job.spec.script) {
-                let to = scripts.join(rel);
-                if !to.exists() {
-                    if let Some(parent) = to.parent() {
-                        std::fs::create_dir_all(parent).map_err(|e| {
-                            Error::io_doing(&codes::HOME_IO, "cannot create", parent, &e)
-                        })?;
-                    }
-                    std::fs::copy(from, &to)
-                        .map_err(|e| Error::io_doing(&codes::HOME_IO, "cannot write", &to, &e))?;
+            let outcome = import_job(&profile, job, self.enable, dest);
+            let e = &mut self.entries[job.entry];
+            match outcome {
+                Ok(decision) => {
+                    let why = format!("a job named '{}' exists with another definition", job.name);
+                    writes::settle(decision, e, &why);
+                }
+                Err(err) => {
+                    e.disposition = Disposition::Failed;
+                    err.message().clone_into(&mut e.reason);
                 }
             }
-            let paused = (!(self.enable && job.enabled)).then(|| PAUSED_REASON.to_owned());
+        }
+        Ok(())
+    }
+}
+
+/// The ledger digest of a stored job's definition.
+fn stored_digest(store: &pmt_store::Store, name: &str) -> Option<String> {
+    let job = ops::find(store, name).ok()?;
+    Some(ledger::digest(
+        pmt_cron::job::spec_json(&job.spec).as_bytes(),
+    ))
+}
+
+/// Creates (or, while it still holds what the previous run wrote,
+/// updates) one job as the ledger decides.
+fn import_job(
+    profile: &Profile<'_>,
+    job: &Job,
+    enable: bool,
+    dest: &Dest<'_>,
+) -> Result<Decision, Error> {
+    let key = format!("job:{}", job.name);
+    let hash = ledger::digest(pmt_cron::job::spec_json(&job.spec).as_bytes());
+    let current = stored_digest(dest.store, &job.name);
+    let prior = dest.ledger.borrow().get(&key).cloned();
+    // A stored job never equals the Hermes definition byte for byte (the
+    // store adds its own fields), so `Same` is only reached through the
+    // ledger's written digest.
+    let decision = match ledger::decide(
+        prior.as_ref(),
+        &hash,
+        &hash,
+        current.as_deref(),
+        dest.overwrite,
+    ) {
+        Decision::Write if current.is_some() => {
+            let spec = job.spec.clone();
+            ops::update(
+                profile,
+                &job.name,
+                None,
+                |s| {
+                    *s = spec;
+                    Ok(())
+                },
+                Timestamp::now(),
+            )?;
+            Decision::Write
+        }
+        Decision::Write => {
+            copy_script(job, profile.scripts_dir)?;
+            let paused = (!(enable && job.enabled)).then(|| PAUSED_REASON.to_owned());
             let new = NewJob {
                 name: Some(job.name.clone()),
                 origin: None,
                 paused,
             };
-            if let Err(err) = ops::create(&profile, job.spec.clone(), new, Timestamp::now()) {
-                let e = &mut self.entries[job.entry];
-                e.disposition = Disposition::Failed;
-                err.message().clone_into(&mut e.reason);
-            }
+            ops::create(profile, job.spec.clone(), new, Timestamp::now())?;
+            Decision::Write
         }
-        Ok(())
+        other => other,
+    };
+    if decision == Decision::Write
+        && let Some(written) = stored_digest(dest.store, &job.name)
+    {
+        dest.ledger.borrow_mut().record(key, hash, written);
     }
+    Ok(decision)
+}
+
+/// Copies the job's script into `<profile>/scripts/` unless one is there.
+fn copy_script(job: &Job, scripts: &std::path::Path) -> Result<(), Error> {
+    let (Some(from), Some(rel)) = (&job.script, &job.spec.script) else {
+        return Ok(());
+    };
+    let to = scripts.join(rel);
+    if to.exists() {
+        return Ok(());
+    }
+    if let Some(parent) = to.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| Error::io_doing(&codes::HOME_IO, "cannot create", parent, &e))?;
+    }
+    std::fs::copy(from, &to)
+        .map(drop)
+        .map_err(|e| Error::io_doing(&codes::HOME_IO, "cannot write", &to, &e))
 }
 
 /// Plans the cron component.

@@ -15,6 +15,8 @@
 //! - [`host`] is what the binary supplies: its registries, the job
 //!   catalog and the Python-bridge plugin import.
 
+pub mod agents;
+pub mod commit;
 pub mod component;
 pub mod config;
 pub mod cron;
@@ -23,6 +25,7 @@ pub mod env;
 pub mod gateway;
 pub mod host;
 pub mod identity;
+pub mod ledger;
 pub mod mcp;
 pub mod memory;
 pub mod plan;

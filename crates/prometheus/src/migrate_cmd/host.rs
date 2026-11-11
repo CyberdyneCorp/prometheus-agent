@@ -11,6 +11,7 @@ use pmt_migrate::{Host, PluginOutcome, Registry};
 use pmt_plugins::python::audit::Verdict;
 use pmt_providers::registry::ProviderRegistry;
 
+use super::interrupt::Interrupt;
 use crate::cron_host::HostCatalog;
 use crate::plugins_host::bridge::migrate;
 
@@ -18,15 +19,20 @@ use crate::plugins_host::bridge::migrate;
 pub(super) struct MigrateHost<'a> {
     launch: &'a LaunchEnv,
     providers: Option<ProviderRegistry>,
+    interrupt: Interrupt,
 }
 
 impl<'a> MigrateHost<'a> {
     /// The host for this process.
     #[must_use]
-    pub(super) fn new(launch: &'a LaunchEnv) -> Self {
+    pub(super) fn new(launch: &'a LaunchEnv, interrupt: Interrupt) -> Self {
         let providers =
             ProviderRegistry::for_profile(&pmt_config::Config::default(), Vec::new()).ok();
-        Self { launch, providers }
+        Self {
+            launch,
+            providers,
+            interrupt,
+        }
     }
 }
 
@@ -86,5 +92,9 @@ impl Host for MigrateHost<'_> {
 
     fn progress(&self, line: &str) {
         eprintln!("{line}");
+    }
+
+    fn interrupted(&self) -> bool {
+        self.interrupt.raised()
     }
 }

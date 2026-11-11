@@ -3718,3 +3718,42 @@ capabilities = [
 
 [hermes-migration."Gateway settings and pairing allowlists"]
 "Approved Telegram user stays approved" = ["crates/prometheus/tests/migrate_hermes_data.rs::an_approved_telegram_user_stays_approved"]
+
+# Group 55.5-55.7 (ledger re-runs, resumability, exit codes; other-agent
+# importers, secrets policy, mappings; cleanup, sync, transcripts)
+[hermes-migration."Idempotent incremental re-run"]
+"Re-run imports only new sessions" = ["crates/prometheus/tests/migrate_rerun.rs::a_rerun_imports_only_the_new_sessions", "crates/prometheus/tests/migrate_rerun.rs::a_second_run_imports_nothing_new"]
+"User edit preserved" = ["crates/prometheus/tests/migrate_rerun.rs::a_user_edit_is_kept_and_reported_as_a_conflict", "crates/pmt-migrate/src/ledger.rs::a_user_edit_is_kept_as_a_conflict_unless_overwrite", "crates/pmt-migrate/src/ledger.rs::a_destination_still_holding_the_previous_value_is_updated"]
+"Grown Hermes session appended" = ["crates/prometheus/tests/migrate_rerun.rs::a_grown_hermes_session_is_appended_unless_continued_here"]
+
+[hermes-migration."Per-component atomicity and resumability"]
+"Interrupted during sessions" = ["crates/prometheus/tests/migrate_rerun.rs::an_interrupted_run_resumes_from_the_last_committed_batch"]
+
+[hermes-migration."Migration exit codes and confirmation"]
+"Non-interactive without --yes" = ["crates/prometheus/tests/migrate_hermes.rs::non_interactive_runs_need_yes_and_write_nothing", "crates/prometheus/tests/migrate_agents.rs::an_importer_needs_yes_without_a_terminal"]
+
+[hermes-migration."Importers for other agents"]
+"Detect on a machine with two agents" = ["crates/prometheus/tests/migrate_agents.rs::detect_lists_only_the_agents_present"]
+"Broken settings file" = ["crates/prometheus/tests/migrate_agents.rs::a_broken_settings_file_fails_alone_and_the_rest_imports"]
+
+[hermes-migration."Other agents never yield secrets by default"]
+"MCP token stripped" = ["crates/prometheus/tests/migrate_agents.rs::an_mcp_token_is_stripped_and_named", "crates/pmt-migrate/src/agents/mcp.rs::a_token_is_stripped_and_named"]
+
+[hermes-migration."Claude Code, Codex CLI and Cursor mappings"]
+"Prefix rule converted" = ["crates/prometheus/tests/migrate_agents.rs::a_prefix_rule_becomes_an_approval_and_other_rules_are_unsupported", "crates/pmt-migrate/src/agents/claude.rs::bash_rules_become_command_patterns"]
+"Memory deduplicated" = ["crates/prometheus/tests/migrate_agents.rs::memory_already_held_is_not_added_twice"]
+
+[hermes-migration."OpenClaw mapping"]
+"Reasoning effort mapped" = ["crates/prometheus/tests/migrate_agents.rs::openclaw_full_maps_reasoning_effort_and_keeps_secrets_out", "crates/pmt-migrate/src/agents/openclaw.rs::thinking_levels_map_to_reasoning_effort"]
+"Secrets need the explicit flag" = ["crates/prometheus/tests/migrate_agents.rs::openclaw_full_maps_reasoning_effort_and_keeps_secrets_out"]
+
+[hermes-migration."Source archiving after import"]
+"Cleanup is explicit" = ["crates/prometheus/tests/migrate_agents.rs::openclaw_full_maps_reasoning_effort_and_keeps_secrets_out", "crates/prometheus/tests/migrate_agents.rs::cleanup_archives_openclaw_only_on_request"]
+
+[hermes-migration."Keeping imports in sync"]
+"New skill pulled in" = ["crates/prometheus/tests/migrate_sync.rs::a_new_skill_is_pulled_in_and_unchanged_sources_are_skipped"]
+"Token refresh does not trigger a sync" = ["crates/prometheus/tests/migrate_sync.rs::a_token_refresh_does_not_trigger_a_sync"]
+
+[hermes-migration."Session transcripts from other agent CLIs"]
+"Re-import is idempotent" = ["crates/prometheus/tests/migrate_sync.rs::a_reimported_codex_rollout_returns_the_existing_session"]
+"Clean transcript" = ["crates/prometheus/tests/migrate_sync.rs::a_claude_log_imports_as_a_clean_transcript", "crates/pmt-migrate/src/agents/transcripts.rs::claude_tool_output_and_injected_context_are_left_out"]

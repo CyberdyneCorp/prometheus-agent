@@ -13,8 +13,10 @@ use serde_json::Value;
 
 use crate::component::Component;
 use crate::host::Registry;
+use crate::ledger;
 use crate::plan::{Dest, Source, Step};
 use crate::report::{Disposition, Entry};
+use crate::writes;
 
 /// The Hermes entry delimiter.
 pub const DELIMITER: &str = "\n§\n";
@@ -23,6 +25,8 @@ pub const DELIMITER: &str = "\n§\n";
 pub struct MemoryStep {
     entries: Vec<Entry>,
     items: Vec<(usize, Item)>,
+    /// Entry index, ledger key and content hash of each memory file.
+    files: Vec<(usize, String, String)>,
     provider: Option<(usize, String)>,
 }
 
@@ -43,22 +47,55 @@ impl Step for MemoryStep {
             {
                 let mut writes = crate::writes::Writes::default();
                 writes.key("memory.provider", name.as_str(), *index);
-                writes.apply(dest.scope, &mut self.entries, dest.overwrite)?;
+                writes.apply(dest, &mut self.entries)?;
             } else {
                 let e = &mut self.entries[*index];
                 e.disposition = Disposition::Unsupported;
                 e.reason = format!("no Prometheus memory provider plugin '{name}' is installed");
             }
         }
-        if self.items.is_empty() {
-            return Ok(());
+        // A file unchanged since the last run is not imported again (the
+        // import deduplicates anyway; this keeps entries the user removed
+        // removed).
+        let mut fresh = Vec::new();
+        for (index, key, hash) in &self.files {
+            if dest
+                .ledger
+                .borrow()
+                .get(key)
+                .is_some_and(|r| r.hash == *hash)
+            {
+                writes::unchanged(&mut self.entries[*index]);
+            } else {
+                fresh.push(*index);
+            }
         }
-        let items: Vec<Item> = self.items.iter().map(|(_, i)| i.clone()).collect();
+        let items: Vec<Item> = self
+            .items
+            .iter()
+            .filter(|(index, _)| fresh.contains(index))
+            .map(|(_, i)| i.clone())
+            .collect();
+        if !items.is_empty() {
+            self.import(dest, &items)?;
+        }
+        let mut ledger = dest.ledger.borrow_mut();
+        for (index, key, hash) in &self.files {
+            if fresh.contains(index) {
+                ledger.record(key.clone(), hash.clone(), hash.clone());
+            }
+        }
+        Ok(())
+    }
+}
+
+impl MemoryStep {
+    fn import(&mut self, dest: &Dest<'_>, items: &[Item]) -> Result<(), Error> {
         let redactor = dest.scope.secrets().redactor()?;
         let summary = manage::import_with(
             dest.store,
             &dest.scope.config().memory,
-            &items,
+            items,
             &redactor,
             Limits::Exceed,
         )?;
@@ -95,6 +132,7 @@ pub fn plan(src: &Source<'_>) -> Result<MemoryStep, Error> {
     let mut step = MemoryStep {
         entries: Vec::new(),
         items: Vec::new(),
+        files: Vec::new(),
         provider: None,
     };
     for (file, target) in [
@@ -106,6 +144,11 @@ pub fn plan(src: &Source<'_>) -> Result<MemoryStep, Error> {
         };
         let parts = split(&text);
         let index = step.entries.len();
+        step.files.push((
+            index,
+            format!("memory:{file}"),
+            ledger::digest(text.as_bytes()),
+        ));
         step.entries.push(
             Entry::new(Component::Memory, file, Disposition::Mapped)
                 .to(format!("{target} memory"))

@@ -18074,8 +18074,16 @@ Import another agent's home: `from-hermes` reads a Hermes Agent home (never chan
 Usage: prometheus migrate [OPTIONS] <COMMAND>
 
 Commands:
-  from-hermes  Import a Hermes Agent home (read-only on the source): config, secrets, identity, memory, skills, sessions, cron jobs, MCP servers, plugins and gateway settings
-  help         Print this message or the help of the given subcommand(s)
+  from-hermes       Import a Hermes Agent home (read-only on the source): config, secrets, identity, memory, skills, sessions, cron jobs, MCP servers, plugins and gateway settings
+  from-openclaw     Import an OpenClaw home (`~/.openclaw`, or the legacy `~/.clawdbot` and `~/.moltbot`)
+  from-claude-code  Import Claude Code instructions, skills, MCP servers and command permissions (`~/.claude`; credentials are never read)
+  from-codex        Import Codex CLI instructions, memories, skills and MCP servers (`~/.codex`; credentials are never read)
+  from-cursor       Import Cursor rules, skills and MCP servers (`~/.cursor`; credentials are never read)
+  detect            List the other agents found on this machine and what each would import
+  sync              Re-run every registered Claude Code, Codex or Cursor import whose source changed
+  cleanup           Archive a migrated agent's directories (`<name>.pre-migration`)
+  sessions          Import one Claude Code or Codex CLI conversation as a session
+  help              Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -18175,6 +18183,436 @@ Options:
           Print help
 ```
 
+## `prometheus migrate from-openclaw`
+
+```text
+Import an OpenClaw home (`~/.openclaw`, or the legacy `~/.clawdbot` and `~/.moltbot`)
+
+Usage: prometheus migrate from-openclaw [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --source <PATH>
+          The agent's directory (default `~/.openclaw`, `~/.claude`, `~/.codex` or `~/.cursor`)
+
+      --dry-run
+          Print the per-item plan; write nothing
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --yes
+          Do not ask before writing (required without a terminal)
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --overwrite
+          Replace items that exist in Prometheus instead of reporting a conflict
+
+      --no-backup
+          Skip the `pre-migration` snapshot of the profile
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+      --preset <PRESET>
+          What to import
+
+          Possible values:
+          - user-data: Identity, memory, skills, MCP servers and the time zone
+          - full:      Also models, providers, sandbox and other infrastructure
+
+          [default: user-data]
+
+      --migrate-secrets
+          Import provider API keys into the secrets store
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --workspace-target <PATH>
+          Copy the workspace `AGENTS.md` into this directory
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+      --skill-conflict <SKILL_CONFLICT>
+          What a skill that exists in Prometheus does
+
+          Possible values:
+          - skip:      Keep the profile's skill and report a conflict
+          - overwrite: Replace the profile's skill
+          - rename:    Import beside it as `<name>-imported`
+
+          [default: skip]
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus migrate from-claude-code`
+
+```text
+Import Claude Code instructions, skills, MCP servers and command permissions (`~/.claude`; credentials are never read)
+
+Usage: prometheus migrate from-claude-code [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --source <PATH>
+          The agent's directory (default `~/.openclaw`, `~/.claude`, `~/.codex` or `~/.cursor`)
+
+      --dry-run
+          Print the per-item plan; write nothing
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --yes
+          Do not ask before writing (required without a terminal)
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --overwrite
+          Replace items that exist in Prometheus instead of reporting a conflict
+
+      --no-backup
+          Skip the `pre-migration` snapshot of the profile
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus migrate from-codex`
+
+```text
+Import Codex CLI instructions, memories, skills and MCP servers (`~/.codex`; credentials are never read)
+
+Usage: prometheus migrate from-codex [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --source <PATH>
+          The agent's directory (default `~/.openclaw`, `~/.claude`, `~/.codex` or `~/.cursor`)
+
+      --dry-run
+          Print the per-item plan; write nothing
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --yes
+          Do not ask before writing (required without a terminal)
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --overwrite
+          Replace items that exist in Prometheus instead of reporting a conflict
+
+      --no-backup
+          Skip the `pre-migration` snapshot of the profile
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus migrate from-cursor`
+
+```text
+Import Cursor rules, skills and MCP servers (`~/.cursor`; credentials are never read)
+
+Usage: prometheus migrate from-cursor [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --source <PATH>
+          The agent's directory (default `~/.openclaw`, `~/.claude`, `~/.codex` or `~/.cursor`)
+
+      --dry-run
+          Print the per-item plan; write nothing
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --yes
+          Do not ask before writing (required without a terminal)
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --overwrite
+          Replace items that exist in Prometheus instead of reporting a conflict
+
+      --no-backup
+          Skip the `pre-migration` snapshot of the profile
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus migrate detect`
+
+```text
+List the other agents found on this machine and what each would import
+
+Usage: prometheus migrate detect [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus migrate sync`
+
+```text
+Re-run every registered Claude Code, Codex or Cursor import whose source changed
+
+Usage: prometheus migrate sync [OPTIONS]
+
+Options:
+      --dry-run
+          Show what would sync; write nothing
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus migrate cleanup`
+
+```text
+Archive a migrated agent's directories (`<name>.pre-migration`)
+
+Usage: prometheus migrate cleanup [OPTIONS] <AGENT>
+
+Arguments:
+  <AGENT>
+          The agent whose directories are archived
+
+          Possible values:
+          - openclaw: `~/.openclaw` (and the legacy `~/.clawdbot`, `~/.moltbot`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --source <PATH>
+          The directory to archive (default: every OpenClaw directory)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --yes
+          Do not ask first (required without a terminal)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus migrate sessions`
+
+```text
+Import one Claude Code or Codex CLI conversation as a session
+
+Usage: prometheus migrate sessions [OPTIONS] --from <FROM> [FILE]
+
+Arguments:
+  [FILE]
+          The log file; without it a picker lists the logs
+
+Options:
+      --from <FROM>
+          The CLI the log comes from
+
+          Possible values:
+          - claude-code: Claude Code session logs (`~/.claude/projects/**/*.jsonl`)
+          - codex:       Codex CLI rollouts (`~/.codex/sessions/**/rollout-*.jsonl`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --pick
+          Pick the log from a list (newest first, with a preview)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --source <PATH>
+          The CLI's config directory (default `~/.claude` or `~/.codex`)
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
 ## `prometheus migrate help`
 
 ```text
@@ -18183,8 +18621,16 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus migrate help [COMMAND]
 
 Commands:
-  from-hermes  Import a Hermes Agent home (read-only on the source): config, secrets, identity, memory, skills, sessions, cron jobs, MCP servers, plugins and gateway settings
-  help         Print this message or the help of the given subcommand(s)
+  from-hermes       Import a Hermes Agent home (read-only on the source): config, secrets, identity, memory, skills, sessions, cron jobs, MCP servers, plugins and gateway settings
+  from-openclaw     Import an OpenClaw home (`~/.openclaw`, or the legacy `~/.clawdbot` and `~/.moltbot`)
+  from-claude-code  Import Claude Code instructions, skills, MCP servers and command permissions (`~/.claude`; credentials are never read)
+  from-codex        Import Codex CLI instructions, memories, skills and MCP servers (`~/.codex`; credentials are never read)
+  from-cursor       Import Cursor rules, skills and MCP servers (`~/.cursor`; credentials are never read)
+  detect            List the other agents found on this machine and what each would import
+  sync              Re-run every registered Claude Code, Codex or Cursor import whose source changed
+  cleanup           Archive a migrated agent's directories (`<name>.pre-migration`)
+  sessions          Import one Claude Code or Codex CLI conversation as a session
+  help              Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus migrate help from-hermes`
@@ -18193,6 +18639,70 @@ Commands:
 Import a Hermes Agent home (read-only on the source): config, secrets, identity, memory, skills, sessions, cron jobs, MCP servers, plugins and gateway settings
 
 Usage: prometheus migrate help from-hermes
+```
+
+## `prometheus migrate help from-openclaw`
+
+```text
+Import an OpenClaw home (`~/.openclaw`, or the legacy `~/.clawdbot` and `~/.moltbot`)
+
+Usage: prometheus migrate help from-openclaw
+```
+
+## `prometheus migrate help from-claude-code`
+
+```text
+Import Claude Code instructions, skills, MCP servers and command permissions (`~/.claude`; credentials are never read)
+
+Usage: prometheus migrate help from-claude-code
+```
+
+## `prometheus migrate help from-codex`
+
+```text
+Import Codex CLI instructions, memories, skills and MCP servers (`~/.codex`; credentials are never read)
+
+Usage: prometheus migrate help from-codex
+```
+
+## `prometheus migrate help from-cursor`
+
+```text
+Import Cursor rules, skills and MCP servers (`~/.cursor`; credentials are never read)
+
+Usage: prometheus migrate help from-cursor
+```
+
+## `prometheus migrate help detect`
+
+```text
+List the other agents found on this machine and what each would import
+
+Usage: prometheus migrate help detect
+```
+
+## `prometheus migrate help sync`
+
+```text
+Re-run every registered Claude Code, Codex or Cursor import whose source changed
+
+Usage: prometheus migrate help sync
+```
+
+## `prometheus migrate help cleanup`
+
+```text
+Archive a migrated agent's directories (`<name>.pre-migration`)
+
+Usage: prometheus migrate help cleanup
+```
+
+## `prometheus migrate help sessions`
+
+```text
+Import one Claude Code or Codex CLI conversation as a session
+
+Usage: prometheus migrate help sessions
 ```
 
 ## `prometheus migrate help help`
@@ -27723,7 +28233,15 @@ Import another agent's home: `from-hermes` reads a Hermes Agent home (never chan
 Usage: prometheus help migrate [COMMAND]
 
 Commands:
-  from-hermes  Import a Hermes Agent home (read-only on the source): config, secrets, identity, memory, skills, sessions, cron jobs, MCP servers, plugins and gateway settings
+  from-hermes       Import a Hermes Agent home (read-only on the source): config, secrets, identity, memory, skills, sessions, cron jobs, MCP servers, plugins and gateway settings
+  from-openclaw     Import an OpenClaw home (`~/.openclaw`, or the legacy `~/.clawdbot` and `~/.moltbot`)
+  from-claude-code  Import Claude Code instructions, skills, MCP servers and command permissions (`~/.claude`; credentials are never read)
+  from-codex        Import Codex CLI instructions, memories, skills and MCP servers (`~/.codex`; credentials are never read)
+  from-cursor       Import Cursor rules, skills and MCP servers (`~/.cursor`; credentials are never read)
+  detect            List the other agents found on this machine and what each would import
+  sync              Re-run every registered Claude Code, Codex or Cursor import whose source changed
+  cleanup           Archive a migrated agent's directories (`<name>.pre-migration`)
+  sessions          Import one Claude Code or Codex CLI conversation as a session
 ```
 
 ## `prometheus help migrate from-hermes`
@@ -27732,6 +28250,70 @@ Commands:
 Import a Hermes Agent home (read-only on the source): config, secrets, identity, memory, skills, sessions, cron jobs, MCP servers, plugins and gateway settings
 
 Usage: prometheus help migrate from-hermes
+```
+
+## `prometheus help migrate from-openclaw`
+
+```text
+Import an OpenClaw home (`~/.openclaw`, or the legacy `~/.clawdbot` and `~/.moltbot`)
+
+Usage: prometheus help migrate from-openclaw
+```
+
+## `prometheus help migrate from-claude-code`
+
+```text
+Import Claude Code instructions, skills, MCP servers and command permissions (`~/.claude`; credentials are never read)
+
+Usage: prometheus help migrate from-claude-code
+```
+
+## `prometheus help migrate from-codex`
+
+```text
+Import Codex CLI instructions, memories, skills and MCP servers (`~/.codex`; credentials are never read)
+
+Usage: prometheus help migrate from-codex
+```
+
+## `prometheus help migrate from-cursor`
+
+```text
+Import Cursor rules, skills and MCP servers (`~/.cursor`; credentials are never read)
+
+Usage: prometheus help migrate from-cursor
+```
+
+## `prometheus help migrate detect`
+
+```text
+List the other agents found on this machine and what each would import
+
+Usage: prometheus help migrate detect
+```
+
+## `prometheus help migrate sync`
+
+```text
+Re-run every registered Claude Code, Codex or Cursor import whose source changed
+
+Usage: prometheus help migrate sync
+```
+
+## `prometheus help migrate cleanup`
+
+```text
+Archive a migrated agent's directories (`<name>.pre-migration`)
+
+Usage: prometheus help migrate cleanup
+```
+
+## `prometheus help migrate sessions`
+
+```text
+Import one Claude Code or Codex CLI conversation as a session
+
+Usage: prometheus help migrate sessions
 ```
 
 ## `prometheus help uninstall`

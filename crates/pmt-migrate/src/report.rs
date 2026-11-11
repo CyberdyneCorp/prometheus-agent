@@ -121,6 +121,9 @@ pub enum Status {
     Committed,
     /// Nothing written; see the error.
     Failed,
+    /// Stopped by Ctrl+C before it committed (sessions: after its last
+    /// committed batch); a re-run continues it.
+    Interrupted,
 }
 
 /// One component of one profile.
@@ -150,6 +153,10 @@ pub struct ProfileReport {
     /// Why the whole profile failed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// The error code of `error` (`migrate.destination`: the profile
+    /// cannot be written).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
     /// Each selected component.
     pub components: Vec<ComponentReport>,
     /// Every item.
@@ -191,6 +198,9 @@ pub struct Report {
     pub profiles: Vec<ProfileReport>,
     /// Profile directories left out.
     pub skipped_profiles: Vec<SkippedProfile>,
+    /// The run was interrupted (Ctrl+C); re-running resumes it.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub interrupted: bool,
     /// Run-wide notices.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<String>,
@@ -206,13 +216,38 @@ impl Report {
         self.profiles.iter().any(ProfileReport::failed)
     }
 
+    /// The exit status (spec: hermes-migration, Migration exit codes and
+    /// confirmation): 130 interrupted, 73 when a destination profile
+    /// cannot be written, 1 when any component failed, else 0
+    /// (unsupported and conflict entries do not fail a run).
+    #[must_use]
+    pub fn exit_code(&self) -> u8 {
+        let unwritable = self
+            .profiles
+            .iter()
+            .any(|p| p.code.as_deref() == Some(pmt_core::error::codes::MIGRATE_DESTINATION.code));
+        if self.interrupted {
+            pmt_core::exit::INTERRUPTED
+        } else if unwritable {
+            pmt_core::exit::CANNOT_CREATE_OUTPUT
+        } else if self.failed() {
+            pmt_core::exit::FAILURE
+        } else {
+            pmt_core::exit::SUCCESS
+        }
+    }
+
     /// The human summary: per profile, the counts per component and every
     /// entry that needs attention (unsupported, ambiguous, conflict,
     /// failed).
     #[must_use]
     pub fn summary(&self) -> String {
         let mut out = String::new();
-        let verb = if self.dry_run { "Plan" } else { "Migrated" };
+        let verb = match (self.dry_run, self.interrupted) {
+            (true, _) => "Plan",
+            (false, true) => "Interrupted migration",
+            (false, false) => "Migrated",
+        };
         let _ = writeln!(out, "{verb} from {}", self.source);
         for warning in &self.warnings {
             let _ = writeln!(out, "WARN {warning}");
@@ -244,6 +279,7 @@ fn summarize_profile(out: &mut String, p: &ProfileReport) {
             .collect();
         let status = match (c.status, &c.error) {
             (Status::Failed, Some(e)) => format!("failed: {e}"),
+            (Status::Interrupted, _) => "interrupted; rerun to continue".to_owned(),
             _ if counts.is_empty() => "nothing to import".to_owned(),
             _ => counts.join(", "),
         };
@@ -264,6 +300,35 @@ fn summarize_profile(out: &mut String, p: &ProfileReport) {
             let _ = write!(line, " (value {value})");
         }
         let _ = writeln!(out, "{line}");
+    }
+}
+
+impl Report {
+    /// The per-item plan: one line per entry of every profile, what it
+    /// becomes and why.
+    #[must_use]
+    pub fn items(&self) -> String {
+        let mut out = String::new();
+        for p in &self.profiles {
+            let target = p.target.as_deref().unwrap_or("-");
+            let _ = writeln!(out, "{} -> profile {target}", p.source);
+            for e in &p.entries {
+                let mut line = format!(
+                    "  {:<9} {:<15} {}",
+                    e.component.as_str(),
+                    e.disposition.as_str(),
+                    e.item
+                );
+                if let Some(t) = &e.target {
+                    let _ = write!(line, " -> {t}");
+                }
+                if !e.reason.is_empty() {
+                    let _ = write!(line, " ({})", e.reason);
+                }
+                let _ = writeln!(out, "{line}");
+            }
+        }
+        out
     }
 }
 

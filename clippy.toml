@@ -1,5 +1,5 @@
 # Product and protocol names that pedantic `doc_markdown` would otherwise ask to backtick.
-doc-valid-idents = ["DevTools", "OpenAI", "CPython", "SQLite", "WebAssembly", "JavaScript", "TypeScript", "..", "GitHub", "AppContainer", "SonarSource", "ChatGPT", "OpenID", "SearXNG", "OpenRouter", "SuperGrok", "MiniMax", "MoA", "ROCm", "ClawHub", "LobeHub", "UTF8String"]
+doc-valid-idents = ["DevTools", "OpenAI", "CPython", "SQLite", "WebAssembly", "JavaScript", "TypeScript", "..", "GitHub", "AppContainer", "SonarSource", "ChatGPT", "OpenID", "SearXNG", "OpenRouter", "SuperGrok", "MiniMax", "MoA", "ROCm", "ClawHub", "LobeHub", "UTF8String", "OpenClaw"]
 
 # std's file locks are unsupported on Android (Termux, a Tier 2 target).
 disallowed-methods = [

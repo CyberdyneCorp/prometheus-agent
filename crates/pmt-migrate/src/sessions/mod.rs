@@ -14,7 +14,7 @@ mod read;
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use pmt_core::error::Error;
+use pmt_core::error::{Error, codes};
 use pmt_core::id::SessionId;
 use pmt_store::legacy::LegacyLink;
 use pmt_store::portable::Portable;
@@ -58,33 +58,60 @@ impl Step for SessionsStep {
         &mut self.entries
     }
 
+    fn commits_in_parts(&self) -> bool {
+        true
+    }
+
     fn apply(&mut self, dest: &Dest<'_>) -> Result<(), Error> {
         let Some(plan) = &self.plan else {
             return Ok(());
         };
-        let mut ids: BTreeMap<String, SessionId> = dest
-            .store
-            .legacy_links(LEGACY_SOURCE)?
-            .into_iter()
-            .map(|(legacy, (id, _))| (legacy, id))
+        let links = dest.store.legacy_links(LEGACY_SOURCE)?;
+        let mut ids: BTreeMap<String, SessionId> = links
+            .iter()
+            .map(|(legacy, (id, _))| (legacy.clone(), *id))
             .collect();
         let by_id: BTreeMap<&str, &read::HermesSession> =
             plan.sessions.iter().map(|s| (s.id.as_str(), s)).collect();
-        let pending: Vec<&read::HermesSession> = parents_first(&plan.sessions)
-            .into_iter()
-            .filter(|s| {
-                let done = ids.contains_key(&s.id);
-                if done {
-                    let e = &mut self.entries[plan.index[&s.id]];
-                    e.disposition = Disposition::Skipped;
-                    "already imported".clone_into(&mut e.reason);
-                }
-                !done
-            })
-            .collect();
+        let mut pending = Vec::new();
+        for s in parents_first(&plan.sessions) {
+            let entry = &mut self.entries[plan.index[&s.id]];
+            match links.get(&s.id) {
+                None => pending.push(s),
+                Some((id, carried)) => grow(plan, s, *id, *carried, dest, entry)?,
+            }
+        }
         let total = pending.len();
         for (n, chunk) in pending.chunks(BATCH).enumerate() {
-            let expected = import_batch(plan, chunk, &by_id, &mut ids, dest)?;
+            let rest = &pending[n * BATCH..];
+            if dest.host.interrupted() {
+                settle_rest(
+                    &mut self.entries,
+                    &plan.index,
+                    rest,
+                    Disposition::Skipped,
+                    "interrupted; a re-run continues from here",
+                );
+                return Err(Error::new(
+                    &codes::MIGRATE_INTERRUPTED,
+                    format!("interrupted after {} of {total} sessions", n * BATCH),
+                ));
+            }
+            let expected = match import_batch(plan, chunk, &by_id, &mut ids, dest) {
+                Ok(expected) => expected,
+                Err(e) => {
+                    // Earlier batches stay committed (and linked, so a
+                    // re-run skips them); this one and the rest are not.
+                    settle_rest(
+                        &mut self.entries,
+                        &plan.index,
+                        rest,
+                        Disposition::Failed,
+                        e.message(),
+                    );
+                    return Err(e);
+                }
+            };
             for (hermes, (id, count)) in expected {
                 let stored = dest.store.session(id)?.message_count;
                 if stored != count {
@@ -102,6 +129,73 @@ impl Step for SessionsStep {
         }
         Ok(())
     }
+}
+
+/// Marks the entries of `rest` (sessions not committed) with
+/// `disposition`.
+fn settle_rest(
+    entries: &mut [Entry],
+    index: &BTreeMap<String, usize>,
+    rest: &[&read::HermesSession],
+    disposition: Disposition,
+    why: &str,
+) {
+    for s in rest {
+        let e = &mut entries[index[&s.id]];
+        e.disposition = disposition;
+        why.clone_into(&mut e.reason);
+    }
+}
+
+/// An already imported session: appends the messages Hermes added since
+/// (spec: hermes-migration, Grown Hermes session appended) unless it was
+/// continued in Prometheus, which keeps it as a conflict.
+fn grow(
+    plan: &Planned,
+    s: &read::HermesSession,
+    id: SessionId,
+    carried: u64,
+    dest: &Dest<'_>,
+    entry: &mut Entry,
+) -> Result<(), Error> {
+    let count = plan.db.message_count(&s.id)?;
+    if count <= carried {
+        entry.disposition = Disposition::Skipped;
+        "already imported".clone_into(&mut entry.reason);
+        return Ok(());
+    }
+    let rows = plan.db.messages(&s.id)?;
+    let split = usize::try_from(carried)
+        .unwrap_or(usize::MAX)
+        .min(rows.len());
+    let imported = rows[..split]
+        .iter()
+        .filter_map(|m| convert::message(m, id))
+        .count() as u64;
+    let added: Vec<_> = rows[split..]
+        .iter()
+        .filter_map(|m| convert::message(m, id))
+        .collect();
+    if dest.store.session(id)?.message_count != imported {
+        entry.disposition = Disposition::Conflict;
+        entry.reason = format!(
+            "continued in Prometheus; {} newer Hermes messages were not appended",
+            rows.len() - split
+        );
+        return Ok(());
+    }
+    dest.store.append_linked(
+        &added,
+        &LegacyLink {
+            source: LEGACY_SOURCE.to_owned(),
+            legacy_id: s.id.clone(),
+            session: id,
+            messages: rows.len() as u64,
+        },
+    )?;
+    entry.disposition = Disposition::Transformed;
+    entry.reason = format!("appended {} new messages", added.len());
+    Ok(())
 }
 
 /// Imports one batch; returns each session's id and expected message

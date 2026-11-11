@@ -23,9 +23,10 @@ use serde_json::Value;
 
 use crate::component::Component;
 use crate::config::json_to_toml;
+use crate::ledger::{self, Decision};
 use crate::plan::{Dest, Source, Step};
 use crate::report::{Disposition, Entry};
-use crate::writes::Writes;
+use crate::writes::{self, Writes};
 
 /// Where quarantined skills go, below the profile's `skills/`.
 pub const QUARANTINE_DIR: &str = ".quarantine";
@@ -64,11 +65,22 @@ impl Step for SkillsStep {
         let skills = dest.scope.dir().join("skills");
         let lock = LockFile::in_dir(&skills);
         for c in &self.copies {
-            if let Some(why) = copy_skill(c, &skills, &lock, dest.overwrite)? {
-                let e = &mut self.entries[c.entry];
-                e.disposition = Disposition::Conflict;
-                e.reason = why;
+            let target = if c.quarantined {
+                skills.join(QUARANTINE_DIR).join(&c.rel)
+            } else {
+                skills.join(&c.rel)
+            };
+            let decision = install(&c.source, &target, &format!("skill:{}", c.rel), dest)?;
+            if decision == Decision::Write
+                && let Some(hub) = &c.hub
+            {
+                lock.upsert(lockfile::Entry {
+                    content_digest: digest_of(&target),
+                    ..hub.clone()
+                })?;
             }
+            let why = format!("{} exists with other content", c.rel);
+            writes::settle(decision, &mut self.entries[c.entry], &why);
         }
         let current = &dest.scope.config().skills.disabled;
         let mut disabled: Vec<String> = current.clone();
@@ -83,44 +95,46 @@ impl Step for SkillsStep {
             self.writes.key("skills.disabled", list, index);
         }
         // The list is merged with the profile's, so it never conflicts.
-        self.writes.apply(dest.scope, &mut self.entries, true)
+        self.writes.apply_merged(dest.scope, &mut self.entries)
     }
 }
 
-/// Copies one skill (and records its hub provenance); `Some(why)` when an
-/// existing copy with other content was kept.
-fn copy_skill(
-    c: &Copy,
-    skills: &Path,
-    lock: &LockFile,
-    overwrite: bool,
-) -> Result<Option<String>, Error> {
-    let target = if c.quarantined {
-        skills.join(QUARANTINE_DIR).join(&c.rel)
-    } else {
-        skills.join(&c.rel)
-    };
-    if target.exists() {
-        if pmt_skills::digest::dir(&target) == digest_of(&c.source) {
-            return Ok(None);
+/// Copies the skill directory `source` to `target` as the ledger
+/// decides (spec: hermes-migration, Idempotent incremental re-run): a
+/// skill the user changed in Prometheus since it was imported is kept.
+///
+/// # Errors
+///
+/// `home.io` when the copy cannot be written.
+pub(crate) fn install(
+    source: &Path,
+    target: &Path,
+    key: &str,
+    dest: &Dest<'_>,
+) -> Result<Decision, Error> {
+    let new = digest_of(source);
+    let current = target.exists().then(|| digest_of(target));
+    let prior = dest.ledger.borrow().get(key).cloned();
+    let decision = ledger::decide(
+        prior.as_ref(),
+        &new,
+        &new,
+        current.as_deref(),
+        dest.overwrite,
+    );
+    match decision {
+        Decision::Write => {
+            if target.exists() {
+                std::fs::remove_dir_all(target)
+                    .map_err(|e| Error::io_doing(&codes::HOME_IO, "cannot replace", target, &e))?;
+            }
+            copy_tree(source, target)?;
+            dest.ledger.borrow_mut().record(key, new, digest_of(target));
         }
-        if !overwrite {
-            return Ok(Some(format!(
-                "{} exists with other content; kept (use --overwrite to replace it)",
-                c.rel
-            )));
-        }
-        std::fs::remove_dir_all(&target)
-            .map_err(|e| Error::io_doing(&codes::HOME_IO, "cannot replace", &target, &e))?;
+        Decision::Same => dest.ledger.borrow_mut().record(key, new.clone(), new),
+        Decision::Unchanged | Decision::Conflict => {}
     }
-    copy_tree(&c.source, &target)?;
-    if let Some(hub) = &c.hub {
-        lock.upsert(lockfile::Entry {
-            content_digest: pmt_skills::digest::dir(&target),
-            ..hub.clone()
-        })?;
-    }
-    Ok(None)
+    Ok(decision)
 }
 
 /// Plans the skills component.
@@ -183,26 +197,16 @@ fn plan_skill(
     if let Some(h) = &provenance {
         e.reason = join(&e.reason, &format!("hub skill from {}", h.source));
     }
-    let report = scan(&dir);
-    let quarantined = match &report {
-        Ok(r) if r.verdict == Verdict::Dangerous => {
-            e = entry(Disposition::Failed)
-                .to(format!("skills/{QUARANTINE_DIR}/{rel}"))
-                .because(format!(
-                    "quarantined and disabled: scan found {}",
-                    r.summary()
-                ));
-            true
-        }
+    let quarantined = match screen(&dir) {
         Err(why) => {
             e = entry(Disposition::Failed)
                 .to(format!("skills/{QUARANTINE_DIR}/{rel}"))
-                .because(format!("quarantined and disabled: the scan failed ({why})"));
+                .because(why);
             true
         }
-        Ok(r) => {
-            if r.verdict == Verdict::Caution {
-                e.reason = join(&e.reason, &format!("scan: {}", r.summary()));
+        Ok(caution) => {
+            if let Some(note) = caution {
+                e.reason = join(&e.reason, &note);
             }
             false
         }
@@ -270,6 +274,19 @@ fn plan_disabled(src: &Source<'_>, step: &mut SkillsStep) {
                 ..entry
             }),
         }
+    }
+}
+
+/// The Prometheus skill scan of `dir`: `Err(reason)` when the skill must
+/// be quarantined and disabled, else an optional caution note.
+pub(crate) fn screen(dir: &Path) -> Result<Option<String>, String> {
+    match scan(dir) {
+        Ok(r) if r.verdict == Verdict::Dangerous => Err(format!(
+            "quarantined and disabled: scan found {}",
+            r.summary()
+        )),
+        Err(why) => Err(format!("quarantined and disabled: the scan failed ({why})")),
+        Ok(r) => Ok((r.verdict == Verdict::Caution).then(|| format!("scan: {}", r.summary()))),
     }
 }
 

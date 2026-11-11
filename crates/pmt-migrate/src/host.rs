@@ -68,4 +68,10 @@ pub trait Host {
 
     /// Prints a progress line (stderr).
     fn progress(&self, line: &str);
+
+    /// Whether the user asked to stop (Ctrl+C): the run stops at the next
+    /// commit boundary.
+    fn interrupted(&self) -> bool {
+        false
+    }
 }

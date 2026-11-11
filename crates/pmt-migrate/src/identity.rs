@@ -11,8 +11,10 @@ use serde_json::Value;
 use crate::component::Component;
 use crate::config::flatten;
 use crate::data;
+use crate::ledger::{self, Decision};
 use crate::plan::{Dest, Source, Step};
 use crate::report::{Disposition, Entry};
+use crate::writes;
 
 /// Names that select no personality.
 const NEUTRAL: &[&str] = &["", "none", "default", "neutral"];
@@ -38,22 +40,32 @@ impl Step for IdentityStep {
             return Ok(());
         };
         let path = dest.scope.dir().join(IDENTITY_FILE);
-        let current = std::fs::read_to_string(&path).ok();
-        match current {
-            Some(old) if old == *soul => Ok(()),
-            Some(old) if !old.trim().is_empty() && !dest.overwrite => {
-                for i in &self.soul_entries {
-                    let e = &mut self.entries[*i];
-                    e.disposition = Disposition::Conflict;
-                    e.reason = format!(
-                        "{IDENTITY_FILE} already has other content; kept (use --overwrite to replace it)"
-                    );
-                }
-                Ok(())
-            }
-            _ => pmt_core::private_fs::write_atomic(&path, soul.as_bytes())
-                .map_err(|e| Error::io_doing(&codes::HOME_IO, "cannot write", &path, &e)),
+        let current = std::fs::read_to_string(&path)
+            .ok()
+            .filter(|old| !old.trim().is_empty())
+            .map(|old| ledger::digest(old.as_bytes()));
+        let new = ledger::digest(soul.as_bytes());
+        let key = format!("file:{IDENTITY_FILE}");
+        let prior = dest.ledger.borrow().get(&key).cloned();
+        let decision = ledger::decide(
+            prior.as_ref(),
+            &new,
+            &new,
+            current.as_deref(),
+            dest.overwrite,
+        );
+        let why = format!("{IDENTITY_FILE} already has other content");
+        for i in &self.soul_entries {
+            writes::settle(decision, &mut self.entries[*i], &why);
         }
+        if decision == Decision::Write {
+            pmt_core::private_fs::write_atomic(&path, soul.as_bytes())
+                .map_err(|e| Error::io_doing(&codes::HOME_IO, "cannot write", &path, &e))?;
+        }
+        if matches!(decision, Decision::Write | Decision::Same) {
+            dest.ledger.borrow_mut().record(key, new.clone(), new);
+        }
+        Ok(())
     }
 }
 

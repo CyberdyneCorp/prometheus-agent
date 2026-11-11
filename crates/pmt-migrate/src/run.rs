@@ -6,15 +6,15 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use pmt_config::{Home, Launch, Overrides, ProfileName, ProfileScope};
 use pmt_core::error::{Error, codes};
-use pmt_store::Store;
 
+use crate::commit::{self, Commit, Planned, Target, finish_planned, open_target, staging_dir};
 use crate::component::Component;
 use crate::env::{self, EnvEntry};
 use crate::host::Host;
-use crate::plan::{Dest, Source, Step};
-use crate::report::{self, ComponentReport, ProfileReport, Report, Status};
+use crate::ledger::Ledger;
+use crate::plan::{Existing, Source, Step};
+use crate::report::{self, ProfileReport, Report, Status};
 use crate::source::{self, HermesHome, SourceProfile};
 use crate::yaml::{self, Doc};
 use crate::{config, cron, gateway, identity, mcp, memory, plugins, secrets, sessions, skills};
@@ -112,12 +112,25 @@ pub fn run(prometheus_home: &Path, options: &Options, host: &dyn Host) -> Result
         dry_run: options.dry_run,
         profiles: Vec::new(),
         skipped_profiles: skipped,
+        interrupted: false,
         warnings: Vec::new(),
     };
     for profile in &profiles {
+        if host.interrupted() {
+            report.interrupted = true;
+            break;
+        }
         let mut one = migrate_profile(prometheus_home, profile, options, host, &run_id);
         report.warnings.append(&mut one.1);
+        report.interrupted |= one
+            .0
+            .components
+            .iter()
+            .any(|c| c.status == Status::Interrupted);
         report.profiles.push(one.0);
+        if report.interrupted {
+            break;
+        }
     }
     Ok(report)
 }
@@ -154,20 +167,6 @@ fn read_profile(profile: &SourceProfile) -> Read {
     }
 }
 
-/// The opened destination of a real run.
-struct Target {
-    profile: pmt_config::ProfileDir,
-    store: Store,
-}
-
-fn open_target(prometheus_home: &Path, name: &ProfileName) -> Result<Target, Error> {
-    let home = Home::open(prometheus_home)?;
-    let profile = home.profile(name)?;
-    let scope = ProfileScope::open(profile.clone(), &Overrides::default(), Launch::Other)?;
-    let store = Store::open(&scope)?;
-    Ok(Target { profile, store })
-}
-
 fn migrate_profile(
     prometheus_home: &Path,
     profile: &SourceProfile,
@@ -180,6 +179,7 @@ fn migrate_profile(
         target: None,
         source: profile.dir.display().to_string(),
         error: None,
+        code: None,
         components: Vec::new(),
         entries: Vec::new(),
         warnings: Vec::new(),
@@ -207,6 +207,7 @@ fn migrate_profile(
             Ok(t) => Some(t),
             Err(e) => {
                 out.error = Some(e.message().to_owned());
+                out.code = Some(e.code().code.to_owned());
                 return (out, run_warnings);
             }
         }
@@ -230,11 +231,31 @@ fn migrate_profile(
     let steps = plan_all(&src, read.config_error.as_deref(), options, &mut out);
     match &dest {
         None => {
-            let existing = prometheus_home.join("profiles").join(target.as_str());
-            let existing = existing.is_dir().then_some(existing.as_path());
-            finish_planned(steps, existing, options.overwrite, &mut out);
+            let dir = prometheus_home.join("profiles").join(target.as_str());
+            let ledger = Ledger::peek(&dir, LEDGER_SOURCE);
+            let existing = Existing {
+                dir: &dir,
+                overwrite: options.overwrite,
+                ledger: &ledger,
+            };
+            finish_planned(steps, dir.is_dir().then_some(&existing), &mut out);
         }
-        Some(target) => commit_all(target, steps, options, host, &staging, &mut out),
+        Some(target) => {
+            let commit = Commit {
+                target,
+                overwrite: options.overwrite,
+                host,
+                staging: &staging,
+                run_id,
+            };
+            match commit.ledger(LEDGER_SOURCE, &profile.dir) {
+                Ok((ledger, warning)) => {
+                    out.warnings.extend(warning);
+                    commit.all(&ledger, steps, &mut out);
+                }
+                Err(e) => out.error = Some(e.message().to_owned()),
+            }
+        }
     }
     drop(staging_root);
     if let Some(target) = &dest {
@@ -243,57 +264,8 @@ fn migrate_profile(
     (out, run_warnings)
 }
 
-/// The staging directory: `<profile>/cache/migrate-<run-id>/` on a real
-/// run, a temporary directory outside the Prometheus home on a dry run;
-/// removed when dropped.
-fn staging_dir(dest: Option<&Target>, run_id: &str) -> Result<Staging, Error> {
-    match dest {
-        Some(t) => {
-            let dir = t
-                .profile
-                .path()
-                .join("cache")
-                .join(format!("migrate-{run_id}"));
-            std::fs::create_dir_all(&dir)
-                .map_err(|e| Error::io_doing(&codes::HOME_IO, "cannot create", &dir, &e))?;
-            Ok(Staging::Owned(dir))
-        }
-        None => tempfile::Builder::new()
-            .prefix("prometheus-migrate-")
-            .tempdir()
-            .map(Staging::Temp)
-            .map_err(|e| {
-                Error::new(
-                    &codes::HOME_IO,
-                    format!("cannot create a staging directory: {e}"),
-                )
-            }),
-    }
-}
-
-enum Staging {
-    Owned(PathBuf),
-    Temp(tempfile::TempDir),
-}
-
-impl Staging {
-    fn path(&self) -> &Path {
-        match self {
-            Self::Owned(p) => p,
-            Self::Temp(t) => t.path(),
-        }
-    }
-}
-
-impl Drop for Staging {
-    fn drop(&mut self) {
-        if let Self::Owned(dir) = self {
-            let _ = std::fs::remove_dir_all(dir);
-        }
-    }
-}
-
-type Planned = Vec<(Component, Result<Box<dyn Step>, Error>)>;
+/// The ledger source name of Hermes migrations.
+pub const LEDGER_SOURCE: &str = "hermes";
 
 fn plan_all(
     src: &Source<'_>,
@@ -332,120 +304,10 @@ fn plan_one(
     }
 }
 
-fn record(
-    out: &mut ProfileReport,
-    component: Component,
-    status: Status,
-    error: Option<String>,
-    step: Option<&mut Box<dyn Step>>,
-) {
-    if let Some(step) = step {
-        out.warnings.extend(step.warnings());
-        out.entries.append(step.entries());
-    }
-    let counts = report::counts(&out.entries, component);
-    out.components.push(ComponentReport {
-        component,
-        status,
-        error,
-        counts,
-    });
-}
-
-/// A dry run's steps, with the conflicts an existing destination profile
-/// would cause (`existing`: its directory).
-fn finish_planned(
-    steps: Planned,
-    existing: Option<&Path>,
-    overwrite: bool,
-    out: &mut ProfileReport,
-) {
-    for (component, step) in steps {
-        match step {
-            Ok(mut step) => {
-                if let Some(dir) = existing {
-                    step.predict(dir, overwrite);
-                }
-                record(out, component, Status::Planned, None, Some(&mut step));
-            }
-            Err(e) => record(
-                out,
-                component,
-                Status::Failed,
-                Some(e.message().to_owned()),
-                None,
-            ),
-        }
-    }
-}
-
-fn commit_all(
-    target: &Target,
-    steps: Planned,
-    options: &Options,
-    host: &dyn Host,
-    staging: &Path,
-    out: &mut ProfileReport,
-) {
-    for (component, step) in steps {
-        let mut step = match step {
-            Ok(step) => step,
-            Err(e) => {
-                record(
-                    out,
-                    component,
-                    Status::Failed,
-                    Some(e.message().to_owned()),
-                    None,
-                );
-                continue;
-            }
-        };
-        // Each component sees the config the previous ones wrote.
-        let applied =
-            ProfileScope::open(target.profile.clone(), &Overrides::default(), Launch::Other)
-                .and_then(|scope| {
-                    let dest = Dest {
-                        scope: &scope,
-                        store: &target.store,
-                        overwrite: options.overwrite,
-                        host,
-                        staging: staging.to_owned(),
-                    };
-                    step.apply(&dest)
-                });
-        match applied {
-            Ok(()) => record(out, component, Status::Committed, None, Some(&mut step)),
-            Err(e) => {
-                // Nothing of a failed component is reported as imported.
-                let entries = step.entries();
-                for e in entries.iter_mut() {
-                    if !matches!(
-                        e.disposition,
-                        report::Disposition::Failed
-                            | report::Disposition::Unsupported
-                            | report::Disposition::Skipped
-                    ) {
-                        e.disposition = report::Disposition::Failed;
-                        "the component failed".clone_into(&mut e.reason);
-                    }
-                }
-                record(
-                    out,
-                    component,
-                    Status::Failed,
-                    Some(e.message().to_owned()),
-                    Some(&mut step),
-                );
-            }
-        }
-    }
-}
-
-/// Saves the profile's report to `<profile>/migrations/hermes-<run-id>.json`.
+/// Saves one profile's report as `<profile>/migrations/hermes-<run-id>.json`.
 fn save(
     target: &Target,
-    profile: &ProfileReport,
+    out: &ProfileReport,
     run_id: &str,
     options: &Options,
     warnings: &[String],
@@ -455,20 +317,13 @@ fn save(
         run_id: run_id.to_owned(),
         source: options.hermes_home.display().to_string(),
         dry_run: false,
-        profiles: vec![profile.clone()],
+        profiles: vec![out.clone()],
         skipped_profiles: Vec::new(),
+        interrupted: out
+            .components
+            .iter()
+            .any(|c| c.status == Status::Interrupted),
         warnings: warnings.to_vec(),
     };
-    let path = target
-        .profile
-        .path()
-        .join("migrations")
-        .join(format!("hermes-{run_id}.json"));
-    let text = serde_json::to_string_pretty(&report).unwrap_or_default();
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    if let Err(e) = pmt_core::private_fs::write_atomic(&path, text.as_bytes()) {
-        tracing::warn!("cannot save the migration report {}: {e}", path.display());
-    }
+    commit::save(target, LEDGER_SOURCE, &report);
 }

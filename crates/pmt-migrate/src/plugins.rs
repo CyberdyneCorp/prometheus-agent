@@ -8,13 +8,15 @@
 //! Prometheus provides as signed catalog plugins (Home Assistant,
 //! Camofox, the catalog adapters) are listed with the plugin they need.
 
-use pmt_core::error::Error;
+use pmt_core::error::{Error, codes};
 use serde_json::Value;
 
 use crate::component::Component;
 use crate::host::Registry;
+use crate::ledger::{self, Decision};
 use crate::plan::{Dest, Source, Step};
 use crate::report::{Disposition, Entry};
+use crate::writes;
 
 /// Hermes platforms Prometheus serves through catalog adapter plugins
 /// (spec: platform-adapters, Catalog adapter set).
@@ -62,15 +64,29 @@ impl Step for PluginsStep {
     }
 
     fn apply(&mut self, dest: &Dest<'_>) -> Result<(), Error> {
-        let Some(dir) = &self.dir else {
+        let Some(dir) = self.dir.clone() else {
             return Ok(());
         };
+        let dir = dir.as_path();
+        let settled = self.prepare(dir, dest)?;
         let outcomes = dest.host.import_plugins(dest.scope, dir, &self.enabled)?;
         for outcome in outcomes {
             let Some((_, index)) = self.planned.iter().find(|(id, _)| *id == outcome.id) else {
                 continue;
             };
+            if settled.contains(index) {
+                continue;
+            }
             let e = &mut self.entries[*index];
+            let installed = dest.scope.dir().join("plugins").join(&outcome.id);
+            if outcome.skipped.is_none() {
+                let hash = pmt_skills::digest::dir(&dir.join(&outcome.id));
+                dest.ledger.borrow_mut().record(
+                    format!("plugin:{}", outcome.id),
+                    hash,
+                    pmt_skills::digest::dir(&installed),
+                );
+            }
             if let Some(why) = outcome.skipped {
                 e.disposition = Disposition::Conflict;
                 e.reason = format!("{why}; kept");
@@ -86,6 +102,44 @@ impl Step for PluginsStep {
             }
         }
         Ok(())
+    }
+}
+
+impl PluginsStep {
+    /// Settles each plugin against the ledger before the import, which
+    /// copies only plugins the profile does not have: one unchanged since
+    /// the last run is left alone, and one changed in Hermes whose copy
+    /// still holds what the previous run wrote is removed so it is
+    /// copied again. Returns the entries settled here.
+    fn prepare(&mut self, dir: &std::path::Path, dest: &Dest<'_>) -> Result<Vec<usize>, Error> {
+        let mut settled = Vec::new();
+        for (id, index) in &self.planned {
+            let installed = dest.scope.dir().join("plugins").join(id);
+            let hash = pmt_skills::digest::dir(&dir.join(id));
+            let current = installed
+                .is_dir()
+                .then(|| pmt_skills::digest::dir(&installed));
+            let prior = dest.ledger.borrow().get(&format!("plugin:{id}")).cloned();
+            match ledger::decide(
+                prior.as_ref(),
+                &hash,
+                &hash,
+                current.as_deref(),
+                dest.overwrite,
+            ) {
+                Decision::Unchanged => {
+                    writes::unchanged(&mut self.entries[*index]);
+                    settled.push(*index);
+                }
+                Decision::Write if current.is_some() => {
+                    std::fs::remove_dir_all(&installed).map_err(|e| {
+                        Error::io_doing(&codes::HOME_IO, "cannot replace", &installed, &e)
+                    })?;
+                }
+                _ => {}
+            }
+        }
+        Ok(settled)
     }
 }
 

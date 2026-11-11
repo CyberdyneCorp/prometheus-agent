@@ -391,16 +391,18 @@ fn the_report_names_unsupported_keys_and_secrets_but_no_secret_value() {
         .flatten()
         .map(|e| e.path())
         .filter(|p| {
-            p.file_name()
-                .unwrap()
-                .to_string_lossy()
-                .starts_with("hermes-")
+            let name = p.file_name().unwrap().to_string_lossy().into_owned();
+            name.starts_with("hermes-") && p.extension().is_some_and(|e| e == "json")
         })
         .collect();
     assert_eq!(saved.len(), 1, "{saved:?}");
+    let ledger = tmp
+        .path()
+        .join("profiles/default/migrations/hermes-ledger.toml");
     for text in [
         std::fs::read_to_string(&saved[0]).unwrap(),
         common::stdout(&out),
+        std::fs::read_to_string(ledger).unwrap(),
     ] {
         assert!(text.contains("OPENAI_API_KEY"));
         for value in ["sk-abc", "sk-or-1", "ghp-secret-1", "xyz"] {

@@ -305,6 +305,39 @@ impl Store {
     }
 }
 
+impl Store {
+    /// Appends `messages` (rows of an imported session that grew in the
+    /// agent it came from) after the session's last row and advances its
+    /// legacy link to `link`, in one transaction.
+    ///
+    /// # Errors
+    ///
+    /// `session.not_found`, `store.sqlite`.
+    pub fn append_linked(
+        &self,
+        messages: &[Message],
+        link: &crate::legacy::LegacyLink,
+    ) -> Result<(), Error> {
+        self.ensure_writable()?;
+        let blob_dir = self.location().blobs().to_path_buf();
+        let redactor = self.redactor();
+        let rows = messages
+            .iter()
+            .map(|m| messages::prepare(&blob_dir, &new_message(m), redactor.as_ref()))
+            .collect::<Result<Vec<_>, _>>()?;
+        self.write(|tx| {
+            if sessions::load(tx, link.session)?.is_none() {
+                return Err(sessions::not_found(link.session));
+            }
+            if !rows.is_empty() {
+                let first = messages::next_seq(tx, link.session)?;
+                messages::insert(tx, link.session, &rows, first)?;
+            }
+            crate::legacy::insert(tx, std::slice::from_ref(link))
+        })
+    }
+}
+
 fn write_one(
     tx: &Transaction<'_>,
     portable: &Portable,

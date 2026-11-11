@@ -1,18 +1,29 @@
-//! `prometheus migrate from-hermes` (spec: hermes-migration): the command
-//! surface over `pmt-migrate`, plus the binary's side of a migration
+//! `prometheus migrate` (spec: hermes-migration): the command surface
+//! over `pmt-migrate`: `from-hermes` ([`hermes`]), the other-agent
+//! importers and `detect` ([`agents`]), `sync`, `cleanup` and `sessions`
+//! ([`more`]), plus the binary's side of a migration
 //! ([`host::MigrateHost`]).
 
+mod agents;
+mod hermes;
 mod host;
+mod interrupt;
+mod more;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use clap::{Args, Subcommand};
+use clap::Subcommand;
+use pmt_config::ProfileName;
 use pmt_core::error::{Error, codes};
-use pmt_migrate::{Options, Report};
+use pmt_migrate::Report;
 
 use crate::context::Context;
 use crate::output::{json, print_raw};
 use crate::prompt;
+
+pub use agents::{AgentArgs, OpenClawArgs};
+pub use hermes::FromHermesArgs;
+pub use more::{CleanupArgs, SessionsArgs, SyncArgs};
 
 /// `prometheus migrate` subcommands.
 #[derive(Debug, Subcommand)]
@@ -21,43 +32,29 @@ pub enum MigrateCommand {
     /// secrets, identity, memory, skills, sessions, cron jobs, MCP servers,
     /// plugins and gateway settings.
     FromHermes(FromHermesArgs),
-}
-
-/// `migrate from-hermes` options (the global `--profile`, repeatable here,
-/// names the Hermes profiles).
-#[derive(Debug, Clone, Args)]
-#[allow(clippy::struct_excessive_bools)] // one per flag
-pub struct FromHermesArgs {
-    /// The Hermes home (default `~/.hermes`, `%LOCALAPPDATA%\hermes` on
-    /// Windows; `HERMES_HOME` is never read).
-    #[arg(long, value_name = "PATH")]
-    pub hermes_home: Option<PathBuf>,
-    /// Every live Hermes profile.
-    #[arg(long)]
-    pub all: bool,
-    /// The Prometheus profile a single `--profile` goes to.
-    #[arg(long, value_name = "NAME")]
-    pub into_profile: Option<String>,
-    /// Only these components (comma-separated, repeatable).
-    #[arg(long, value_name = "COMPONENTS")]
-    pub only: Vec<String>,
-    /// All components but these (comma-separated, repeatable).
-    #[arg(long, value_name = "COMPONENTS")]
-    pub skip: Vec<String>,
-    /// Print the plan; write nothing (not even the Prometheus home).
-    #[arg(long)]
-    pub dry_run: bool,
-    /// Do not ask before writing (required without a terminal).
-    #[arg(long)]
-    pub yes: bool,
-    /// Keep the jobs Hermes had enabled enabled (stop the Hermes
-    /// scheduler first).
-    #[arg(long)]
-    pub enable_cron: bool,
-    /// Replace destination values that differ instead of reporting a
-    /// conflict.
-    #[arg(long)]
-    pub overwrite: bool,
+    /// Import an OpenClaw home (`~/.openclaw`, or the legacy
+    /// `~/.clawdbot` and `~/.moltbot`).
+    #[command(name = "from-openclaw")]
+    FromOpenClaw(OpenClawArgs),
+    /// Import Claude Code instructions, skills, MCP servers and command
+    /// permissions (`~/.claude`; credentials are never read).
+    FromClaudeCode(AgentArgs),
+    /// Import Codex CLI instructions, memories, skills and MCP servers
+    /// (`~/.codex`; credentials are never read).
+    FromCodex(AgentArgs),
+    /// Import Cursor rules, skills and MCP servers (`~/.cursor`;
+    /// credentials are never read).
+    FromCursor(AgentArgs),
+    /// List the other agents found on this machine and what each would
+    /// import.
+    Detect,
+    /// Re-run every registered Claude Code, Codex or Cursor import whose
+    /// source changed.
+    Sync(SyncArgs),
+    /// Archive a migrated agent's directories (`<name>.pre-migration`).
+    Cleanup(CleanupArgs),
+    /// Import one Claude Code or Codex CLI conversation as a session.
+    Sessions(SessionsArgs),
 }
 
 /// Runs a `migrate` subcommand; `profiles` are the `--profile` values.
@@ -68,74 +65,29 @@ pub struct FromHermesArgs {
 /// `migrate.source_missing` (66), `migrate.confirmation_required` (4),
 /// home errors.
 pub fn run(command: &MigrateCommand, ctx: &Context<'_>, profiles: &[String]) -> Result<u8, Error> {
-    let MigrateCommand::FromHermes(args) = command;
-    let options = options(args, ctx, profiles)?;
-    // The source is checked before anything is asked or written.
-    pmt_migrate::run::select(&options)?;
-    let home = pmt_config::home::resolve(ctx.home_flag, ctx.launch)?;
-    let host = host::MigrateHost::new(ctx.launch);
-    if !options.dry_run && !args.yes {
-        if !prompt::stdin_is_tty() {
-            let err = Error::new(
-                &codes::MIGRATE_CONFIRMATION_REQUIRED,
-                "refusing to migrate non-interactively without --yes",
-            )
-            .with_hint("rerun with --yes, or --dry-run to see the plan");
-            crate::output::print_error(&err, ctx.json);
-            return Ok(pmt_core::exit::APPROVAL_REQUIRED);
-        }
-        let plan = pmt_migrate::run(
-            &home,
-            &Options {
-                dry_run: true,
-                ..options.clone()
-            },
-            &host,
-        )?;
-        eprint!("{}", plan.summary());
-        if !prompt::confirm("Migrate these into Prometheus?")? {
-            eprintln!("nothing was migrated");
-            return Ok(pmt_core::exit::FAILURE);
-        }
+    use pmt_migrate::agents::Agent;
+    if !matches!(command, MigrateCommand::FromHermes(_)) && profiles.len() > 1 {
+        return Err(Error::new(
+            &codes::MIGRATE_USAGE,
+            "this command imports into one profile; give at most one --profile",
+        ));
     }
-    let report = pmt_migrate::run(&home, &options, &host)?;
-    show(&report, ctx.json)?;
-    Ok(if report.failed() {
-        pmt_core::exit::FAILURE
-    } else {
-        pmt_core::exit::SUCCESS
-    })
+    match command {
+        MigrateCommand::FromHermes(args) => hermes::run(args, ctx, profiles),
+        MigrateCommand::FromOpenClaw(args) => {
+            agents::run(Agent::OpenClaw, &args.common, Some(args), ctx)
+        }
+        MigrateCommand::FromClaudeCode(args) => agents::run(Agent::ClaudeCode, args, None, ctx),
+        MigrateCommand::FromCodex(args) => agents::run(Agent::Codex, args, None, ctx),
+        MigrateCommand::FromCursor(args) => agents::run(Agent::Cursor, args, None, ctx),
+        MigrateCommand::Detect => agents::detect(ctx),
+        MigrateCommand::Sync(args) => more::sync(args, ctx),
+        MigrateCommand::Cleanup(args) => more::cleanup(args, ctx),
+        MigrateCommand::Sessions(args) => more::sessions(args, ctx),
+    }
 }
 
-fn options(
-    args: &FromHermesArgs,
-    ctx: &Context<'_>,
-    profiles: &[String],
-) -> Result<Options, Error> {
-    let components = pmt_migrate::component::select(&args.only, &args.skip)?;
-    let hermes_home = if let Some(path) = &args.hermes_home {
-        path.clone()
-    } else {
-        let user = ctx.launch.user_home().ok_or_else(|| {
-            Error::new(
-                &codes::MIGRATE_SOURCE_MISSING,
-                "the user home is unknown; give --hermes-home",
-            )
-        })?;
-        pmt_migrate::default_hermes_home(user, ctx.launch.local_app_data().map(PathBuf::as_path))
-    };
-    Ok(Options {
-        hermes_home,
-        profiles: profiles.to_vec(),
-        all: args.all,
-        into_profile: args.into_profile.clone(),
-        components,
-        dry_run: args.dry_run,
-        enable_cron: args.enable_cron,
-        overwrite: args.overwrite,
-    })
-}
-
+/// Prints a report: the summary, or the whole report under `--json`.
 fn show(report: &Report, as_json: bool) -> Result<u8, Error> {
     for warning in &report.warnings {
         tracing::warn!("{warning}");
@@ -144,4 +96,50 @@ fn show(report: &Report, as_json: bool) -> Result<u8, Error> {
         return json(report);
     }
     print_raw(&report.summary())
+}
+
+/// The user home (`~`), where other agents keep their directories.
+fn user_home(ctx: &Context<'_>) -> Result<PathBuf, Error> {
+    ctx.launch.user_home().cloned().ok_or_else(|| {
+        Error::new(
+            &codes::MIGRATE_SOURCE_MISSING,
+            "the user home is unknown; give --source",
+        )
+    })
+}
+
+/// The Prometheus profile an import goes to: `--profile`, else the
+/// active one (`default` before the home exists).
+fn target_profile(ctx: &Context<'_>, home: &Path) -> Result<ProfileName, Error> {
+    if let Some(name) = ctx.profile {
+        return ProfileName::parse(name);
+    }
+    // Read without opening the home, which would create its layout.
+    match std::fs::read_to_string(home.join(pmt_config::layout::ACTIVE_PROFILE_FILE)) {
+        Ok(name) if !name.trim().is_empty() => ProfileName::parse(name.trim()),
+        _ => Ok(ProfileName::default_profile()),
+    }
+}
+
+/// Asks before writing: `Ok(None)` to go on, else the exit status (4
+/// without a terminal and without `--yes`, 1 when declined).
+fn confirm(question: &str, yes: bool, as_json: bool) -> Result<Option<u8>, Error> {
+    if yes {
+        return Ok(None);
+    }
+    if !prompt::stdin_is_tty() {
+        let err = Error::new(
+            &codes::MIGRATE_CONFIRMATION_REQUIRED,
+            "refusing to migrate non-interactively without --yes",
+        )
+        .with_hint("rerun with --yes, or --dry-run to see the plan");
+        crate::output::print_error(&err, as_json);
+        return Ok(Some(pmt_core::exit::APPROVAL_REQUIRED));
+    }
+    if prompt::confirm(question)? {
+        Ok(None)
+    } else {
+        eprintln!("nothing was changed");
+        Ok(Some(pmt_core::exit::FAILURE))
+    }
 }

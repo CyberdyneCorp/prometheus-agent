@@ -3226,6 +3226,7 @@ version = "0.1.0"
 dependencies = [
  "jiff",
  "md-5",
+ "pmt-backup",
  "pmt-config",
  "pmt-core",
  "pmt-cron",
@@ -3238,6 +3239,7 @@ dependencies = [
  "saphyr-parser",
  "serde",
  "serde_json",
+ "sha2 0.11.1",
  "tempfile",
  "toml",
  "toml_edit",

@@ -3,6 +3,7 @@
 //! then (unless a dry run) the writes. Planning reads only the Hermes
 //! profile; applying writes only the Prometheus profile.
 
+use std::cell::RefCell;
 use std::path::PathBuf;
 
 use pmt_config::ProfileScope;
@@ -12,6 +13,7 @@ use pmt_store::Store;
 use crate::component::Component;
 use crate::env::EnvEntry;
 use crate::host::Host;
+use crate::ledger::Ledger;
 use crate::report::Entry;
 use crate::source::SourceProfile;
 use crate::yaml::Doc;
@@ -55,6 +57,7 @@ impl Source<'_> {
 }
 
 /// The Prometheus side of one profile.
+#[derive(Clone)]
 pub struct Dest<'a> {
     /// The profile.
     pub scope: &'a ProfileScope,
@@ -66,6 +69,20 @@ pub struct Dest<'a> {
     pub host: &'a dyn Host,
     /// `<profile>/cache/migrate-<run-id>/` (removed when the run ends).
     pub staging: PathBuf,
+    /// The profile's migration ledger: steps read the previous run's
+    /// records and add theirs; it is saved when the component commits.
+    pub ledger: &'a RefCell<Ledger>,
+}
+
+/// An existing destination profile a dry run predicts against (read
+/// only).
+pub struct Existing<'a> {
+    /// The profile directory.
+    pub dir: &'a std::path::Path,
+    /// `--overwrite`.
+    pub overwrite: bool,
+    /// Its migration ledger.
+    pub ledger: &'a Ledger,
 }
 
 /// One component's plan.
@@ -81,9 +98,15 @@ pub trait Step {
         Vec::new()
     }
 
-    /// Dry run: marks the conflicts with the existing Prometheus profile
-    /// at `profile_dir`, reading it only.
-    fn predict(&mut self, _profile_dir: &std::path::Path, _overwrite: bool) {}
+    /// Dry run: marks the conflicts with an existing Prometheus profile,
+    /// reading it only.
+    fn predict(&mut self, _existing: &Existing<'_>) {}
+
+    /// Whether the step commits in parts (sessions, in batches): its
+    /// entries already say what was committed when it fails.
+    fn commits_in_parts(&self) -> bool {
+        false
+    }
 
     /// Writes the plan.
     ///

@@ -19,10 +19,11 @@ use serde_json::Value;
 
 use crate::component::Component;
 use crate::env::{self, Class, Transform};
-use crate::plan::{Dest, Source, Step};
+use crate::ledger;
+use crate::plan::{Dest, Existing, Source, Step};
 use crate::report::{Disposition, Entry};
 use crate::source::read_text;
-use crate::writes::Writes;
+use crate::writes::{self, Writes};
 
 /// Hermes credential files a profile may hold that Prometheus does not
 /// import (they are reported, never copied).
@@ -66,16 +67,34 @@ impl Step for SecretsStep {
         &mut self.entries
     }
 
-    fn predict(&mut self, profile_dir: &std::path::Path, overwrite: bool) {
-        self.writes
-            .predict(profile_dir, &mut self.entries, overwrite);
+    fn predict(&mut self, existing: &Existing<'_>) {
+        self.writes.predict(existing, &mut self.entries);
     }
 
     fn apply(&mut self, dest: &Dest<'_>) -> Result<(), Error> {
-        self.writes
-            .apply(dest.scope, &mut self.entries, dest.overwrite)?;
+        self.writes.apply(dest, &mut self.entries)?;
         let credentials = Credentials::new(dest.scope.secrets().store().clone());
         for s in &self.sign_ins {
+            // Tokens refresh on both sides, so a sign-in is compared by
+            // the Hermes tokens it came from, never by what is stored.
+            let key = format!("signin:{}/{}", s.provider, s.label);
+            let hash = ledger::digest(
+                format!(
+                    "{}\n{}",
+                    s.tokens.access_token.expose(),
+                    s.tokens.refresh_token.as_ref().map_or("", |t| t.expose())
+                )
+                .as_bytes(),
+            );
+            if dest
+                .ledger
+                .borrow()
+                .get(&key)
+                .is_some_and(|r| r.hash == hash)
+            {
+                writes::unchanged(&mut self.entries[s.entry]);
+                continue;
+            }
             let existing = credentials.subscription(&s.provider, &s.label)?;
             if existing.is_some() && !dest.overwrite {
                 let e = &mut self.entries[s.entry];
@@ -91,6 +110,7 @@ impl Step for SecretsStep {
                 ..Obtained::default()
             };
             credentials.save(&s.provider, &s.label, &s.tokens, &obtained)?;
+            dest.ledger.borrow_mut().record(key, hash.clone(), hash);
         }
         Ok(())
     }

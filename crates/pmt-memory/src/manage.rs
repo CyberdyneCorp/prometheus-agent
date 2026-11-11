@@ -357,6 +357,24 @@ pub fn import_with(
     redactor: &Redactor,
     limits: Limits,
 ) -> Result<Summary, Error> {
+    import_from(store, config, items, redactor, limits, None)
+}
+
+/// [`import_with`] recording `provenance` (for example
+/// `import:claude-code`) as the entries' origin session, the text the
+/// memory view shows for where an entry came from.
+///
+/// # Errors
+///
+/// As [`import`].
+pub fn import_from(
+    store: &Store,
+    config: &MemoryConfig,
+    items: &[Item],
+    redactor: &Redactor,
+    limits: Limits,
+    provenance: Option<&str>,
+) -> Result<Summary, Error> {
     let mut summary = Summary::default();
     let kept: Vec<&Item> = items
         .iter()
@@ -370,7 +388,7 @@ pub fn import_with(
     store.memory_batch(None, |b| {
         b.author = Some(pmt_store::Author {
             origin: MemoryOrigin::Import,
-            session: None,
+            session: provenance.map(str::to_owned),
         });
         let mut summary = Summary {
             secrets_skipped: skipped,
@@ -386,7 +404,12 @@ pub fn import_with(
             if ours.is_empty() {
                 continue;
             }
-            let ctx = write::context(config, target, MemoryOrigin::Import, None);
+            let ctx = write::context(
+                config,
+                target,
+                MemoryOrigin::Import,
+                provenance.map(str::to_owned),
+            );
             import_target(&mut entries, &ours, &ctx, &mut summary, limits).map_err(refused)?;
         }
         b.entries = entries;

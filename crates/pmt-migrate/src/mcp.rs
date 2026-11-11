@@ -15,7 +15,7 @@ use serde_json::{Map, Value, json};
 use crate::component::Component;
 use crate::config::{json_to_toml, refs};
 use crate::env::{self, Class};
-use crate::plan::{Dest, Source, Step};
+use crate::plan::{Dest, Existing, Source, Step};
 use crate::report::{Disposition, Entry};
 use crate::writes::Writes;
 
@@ -49,14 +49,12 @@ impl Step for McpStep {
         &mut self.entries
     }
 
-    fn predict(&mut self, profile_dir: &std::path::Path, overwrite: bool) {
-        self.writes
-            .predict(profile_dir, &mut self.entries, overwrite);
+    fn predict(&mut self, existing: &Existing<'_>) {
+        self.writes.predict(existing, &mut self.entries);
     }
 
     fn apply(&mut self, dest: &Dest<'_>) -> Result<(), Error> {
-        self.writes
-            .apply(dest.scope, &mut self.entries, dest.overwrite)
+        self.writes.apply(dest, &mut self.entries)
     }
 }
 

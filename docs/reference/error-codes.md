@@ -125,6 +125,9 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `migrate.source_missing` | `not_found` | 66 | No Hermes home exists at `--hermes-home` (default `~/.hermes`, `%LOCALAPPDATA%\hermes` on Windows). |
 | `migrate.usage` | `usage` | 2 | `--into-profile` needs exactly one `--profile`; `--profile` and `--all` exclude each other. |
 | `migrate.confirmation_required` | `permission_denied` | 77 | Without a terminal the migration cannot ask before writing; rerun with `--yes` (exit 4). Nothing was written. |
+| `migrate.interrupted` | `cancelled` | 130 | The migration stopped at a commit boundary: every committed component and session batch is kept and recorded in the ledger; rerun the same command to continue. |
+| `migrate.source_busy` | `conflict` | 75 | The other agent is running and holds the directory `migrate cleanup` would archive (exit 75); stop it and rerun. Nothing was renamed. |
+| `migrate.destination` | `io` | 74 | The Prometheus home or profile cannot be created or written (permissions, read-only file system); nothing of that profile was imported (exit 73). |
 | `migrate.component` | `invalid_input` | 65 | A component of the Hermes profile could not be imported (an unsupported config or state.db version, an unreadable file); the other components proceed and the report names the cause. |
 | `store.fork_target_invalid` | `invalid_input` | 65 | `session.fork` names an `at_message_id` that is not an active message of the forked session. |
 | `store.rewind_conflict` | `conflict` | 75 | The messages the rewind or restore expected changed in the meantime; nothing changed. Look at the transcript again and retry. |

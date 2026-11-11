@@ -137,3 +137,70 @@ pub fn attributes(root: &Path) -> BTreeMap<PathBuf, (Vec<u8>, u64, u32, std::tim
     }
     out
 }
+
+/// The source homes the migration guide's commands run against
+/// (`docs/guide/migration.md`): a Hermes home with config, a secret,
+/// memory, identity and one session, a Claude Code home, a Codex CLI
+/// rollout and an OpenClaw home, all in `user_home`.
+pub fn guide_fixture(user_home: &Path) {
+    let write = |rel: &str, text: &str| {
+        let path = user_home.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    };
+    let h = Hermes::new(&user_home.join(".hermes"));
+    h.write(
+        "default",
+        "config.yaml",
+        "_config_version: 52\nmodel:\n  default: claude-sonnet-4\n  provider: anthropic\nmax_turns: 60\n",
+    );
+    h.write("default", ".env", "ANTHROPIC_API_KEY=sk-ant-guide\n");
+    h.write("default", "SOUL.md", "You are calm and precise.\n");
+    h.write(
+        "default",
+        "memories/MEMORY.md",
+        "uses tabs\n§\nprefers rust\n",
+    );
+    let db = h.db("default", 32);
+    add_session(
+        &db,
+        &Session {
+            id: "20260301_101500_a1b2c3",
+            started_at: 1_772_360_100.0,
+            title: Some("Profiling"),
+            ..Session::default()
+        },
+    );
+    add_message(
+        &db,
+        "20260301_101500_a1b2c3",
+        "user",
+        "why is the build slow",
+        1_772_360_101.0,
+    );
+    write(".claude/CLAUDE.md", "# Style\n\nUse tabs.\n");
+    write(
+        ".claude/skills/review/SKILL.md",
+        "---\nname: review\ndescription: Review a diff.\n---\nRead the diff carefully.\n",
+    );
+    write(
+        ".claude/settings.json",
+        r#"{"permissions": {"allow": ["Bash(npm run test:*)", "WebFetch"]}}"#,
+    );
+    write(
+        ".codex/sessions/2026/11/01/rollout-2026-11-01T10-00-00-guide.jsonl",
+        concat!(
+            r#"{"type":"session_meta","payload":{"id":"019a7c2e-guide"}}"#,
+            "\n",
+            r#"{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"rename the module"}]}}"#,
+            "\n",
+            r#"{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Renamed."}]}}"#,
+            "\n"
+        ),
+    );
+    write(
+        ".openclaw/openclaw.json",
+        r#"{"agents": {"defaults": {"thinkingDefault": "adaptive", "userTimezone": "Europe/Lisbon"}}, "models": {"providers": {"acme": {"baseUrl": "https://llm.acme.test/v1", "apiKey": "acme-guide"}}}}"#,
+    );
+    write(".openclaw/workspace/MEMORY.md", "lives in Lisbon\n");
+}

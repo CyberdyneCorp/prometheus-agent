@@ -1,18 +1,21 @@
 //! Config keys and secrets a component writes, applied as one unit.
 //!
-//! A destination that already holds another value keeps it and the item
-//! becomes a `conflict` (spec: hermes-migration, Idempotent incremental
-//! re-run) unless `--overwrite` is given. The config keys go in one
+//! Each item is decided against the migration ledger ([`crate::ledger`]):
+//! a destination edited since the previous run keeps its value and the
+//! item becomes a `conflict` (spec: hermes-migration, Idempotent
+//! incremental re-run) unless `--overwrite` is given. The config keys go in one
 //! validated write ([`pmt_config::ConfigFile::set_values`]), so a component
 //! never leaves a half-written `config.toml`.
 
-use std::path::Path;
+use std::collections::BTreeMap;
 
 use pmt_config::ProfileScope;
 use pmt_core::error::Error;
 use pmt_core::secret::SecretString;
-use toml_edit::{DocumentMut, Item, Value};
+use toml_edit::Value;
 
+use crate::ledger::{Decision, Ledger, UNCHANGED, decide, digest};
+use crate::plan::{Dest, Existing};
 use crate::report::{Disposition, Entry};
 
 /// A config key to write, with the report entry it belongs to.
@@ -65,21 +68,46 @@ impl Writes {
         });
     }
 
-    /// Writes everything into `scope`'s profile, turning entries whose
-    /// destination differs into conflicts unless `overwrite`.
+    /// Writes everything into the destination profile. Against the
+    /// ledger: an item whose source did not change since the last run is
+    /// left alone, and a destination that differs is replaced only while
+    /// it still holds what the previous run wrote; otherwise it is kept
+    /// as a conflict unless `--overwrite`.
     ///
     /// # Errors
     ///
     /// The config file's or the secrets store's errors; nothing of the
     /// config is written then.
-    pub fn apply(
+    pub fn apply(&self, dest: &Dest<'_>, entries: &mut [Entry]) -> Result<(), Error> {
+        let ledger = dest.ledger.borrow().clone();
+        let records = self.write(dest.scope, entries, dest.overwrite, &ledger)?;
+        let mut ledger = dest.ledger.borrow_mut();
+        for (key, hash, written) in records {
+            ledger.record(key, hash, written);
+        }
+        Ok(())
+    }
+
+    /// Writes everything, replacing differing values: for lists the
+    /// component already merged with the destination's.
+    ///
+    /// # Errors
+    ///
+    /// As [`Writes::apply`].
+    pub fn apply_merged(&self, scope: &ProfileScope, entries: &mut [Entry]) -> Result<(), Error> {
+        self.write(scope, entries, true, &Ledger::detached())
+            .map(drop)
+    }
+
+    fn write(
         &self,
         scope: &ProfileScope,
         entries: &mut [Entry],
         overwrite: bool,
-    ) -> Result<(), Error> {
+        ledger: &Ledger,
+    ) -> Result<Vec<(String, String, String)>, Error> {
         let store = scope.secrets().store();
-        let mut current = std::collections::BTreeMap::new();
+        let mut current = BTreeMap::new();
         for s in &self.secrets {
             if let Some(value) = store.get(&s.name)? {
                 current.insert(s.name.clone(), value.expose().to_owned());
@@ -87,93 +115,138 @@ impl Writes {
         }
         let file = scope.profile().config_file();
         let text = file.raw()?.unwrap_or_default();
-        let (keys, secrets) = self.pending(&text, &current, entries, overwrite);
-        if !keys.is_empty() {
-            file.set_values(&keys)?;
+        let pending = self.pending(&text, &current, entries, overwrite, ledger);
+        if !pending.keys.is_empty() {
+            file.set_values(&pending.keys)?;
         }
-        for s in secrets {
+        for s in pending.secrets {
             store.set(&s.name, &s.value)?;
         }
-        Ok(())
+        Ok(pending.records)
     }
 
-    /// What a dry run predicts: the conflicts with an existing profile at
-    /// `profile_dir`, read without writing (`config.toml`, and
-    /// `secrets.toml` of the file backend).
-    pub fn predict(&self, profile_dir: &Path, entries: &mut [Entry], overwrite: bool) {
-        let text = std::fs::read_to_string(profile_dir.join("config.toml")).unwrap_or_default();
-        let secrets: std::collections::BTreeMap<String, String> =
-            std::fs::read_to_string(profile_dir.join("secrets.toml"))
-                .ok()
-                .and_then(|t| toml::from_str::<toml::Table>(&t).ok())
-                .map(|t| {
-                    t.into_iter()
-                        .filter_map(|(k, v)| v.as_str().map(|v| (k, v.to_owned())))
-                        .collect()
-                })
-                .unwrap_or_default();
-        let _ = self.pending(&text, &secrets, entries, overwrite);
+    /// What a dry run predicts: the conflicts with an existing profile,
+    /// read without writing (`config.toml`, and `secrets.toml` of the
+    /// file backend).
+    pub fn predict(&self, existing: &Existing<'_>, entries: &mut [Entry]) {
+        let dir = existing.dir;
+        let text = std::fs::read_to_string(dir.join("config.toml")).unwrap_or_default();
+        let secrets: BTreeMap<String, String> = std::fs::read_to_string(dir.join("secrets.toml"))
+            .ok()
+            .and_then(|t| toml::from_str::<toml::Table>(&t).ok())
+            .map(|t| {
+                t.into_iter()
+                    .filter_map(|(k, v)| v.as_str().map(|v| (k, v.to_owned())))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let _ = self.pending(
+            &text,
+            &secrets,
+            entries,
+            existing.overwrite,
+            existing.ledger,
+        );
     }
 
     /// The keys and secrets to write given the destination's `config`
-    /// text and `secrets`; the others become conflicts (unless
-    /// `overwrite`) or need nothing (equal values).
+    /// text and `secrets`, and the ledger records of what gets written
+    /// or already matches; the other entries become conflicts or are left
+    /// alone.
     fn pending(
         &self,
         config: &str,
-        secrets: &std::collections::BTreeMap<String, String>,
+        secrets: &BTreeMap<String, String>,
         entries: &mut [Entry],
         overwrite: bool,
-    ) -> (Vec<(String, Value)>, Vec<&SecretWrite>) {
-        let mut writes = Vec::new();
+        ledger: &Ledger,
+    ) -> Pending<'_> {
+        let mut out = Pending::default();
         for s in &self.secrets {
-            match secrets.get(&s.name) {
-                Some(old) if old == s.value.expose() => {}
-                Some(_) if !overwrite => {
-                    conflict(
-                        &mut entries[s.entry],
-                        "the secrets store holds another value",
-                    );
-                }
-                _ => writes.push(s),
+            let key = format!("secret:{}", s.name);
+            let new = digest(s.value.expose().as_bytes());
+            let current = secrets.get(&s.name).map(|v| digest(v.as_bytes()));
+            let decision = decide(ledger.get(&key), &new, &new, current.as_deref(), overwrite);
+            if settle(
+                decision,
+                &mut entries[s.entry],
+                "the secrets store holds another value",
+            ) {
+                out.secrets.push(s);
+            }
+            if matches!(decision, Decision::Write | Decision::Same) {
+                out.records.push((key, new.clone(), new));
             }
         }
-        let doc: DocumentMut = config.parse().unwrap_or_default();
-        let mut keys = Vec::new();
+        let doc: toml::Table = toml::from_str(config).unwrap_or_default();
         for k in &self.config {
-            match lookup(&doc, &k.key) {
-                Some(old) if same(old, &k.value) => {}
-                Some(_) if !overwrite => conflict(
-                    &mut entries[k.entry],
-                    &format!("config.toml already sets {}", k.key),
-                ),
-                _ => keys.push((k.key.clone(), k.value.clone())),
+            let key = format!("config:{}", k.key);
+            let new = normalize(&k.value).map_or_else(|| k.value.to_string(), |v| v.to_string());
+            let current = lookup_value(&doc, &k.key).map(ToString::to_string);
+            let hash = digest(new.as_bytes());
+            let decision = decide(ledger.get(&key), &hash, &new, current.as_deref(), overwrite);
+            let why = format!("config.toml already sets {}", k.key);
+            if settle(decision, &mut entries[k.entry], &why) {
+                out.keys.push((k.key.clone(), k.value.clone()));
+            }
+            if matches!(decision, Decision::Write | Decision::Same) {
+                out.records.push((key, hash, new));
             }
         }
-        (keys, writes)
+        out
     }
 }
 
-fn conflict(entry: &mut Entry, why: &str) {
+/// What [`Writes::pending`] found to do.
+#[derive(Default)]
+struct Pending<'a> {
+    keys: Vec<(String, Value)>,
+    secrets: Vec<&'a SecretWrite>,
+    /// Ledger key, source hash and written value of each item written or
+    /// matching.
+    records: Vec<(String, String, String)>,
+}
+
+/// Applies `decision` to `entry`; `true` when the value must be written.
+pub(crate) fn settle(decision: Decision, entry: &mut Entry, conflict_why: &str) -> bool {
+    match decision {
+        Decision::Write => true,
+        Decision::Same => false,
+        Decision::Unchanged => {
+            unchanged(entry);
+            false
+        }
+        Decision::Conflict => {
+            conflict(entry, conflict_why);
+            false
+        }
+    }
+}
+
+/// Marks `entry` as left alone by a re-run.
+pub(crate) fn unchanged(entry: &mut Entry) {
+    if !matches!(
+        entry.disposition,
+        Disposition::Failed | Disposition::Unsupported | Disposition::Conflict
+    ) {
+        entry.disposition = Disposition::Skipped;
+        UNCHANGED.clone_into(&mut entry.reason);
+    }
+}
+
+/// The value at dotted `key` of a parsed `config.toml`.
+fn lookup_value<'a>(doc: &'a toml::Table, key: &str) -> Option<&'a toml::Value> {
+    let mut segments = key.split('.');
+    let mut value = doc.get(segments.next()?)?;
+    for segment in segments {
+        value = value.as_table()?.get(segment)?;
+    }
+    Some(value)
+}
+
+pub(crate) fn conflict(entry: &mut Entry, why: &str) {
     entry.disposition = Disposition::Conflict;
     entry.reason = format!("{why}; kept (use --overwrite to replace it)");
-}
-
-/// The item at dotted `key` of `doc` (a value or a table).
-#[must_use]
-pub fn lookup<'a>(doc: &'a DocumentMut, key: &str) -> Option<&'a Item> {
-    let mut item: &Item = doc.as_item();
-    for segment in key.split('.') {
-        item = item.as_table_like()?.get(segment)?;
-    }
-    Some(item)
-}
-
-/// Whether the existing `item` holds `value` (a table never compares
-/// equal: it was written by hand).
-fn same(item: &Item, value: &Value) -> bool {
-    item.as_value()
-        .is_some_and(|old| normalize(old) == normalize(value))
 }
 
 /// `v` as a plain TOML value, so formatting differences compare equal.
