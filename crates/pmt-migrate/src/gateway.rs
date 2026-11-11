@@ -20,9 +20,10 @@ use crate::component::Component;
 use crate::config::{flatten, json_to_toml};
 use crate::env::{self, Class};
 use crate::host::Registry;
+use crate::ledger;
 use crate::plan::{Dest, Existing, Source, Step};
 use crate::report::{Disposition, Entry};
-use crate::writes::Writes;
+use crate::writes::{self, Writes};
 
 /// `.env` prefixes and their platform, longest first.
 const PREFIXES: &[(&str, &str)] = &[
@@ -99,26 +100,57 @@ impl Step for GatewayStep {
 
     fn predict(&mut self, existing: &Existing<'_>) {
         self.writes.predict(existing, &mut self.entries);
+        for p in &self.pairings {
+            if existing.ledger.get(&p.key()).is_some() {
+                writes::unchanged(&mut self.entries[p.entry]);
+            }
+        }
     }
 
     fn apply(&mut self, dest: &Dest<'_>) -> Result<(), Error> {
         self.writes.apply(dest, &mut self.entries)?;
         for p in &self.pairings {
-            #[allow(clippy::cast_possible_truncation)]
-            let at =
-                p.at.and_then(|s| Timestamp::from_millisecond((s * 1000.0) as i64).ok())
-                    .unwrap_or_else(Timestamp::now);
-            let added = dest
-                .store
-                .adopt_pairing(&p.platform, &p.user, p.name.as_deref(), at)?;
-            if !added {
-                let e = &mut self.entries[p.entry];
-                e.disposition = Disposition::Skipped;
-                "already approved".clone_into(&mut e.reason);
-            }
+            adopt(p, dest, &mut self.entries[p.entry])?;
         }
         Ok(())
     }
+}
+
+impl Pairing {
+    /// The ledger key. The approval itself is the item: a later change
+    /// of the sender's name or approval time in Hermes does not make it
+    /// new again, so a sender revoked in Prometheus stays revoked.
+    fn key(&self) -> String {
+        format!("pairing:{}:{}", self.platform, self.user)
+    }
+}
+
+/// Approves one Hermes sender unless an earlier run already imported the
+/// approval (spec: hermes-migration, Idempotent incremental re-run).
+fn adopt(p: &Pairing, dest: &Dest<'_>, entry: &mut Entry) -> Result<(), Error> {
+    let key = p.key();
+    if dest.ledger.borrow().get(&key).is_some() {
+        writes::unchanged(entry);
+        return Ok(());
+    }
+    #[allow(clippy::cast_possible_truncation)]
+    let at =
+        p.at.and_then(|s| Timestamp::from_millisecond((s * 1000.0) as i64).ok())
+            .unwrap_or_else(Timestamp::now);
+    let before = dest.store.pairing_row(&p.platform, &p.user)?;
+    if dest
+        .store
+        .adopt_pairing(&p.platform, &p.user, p.name.as_deref(), at)?
+    {
+        let (platform, user) = (p.platform.clone(), p.user.clone());
+        dest.on_undo(move |store| store.restore_pairing(&platform, &user, before.as_ref()));
+    } else {
+        entry.disposition = Disposition::Skipped;
+        "already approved".clone_into(&mut entry.reason);
+    }
+    let hash = ledger::digest(key.as_bytes());
+    dest.ledger.borrow_mut().record(key, hash, "approved");
+    Ok(())
 }
 
 /// Plans the gateway component.

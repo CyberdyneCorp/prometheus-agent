@@ -11,6 +11,7 @@ use pmt_memory::manage::{self, Item, Limits};
 
 use crate::component::Component;
 use crate::ledger::{self, Decision};
+use crate::memory::Fresh;
 use crate::plan::{Dest, Existing, Step};
 use crate::report::{Disposition, Entry};
 use crate::skills::{self, QUARANTINE_DIR};
@@ -71,8 +72,8 @@ impl Step for WritesStep {
 pub struct MemoryStep {
     /// One entry per source file.
     pub entries: Vec<Entry>,
-    /// Entry index, ledger key and content hash of each file.
-    pub files: Vec<(usize, String, String)>,
+    /// Entry index and ledger key of each file.
+    pub files: Vec<(usize, String)>,
     /// The items, with the index of their file's entry.
     pub items: Vec<(usize, Item)>,
     /// `import:<source>`.
@@ -89,52 +90,31 @@ impl Step for MemoryStep {
     }
 
     fn apply(&mut self, dest: &Dest<'_>) -> Result<(), Error> {
-        let mut fresh = Vec::new();
-        for (index, key, hash) in &self.files {
-            if dest
-                .ledger
-                .borrow()
-                .get(key)
-                .is_some_and(|r| r.hash == *hash)
-            {
-                writes::unchanged(&mut self.entries[*index]);
-            } else {
-                fresh.push(*index);
-            }
-        }
-        let items: Vec<Item> = self
-            .items
-            .iter()
-            .filter(|(i, _)| fresh.contains(i))
-            .map(|(_, item)| item.clone())
-            .collect();
-        if !items.is_empty() {
+        let fresh = Fresh::of(dest, &self.files, &self.items, &mut self.entries);
+        let files: Vec<usize> = self.files.iter().map(|(i, _)| *i).collect();
+        fresh.import(dest, |items| {
             let redactor = dest.scope.secrets().redactor()?;
             let summary = manage::import_from(
                 dest.store,
                 &dest.scope.config().memory,
-                &items,
+                items,
                 &redactor,
                 Limits::Exceed,
                 Some(&self.provenance),
             )?;
             if summary.duplicates > 0 {
-                for i in &fresh {
-                    let e = &mut self.entries[*i];
-                    e.reason = format!(
-                        "{}; {} already in memory, not added again",
-                        e.reason, summary.duplicates
-                    );
+                for i in files {
+                    let e = &mut self.entries[i];
+                    if e.disposition != Disposition::Skipped {
+                        e.reason = format!(
+                            "{}; {} already in memory, not added again",
+                            e.reason, summary.duplicates
+                        );
+                    }
                 }
             }
-        }
-        let mut ledger = dest.ledger.borrow_mut();
-        for (index, key, hash) in &self.files {
-            if fresh.contains(index) {
-                ledger.record(key.clone(), hash.clone(), hash.clone());
-            }
-        }
-        Ok(())
+            Ok(())
+        })
     }
 }
 
@@ -267,14 +247,15 @@ impl Step for SkillsStep {
             let mut w = Writes::default();
             let list = toml_edit::Value::Array(disabled.iter().map(String::as_str).collect());
             w.key("skills.disabled", list, 0);
-            w.apply_merged(dest.scope, &mut self.entries)?;
+            w.apply_merged(dest, &mut self.entries)?;
         }
         Ok(())
     }
 }
 
 /// Command patterns: permanent approvals in `grants.toml` and user deny
-/// rules in `approvals.deny`.
+/// rules in `approvals.deny`, recorded in the ledger as
+/// `approval:<pattern>` and `deny:<pattern>`.
 pub struct ApprovalsStep {
     /// The entries.
     pub entries: Vec<Entry>,
@@ -295,21 +276,21 @@ impl Step for ApprovalsStep {
 
     fn apply(&mut self, dest: &Dest<'_>) -> Result<(), Error> {
         let grants = GrantsFile::of(dest.scope.profile());
+        let allowed = grants.load()?.allow;
         for (index, pattern) in &self.allow {
-            if !grants.allow_command(pattern)? {
-                let e = &mut self.entries[*index];
-                e.disposition = Disposition::Skipped;
-                "already approved".clone_into(&mut e.reason);
+            let e = &mut self.entries[*index];
+            let key = format!("approval:{pattern}");
+            if settle_pattern(dest, e, &key, allowed.contains(pattern), "already approved") {
+                dest.keep(grants.path())?;
+                grants.allow_command(pattern)?;
             }
         }
         let current = &dest.scope.config().approvals.deny;
         let mut deny = current.clone();
         for (index, pattern) in &self.deny {
-            if deny.contains(pattern) {
-                let e = &mut self.entries[*index];
-                e.disposition = Disposition::Skipped;
-                "already denied".clone_into(&mut e.reason);
-            } else {
+            let e = &mut self.entries[*index];
+            let key = format!("deny:{pattern}");
+            if settle_pattern(dest, e, &key, deny.contains(pattern), "already denied") {
                 deny.push(pattern.clone());
             }
         }
@@ -317,10 +298,34 @@ impl Step for ApprovalsStep {
             let mut w = Writes::default();
             let list = toml_edit::Value::Array(deny.iter().map(String::as_str).collect());
             w.key("approvals.deny", list, self.deny[0].0);
-            w.apply_merged(dest.scope, &mut self.entries)?;
+            w.apply_merged(dest, &mut self.entries)?;
         }
         Ok(())
     }
+}
+
+/// Settles one command pattern against the ledger and records it; `true`
+/// when it must be added. A pattern an earlier run imported is left
+/// alone, so one the user removed in Prometheus stays removed.
+fn settle_pattern(
+    dest: &Dest<'_>,
+    entry: &mut Entry,
+    key: &str,
+    present: bool,
+    present_why: &str,
+) -> bool {
+    let mut ledger = dest.ledger.borrow_mut();
+    if ledger.get(key).is_some() {
+        writes::unchanged(entry);
+        return false;
+    }
+    let hash = ledger::digest(key.as_bytes());
+    ledger.record(key, hash.clone(), hash);
+    if present {
+        entry.disposition = Disposition::Skipped;
+        present_why.clone_into(&mut entry.reason);
+    }
+    !present
 }
 
 /// One text file written whole (an identity file, a workspace
@@ -366,6 +371,7 @@ impl Step for FileStep {
             writes::settle(decision, e, &why);
         }
         if decision == Decision::Write {
+            dest.keep(&path)?;
             write_file(&path, &self.content)?;
         }
         if matches!(decision, Decision::Write | Decision::Same) {

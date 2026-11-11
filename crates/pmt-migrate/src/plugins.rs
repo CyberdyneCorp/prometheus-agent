@@ -68,8 +68,21 @@ impl Step for PluginsStep {
             return Ok(());
         };
         let dir = dir.as_path();
+        for (id, _) in &self.planned {
+            dest.keep(&dest.scope.dir().join("plugins").join(id))?;
+        }
         let settled = self.prepare(dir, dest)?;
-        let outcomes = dest.host.import_plugins(dest.scope, dir, &self.enabled)?;
+        // A plugin left alone by the ledger is not copied again, even when
+        // the user removed it from the profile.
+        let skip: Vec<String> = self
+            .planned
+            .iter()
+            .filter(|(_, index)| settled.contains(index))
+            .map(|(id, _)| id.clone())
+            .collect();
+        let outcomes = dest
+            .host
+            .import_plugins(dest.scope, dir, &self.enabled, &skip)?;
         for outcome in outcomes {
             let Some((_, index)) = self.planned.iter().find(|(id, _)| *id == outcome.id) else {
                 continue;

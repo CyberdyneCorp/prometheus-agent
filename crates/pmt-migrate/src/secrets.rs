@@ -109,6 +109,9 @@ impl Step for SecretsStep {
                 source: "import:hermes".to_owned(),
                 ..Obtained::default()
             };
+            for name in Credentials::secret_names(&s.provider, &s.label) {
+                dest.keep_secret(&name)?;
+            }
             credentials.save(&s.provider, &s.label, &s.tokens, &obtained)?;
             dest.ledger.borrow_mut().record(key, hash.clone(), hash);
         }

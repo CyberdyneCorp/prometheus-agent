@@ -114,6 +114,19 @@ fn hash(salt: &str, code: &str) -> String {
     hex(&Sha256::digest(format!("{salt}:{code}").as_bytes()))
 }
 
+/// One stored pairing entry, verbatim (see [`Store::pairing_row`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PairingRow {
+    chat_id: String,
+    sender_name: Option<String>,
+    state: String,
+    code_salt: Option<String>,
+    code_hash: Option<String>,
+    requested_at: i64,
+    expires_at: Option<i64>,
+    approved_at: Option<i64>,
+}
+
 fn pairing_from_row(row: &Row<'_>) -> rusqlite::Result<Pairing> {
     Ok(Pairing {
         platform: row.get(0)?,
@@ -418,6 +431,83 @@ impl Store {
             )
             .map_err(sql)?;
             Ok(true)
+        })
+    }
+
+    /// The whole entry of `sender_id` on `platform` as stored, to put
+    /// back with [`Store::restore_pairing`] (a migration undoing the
+    /// senders it adopted).
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`.
+    pub fn pairing_row(
+        &self,
+        platform: &str,
+        sender_id: &str,
+    ) -> Result<Option<PairingRow>, Error> {
+        self.read(|conn| {
+            conn.query_row(
+                "SELECT chat_id, sender_name, state, code_salt, code_hash, requested_at, \
+                 expires_at, approved_at FROM gateway_pairing WHERE platform = ?1 AND sender_id = ?2",
+                params![platform, sender_id],
+                |row| {
+                    Ok(PairingRow {
+                        chat_id: row.get(0)?,
+                        sender_name: row.get(1)?,
+                        state: row.get(2)?,
+                        code_salt: row.get(3)?,
+                        code_hash: row.get(4)?,
+                        requested_at: row.get(5)?,
+                        expires_at: row.get(6)?,
+                        approved_at: row.get(7)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(sql)
+        })
+    }
+
+    /// Puts the entry of `sender_id` on `platform` back as `row` held it
+    /// (`None`: no entry).
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`.
+    pub fn restore_pairing(
+        &self,
+        platform: &str,
+        sender_id: &str,
+        row: Option<&PairingRow>,
+    ) -> Result<(), Error> {
+        self.write(|tx| {
+            tx.execute(
+                "DELETE FROM gateway_pairing WHERE platform = ?1 AND sender_id = ?2",
+                params![platform, sender_id],
+            )
+            .map_err(sql)?;
+            if let Some(r) = row {
+                tx.execute(
+                    "INSERT INTO gateway_pairing (platform, sender_id, chat_id, sender_name, state, \
+                     code_salt, code_hash, requested_at, expires_at, approved_at) \
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                    params![
+                        platform,
+                        sender_id,
+                        r.chat_id,
+                        r.sender_name,
+                        r.state,
+                        r.code_salt,
+                        r.code_hash,
+                        r.requested_at,
+                        r.expires_at,
+                        r.approved_at
+                    ],
+                )
+                .map_err(sql)?;
+            }
+            Ok(())
         })
     }
 

@@ -149,6 +149,78 @@ fn a_skill_edited_in_prometheus_is_kept_by_a_sync() {
     );
 }
 
+/// The memory entries of the default profile.
+fn memories(home: &Path) -> Vec<(String, String)> {
+    let db = Connection::open(home.join("profiles/default/state.db")).unwrap();
+    let mut stmt = db
+        .prepare("SELECT id, content FROM memory_entries ORDER BY created_at, id")
+        .unwrap();
+    stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect()
+}
+
+#[test]
+fn approvals_and_memory_removed_in_prometheus_stay_removed_after_a_sync() {
+    let tmp = common::temp_home();
+    let home = tmp.path();
+    let source = claude(home);
+    write(&source.join("CLAUDE.md"), "Use tabs.\n\nPrefer rust.\n");
+    write(
+        &source.join("settings.json"),
+        r#"{"permissions": {"allow": ["Bash(npm test)"], "deny": ["Bash(rm -rf:*)"]}}"#,
+    );
+    let state = common::user_home(home).join(".claude.json");
+    write(&state, r#"{"numStartups": 1, "mcpServers": {}}"#);
+    ok(&migrate(
+        home,
+        &["from-claude-code", "--yes", "--no-backup"],
+    ));
+    let profile = home.join("profiles/default");
+    let grants = std::fs::read_to_string(profile.join("grants.toml")).unwrap();
+    assert!(grants.contains("npm test"), "{grants}");
+    let config = std::fs::read_to_string(profile.join("config.toml")).unwrap();
+    assert!(config.contains("rm -rf*"), "{config}");
+
+    // Claude Code rewrites its state file on every launch: no sync.
+    write(&state, r#"{"numStartups": 2, "mcpServers": {}}"#);
+    assert_eq!(
+        synced(&migrate(home, &["sync"]))["status"],
+        "skipped: unchanged"
+    );
+
+    // The user drops the approval, the deny rule and one memory entry.
+    std::fs::write(
+        profile.join("grants.toml"),
+        grants.replace("\"npm test\"", ""),
+    )
+    .unwrap();
+    std::fs::write(
+        profile.join("config.toml"),
+        config.replace("\"rm -rf*\"", ""),
+    )
+    .unwrap();
+    let (rust, _) = memories(home)
+        .into_iter()
+        .find(|(_, c)| c == "Prefer rust.")
+        .unwrap();
+    ok(&common::run(home, &["--json", "memory", "rm", &rust]));
+
+    write(
+        &source.join("CLAUDE.md"),
+        "Use tabs.\n\nPrefer rust.\n\nWrite tests first.\n",
+    );
+    let result = synced(&migrate(home, &["sync"]));
+    assert_eq!(result["status"], "synced", "{result:#}");
+    let contents: Vec<String> = memories(home).into_iter().map(|(_, c)| c).collect();
+    assert_eq!(contents, ["Use tabs.", "Write tests first."], "{result:#}");
+    let grants = std::fs::read_to_string(profile.join("grants.toml")).unwrap();
+    assert!(!grants.contains("npm test"), "{grants}");
+    let config = std::fs::read_to_string(profile.join("config.toml")).unwrap();
+    assert!(!config.contains("rm -rf*"), "{config}");
+}
+
 fn session_count(home: &Path) -> i64 {
     Connection::open(home.join("profiles/default/state.db"))
         .unwrap()

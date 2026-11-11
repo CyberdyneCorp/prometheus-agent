@@ -4,7 +4,7 @@
 //! profile; applying writes only the Prometheus profile.
 
 use std::cell::RefCell;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use pmt_config::ProfileScope;
 use pmt_core::error::Error;
@@ -16,6 +16,7 @@ use crate::host::Host;
 use crate::ledger::Ledger;
 use crate::report::Entry;
 use crate::source::SourceProfile;
+use crate::undo::Undo;
 use crate::yaml::Doc;
 
 /// The Hermes side of one profile, read once and shared by the
@@ -72,6 +73,36 @@ pub struct Dest<'a> {
     /// The profile's migration ledger: steps read the previous run's
     /// records and add theirs; it is saved when the component commits.
     pub ledger: &'a RefCell<Ledger>,
+    /// How to take back what the component wrote when it does not
+    /// commit: every write records its undo here first.
+    pub undo: &'a RefCell<Undo>,
+}
+
+impl Dest<'_> {
+    /// Records `path` (a file or directory) before it is changed.
+    ///
+    /// # Errors
+    ///
+    /// As [`Undo::path`].
+    pub fn keep(&self, path: &Path) -> Result<(), Error> {
+        self.undo.borrow_mut().path(path)
+    }
+
+    /// Records the profile's secret `name` before it is set or removed.
+    ///
+    /// # Errors
+    ///
+    /// As [`Undo::secret`].
+    pub fn keep_secret(&self, name: &str) -> Result<(), Error> {
+        self.undo
+            .borrow_mut()
+            .secret(self.scope.secrets().store(), name)
+    }
+
+    /// Records how to revert a store change just made.
+    pub fn on_undo(&self, revert: impl FnOnce(&Store) -> Result<(), Error> + 'static) {
+        self.undo.borrow_mut().store(revert);
+    }
 }
 
 /// An existing destination profile a dry run predicts against (read

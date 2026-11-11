@@ -74,6 +74,7 @@ impl Step for SkillsStep {
             if decision == Decision::Write
                 && let Some(hub) = &c.hub
             {
+                dest.keep(lock.path())?;
                 lock.upsert(lockfile::Entry {
                     content_digest: digest_of(&target),
                     ..hub.clone()
@@ -95,7 +96,7 @@ impl Step for SkillsStep {
             self.writes.key("skills.disabled", list, index);
         }
         // The list is merged with the profile's, so it never conflicts.
-        self.writes.apply_merged(dest.scope, &mut self.entries)
+        self.writes.apply_merged(dest, &mut self.entries)
     }
 }
 
@@ -124,6 +125,7 @@ pub(crate) fn install(
     );
     match decision {
         Decision::Write => {
+            dest.keep(target)?;
             if target.exists() {
                 std::fs::remove_dir_all(target)
                     .map_err(|e| Error::io_doing(&codes::HOME_IO, "cannot replace", target, &e))?;

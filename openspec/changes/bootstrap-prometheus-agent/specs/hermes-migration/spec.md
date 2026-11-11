@@ -251,14 +251,24 @@ The system SHALL record in a migration ledger (`<profile>/migrations/hermes-ledg
 - **WHEN** the migration runs again
 - **THEN** the 4 messages SHALL be appended to the existing Prometheus session
 
+#### Scenario: Revoked sender stays revoked
+- **GIVEN** a Telegram sender approved through Hermes pairing, migrated, then revoked with `prometheus pairing revoke`
+- **WHEN** the migration runs again against the unchanged Hermes home
+- **THEN** the sender SHALL stay revoked and the report SHALL list the pairing as `skipped` (unchanged since the last migration)
+
 ### Requirement: Per-component atomicity and resumability
-The system SHALL stage each component's output and commit it per profile and component, so an interruption or a failing component leaves every committed component complete and recorded in the ledger and every uncommitted component absent, and a later run SHALL resume from the ledger.
+The system SHALL stage each component's output and commit it per profile and component, so an interruption or a failing component leaves every committed component complete and recorded in the ledger and every uncommitted component absent (a component that fails after writing part of its output SHALL be rolled back and its ledger records dropped), and a later run SHALL resume from the ledger. Sessions commit per batch of at most 500 sessions instead (a history can be too large for one transaction, and the batch is the unit a re-run resumes from): committed batches stay, recorded through their legacy ids, and a session deleted in Prometheus after import SHALL NOT be imported again.
 **Milestone:** M2
 
 #### Scenario: Interrupted during sessions
 - **GIVEN** a migration interrupted with Ctrl+C while importing sessions
 - **WHEN** the user re-runs the same command
 - **THEN** config, secrets and memory SHALL not be re-imported and the session import SHALL continue from the last committed batch
+
+#### Scenario: Failing component leaves nothing behind
+- **GIVEN** a skills component that fails after copying its first skill
+- **WHEN** the migration finishes
+- **THEN** the copied skill SHALL be removed, the ledger SHALL hold no record of the component, the other components SHALL be committed, and a re-run SHALL import the skills
 
 ### Requirement: Migration exit codes and confirmation
 The system SHALL show the plan summary and ask for confirmation before writing unless `--yes` is given or stdin is not a terminal (in which case it SHALL require `--yes` and exit 4 without it), and SHALL exit 0 when every selected component committed (unsupported and conflict entries do not fail the run), 1 when any component failed, 66 when the source is missing, and 73 when the destination cannot be written.
@@ -350,6 +360,11 @@ Every successful Claude Code, Codex CLI or Cursor import SHALL register its sour
 - **GIVEN** only `~/.claude/.credentials.json` changed since the last sync
 - **WHEN** `prometheus migrate sync` runs
 - **THEN** no importer SHALL run
+
+#### Scenario: Removed approval and memory entry stay removed
+- **GIVEN** a registered Claude Code import whose command approval, deny rule and one memory entry the user removed in Prometheus, and a new paragraph added to `CLAUDE.md`
+- **WHEN** `prometheus migrate sync` runs
+- **THEN** only the new paragraph SHALL be imported and the removed approval, deny rule and memory entry SHALL stay removed
 
 ### Requirement: Session transcripts from other agent CLIs
 `prometheus migrate sessions --from claude-code|codex [FILE] [--pick] [--json]` SHALL import a conversation from Claude Code session logs (`~/.claude/projects/**/*.jsonl`, or the `projects/` directory of a relocated Claude Code config directory given with `--source`) or Codex CLI rollouts (`~/.codex/sessions/**/rollout-*.jsonl`), reading them only, into a new session titled `Imported from Claude Code: <first user message>` (or `Codex CLI`) with source `import` and source tag `claude-code` or `codex` (together `import:claude-code`, `import:codex`; the tag follows the session-storage tag syntax) and the foreign session id recorded; it SHALL carry over the ordered user and assistant messages, condensing tool activity into short `[ran tool: <name>]` notes inside assistant turns and omitting system prompts, injected context, reasoning traces and raw tool output; importing the same log again SHALL return the existing session id instead of creating a copy; without `FILE` an interactive picker SHALL list logs newest first with a read-only preview, and the command SHALL print the new session id and the resume command.

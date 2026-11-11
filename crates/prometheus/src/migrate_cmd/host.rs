@@ -74,8 +74,9 @@ impl Host for MigrateHost<'_> {
         scope: &ProfileScope,
         dir: &Path,
         enabled: &[String],
+        skip: &[String],
     ) -> Result<Vec<PluginOutcome>, Error> {
-        let report = migrate::import(scope, dir, enabled)?;
+        let report = migrate::import(scope, dir, enabled, skip)?;
         Ok(report
             .plugins
             .into_iter()

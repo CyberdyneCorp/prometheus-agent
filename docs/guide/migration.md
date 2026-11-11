@@ -27,7 +27,9 @@ Every importer follows the same rules:
   imported, so running the same command again imports only what is new or
   changed, never duplicates, and never overwrites a value you edited in
   Prometheus since: that item is reported `conflict` and kept, unless you
-  pass `--overwrite`.
+  pass `--overwrite`. What you removed in Prometheus stays removed while
+  its source is unchanged: a revoked pairing, a deleted session, memory
+  entry, skill or plugin, a dropped command approval.
 
 ## From Hermes
 
@@ -50,7 +52,10 @@ $ prometheus migrate from-hermes # exits 4
 
 Then migrate. Each component is committed on its own and recorded in the
 ledger, in this order: secrets, config, identity, memory, skills,
-sessions, cron, mcp, plugins, gateway. Choose components with
+sessions, cron, mcp, plugins, gateway. A component that fails is undone
+(none of its writes stay) while the committed ones are kept; sessions
+commit in batches of 500, so a re-run continues after the last committed
+batch. Choose components with
 `--only` and `--skip`:
 
 ```console
@@ -164,7 +169,10 @@ A successful Claude Code, Codex CLI or Cursor import registers itself in
 re-imports every registered source whose files changed, without asking, so
 it can run as a scheduled job. A changed skill is refreshed unless you edited
 the imported copy (then it is a `conflict`), and a token refresh never
-triggers a sync because credential files are not part of what is compared:
+triggers a sync because credential files are not part of what is compared
+(of `~/.claude.json`, which Claude Code rewrites on every launch, only
+`mcpServers` is compared). Memory entries and command approvals the sync
+imported before are not added back once you removed them:
 
 ```console
 $ prometheus migrate sync

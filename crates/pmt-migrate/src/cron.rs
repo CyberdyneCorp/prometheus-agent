@@ -122,6 +122,15 @@ fn import_job(
         dest.overwrite,
     ) {
         Decision::Write if current.is_some() => {
+            let row = ops::find(dest.store, &job.name)?.row;
+            dest.on_undo(move |store| {
+                store
+                    .cron_modify_job(&row.id, |r| {
+                        r.clone_from(&row);
+                        Ok(())
+                    })
+                    .map(drop)
+            });
             let spec = job.spec.clone();
             ops::update(
                 profile,
@@ -136,14 +145,21 @@ fn import_job(
             Decision::Write
         }
         Decision::Write => {
-            copy_script(job, profile.scripts_dir)?;
+            let script = copy_script(job, profile.scripts_dir, dest)?;
             let paused = (!(enable && job.enabled)).then(|| PAUSED_REASON.to_owned());
             let new = NewJob {
                 name: Some(job.name.clone()),
                 origin: None,
                 paused,
             };
-            ops::create(profile, job.spec.clone(), new, Timestamp::now())?;
+            let created = ops::create(profile, job.spec.clone(), new, Timestamp::now())
+                .inspect_err(|_| {
+                    // The job is a failed item: its script goes with it.
+                    if let Some(script) = script {
+                        let _ = std::fs::remove_file(script);
+                    }
+                })?;
+            dest.on_undo(move |store| store.cron_delete_job(&created.row.id).map(drop));
             Decision::Write
         }
         other => other,
@@ -156,21 +172,27 @@ fn import_job(
     Ok(decision)
 }
 
-/// Copies the job's script into `<profile>/scripts/` unless one is there.
-fn copy_script(job: &Job, scripts: &std::path::Path) -> Result<(), Error> {
+/// Copies the job's script into `<profile>/scripts/` unless one is there;
+/// returns the copy made.
+fn copy_script(
+    job: &Job,
+    scripts: &std::path::Path,
+    dest: &Dest<'_>,
+) -> Result<Option<std::path::PathBuf>, Error> {
     let (Some(from), Some(rel)) = (&job.script, &job.spec.script) else {
-        return Ok(());
+        return Ok(None);
     };
     let to = scripts.join(rel);
     if to.exists() {
-        return Ok(());
+        return Ok(None);
     }
+    dest.keep(&to)?;
     if let Some(parent) = to.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|e| Error::io_doing(&codes::HOME_IO, "cannot create", parent, &e))?;
     }
     std::fs::copy(from, &to)
-        .map(drop)
+        .map(|_| Some(to.clone()))
         .map_err(|e| Error::io_doing(&codes::HOME_IO, "cannot write", &to, &e))
 }
 

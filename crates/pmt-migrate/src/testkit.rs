@@ -60,6 +60,7 @@ impl Host for FakeHost {
         _: &ProfileScope,
         _: &Path,
         _: &[String],
+        _: &[String],
     ) -> Result<Vec<PluginOutcome>, Error> {
         Ok(Vec::new())
     }
@@ -103,4 +104,10 @@ impl Fixture {
             staging: self.dir.path(),
         }
     }
+}
+
+/// A real Prometheus profile `default` in `<root>/prometheus`.
+pub(crate) fn target(root: &Path) -> crate::commit::Target {
+    let name = pmt_config::ProfileName::parse("default").unwrap();
+    crate::commit::open_target(&root.join("prometheus"), &name).unwrap()
 }

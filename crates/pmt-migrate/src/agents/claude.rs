@@ -24,8 +24,14 @@ pub(super) fn plan(b: &mut Build<'_>) {
         false,
     );
     b.skills_in(&root.join("skills"), false);
+    // Claude Code rewrites `~/.claude.json` on most launches: only its
+    // `mcpServers` count, so the rest never triggers a sync.
     if let Some(state) = state_file(b)
-        && let Some(servers) = b.json(Component::Mcp, &state).as_ref().and_then(servers)
+        && let Some(servers) = b
+            .json_part(Component::Mcp, &state, "mcpServers")
+            .as_ref()
+            .and_then(Value::as_object)
+            .cloned()
     {
         b.mcp_servers(".claude.json:mcpServers", &servers, Secrets::Strip);
     }

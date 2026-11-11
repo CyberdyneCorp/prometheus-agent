@@ -59,6 +59,7 @@ impl Step for IdentityStep {
             writes::settle(decision, &mut self.entries[*i], &why);
         }
         if decision == Decision::Write {
+            dest.keep(&path)?;
             pmt_core::private_fs::write_atomic(&path, soul.as_bytes())
                 .map_err(|e| Error::io_doing(&codes::HOME_IO, "cannot write", &path, &e))?;
         }

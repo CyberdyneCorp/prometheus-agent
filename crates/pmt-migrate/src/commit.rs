@@ -16,6 +16,7 @@ use crate::host::Host;
 use crate::ledger::{self, Ledger};
 use crate::plan::{Dest, Existing, Step};
 use crate::report::{self, ComponentReport, ProfileReport, Report, Status};
+use crate::undo::Undo;
 
 /// Each component's plan, in commit order.
 pub type Planned = Vec<(Component, Result<Box<dyn Step>, Error>)>;
@@ -217,7 +218,8 @@ impl Commit<'_> {
 
     /// Commits the components in order; each committed one is recorded in
     /// the ledger at once, so an interruption or a later failure leaves it
-    /// complete and a re-run resumes after it.
+    /// complete and a re-run resumes after it. A component that does not
+    /// commit is undone: neither its writes nor its ledger records stay.
     pub fn all(&self, ledger: &RefCell<Ledger>, steps: Planned, out: &mut ProfileReport) {
         let mut stopped = false;
         for (component, step) in steps {
@@ -239,36 +241,67 @@ impl Commit<'_> {
                     continue;
                 }
             };
-            let applied = self
-                .apply(ledger, &mut step)
-                .and_then(|()| ledger.borrow_mut().commit(component.as_str(), self.run_id));
-            match applied {
-                Ok(()) => record(out, component, Status::Committed, None, Some(&mut step)),
-                Err(e) if e.code().code == codes::MIGRATE_INTERRUPTED.code => {
-                    // What the component committed so far is kept in the
-                    // store; its items are recorded for the re-run.
-                    let _ = ledger.borrow().save();
-                    stopped = true;
-                    record(out, component, Status::Interrupted, None, Some(&mut step));
-                }
-                Err(e) => {
-                    let _ = ledger.borrow().save();
-                    if !step.commits_in_parts() {
-                        mark_failed(step.entries());
-                    }
-                    record(
-                        out,
-                        component,
-                        Status::Failed,
-                        Some(e.message().to_owned()),
-                        Some(&mut step),
-                    );
-                }
+            let Err(e) = self.one(ledger, component, &mut step) else {
+                record(out, component, Status::Committed, None, Some(&mut step));
+                continue;
+            };
+            let interrupted = e.code().code == codes::MIGRATE_INTERRUPTED.code;
+            stopped |= interrupted;
+            if !step.commits_in_parts() {
+                mark_undone(step.entries(), interrupted);
             }
+            let (status, error) = if interrupted {
+                (Status::Interrupted, None)
+            } else {
+                (Status::Failed, Some(e.message().to_owned()))
+            };
+            record(out, component, status, error, Some(&mut step));
         }
     }
 
-    fn apply(&self, ledger: &RefCell<Ledger>, step: &mut Box<dyn Step>) -> Result<(), Error> {
+    /// Applies and commits one component; when that fails, a component
+    /// committing in parts keeps the parts it committed (recorded for the
+    /// re-run), any other is undone.
+    fn one(
+        &self,
+        ledger: &RefCell<Ledger>,
+        component: Component,
+        step: &mut Box<dyn Step>,
+    ) -> Result<(), Error> {
+        let before = ledger.borrow().clone();
+        let undo = RefCell::new(Undo::new(
+            self.staging.join("undo").join(component.as_str()),
+        ));
+        let Err(e) = self
+            .apply(ledger, &undo, step)
+            .and_then(|()| ledger.borrow_mut().commit(component.as_str(), self.run_id))
+        else {
+            return Ok(());
+        };
+        if step.commits_in_parts() {
+            let _ = ledger.borrow().save();
+            return Err(e);
+        }
+        *ledger.borrow_mut() = before;
+        match undo.into_inner().rollback(&self.target.store) {
+            Ok(()) => Err(e),
+            Err(u) => Err(Error::new(
+                e.code(),
+                format!(
+                    "{}; undoing its partial writes failed: {}",
+                    e.message(),
+                    u.message()
+                ),
+            )),
+        }
+    }
+
+    fn apply(
+        &self,
+        ledger: &RefCell<Ledger>,
+        undo: &RefCell<Undo>,
+        step: &mut Box<dyn Step>,
+    ) -> Result<(), Error> {
         // Each component sees the config the previous ones wrote.
         let scope = ProfileScope::open(
             self.target.profile.clone(),
@@ -282,13 +315,19 @@ impl Commit<'_> {
             host: self.host,
             staging: self.staging.to_owned(),
             ledger,
+            undo,
         };
         step.apply(&dest)
     }
 }
 
-/// Nothing of a failed component is reported as imported.
-fn mark_failed(entries: &mut [report::Entry]) {
+/// Nothing of an undone component is reported as imported.
+fn mark_undone(entries: &mut [report::Entry], interrupted: bool) {
+    let why = if interrupted {
+        "interrupted before the component committed; nothing of it was written"
+    } else {
+        "the component failed; nothing of it was written"
+    };
     for e in entries {
         if !matches!(
             e.disposition,
@@ -297,7 +336,7 @@ fn mark_failed(entries: &mut [report::Entry]) {
                 | report::Disposition::Skipped
         ) {
             e.disposition = report::Disposition::Failed;
-            "the component failed".clone_into(&mut e.reason);
+            why.clone_into(&mut e.reason);
         }
     }
 }
@@ -315,5 +354,103 @@ pub fn save(target: &Target, prefix: &str, report: &Report) {
     }
     if let Err(e) = pmt_core::private_fs::write_atomic(&path, text.as_bytes()) {
         tracing::warn!("cannot save the migration report {}: {e}", path.display());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use pmt_core::error::{Error, codes};
+
+    use super::*;
+    use crate::report::{Disposition, Entry};
+    use crate::testkit::{FakeHost, target};
+    use crate::writes::Writes;
+
+    /// Writes config, a secret, a file and a store row, then fails.
+    struct HalfWay {
+        entries: Vec<Entry>,
+    }
+
+    impl Step for HalfWay {
+        fn component(&self) -> Component {
+            Component::Config
+        }
+
+        fn entries(&mut self) -> &mut Vec<Entry> {
+            &mut self.entries
+        }
+
+        fn apply(&mut self, dest: &Dest<'_>) -> Result<(), Error> {
+            let mut w = Writes::default();
+            w.key("agent.max_iterations", 90, 0);
+            w.secret("HALF_WAY_KEY", "sk-half", 0);
+            w.apply(dest, &mut self.entries)?;
+            let file = dest.scope.dir().join("notes/kept.md");
+            dest.keep(&file)?;
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            std::fs::write(&file, "written\n").unwrap();
+            let before = dest.store.pairing_row("telegram", "42")?;
+            dest.store
+                .adopt_pairing("telegram", "42", None, jiff::Timestamp::now())?;
+            dest.on_undo(move |s| s.restore_pairing("telegram", "42", before.as_ref()));
+            Err(Error::new(&codes::HOME_IO, "disk full"))
+        }
+    }
+
+    #[test]
+    fn a_component_failing_after_partial_writes_leaves_nothing_behind() {
+        let tmp = tempfile::tempdir().unwrap();
+        let t = target(tmp.path());
+        let dir = t.profile.path().to_owned();
+        let staging = tmp.path().join("staging");
+        let commit = Commit {
+            target: &t,
+            overwrite: false,
+            host: &FakeHost,
+            staging: &staging,
+            run_id: "run1",
+        };
+        let (ledger, _) = commit.ledger("hermes", tmp.path()).unwrap();
+        let entry = Entry::new(Component::Config, "max_turns", Disposition::Mapped);
+        let step: Box<dyn Step> = Box::new(HalfWay {
+            entries: vec![entry],
+        });
+        let mut out = ProfileReport {
+            hermes_profile: "default".to_owned(),
+            target: None,
+            source: String::new(),
+            error: None,
+            code: None,
+            components: Vec::new(),
+            entries: Vec::new(),
+            warnings: Vec::new(),
+        };
+        let config_before = std::fs::read_to_string(dir.join("config.toml")).ok();
+        commit.all(&ledger, vec![(Component::Config, Ok(step))], &mut out);
+
+        assert_eq!(out.components[0].status, Status::Failed);
+        assert_eq!(out.entries[0].disposition, Disposition::Failed);
+        assert!(out.entries[0].reason.contains("nothing of it was written"));
+        assert_eq!(
+            std::fs::read_to_string(dir.join("config.toml")).ok(),
+            config_before
+        );
+        let scope =
+            ProfileScope::open(t.profile.clone(), &Overrides::default(), Launch::Other).unwrap();
+        assert!(
+            scope
+                .secrets()
+                .store()
+                .get("HALF_WAY_KEY")
+                .unwrap()
+                .is_none()
+        );
+        assert!(!dir.join("notes").exists());
+        assert!(!t.store.is_paired("telegram", "42").unwrap());
+        let ledger = ledger.into_inner();
+        assert!(ledger.get("config:agent.max_iterations").is_none());
+        assert!(ledger.committed("config").is_none());
+        let (saved, _) = commit.ledger("hermes", tmp.path()).unwrap();
+        assert!(saved.into_inner().get("secret:HALF_WAY_KEY").is_none());
     }
 }

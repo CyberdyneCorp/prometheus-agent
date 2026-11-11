@@ -62,18 +62,28 @@ impl Report {
 }
 
 /// Imports every plugin directory of `source` (a Hermes `plugins/`
-/// directory); `enabled` are the plugins Hermes had enabled.
+/// directory) but those named in `skip`; `enabled` are the plugins Hermes
+/// had enabled.
 ///
 /// # Errors
 ///
 /// When the source cannot be read or the profile cannot be written.
-pub fn import(scope: &ProfileScope, source: &Path, enabled: &[String]) -> Result<Report, Error> {
+pub fn import(
+    scope: &ProfileScope,
+    source: &Path,
+    enabled: &[String],
+    skip: &[String],
+) -> Result<Report, Error> {
     let mut report = Report::default();
     let mut dirs: Vec<PathBuf> = std::fs::read_dir(source)
         .map_err(|e| Error::io(&codes::PLUGINS_DISCOVERY, source, &e))?
         .flatten()
         .map(|e| e.path())
         .filter(|p| p.join(HERMES_MANIFEST_FILE).is_file())
+        .filter(|p| {
+            p.file_name()
+                .is_none_or(|n| !skip.iter().any(|s| n == s.as_str()))
+        })
         .collect();
     dirs.sort();
     for dir in dirs {
@@ -167,7 +177,7 @@ mod tests {
             copy(&pmt_pybridge::testkit::fixture(name), &to).unwrap();
         }
         let enabled = ["platform".to_owned(), "spotify".to_owned()];
-        let report = import(&scope, &hermes, &enabled).unwrap();
+        let report = import(&scope, &hermes, &enabled, &[]).unwrap();
         let by_id = |id: &str| report.plugins.iter().find(|p| p.id == id).unwrap().clone();
         let platform = by_id("platform");
         assert_eq!(platform.verdict, Verdict::Incompatible);

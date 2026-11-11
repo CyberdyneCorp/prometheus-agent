@@ -124,6 +124,25 @@ impl<'a> Build<'a> {
         }
     }
 
+    /// Reads the top-level `key` of the JSON file at `path` (only it
+    /// counts for the sync digest), recording a broken file under
+    /// `component`.
+    pub(super) fn json_part(
+        &mut self,
+        component: Component,
+        path: &Path,
+        key: &str,
+    ) -> Option<Value> {
+        match self.reader.json_part(path, key) {
+            Ok(v) => v,
+            Err(why) => {
+                let item = self.item(path);
+                self.broken(component, item, why);
+                None
+            }
+        }
+    }
+
     /// Imports the text file at `path` as memory entries of `target`:
     /// its paragraphs, or its `§`-separated entries when `sections`.
     pub(super) fn memory_file(
@@ -146,11 +165,7 @@ impl<'a> Build<'a> {
             super::read::paragraphs(body)
         };
         let index = self.memory.entries.len();
-        self.memory.files.push((
-            index,
-            format!("memory:{item}"),
-            crate::ledger::digest(text.as_bytes()),
-        ));
+        self.memory.files.push((index, format!("memory:{item}")));
         self.memory.entries.push(
             Entry::new(Component::Memory, item, Disposition::Mapped)
                 .to(match target {

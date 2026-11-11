@@ -203,6 +203,18 @@ impl Credentials {
         Ok(found)
     }
 
+    /// The secret names the sign-in `label` of `provider` is stored
+    /// under (what [`Credentials::save`] writes).
+    #[must_use]
+    pub fn secret_names(provider: &str, label: &str) -> [String; 3] {
+        let Names {
+            access,
+            refresh,
+            meta,
+        } = Names::of(provider, label);
+        [access, refresh, meta]
+    }
+
     /// The sign-in `label` of `provider`.
     ///
     /// # Errors

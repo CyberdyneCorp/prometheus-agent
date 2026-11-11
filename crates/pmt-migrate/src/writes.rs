@@ -9,7 +9,6 @@
 
 use std::collections::BTreeMap;
 
-use pmt_config::ProfileScope;
 use pmt_core::error::Error;
 use pmt_core::secret::SecretString;
 use toml_edit::Value;
@@ -80,7 +79,7 @@ impl Writes {
     /// config is written then.
     pub fn apply(&self, dest: &Dest<'_>, entries: &mut [Entry]) -> Result<(), Error> {
         let ledger = dest.ledger.borrow().clone();
-        let records = self.write(dest.scope, entries, dest.overwrite, &ledger)?;
+        let records = self.write(dest, entries, dest.overwrite, &ledger)?;
         let mut ledger = dest.ledger.borrow_mut();
         for (key, hash, written) in records {
             ledger.record(key, hash, written);
@@ -94,18 +93,19 @@ impl Writes {
     /// # Errors
     ///
     /// As [`Writes::apply`].
-    pub fn apply_merged(&self, scope: &ProfileScope, entries: &mut [Entry]) -> Result<(), Error> {
-        self.write(scope, entries, true, &Ledger::detached())
+    pub fn apply_merged(&self, dest: &Dest<'_>, entries: &mut [Entry]) -> Result<(), Error> {
+        self.write(dest, entries, true, &Ledger::detached())
             .map(drop)
     }
 
     fn write(
         &self,
-        scope: &ProfileScope,
+        dest: &Dest<'_>,
         entries: &mut [Entry],
         overwrite: bool,
         ledger: &Ledger,
     ) -> Result<Vec<(String, String, String)>, Error> {
+        let scope = dest.scope;
         let store = scope.secrets().store();
         let mut current = BTreeMap::new();
         for s in &self.secrets {
@@ -117,9 +117,11 @@ impl Writes {
         let text = file.raw()?.unwrap_or_default();
         let pending = self.pending(&text, &current, entries, overwrite, ledger);
         if !pending.keys.is_empty() {
+            dest.keep(file.path())?;
             file.set_values(&pending.keys)?;
         }
         for s in pending.secrets {
+            dest.keep_secret(&s.name)?;
             store.set(&s.name, &s.value)?;
         }
         Ok(pending.records)

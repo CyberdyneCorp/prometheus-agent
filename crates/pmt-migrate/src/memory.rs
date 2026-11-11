@@ -25,8 +25,8 @@ pub const DELIMITER: &str = "\n§\n";
 pub struct MemoryStep {
     entries: Vec<Entry>,
     items: Vec<(usize, Item)>,
-    /// Entry index, ledger key and content hash of each memory file.
-    files: Vec<(usize, String, String)>,
+    /// Entry index and ledger key of each memory file.
+    files: Vec<(usize, String)>,
     provider: Option<(usize, String)>,
 }
 
@@ -54,38 +54,8 @@ impl Step for MemoryStep {
                 e.reason = format!("no Prometheus memory provider plugin '{name}' is installed");
             }
         }
-        // A file unchanged since the last run is not imported again (the
-        // import deduplicates anyway; this keeps entries the user removed
-        // removed).
-        let mut fresh = Vec::new();
-        for (index, key, hash) in &self.files {
-            if dest
-                .ledger
-                .borrow()
-                .get(key)
-                .is_some_and(|r| r.hash == *hash)
-            {
-                writes::unchanged(&mut self.entries[*index]);
-            } else {
-                fresh.push(*index);
-            }
-        }
-        let items: Vec<Item> = self
-            .items
-            .iter()
-            .filter(|(index, _)| fresh.contains(index))
-            .map(|(_, i)| i.clone())
-            .collect();
-        if !items.is_empty() {
-            self.import(dest, &items)?;
-        }
-        let mut ledger = dest.ledger.borrow_mut();
-        for (index, key, hash) in &self.files {
-            if fresh.contains(index) {
-                ledger.record(key.clone(), hash.clone(), hash.clone());
-            }
-        }
-        Ok(())
+        let fresh = Fresh::of(dest, &self.files, &self.items, &mut self.entries);
+        fresh.import(dest, |items| self.import(dest, items))
     }
 }
 
@@ -107,6 +77,85 @@ impl MemoryStep {
                         .push_str("; over budget; run prometheus memory curate");
                 }
             }
+        }
+        Ok(())
+    }
+}
+
+/// The memory entries of a run that no earlier run imported (spec:
+/// hermes-migration, Idempotent incremental re-run; Keeping imports in
+/// sync). Each entry is recorded in the ledger as
+/// `<file key>#<digest of its text>`, so one imported before is never
+/// imported again, even after the user edited or removed it in
+/// Prometheus, while a new entry of a changed file still is.
+pub(crate) struct Fresh {
+    items: Vec<Item>,
+    keys: Vec<(String, String)>,
+}
+
+impl Fresh {
+    /// The new items among `items` (entry index of their file, item),
+    /// whose files are `files` (entry index, ledger key); the entry of a
+    /// file with nothing new becomes `unchanged`.
+    pub(crate) fn of(
+        dest: &Dest<'_>,
+        files: &[(usize, String)],
+        items: &[(usize, Item)],
+        entries: &mut [Entry],
+    ) -> Self {
+        let ledger = dest.ledger.borrow();
+        let mut fresh = Self {
+            items: Vec::new(),
+            keys: Vec::new(),
+        };
+        for (index, file) in files {
+            let mut known = 0;
+            for (_, item) in items.iter().filter(|(i, _)| i == index) {
+                let hash = ledger::digest(item.content.as_bytes());
+                let key = format!("{file}#{hash}");
+                if ledger.get(&key).is_some() {
+                    known += 1;
+                } else if !fresh.keys.iter().any(|(k, _)| *k == key) {
+                    fresh.items.push(item.clone());
+                    fresh.keys.push((key, hash));
+                }
+            }
+            let e = &mut entries[*index];
+            let total = items.iter().filter(|(i, _)| i == index).count();
+            if known > 0 && known == total {
+                writes::unchanged(e);
+            } else if known > 0 {
+                e.reason = format!("{} new entries; {known} imported before", total - known);
+            }
+        }
+        fresh
+    }
+
+    /// Imports the new items through `import` (one memory transaction),
+    /// records them, and how to take the import back.
+    ///
+    /// # Errors
+    ///
+    /// `import`'s error; store errors.
+    pub(crate) fn import(
+        self,
+        dest: &Dest<'_>,
+        import: impl FnOnce(&[Item]) -> Result<(), Error>,
+    ) -> Result<(), Error> {
+        if self.items.is_empty() {
+            return Ok(());
+        }
+        let before = dest.store.memory_entries(None)?;
+        import(&self.items)?;
+        dest.on_undo(move |store| {
+            store.memory_batch(None, |batch| {
+                batch.entries.clone_from(&before);
+                Ok(())
+            })
+        });
+        let mut ledger = dest.ledger.borrow_mut();
+        for (key, hash) in self.keys {
+            ledger.record(key, hash.clone(), hash);
         }
         Ok(())
     }
@@ -144,11 +193,7 @@ pub fn plan(src: &Source<'_>) -> Result<MemoryStep, Error> {
         };
         let parts = split(&text);
         let index = step.entries.len();
-        step.files.push((
-            index,
-            format!("memory:{file}"),
-            ledger::digest(text.as_bytes()),
-        ));
+        step.files.push((index, format!("memory:{file}")));
         step.entries.push(
             Entry::new(Component::Memory, file, Disposition::Mapped)
                 .to(format!("{target} memory"))

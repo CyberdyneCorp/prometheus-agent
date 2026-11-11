@@ -54,7 +54,8 @@ pub trait Host {
     fn cron_catalog(&self, scope: &ProfileScope) -> Box<dyn pmt_cron::validate::Catalog>;
 
     /// Copies the Hermes plugins under `dir` into `scope`'s profile,
-    /// disabled and without grants; `enabled` were enabled in Hermes.
+    /// disabled and without grants; `enabled` were enabled in Hermes, and
+    /// `skip` are left out (an earlier run imported them).
     ///
     /// # Errors
     ///
@@ -64,6 +65,7 @@ pub trait Host {
         scope: &ProfileScope,
         dir: &Path,
         enabled: &[String],
+        skip: &[String],
     ) -> Result<Vec<PluginOutcome>, Error>;
 
     /// Prints a progress line (stderr).

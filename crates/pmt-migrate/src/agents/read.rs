@@ -4,7 +4,7 @@
 //! imports in sync). Credential files are never passed to them.
 
 use std::cell::RefCell;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
@@ -15,6 +15,9 @@ use crate::ledger;
 pub struct Reader {
     root: PathBuf,
     read: RefCell<BTreeSet<PathBuf>>,
+    /// JSON files of which only one top-level key was used: only that
+    /// key counts for the digest.
+    parts: RefCell<BTreeMap<PathBuf, String>>,
 }
 
 impl Reader {
@@ -24,6 +27,7 @@ impl Reader {
         Self {
             root: root.to_owned(),
             read: RefCell::new(BTreeSet::new()),
+            parts: RefCell::new(BTreeMap::new()),
         }
     }
 
@@ -69,6 +73,24 @@ impl Reader {
         serde_json::from_str(&relax(&text))
             .map(Some)
             .map_err(|e| format!("{} is not valid JSON: {e}", path.display()))
+    }
+
+    /// The top-level `key` of the JSON file `path`. Only that key counts
+    /// for the digest, so a file another program rewrites for its own
+    /// state (`~/.claude.json`) triggers a sync only when `key` changed.
+    ///
+    /// # Errors
+    ///
+    /// As [`Reader::json`].
+    pub fn json_part(&self, path: &Path, key: &str) -> Result<Option<Value>, String> {
+        let whole = self.read.borrow().contains(path);
+        let doc = self.json(path)?;
+        if !whole && self.read.borrow_mut().remove(path) {
+            self.parts
+                .borrow_mut()
+                .insert(path.to_owned(), key.to_owned());
+        }
+        Ok(doc.and_then(|d| d.get(key).cloned()))
     }
 
     /// `path` parsed as TOML, as JSON values.
@@ -136,16 +158,37 @@ impl Reader {
     /// their bytes as they are now).
     #[must_use]
     pub fn digest(&self) -> String {
+        let parts = self.parts.borrow();
+        let mut paths: BTreeSet<PathBuf> = self.read.borrow().clone();
+        paths.extend(parts.keys().cloned());
         let mut bytes = Vec::new();
-        for path in self.read.borrow().iter() {
+        for path in &paths {
             let rel = path.strip_prefix(&self.root).unwrap_or(path);
             bytes.extend_from_slice(rel.to_string_lossy().as_bytes());
             bytes.push(0);
-            bytes.extend_from_slice(&std::fs::read(path).unwrap_or_default());
+            let content = std::fs::read(path).unwrap_or_default();
+            match parts.get(path) {
+                Some(key) => bytes.extend_from_slice(&part(&content, key)),
+                None => bytes.extend_from_slice(&content),
+            }
             bytes.push(0);
         }
         ledger::digest(&bytes)
     }
+}
+
+/// The canonical text of the top-level `key` of JSON `content` (the
+/// whole content when it does not parse).
+fn part(content: &[u8], key: &str) -> Vec<u8> {
+    serde_json::from_str::<Value>(&relax(&String::from_utf8_lossy(content))).map_or_else(
+        |_| content.to_vec(),
+        |doc| {
+            doc.get(key)
+                .map(Value::to_string)
+                .unwrap_or_default()
+                .into_bytes()
+        },
+    )
 }
 
 /// `text` with `//` and `/* */` comments and trailing commas removed

@@ -327,3 +327,107 @@ fn an_unwritable_destination_exits_73() {
     let report: Value = serde_json::from_str(common::stdout(&out).trim()).unwrap();
     assert_eq!(report["profiles"][0]["code"], "migrate.destination");
 }
+
+#[cfg(feature = "gateway")]
+#[test]
+fn a_sender_revoked_in_prometheus_stays_revoked_after_a_rerun() {
+    let tmp = common::temp_home();
+    let h = home_with(tmp.path(), 0);
+    h.write("default", ".env", "TELEGRAM_BOT_TOKEN=123:abc\n");
+    h.write(
+        "default",
+        "platforms/pairing/telegram-approved.json",
+        r#"{"424242": {"user_name": "ada", "approved_at": 1772360100.0}}"#,
+    );
+    let home = tmp.path().join("prometheus");
+    let first = json(&migrate(&home, &h.root, &["--only", "secrets,gateway"]));
+    assert_eq!(
+        entry(&first, "pairing:telegram:424242")["disposition"],
+        "mapped"
+    );
+    let revoke = common::run(&home, &["pairing", "revoke", "telegram", "424242"]);
+    assert!(revoke.status.success(), "{}", common::stdout(&revoke));
+
+    let again = json(&migrate(&home, &h.root, &["--only", "secrets,gateway"]));
+    let pairing = entry(&again, "pairing:telegram:424242");
+    assert_eq!(pairing["disposition"], "skipped", "{pairing:#}");
+    assert_eq!(pairing["reason"], "unchanged since the last migration");
+    let approved: i64 = store(&home)
+        .query_row(
+            "SELECT COUNT(*) FROM gateway_pairing WHERE sender_id = '424242'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(approved, 0, "a re-run approved a revoked sender again");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_component_failing_midway_leaves_none_of_its_output() {
+    use std::os::unix::fs::PermissionsExt;
+
+    if nix::unistd::geteuid().is_root() {
+        return; // root writes anywhere
+    }
+    let tmp = common::temp_home();
+    let h = home_with(tmp.path(), 0);
+    h.write(
+        "default",
+        "skills/zeta/late/SKILL.md",
+        "---\nname: late\ndescription: Copied last.\n---\nDo it late.\n",
+    );
+    let home = tmp.path().join("prometheus");
+    json(&migrate(&home, &h.root, &["--only", "config"]));
+    // The second skill cannot be written: the first one is already
+    // copied when the component fails.
+    let skills = home.join("profiles/default/skills");
+    let blocked = skills.join("zeta");
+    std::fs::create_dir_all(&blocked).unwrap();
+    std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o500)).unwrap();
+    let out = migrate(&home, &h.root, &[]);
+    std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o700)).unwrap();
+    assert_eq!(out.status.code(), Some(1), "{}", common::stdout(&out));
+    let report: Value = serde_json::from_str(common::stdout(&out).trim()).unwrap();
+    let component = |name: &str| {
+        report["profiles"][0]["components"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["component"] == name)
+            .unwrap()
+            .clone()
+    };
+    assert_eq!(component("skills")["status"], "failed", "{report:#}");
+    assert_eq!(component("memory")["status"], "committed");
+    assert_eq!(entry(&report, "skills/notes")["disposition"], "failed");
+    assert!(
+        !skills.join("notes").exists(),
+        "a failed component left a skill"
+    );
+    let ledger =
+        std::fs::read_to_string(home.join("profiles/default/migrations/hermes-ledger.toml"))
+            .unwrap();
+    assert!(!ledger.contains("skill:"), "{ledger}");
+
+    let again = json(&migrate(&home, &h.root, &[]));
+    assert_eq!(entry(&again, "skills/notes")["disposition"], "mapped");
+    assert!(skills.join("notes/SKILL.md").is_file());
+    assert!(skills.join("zeta/late/SKILL.md").is_file());
+}
+
+#[test]
+fn a_session_deleted_in_prometheus_is_not_imported_again() {
+    let tmp = common::temp_home();
+    let h = home_with(tmp.path(), 2);
+    let home = tmp.path().join("prometheus");
+    json(&migrate(&home, &h.root, &["--only", "sessions"]));
+    let (id, _) = imported(&home, "s00000");
+    let deleted = common::run(&home, &["sessions", "delete", &id, "--yes"]);
+    assert!(deleted.status.success(), "{}", common::stdout(&deleted));
+
+    let again = json(&migrate(&home, &h.root, &["--only", "sessions"]));
+    let entry = entry(&again, "s00000");
+    assert_eq!(entry["disposition"], "skipped", "{entry:#}");
+    assert_eq!(session_count(&home), 1);
+}

@@ -77,7 +77,8 @@ impl Step for SessionsStep {
         for s in parents_first(&plan.sessions) {
             let entry = &mut self.entries[plan.index[&s.id]];
             match links.get(&s.id) {
-                None => pending.push(s),
+                None if !deleted(dest, &s.id, entry) => pending.push(s),
+                None => {}
                 Some((id, carried)) => grow(plan, s, *id, *carried, dest, entry)?,
             }
         }
@@ -112,6 +113,7 @@ impl Step for SessionsStep {
                     return Err(e);
                 }
             };
+            record_imported(dest, expected.keys());
             for (hermes, (id, count)) in expected {
                 let stored = dest.store.session(id)?.message_count;
                 if stored != count {
@@ -129,6 +131,33 @@ impl Step for SessionsStep {
         }
         Ok(())
     }
+}
+
+/// Whether Hermes session `id`, which has no Prometheus copy, was
+/// imported before: deleting a session drops its legacy link, but the
+/// ledger remembers it, so it stays deleted (its entry says so).
+fn deleted(dest: &Dest<'_>, id: &str, entry: &mut Entry) -> bool {
+    if dest.ledger.borrow().get(&ledger_key(id)).is_none() {
+        return false;
+    }
+    entry.disposition = Disposition::Skipped;
+    "deleted in Prometheus since it was imported; kept deleted".clone_into(&mut entry.reason);
+    true
+}
+
+/// Records the Hermes sessions of a committed batch in the ledger.
+fn record_imported<'a>(dest: &Dest<'_>, ids: impl Iterator<Item = &'a String>) {
+    let mut ledger = dest.ledger.borrow_mut();
+    for id in ids {
+        let key = ledger_key(id);
+        let hash = crate::ledger::digest(key.as_bytes());
+        ledger.record(key, hash.clone(), hash);
+    }
+}
+
+/// The ledger key of Hermes session `id`.
+fn ledger_key(id: &str) -> String {
+    format!("session:{id}")
 }
 
 /// Marks the entries of `rest` (sessions not committed) with

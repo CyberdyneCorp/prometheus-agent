@@ -38,6 +38,7 @@ pub mod skills;
 pub mod source;
 #[cfg(test)]
 mod testkit;
+pub mod undo;
 pub mod writes;
 pub mod yaml;
 
