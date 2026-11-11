@@ -291,23 +291,31 @@ impl Worker {
                     .lock()
                     .unwrap_or_else(PoisonError::into_inner),
             );
-            loop {
-                let batch = self.inner.take_batch();
-                if batch.is_empty() {
-                    break;
-                }
-                let items = batch.len() as u64;
-                let result = self.send_spans(batch).await;
-                self.inner.outcome(result, items);
-            }
             if !flushes.is_empty() || tokio::time::Instant::now() >= next_metrics {
                 next_metrics = tokio::time::Instant::now() + METRICS_EVERY;
-                let result = self.send_metrics().await;
+                // Side by side: a flush (process exit) waits for both, so
+                // one round trip instead of two.
+                let ((), result) = tokio::join!(self.drain_spans(), self.send_metrics());
                 self.inner.outcome(result, 0);
+            } else {
+                self.drain_spans().await;
             }
             for flush in flushes {
                 let _ = flush.send(());
             }
+        }
+    }
+
+    /// Sends every queued span, batch by batch.
+    async fn drain_spans(&self) {
+        loop {
+            let batch = self.inner.take_batch();
+            if batch.is_empty() {
+                break;
+            }
+            let items = batch.len() as u64;
+            let result = self.send_spans(batch).await;
+            self.inner.outcome(result, items);
         }
     }
 
