@@ -528,7 +528,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 57. M2 Internationalization
 
-- [x] 57.1 Implement static UI string catalogs (language changes keep the prompt cache), the bundled languages, `display.language` selection per profile (unknown ids refused) and layered lookup with partial catalogs; verify with catalog tests (spec: i18n)
+- [ ] 57.1 Implement static UI string catalogs (language changes keep the prompt cache), the bundled languages, `display.language` selection per profile (unknown ids refused) and layered lookup with partial catalogs; verify with catalog tests (spec: i18n)
 - [x] 57.2 Implement placeholder and value validation (misspelled placeholders fall back), language-pack plugins with pack validation (unknown keys warned), language changes applied without restart and migration of Hermes language settings; verify with a no-code pack fixture (spec: i18n)
 
 ## 58. M2 CLI upgrades
