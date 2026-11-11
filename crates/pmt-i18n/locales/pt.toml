@@ -97,6 +97,8 @@ worktree_dirty = "alterações não commitadas"
 worktree_unpushed = "{count} commit(s) não enviado(s)"
 worktree_dirty_unpushed = "alterações não commitadas e {count} commit(s) não enviado(s)"
 worktree_question = "o worktree {path} tem {what}: [k] manter (padrão), [a] arquivar e remover, [r] remover e descartar "
+session_deleted = "sessão {id} eliminada"
+confirm_exit_delete = "/exit --delete elimina esta sessão para sempre; escreve /exit --delete --yes para confirmar"
 
 [gateway]
 stopped = "Parado. Você pode continuar esta sessão."
@@ -454,6 +456,9 @@ footer = "Adiciona ou remove o rodapé com modelo, contexto e diretório nas res
 focus = "Oculta o progresso das ferramentas nesta sessão (on, off, status)"
 timestamps = "Mostra o horário das mensagens (on, off, status); salvo"
 exit = "Sair"
+plan = "Planeja uma tarefa num turno que só altera o seu ficheiro de plano"
+export = "Exporta um perfil como arquivo (como prometheus profile export)"
+import = "Cria um perfil a partir de um arquivo exportado"
 
 [slash.plugins]
 none = "nenhum plugin"
@@ -978,6 +983,14 @@ not_uploaded = "nada foi enviado"
 confirm = "Enviar este relatório para {host}? Ele ficará público para qualquer pessoa com o link.\nEnvie /debug share yes para enviar; caso contrário, nada é enviado."
 uploaded = "enviado: {url} (apague-o com: prometheus debug delete {url})"
 
+[slash.plan]
+written = "plano escrito em {path}"
+missing = "nenhum plano foi escrito ({path} não existe)"
+
+[slash.archive]
+exported = "perfil '{profile}' exportado ({members} membros) para {path}"
+imported = "perfil '{profile}' importado de {path} como '{name}'"
+
 [display]
 tool_ok = "ok"
 tool_failed = "falhou"
@@ -987,7 +1000,7 @@ summary_one = "· {secs}s · {calls} ferramenta · {input} de entrada / {output}
 summary_many = "· {secs}s · {calls} ferramentas · {input} de entrada / {output} de saída tokens"
 cost_unknown = "custo desconhecido"
 background = "[segundo plano] {text}"
-banner = "Prometheus {version} · perfil {profile} · {model} · /help para os comandos"
+banner = "{agent} {version} · perfil {profile} · {model} · /help para os comandos"
 degraded = "degradado: {marker}"
 focus_prompt = "foco › "
 model_back = "modelo: de volta a {route}"

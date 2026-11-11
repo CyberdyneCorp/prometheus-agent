@@ -371,6 +371,8 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `rpc.session_denied` | `permission_denied` | 77 | The session is not one of the connection's profile, or a mutating method was called without attaching to it; the error does not say whether the session exists elsewhere. |
 | `rpc.connection` | `unavailable` | 69 | The connection to the daemon could not be opened or was closed (the WebSocket close code is in the message). |
 | `rpc.ticket` | `auth` | 78 | The control channel refused the ticket request (unknown profile or purpose, several profiles for a purpose other than `profile-admin`). |
+| `webhook.not_found` | `not_found` | 66 | The profile has no webhook subscription of that name; `prometheus webhooks list` shows them. |
+| `webhook.test_failed` | `unavailable` | 69 | The test delivery did not reach the route: the payload file is unreadable, the daemon's listener is not running, or it refused the delivery (the status is in the message). |
 | `daemon.not_running` | `unavailable` | 69 | No gateway daemon runs for this home; start it with `prometheus daemon start`. |
 | `daemon.start_failed` | `unavailable` | 69 | `prometheus daemon start` launched the daemon but it exited or did not publish its endpoint in time; see `prometheus logs daemon` and the exit status in the message. |
 | `daemon.no_profile` | `config` | 78 | Every profile of the home failed to load (each error is logged), so the daemon has nothing to serve. |

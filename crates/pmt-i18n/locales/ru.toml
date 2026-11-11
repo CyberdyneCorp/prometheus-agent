@@ -97,6 +97,8 @@ worktree_dirty = "незакоммиченные изменения"
 worktree_unpushed = "неотправленных коммитов: {count}"
 worktree_dirty_unpushed = "незакоммиченные изменения и неотправленных коммитов: {count}"
 worktree_question = "в worktree {path} есть {what}: [k] оставить (по умолчанию), [a] заархивировать и удалить, [r] удалить без сохранения "
+session_deleted = "сеанс {id} удалён"
+confirm_exit_delete = "/exit --delete навсегда удаляет этот сеанс; введите /exit --delete --yes для подтверждения"
 
 [gateway]
 stopped = "Остановлено. Вы можете продолжить эту сессию."
@@ -454,6 +456,9 @@ footer = "Добавить или убрать подвал с моделью, �
 focus = "Скрыть ход инструментов в этой сессии (on, off, status)"
 timestamps = "Показывать время сообщений (on, off, status); сохраняется"
 exit = "Выйти"
+plan = "Спланировать задачу за один ход, который меняет только файл плана"
+export = "Экспортировать профиль в архив (как prometheus profile export)"
+import = "Создать профиль из экспортированного архива"
 
 [slash.plugins]
 none = "нет плагинов"
@@ -978,6 +983,14 @@ not_uploaded = "ничего не загружено"
 confirm = "Загрузить этот отчёт на {host}? Он будет доступен всем, у кого есть ссылка.\nОтправьте /debug share yes для загрузки; иначе ничего не загружается."
 uploaded = "загружено: {url} (удалить: prometheus debug delete {url})"
 
+[slash.plan]
+written = "план записан в {path}"
+missing = "план не записан ({path} отсутствует)"
+
+[slash.archive]
+exported = "профиль '{profile}' экспортирован ({members} элементов) в {path}"
+imported = "профиль '{profile}' импортирован из {path} как '{name}'"
+
 [display]
 tool_ok = "ok"
 tool_failed = "ошибка"
@@ -987,7 +1000,7 @@ summary_one = "· {secs} с · инструментов: {calls} · {input} вх
 summary_many = "· {secs} с · инструментов: {calls} · {input} вход / {output} выход токенов"
 cost_unknown = "стоимость неизвестна"
 background = "[фон] {text}"
-banner = "Prometheus {version} · профиль {profile} · {model} · /help — команды"
+banner = "{agent} {version} · профиль {profile} · {model} · /help — команды"
 degraded = "ограничено: {marker}"
 focus_prompt = "фокус › "
 model_back = "модель: снова {route}"

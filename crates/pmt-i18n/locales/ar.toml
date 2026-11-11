@@ -97,6 +97,8 @@ worktree_dirty = "تغييرات غير مودَعة"
 worktree_unpushed = "{count} إيداع غير مدفوع"
 worktree_dirty_unpushed = "تغييرات غير مودَعة و{count} إيداع غير مدفوع"
 worktree_question = "شجرة العمل {path} فيها {what}: [k] إبقاء (افتراضي)، [a] أرشفة وإزالة، [r] إزالة وتجاهل "
+session_deleted = "حُذفت الجلسة {id}"
+confirm_exit_delete = "‏/exit --delete يحذف هذه الجلسة نهائيًا؛ اكتب ‎/exit --delete --yes للتأكيد"
 
 [gateway]
 stopped = "تم الإيقاف. يمكنك متابعة هذه الجلسة."
@@ -454,6 +456,9 @@ footer = "يضيف أو يزيل تذييل النموذج والسياق وال
 focus = "يخفي تقدم الأدوات لهذه الجلسة (on, off, status)"
 timestamps = "يعرض أوقات الرسائل (on, off, status)؛ يُحفظ"
 exit = "خروج"
+plan = "خطط لمهمة في دورة واحدة لا تغيّر شيئًا سوى ملف خطتها"
+export = "صدّر ملفًا شخصيًا كأرشيف (مثل prometheus profile export)"
+import = "أنشئ ملفًا شخصيًا من أرشيف مُصدَّر"
 
 [slash.plugins]
 none = "لا إضافات"
@@ -978,6 +983,14 @@ not_uploaded = "لم يُرفع شيء"
 confirm = "هل تريد رفع هذا التقرير إلى {host}؟ سيكون عامًا لكل من لديه الرابط.\nأرسل /debug share yes للرفع؛ وإلا فلن يُرفع شيء."
 uploaded = "تم الرفع: {url} (احذفه باستخدام: prometheus debug delete {url})"
 
+[slash.plan]
+written = "كُتبت الخطة في {path}"
+missing = "لم تُكتب أي خطة ({path} غير موجود)"
+
+[slash.archive]
+exported = "صُدِّر الملف الشخصي '{profile}' ({members} عنصرًا) إلى {path}"
+imported = "استُورد الملف الشخصي '{profile}' من {path} باسم '{name}'"
+
 [display]
 tool_ok = "ok"
 tool_failed = "فشل"
@@ -987,7 +1000,7 @@ summary_one = "· {secs} ث · {calls} أداة · {input} داخلة / {output}
 summary_many = "· {secs} ث · {calls} أدوات · {input} داخلة / {output} خارجة رموز"
 cost_unknown = "التكلفة غير معروفة"
 background = "[الخلفية] {text}"
-banner = "Prometheus {version} · الملف الشخصي {profile} · {model} · /help للأوامر"
+banner = "{agent} {version} · الملف الشخصي {profile} · {model} · /help للأوامر"
 degraded = "متدهور: {marker}"
 focus_prompt = "تركيز › "
 model_back = "النموذج: عاد إلى {route}"

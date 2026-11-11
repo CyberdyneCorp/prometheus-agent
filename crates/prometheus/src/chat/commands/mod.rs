@@ -19,6 +19,7 @@ pub mod info;
 mod local;
 mod mcp;
 mod moa;
+pub mod planning;
 pub(crate) mod plugins;
 mod provider;
 pub(crate) mod quick;
@@ -93,6 +94,9 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "init" => return Some(Ok(Reply::Send(pmt_agent::init::input(args)))),
         "retry" => return Some(retry(ctx)),
         "moa" => return Some(moa::moa(ctx, args).await),
+        "plan" => return Some(Ok(planning::plan(ctx, args))),
+        "export" => planning::export(ctx, args),
+        "import" => planning::import(ctx, args),
         "help" => Ok(ctx
             .registry
             .help(ctx.surface, &ctx.strings())

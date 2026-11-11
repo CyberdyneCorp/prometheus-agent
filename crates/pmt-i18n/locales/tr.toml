@@ -97,6 +97,8 @@ worktree_dirty = "commit edilmemiş değişiklikler"
 worktree_unpushed = "{count} gönderilmemiş commit"
 worktree_dirty_unpushed = "commit edilmemiş değişiklikler ve {count} gönderilmemiş commit"
 worktree_question = "{path} worktree'sinde {what} var: [k] tut (varsayılan), [a] arşivle ve kaldır, [r] kaldır ve at "
+session_deleted = "{id} oturumu silindi"
+confirm_exit_delete = "/exit --delete bu oturumu kalıcı olarak siler; onaylamak için /exit --delete --yes yazın"
 
 [gateway]
 stopped = "Durduruldu. Bu oturuma devam edebilirsiniz."
@@ -454,6 +456,9 @@ footer = "Bu sohbetteki yanıtlara model, bağlam ve dizin alt bilgisini ekler y
 focus = "Bu oturumda araç ilerlemesini gizler (on, off, status)"
 timestamps = "Mesaj zaman damgalarını gösterir (on, off, status); kaydedilir"
 exit = "Çık"
+plan = "Plan dosyası dışında hiçbir şeyi değiştirmeyen tek turda bir görevi planla"
+export = "Bir profili arşiv olarak dışa aktar (prometheus profile export gibi)"
+import = "Dışa aktarılmış bir arşivden profil oluştur"
 
 [slash.plugins]
 none = "eklenti yok"
@@ -978,6 +983,14 @@ not_uploaded = "hiçbir şey yüklenmedi"
 confirm = "Bu rapor {host} adresine yüklensin mi? Bağlantıya sahip herkese açık olacak.\nYüklemek için /debug share yes gönderin; aksi halde hiçbir şey yüklenmez."
 uploaded = "yüklendi: {url} (silmek için: prometheus debug delete {url})"
 
+[slash.plan]
+written = "plan {path} dosyasına yazıldı"
+missing = "hiç plan yazılmadı ({path} yok)"
+
+[slash.archive]
+exported = "'{profile}' profili ({members} öğe) {path} konumuna dışa aktarıldı"
+imported = "'{profile}' profili {path} konumundan '{name}' olarak içe aktarıldı"
+
 [display]
 tool_ok = "ok"
 tool_failed = "başarısız"
@@ -987,7 +1000,7 @@ summary_one = "· {secs} sn · {calls} araç · {input} giriş / {output} çık�
 summary_many = "· {secs} sn · {calls} araç · {input} giriş / {output} çıkış token"
 cost_unknown = "maliyet bilinmiyor"
 background = "[arka plan] {text}"
-banner = "Prometheus {version} · profil {profile} · {model} · komutlar için /help"
+banner = "{agent} {version} · profil {profile} · {model} · komutlar için /help"
 degraded = "kısıtlı: {marker}"
 focus_prompt = "odak › "
 model_back = "model: {route} modeline dönüldü"

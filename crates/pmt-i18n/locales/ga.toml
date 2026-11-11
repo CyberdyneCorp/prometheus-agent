@@ -97,6 +97,8 @@ worktree_dirty = "athruithe neamhthiomnaithe"
 worktree_unpushed = "{count} tiomantas nár brúdh"
 worktree_dirty_unpushed = "athruithe neamhthiomnaithe agus {count} tiomantas nár brúdh"
 worktree_question = "tá {what} ag an worktree {path}: [k] coinnigh (réamhshocrú), [a] cartlannaigh agus bain, [r] bain agus caith amach "
+session_deleted = "scriosadh an seisiún {id}"
+confirm_exit_delete = "scriosann /exit --delete an seisiún seo go buan; clóscríobh /exit --delete --yes chun é a dheimhniú"
 
 [gateway]
 stopped = "Stoptha. Is féidir leat leanúint leis an seisiún seo."
@@ -454,6 +456,9 @@ footer = "Cuir leis nó bain an buntásc múnla, comhthéacs agus comhadlainne �
 focus = "Folaigh dul chun cinn na n-uirlisí don seisiún seo (on, off, status)"
 timestamps = "Taispeáin stampaí ama teachtaireachtaí (on, off, status); sábháilte"
 exit = "Fág"
+plan = "Pleanáil tasc in aon seal amháin nach n-athraíonn ach a chomhad plean"
+export = "Easpórtáil próifíl mar chartlann (cosúil le prometheus profile export)"
+import = "Cruthaigh próifíl ó chartlann easpórtáilte"
 
 [slash.plugins]
 none = "gan breiseáin"
@@ -978,6 +983,14 @@ not_uploaded = "níor uaslódáladh aon rud"
 confirm = "Uaslódáil an tuarascáil seo go {host}? Beidh sí poiblí d'aon duine a bhfuil an nasc aige.\nSeol /debug share yes chun í a uaslódáil; seachas sin ní uaslódáiltear aon rud."
 uploaded = "uaslódáilte: {url} (scrios é le: prometheus debug delete {url})"
 
+[slash.plan]
+written = "scríobhadh an plean chuig {path}"
+missing = "níor scríobhadh aon phlean (níl {path} ann)"
+
+[slash.archive]
+exported = "easpórtáladh an phróifíl '{profile}' ({members} ball) chuig {path}"
+imported = "iompórtáladh an phróifíl '{profile}' ó {path} mar '{name}'"
+
 [display]
 tool_ok = "ok"
 tool_failed = "theip air"
@@ -987,7 +1000,7 @@ summary_one = "· {secs}s · {calls} uirlis · {input} isteach / {output} amach 
 summary_many = "· {secs}s · {calls} uirlis · {input} isteach / {output} amach comhartha"
 cost_unknown = "costas anaithnid"
 background = "[cúlra] {text}"
-banner = "Prometheus {version} · próifíl {profile} · {model} · /help le haghaidh orduithe"
+banner = "{agent} {version} · próifíl {profile} · {model} · /help le haghaidh orduithe"
 degraded = "díghrádaithe: {marker}"
 focus_prompt = "fócas › "
 model_back = "múnla: ar ais go {route}"

@@ -97,6 +97,8 @@ worktree_dirty = "modifiche non committate"
 worktree_unpushed = "{count} commit non inviati"
 worktree_dirty_unpushed = "modifiche non committate e {count} commit non inviati"
 worktree_question = "il worktree {path} ha {what}: [k] mantieni (predefinito), [a] archivia e rimuovi, [r] rimuovi e scarta "
+session_deleted = "sessione {id} eliminata"
+confirm_exit_delete = "/exit --delete elimina definitivamente questa sessione; digita /exit --delete --yes per confermare"
 
 [gateway]
 stopped = "Interrotto. Puoi continuare questa sessione."
@@ -454,6 +456,9 @@ footer = "Aggiunge o toglie il piè di pagina con modello, contesto e directory 
 focus = "Nasconde l'avanzamento degli strumenti per questa sessione (on, off, status)"
 timestamps = "Mostra l'orario dei messaggi (on, off, status); salvato"
 exit = "Esci"
+plan = "Pianifica un'attività in un turno che modifica solo il suo file di piano"
+export = "Esporta un profilo come archivio (come prometheus profile export)"
+import = "Crea un profilo da un archivio esportato"
 
 [slash.plugins]
 none = "nessun plugin"
@@ -978,6 +983,14 @@ not_uploaded = "non è stato caricato nulla"
 confirm = "Caricare questo rapporto su {host}? Sarà pubblico per chiunque abbia il link.\nInvia /debug share yes per caricarlo; altrimenti non viene caricato nulla."
 uploaded = "caricato: {url} (eliminalo con: prometheus debug delete {url})"
 
+[slash.plan]
+written = "piano scritto in {path}"
+missing = "nessun piano è stato scritto ({path} manca)"
+
+[slash.archive]
+exported = "profilo '{profile}' esportato ({members} elementi) in {path}"
+imported = "profilo '{profile}' importato da {path} come '{name}'"
+
 [display]
 tool_ok = "ok"
 tool_failed = "fallito"
@@ -987,7 +1000,7 @@ summary_one = "· {secs}s · {calls} strumento · {input} in / {output} out toke
 summary_many = "· {secs}s · {calls} strumenti · {input} in / {output} out token"
 cost_unknown = "costo sconosciuto"
 background = "[background] {text}"
-banner = "Prometheus {version} · profilo {profile} · {model} · /help per i comandi"
+banner = "{agent} {version} · profilo {profile} · {model} · /help per i comandi"
 degraded = "degradato: {marker}"
 focus_prompt = "focus › "
 model_back = "modello: di nuovo {route}"

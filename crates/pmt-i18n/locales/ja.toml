@@ -97,6 +97,8 @@ worktree_dirty = "未コミットの変更"
 worktree_unpushed = "未プッシュのコミット {count} 件"
 worktree_dirty_unpushed = "未コミットの変更と未プッシュのコミット {count} 件"
 worktree_question = "worktree {path} に {what} があります: [k] 残す（既定）、[a] アーカイブして削除、[r] 削除して破棄 "
+session_deleted = "セッション {id} を削除しました"
+confirm_exit_delete = "/exit --delete はこのセッションを完全に削除します。確定するには /exit --delete --yes と入力してください"
 
 [gateway]
 stopped = "停止しました。このセッションは続けられます。"
@@ -454,6 +456,9 @@ footer = "このチャットの返答にモデル、コンテキスト、ディ�
 focus = "このセッションのツール進捗表示を隠す（on, off, status）"
 timestamps = "メッセージのタイムスタンプを表示（on, off, status）。保存されます"
 exit = "終了"
+plan = "計画ファイル以外は何も変更しない 1 ターンでタスクを計画します"
+export = "プロファイルをアーカイブとしてエクスポートします (prometheus profile export と同じ)"
+import = "エクスポートされたアーカイブからプロファイルを作成します"
 
 [slash.plugins]
 none = "プラグインはありません"
@@ -978,6 +983,14 @@ not_uploaded = "何もアップロードしていません"
 confirm = "このレポートを {host} にアップロードしますか? リンクを知っている誰でも閲覧できます。\nアップロードするには /debug share yes を送信してください。送信しなければ何もアップロードされません。"
 uploaded = "アップロードしました: {url} (削除: prometheus debug delete {url})"
 
+[slash.plan]
+written = "計画を {path} に書き込みました"
+missing = "計画は書き込まれませんでした ({path} がありません)"
+
+[slash.archive]
+exported = "プロファイル '{profile}' ({members} 項目) を {path} にエクスポートしました"
+imported = "プロファイル '{profile}' を {path} から '{name}' としてインポートしました"
+
 [display]
 tool_ok = "ok"
 tool_failed = "失敗"
@@ -987,7 +1000,7 @@ summary_one = "· {secs} 秒 · ツール {calls} 件 · 入力 {input} / 出力
 summary_many = "· {secs} 秒 · ツール {calls} 件 · 入力 {input} / 出力 {output} トークン"
 cost_unknown = "コスト不明"
 background = "[バックグラウンド] {text}"
-banner = "Prometheus {version} · プロファイル {profile} · {model} · コマンドは /help"
+banner = "{agent} {version} · プロファイル {profile} · {model} · コマンドは /help"
 degraded = "機能制限: {marker}"
 focus_prompt = "集中 › "
 model_back = "モデル: {route} に戻りました"

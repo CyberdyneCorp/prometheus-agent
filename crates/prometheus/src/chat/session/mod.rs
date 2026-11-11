@@ -15,6 +15,7 @@ pub mod delegation;
 pub mod documents;
 pub mod downgrades;
 mod embed;
+mod ending;
 pub mod env;
 mod guardian;
 pub mod judge;
@@ -28,6 +29,7 @@ pub mod modal;
 pub mod model;
 mod opening;
 pub mod place;
+pub mod plan;
 mod plugins;
 pub mod processes;
 pub mod progress;
@@ -59,13 +61,10 @@ use pmt_core::human::Surface;
 use pmt_core::id::SessionId;
 use pmt_core::secret::Redactor;
 use pmt_memory::session::{Approver, MemorySession};
-use pmt_obs::trajectory::events::Event;
-use pmt_obs::trajectory::payload::{SessionEnd, SessionStart};
-use pmt_obs::trajectory::writer::Emit;
 use pmt_skills::review::Nudge;
 use pmt_skills::secrets::SecretPrompt;
 use pmt_skills::session::{SessionSetup, SkillSessions, SkillsSession};
-use pmt_store::{EndReason, NewSession, Source, Store};
+use pmt_store::{NewSession, Source, Store};
 use pmt_tools::approval::{ApprovalRequest, CommandGate, Decision};
 use pmt_tools::environments::tool_output_reads;
 use pmt_tools::{Selection, ToolRegistry};
@@ -182,6 +181,9 @@ pub struct Factory {
     /// Where an in-process interactive chat takes background delegation
     /// completions (a daemon session gets its sink from its clients).
     delegation_inbox: Option<Arc<dyn pmt_delegation::host::Completions>>,
+    /// `--output-format stream-json`: the sessions' events also go to
+    /// stdout as they happen (spec: cli, Streaming JSONL output).
+    stream: bool,
 }
 
 /// One running session.
@@ -342,6 +344,7 @@ impl Factory {
             reread: None,
             route_flags: delegation::OwnedFlags::of(flags),
             delegation_inbox: None,
+            stream: false,
         })
     }
 
@@ -429,6 +432,30 @@ impl Factory {
         inbox: Arc<dyn pmt_delegation::host::Completions>,
     ) -> Self {
         self.delegation_inbox = Some(inbox);
+        self
+    }
+
+    /// The stdout stream of `session` (`--output-format stream-json`; a
+    /// top-level session of this process only).
+    fn stream_for(
+        &self,
+        session: &pmt_store::Session,
+        top_level: bool,
+    ) -> Option<Arc<dyn EventSink>> {
+        (self.stream && top_level).then(|| {
+            Arc::new(crate::chat::stream::Stream::new(
+                session.id.to_string(),
+                session.root_session_id.to_string(),
+                Some(self.redactor.clone()),
+            )) as Arc<dyn EventSink>
+        })
+    }
+
+    /// Streams every event of this factory's top-level sessions to stdout
+    /// (`--output-format stream-json`).
+    #[must_use]
+    pub fn with_event_stream(mut self) -> Self {
+        self.stream = true;
         self
     }
 
@@ -590,7 +617,7 @@ impl Factory {
         let tool_state = Box::pin(self.tool_state(id, built, ports)).await?;
         let tool_port = tool_state.tools();
         delegation.parent_is(&tool_port, &capabilities, &gate.gate);
-        let recording = self.recording(&session, child)?;
+        let recording = self.recording(&session, child, clients.is_none())?;
         let mut notices = Vec::new();
         let (prompt, plugin_sections) = self
             .prompt_for(id, (&skills, &memory), &mut notices, child)
@@ -819,6 +846,7 @@ impl Factory {
         &self,
         session: &pmt_store::Session,
         child: Option<&delegation::ChildSpec>,
+        no_clients: bool,
     ) -> Result<trace::Recording, Error> {
         let trajectory = pmt_obs::trajectory::writer::open_for_session(
             &self.scope,
@@ -828,7 +856,12 @@ impl Factory {
         .map(Arc::new);
         let parent = self.options.cron.as_ref().and_then(|run| run.trace);
         let trace = trace::open(&self.scope_for(child), session, parent);
-        Ok(trace::Recording { trajectory, trace })
+        let stream = self.stream_for(session, no_clients && child.is_none());
+        Ok(trace::Recording {
+            trajectory,
+            trace,
+            stream,
+        })
     }
 
     /// Attaches the session's execution environment (its terminal reports
@@ -1312,130 +1345,6 @@ impl Live {
     #[must_use]
     pub fn selection(&self) -> Selection {
         self.tool_state.selection()
-    }
-
-    /// Records `session.start` for `session` on `target`'s route, then
-    /// one `security.downgrade` per allowed hardening downgrade.
-    async fn emit_start(
-        &self,
-        session: &pmt_store::Session,
-        target: &pmt_providers::resolve::Target,
-    ) {
-        self.emit(Event::SessionStart(SessionStart {
-            source: session.source.as_str().to_owned(),
-            title: session.title.clone(),
-            model: target.model.clone(),
-            parent_session_id: session.parent_session_id.map(|p| p.to_string()),
-            trace_id: None, // stamped from the session's trace
-        }))
-        .await;
-        for event in self.downgrades.events() {
-            self.emit(event).await;
-        }
-        // The gateway fires its own sessions' start through its hooks.
-        if self.surface() != "gateway" {
-            let fields = lifecycle::session_start(&self.id.to_string(), self.surface());
-            self.plugins
-                .fire_observer(
-                    &self.plugin_call(self.surface()),
-                    "on_session_start",
-                    fields,
-                )
-                .await;
-        }
-    }
-
-    /// Emits `event` outside any turn.
-    pub async fn emit(&self, event: Event) {
-        let mut emit = Emit::now(event);
-        pmt_agent::turn::stamp(&self.recording.trace, &mut emit);
-        let Some(writer) = &self.recording.trajectory else {
-            return;
-        };
-        if let Err(err) = writer.emit(emit).await {
-            tracing::debug!(error = %err, "trajectory event dropped");
-        }
-    }
-
-    /// Ends the session row with `reason`, records `session.end` and
-    /// closes the trajectory.
-    pub async fn close(self, store: &Store, reason: EndReason) {
-        self.end(store, reason).await;
-        // Webhooks of the session's last events go out before the process
-        // that ran it may exit.
-        crate::hooks_host::outbound::flush(crate::hooks_host::outbound::FLUSH).await;
-        // Everything else the session holds (its agent, tools, delegation)
-        // may reach the writer through its event sinks: it is dropped
-        // first so the writer can be finished.
-        let trajectory = self.recording.trajectory.clone();
-        drop(self);
-        if let Some(writer) = trajectory.and_then(|t| Arc::try_unwrap(t).ok())
-            && let Err(err) = writer.finish()
-        {
-            tracing::warn!(error = %err, "could not close the trajectory");
-        }
-    }
-
-    /// Unloads the session without ending it (the messaging gateway's
-    /// agent cache): the record stays open and its next turn rebuilds the
-    /// agent from the store with the same frozen prompt. Built-in memory
-    /// is written to the session's own profile store at every call, so
-    /// nothing is left to flush.
-    pub async fn unload(self) {
-        crate::memory_provider::forget(&self.id.to_string());
-        if let Some(browser) = &self.place.browser() {
-            browser.close_session(&self.id.to_string()).await;
-        }
-        // Everything else the session holds (its agent, tools, delegation)
-        // may reach the writer through its event sinks: it is dropped
-        // first so the writer can be finished.
-        let trajectory = self.recording.trajectory.clone();
-        drop(self);
-        if let Some(writer) = trajectory.and_then(|t| Arc::try_unwrap(t).ok())
-            && let Err(err) = writer.finish()
-        {
-            tracing::warn!(error = %err, "could not close the trajectory");
-        }
-    }
-
-    /// Ends the session row with `reason` and records `session.end`,
-    /// leaving the trajectory file open: for a session something else
-    /// still holds when the process stops (prefer [`Live::close`]).
-    pub async fn end(&self, store: &Store, reason: EndReason) {
-        if let Some(delegation) = &self.delegation {
-            delegation.close();
-        }
-        pmt_tools::code_exec::kernel::close_session(&self.id.to_string());
-        crate::memory_provider::close(&self.id.to_string()).await;
-        self.emit(Event::SessionEnd(SessionEnd {
-            reason: reason.as_str().to_owned(),
-        }))
-        .await;
-        if let Err(err) = store.end_session(self.id, reason) {
-            tracing::warn!(error = %err, session = %self.id, "could not end the session");
-        }
-        // The gateway fires its own sessions' end through its hooks.
-        if self.surface() != "gateway" {
-            let fields = serde_json::json!({
-                "session_id": self.id.to_string(),
-                "reason": reason.as_str(),
-                "platform": self.surface(),
-            });
-            if let serde_json::Value::Object(fields) = fields {
-                self.plugins
-                    .fire_observer(&self.plugin_call(self.surface()), "on_session_end", fields)
-                    .await;
-            }
-        }
-        if let Some(browser) = &self.place.browser() {
-            browser.close_session(&self.id.to_string()).await;
-        }
-        // Logged, so in English.
-        let english = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
-        if let Some(text) = self.sync_back(&*english).await {
-            tracing::info!(session = %self.id, "{text}");
-        }
-        self.place.release();
     }
 
     /// Copies the remote workspace's changes back to the host (session end

@@ -402,7 +402,7 @@ When `privacy.redact_pii = true` (default false) the system SHALL, before conten
 - **THEN** the request SHALL contain a `user_` hash and `[REDACTED:phone]`, and the reply SHALL still reach user 123456789
 
 ### Requirement: Protected instruction files configuration
-`security.protected_instruction_files` (default true) SHALL keep the human-approval requirement for agent writes to instruction files (`AGENTS.md`, `CLAUDE.md`, `SOUL.md`, `IDENTITY.md`, `.cursorrules`, and any project-local `.prometheus/` configuration) under every approval mode including yolo, and `security.protected_instruction_extra_patterns` (basename globs, default empty, e.g. `*.mdc`) SHALL extend the set; setting it to false SHALL log at WARN on every start and appear as a downgrade in `prometheus doctor security`.
+`security.protected_instruction_files` (default true) SHALL keep the human-approval requirement for agent writes to instruction files (`AGENTS.md`, `CLAUDE.md`, `SOUL.md`, `IDENTITY.md`, `.cursorrules`, and any project-local `.prometheus/` configuration; the Markdown plans `/plan` writes under `.prometheus/plans/` are not configuration) under every approval mode including yolo, and `security.protected_instruction_extra_patterns` (basename globs, default empty, e.g. `*.mdc`) SHALL extend the set; setting it to false SHALL log at WARN on every start and appear as a downgrade in `prometheus doctor security`.
 **Milestone:** M1
 
 #### Scenario: Extra pattern under yolo

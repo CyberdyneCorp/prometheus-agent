@@ -97,6 +97,8 @@ worktree_dirty = "커밋되지 않은 변경 사항"
 worktree_unpushed = "푸시되지 않은 커밋 {count}개"
 worktree_dirty_unpushed = "커밋되지 않은 변경 사항과 푸시되지 않은 커밋 {count}개"
 worktree_question = "worktree {path}에 {what}이(가) 있습니다: [k] 유지(기본), [a] 보관 후 제거, [r] 제거 후 버리기 "
+session_deleted = "세션 {id}을(를) 삭제했습니다"
+confirm_exit_delete = "/exit --delete는 이 세션을 영구히 삭제합니다. 확인하려면 /exit --delete --yes를 입력하세요"
 
 [gateway]
 stopped = "중지되었습니다. 이 세션을 계속할 수 있습니다."
@@ -454,6 +456,9 @@ footer = "이 채팅의 답변에 모델, 컨텍스트, 디렉터리 바닥글 �
 focus = "이 세션의 도구 진행 표시 숨기기(on, off, status)"
 timestamps = "메시지 시간 표시(on, off, status). 저장됨"
 exit = "나가기"
+plan = "계획 파일 외에는 아무것도 바꾸지 않는 한 턴으로 작업을 계획합니다"
+export = "프로필을 아카이브로 내보냅니다 (prometheus profile export와 같음)"
+import = "내보낸 아카이브로 프로필을 만듭니다"
 
 [slash.plugins]
 none = "플러그인이 없습니다"
@@ -978,6 +983,14 @@ not_uploaded = "업로드된 것이 없습니다"
 confirm = "이 보고서를 {host}에 업로드할까요? 링크가 있는 누구나 볼 수 있습니다.\n업로드하려면 /debug share yes를 보내세요. 그렇지 않으면 아무것도 업로드되지 않습니다."
 uploaded = "업로드됨: {url} (삭제: prometheus debug delete {url})"
 
+[slash.plan]
+written = "계획을 {path}에 저장했습니다"
+missing = "계획이 작성되지 않았습니다 ({path} 없음)"
+
+[slash.archive]
+exported = "프로필 '{profile}'({members}개 항목)을 {path}(으)로 내보냈습니다"
+imported = "프로필 '{profile}'을 {path}에서 '{name}'(으)로 가져왔습니다"
+
 [display]
 tool_ok = "ok"
 tool_failed = "실패"
@@ -987,7 +1000,7 @@ summary_one = "· {secs}초 · 도구 {calls}개 · 입력 {input} / 출력 {out
 summary_many = "· {secs}초 · 도구 {calls}개 · 입력 {input} / 출력 {output} 토큰"
 cost_unknown = "비용 알 수 없음"
 background = "[백그라운드] {text}"
-banner = "Prometheus {version} · 프로필 {profile} · {model} · 명령은 /help"
+banner = "{agent} {version} · 프로필 {profile} · {model} · 명령은 /help"
 degraded = "기능 제한: {marker}"
 focus_prompt = "집중 › "
 model_back = "모델: {route}(으)로 돌아감"

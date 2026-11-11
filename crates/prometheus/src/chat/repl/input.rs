@@ -3,7 +3,7 @@
 //! for one, so the user can type while a turn runs; text printed while a
 //! line is being edited appears above the prompt.
 //!
-//! A trailing `\` or Alt+Enter continues the line; history lives in
+//! A trailing `\` or Alt+Enter (Ctrl+Enter too) continues the line; history lives in
 //! `<profile>/cli_history` (at most [`HISTORY_CAP`] entries, secrets
 //! redacted, owner-only); `@` completes files under the session's working
 //! directory. In the editor Ctrl+C is a key (no signal), reported as
@@ -415,10 +415,14 @@ fn editor(
         cwd: setup.cwd.clone(),
         shared: Arc::clone(shared),
     }));
-    editor.bind_sequence(
-        KeyEvent(KeyCode::Enter, Modifiers::ALT),
-        EventHandler::Simple(Cmd::Newline),
-    );
+    // Ctrl+Enter is the Windows console's newline chord (spec: cli,
+    // Windows console behaviour); Alt+Enter works everywhere.
+    for modifier in [Modifiers::ALT, Modifiers::CTRL] {
+        editor.bind_sequence(
+            KeyEvent(KeyCode::Enter, modifier),
+            EventHandler::Simple(Cmd::Newline),
+        );
+    }
     editor.bind_sequence(
         rustyline::Event::KeySeq(vec![KeyEvent::ctrl('X'), KeyEvent::ctrl('E')]),
         EventHandler::Conditional(Box::new(ComposeKey(Arc::clone(shared)))),

@@ -97,6 +97,8 @@ worktree_dirty = "des modifications non validées"
 worktree_unpushed = "{count} commit(s) non poussé(s)"
 worktree_dirty_unpushed = "des modifications non validées et {count} commit(s) non poussé(s)"
 worktree_question = "le worktree {path} a {what} : [k] conserver (par défaut), [a] archiver et supprimer, [r] supprimer et abandonner "
+session_deleted = "session {id} supprimée"
+confirm_exit_delete = "/exit --delete supprime définitivement cette session ; tapez /exit --delete --yes pour confirmer"
 
 [gateway]
 stopped = "Arrêté. Vous pouvez poursuivre cette session."
@@ -454,6 +456,9 @@ footer = "Ajouter ou retirer le pied de page modèle, contexte et répertoire de
 focus = "Masquer la progression des outils pour cette session (on, off, status)"
 timestamps = "Afficher l'heure des messages (on, off, status) ; enregistré"
 exit = "Quitter"
+plan = "Planifier une tâche en un tour qui ne modifie que son fichier de plan"
+export = "Exporter un profil sous forme d'archive (comme prometheus profile export)"
+import = "Créer un profil à partir d'une archive exportée"
 
 [slash.plugins]
 none = "aucun plugin"
@@ -978,6 +983,14 @@ not_uploaded = "rien n'a été envoyé"
 confirm = "Envoyer ce rapport vers {host} ? Il sera public pour toute personne ayant le lien.\nEnvoyez /debug share yes pour l'envoyer ; sinon rien n'est envoyé."
 uploaded = "envoyé : {url} (supprimez-le avec : prometheus debug delete {url})"
 
+[slash.plan]
+written = "plan écrit dans {path}"
+missing = "aucun plan n'a été écrit ({path} est absent)"
+
+[slash.archive]
+exported = "profil '{profile}' exporté ({members} éléments) vers {path}"
+imported = "profil '{profile}' importé depuis {path} sous le nom '{name}'"
+
 [display]
 tool_ok = "ok"
 tool_failed = "échec"
@@ -987,7 +1000,7 @@ summary_one = "· {secs}s · {calls} outil · {input} jetons entrants / {output}
 summary_many = "· {secs}s · {calls} outils · {input} jetons entrants / {output} sortants"
 cost_unknown = "coût inconnu"
 background = "[arrière-plan] {text}"
-banner = "Prometheus {version} · profil {profile} · {model} · /help pour les commandes"
+banner = "{agent} {version} · profil {profile} · {model} · /help pour les commandes"
 degraded = "dégradé : {marker}"
 focus_prompt = "focus › "
 model_back = "modèle : retour à {route}"

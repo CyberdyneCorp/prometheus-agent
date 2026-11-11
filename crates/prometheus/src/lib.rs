@@ -22,6 +22,7 @@ pub mod completions;
 pub mod config_cmd;
 pub mod connectors_cmd;
 pub mod connectors_host;
+pub mod console_cmd;
 pub mod context;
 pub mod context_engine;
 pub mod cron_cmd;
@@ -84,6 +85,7 @@ pub mod smoke_suite;
 pub mod startup;
 pub mod status_cmd;
 pub mod surface;
+pub mod themes_cmd;
 pub mod tools_cmd;
 pub mod trajectory_cmd;
 pub mod trajectory_export;
@@ -95,6 +97,7 @@ pub mod usage_cmd;
 pub mod vault_cmd;
 pub mod verify_cmd;
 pub mod version;
+pub mod webhooks_cmd;
 pub mod worktrees_cmd;
 
 pub use cli::{

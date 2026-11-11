@@ -48,6 +48,23 @@ pub const ALL_SURFACES: &[Surface] = &[
 /// The interactive terminal surfaces.
 pub const TERMINALS: &[Surface] = &[Surface::Cli, Surface::Tui, Surface::Desktop];
 
+/// Commands that ask `once / always / cancel` first (spec: cli,
+/// Destructive command confirmation).
+const DESTRUCTIVE: &[&str] = &["clear", "new", "undo", "rewind"];
+
+/// Whether `/name args` changes or removes the session: the destructive
+/// commands and `/exit --delete`.
+#[must_use]
+pub fn is_destructive(name: &str, args: &str) -> bool {
+    DESTRUCTIVE.contains(&name) || (name == "exit" && exit_deletes(args))
+}
+
+/// Whether `/exit` arguments ask to delete the session (`--delete`).
+#[must_use]
+pub fn exit_deletes(args: &str) -> bool {
+    args.split_whitespace().any(|w| w == "--delete")
+}
+
 /// What a command typed while a turn runs does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BusyPolicy {

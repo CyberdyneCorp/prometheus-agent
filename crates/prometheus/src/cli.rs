@@ -177,6 +177,25 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::projects_cmd::ProjectsCommand,
     },
+    /// Themes: list them, use one, set a colour, spinner or branding key
+    /// of the custom theme, show the one in use.
+    Themes {
+        /// The themes subcommand.
+        #[command(subcommand)]
+        command: crate::themes_cmd::ThemesCommand,
+    },
+    /// A console that runs only read-mostly prometheus commands (status,
+    /// doctor, logs, sessions list/show/export, config show/get/validate,
+    /// usage, version, update --check, daemon status/restart, gateway
+    /// status), never a shell.
+    Console,
+    /// Webhook routes kept in the profile's state: subscribe (prints the
+    /// route URL and, once, its signing secret), list, remove and test.
+    Webhooks {
+        /// The webhooks subcommand.
+        #[command(subcommand)]
+        command: crate::webhooks_cmd::WebhooksCommand,
+    },
     /// The credential vault: logins, cards and addresses the browser fills
     /// by handle.
     Vault {

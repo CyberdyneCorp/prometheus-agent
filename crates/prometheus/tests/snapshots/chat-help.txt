@@ -127,6 +127,14 @@ Options:
       --usage-file <PATH>
           Write this run's usage as JSON to PATH when it ends, whatever the outcome
 
+      --output-format <FORMAT>
+          Output of a one-shot run: the answer as text, one JSON object (as `--json`), or every event as a JSON line ending with a `result` line (`stream-json`, one-shot runs only)
+
+          Possible values:
+          - text:        The answer as text (the default)
+          - json:        One JSON object at the end (as `--json`)
+          - stream-json: One JSON object per event as it happens, then a `result` line
+
       --mock-script <PATH>
           Script for the `mock` provider
 

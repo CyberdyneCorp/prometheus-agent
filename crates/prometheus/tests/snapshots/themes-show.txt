@@ -1,0 +1,6 @@
+theme: custom
+extends: slate
+spinner.frames: - \ | /
+spinner.phrases: thinking, still thinking
+branding.agent_name: Atlas
+branding.prompt_symbol: λ

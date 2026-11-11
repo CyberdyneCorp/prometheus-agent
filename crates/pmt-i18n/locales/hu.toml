@@ -97,6 +97,8 @@ worktree_dirty = "nem véglegesített módosítások"
 worktree_unpushed = "{count} fel nem töltött commit"
 worktree_dirty_unpushed = "nem véglegesített módosítások és {count} fel nem töltött commit"
 worktree_question = "a(z) {path} worktree-ben van {what}: [k] megtartás (alapértelmezett), [a] archiválás és eltávolítás, [r] eltávolítás és elvetés "
+session_deleted = "a(z) {id} munkamenet törölve"
+confirm_exit_delete = "a /exit --delete végleg törli ezt a munkamenetet; a megerősítéshez írd be: /exit --delete --yes"
 
 [gateway]
 stopped = "Leállítva. Folytathatod ezt a munkamenetet."
@@ -454,6 +456,9 @@ footer = "A modellt, kontextust és könyvtárat mutató lábléc hozzáadása v
 focus = "Az eszközök előrehaladásának elrejtése ebben a munkamenetben (on, off, status)"
 timestamps = "Üzenet-időbélyegek megjelenítése (on, off, status); mentve"
 exit = "Kilépés"
+plan = "Feladat megtervezése egy körben, amely csak a tervfájlját módosítja"
+export = "Profil exportálása archívumként (mint a prometheus profile export)"
+import = "Profil létrehozása exportált archívumból"
 
 [slash.plugins]
 none = "nincsenek bővítmények"
@@ -978,6 +983,14 @@ not_uploaded = "semmi sem lett feltöltve"
 confirm = "Feltöltöd ezt a jelentést ide: {host}? Bárki láthatja, akinek megvan a link.\nA feltöltéshez küldd: /debug share yes; különben semmi sem töltődik fel."
 uploaded = "feltöltve: {url} (törlés: prometheus debug delete {url})"
 
+[slash.plan]
+written = "a terv ide került: {path}"
+missing = "nem készült terv ({path} hiányzik)"
+
+[slash.archive]
+exported = "a(z) '{profile}' profil exportálva ({members} elem) ide: {path}"
+imported = "a(z) '{profile}' profil importálva innen: {path}, néven: '{name}'"
+
 [display]
 tool_ok = "ok"
 tool_failed = "sikertelen"
@@ -987,7 +1000,7 @@ summary_one = "· {secs} mp · {calls} eszköz · {input} be / {output} ki token
 summary_many = "· {secs} mp · {calls} eszköz · {input} be / {output} ki token"
 cost_unknown = "ismeretlen költség"
 background = "[háttér] {text}"
-banner = "Prometheus {version} · profil {profile} · {model} · /help a parancsokhoz"
+banner = "{agent} {version} · profil {profile} · {model} · /help a parancsokhoz"
 degraded = "korlátozott: {marker}"
 focus_prompt = "fókusz › "
 model_back = "modell: vissza ide: {route}"

@@ -97,6 +97,8 @@ worktree_dirty = "nicht committete Änderungen"
 worktree_unpushed = "{count} nicht gepushte(r) Commit(s)"
 worktree_dirty_unpushed = "nicht committete Änderungen und {count} nicht gepushte(r) Commit(s)"
 worktree_question = "Worktree {path} hat {what}: [k] behalten (Standard), [a] archivieren und entfernen, [r] entfernen und verwerfen "
+session_deleted = "Sitzung {id} gelöscht"
+confirm_exit_delete = "/exit --delete löscht diese Sitzung endgültig; gib /exit --delete --yes ein, um es zu bestätigen"
 
 [gateway]
 stopped = "Gestoppt. Du kannst diese Sitzung fortsetzen."
@@ -454,6 +456,9 @@ footer = "Die Fußzeile mit Modell, Kontext und Verzeichnis bei Antworten in die
 focus = "Den Werkzeugfortschritt für diese Sitzung ausblenden (on, off, status)"
 timestamps = "Zeitstempel der Nachrichten anzeigen (on, off, status); gespeichert"
 exit = "Beenden"
+plan = "Eine Aufgabe in einem Durchgang planen, der nur seine Plandatei ändert"
+export = "Ein Profil als Archiv exportieren (wie prometheus profile export)"
+import = "Ein Profil aus einem exportierten Archiv anlegen"
 
 [slash.plugins]
 none = "keine Plugins"
@@ -978,6 +983,14 @@ not_uploaded = "es wurde nichts hochgeladen"
 confirm = "Diesen Bericht zu {host} hochladen? Er ist für jeden mit dem Link öffentlich.\nSende /debug share yes zum Hochladen; sonst wird nichts hochgeladen."
 uploaded = "hochgeladen: {url} (löschen mit: prometheus debug delete {url})"
 
+[slash.plan]
+written = "Plan gespeichert unter {path}"
+missing = "es wurde kein Plan geschrieben ({path} fehlt)"
+
+[slash.archive]
+exported = "Profil '{profile}' ({members} Einträge) nach {path} exportiert"
+imported = "Profil '{profile}' aus {path} als '{name}' importiert"
+
 [display]
 tool_ok = "ok"
 tool_failed = "fehlgeschlagen"
@@ -987,7 +1000,7 @@ summary_one = "· {secs}s · {calls} Werkzeug · {input} ein / {output} aus Toke
 summary_many = "· {secs}s · {calls} Werkzeuge · {input} ein / {output} aus Tokens"
 cost_unknown = "Kosten unbekannt"
 background = "[Hintergrund] {text}"
-banner = "Prometheus {version} · Profil {profile} · {model} · /help für Befehle"
+banner = "{agent} {version} · Profil {profile} · {model} · /help für Befehle"
 degraded = "eingeschränkt: {marker}"
 focus_prompt = "Fokus › "
 model_back = "Modell: zurück zu {route}"

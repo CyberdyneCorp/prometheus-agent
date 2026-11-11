@@ -61,6 +61,7 @@ pub mod scope;
 pub mod secrets;
 pub mod validate;
 mod validate_platforms;
+pub mod webhook_subscriptions;
 pub mod write;
 
 pub use daemon::DaemonConfig;

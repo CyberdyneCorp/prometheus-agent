@@ -337,7 +337,7 @@ impl Run<'_> {
 }
 
 /// Shows `text` on the session's clients as a `command.notice` event.
-fn notice(link: &Link, text: &str) {
+pub(super) fn notice(link: &Link, text: &str) {
     link.emit::<SessionEvent>(&json!({
         "type": COMMAND_NOTICE,
         "ts": jiff::Timestamp::now().to_string(),

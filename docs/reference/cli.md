@@ -27,6 +27,9 @@ Commands:
   cron         Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and the headless tick
   worktrees    Git worktrees of sessions and subagents: list, sweep and restore archived trees
   projects     Projects: named workspaces spanning folders, the active project, archive and restore
+  themes       Themes: list them, use one, set a colour, spinner or branding key of the custom theme, show the one in use
+  console      A console that runs only read-mostly prometheus commands (status, doctor, logs, sessions list/show/export, config show/get/validate, usage, version, update --check, daemon status/restart, gateway status), never a shell
+  webhooks     Webhook routes kept in the profile's state: subscribe (prints the route URL and, once, its signing secret), list, remove and test
   vault        The credential vault: logins, cards and addresses the browser fills by handle
   security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one
@@ -200,6 +203,14 @@ Options:
       --usage-file <PATH>
           Write this run's usage as JSON to PATH when it ends, whatever the outcome
 
+      --output-format <FORMAT>
+          Output of a one-shot run: the answer as text, one JSON object (as `--json`), or every event as a JSON line ending with a `result` line (`stream-json`, one-shot runs only)
+
+          Possible values:
+          - text:        The answer as text (the default)
+          - json:        One JSON object at the end (as `--json`)
+          - stream-json: One JSON object per event as it happens, then a `result` line
+
       --mock-script <PATH>
           Script for the `mock` provider
 
@@ -345,6 +356,14 @@ Options:
       --usage-file <PATH>
           Write this run's usage as JSON to PATH when it ends, whatever the outcome
 
+      --output-format <FORMAT>
+          Output of a one-shot run: the answer as text, one JSON object (as `--json`), or every event as a JSON line ending with a `result` line (`stream-json`, one-shot runs only)
+
+          Possible values:
+          - text:        The answer as text (the default)
+          - json:        One JSON object at the end (as `--json`)
+          - stream-json: One JSON object per event as it happens, then a `result` line
+
       --mock-script <PATH>
           Script for the `mock` provider
 
@@ -402,7 +421,7 @@ Options:
 ```text
 Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
 
-Usage: prometheus setup [OPTIONS] [SECTION]
+Usage: prometheus setup [OPTIONS] [SECTION] [PLATFORM]
 
 Arguments:
   [SECTION]
@@ -414,7 +433,12 @@ Arguments:
           - tools:    Toolsets per surface and tool providers
           - terminal: The terminal backend
           - memory:   The memory stores
+          - tts:      Text to speech: the provider and its API key
+          - agent:    The agent: identity file, approval mode and iteration budget
           - gateway:  Messaging adapters (with the gateway)
+
+  [PLATFORM]
+          `setup gateway <platform>`: the messaging adapter to set up
 
 Options:
       --home <PATH>
@@ -426,17 +450,23 @@ Options:
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
 
-      --reset-onboarding
-          Clear the onboarding state (offered setup, shown tips, tour steps)
+      --quick
+          Ask only for the values the profile has not set yet
 
-      --portal
-          Sign in to the Nous Portal, make `nous` the main provider and offer to route every tool category through its tool gateway
+      --reset
+          Restore the section's settings to their defaults (after a confirmation; secrets are kept)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
 
       --json
           Print one JSON document on stdout; errors go to stderr as JSON
+
+      --reset-onboarding
+          Clear the onboarding state (offered setup, shown tips, tour steps)
+
+      --portal
+          Sign in to the Nous Portal, make `nous` (and its default model) the main route and send web, image and speech tools through its tool gateway, showing the change before writing it
 
   -v, --verbose...
           More detail; repeatable
@@ -10449,6 +10479,612 @@ Usage: prometheus projects help bind-board
 Print this message or the help of the given subcommand(s)
 
 Usage: prometheus projects help help
+```
+
+## `prometheus themes`
+
+```text
+Themes: list them, use one, set a colour, spinner or branding key of the custom theme, show the one in use
+
+Usage: prometheus themes [OPTIONS] <COMMAND>
+
+Commands:
+  list  List the themes (the one in use is marked) [alias: ls]
+  use   Use a theme from now on (`display.theme`)
+  set   Set one key of the custom theme (`colors.<role>`, `spinner.frames`, `spinner.phrases`, `branding.agent_name`, `branding.prompt_symbol`, `branding.banner`) and use it; lists take a TOML array or a comma-separated value
+  show  Show the theme in use: its base, spinner and branding
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus themes list`
+
+```text
+List the themes (the one in use is marked)
+
+Usage: prometheus themes list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus themes use`
+
+```text
+Use a theme from now on (`display.theme`)
+
+Usage: prometheus themes use [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The theme
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus themes set`
+
+```text
+Set one key of the custom theme (`colors.<role>`, `spinner.frames`, `spinner.phrases`, `branding.agent_name`, `branding.prompt_symbol`, `branding.banner`) and use it; lists take a TOML array or a comma-separated value
+
+Usage: prometheus themes set [OPTIONS] <KEY> <VALUE>
+
+Arguments:
+  <KEY>
+          The key
+
+  <VALUE>
+          Its value
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus themes show`
+
+```text
+Show the theme in use: its base, spinner and branding
+
+Usage: prometheus themes show [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus themes help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus themes help [COMMAND]
+
+Commands:
+  list  List the themes (the one in use is marked)
+  use   Use a theme from now on (`display.theme`)
+  set   Set one key of the custom theme (`colors.<role>`, `spinner.frames`, `spinner.phrases`, `branding.agent_name`, `branding.prompt_symbol`, `branding.banner`) and use it; lists take a TOML array or a comma-separated value
+  show  Show the theme in use: its base, spinner and branding
+  help  Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus themes help list`
+
+```text
+List the themes (the one in use is marked)
+
+Usage: prometheus themes help list
+```
+
+## `prometheus themes help use`
+
+```text
+Use a theme from now on (`display.theme`)
+
+Usage: prometheus themes help use
+```
+
+## `prometheus themes help set`
+
+```text
+Set one key of the custom theme (`colors.<role>`, `spinner.frames`, `spinner.phrases`, `branding.agent_name`, `branding.prompt_symbol`, `branding.banner`) and use it; lists take a TOML array or a comma-separated value
+
+Usage: prometheus themes help set
+```
+
+## `prometheus themes help show`
+
+```text
+Show the theme in use: its base, spinner and branding
+
+Usage: prometheus themes help show
+```
+
+## `prometheus themes help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus themes help help
+```
+
+## `prometheus console`
+
+```text
+A console that runs only read-mostly prometheus commands (status, doctor, logs, sessions list/show/export, config show/get/validate, usage, version, update --check, daemon status/restart, gateway status), never a shell
+
+Usage: prometheus console [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus webhooks`
+
+```text
+Webhook routes kept in the profile's state: subscribe (prints the route URL and, once, its signing secret), list, remove and test
+
+Usage: prometheus webhooks [OPTIONS] <COMMAND>
+
+Commands:
+  subscribe  Create a webhook route; prints its URL and (once) its new signing secret
+  list       List the subscribed routes (never their secrets) [alias: ls]
+  remove     Remove a subscribed route (and the signing secret made for it) [alias: rm]
+  test       Post a signed sample payload to a route through the daemon's listener; prints the session it started
+  help       Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus webhooks subscribe`
+
+```text
+Create a webhook route; prints its URL and (once) its new signing secret
+
+Usage: prometheus webhooks subscribe [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The route name (a-z, 0-9, '-', '_')
+
+Options:
+      --events <LIST>
+          Event types admitted (comma-separated; default: every event)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --skills <LIST>
+          Skills preloaded into each delivery's session (comma-separated)
+
+      --deliver <TARGET>
+          Where the answer goes: origin, log, `github_comment` or a send target `platform[:chat_id[:thread_id]]` (default: origin)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --prompt <TEMPLATE>
+          The turn's input, `{dot.path}` placeholders taken from the payload
+
+      --secret-name <NAME>
+          Sign with this existing secret instead of a generated one
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --deliver-only
+          Send the rendered prompt to `--deliver` with no model call
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --script <PATH>
+          A transform script under the profile's `scripts/` directory
+
+      --cron-job <JOB>
+          Fire this scheduled job (id or name) instead of a turn
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+      --mirror-to-session
+          Also append the delivered text to the target chat's session
+
+  -h, --help
+          Print help
+```
+
+## `prometheus webhooks list`
+
+```text
+List the subscribed routes (never their secrets)
+
+Usage: prometheus webhooks list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus webhooks remove`
+
+```text
+Remove a subscribed route (and the signing secret made for it)
+
+Usage: prometheus webhooks remove [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The route
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus webhooks test`
+
+```text
+Post a signed sample payload to a route through the daemon's listener; prints the session it started
+
+Usage: prometheus webhooks test [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The route
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --payload <FILE>
+          The JSON payload to send instead of the sample
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus webhooks help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus webhooks help [COMMAND]
+
+Commands:
+  subscribe  Create a webhook route; prints its URL and (once) its new signing secret
+  list       List the subscribed routes (never their secrets)
+  remove     Remove a subscribed route (and the signing secret made for it)
+  test       Post a signed sample payload to a route through the daemon's listener; prints the session it started
+  help       Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus webhooks help subscribe`
+
+```text
+Create a webhook route; prints its URL and (once) its new signing secret
+
+Usage: prometheus webhooks help subscribe
+```
+
+## `prometheus webhooks help list`
+
+```text
+List the subscribed routes (never their secrets)
+
+Usage: prometheus webhooks help list
+```
+
+## `prometheus webhooks help remove`
+
+```text
+Remove a subscribed route (and the signing secret made for it)
+
+Usage: prometheus webhooks help remove
+```
+
+## `prometheus webhooks help test`
+
+```text
+Post a signed sample payload to a route through the daemon's listener; prints the session it started
+
+Usage: prometheus webhooks help test
+```
+
+## `prometheus webhooks help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus webhooks help help
 ```
 
 ## `prometheus vault`
@@ -26083,6 +26719,9 @@ Commands:
   cron         Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and the headless tick
   worktrees    Git worktrees of sessions and subagents: list, sweep and restore archived trees
   projects     Projects: named workspaces spanning folders, the active project, archive and restore
+  themes       Themes: list them, use one, set a colour, spinner or branding key of the custom theme, show the one in use
+  console      A console that runs only read-mostly prometheus commands (status, doctor, logs, sessions list/show/export, config show/get/validate, usage, version, update --check, daemon status/restart, gateway status), never a shell
+  webhooks     Webhook routes kept in the profile's state: subscribe (prints the route URL and, once, its signing secret), list, remove and test
   vault        The credential vault: logins, cards and addresses the browser fills by handle
   security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one
@@ -27725,6 +28364,106 @@ Usage: prometheus help projects restore
 Bind a project to a kanban board (omit the board to unbind)
 
 Usage: prometheus help projects bind-board
+```
+
+## `prometheus help themes`
+
+```text
+Themes: list them, use one, set a colour, spinner or branding key of the custom theme, show the one in use
+
+Usage: prometheus help themes [COMMAND]
+
+Commands:
+  list  List the themes (the one in use is marked)
+  use   Use a theme from now on (`display.theme`)
+  set   Set one key of the custom theme (`colors.<role>`, `spinner.frames`, `spinner.phrases`, `branding.agent_name`, `branding.prompt_symbol`, `branding.banner`) and use it; lists take a TOML array or a comma-separated value
+  show  Show the theme in use: its base, spinner and branding
+```
+
+## `prometheus help themes list`
+
+```text
+List the themes (the one in use is marked)
+
+Usage: prometheus help themes list
+```
+
+## `prometheus help themes use`
+
+```text
+Use a theme from now on (`display.theme`)
+
+Usage: prometheus help themes use
+```
+
+## `prometheus help themes set`
+
+```text
+Set one key of the custom theme (`colors.<role>`, `spinner.frames`, `spinner.phrases`, `branding.agent_name`, `branding.prompt_symbol`, `branding.banner`) and use it; lists take a TOML array or a comma-separated value
+
+Usage: prometheus help themes set
+```
+
+## `prometheus help themes show`
+
+```text
+Show the theme in use: its base, spinner and branding
+
+Usage: prometheus help themes show
+```
+
+## `prometheus help console`
+
+```text
+A console that runs only read-mostly prometheus commands (status, doctor, logs, sessions list/show/export, config show/get/validate, usage, version, update --check, daemon status/restart, gateway status), never a shell
+
+Usage: prometheus help console
+```
+
+## `prometheus help webhooks`
+
+```text
+Webhook routes kept in the profile's state: subscribe (prints the route URL and, once, its signing secret), list, remove and test
+
+Usage: prometheus help webhooks [COMMAND]
+
+Commands:
+  subscribe  Create a webhook route; prints its URL and (once) its new signing secret
+  list       List the subscribed routes (never their secrets)
+  remove     Remove a subscribed route (and the signing secret made for it)
+  test       Post a signed sample payload to a route through the daemon's listener; prints the session it started
+```
+
+## `prometheus help webhooks subscribe`
+
+```text
+Create a webhook route; prints its URL and (once) its new signing secret
+
+Usage: prometheus help webhooks subscribe
+```
+
+## `prometheus help webhooks list`
+
+```text
+List the subscribed routes (never their secrets)
+
+Usage: prometheus help webhooks list
+```
+
+## `prometheus help webhooks remove`
+
+```text
+Remove a subscribed route (and the signing secret made for it)
+
+Usage: prometheus help webhooks remove
+```
+
+## `prometheus help webhooks test`
+
+```text
+Post a signed sample payload to a route through the daemon's listener; prints the session it started
+
+Usage: prometheus help webhooks test
 ```
 
 ## `prometheus help vault`

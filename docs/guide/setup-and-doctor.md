@@ -2,7 +2,7 @@
 
 ## The setup wizard
 
-`prometheus setup [model|secrets|tools|terminal|memory|gateway]` walks
+`prometheus setup [model|secrets|tools|terminal|memory|tts|agent|gateway]` walks
 through a profile's settings. Each question shows the current value and
 Enter keeps it, so running the wizard again and accepting every default
 leaves `config.toml` byte-identical. Values are written only through the
@@ -17,10 +17,25 @@ keychain), never to `config.toml`.
 - `tools`: the tool configurator (below).
 - `terminal`: `terminal.backend` (`local` in this build).
 - `memory`: `memory.memory_enabled` and `memory.user_profile_enabled`.
-- `gateway`: messaging adapters, available with the gateway (exit 69
-  until then).
+- `tts`: `tts.provider` and, for a cloud provider, its API key.
+- `agent`: the identity file `SOUL.md`, `approvals.mode` and
+  `agent.max_iterations`.
+- `gateway [<platform>]`: one messaging adapter, field by field from its
+  configuration schema. Its credential (`TELEGRAM_BOT_TOKEN`...) and every
+  secret-reference option are read hidden and stored only in the secrets
+  store; the other scalar options show their current value or default
+  (tables and lists stay with `prometheus config set`). The adapter is
+  enabled, and when the daemon runs the wizard offers to start it.
 
-Without a section the wizard runs model, secrets, terminal and memory.
+Without a section the wizard runs model, secrets, terminal, memory, tts
+and agent; the first full run on a profile offers to import a Hermes,
+OpenClaw, Claude Code, Codex or Cursor home it finds (`prometheus migrate
+from-...`). `--quick` asks only for what the profile has not set (a
+configured model is not asked for again). `--reset` restores the
+section's settings to their defaults after a confirmation, keeping the
+secrets. `--portal` signs in to the Nous Portal and shows the change it
+makes (`model.provider = "nous"` with the portal's default model, and the
+web, image and speech tools through its tool gateway) before writing it.
 An interactive `prometheus` on a profile with no model offers `setup
 model` first. `--non-interactive` writes the `--set` values instead of
 asking and takes missing secrets from the environment (`PMT_SECRET_<NAME>`
@@ -142,3 +157,23 @@ $ prometheus completions bash
 $ prometheus __complete bash -- prometheus config set agent.max_it
 agent.max_iterations
 ```
+
+## Windows console
+
+On Windows the CLI switches the console to UTF-8 (input and output code
+page 65001) and turns on virtual terminal processing for its lifetime;
+the previous code pages and mode come back when it exits. Ctrl+Enter
+inserts a line break like Alt+Enter. `prometheus doctor` reports the
+shell the [`terminal`](../reference/tools.md#terminal) tool uses and whether the install directory is on
+`PATH` (`terminal/install_on_path`).
+
+## The safe console
+
+`prometheus console` is a prompt that runs only `status`, `doctor`,
+`logs`, `sessions list|show|export`, `config show|get|validate`, `usage`,
+`version`, `update --check`, `daemon status|restart` and `gateway status`,
+on the console's own `-p` profile. Each line is parsed by the CLI's own
+parser, never by a shell: a line with shell syntax (`;`, `|`, `&`, `<`,
+`>`, backticks, `$`, a leading `!`) or any other command is answered `not
+available in the console` and nothing runs. `help` lists the commands,
+`exit` leaves.

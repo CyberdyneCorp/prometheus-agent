@@ -97,6 +97,8 @@ worktree_dirty = "ongekommitteerde veranderinge"
 worktree_unpushed = "{count} ongestoote commit(s)"
 worktree_dirty_unpushed = "ongekommitteerde veranderinge en {count} ongestoote commit(s)"
 worktree_question = "worktree {path} het {what}: [k] behou (verstek), [a] argiveer en verwyder, [r] verwyder en weggooi "
+session_deleted = "sessie {id} geskrap"
+confirm_exit_delete = "/exit --delete skrap hierdie sessie permanent; tik /exit --delete --yes om te bevestig"
 
 [gateway]
 stopped = "Gestop. Jy kan hierdie sessie voortsit."
@@ -454,6 +456,9 @@ footer = "Voeg die voetskrif met model, konteks en gids by antwoorde in hierdie 
 focus = "Versteek gereedskapvordering vir hierdie sessie (on, off, status)"
 timestamps = "Wys boodskaptydstempels (on, off, status); gestoor"
 exit = "Gaan uit"
+plan = "Beplan 'n taak in een beurt wat niks verander behalwe sy planlêer"
+export = "Voer 'n profiel uit as 'n argief (soos prometheus profile export)"
+import = "Skep 'n profiel uit 'n uitgevoerde argief"
 
 [slash.plugins]
 none = "geen plugins nie"
@@ -978,6 +983,14 @@ not_uploaded = "niks is opgelaai nie"
 confirm = "Laai hierdie verslag op na {host}? Dit sal publiek wees vir enigeen met die skakel.\nStuur /debug share yes om op te laai; anders word niks opgelaai nie."
 uploaded = "opgelaai: {url} (vee dit uit met: prometheus debug delete {url})"
 
+[slash.plan]
+written = "plan geskryf na {path}"
+missing = "geen plan is geskryf nie ({path} ontbreek)"
+
+[slash.archive]
+exported = "profiel '{profile}' uitgevoer ({members} lede) na {path}"
+imported = "profiel '{profile}' ingevoer uit {path} as '{name}'"
+
 [display]
 tool_ok = "ok"
 tool_failed = "misluk"
@@ -987,7 +1000,7 @@ summary_one = "· {secs}s · {calls} gereedskap · {input} in / {output} uit tok
 summary_many = "· {secs}s · {calls} gereedskappe · {input} in / {output} uit tokens"
 cost_unknown = "koste onbekend"
 background = "[agtergrond] {text}"
-banner = "Prometheus {version} · profiel {profile} · {model} · /help vir opdragte"
+banner = "{agent} {version} · profiel {profile} · {model} · /help vir opdragte"
 degraded = "afgegradeer: {marker}"
 focus_prompt = "fokus › "
 model_back = "model: terug na {route}"

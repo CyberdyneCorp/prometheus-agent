@@ -1,0 +1,9 @@
+Model — configured (--quick keeps it)
+Secrets — the configured providers need no API key
+Terminal — backend local (set)
+Memory — the agent's notes and your user profile
+keep agent memory? [Y/n] keep a user profile? [Y/n] Speech — provider: unset (available: edge, elevenlabs, openai, gemini, xai, mistral, minimax, deepinfra, nous, piper, kittentts, neutts; Enter keeps it)
+TTS provider: tts.provider = "edge"
+Agent — identity, approvals and iteration budget
+  identity file SOUL.md (in the profile): none
+identity (who the agent is; Enter keeps it): approval mode (manual, smart, off) [manual]: model calls per turn [500]: setup done

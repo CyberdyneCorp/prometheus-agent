@@ -41,6 +41,21 @@ error: --query, --prompt-file and -z <prompt> cannot be used together
 A prompt file is sent verbatim: a body that starts with `/` or `!` is
 text for the model, never a command.
 
+`--output-format text|json|stream-json` picks the output of a one-shot
+run (`json` is `--json`). `stream-json` writes each event of the session
+as it happens, one JSON object per line in the trajectory's line shape
+(`session.start`, `user.message`, `tool.call`, `tool.result`,
+`assistant.message`, `turn.end`...), flushed after every line, and ends
+with one `result` line carrying `session_id`, `answer`, `usage` and
+`exit_reason`; errors go to stderr as JSON and the exit status is the
+same as above. An interactive or TUI session cannot stream (exit 2).
+
+```console
+$ prometheus -z "hi" --output-format stream-json
+{"v":"<v>","ts":"<ts>","seq":1,"session_id":"<id>","root_session_id":"<id>","turn_id":null,"span_id":"<span>","parent_span_id":null,"type":"session.start","payload":<payload>}
+{"type":"result","session_id":"<id>","answer":"mock: hi","usage":<usage>,"exit_reason":"completed"}
+```
+
 ## Flags of the session
 
 `-m/--model`, `--provider`, `-t/--toolsets`, `--approvals`, `--yolo`,
@@ -262,6 +277,24 @@ another chat has open prints `session <id> is open in another client (pid
 <n>)` and offers to follow it read-only or fork it at its last message (a
 one-shot run exits 75 instead).
 
+## Plans, leaving with delete, profile archives
+
+`/plan [task]` runs one planning turn: the model may read and search but
+every call of a tool that changes the workspace or the world is refused
+with `not allowed in /plan`, except a [`write_file`](../reference/tools.md#write_file) of the plan,
+`<workspace>/.prometheus/plans/<slug>.md` (the slug comes from the task,
+then `-2`, `-3`...; without a task the conversation so far is the task).
+The tools sent to the provider do not change, so the prompt cache stays
+warm; the plan's path is printed when the turn ends.
+
+`/exit --delete` leaves and deletes the session for good after the
+destructive confirmation (`--yes` skips it); `prometheus sessions show
+<id>` then exits 66. `/export [profile] [-o <file>]` and `/import
+<archive> [--name <name>]` are `prometheus profile export` and `profile
+import` with their defaults (no sessions, no secrets; `<profile>.tar.zst`
+in the working directory without `-o`); an archive with sealed secrets is
+imported with `prometheus profile import`, which asks for the passphrase.
+
 ## Themes
 
 `display.theme` picks `default`, `mono`, `daylight`, `slate` or a file
@@ -278,6 +311,35 @@ extends = "slate"
 [colors]
 prompt = "#88c0d0"
 error = "bright_red"
+[spinner]
+frames = ["◐", "◓", "◑", "◒"]
+phrases = ["thinking", "still thinking"]
+[branding]
+agent_name = "Atlas"
+prompt_symbol = "λ"
+banner = "ATLAS"
+[desktop]
+css = "body { font-size: 15px }"
+```
+
+A theme also brands the interfaces: `spinner.frames` and
+`spinner.phrases` replace the TUI's busy indicator, `branding.agent_name`
+names the agent in the banner, `branding.prompt_symbol` leads the input
+prompt of the line interface and the TUI, and `branding.banner` (at most
+40 lines) is shown above the banner line. `[desktop]` holds the desktop
+and dashboard's CSS overrides; terminal surfaces ignore it.
+
+`prometheus themes list|use <name>|set <key> <value>|show` manages them.
+`set` writes `<profile>/themes/custom.toml`, extending the active theme,
+and uses it; lists take a TOML array or comma-separated values. A change
+that would not load (an unknown key, a banner over 40 lines) is refused
+with exit 78 and leaves the file as it was.
+
+```console
+$ prometheus themes set branding.prompt_symbol λ
+$ prometheus themes show
+theme: custom
+branding.prompt_symbol: λ
 ```
 
 ## Usage

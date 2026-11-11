@@ -3805,3 +3805,29 @@ capabilities = [
 
 [i18n."Migration of Hermes language settings"]
 "Env override becomes config" = ["crates/prometheus/tests/i18n_cli.rs::hermes_language_settings_and_overlays_migrate"]
+
+# 58. M2 CLI upgrades (streaming JSONL, /plan, /exit --delete and profile archive forms, themes and branding, setup modes, Windows console, safe console, webhook subscriptions)
+[cli."Streaming JSONL output"]
+"Stream ends with result" = ["crates/prometheus/tests/cli_upgrades.rs::a_streamed_one_shot_run_writes_json_lines_ending_with_the_result", "crates/prometheus/tests/cli_upgrades.rs::a_streamed_run_keeps_the_exit_codes_and_ends_with_the_result", "crates/prometheus/tests/cli_upgrades.rs::a_streamed_run_attached_to_the_daemon_ends_with_the_result", "crates/prometheus/tests/cli_upgrades.rs::stream_json_is_refused_for_an_interactive_session", "crates/prometheus/src/chat/stream.rs::a_streamed_event_has_the_trajectory_line_shape"]
+
+[cli."Planning-only turn"]
+"Write outside plans refused" = ["crates/prometheus/tests/cli_upgrades.rs::a_plan_turn_writes_only_its_plan_file", "crates/prometheus/src/chat/session/plan.rs::only_reads_and_the_plan_file_pass", "crates/prometheus/src/chat/session/plan.rs::slugs_come_from_the_task_and_are_deduplicated"]
+
+[cli."Exit with delete and profile archive slash forms"]
+"Exit and delete" = ["crates/prometheus/tests/cli_upgrades.rs::exit_with_delete_removes_the_session", "crates/prometheus/tests/cli_upgrades.rs::exit_with_delete_removes_a_daemon_session", "crates/prometheus/tests/cli_upgrades.rs::export_and_import_slash_forms_copy_a_profile"]
+
+[cli."Theme commands and branding keys"]
+"Custom prompt symbol" = ["crates/prometheus/tests/themes_cli.rs::a_custom_prompt_symbol_leads_the_repl_prompt", "crates/prometheus/tests/themes_cli.rs::themes_set_branding_keys_in_a_custom_theme_that_extends_the_active_one"]
+
+[cli."Setup wizard modes"]
+"Quick setup asks only unset values" = ["crates/prometheus/tests/setup_modes.rs::quick_setup_asks_only_for_unset_values"]
+"Adapter fields from schema" = ["crates/prometheus/tests/setup_modes.rs::gateway_setup_asks_every_schema_field_and_stores_the_token_as_a_secret", "crates/prometheus/src/setup_cmd/gateway.rs::telegram_options_become_scalar_fields"]
+
+[cli."Windows console behaviour"]
+"Code page restored" = { tests = ["crates/prometheus/tests/cli_windows.rs::the_console_code_page_is_restored_when_prometheus_exits", "crates/pmt-sandbox/src/console.rs::code_pages_are_utf8_while_enabled_and_restored_after"], note = "Windows only (CI's Windows jobs): a new console set to code page 437 runs prometheus, then chcp reports 437" }
+
+[cli."Safe command console"]
+"Shell metacharacters refused" = ["crates/prometheus/tests/console_cli.rs::the_console_runs_allowlisted_commands_and_refuses_shell_syntax", "crates/prometheus/src/console_cmd.rs::shell_syntax_and_other_commands_are_refused"]
+
+[cli."Webhook subscriptions"]
+"Subscribe prints secret once" = ["crates/prometheus/tests/webhooks_cli.rs::subscribe_prints_the_secret_once_and_list_never_shows_it", "crates/prometheus/tests/webhooks_cli.rs::test_delivers_a_signed_sample_through_the_running_daemon"]

@@ -215,9 +215,23 @@ impl Tui<'_> {
         });
     }
 
+    /// `/exit --delete`: with `--yes` the TUI leaves and deletes the
+    /// session; without it, it says how to confirm (the destructive
+    /// confirmation).
+    fn quit_deleting(&mut self, args: &str) {
+        if args.split_whitespace().any(|w| matches!(w, "--yes" | "-y")) {
+            self.ending = Some(Ending::Delete(self.link.session.clone()));
+        } else {
+            let strings =
+                pmt_config::language::strings(self.open.scope.dir(), pmt_i18n::Surface::Core);
+            self.notice(pmt_i18n::t!(strings, "cli.confirm_exit_delete"));
+        }
+    }
+
     /// A client-local command: no round-trip for the screen's own ones.
     fn local(&mut self, command: Local, args: &str) {
         match command {
+            Local::Quit if crate::slash::exit_deletes(args) => self.quit_deleting(args),
             Local::Quit => self.ending = Some(Ending::Quit),
             Local::Clear => {
                 self.app.transcript.clear();

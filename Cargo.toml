@@ -80,6 +80,7 @@ tracing = "0.1"
 # subset is declared by hand with the derive; no codegen, no gRPC stack).
 prost = { version = "0.14", default-features = false, features = ["derive", "std"] }
 sha2 = "0.11"
+shlex = "2.0"
 # TOTP codes of vault logins (HMAC-SHA1, RFC 6238).
 sha1 = "0.11"
 # Content hashes of Hermes bundled skills (`skills/.bundled_manifest` is MD5).

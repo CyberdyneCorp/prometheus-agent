@@ -166,31 +166,75 @@ fn categories(names: &[String]) -> Result<Vec<Category>, Error> {
         .collect()
 }
 
-/// `prometheus setup --portal`: signs in to the Nous Portal, makes `nous`
-/// the main provider and, when the user agrees (never without a
-/// terminal), routes every tool category through the gateway.
+/// The tool categories `setup --portal` sends through the tool gateway:
+/// web, image and speech (spec: cli, Setup wizard modes).
+const PORTAL_CATEGORIES: [Category; 4] = [
+    Category::WebSearch,
+    Category::WebExtract,
+    Category::ImageGeneration,
+    Category::Tts,
+];
+
+/// The `(key, value)` pairs `setup --portal` writes: `nous` with the
+/// portal's default model as the main route, and the web, image and TTS
+/// providers through its gateway.
+fn portal_pairs(scope: &pmt_config::ProfileScope) -> Result<Vec<(&'static str, String)>, Error> {
+    let registry = pmt_providers::ProviderRegistry::for_profile(scope.config(), Vec::new())?;
+    let default_model = registry
+        .lookup(GATEWAY_PROVIDER)?
+        .descriptor()
+        .default_model
+        .clone();
+    let mut pairs = vec![("model.provider", GATEWAY_PROVIDER.to_owned())];
+    if let Some(model) = default_model {
+        pairs.push(("model.default", model));
+    }
+    pairs.extend(
+        PORTAL_CATEGORIES
+            .iter()
+            .map(|c| (c.key(), GATEWAY_PROVIDER.to_owned())),
+    );
+    Ok(pairs)
+}
+
+/// The lines of the change `pairs` make (`key: old -> new`), unchanged
+/// keys left out.
+fn diff(scope: &pmt_config::ProfileScope, pairs: &[(&str, String)]) -> Vec<String> {
+    pairs
+        .iter()
+        .filter_map(|(key, new)| {
+            let old = scope.layers().value(key).map(crate::setup_cmd::plain);
+            (old.as_deref() != Some(new.as_str()))
+                .then(|| format!("  {key}: {} -> {new}", old.as_deref().unwrap_or("unset")))
+        })
+        .collect()
+}
+
+/// `prometheus setup --portal`: signs in to the Nous Portal, then shows
+/// the change (main route `nous` with its default model; web, image and
+/// speech tools through the tool gateway) and writes it once confirmed
+/// (a run without a terminal writes what it showed).
 ///
 /// # Errors
 ///
 /// Sign-in and config write errors.
 pub fn setup(ctx: &Context<'_>) -> Result<u8, Error> {
     let sub = crate::auth_cmd::sign_in_default(ctx, GATEWAY_PROVIDER)?;
+    eprintln!("signed in to the Nous Portal as '{}'", sub.label);
     let scope = ctx.scope()?;
-    let file = scope.profile().config_file();
-    file.set("model.provider", GATEWAY_PROVIDER)?;
-    eprintln!(
-        "signed in to the Nous Portal as '{}'; the main provider is now nous",
-        sub.label
-    );
-    let route_all = crate::prompt::stdin_is_tty()
-        && crate::prompt::confirm(
-            "Route web search, extraction, image and video generation, speech, the cloud browser and remote sandboxes through the Nous tool gateway?",
-        )?;
-    if route_all {
-        for category in Category::ALL {
-            route_through_gateway(&scope, category)?;
-        }
-        eprintln!("every tool category now goes through the Nous tool gateway");
+    let pairs = portal_pairs(&scope)?;
+    let lines = diff(&scope, &pairs);
+    if lines.is_empty() {
+        eprintln!("the profile already uses the Nous Portal; nothing to change");
+        return Ok(0);
     }
+    eprintln!("config.toml changes:\n{}", lines.join("\n"));
+    if crate::prompt::stdin_is_tty() && !crate::prompt::confirm("Write these changes?")? {
+        eprintln!("nothing written");
+        return Ok(1);
+    }
+    let pairs: Vec<(&str, &str)> = pairs.iter().map(|(k, v)| (*k, v.as_str())).collect();
+    scope.profile().config_file().set_all(&pairs)?;
+    eprintln!("the main route and the web, image and speech tools now use the Nous Portal");
     Ok(0)
 }

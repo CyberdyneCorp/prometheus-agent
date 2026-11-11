@@ -451,6 +451,13 @@ async fn run_one(
     // A `/model --once` or `/moa` route ends with its turn, whatever the
     // turn's outcome (spec: mixture-of-agents, One-shot /moa command).
     session.live.model.end_turn();
+    // A `/plan` restriction lasts one turn; its clients learn where the
+    // plan went (spec: cli, Planning-only turn).
+    if let Some(plan) = session.live.tools.end_plan() {
+        let strings = pmt_config::language::strings(scope.dir(), pmt_i18n::Surface::Core);
+        let text = crate::chat::commands::planning::finished(&strings, &plan);
+        super::commands::notice(&job.link, &text);
+    }
     if let Ok(result) = &outcome {
         crate::chat::reviews::after_turn(&session.factory, &session.live, result).await;
     }

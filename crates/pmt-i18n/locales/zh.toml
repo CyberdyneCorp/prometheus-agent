@@ -97,6 +97,8 @@ worktree_dirty = "未提交的更改"
 worktree_unpushed = "{count} 个未推送的提交"
 worktree_dirty_unpushed = "未提交的更改和 {count} 个未推送的提交"
 worktree_question = "worktree {path} 有{what}：[k] 保留（默认）、[a] 归档并移除、[r] 移除并丢弃 "
+session_deleted = "会话 {id} 已删除"
+confirm_exit_delete = "/exit --delete 会永久删除此会话；输入 /exit --delete --yes 以确认"
 
 [gateway]
 stopped = "已停止。你可以继续此会话。"
@@ -454,6 +456,9 @@ footer = "在此聊天的回复中添加或移除模型、上下文和目录页�
 focus = "隐藏此会话的工具进度（on、off、status）"
 timestamps = "显示消息时间戳（on、off、status）；会保存"
 exit = "离开"
+plan = "用一轮规划任务，除计划文件外不做任何更改"
+export = "将配置文件导出为归档（同 prometheus profile export）"
+import = "从导出的归档创建配置文件"
 
 [slash.plugins]
 none = "没有插件"
@@ -978,6 +983,14 @@ not_uploaded = "未上传任何内容"
 confirm = "将此报告上传到 {host}？任何拥有链接的人都能查看。\n发送 /debug share yes 上传；否则不会上传任何内容。"
 uploaded = "已上传：{url}（删除：prometheus debug delete {url}）"
 
+[slash.plan]
+written = "计划已写入 {path}"
+missing = "未写入任何计划（{path} 不存在）"
+
+[slash.archive]
+exported = "已将配置文件 '{profile}'（{members} 项）导出到 {path}"
+imported = "已从 {path} 导入配置文件 '{profile}'，名为 '{name}'"
+
 [display]
 tool_ok = "ok"
 tool_failed = "失败"
@@ -987,7 +1000,7 @@ summary_one = "· {secs} 秒 · {calls} 个工具 · 输入 {input} / 输出 {ou
 summary_many = "· {secs} 秒 · {calls} 个工具 · 输入 {input} / 输出 {output} 个令牌"
 cost_unknown = "费用未知"
 background = "[后台] {text}"
-banner = "Prometheus {version} · 配置文件 {profile} · {model} · 输入 /help 查看命令"
+banner = "{agent} {version} · 配置文件 {profile} · {model} · 输入 /help 查看命令"
 degraded = "已降级：{marker}"
 focus_prompt = "专注 › "
 model_back = "模型：已切回 {route}"

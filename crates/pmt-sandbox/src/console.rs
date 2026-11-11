@@ -1,8 +1,10 @@
 //! A UTF-8 console for the CLI and its children on Windows (spec:
-//! execution-environments, Windows local shell): the console's input and
-//! output code pages become 65001 for the life of the guard and the
-//! original ones come back when it drops. Children share the console, so
-//! they read and write UTF-8 too. Elsewhere this does nothing.
+//! execution-environments, Windows local shell; cli, Windows console
+//! behaviour): the console's input and output code pages become 65001 and
+//! virtual terminal processing (ANSI colours and cursor moves) is on for
+//! the life of the guard; the original code pages and output mode come
+//! back when it drops. Children share the console, so they read and write
+//! UTF-8 too. Elsewhere this does nothing.
 //!
 //! On Windows it also interrupts one child the way a user's Ctrl+Break
 //! would ([`new_process_group`], [`ctrl_break`]): a console control event
@@ -19,16 +21,22 @@ pub const UTF8_CODE_PAGE: u32 = 65_001;
 pub struct Utf8Console {
     /// `(input, output)` code pages to restore; `None` without a console.
     saved: Option<(u32, u32)>,
+    /// The output mode to restore; `None` when stdout is no console.
+    mode: Option<u32>,
 }
 
 impl Utf8Console {
-    /// Switches an attached console to UTF-8.
+    /// Switches an attached console to UTF-8 with virtual terminal
+    /// processing.
     pub fn enable() -> Self {
         let saved = code_pages();
         if saved.is_some_and(|pages| pages != (UTF8_CODE_PAGE, UTF8_CODE_PAGE)) {
             set_code_pages((UTF8_CODE_PAGE, UTF8_CODE_PAGE));
         }
-        Self { saved }
+        Self {
+            saved,
+            mode: enable_virtual_terminal(),
+        }
     }
 }
 
@@ -37,7 +45,33 @@ impl Drop for Utf8Console {
         if let Some(pages) = self.saved {
             set_code_pages(pages);
         }
+        if let Some(mode) = self.mode {
+            restore_mode(mode);
+        }
     }
+}
+
+/// Turns on virtual terminal processing of the output console; the mode
+/// to restore.
+fn enable_virtual_terminal() -> Option<u32> {
+    #[cfg(windows)]
+    {
+        use crate::platform::console::{VIRTUAL_TERMINAL, output_mode, set_output_mode};
+        let mode = output_mode()?;
+        if mode & VIRTUAL_TERMINAL == 0 {
+            set_output_mode(mode | VIRTUAL_TERMINAL);
+        }
+        Some(mode)
+    }
+    #[cfg(not(windows))]
+    None
+}
+
+fn restore_mode(mode: u32) {
+    #[cfg(windows)]
+    crate::platform::console::set_output_mode(mode);
+    #[cfg(not(windows))]
+    let _ = mode;
 }
 
 /// The console's `(input, output)` code pages, `None` without a console.

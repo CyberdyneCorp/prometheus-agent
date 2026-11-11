@@ -274,6 +274,9 @@ fn workspace(command: &Command, ctx: &Context<'_>) -> Result<u8, Error> {
         Command::Projects { command } => prometheus::projects_cmd::run(command, ctx),
         Command::Vault { command } => prometheus::vault_cmd::run(command, ctx),
         Command::Files { command } => prometheus::files_cmd::run(command, ctx),
+        Command::Themes { command } => prometheus::themes_cmd::run(command, ctx),
+        Command::Console => prometheus::console_cmd::run(ctx),
+        Command::Webhooks { command } => prometheus::webhooks_cmd::run(command, ctx),
         _ => unreachable!("run() dispatches every other command itself"),
     }
 }
@@ -320,6 +323,7 @@ fn ui(cli: &Cli) -> chat::Ui {
         quiet: cli.quiet,
         no_color: cli.no_color,
         verbose: cli.verbose,
+        stream: false,
     }
 }
 

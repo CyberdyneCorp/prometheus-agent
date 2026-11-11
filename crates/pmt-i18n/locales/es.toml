@@ -97,6 +97,8 @@ worktree_dirty = "cambios sin confirmar"
 worktree_unpushed = "{count} commit(s) sin enviar"
 worktree_dirty_unpushed = "cambios sin confirmar y {count} commit(s) sin enviar"
 worktree_question = "el worktree {path} tiene {what}: [k] conservar (predeterminado), [a] archivar y eliminar, [r] eliminar y descartar "
+session_deleted = "sesión {id} eliminada"
+confirm_exit_delete = "/exit --delete elimina esta sesión para siempre; escribe /exit --delete --yes para confirmar"
 
 [gateway]
 stopped = "Detenido. Puedes continuar esta sesión."
@@ -454,6 +456,9 @@ footer = "Añade o quita el pie con modelo, contexto y directorio en las respues
 focus = "Oculta el progreso de herramientas en esta sesión (on, off, status)"
 timestamps = "Muestra la hora de los mensajes (on, off, status); se guarda"
 exit = "Salir"
+plan = "Planifica una tarea en un turno que solo cambia su archivo de plan"
+export = "Exporta un perfil como archivo (como prometheus profile export)"
+import = "Crea un perfil a partir de un archivo exportado"
 
 [slash.plugins]
 none = "no hay plugins"
@@ -978,6 +983,14 @@ not_uploaded = "no se subió nada"
 confirm = "¿Subir este informe a {host}? Será público para cualquiera con el enlace.\nEnvía /debug share yes para subirlo; de lo contrario no se sube nada."
 uploaded = "subido: {url} (bórralo con: prometheus debug delete {url})"
 
+[slash.plan]
+written = "plan escrito en {path}"
+missing = "no se escribió ningún plan (falta {path})"
+
+[slash.archive]
+exported = "perfil '{profile}' exportado ({members} miembros) a {path}"
+imported = "perfil '{profile}' importado de {path} como '{name}'"
+
 [display]
 tool_ok = "ok"
 tool_failed = "falló"
@@ -987,7 +1000,7 @@ summary_one = "· {secs}s · {calls} herramienta · {input} de entrada / {output
 summary_many = "· {secs}s · {calls} herramientas · {input} de entrada / {output} de salida tokens"
 cost_unknown = "coste desconocido"
 background = "[segundo plano] {text}"
-banner = "Prometheus {version} · perfil {profile} · {model} · /help para los comandos"
+banner = "{agent} {version} · perfil {profile} · {model} · /help para los comandos"
 degraded = "degradado: {marker}"
 focus_prompt = "enfoque › "
 model_back = "modelo: de vuelta a {route}"

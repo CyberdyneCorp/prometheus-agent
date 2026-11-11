@@ -99,6 +99,8 @@ worktree_dirty = "uncommitted changes"
 worktree_unpushed = "{count} unpushed commit(s)"
 worktree_dirty_unpushed = "uncommitted changes and {count} unpushed commit(s)"
 worktree_question = "worktree {path} has {what}: [k]eep (default), [a]rchive and remove, [r]emove and discard "
+session_deleted = "session {id} deleted"
+confirm_exit_delete = "/exit --delete deletes this session for good; type /exit --delete --yes to confirm"
 
 [gateway]
 stopped = "Stopped. You can continue this session."
@@ -456,6 +458,9 @@ footer = "Add or drop the model, context and directory footer on replies in this
 focus = "Hide tool progress for this session (on, off, status)"
 timestamps = "Show message timestamps (on, off, status); saved"
 exit = "Leave"
+plan = "Plan a task in one turn that changes nothing but its plan file"
+export = "Export a profile as an archive (as prometheus profile export)"
+import = "Create a profile from an exported archive"
 
 [slash.plugins]
 none = "no plugins"
@@ -980,6 +985,14 @@ not_uploaded = "nothing was uploaded"
 confirm = "Upload this report to {host}? It will be public to anyone with the link.\nSend /debug share yes to upload; nothing is uploaded otherwise."
 uploaded = "uploaded: {url} (delete it with: prometheus debug delete {url})"
 
+[slash.plan]
+written = "plan written to {path}"
+missing = "no plan was written ({path} is missing)"
+
+[slash.archive]
+exported = "exported profile '{profile}' ({members} members) to {path}"
+imported = "imported profile '{profile}' from {path} as '{name}'"
+
 [display]
 tool_ok = "ok"
 tool_failed = "failed"
@@ -989,7 +1002,7 @@ summary_one = "· {secs}s · {calls} tool · {input} in / {output} out tokens"
 summary_many = "· {secs}s · {calls} tools · {input} in / {output} out tokens"
 cost_unknown = "cost unknown"
 background = "[background] {text}"
-banner = "Prometheus {version} · profile {profile} · {model} · /help for commands"
+banner = "{agent} {version} · profile {profile} · {model} · /help for commands"
 degraded = "degraded: {marker}"
 focus_prompt = "focus › "
 model_back = "model: back to {route}"

@@ -59,6 +59,10 @@ pub struct Status {
     /// The session's live automation rows by kind (`loop · every 5m · 2
     /// runs · next in 4m`), from `automation.state`.
     pub automation: std::collections::BTreeMap<String, String>,
+    /// A theme's spinner frames, in place of the indicator style's.
+    pub spinner: Vec<String>,
+    /// A theme's status phrases, one shown at a time while busy.
+    pub phrases: Vec<String>,
 }
 
 /// The status item that opens the session switcher when clicked.
@@ -108,19 +112,36 @@ impl Status {
         items
     }
 
-    /// The glyph shown while busy.
+    /// The glyph shown while busy: the theme's spinner frame, else the
+    /// indicator style's.
     #[must_use]
-    pub fn busy_glyph(&self) -> &'static str {
-        busy::glyph(self.indicator, self.busy_for, self.reduced_motion)
+    pub fn busy_glyph(&self) -> String {
+        if self.spinner.is_empty() {
+            return busy::glyph(self.indicator, self.busy_for, self.reduced_motion).to_owned();
+        }
+        self.spinner[self.step(self.spinner.len())].clone()
     }
 
-    /// The lead: the busy glyph and a space, else two blanks (a narrow
-    /// terminal keeps its columns for the items while idle).
+    /// The frame or phrase index `busy_for` into a busy period (the first
+    /// under reduced motion).
+    fn step(&self, len: usize) -> usize {
+        if self.reduced_motion || len == 0 {
+            return 0;
+        }
+        let step = self.busy_for.as_millis() / busy::PERIOD.as_millis();
+        usize::try_from(step % len as u128).unwrap_or(0)
+    }
+
+    /// The lead: the busy glyph (and a theme phrase) and a space, else two
+    /// blanks (a narrow terminal keeps its columns for the items while
+    /// idle).
     fn lead(&self) -> String {
-        if self.busy {
-            format!("{} ", self.busy_glyph())
-        } else {
-            "  ".to_owned()
+        if !self.busy {
+            return "  ".to_owned();
+        }
+        match self.phrases.get(self.step(self.phrases.len())) {
+            Some(phrase) => format!("{} {phrase} ", self.busy_glyph()),
+            None => format!("{} ", self.busy_glyph()),
         }
     }
 

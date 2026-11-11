@@ -1121,6 +1121,12 @@ error_codes! {
     /// No ticket, an unknown, expired or reused one, or a bad request on the control channel.
     RPC_TICKET = ("rpc.ticket", Auth,
         "The control channel refused the ticket request (unknown profile or purpose, several profiles for a purpose other than `profile-admin`).");
+    /// No webhook subscription has the name.
+    WEBHOOK_NOT_FOUND = ("webhook.not_found", NotFound,
+        "The profile has no webhook subscription of that name; `prometheus webhooks list` shows them.");
+    /// A webhook test delivery could not be made.
+    WEBHOOK_TEST_FAILED = ("webhook.test_failed", Unavailable,
+        "The test delivery did not reach the route: the payload file is unreadable, the daemon's listener is not running, or it refused the delivery (the status is in the message).");
     /// No daemon runs for the home.
     DAEMON_NOT_RUNNING = ("daemon.not_running", Unavailable,
         "No gateway daemon runs for this home; start it with `prometheus daemon start`.");

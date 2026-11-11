@@ -23,9 +23,6 @@ use crate::chat::attach;
 use crate::chat::repl::queue;
 use crate::slash::{Registry, Resolution, Surface, split_line};
 
-/// Commands that ask `once / always / cancel` first.
-const DESTRUCTIVE: &[&str] = &["clear", "new", "undo", "rewind"];
-
 /// `args` without `--yes`/`-y`, and whether one was there.
 fn take_yes(args: &str) -> (String, bool) {
     let kept: Vec<&str> = args
@@ -46,7 +43,10 @@ impl Chat<'_, '_> {
             return Ok(Flow::Continue);
         };
         let (args, yes) = take_yes(&args);
-        if DESTRUCTIVE.contains(&command.name) && !yes && !self.confirmed(command.name).await? {
+        if crate::slash::is_destructive(command.name, &args)
+            && !yes
+            && !self.confirmed(command.name).await?
+        {
             return Ok(Flow::Continue);
         }
         if let Some(flow) = self.local(command.name, &args).await? {
@@ -89,6 +89,7 @@ impl Chat<'_, '_> {
     /// Runs `name` here when it is a client command.
     async fn local(&mut self, name: &str, args: &str) -> Result<Option<Flow>, Error> {
         let text = match name {
+            "exit" if crate::slash::exit_deletes(args) => return Ok(Some(Flow::ExitDelete)),
             "exit" => return Ok(Some(Flow::Exit)),
             "voice" => {
                 self.voice_command(args).await;

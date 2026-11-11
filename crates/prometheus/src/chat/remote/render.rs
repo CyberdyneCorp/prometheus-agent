@@ -26,6 +26,9 @@ pub(super) trait Out {
     /// A piece of the answer while the turn generates it (the whole
     /// answer still comes through [`Out::answer`]).
     fn delta(&self, _text: &str) {}
+    /// Every `session.event` as it arrives (a streamed one-shot run
+    /// writes the trajectory events among them as JSON lines).
+    fn raw_event(&self, _event: &pmt_rpc::contracts::Envelope) {}
     /// An error.
     fn error(&self, err: &Error);
 }

@@ -117,6 +117,7 @@ url.workspace = true
 regex.workspace = true
 # Webhook signatures (HMAC-SHA256).
 sha2.workspace = true
+shlex.workspace = true
 # Workspace manifests of session recordings (gitignore-aware).
 ignore.workspace = true
 semver.workspace = true

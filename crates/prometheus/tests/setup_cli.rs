@@ -106,8 +106,10 @@ fn non_interactive_takes_set_values_and_env_secrets_or_exits_78() {
     assert!(secrets.contains(KEY));
 }
 
+/// A build without the messaging gateway has no adapter to set up.
+#[cfg(not(feature = "gateway"))]
 #[test]
-fn gateway_setup_waits_for_the_gateway() {
+fn gateway_setup_needs_the_gateway() {
     let home = temp_home();
     let out = run(home.path(), &["setup", "gateway"]);
     assert_eq!(out.status.code(), Some(69), "{}", stderr(&out));

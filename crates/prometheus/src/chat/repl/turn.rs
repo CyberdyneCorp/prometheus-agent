@@ -110,6 +110,12 @@ impl Repl {
         self.after_turn(&live, result, started.elapsed(), calls)
             .await;
         self.automation_after(&live, outcome).await;
+        if let Some(plan) = live.tools.end_plan() {
+            self.notice(&crate::chat::commands::planning::finished(
+                &self.strings(),
+                &plan,
+            ));
+        }
         if let Some(back) = live.model.end_turn() {
             let route = format!(
                 "{}/{}",

@@ -97,6 +97,8 @@ struct Repl {
     last_interrupt: Option<Instant>,
     start: Start,
     confirm_destructive: bool,
+    /// `/exit --delete` ended the session: delete it after closing.
+    delete_on_exit: bool,
     /// Images that go with the next prompt (`/image`, `--image`).
     attachments: Vec<crate::chat::attach::Image>,
     /// `!!` blocks that go with the next prompt.
@@ -236,6 +238,7 @@ pub async fn run(
         attachments: start.images.clone(),
         start,
         confirm_destructive: config.cli.confirm_destructive,
+        delete_on_exit: false,
         shell_context: Vec::new(),
         running: false,
         status_bar,
@@ -289,8 +292,33 @@ impl Repl {
                 break;
             }
         }
+        let id = self.live.as_ref().map(|live| live.id);
         self.finish(EndReason::UserExit).await;
-        0
+        match id {
+            Some(id) if self.delete_on_exit => self.delete_session(id),
+            _ => 0,
+        }
+    }
+
+    /// `/exit --delete`: the ended session goes, per the store's deletion
+    /// semantics; exit 0 once it is gone.
+    fn delete_session(&self, id: pmt_core::id::SessionId) -> u8 {
+        match self.factory.store.delete_session(id, false) {
+            Ok(deleted) => {
+                let ids: Vec<String> = deleted.sessions.iter().map(ToString::to_string).collect();
+                crate::plugins_host::sessions_deleted(&self.factory.scope, &ids);
+                self.notice(&pmt_i18n::t!(
+                    self.strings(),
+                    "cli.session_deleted",
+                    id = id
+                ));
+                0
+            }
+            Err(err) => {
+                self.error(&err);
+                err.exit_code()
+            }
+        }
     }
 
     /// Reads and handles one event at the idle prompt.
@@ -493,7 +521,7 @@ impl Repl {
             None if self.display.focus.is_some() => {
                 pmt_i18n::t!(self.strings(), "display.focus_prompt")
             }
-            None => "› ".to_owned(),
+            None => self.display.theme.prompt_symbol(),
         };
         self.display
             .theme
@@ -510,17 +538,23 @@ impl Repl {
             target.provider,
             target.model.as_deref().unwrap_or("default")
         );
+        let branding = self.display.theme.branding.clone();
+        let agent = branding.agent_name.as_deref().unwrap_or("Prometheus");
         let banner = if self.factory.scope.config().display.compact {
-            format!("Prometheus {} · {model}", crate::build_info::VERSION)
+            format!("{agent} {} · {model}", crate::build_info::VERSION)
         } else {
             pmt_i18n::t!(
                 self.strings(),
                 "display.banner",
+                agent = agent,
                 version = crate::build_info::VERSION,
                 profile = self.factory.scope.name(),
                 model = model
             )
         };
+        if let Some(art) = &branding.banner {
+            self.say(Role::Accent, art);
+        }
         self.say(Role::Accent, &banner);
         // Spec: security-boundaries, Hardening downgrades are never silent.
         if let Some(marker) = self.live().downgrades.banner_marker() {

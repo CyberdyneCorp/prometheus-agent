@@ -97,6 +97,8 @@ worktree_dirty = "незакомічені зміни"
 worktree_unpushed = "ненадісланих комітів: {count}"
 worktree_dirty_unpushed = "незакомічені зміни та ненадісланих комітів: {count}"
 worktree_question = "у worktree {path} є {what}: [k] залишити (типово), [a] заархівувати й видалити, [r] видалити без збереження "
+session_deleted = "сеанс {id} видалено"
+confirm_exit_delete = "/exit --delete назавжди видаляє цей сеанс; введіть /exit --delete --yes для підтвердження"
 
 [gateway]
 stopped = "Зупинено. Ви можете продовжити цю сесію."
@@ -454,6 +456,9 @@ footer = "Додати або прибрати підвал із моделлю,
 focus = "Приховати поступ інструментів у цьому сеансі (on, off, status)"
 timestamps = "Показувати час повідомлень (on, off, status); зберігається"
 exit = "Вийти"
+plan = "Спланувати завдання за один хід, який змінює лише файл плану"
+export = "Експортувати профіль в архів (як prometheus profile export)"
+import = "Створити профіль з експортованого архіву"
 
 [slash.plugins]
 none = "немає плагінів"
@@ -978,6 +983,14 @@ not_uploaded = "нічого не завантажено"
 confirm = "Завантажити цей звіт на {host}? Він буде доступний усім, хто має посилання.\nНадішліть /debug share yes для завантаження; інакше нічого не завантажується."
 uploaded = "завантажено: {url} (видалити: prometheus debug delete {url})"
 
+[slash.plan]
+written = "план записано в {path}"
+missing = "план не записано ({path} відсутній)"
+
+[slash.archive]
+exported = "профіль '{profile}' експортовано ({members} елементів) до {path}"
+imported = "профіль '{profile}' імпортовано з {path} як '{name}'"
+
 [display]
 tool_ok = "ok"
 tool_failed = "помилка"
@@ -987,7 +1000,7 @@ summary_one = "· {secs} с · інструментів: {calls} · {input} вх
 summary_many = "· {secs} с · інструментів: {calls} · {input} вхід / {output} вихід токенів"
 cost_unknown = "вартість невідома"
 background = "[фон] {text}"
-banner = "Prometheus {version} · профіль {profile} · {model} · /help — команди"
+banner = "{agent} {version} · профіль {profile} · {model} · /help — команди"
 degraded = "обмежено: {marker}"
 focus_prompt = "фокус › "
 model_back = "модель: знову {route}"

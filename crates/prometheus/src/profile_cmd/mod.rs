@@ -4,7 +4,7 @@
 //! excludes credentials by default).
 
 mod alias;
-mod archive;
+pub mod archive;
 
 use pmt_config::profiles::{CloneFrom, user_of};
 use pmt_config::{Home, Launch, Overrides, ProfileName, ProfileScope};

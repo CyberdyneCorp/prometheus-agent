@@ -244,15 +244,29 @@ impl<'a> Tui<'a> {
         let config = open.scope.config();
         // The profile the daemon granted (the handshake names it).
         let granted = link.client.hello().profiles.first().cloned();
+        // The profile's theme brands the TUI too: its spinner and prompt
+        // (spec: cli, Theme commands and branding keys).
+        let branded = crate::chat::theme::Theme::load(open.scope.dir(), &config.display.theme).ok();
         let status = Status {
             profile: granted.unwrap_or_else(|| open.scope.name().as_str().to_owned()),
             reduced_motion: config.ui.tui.reduced_motion,
             indicator: config.ui.tui.busy_indicator,
+            spinner: branded
+                .as_ref()
+                .map(|t| t.spinner.frames.clone())
+                .unwrap_or_default(),
+            phrases: branded
+                .as_ref()
+                .map(|t| t.spinner.phrases.clone())
+                .unwrap_or_default(),
             ..Status::default()
         };
         let history = History::load(history::path_in(open.scope.dir()), Redactor::default());
         let status_bar = StatusBar::new(open.scope, &open.env);
         let mut app = App::new(Theme::new(theme, open.no_color), status);
+        if let Some(branded) = &branded {
+            app.prompt = branded.prompt_symbol();
+        }
         app.status_visible = status_bar.shown;
         let composer = &config.ui.composer;
         let mut tui = Self {

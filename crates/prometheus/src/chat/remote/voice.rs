@@ -97,7 +97,9 @@ impl Host for Attached<'_, '_, '_> {
 
     async fn typed(&mut self, line: String) -> bool {
         match Box::pin(self.chat.line(line)).await {
-            Ok(Flow::Exit) => {
+            // A spoken session leaves without deleting (`/exit --delete`
+            // is typed at the prompt).
+            Ok(Flow::Exit | Flow::ExitDelete) => {
                 self.exit = true;
                 false
             }

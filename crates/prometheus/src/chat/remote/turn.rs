@@ -166,6 +166,9 @@ fn on_event(
     asking: &mut Option<Asking>,
     strings: &Strings,
 ) -> Option<TurnFinished> {
+    if event.event == "session.event" {
+        out.raw_event(event);
+    }
     match event.event.as_str() {
         "session.event"
             if event.data["type"] == ASSISTANT_DELTA && event.data["turn_id"] == turn_id =>

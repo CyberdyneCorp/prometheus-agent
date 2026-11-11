@@ -8,7 +8,22 @@
 //! [colors]
 //! prompt = "#88c0d0"
 //! error = "bright_red"
+//! [spinner]
+//! frames = ["◐", "◓", "◑", "◒"]
+//! phrases = ["thinking", "working"]
+//! [branding]
+//! agent_name = "Atlas"
+//! prompt_symbol = "λ"
+//! banner = "ATLAS"
+//! [desktop]
+//! css = "..."
 //! ```
+//!
+//! Besides colours a theme may carry the busy spinner's frames and status
+//! phrases and the branding (spec: cli, Theme commands and branding keys):
+//! the agent's name in the banner, the prompt symbol and a banner of at
+//! most [`MAX_BANNER_LINES`] lines. `[desktop]` holds the desktop and
+//! dashboard's CSS overrides; terminal surfaces ignore it.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -50,12 +65,44 @@ const ROLES: &[(&str, Role)] = &[
 /// The built-in theme names.
 pub const BUILTIN: &[&str] = &["default", "mono", "daylight", "slate"];
 
-/// A resolved theme: an SGR sequence per role (empty: no colour).
+/// The most lines `branding.banner` may have.
+pub const MAX_BANNER_LINES: usize = 40;
+
+/// The busy spinner of a theme (empty: the surface's own).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, serde::Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Spinner {
+    /// The glyphs shown in turn while a turn runs.
+    pub frames: Vec<String>,
+    /// Status phrases shown in turn beside them.
+    pub phrases: Vec<String>,
+}
+
+/// The branding of a theme (unset: Prometheus's own).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, serde::Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Branding {
+    /// The agent's name in the banner.
+    pub agent_name: Option<String>,
+    /// What the input prompt starts with.
+    pub prompt_symbol: Option<String>,
+    /// Text shown above the banner line (at most 40 lines).
+    pub banner: Option<String>,
+}
+
+/// A resolved theme: an SGR sequence per role (empty: no colour), the
+/// spinner and the branding.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Theme {
     /// Its name.
     pub name: String,
+    /// The built-in it extends (itself for a built-in).
+    pub base: String,
     colors: BTreeMap<Role, String>,
+    /// The busy spinner.
+    pub spinner: Spinner,
+    /// The branding.
+    pub branding: Branding,
 }
 
 fn builtin(name: &str) -> Option<Theme> {
@@ -97,7 +144,10 @@ fn builtin(name: &str) -> Option<Theme> {
         .collect();
     Some(Theme {
         name: name.to_owned(),
+        base: name.to_owned(),
         colors,
+        spinner: Spinner::default(),
+        branding: Branding::default(),
     })
 }
 
@@ -109,6 +159,14 @@ struct UserTheme {
     extends: Option<String>,
     #[serde(default)]
     colors: BTreeMap<String, String>,
+    #[serde(default)]
+    spinner: Spinner,
+    #[serde(default)]
+    branding: Branding,
+    /// Desktop and dashboard overrides, ignored here.
+    #[serde(default)]
+    #[allow(dead_code)] // read by the desktop surfaces only
+    desktop: Option<toml::Table>,
 }
 
 impl Theme {
@@ -130,6 +188,18 @@ impl Theme {
         let mut theme =
             builtin(base).ok_or_else(|| format!("theme '{name}': unknown base '{base}'"))?;
         name.clone_into(&mut theme.name);
+        let lines = file
+            .branding
+            .banner
+            .as_deref()
+            .map_or(0, |b| b.lines().count());
+        if lines > MAX_BANNER_LINES {
+            return Err(format!(
+                "theme '{name}': branding.banner has {lines} lines (at most {MAX_BANNER_LINES})"
+            ));
+        }
+        theme.spinner = file.spinner;
+        theme.branding = file.branding;
         for (key, spec) in &file.colors {
             let role = ROLES
                 .iter()
@@ -143,6 +213,12 @@ impl Theme {
         Ok(theme)
     }
 
+    /// The input prompt: the branding's symbol, else `›`, and a space.
+    #[must_use]
+    pub fn prompt_symbol(&self) -> String {
+        format!("{} ", self.branding.prompt_symbol.as_deref().unwrap_or("›"))
+    }
+
     /// `text` in `role`'s colour, or unchanged when colour is off.
     #[must_use]
     pub fn paint(&self, role: Role, text: &str, color: bool) -> String {
@@ -153,7 +229,9 @@ impl Theme {
     }
 }
 
-fn dir(profile_dir: &Path) -> std::path::PathBuf {
+/// `<profile>/themes`.
+#[must_use]
+pub fn dir(profile_dir: &Path) -> std::path::PathBuf {
     profile_dir.join("themes")
 }
 

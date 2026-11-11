@@ -71,7 +71,8 @@ impl Lines {
         })?;
         Ok(Self {
             editor,
-            prompt: "› ".to_owned(),
+            prompt: crate::chat::theme::Theme::load(scope.dir(), &scope.config().display.theme)
+                .map_or_else(|_| "› ".to_owned(), |t| t.prompt_symbol()),
             queue: VecDeque::new(),
             closed: false,
         })
@@ -205,6 +206,8 @@ pub(super) struct Chat<'a, 'b> {
 pub(super) enum Flow {
     Continue,
     Exit,
+    /// `/exit --delete`: leave, then delete the session.
+    ExitDelete,
 }
 
 /// Runs the attached line interface until `/exit` or the end of input.
@@ -247,6 +250,9 @@ pub(super) async fn run(attached: &mut Attached, start: &Start<'_>) -> Result<u8
         pid = chat.attached.daemon_pid,
         session = chat.attached.session
     );
+    if let Some(art) = &chat.screen.display.theme.branding.banner {
+        chat.screen.say(Role::Accent, art);
+    }
     chat.screen.say(Role::Accent, &banner);
     // A resumed session's summary (a new one has none), then the low-disk
     // prune question when it is due.
@@ -312,8 +318,10 @@ impl Chat<'_, '_> {
                 }
             };
             last_interrupt = None;
-            if let Flow::Exit = self.line(line).await? {
-                return Ok(0);
+            match self.line(line).await? {
+                Flow::Continue => {}
+                Flow::Exit => return Ok(0),
+                Flow::ExitDelete => return self.exit_delete().await,
             }
         }
     }
@@ -502,6 +510,28 @@ impl Chat<'_, '_> {
     }
 
     /// Leaves the current session for `next` (or reports why not).
+    /// `/exit --delete` on a daemon session: detach from it, then delete
+    /// it in the profile's store (as `prometheus sessions delete` does
+    /// beside a running daemon).
+    async fn exit_delete(&mut self) -> Result<u8, Error> {
+        let session = SessionRef {
+            session_id: self.attached.session.clone(),
+        };
+        let _ = self
+            .attached
+            .client
+            .call_typed::<pmt_rpc::contracts::SessionDetach>(&session)
+            .await;
+        let id = pmt_core::id::SessionId::parse(&session.session_id)?;
+        let store = pmt_store::Store::open(self.start.scope)?;
+        let deleted = store.delete_session(id, false)?;
+        let ids: Vec<String> = deleted.sessions.iter().map(ToString::to_string).collect();
+        crate::plugins_host::sessions_deleted(self.start.scope, &ids);
+        let text = pmt_i18n::t!(self.strings(), "cli.session_deleted", id = id);
+        self.screen.notice(&text);
+        Ok(0)
+    }
+
     pub(super) async fn switch(&mut self, next: Result<String, Error>) {
         match next {
             Ok(next) => {

@@ -87,6 +87,9 @@ pub(super) fn secrets(scope: &ProfileScope, wizard: &mut Wizard<'_>) -> Result<(
 pub(super) fn terminal(scope: &ProfileScope, wizard: &mut Wizard<'_>) -> Result<(), Error> {
     let registry = pmt_sandbox::backend::BackendRegistry::builtin();
     let current = scope.config().terminal.backend.clone();
+    if wizard.quick && super::more::is_set(scope, "terminal.backend") {
+        return wizard.say(&format!("Terminal — backend {current} (set)"));
+    }
     wizard.say(&format!(
         "Terminal — backend: {current} (available: {}; Enter keeps it)",
         registry.names().join(", ")
@@ -109,6 +112,9 @@ pub(super) fn memory(scope: &ProfileScope, wizard: &mut Wizard<'_>) -> Result<()
         ("memory.memory_enabled", "keep agent memory"),
         ("memory.user_profile_enabled", "keep a user profile"),
     ] {
+        if wizard.quick && super::more::is_set(scope, key) {
+            continue;
+        }
         let current = scope
             .layers()
             .value(key)
@@ -123,18 +129,25 @@ pub(super) fn memory(scope: &ProfileScope, wizard: &mut Wizard<'_>) -> Result<()
     Ok(())
 }
 
-/// `setup gateway` before the messaging gateway exists.
+/// `setup gateway` in a build without the messaging gateway.
+#[cfg_attr(feature = "gateway", allow(dead_code))]
 pub(super) fn gateway_unavailable() -> Error {
     Error::new(
         &codes::SURFACE_NOT_INCLUDED,
-        "messaging gateway setup arrives with the gateway adapters (M2); nothing to configure in this build",
+        "surface 'gateway' is not included in this build; nothing to configure",
     )
 }
 
 /// `setup --non-interactive`: writes the `--set` values, then checks the
 /// sections' required values, taking secrets from the environment.
-pub(super) fn non_interactive(ctx: &Context<'_>, sections: &[SetupSection]) -> Result<u8, Error> {
+pub(super) fn non_interactive(
+    ctx: &Context<'_>,
+    sections: &[SetupSection],
+    platform: Option<&str>,
+) -> Result<u8, Error> {
+    #[cfg(not(feature = "gateway"))]
     if sections.contains(&SetupSection::Gateway) {
+        let _ = platform;
         return Err(gateway_unavailable());
     }
     let pairs: Vec<(&str, &str)> = ctx.set.iter().filter_map(|s| s.split_once('=')).collect();
@@ -175,6 +188,10 @@ pub(super) fn non_interactive(ctx: &Context<'_>, sections: &[SetupSection]) -> R
             scope.secrets().store().set(&secret.name, value)?;
             eprintln!("{} stored in the secrets store", secret.name);
         }
+    }
+    #[cfg(feature = "gateway")]
+    if sections.contains(&SetupSection::Gateway) {
+        super::gateway::non_interactive(ctx, platform)?;
     }
     for (key, _) in &pairs {
         if let Some(value) = scope.layers().value(key) {
