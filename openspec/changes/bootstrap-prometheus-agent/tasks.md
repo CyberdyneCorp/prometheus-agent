@@ -506,7 +506,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 - [x] 54.1 Publish package-manager and image channels (Homebrew tap, WinGet, container image, Nix flake) with receipts naming the owner; verify that self-update is refused for each with exit 69 (spec: distribution-and-update)
 - [x] 54.2 Implement running-daemon handover on update, update dry-run with changelog preview, offline bundles and `prometheus uninstall`; verify with a local release server (spec: distribution-and-update)
-- [x] 54.3 Implement the NixOS and Home Manager modules (Nix-owned keys read-only, bad config does not restart-loop); verify with a NixOS VM test (spec: distribution-and-update)
+- [ ] 54.3 Implement the NixOS and Home Manager modules (Nix-owned keys read-only, bad config does not restart-loop); verify with a NixOS VM test (spec: distribution-and-update)
 - [x] 54.4 Implement the container image run modes, filesystem, init and health check, multiple profiles in one container, the audio bridge and host services, and the network-isolated deployment recipe; verify with container tests that zombies are reaped and isolation is verified (spec: distribution-and-update)
 - [x] 54.5 Implement update from chat (disabled by default, admin only) and uninstall scopes with dry run; verify that a dry run lists the service unit and a data wipe on a package-manager install is handled (spec: distribution-and-update)
 
