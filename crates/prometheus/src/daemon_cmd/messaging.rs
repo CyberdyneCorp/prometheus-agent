@@ -33,6 +33,7 @@ pub(super) fn options(
 ) -> Result<Options, Error> {
     let mut options = Options::new(home);
     options.factories = factories(ctx);
+    options.plugin_factory = Some(crate::plugins_host::adapter::factory());
     let scopes = Arc::clone(host);
     options
         .hooks

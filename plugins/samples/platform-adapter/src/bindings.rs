@@ -2851,6 +2851,72 @@ pub mod exports {
                 }
                 #[doc(hidden)]
                 #[allow(non_snake_case)]
+                pub unsafe fn _export_chat_info_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let result1 = T::chat_info(_rt::string_lift(bytes0));
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(e) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                            let vec3 = (e.into_bytes()).into_boxed_slice();
+                            let ptr3 = vec3.as_ptr().cast::<u8>();
+                            let len3 = vec3.len();
+                            ::core::mem::forget(vec3);
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len3;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr3.cast_mut();
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec4 = (e.into_bytes()).into_boxed_slice();
+                            let ptr4 = vec4.as_ptr().cast::<u8>();
+                            let len4 = vec4.len();
+                            ::core::mem::forget(vec4);
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len4;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr4.cast_mut();
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_chat_info<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                        _ => {
+                            let l3 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l4 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l3, l4, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
                 pub unsafe fn _export_handle_http_cabi<T: Guest>(
                     arg0: *mut u8,
                     arg1: usize,
@@ -3041,13 +3107,17 @@ pub mod exports {
                 pub trait Guest {
                     /// The adapter descriptor (platform name, limits, capabilities).
                     fn descriptor() -> _rt::String;
-                    /// Connects with the platform options (JSON).
+                    /// Connects with the platform options (JSON): the contract's
+                    /// `connect`; `stop` is its `disconnect`.
                     fn start(options: _rt::String) -> Result<(), _rt::String>;
                     fn stop() -> ();
                     /// Inbound messages received since the last poll (JSON list).
                     fn poll() -> Result<_rt::String, _rt::String>;
                     /// Sends one outgoing message (JSON); returns the platform message id.
                     fn send(message: _rt::String) -> Result<_rt::String, _rt::String>;
+                    /// A chat's name and kind: `{"name", "chat_type"}` (JSON) with
+                    /// `chat_type` one of `dm`, `group`, `channel`, `thread`.
+                    fn chat_info(chat: _rt::String) -> Result<_rt::String, _rt::String>;
                     /// An inbound HTTP route on the shared listener.
                     fn handle_http(request: HttpRequest) -> HttpResponse;
                     /// `allow`, `deny` or anything else for "unknown".
@@ -3091,6 +3161,15 @@ pub mod exports {
                         unsafe extern "C" fn _post_return_send(arg0 : * mut u8,) { unsafe
                         { $($path_to_types)*:: __post_return_send::<$ty > (arg0) } }
                         #[unsafe (export_name =
+                        "prometheus:platform-adapter/plugin@1.0.0#chat-info")] unsafe
+                        extern "C" fn export_chat_info(arg0 : * mut u8, arg1 : usize,) ->
+                        * mut u8 { unsafe { $($path_to_types)*::
+                        _export_chat_info_cabi::<$ty > (arg0, arg1) } } #[unsafe
+                        (export_name =
+                        "cabi_post_prometheus:platform-adapter/plugin@1.0.0#chat-info")]
+                        unsafe extern "C" fn _post_return_chat_info(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*:: __post_return_chat_info::<$ty >
+                        (arg0) } } #[unsafe (export_name =
                         "prometheus:platform-adapter/plugin@1.0.0#handle-http")] unsafe
                         extern "C" fn export_handle_http(arg0 : * mut u8, arg1 : usize,
                         arg2 : * mut u8, arg3 : usize, arg4 : * mut u8, arg5 : usize,
@@ -3259,8 +3338,8 @@ pub(crate) use __export_platform_adapter_impl as export;
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 1880] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xd1\x0d\x01A\x02\x01\
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 1905] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xea\x0d\x01A\x02\x01\
 A\x17\x01B\x04\x01m\x05\x05trace\x05debug\x04info\x04warn\x05error\x04\0\x05leve\
 l\x03\0\0\x01@\x02\x05level\x01\x07messages\x01\0\x04\0\x03log\x01\x02\x03\0\x19\
 prometheus:host/log@1.0.0\x05\0\x01B\x02\x01q\x03\x06denied\x01s\0\x07invalid\x01\
@@ -3294,17 +3373,17 @@ keys\0\x03\x04\0\x03get\x01\x04\x01j\0\x01\x01\x01@\x02\x03keys\x05values\0\x05\
 \0\x03set\x01\x06\x03\0\x1cprometheus:host/config@1.0.0\x05\x09\x01B\x05\x01ks\x01\
 r\x04\x0asession-id\0\x07profiles\x07surfaces\x03cwd\0\x04\0\x04info\x03\0\x01\x01\
 @\0\0\x02\x04\0\x07current\x01\x03\x03\0\x1dprometheus:host/session@1.0.0\x05\x0a\
-\x01B\x17\x01o\x02ss\x01p\0\x01p}\x01r\x04\x06methods\x04paths\x07headers\x01\x04\
+\x01B\x19\x01o\x02ss\x01p\0\x01p}\x01r\x04\x06methods\x04paths\x07headers\x01\x04\
 body\x02\x04\0\x0chttp-request\x03\0\x03\x01r\x03\x06status{\x07headers\x01\x04b\
 ody\x02\x04\0\x0dhttp-response\x03\0\x05\x01@\0\0s\x04\0\x0adescriptor\x01\x07\x01\
 j\0\x01s\x01@\x01\x07optionss\0\x08\x04\0\x05start\x01\x09\x01@\0\x01\0\x04\0\x04\
 stop\x01\x0a\x01j\x01s\x01s\x01@\0\0\x0b\x04\0\x04poll\x01\x0c\x01@\x01\x07messa\
-ges\0\x0b\x04\0\x04send\x01\x0d\x01@\x01\x07request\x04\0\x06\x04\0\x0bhandle-ht\
-tp\x01\x0e\x01@\x01\x07inbounds\0s\x04\0\x10authorize-sender\x01\x0f\x04\0(prome\
-theus:platform-adapter/plugin@1.0.0\x05\x0b\x04\02prometheus:platform-adapter/pl\
-atform-adapter@1.0.0\x04\0\x0b\x16\x01\0\x10platform-adapter\x03\0\0\0G\x09produ\
-cers\x01\x0cprocessed-by\x02\x0dwit-component\x070.227.1\x10wit-bindgen-rust\x06\
-0.41.0";
+ges\0\x0b\x04\0\x04send\x01\x0d\x01@\x01\x04chats\0\x0b\x04\0\x09chat-info\x01\x0e\
+\x01@\x01\x07request\x04\0\x06\x04\0\x0bhandle-http\x01\x0f\x01@\x01\x07inbounds\
+\0s\x04\0\x10authorize-sender\x01\x10\x04\0(prometheus:platform-adapter/plugin@1\
+.0.0\x05\x0b\x04\02prometheus:platform-adapter/platform-adapter@1.0.0\x04\0\x0b\x16\
+\x01\0\x10platform-adapter\x03\0\0\0G\x09producers\x01\x0cprocessed-by\x02\x0dwi\
+t-component\x070.227.1\x10wit-bindgen-rust\x060.41.0";
 #[inline(never)]
 #[doc(hidden)]
 pub fn __link_custom_section_describing_imports() {

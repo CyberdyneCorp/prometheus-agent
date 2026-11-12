@@ -198,6 +198,17 @@ versions on its own; a component built against the current or the previous
 major version of a world loads. `plugins/samples/` holds a sample plugin for
 every world, built with `cargo component` (`cargo xtask plugin-samples`).
 
+A `platform-adapter` plugin provides the messaging platform named by its
+id (lower case): once it is enabled, `[gateway.platforms.<id>]` validates
+and the daemon connects the plugin's adapter, passing the table's
+`options` to `start`. The component must export every operation of the
+adapter contract (`descriptor`, `start`, `stop`, `poll`, `send`,
+`chat-info`, `handle-http`, `authorize-sender`); one that lacks any is
+refused naming it. The plugin reaches its platform only through the host
+`http` import under its `network` grant; a trap or timeout puts only that
+adapter into `retrying` (reconnected with backoff on a fresh instance),
+and five crashes within ten minutes make it `fatal`.
+
 ## Limits
 
 Every call into a plugin is bounded by `plugins.wasm.call_timeout_ms`

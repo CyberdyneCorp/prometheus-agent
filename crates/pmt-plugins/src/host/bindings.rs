@@ -16,6 +16,7 @@ wasmtime::component::bindgen!({
         "../../wit/delegation-router",
         "../../wit/memory-provider",
         "../../wit/context-engine",
+        "../../wit/platform-adapter",
     ],
     inline: "
         package prometheus:runtime;
@@ -27,6 +28,7 @@ wasmtime::component::bindgen!({
             include prometheus:delegation-router/delegation-router@1.0.0;
             include prometheus:memory-provider/memory-provider@1.0.0;
             include prometheus:context-engine/context-engine@1.0.0;
+            include prometheus:platform-adapter/platform-adapter@1.0.0;
         }
     ",
     world: "prometheus:runtime/plugin-host",

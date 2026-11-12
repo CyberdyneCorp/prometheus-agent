@@ -127,6 +127,9 @@ pub struct Options {
     pub home: PathBuf,
     /// Adapter factories by platform name.
     pub factories: BTreeMap<String, AdapterFactory>,
+    /// The factory of every other platform: adapter plugins (spec:
+    /// platform-adapters, First-party platforms and typed platform names).
+    pub plugin_factory: Option<AdapterFactory>,
     /// `daemon.toml gateway.on_all_adapters_down`.
     pub on_all_adapters_down: AllAdaptersDown,
     /// `gateway.shutdown.drain_timeout_secs` of the launch profile.
@@ -172,6 +175,7 @@ impl Options {
         Self {
             home: home.to_path_buf(),
             factories: BTreeMap::new(),
+            plugin_factory: None,
             on_all_adapters_down: AllAdaptersDown::StayAlive,
             drain_timeout: Duration::from_secs(30),
             agent_cache: AgentCacheConfig::default(),

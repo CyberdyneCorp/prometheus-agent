@@ -34,6 +34,7 @@ impl Context<'_> {
     /// `home.unresolved`, `home.io`.
     pub fn home(&self) -> Result<Home, Error> {
         let root = home::resolve(self.home_flag, self.launch)?;
+        crate::plugins_host::adapter::register_platforms(&root);
         Home::open(&root)
     }
 

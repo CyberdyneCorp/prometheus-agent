@@ -19,13 +19,17 @@ interface plugin {
 
     /// The adapter descriptor (platform name, limits, capabilities).
     descriptor: func() -> string;
-    /// Connects with the platform options (JSON).
+    /// Connects with the platform options (JSON): the contract's
+    /// `connect`; `stop` is its `disconnect`.
     start: func(options: string) -> result<_, string>;
     stop: func();
     /// Inbound messages received since the last poll (JSON list).
     poll: func() -> result<string, string>;
     /// Sends one outgoing message (JSON); returns the platform message id.
     send: func(message: string) -> result<string, string>;
+    /// A chat's name and kind: `{"name", "chat_type"}` (JSON) with
+    /// `chat_type` one of `dm`, `group`, `channel`, `thread`.
+    chat-info: func(chat: string) -> result<string, string>;
     /// An inbound HTTP route on the shared listener.
     handle-http: func(request: http-request) -> http-response;
     /// `allow`, `deny` or anything else for "unknown".

@@ -333,7 +333,14 @@ pub(crate) fn start_profile(shared: &Arc<Shared>, profile: &str) {
             );
         }
         let key = (profile.to_owned(), platform.clone());
-        let Some(factory) = shared.options.factories.get(platform) else {
+        let factory = shared.options.factories.get(platform).or_else(|| {
+            shared
+                .options
+                .plugin_factory
+                .as_ref()
+                .filter(|_| pmt_config::platforms::plugin_platforms().contains(platform))
+        });
+        let Some(factory) = factory else {
             let error = AdapterError {
                 retryable: false,
                 code: "unknown_platform".to_owned(),

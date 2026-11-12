@@ -1,0 +1,31 @@
+/// The platform-adapter world without `send`: a component built against
+/// it exports an adapter the host must refuse to load (test plugin).
+package prometheus:platform-adapter@1.0.0;
+
+interface plugin {
+    record http-request {
+        method: string,
+        path: string,
+        headers: list<tuple<string, string>>,
+        body: list<u8>,
+    }
+
+    record http-response {
+        status: u16,
+        headers: list<tuple<string, string>>,
+        body: list<u8>,
+    }
+
+    descriptor: func() -> string;
+    start: func(options: string) -> result<_, string>;
+    stop: func();
+    poll: func() -> result<string, string>;
+    chat-info: func(chat: string) -> result<string, string>;
+    handle-http: func(request: http-request) -> http-response;
+    authorize-sender: func(inbound: string) -> string;
+}
+
+world platform-adapter {
+    include prometheus:host/imports@1.0.0;
+    export plugin;
+}

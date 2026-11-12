@@ -12,6 +12,7 @@
 //! once in running sessions; tools, system-prompt sections and skills are
 //! read when a session starts and stay as they were for its lifetime.
 
+pub mod adapter;
 pub mod approvals;
 pub mod bridge;
 pub mod catalog;
