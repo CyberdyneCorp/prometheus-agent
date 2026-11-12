@@ -286,6 +286,10 @@ fn spawn_detached(home: &Path, profile: Option<&str>) -> Result<std::process::Ch
     if let Some(profile) = profile {
         command.args(["--profile", profile]);
     }
+    // A daemon this command starts has no supervisor to restart it.
+    for marker in pmt_core::supervisor::MARKERS {
+        command.env_remove(marker);
+    }
     command
         .args(["daemon", "run"])
         .stdin(Stdio::null())

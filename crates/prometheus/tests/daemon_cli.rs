@@ -340,3 +340,33 @@ fn doctor_warns_about_a_daemon_of_another_build() {
     );
     assert!(text.contains("build another-build"), "{text}");
 }
+
+/// Regression: a daemon `daemon start` launched from inside a systemd
+/// service (a CI runner: `INVOCATION_ID` set) took itself for supervised,
+/// so `daemon restart` asked it to exit 75 and waited for a supervisor
+/// that never restarts it. It is unsupervised and restarts in place.
+#[test]
+fn a_daemon_started_from_a_systemd_service_restarts_itself() {
+    let home = mock_home();
+    let out = common::command(home.path())
+        .args(["daemon", "start"])
+        .env("INVOCATION_ID", "0123456789abcdef")
+        .env("XPC_SERVICE_NAME", "application.com.example.runner")
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    assert!(ok(&out).starts_with("daemon started (pid "));
+    let _stopper = Stopper(home.path());
+    let first = daemon_pid(home.path());
+    let status: Value =
+        serde_json::from_str(&ok(&run(home.path(), &["--json", "daemon", "status"]))).unwrap();
+    assert_eq!(status["daemon"]["supervised"], false, "{status}");
+    let restarted = common::command(home.path())
+        .args(["daemon", "restart"])
+        .env("INVOCATION_ID", "0123456789abcdef")
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    ok(&restarted);
+    assert_ne!(daemon_pid(home.path()), first);
+}
