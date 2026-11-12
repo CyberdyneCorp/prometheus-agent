@@ -354,4 +354,90 @@ mod line {
         prompt(&mut p);
         exit(p);
     }
+
+    /// Scenario: Slow MCP server (workspace-architecture, Background
+    /// loading and daemon readiness budgets). A server that takes 8 s to
+    /// start never delays the prompt, even with a 5 s discovery wait (the
+    /// session start's wait runs behind the prompt, before the first
+    /// request); missing that window, its tools join by `/mcp reload --now`.
+    #[test]
+    fn a_slow_mcp_server_never_delays_the_prompt_and_joins_by_reload_now() {
+        let home = super::mock_home();
+        let fixture = super::fixture();
+        ok(&run(
+            home.path(),
+            &[
+                "mcp",
+                "add",
+                "slow",
+                "--command",
+                &fixture,
+                "--trust",
+                "full",
+                "--args",
+                "--start-delay-ms",
+                "8000",
+            ],
+        ));
+        ok(&run(
+            home.path(),
+            &["config", "set", "mcp.discovery_wait_ms", "5000"],
+        ));
+        let started = std::time::Instant::now();
+        let mut p = spawn(home.path(), &[]);
+        prompt(&mut p);
+        let ready = started.elapsed();
+        assert!(
+            ready < std::time::Duration::from_secs(3),
+            "the prompt waited {ready:?} for the MCP server"
+        );
+        p.send_line("first").unwrap();
+        p.expect("mock: first").unwrap();
+        prompt(&mut p);
+        let id = super::newest_session(home.path());
+        assert!(!exposed(home.path(), &id).contains(&"mcp__slow__echo".to_owned()));
+        // `--now` starts the servers again and waits for them.
+        p.send_line("/mcp reload --now").unwrap();
+        p.expect("tools: now (this session").unwrap();
+        prompt(&mut p);
+        let tools = exposed(home.path(), &id);
+        assert!(tools.contains(&"mcp__slow__echo".to_owned()), "{tools:?}");
+        exit(p);
+    }
+    /// A server still connecting when an interactive session opens joins
+    /// it before its first request when it connects within
+    /// `mcp.discovery_wait_ms` (plugin-system, MCP config watch,
+    /// recycling and discovery wait), though the prompt did not wait.
+    #[test]
+    fn a_server_connecting_within_the_wait_joins_the_first_turn() {
+        let home = super::mock_home();
+        let fixture = super::fixture();
+        ok(&run(
+            home.path(),
+            &[
+                "mcp",
+                "add",
+                "fx",
+                "--command",
+                &fixture,
+                "--trust",
+                "full",
+                "--args",
+                "--start-delay-ms",
+                "700",
+            ],
+        ));
+        let script = super::script(
+            home.path(),
+            "[[rule]]\nuser = \"go\"\n[[rule.tool_calls]]\nname = \"mcp__fx__echo\"\n\
+             arguments = { text = \"from the first turn\" }\n\n\
+             [[rule]]\ntool_result = \"from the first turn\"\ntext = \"echoed\"\n",
+        );
+        let mut p = spawn(home.path(), &["--mock-script", &script]);
+        prompt(&mut p);
+        p.send_line("go").unwrap();
+        p.expect("echoed").unwrap();
+        prompt(&mut p);
+        exit(p);
+    }
 }

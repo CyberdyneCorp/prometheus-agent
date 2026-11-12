@@ -583,7 +583,7 @@ impl Factory {
         self.maintain();
         let session = self.session_row(id, target)?;
         let conversation = self.models.bind_conversation(&session);
-        self.discover_mcp().await;
+        let discovery = self.discover_mcp_for(id, child.is_some()).await;
         let (registry, selection, session_surface) = self.selection_for(&session, child)?;
         let inline_shell = Arc::new(skills::DeferredShell::default());
         let announce = memory::notices_for(&self.scope, &session);
@@ -615,7 +615,7 @@ impl Factory {
         let ports = (&gate.gate, &agent_tools, &model);
         let built = (registry, selection, &capabilities);
         let tool_state = Box::pin(self.tool_state(id, built, ports)).await?;
-        let tool_port = tool_state.tools();
+        let tool_port = self.settle_later(&tool_state, discovery, &session_surface);
         delegation.parent_is(&tool_port, &capabilities, &gate.gate);
         let recording = self.recording(&session, child, clients.is_none())?;
         let mut notices = Vec::new();

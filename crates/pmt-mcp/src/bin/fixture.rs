@@ -2,10 +2,12 @@
 //! `pmt_mcp::fixture`).
 //!
 //! `[--log <file>] [--mode normal|crash-on-start|hang] [--extras]
-//! [--offers resources,prompts] [--http <addr> [--bearer <token>]]`:
+//! [--offers resources,prompts] [--http <addr> [--bearer <token>]]
+//! [--start-delay-ms <n>]`:
 //! stdio by default; `--http` serves streamable HTTP
 //! and prints `listening <addr>`; `crash-on-start` exits at once and
-//! `hang` never answers `initialize`.
+//! `hang` never answers `initialize`; `--start-delay-ms` waits that long
+//! before serving (a slow server).
 
 use std::io::Write as _;
 
@@ -35,6 +37,9 @@ async fn main() {
             tokio::time::sleep(std::time::Duration::from_hours(1)).await;
         },
         _ => {}
+    }
+    if let Some(delay) = value("--start-delay-ms").and_then(|d| d.parse().ok()) {
+        tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
     }
     if let Some(addr) = value("--http") {
         let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind");

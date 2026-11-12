@@ -214,6 +214,17 @@ pub trait CompactionBoundary: Send + Sync {
     /// the prompt frozen next reads their definitions. A failure keeps
     /// the current tools (the implementation reports it).
     fn refresh_tools(&self) -> model::BoxFuture<'_, ()>;
+
+    /// Settles the tools of a session that started while extensions were
+    /// still loading in the background (an MCP server still connecting):
+    /// called before every freeze, it waits once, before the session's
+    /// first prompt is built, for what the session start would have waited
+    /// for, so that wait never delays the client's prompt (spec:
+    /// workspace-architecture, Background loading and daemon readiness
+    /// budgets). Later calls return at once.
+    fn settle_tools(&self) -> model::BoxFuture<'_, ()> {
+        Box::pin(async {})
+    }
 }
 
 /// Plugin hooks the turn loop fires (spec: plugin-system, `pre_llm_call`

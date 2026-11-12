@@ -124,6 +124,58 @@ impl Factory {
         crate::mcp_host::discover(&scope, one_shot).await;
     }
 
+    /// The MCP discovery of session `id` starting now. A session that runs
+    /// at once (a one-shot or cron run, a delegated `child`) or that
+    /// resumes a frozen prompt waits for it here; a new interactive
+    /// session gets it as a background task instead, so its client shows
+    /// the prompt while slow servers connect (spec: workspace-architecture,
+    /// Background loading and daemon readiness budgets), and the session
+    /// waits for it before its first prompt is built
+    /// ([`super::tool_state::Deferred`]).
+    pub(super) async fn discover_mcp_for(
+        &self,
+        id: SessionId,
+        child: bool,
+    ) -> Option<tokio::task::JoinHandle<()>> {
+        let scope = self.plugin_scope.get();
+        let one_shot = self.options.source_tag.as_deref() == Some(pmt_store::ONESHOT_TAG);
+        let runs_now = child || one_shot || self.options.cron.is_some();
+        let frozen = pmt_agent::prompt::frozen::stored_any_route(&self.store, id)
+            .ok()
+            .flatten()
+            .is_some();
+        if runs_now || frozen || crate::mcp_host::manager(&scope).servers().is_empty() {
+            crate::mcp_host::discover(&scope, one_shot).await;
+            return None;
+        }
+        Some(pmt_core::spawn::spawn(async move {
+            crate::mcp_host::discover(&scope, false).await;
+        }))
+    }
+
+    /// The tool port of `state`, which settles its tools once
+    /// `discovery` (a [`Self::discover_mcp_for`] left running) ends, with
+    /// the selection of a top-level session on `surface`.
+    pub(super) fn settle_later(
+        &self,
+        state: &super::tool_state::ToolState,
+        discovery: Option<tokio::task::JoinHandle<()>>,
+        surface: &pmt_tools::SessionSurface,
+    ) -> Arc<tools::SwappableTools> {
+        if let Some(discovery) = discovery {
+            let (scope, interactive, surface) = (
+                self.scope.clone(),
+                self.options.interactive,
+                surface.clone(),
+            );
+            let select: super::tool_state::Selector = Box::new(move |registry, toolsets| {
+                tools::selection(registry, scope.config(), interactive, toolsets, &surface)
+            });
+            state.defer(super::tool_state::Deferred { discovery, select });
+        }
+        state.tools()
+    }
+
     /// Makes `/plugins reload` re-read the profile's `config.toml` (with
     /// the `--set` list `set` the session opened its scope with) so a
     /// `plugins enable`/`disable` run since the session started counts. A

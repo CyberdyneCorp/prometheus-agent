@@ -16,6 +16,9 @@ use crate::prompt::{self, PromptInputs};
 impl Turn<'_> {
     pub(super) async fn freeze(&mut self, route: &RouteInfo) -> Result<Frozen, Error> {
         let setup = &self.agent.setup;
+        if let Some(boundary) = &setup.compaction_boundary {
+            boundary.settle_tools().await;
+        }
         let pending = self.agent.take_rebuild();
         if matches!(pending, Some(Rebuild::Compaction))
             && let Some(boundary) = &setup.compaction_boundary
