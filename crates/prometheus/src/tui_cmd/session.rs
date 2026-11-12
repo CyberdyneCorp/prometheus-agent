@@ -447,7 +447,9 @@ mod tests {
 
     #[test]
     fn a_card_counts_down_to_its_deadline() {
-        let mut waiting = asked("sudo.request", Some(2_500));
+        // Just under 3 s: a test thread stalled by a loaded machine still
+        // reads the same whole second.
+        let mut waiting = asked("sudo.request", Some(2_950));
         assert!(
             card(&waiting, 0, 0, &english())
                 .hint

@@ -3906,3 +3906,10 @@ capabilities = [
 
 [api-server."Discovery and readiness endpoints"]
 "Readiness hides secrets" = ["crates/prometheus/tests/api_sessions.rs::detailed_health_reports_failures_without_secrets_or_paths"]
+
+# 60. M2 exit criteria (crates/prometheus/tests/m2_exit/: the exit tests
+# chain the M2 surfaces end to end; they also prove the scenarios below).
+
+[messaging-gateway."Event subscription and owned replay"]
+"Reconnect resumes without gaps" = { tests = ["crates/prometheus/tests/m2_exit/daemon_clients.rs::the_daemon_serves_tui_cli_and_platform_and_a_dropped_client_resumes_without_gaps", "crates/pmt-gateway/tests/sessions.rs::events_missed_while_disconnected_are_replayed", "crates/pmt-gateway/src/hub/tests.rs::concurrent_publishers_reach_a_connection_in_seq_order"], note = "the exit test's client drops between two platform turns and replays the missed turn's events gap-free before the next live one; unix only (the TUI runs in a pseudo-terminal)" }
+"Foreign profile session is invisible" = ["crates/prometheus/tests/m2_exit/daemon_clients.rs::the_daemon_serves_tui_cli_and_platform_and_a_dropped_client_resumes_without_gaps", "crates/pmt-gateway/tests/sessions.rs::another_profiles_events_are_denied_without_revealing_the_session"]

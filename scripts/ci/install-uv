@@ -2,7 +2,8 @@
 # Installs the uv this binary pins (crates/pmt-update/runtimes/index.json),
 # verified against its SHA-256, into DEST (default: target/tools/uv), and
 # installs the CPython the python-bridge tests run on into
-# target/pybridge-python, so no test downloads anything.
+# target/pybridge-python and the OpenAI SDK of the M2 exit test into
+# target/openai-sdk, so no test downloads anything.
 #
 # usage: scripts/ci/install-uv [DEST]
 # On GitHub Actions DEST is added to GITHUB_PATH.
@@ -50,4 +51,16 @@ fi
 # (missing _sysconfigdata_, EXTERNALLY-MANAGED). Always install fresh.
 rm -rf "$root/target/pybridge-python"
 UV_PYTHON_INSTALL_REGISTRY=0 "$dest/uv" python install 3.12 --no-bin --install-dir "$root/target/pybridge-python"
+# The official OpenAI Python SDK the M2 exit test drives against the API
+# server (crates/prometheus/tests/m2_exit/openai_sdk.rs: keep the version,
+# the cut-off date and the marker file in step with it).
+rm -rf "$root/target/openai-sdk"
+UV_PYTHON_INSTALL_DIR="$root/target/pybridge-python" "$dest/uv" venv --quiet \
+    --python-preference only-managed --python 3.12 "$root/target/openai-sdk"
+case "$(uname -s)" in
+    MINGW* | MSYS* | CYGWIN*) sdk_python="$root/target/openai-sdk/Scripts/python.exe" ;;
+    *) sdk_python="$root/target/openai-sdk/bin/python" ;;
+esac
+"$dest/uv" pip install --quiet --exclude-newer 2026-11-01T00:00:00Z --python "$sdk_python" openai==2.8.0
+touch "$root/target/openai-sdk/.openai-2.8.0"
 echo "uv $("$dest/uv" --version) at $dest"
