@@ -552,7 +552,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 - [x] 60.3 M2 exit: a cron job delegating to a background subagent fires exactly once across a daemon restart and delivers via the outbox (spec: scheduled-jobs, spec: subagent-delegation)
 - [x] 60.4 M2 exit: an OpenAI SDK client completes a chat and an idempotent retried run through the API server, a `/goal` session reaches completion under the mock judge, a MoA preset answers through the mock provider, and a delegated child commits in its own git worktree (spec: api-server, spec: session-automation, spec: mixture-of-agents, spec: git-worktrees)
 - [x] 60.5 M2 exit: voice mode transcribes a recorded fixture and speaks the reply through mock STT/TTS, an LSP diagnostic is reported after an edit, a connector tool is reached through tool search, a stub local model answers offline, a project is created and activated, `gateway send` delivers to a home channel, and the TUI renders in a bundled non-English language (spec: voice-mode, spec: web-and-media-tools, spec: lsp-diagnostics, spec: connectors, spec: local-models, spec: projects, spec: agent-interop, spec: i18n)
-- [ ] 60.6 M2 exit: migrating the fixture Hermes home and running the golden replay suite pass in CI; every M2 scenario across specs maps to a passing test in the scenario index
+- [x] 60.6 M2 exit: migrating the fixture Hermes home and running the golden replay suite pass in CI; every M2 scenario across specs maps to a passing test in the scenario index
 
 ## 61. M3 Web dashboard
 
