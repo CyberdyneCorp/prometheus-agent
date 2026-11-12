@@ -198,6 +198,17 @@ pub struct PluginProvider {
     pub replaces_builtin: bool,
 }
 
+/// A plugin serving a built-in provider's slot (a bridged Hermes plugin
+/// such as `github-copilot`) that declares no sign-in of its own keeps
+/// the built-in's: the host runs the sign-in and the plugin gets only the
+/// resulting credential (spec: model-providers, Hermes model-provider
+/// plugins hosted by the Python bridge).
+fn inherit_sign_in(plugin: &mut Descriptor, builtin: &Descriptor) {
+    if plugin.oauth.is_none() && plugin.login_flows.is_empty() {
+        plugin.login_flows.clone_from(&builtin.login_flows);
+    }
+}
+
 /// The profile's providers by canonical id, with every alias.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProviderRegistry {
@@ -223,9 +234,12 @@ impl ProviderRegistry {
         for descriptor in builtin::descriptors() {
             registry.insert(descriptor, Origin::Builtin)?;
         }
-        for plugin in plugins {
+        for mut plugin in plugins {
             plugin.descriptor.validate()?;
             if plugin.replaces_builtin {
+                if let Some(builtin) = registry.providers.get(&plugin.descriptor.id) {
+                    inherit_sign_in(&mut plugin.descriptor, &builtin.descriptor);
+                }
                 registry.remove(&plugin.descriptor.id);
             }
             registry.insert(plugin.descriptor, Origin::Plugin)?;

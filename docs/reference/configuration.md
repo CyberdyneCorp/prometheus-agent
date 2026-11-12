@@ -643,6 +643,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `providers.<name>.oauth.client_id` | string | unset | any | `next_session` | The OAuth client id. |
 | `providers.<name>.oauth.device_authorization_url` | string | unset | any | `next_session` | Device authorization endpoint of the device-code flow. |
 | `providers.<name>.oauth.device_poll_url` | string | unset | any | `next_session` | Polling endpoint of a device flow that polls somewhere other than the token endpoint (OpenAI's). |
+| `providers.<name>.oauth.exchange_url` | string | unset | any | `next_session` | Endpoint exchanging the sign-in token for a short-lived API token before each request (GitHub Copilot's `https://api.github.com/copilot_internal/v2/token`). |
 | `providers.<name>.oauth.redirect_path` | string | unset | any | `next_session` | Path of the loopback redirect. |
 | `providers.<name>.oauth.redirect_port` | integer | unset | 0 to 65535 | `next_session` | Loopback redirect port of the browser flow; 0 lets the OS assign one (only for providers that accept any port). |
 | `providers.<name>.oauth.revoke_url` | string | unset | any | `next_session` | Token revocation endpoint (`auth remove` revokes the refresh token). |

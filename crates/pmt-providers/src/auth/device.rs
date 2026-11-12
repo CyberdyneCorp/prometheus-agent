@@ -195,7 +195,8 @@ fn judge(spec: &OAuthSpec, reply: &Reply) -> Poll {
         return Poll::Pending;
     }
     match spec.device_protocol {
-        DeviceProtocol::Rfc8628 if reply.status == 200 => {
+        // GitHub answers a pending poll with 200 and an `error` field.
+        DeviceProtocol::Rfc8628 if reply.status == 200 && reply.field("error").is_none() => {
             match TokenSet::from_reply(reply, Timestamp::now()) {
                 Ok(tokens) => Poll::Done(tokens),
                 Err(err) => Poll::Failed(err.message().to_owned()),

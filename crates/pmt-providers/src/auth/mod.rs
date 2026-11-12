@@ -20,6 +20,7 @@ pub mod browser;
 pub mod codex;
 pub mod credentials;
 pub mod device;
+pub mod exchange;
 mod extras;
 pub mod gateway;
 pub mod jwt;

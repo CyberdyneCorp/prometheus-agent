@@ -5695,6 +5695,13 @@
             "null"
           ]
         },
+        "exchange_url": {
+          "description": "Endpoint exchanging the sign-in token for a short-lived API token\nbefore each request (GitHub Copilot's\n`https://api.github.com/copilot_internal/v2/token`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "redirect_path": {
           "description": "Path of the loopback redirect.",
           "type": [

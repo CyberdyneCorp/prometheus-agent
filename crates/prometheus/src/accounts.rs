@@ -45,6 +45,9 @@ pub fn open(
         client.clone(),
         user_home.map(Path::to_path_buf),
     ))
+    .with_exchanges(pmt_providers::auth::exchange::Exchanges::new(
+        client.clone(),
+    ))
     .with_detector(Detector::new(client.clone()))
     .with_local_runtime(crate::local_cmd::runtime::for_home(
         scope.home(),

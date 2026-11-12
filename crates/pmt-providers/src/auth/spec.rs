@@ -80,6 +80,10 @@ pub struct OAuthSpec {
     pub token_encoding: TokenEncoding,
     /// Hosts the endpoints may be on.
     pub allowed_hosts: Vec<String>,
+    /// Where each request's short-lived API token is obtained for the
+    /// sign-in token ([`super::exchange`]); `None`: the sign-in token is
+    /// sent as is.
+    pub exchange_url: Option<String>,
 }
 
 const OPENAI_ISSUER: &str = "https://auth.openai.com";
@@ -146,6 +150,7 @@ fn custom(id: &str) -> OAuthSpec {
         authorize_params: Vec::new(),
         token_encoding: TokenEncoding::Form,
         allowed_hosts: Vec::new(),
+        exchange_url: None,
     }
 }
 
@@ -192,7 +197,25 @@ fn builtin(id: &str) -> Option<OAuthSpec> {
             allowed_hosts: owned(&["auth.openai.com"]),
             ..custom(id)
         }),
+        "copilot" | "copilot-acp" => Some(copilot(id)),
         _ => portal(id),
+    }
+}
+
+/// GitHub Copilot: GitHub's device-code sign-in (the client id GitHub's
+/// own Copilot editors use), its token exchanged for a short-lived Copilot
+/// API token before requests (spec: model-providers, Hermes model-provider
+/// plugins hosted by the Python bridge).
+fn copilot(id: &str) -> OAuthSpec {
+    OAuthSpec {
+        client_id: "Iv1.b507a08c87ecfe98".to_owned(),
+        token_url: "https://github.com/login/oauth/access_token".to_owned(),
+        device_authorization_url: Some("https://github.com/login/device/code".to_owned()),
+        verification_url: Some("https://github.com/login/device".to_owned()),
+        scopes: owned(&["read:user"]),
+        allowed_hosts: owned(&["github.com", "api.github.com"]),
+        exchange_url: Some("https://api.github.com/copilot_internal/v2/token".to_owned()),
+        ..custom(id)
     }
 }
 
@@ -329,6 +352,7 @@ fn apply(spec: &mut OAuthSpec, o: &OAuthEndpoints) {
     set(&mut spec.device_poll_url, &o.device_poll_url);
     set(&mut spec.verification_url, &o.verification_url);
     set(&mut spec.revoke_url, &o.revoke_url);
+    set(&mut spec.exchange_url, &o.exchange_url);
     if let Some(scopes) = &o.scopes {
         spec.scopes.clone_from(scopes);
     }
@@ -357,6 +381,7 @@ impl OAuthSpec {
             self.device_authorization_url.as_ref(),
             self.device_poll_url.as_ref(),
             self.revoke_url.as_ref(),
+            self.exchange_url.as_ref(),
         ];
         for url in urls.into_iter().flatten() {
             self.check_url(url)?;
