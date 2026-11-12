@@ -327,9 +327,13 @@ impl DaemonHost {
         let target = factory.models.primary(&setup::flags(&setup)).await?;
         // A chat's session tells the chat when its background processes
         // end; an interactive client session tells its clients. Other
-        // sessions (one-shot runs, cron, subagents) cannot receive a later
-        // notice, so quiet-wait never promises one there.
+        // sessions (one-shot runs, API calls, cron, subagents) cannot
+        // receive a later notice, so quiet-wait never promises one there.
         let oneshot = row.source_tag.as_deref() == Some(pmt_store::sessions::ONESHOT_TAG);
+        // An API session answers one HTTP request at a time and has no
+        // attached client to notify, prompt or hand a later completion to
+        // (spec: subagent-delegation, Background and synchronous dispatch).
+        let interactive = !oneshot && row.source != pmt_store::Source::Api;
         let chat = matches!(row.origin, pmt_store::Origin::Gateway { .. })
             .then(|| Arc::clone(&self.gateway));
         let completions = match row.origin {
@@ -338,18 +342,18 @@ impl DaemonHost {
                 profile.scope().name().to_string(),
                 id.to_string(),
             )),
-            pmt_store::Origin::None if !oneshot => Some(notify::to_clients(link.clone())),
+            pmt_store::Origin::None if interactive => Some(notify::to_clients(link.clone())),
             _ => None,
         };
         // Only a person at a client of an interactive session is asked
         // for a sudo password.
-        let sudo = matches!(row.origin, pmt_store::Origin::None if !oneshot).then(|| {
+        let sudo = matches!(row.origin, pmt_store::Origin::None if interactive).then(|| {
             Arc::new(SudoToClients {
                 link: link.clone(),
                 runtime: tokio::runtime::Handle::current(),
             }) as Arc<dyn pmt_tools::terminal::sudo::SudoPrompt>
         });
-        let (inbox, delegation) = self.delegation_inbox(profile, &row, id, link, oneshot)?;
+        let (inbox, delegation) = self.delegation_inbox(profile, &row, id, link, interactive)?;
         let clients = Clients {
             delegation: delegation.clone(),
             events: Arc::new(ToClients { link: link.clone() }),
@@ -408,7 +412,8 @@ impl DaemonHost {
 
     /// Where a loaded session's background delegations deliver: a client
     /// session gets a queued turn, a gateway chat an injected one; other
-    /// sessions (one-shot runs, cron, subagents) wait for their children.
+    /// sessions (one-shot runs, API calls, cron, subagents) wait for their
+    /// children.
     #[allow(clippy::type_complexity)] // the inbox and its trait object
     fn delegation_inbox(
         &self,
@@ -416,7 +421,7 @@ impl DaemonHost {
         row: &pmt_store::Session,
         id: SessionId,
         link: &Link,
-        oneshot: bool,
+        interactive: bool,
     ) -> Result<
         (
             Option<Arc<delegations::ClientInbox>>,
@@ -434,7 +439,7 @@ impl DaemonHost {
                     session: id.to_string(),
                 }) as _),
             ),
-            pmt_store::Origin::None if !oneshot => {
+            pmt_store::Origin::None if interactive => {
                 let inbox =
                     delegations::ClientInbox::new(self, &self.profile(&name)?, id, link.clone());
                 (Some(Arc::clone(&inbox)), Some(inbox as _))

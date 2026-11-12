@@ -207,6 +207,7 @@ impl Delegator {
         }
         let event = Event::SubagentSpawned(SubagentSpawned {
             subagent_id: entry.subagent_id.clone(),
+            delegation_id: entry.delegation_id.clone(),
             child_session_id: session.id().to_string(),
             depth: entry.depth,
             goal: pmt_core::subagent_tree::one_line(goal),
@@ -235,6 +236,8 @@ impl Delegator {
         if self.ctx.config.progress_events {
             let event = Event::SubagentFinished(SubagentFinished {
                 subagent_id: entry.subagent_id.clone(),
+                delegation_id: entry.delegation_id.clone(),
+                child_session_id: entry.session(),
                 status: result.status.as_str().to_owned(),
                 summary: pmt_core::subagent_tree::one_line(&result.summary),
                 duration_ms: result.duration_ms,

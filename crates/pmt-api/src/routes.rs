@@ -1,5 +1,6 @@
 //! Request routing: the browser and Host guard first, the unauthenticated
-//! health check, then the routed profile's bearer check and the endpoint.
+//! health check, then the routed profile's bearer check, the body (only
+//! for an authenticated caller) and the endpoint.
 
 use std::sync::Arc;
 
@@ -15,43 +16,50 @@ use crate::{auth, chat, discovery, responses, runs, sessions_api};
 
 /// Answers one request.
 pub(crate) async fn answer(shared: &Arc<Shared>, request: hyper::Request<Incoming>) -> Reply {
-    let Some(req) = Req::read(request).await else {
-        let refused = error(
-            413,
-            "invalid_request_error",
-            "body_too_large",
-            "the request body is too large",
-        );
-        return Guard::finish(refused, None);
-    };
-    let origin = match shared.guard.admit(&req) {
+    let (parts, body) = request.into_parts();
+    let head = Req::head(parts);
+    let origin = match shared.guard.admit(&head) {
         Ok(origin) => origin,
         Err(refused) => return Guard::finish(refused, None),
     };
-    if req.method == Method::OPTIONS {
+    if head.method == Method::OPTIONS {
         return match &origin {
             Some(origin) => Guard::finish(Guard::preflight(origin), None),
             None => Guard::finish(not_found("the route"), None),
         };
     }
-    let reply = route(shared, &req).await;
+    let reply = route(shared, head, body).await;
     Guard::finish(reply, origin.as_deref())
 }
 
-async fn route(shared: &Arc<Shared>, req: &Req) -> Reply {
-    let (profile, path) = auth::split(&req.path);
-    if req.method == Method::GET && (path == "/health" || path == "/v1/health") {
+/// Routes a request whose head passed the guard. The body is read only
+/// once the caller is authenticated, so an anonymous client never makes
+/// the daemon buffer an upload.
+async fn route(shared: &Arc<Shared>, head: Req, body: Incoming) -> Reply {
+    let (profile, path) = auth::split(&head.path);
+    if head.method == Method::GET && (path == "/health" || path == "/v1/health") {
         return json_reply(200, &json!({"status": "ok"}));
     }
     if !shared.server.profiles().contains(&profile) {
         return not_found("the route");
     }
-    let caller = match auth::authenticate(shared.host.as_ref(), &profile, req) {
+    let caller = match auth::authenticate(shared.host.as_ref(), &profile, &head) {
         Ok(caller) => caller,
         Err(refused) => return refused,
     };
+    let Some(req) = head.with_body(body).await else {
+        return error(
+            413,
+            "invalid_request_error",
+            "body_too_large",
+            "the request body is too large",
+        );
+    };
+    endpoint(shared, &caller, &path, &req).await
+}
+
+async fn endpoint(shared: &Arc<Shared>, caller: &auth::Caller, path: &str, req: &Req) -> Reply {
     let segments: Vec<&str> = path.trim_matches('/').split('/').collect();
-    let caller = &caller;
     match (req.method.clone(), segments.as_slice()) {
         (Method::GET, ["v1", "models"]) => discovery::models(shared, caller),
         (Method::GET, ["v1", "capabilities"]) => discovery::capabilities(shared, caller),

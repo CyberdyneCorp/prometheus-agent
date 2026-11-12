@@ -118,6 +118,13 @@ pub(crate) fn preview(text: &str) -> String {
     out
 }
 
+/// `text` passed through the profile's forced secret redaction, then cut
+/// like [`preview`]: every tool preview an HTTP client sees goes through
+/// it, whatever `security.redact_secrets` says.
+pub(crate) fn redacted_preview(shared: &Shared, profile: &str, text: &str) -> String {
+    preview(&shared.host.api_redact(profile, text))
+}
+
 /// Marks every run a previous daemon left unfinished `unknown`.
 pub(crate) fn recover(shared: &Shared, profiles: &[String]) {
     let me = shared.server.instance_id().to_owned();

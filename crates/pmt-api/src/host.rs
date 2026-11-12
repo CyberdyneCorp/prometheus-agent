@@ -121,6 +121,22 @@ pub enum ApiImage {
     Url(String),
 }
 
+/// The file extension of an accepted image media type (`image/png`,
+/// `image/jpeg`, `image/gif`, `image/webp`, any case); `None` refuses it.
+/// A file name is never built from the caller's media type itself, which
+/// could carry `..`, separators or `:` (spec: api-server, Chat Completions
+/// endpoint).
+#[must_use]
+pub fn image_extension(media_type: &str) -> Option<&'static str> {
+    match media_type.trim().to_ascii_lowercase().as_str() {
+        "image/png" => Some("png"),
+        "image/jpeg" | "image/jpg" => Some("jpg"),
+        "image/gif" => Some("gif"),
+        "image/webp" => Some("webp"),
+        _ => None,
+    }
+}
+
 /// A requested provider and model.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelChoice {

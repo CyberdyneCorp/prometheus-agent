@@ -1,7 +1,7 @@
 //! OpenAI message content (spec: api-server, Chat Completions endpoint;
 //! Responses endpoint): a string, or `text` / `input_text` parts and
 //! `image_url` / `input_image` parts whose URL is remote `http(s)` or a
-//! `data:image/*` URL. Uploaded files (`file`, `input_file`, `file_id`), a
+//! PNG, JPEG, GIF or WebP `data:` URL. Uploaded files (`file`, `input_file`, `file_id`), a
 //! non-image data URL or any other part are refused before a turn starts.
 
 use base64::Engine as _;
@@ -75,24 +75,21 @@ fn image(part: &Value) -> Result<ApiImage, Reply> {
     if url.starts_with("http://") || url.starts_with("https://") {
         return Ok(ApiImage::Url(url.to_owned()));
     }
-    data_url(url).ok_or_else(|| unsupported("a non-image data URL"))
+    data_url(url)
+        .ok_or_else(|| unsupported("a data URL that is not a PNG, JPEG, GIF or WebP image"))
 }
 
-/// `data:image/<x>;base64,<bytes>`.
+/// `data:image/<png|jpeg|gif|webp>;base64,<bytes>`; the media type is
+/// stored normalised, never as the caller wrote it.
 fn data_url(url: &str) -> Option<ApiImage> {
     let rest = url.strip_prefix("data:")?;
     let (meta, data) = rest.split_once(',')?;
-    let media_type = meta.strip_suffix(";base64")?;
-    if !media_type.starts_with("image/") {
-        return None;
-    }
+    let media_type = meta.strip_suffix(";base64")?.to_ascii_lowercase();
+    crate::host::image_extension(&media_type)?;
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(data.trim())
         .ok()?;
-    Some(ApiImage::Data {
-        media_type: media_type.to_owned(),
-        bytes,
-    })
+    Some(ApiImage::Data { media_type, bytes })
 }
 
 fn unsupported(what: &str) -> Reply {
@@ -118,6 +115,10 @@ mod tests {
             json!({"type": "input_file", "file_data": "x"}),
             json!({"type": "image_url", "image_url": {"url": "data:application/pdf;base64,AAAA"}}),
             json!({"type": "input_image", "file_id": "f1"}),
+            // A media type is never trusted as a file name.
+            json!({"type": "image_url", "image_url": {"url": "data:image/../../x;base64,AAAA"}}),
+            json!({"type": "image_url", "image_url": {"url": "data:image/png:evil;base64,AAAA"}}),
+            json!({"type": "image_url", "image_url": {"url": "data:image/svg+xml;base64,AAAA"}}),
         ] {
             let refused = user_input(&json!([part])).unwrap_err();
             assert_eq!(refused.status(), 400, "{part}");

@@ -42,7 +42,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
 use hyper::service::service_fn;
-use hyper_util::rt::TokioIo;
+use hyper_util::rt::{TokioIo, TokioTimer};
 use pmt_config::daemon_api::ApiListener;
 use pmt_core::cancel::CancelToken;
 use pmt_core::error::Error;
@@ -52,6 +52,7 @@ use tracing::Instrument as _;
 
 pub use host::{
     ApiHost, ApiImage, ApiTurn, Catalog, JobsCall, ModelChoice, ModelOptions, NewApiSession,
+    image_extension,
 };
 
 /// What every request handler shares.
@@ -206,17 +207,29 @@ impl ApiServer {
     }
 }
 
+/// Connections served at once; the next waits in the accept queue, so
+/// open connections never grow without bound.
+const MAX_CONNECTIONS: usize = 256;
+
+/// How long a client may take to send a request's headers (also bounds an
+/// idle keep-alive connection).
+const HEADER_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 fn serve(listener: tokio::net::TcpListener, shared: Arc<Shared>, stop: CancelToken) {
+    let slots = Arc::new(tokio::sync::Semaphore::new(MAX_CONNECTIONS));
     pmt_core::spawn::spawn(
         async move {
             loop {
                 let accepted = tokio::select! {
                     () = stop.cancelled() => return,
-                    accepted = listener.accept() => accepted,
+                    accepted = accept(&listener, &slots) => accepted,
                 };
-                let Ok((stream, _)) = accepted else { continue };
+                let Some((stream, slot)) = accepted else {
+                    continue;
+                };
                 let shared = Arc::clone(&shared);
                 pmt_core::spawn::spawn(async move {
+                    let _slot = slot;
                     let service = service_fn(move |req| {
                         let shared = Arc::clone(&shared);
                         async move {
@@ -224,6 +237,8 @@ fn serve(listener: tokio::net::TcpListener, shared: Arc<Shared>, stop: CancelTok
                         }
                     });
                     let conn = hyper::server::conn::http1::Builder::new()
+                        .timer(TokioTimer::new())
+                        .header_read_timeout(HEADER_READ_TIMEOUT)
                         .serve_connection(TokioIo::new(stream), service);
                     if let Err(err) = conn.await {
                         tracing::debug!("api connection ended: {err}");
@@ -233,6 +248,16 @@ fn serve(listener: tokio::net::TcpListener, shared: Arc<Shared>, stop: CancelTok
         }
         .in_current_span(),
     );
+}
+
+/// The next connection once a slot is free.
+async fn accept(
+    listener: &TcpListener,
+    slots: &Arc<tokio::sync::Semaphore>,
+) -> Option<(tokio::net::TcpStream, tokio::sync::OwnedSemaphorePermit)> {
+    let slot = Arc::clone(slots).acquire_owned().await.ok()?;
+    let (stream, _) = listener.accept().await.ok()?;
+    Some((stream, slot))
 }
 
 /// The API listener's health component.

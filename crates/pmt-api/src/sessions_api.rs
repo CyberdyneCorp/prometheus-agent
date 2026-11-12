@@ -330,11 +330,11 @@ async fn chat(
         let outcome = loop {
             tokio::select! {
                 outcome = &mut work => break outcome,
-                Some(event) = rx.recv() => relay(&out, event),
+                Some(event) = rx.recv() => relay(&shared, &profile, &out, event),
             }
         };
         while let Ok(event) = rx.try_recv() {
-            relay(&out, event);
+            relay(&shared, &profile, &out, event);
         }
         let (name, data) = match outcome {
             Ok(outcome) => {
@@ -357,7 +357,8 @@ async fn chat(
     Ok(reply)
 }
 
-fn relay(out: &mpsc::UnboundedSender<Sse>, event: TurnEvent) {
+fn relay(shared: &Shared, profile: &str, out: &mpsc::UnboundedSender<Sse>, event: TurnEvent) {
+    let preview = |text: &str| crate::runs::redacted_preview(shared, profile, text);
     let (name, data) = match event {
         TurnEvent::Delta(text) => ("assistant.delta", json!({"delta": text})),
         TurnEvent::Commentary(text) => ("assistant.commentary", json!({"text": text})),
@@ -367,7 +368,7 @@ fn relay(out: &mpsc::UnboundedSender<Sse>, event: TurnEvent) {
             arguments,
         } => (
             "tool.started",
-            json!({"tool": tool, "call_id": call_id, "preview": crate::runs::preview(&arguments.to_string())}),
+            json!({"tool": tool, "call_id": call_id, "preview": preview(&arguments.to_string())}),
         ),
         TurnEvent::ToolCompleted {
             call_id,
@@ -378,7 +379,7 @@ fn relay(out: &mpsc::UnboundedSender<Sse>, event: TurnEvent) {
         } => (
             if ok { "tool.completed" } else { "tool.failed" },
             json!({"tool": tool, "call_id": call_id, "duration_ms": duration_ms,
-                "preview": crate::runs::preview(&output)}),
+                "preview": preview(&output)}),
         ),
         _ => return,
     };

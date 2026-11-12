@@ -11,7 +11,7 @@ use pmt_store::api::runs::RunUpdate;
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
-use super::{Pending, Run, preview};
+use super::{Pending, Run, redacted_preview};
 use crate::Shared;
 use crate::admission::Finish;
 use crate::host::ApiTurn;
@@ -95,26 +95,27 @@ impl Relay<'_> {
             TurnEvent::Commentary(text) if self.interim => {
                 events.push("message.interim", json!({"text": text, "already_streamed": true}));
             }
-            TurnEvent::ToolStarted { call_id, tool, arguments } => events.push(
-                "tool.started",
-                json!({"tool": tool, "call_id": call_id, "preview": preview(&arguments.to_string())}),
-            ),
+            TurnEvent::ToolStarted { call_id, tool, arguments } => {
+                let preview = redacted_preview(self.shared, &self.run.profile, &arguments.to_string());
+                events.push("tool.started", json!({"tool": tool, "call_id": call_id, "preview": preview}));
+            }
             TurnEvent::ToolCompleted { call_id, tool, ok, duration_ms, output } => {
-                let redacted = self.shared.host.api_redact(&self.run.profile, &output);
+                let preview = redacted_preview(self.shared, &self.run.profile, &output);
                 events.push(
                     "tool.completed",
                     json!({"tool": tool, "call_id": call_id, "duration_ms": duration_ms,
-                        "error": !ok, "preview": preview(&redacted)}),
+                        "error": !ok, "preview": preview}),
                 );
             }
             TurnEvent::SubagentStart(payload) => events.push(
                 "subagent.start",
-                json!({"delegation_id": payload["subagent_id"], "child_session_id": payload["child_session_id"],
-                    "goal": payload["goal"], "depth": payload["depth"]}),
+                json!({"delegation_id": payload["delegation_id"], "subagent_id": payload["subagent_id"],
+                    "child_session_id": payload["child_session_id"], "goal": payload["goal"], "depth": payload["depth"]}),
             ),
             TurnEvent::SubagentComplete(payload) => events.push(
                 "subagent.complete",
-                json!({"delegation_id": payload["subagent_id"], "status": payload["status"],
+                json!({"delegation_id": payload["delegation_id"], "subagent_id": payload["subagent_id"],
+                    "status": payload["status"],
                     "summary": payload["summary"], "duration_ms": payload["duration_ms"],
                     "tokens": payload["usage"], "cost": payload["usage"]["cost_usd"],
                     "child_session_id": payload["child_session_id"]}),

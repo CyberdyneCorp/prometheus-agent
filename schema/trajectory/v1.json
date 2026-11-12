@@ -997,6 +997,11 @@
                 "description": "The child's session.",
                 "type": "string"
               },
+              "delegation_id": {
+                "default": "",
+                "description": "The `dg-<ULID>` dispatch the child belongs to (empty in\ntrajectories written before it was recorded).",
+                "type": "string"
+              },
               "depth": {
                 "description": "Delegation depth from 1.",
                 "format": "uint32",
@@ -1098,6 +1103,18 @@
           "payload": {
             "description": "`subagent.finished`.",
             "properties": {
+              "child_session_id": {
+                "description": "The child's session; `None` when it never opened one (refused,\ncancelled while queued).",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "delegation_id": {
+                "default": "",
+                "description": "The `dg-<ULID>` dispatch the child belongs to (empty in\ntrajectories written before it was recorded).",
+                "type": "string"
+              },
               "duration_ms": {
                 "description": "Wall time.",
                 "format": "uint64",

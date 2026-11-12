@@ -234,6 +234,21 @@ fn text<'a>(job: &'a Value, key: &str) -> Option<&'a str> {
         .filter(|t| !t.trim().is_empty())
 }
 
+/// The Hermes file of a job's `script`. The name is checked before any
+/// path is built from it, so neither side of the copy leaves its
+/// `scripts/` directory.
+fn source_script(src: &Source<'_>, rel: &str) -> Result<PathBuf, String> {
+    if !pmt_cron::validate::stays_inside(rel) {
+        return Err(format!("its script path {rel} escapes scripts/"));
+    }
+    let from = src.profile.path("scripts").join(rel);
+    if from.is_file() {
+        Ok(from)
+    } else {
+        Err(format!("its script scripts/{rel} is missing"))
+    }
+}
+
 fn plan_job(src: &Source<'_>, job: &Value, step: &mut CronStep) {
     let id = text(job, "id").unwrap_or("?");
     let name = text(job, "name").unwrap_or(id).to_owned();
@@ -287,15 +302,15 @@ fn plan_job(src: &Source<'_>, job: &Value, step: &mut CronStep) {
         .and_then(|n| u32::try_from(n).ok());
     let mut script = None;
     if let Some(rel) = text(job, "script") {
-        let from = src.profile.path("scripts").join(rel);
-        if from.is_file() {
-            spec.script = Some(rel.to_owned());
-            script = Some(from);
-        } else {
-            step.entries.push(
-                entry(Disposition::Failed).because(format!("its script scripts/{rel} is missing")),
-            );
-            return;
+        match source_script(src, rel) {
+            Ok(from) => {
+                spec.script = Some(rel.to_owned());
+                script = Some(from);
+            }
+            Err(why) => {
+                step.entries.push(entry(Disposition::Failed).because(why));
+                return;
+            }
         }
     }
     let enabled = job.get("enabled").and_then(Value::as_bool).unwrap_or(true)

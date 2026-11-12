@@ -341,17 +341,18 @@ fn streamed(
         let (tx, mut rx) = mpsc::unbounded_channel();
         let run = turn::run(&shared, &profile, turn, &tx, Answering::Nobody);
         tokio::pin!(run);
+        let preview = |text: &str| crate::runs::redacted_preview(&shared, &profile, text);
         let mut streamed = false;
         let outcome = loop {
             tokio::select! {
                 outcome = &mut run => break outcome,
                 Some(event) = rx.recv() => {
-                    streamed |= forward(&out, &send, &shape, event);
+                    streamed |= forward(&out, &send, &shape, event, &preview);
                 }
             }
         };
         while let Ok(event) = rx.try_recv() {
-            streamed |= forward(&out, &send, &shape, event);
+            streamed |= forward(&out, &send, &shape, event, &preview);
         }
         let outcome = match outcome {
             Ok(outcome) => outcome,
@@ -389,11 +390,14 @@ fn streamed(
 }
 
 /// Sends one turn event; whether it streamed answer text.
+/// `preview` turns a tool's arguments into the redacted preview clients
+/// see.
 fn forward(
     out: &mpsc::UnboundedSender<Sse>,
     send: &impl Fn(Value, Option<&str>),
     shape: &Shape,
     event: TurnEvent,
+    preview: &dyn Fn(&str) -> String,
 ) -> bool {
     match event {
         TurnEvent::Delta(text) => {
@@ -409,7 +413,7 @@ fn forward(
             let _ = out.send(Sse::named(
                 "prometheus.tool.progress",
                 &json!({"tool": tool, "call_id": call_id, "status": "started",
-                    "preview": crate::runs::preview(&arguments.to_string()),
+                    "preview": preview(&arguments.to_string()),
                     "session_id": shape.session}),
             ));
         }

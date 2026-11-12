@@ -35,22 +35,27 @@ pub(crate) struct Req {
 }
 
 impl Req {
-    /// Reads `request`'s body (at most [`MAX_BODY`]); `None` when it is
-    /// larger or broken.
-    pub(crate) async fn read(request: hyper::Request<Incoming>) -> Option<Self> {
-        let (parts, body) = request.into_parts();
-        let body = Limited::new(body, MAX_BODY)
-            .collect()
-            .await
-            .ok()?
-            .to_bytes();
-        Some(Self {
+    /// The request line and headers, with an empty body: the guard and the
+    /// bearer check run on these before any body is read.
+    pub(crate) fn head(parts: hyper::http::request::Parts) -> Self {
+        Self {
             method: parts.method,
             path: parts.uri.path().to_owned(),
             query: parts.uri.query().map(str::to_owned),
             headers: parts.headers,
-            body,
-        })
+            body: Bytes::new(),
+        }
+    }
+
+    /// Reads `body` (at most [`MAX_BODY`]) into the request; `None` when it
+    /// is larger or broken.
+    pub(crate) async fn with_body(mut self, body: Incoming) -> Option<Self> {
+        self.body = Limited::new(body, MAX_BODY)
+            .collect()
+            .await
+            .ok()?
+            .to_bytes();
+        Some(self)
     }
 
     /// A header's value as text.

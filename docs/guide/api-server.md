@@ -80,11 +80,14 @@ The answer echoes the session in `X-Prometheus-Session-Id` and in a
 `prometheus.error_code = "iteration_budget_exhausted"` when the turn ran out
 of iterations and wrote a wrap-up, `cancelled` when it was stopped and
 `error` on failure. User content may be text and `image_url` parts (remote
-`http(s)` URLs, fetched under the profile's URL policy, or `data:image/*`
-URLs); uploaded files are refused with 400 `unsupported_content_type`.
+`http(s)` URLs, fetched under the profile's URL policy, or `data:` URLs).
+Images must be PNG, JPEG, GIF or WebP and at most 20 MiB; other image
+types and uploaded files are refused with 400 `unsupported_content_type`.
 With `stream: true`, reasoning arrives as `delta.reasoning_content` and
 tool starts as `prometheus.tool.progress` events (unless
-`api_server.tool_progress_events = false`).
+`api_server.tool_progress_events = false`). Tool previews on every stream
+(Chat Completions, Runs, session chat) pass through the profile's known
+secrets redaction whatever `security.redact_secrets` says.
 
 A caller's `system` message is layered after the profile's own system
 prompt as a separate block, fixed when the session is created; it never
@@ -152,7 +155,10 @@ background. `GET /v1/runs/{id}` reports its status (`queued`, `running`,
 `approval.request`, `clarify.request`, `subagent.start`,
 `subagent.complete` and one terminal `run.completed`, `run.failed`,
 `run.cancelled` or `run.interrupted`; reconnect with `Last-Event-ID` to
-continue after the last event you saw.
+continue after the last event you saw. API calls wait for the children
+they delegate to, so a run's `subagent.start` and `subagent.complete`
+(each with `delegation_id` `dg-...`, `subagent_id` and `child_session_id`)
+arrive before its terminal event.
 
 Controls: `POST /v1/runs/{id}/stop`, `/approval`
 (`{request_id, execution_generation, choice}`), `/clarify`

@@ -190,7 +190,12 @@ impl DaemonHost {
                 ApiImage::Data { media_type, bytes } => (bytes.clone(), media_type.clone()),
                 ApiImage::Url(url) => fetch_image(scope, url).await?,
             };
-            let ext = media_type.strip_prefix("image/").unwrap_or("png");
+            let ext = pmt_api::image_extension(&media_type).ok_or_else(|| {
+                Error::new(
+                    &codes::CHAT_IMAGE,
+                    format!("unsupported image type {media_type}"),
+                )
+            })?;
             let name = format!("{}.{ext}", pmt_store::BlobRef::of(&bytes).sha256());
             std::fs::create_dir_all(&dir).map_err(|e| Error::io(&codes::HOME_IO, &dir, &e))?;
             let path = dir.join(name);
@@ -295,14 +300,36 @@ async fn fetch_image(scope: &ProfileScope, url: &str) -> Result<(Vec<u8>, String
         .unwrap_or("image/png")
         .trim()
         .to_owned();
-    if !media_type.starts_with("image/") {
-        return Err(failed(format!("not an image ({media_type})")));
+    if pmt_api::image_extension(&media_type).is_none() {
+        return Err(failed(format!(
+            "not a PNG, JPEG, GIF or WebP image ({media_type})"
+        )));
     }
-    let bytes = response.bytes().await.map_err(|e| failed(e.to_string()))?;
-    if bytes.len() > MAX_IMAGE_BYTES {
-        return Err(failed("larger than 20 MiB".to_owned()));
+    let bytes = read_capped(response, MAX_IMAGE_BYTES)
+        .await
+        .map_err(failed)?;
+    Ok((bytes, media_type))
+}
+
+/// The body of `response`, refused as soon as it is known to exceed `cap`
+/// bytes: a server streaming without end never makes the daemon buffer
+/// more than `cap`.
+async fn read_capped(mut response: reqwest::Response, cap: usize) -> Result<Vec<u8>, String> {
+    let too_large = || format!("larger than {} MiB", cap / (1024 * 1024));
+    if response
+        .content_length()
+        .is_some_and(|length| length > cap as u64)
+    {
+        return Err(too_large());
     }
-    Ok((bytes.to_vec(), media_type))
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
+        if bytes.len() + chunk.len() > cap {
+            return Err(too_large());
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(bytes)
 }
 
 impl pmt_api::ApiHost for DaemonHost {
@@ -467,5 +494,82 @@ mod tests {
         assert_eq!(super::fast(Some("priority")), Some(FastMode::Fast));
         assert_eq!(super::fast(Some("default")), Some(FastMode::Normal));
         assert_eq!(super::fast(None), None);
+    }
+
+    /// A local image server answering one request with `head` and then
+    /// `body` repeated until the client hangs up; its URL.
+    async fn image_server(head: &'static str, body: &'static [u8]) -> String {
+        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        pmt_core::spawn::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = [0_u8; 1024];
+            let _ = socket.read(&mut request).await;
+            if socket.write_all(head.as_bytes()).await.is_err() {
+                return;
+            }
+            if body.is_empty() {
+                // Holds the connection until the client hangs up.
+                let _ = socket.read(&mut request).await;
+                return;
+            }
+            while socket.write_all(body).await.is_ok() {}
+        });
+        format!("http://{addr}/huge.png")
+    }
+
+    async fn fetch(url: &str) -> reqwest::Response {
+        let policy = pmt_net::OutboundPolicy::default();
+        let client = pmt_net::http::client_builder_loopback_direct(&policy)
+            .unwrap()
+            .build()
+            .unwrap();
+        client.get(url).send().await.unwrap()
+    }
+
+    /// A remote image larger than the cap is refused while it streams: the
+    /// buffer never grows past the cap.
+    #[tokio::test]
+    async fn an_endless_image_is_refused_once_it_passes_the_cap() {
+        static CHUNK: [u8; 64 * 1024] = [7; 64 * 1024];
+        let url = image_server(
+            "HTTP/1.1 200 OK\r\ncontent-type: image/png\r\nconnection: close\r\n\r\n",
+            &CHUNK,
+        )
+        .await;
+        let response = fetch(&url).await;
+        let refused = super::read_capped(response, super::MAX_IMAGE_BYTES)
+            .await
+            .unwrap_err();
+        assert_eq!(refused, "larger than 20 MiB");
+    }
+
+    /// A declared length over the cap is refused before any body is read.
+    #[tokio::test]
+    async fn a_declared_oversized_image_is_refused_up_front() {
+        let url = image_server(
+            "HTTP/1.1 200 OK\r\ncontent-type: image/png\r\ncontent-length: 4294967296\r\n\r\n",
+            b"",
+        )
+        .await;
+        let response = fetch(&url).await;
+        let refused = super::read_capped(response, super::MAX_IMAGE_BYTES)
+            .await
+            .unwrap_err();
+        assert_eq!(refused, "larger than 20 MiB");
+    }
+
+    #[test]
+    fn file_extensions_come_from_the_allowlist_only() {
+        assert_eq!(pmt_api::image_extension("image/JPEG"), Some("jpg"));
+        for refused in [
+            "image/../../x",
+            "image/png:stream",
+            "image/svg+xml",
+            "text/plain",
+        ] {
+            assert_eq!(pmt_api::image_extension(refused), None, "{refused}");
+        }
     }
 }

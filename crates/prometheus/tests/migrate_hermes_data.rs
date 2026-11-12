@@ -367,6 +367,41 @@ fn a_bare_hermes_interval_stays_recurring_and_paused() {
     assert_eq!(entry(&report, "cron:reminder")["disposition"], "skipped");
 }
 
+/// A job whose `script` climbs out of `scripts/` fails before anything is
+/// read or written on either side of the copy.
+#[test]
+fn a_job_script_escaping_scripts_is_refused_before_any_copy() {
+    let tmp = common::temp_home();
+    let h = Hermes::new(&tmp.path().join("hermes"));
+    std::fs::write(tmp.path().join("escaped.sh"), "echo out\n").unwrap();
+    h.write(
+        "default",
+        "cron/jobs.json",
+        r#"{"jobs": [
+            {"id": "e1", "name": "escape", "prompt": "Run it", "enabled": true, "state": "scheduled",
+             "schedule": {"kind": "interval", "minutes": 30}, "script": "../../escaped.sh"}
+        ]}"#,
+    );
+    let out = migrate(tmp.path(), &h.root, &["--only", "cron"]);
+    let report: Value = serde_json::from_str(common::stdout(&out).trim()).unwrap();
+    let e = entry(&report, "cron:escape");
+    assert_eq!(e["disposition"], "failed", "{e}");
+    assert!(
+        e["reason"].as_str().unwrap().contains("escapes scripts/"),
+        "{e}"
+    );
+    let profile = tmp.path().join("profiles/default");
+    assert!(!tmp.path().join("profiles/escaped.sh").exists());
+    assert!(
+        !profile.join("scripts").exists()
+            || std::fs::read_dir(profile.join("scripts"))
+                .unwrap()
+                .next()
+                .is_none(),
+        "nothing was copied"
+    );
+}
+
 #[test]
 fn enable_cron_keeps_hermes_enabled_jobs_enabled_and_warns() {
     let tmp = common::temp_home();
