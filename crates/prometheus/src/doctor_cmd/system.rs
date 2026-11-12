@@ -83,7 +83,50 @@ pub(super) fn terminal(inputs: &Inputs<'_>) -> Vec<Check> {
     if config.backend == "modal" || config.backend == pmt_sandbox::backend::MANAGED_SANDBOX {
         checks.push(modal_mode(inputs.scope));
     }
+    // On Windows a shell started elsewhere finds `prometheus` only when
+    // its directory is on PATH (spec: cli, Windows console behaviour).
+    if cfg!(windows) {
+        checks.push(install_on_path(inputs));
+    }
     checks
+}
+
+/// Whether the directory of this binary is on `path` (`PATH`'s value).
+fn on_path(dir: &std::path::Path, path: &std::ffi::OsStr) -> bool {
+    let same = |entry: &std::path::Path| {
+        let canonical = |p: &std::path::Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+        canonical(entry) == canonical(dir)
+    };
+    std::env::split_paths(path).any(|entry| same(&entry))
+}
+
+/// `terminal/install_on_path`: the install directory on `PATH`.
+fn install_on_path(inputs: &Inputs<'_>) -> Check {
+    let dir = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(std::path::Path::to_path_buf));
+    let path = inputs.ctx.launch.inherited("PATH").unwrap_or_default();
+    match dir {
+        Some(dir) if on_path(&dir, path) => Check::new(
+            "terminal",
+            "install_on_path",
+            Status::Ok,
+            format!("{} is on PATH", dir.display()),
+        ),
+        Some(dir) => Check::new(
+            "terminal",
+            "install_on_path",
+            Status::Warn,
+            format!("{} is not on PATH", dir.display()),
+        )
+        .with_hint("add it to PATH so new terminals find prometheus"),
+        None => Check::new(
+            "terminal",
+            "install_on_path",
+            Status::Warn,
+            "the install directory is unknown".to_owned(),
+        ),
+    }
 }
 
 /// The first-party `modal` backend's authentication mode, or why neither
@@ -105,8 +148,8 @@ fn modal_mode(scope: &ProfileScope) -> Check {
     }
 }
 
-/// The configured providers' endpoints: `(provider, host, port)`.
-pub(crate) fn provider_endpoints(scope: &ProfileScope) -> Vec<(String, String, u16)> {
+/// The configured providers' base URLs: `(provider, url)`.
+pub(crate) fn provider_urls(scope: &ProfileScope) -> Vec<(String, String)> {
     let config = scope.config();
     let Ok(registry) = pmt_providers::ProviderRegistry::for_profile(config, Vec::new()) else {
         return Vec::new();
@@ -119,20 +162,29 @@ pub(crate) fn provider_endpoints(scope: &ProfileScope) -> Vec<(String, String, u
         .into_iter()
         .collect();
     ids.extend(config.fallback.chain.iter().map(|e| e.provider.as_str()));
-    let mut endpoints = Vec::new();
+    let mut urls: Vec<(String, String)> = Vec::new();
     for id in ids {
-        let Some(url) = registry
-            .lookup(id)
-            .ok()
-            .and_then(|p| p.base_url())
-            .and_then(|u| reqwest::Url::parse(u).ok())
-        else {
+        if let Some(url) = registry.lookup(id).ok().and_then(|p| p.base_url()) {
+            let entry = (id.to_owned(), url.to_owned());
+            if !urls.contains(&entry) {
+                urls.push(entry);
+            }
+        }
+    }
+    urls
+}
+
+/// The configured providers' endpoints: `(provider, host, port)`.
+pub(crate) fn provider_endpoints(scope: &ProfileScope) -> Vec<(String, String, u16)> {
+    let mut endpoints = Vec::new();
+    for (id, url) in provider_urls(scope) {
+        let Ok(url) = reqwest::Url::parse(&url) else {
             continue;
         };
         let (Some(host), Some(port)) = (url.host_str(), url.port_or_known_default()) else {
             continue;
         };
-        let entry = (id.to_owned(), host.to_owned(), port);
+        let entry = (id, host.to_owned(), port);
         if !endpoints.contains(&entry) {
             endpoints.push(entry);
         }
@@ -161,6 +213,20 @@ pub(super) async fn network(inputs: &Inputs<'_>) -> Vec<Check> {
         Status::Ok,
         egress_line(&config.security.egress),
     ));
+    if inputs.online {
+        let network = &config.network;
+        let open = super::isolation::direct_egress(&super::isolation::EGRESS_PROBES);
+        checks.push(super::isolation::egress_check(
+            open,
+            network.expect_isolated,
+        ));
+        if network.expect_isolated || network.proxy.is_some() {
+            checks.extend(super::isolation::proxy_checks(
+                network.proxy.as_deref(),
+                &provider_endpoints(inputs.scope),
+            ));
+        }
+    }
     checks
 }
 
@@ -351,4 +417,18 @@ fn posture(inputs: &Inputs<'_>) -> Vec<Check> {
         ));
     }
     checks
+}
+
+#[cfg(test)]
+mod tests {
+    use super::on_path;
+
+    #[test]
+    fn the_install_directory_is_found_among_the_path_entries() {
+        let dir = std::env::temp_dir();
+        let path = std::env::join_paths([std::path::Path::new("/nowhere"), &dir]).unwrap();
+        assert!(on_path(&dir, &path));
+        let other = std::env::join_paths([std::path::Path::new("/nowhere")]).unwrap();
+        assert!(!on_path(&dir, &other));
+    }
 }

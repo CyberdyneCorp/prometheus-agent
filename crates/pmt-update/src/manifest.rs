@@ -9,6 +9,7 @@
 //! - `<tag>/release-manifest.json`: [`ReleaseManifest`]
 //! - `<tag>/<archive>`: one `.tar.gz` per target ([`Artifact::name`])
 
+use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
 use serde::{Deserialize, Serialize};
@@ -66,6 +67,56 @@ impl Artifact {
     }
 }
 
+/// The signed changelog entries of one release, grouped as
+/// `prometheus update --dry-run` prints them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReleaseNotes {
+    /// The release tag.
+    pub version: ReleaseVersion,
+    /// Changes that need the user's attention (config, behaviour).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub breaking: Vec<String>,
+    /// New features.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub features: Vec<String>,
+    /// Bug fixes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fixes: Vec<String>,
+    /// Security fixes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub security: Vec<String>,
+}
+
+/// The storage schemas a release migrates profiles to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Schemas {
+    /// `config.toml` schema version.
+    pub config: u32,
+    /// `state.db` schema version.
+    pub store: u32,
+}
+
+/// What a release says about itself beyond its archives, for
+/// `prometheus update --dry-run` and the image pins (all optional, so a
+/// manifest without them still verifies).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReleaseDetails {
+    /// Changelog entries, newest first; at least the releases since the
+    /// previous stable.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<ReleaseNotes>,
+    /// The schemas this release migrates to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub schemas: Option<Schemas>,
+    /// Managed runtime pins: name to version.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub runtimes: BTreeMap<String, String>,
+    /// Images of the release pinned by digest: name to
+    /// `<registry>/<name>@sha256:<digest>`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub images: BTreeMap<String, String>,
+}
+
 /// `release-manifest.json`: every artifact of one release.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReleaseManifest {
@@ -79,6 +130,9 @@ pub struct ReleaseManifest {
     pub published_at: String,
     /// One entry per target archive.
     pub artifacts: Vec<Artifact>,
+    /// Notes, schemas, runtime and image pins.
+    #[serde(flatten)]
+    pub details: ReleaseDetails,
 }
 
 impl ReleaseManifest {
@@ -110,6 +164,14 @@ impl ReleaseManifest {
         let _ = writeln!(out, "  \"version\": {},", field(&self.version.to_string()));
         let _ = writeln!(out, "  \"commit\": {},", field(&self.commit));
         let _ = writeln!(out, "  \"published_at\": {},", field(&self.published_at));
+        // Each detail on one line of its own, never mistaken for an
+        // artifact line by the installer.
+        let details = serde_json::to_value(&self.details).expect("details serialize");
+        if let serde_json::Value::Object(map) = details {
+            for (key, value) in map {
+                let _ = writeln!(out, "  {}: {value},", field(&key));
+            }
+        }
         out.push_str("  \"artifacts\": [\n");
         let lines: Vec<String> = self
             .artifacts
@@ -182,6 +244,20 @@ mod tests {
                 Artifact::of("x86_64-unknown-linux-musl", b"linux"),
                 Artifact::of(MACOS_UNIVERSAL, b"mac"),
             ],
+            details: super::ReleaseDetails {
+                notes: vec![super::ReleaseNotes {
+                    version: ReleaseVersion::parse("v1.4.0").unwrap(),
+                    breaking: vec!["config key renamed".to_owned()],
+                    features: Vec::new(),
+                    fixes: vec!["a fix".to_owned()],
+                    security: Vec::new(),
+                }],
+                schemas: Some(super::Schemas {
+                    config: 2,
+                    store: 36,
+                }),
+                ..super::ReleaseDetails::default()
+            },
         }
     }
 

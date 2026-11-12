@@ -150,15 +150,17 @@ pub fn selected(agent: &AgentConfig) -> Result<Option<Overlay>, Error> {
     Ok(Some(Overlay { name, text }))
 }
 
-/// The `/personality` listing: every name, the active one marked.
+/// The `/personality` listing: every name, the active one marked (the
+/// mark worded with `text`).
 #[must_use]
-pub fn listing(agent: &AgentConfig) -> String {
+pub fn listing(text: &dyn pmt_core::text::Catalog, agent: &AgentConfig) -> String {
     let active = canonical(agent, &agent.personality).unwrap_or_else(|_| "none".to_owned());
+    let mark = text.text("slash.personality.active", &[]);
     names(agent)
         .into_iter()
         .map(|name| {
             if name == active {
-                format!("* {name} (active)")
+                format!("* {name} ({mark})")
             } else {
                 format!("  {name}")
             }
@@ -258,7 +260,8 @@ mod tests {
 
     #[test]
     fn the_listing_marks_the_active_one() {
-        let text = listing(&agent("noir", &[]));
+        let english = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
+        let text = listing(&*english, &agent("noir", &[]));
         assert!(text.starts_with("  none\n"), "{text}");
         assert!(text.contains("* noir (active)"), "{text}");
     }

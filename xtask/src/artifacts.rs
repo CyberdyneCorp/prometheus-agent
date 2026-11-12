@@ -56,12 +56,28 @@ pub(crate) fn all() -> Vec<Artifact> {
         },
     ]
     .into_iter()
+    .chain(pmt_i18n::Surface::ALL.map(locale_keys))
     .chain(rpc_artifacts(pmt_rpc::Catalog::builtin()))
     .chain([Artifact {
         path: "docs/reference/rpc.md",
         contents: pmt_rpc::reference::render(&pmt_rpc::Catalog::builtin().schema(), HEADER),
     }])
     .collect()
+}
+
+/// `schema/locales/keys.<surface>.json`: the English key set of a catalog
+/// surface, which language packs and translators validate against.
+fn locale_keys(surface: pmt_i18n::Surface) -> Artifact {
+    let path = match surface {
+        pmt_i18n::Surface::Core => "schema/locales/keys.core.json",
+        pmt_i18n::Surface::Tui => "schema/locales/keys.tui.json",
+        pmt_i18n::Surface::Desktop => "schema/locales/keys.desktop.json",
+    };
+    let keys = serde_json::to_string_pretty(&surface.english_keys()).unwrap_or_default();
+    Artifact {
+        path,
+        contents: format!("{keys}\n"),
+    }
 }
 
 /// `schema/rpc.json` and its TypeScript bindings, rendered from `catalog`.

@@ -1,0 +1,58 @@
+# Network-isolated deployment (spec: distribution-and-update, Network-
+# isolated deployment recipe): Prometheus sits only on an internal network
+# and reaches the internet solely through the egress proxy, which allows
+# just the provider and tool hosts of the enabled profiles.
+#
+#   docker compose -f compose.isolated.yaml run --rm --no-deps prometheus \
+#     prometheus doctor network --allowlist > allowlist.txt
+#   docker compose -f compose.isolated.yaml up -d
+#   docker compose -f compose.isolated.yaml exec prometheus prometheus doctor network --online
+#
+# Set network.proxy = "http://egress-proxy:3128" and
+# network.expect_isolated = true in each profile (the allowlist command
+# prints the hosts to allow; regenerate it after changing providers).
+
+services:
+  prometheus:
+    image: ghcr.io/cyberdynecorp/prometheus:${PROMETHEUS_VERSION:-latest}
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - prometheus-data:/data
+    mem_limit: 2g
+    pids_limit: 512
+    environment:
+      HTTP_PROXY: http://egress-proxy:3128
+      HTTPS_PROXY: http://egress-proxy:3128
+      NO_PROXY: localhost,127.0.0.1
+    networks:
+      - isolated
+    depends_on:
+      - egress-proxy
+    healthcheck:
+      test: ["CMD", "prometheus", "status", "--liveness"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  egress-proxy:
+    image: ubuntu/squid:6.10-24.10_beta@sha256:c9f5212b147a766529c7b026e2bebed37b998d33d0066b658596af5eba7cc65c
+    restart: unless-stopped
+    volumes:
+      - ./squid.conf:/etc/squid/squid.conf:ro
+      - ./allowlist.txt:/etc/squid/allowlist.txt:ro
+    networks:
+      - isolated
+      - egress
+
+networks:
+  # No route out: the only way to the internet is the proxy.
+  isolated:
+    internal: true
+  egress: {}
+
+volumes:
+  prometheus-data:

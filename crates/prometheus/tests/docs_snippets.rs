@@ -8,7 +8,8 @@
 //! stderr, where `<...>`, `<home>` or any other `<word>` matches any text.
 //! A command exits 0 unless it ends with `# exits N`. A guide's commands
 //! run in order against one fresh home given as `PROMETHEUS_HOME`;
-//! `echo -n "$VAR" | prometheus ...` pipes the value of a fixture variable.
+//! `echo -n "$VAR" | prometheus ...` pipes the value of a fixture variable,
+//! and a word starting with `~/` names a path in the test's user home.
 
 mod common;
 
@@ -156,7 +157,14 @@ fn matches(expected: &str, actual: &str) -> bool {
 }
 
 fn run(home: &Path, snippet: &Snippet, guide: &Path) {
-    let (stdin, args) = stdin_and_args(&snippet.command);
+    let (stdin, mut args) = stdin_and_args(&snippet.command);
+    // `~/` is the test's user home, as a shell would expand it.
+    let user = common::user_home(home);
+    for arg in &mut args {
+        if let Some(rest) = arg.strip_prefix("~/") {
+            *arg = user.join(rest).display().to_string();
+        }
+    }
     let mut cmd = Command::new(common::BIN);
     for (var, _) in std::env::vars_os() {
         let name = var.to_string_lossy().into_owned();
@@ -195,6 +203,23 @@ fn run(home: &Path, snippet: &Snippet, guide: &Path) {
     }
 }
 
+/// Sources a guide's commands read: the migration guide imports from
+/// fixture agent homes in the user home; the projects guide's folders
+/// exist there.
+fn fixtures(guide: &Path, home: &Path) {
+    if guide.file_stem().is_some_and(|s| s == "projects") {
+        let user = common::user_home(home);
+        for dir in ["src/prometheus", "src/docs", "src/api", "src/api-docs"] {
+            std::fs::create_dir_all(user.join(dir)).unwrap();
+        }
+    }
+    if guide.file_stem().is_some_and(|s| s == "migration") {
+        let user = common::user_home(home);
+        std::fs::create_dir_all(&user).unwrap();
+        common::hermes::guide_fixture(&user);
+    }
+}
+
 #[test]
 fn every_guide_command_runs_as_documented() {
     let guides = guides();
@@ -207,6 +232,7 @@ fn every_guide_command_runs_as_documented() {
             guide.display()
         );
         let home = common::temp_home();
+        fixtures(&guide, home.path());
         for snippet in &snippets {
             run(home.path(), snippet, &guide);
         }

@@ -16,6 +16,7 @@ use pmt_config::ProfileScope;
 use pmt_config::schema::{AutoResume, TuiTheme};
 use pmt_core::error::{Error, codes};
 use pmt_core::secret::Redactor;
+use pmt_i18n::t;
 use pmt_rpc::client::ServerCall;
 use pmt_rpc::contracts::{
     Attached, BannerInfo, Completions, ContextUsage, Dispatched, ModelOptions, PromptImage,
@@ -118,6 +119,8 @@ pub(super) struct Tui<'a> {
     pub(super) setup: Option<Vec<super::terminal_setup::Target>>,
     /// The low-disk prune question waiting for `on`, `off` or `later`.
     pub(super) prune: bool,
+    /// `/exit --delete`'s confirmation.
+    pub(super) exit_delete: super::exit_delete::ExitDelete,
     /// `/redraw`: clear the terminal before the next frame.
     pub(super) clear_next: bool,
     /// When a paste collapses into a chip.
@@ -243,15 +246,29 @@ impl<'a> Tui<'a> {
         let config = open.scope.config();
         // The profile the daemon granted (the handshake names it).
         let granted = link.client.hello().profiles.first().cloned();
+        // The profile's theme brands the TUI too: its spinner and prompt
+        // (spec: cli, Theme commands and branding keys).
+        let branded = crate::chat::theme::Theme::load(open.scope.dir(), &config.display.theme).ok();
         let status = Status {
             profile: granted.unwrap_or_else(|| open.scope.name().as_str().to_owned()),
             reduced_motion: config.ui.tui.reduced_motion,
             indicator: config.ui.tui.busy_indicator,
+            spinner: branded
+                .as_ref()
+                .map(|t| t.spinner.frames.clone())
+                .unwrap_or_default(),
+            phrases: branded
+                .as_ref()
+                .map(|t| t.spinner.phrases.clone())
+                .unwrap_or_default(),
             ..Status::default()
         };
         let history = History::load(history::path_in(open.scope.dir()), Redactor::default());
         let status_bar = StatusBar::new(open.scope, &open.env);
         let mut app = App::new(Theme::new(theme, open.no_color), status);
+        if let Some(branded) = &branded {
+            app.prompt = branded.prompt_symbol();
+        }
         app.status_visible = status_bar.shown;
         let composer = &config.ui.composer;
         let mut tui = Self {
@@ -270,6 +287,10 @@ impl<'a> Tui<'a> {
             models: Vec::new(),
             setup: None,
             prune: false,
+            exit_delete: super::exit_delete::ExitDelete {
+                confirm: config.cli.confirm_destructive,
+                asked: false,
+            },
             clear_next: false,
             collapse: Collapse {
                 lines: composer.paste_collapse_lines,
@@ -384,6 +405,7 @@ impl<'a> Tui<'a> {
             screen.swap_buffers();
         }
         self.app.status.battery = self.status_bar.battery_item();
+        self.app.strings = self.strings();
         screen
             .draw(|frame| {
                 assert!(!panic_now, "PMT_TEST_TUI_PANIC: a panic while drawing");
@@ -450,7 +472,7 @@ impl<'a> Tui<'a> {
     /// finds the daemon again.
     async fn connection_lost(&mut self) {
         let closed = self.link.client.wait_closed().await;
-        self.app.status.note = Some("reconnecting".to_owned());
+        self.app.status.note = Some(t!(self.strings(), "tui.reconnecting"));
         self.asking.clear();
         self.clarify.clear();
         self.masked.clear();

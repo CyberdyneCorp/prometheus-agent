@@ -12,6 +12,7 @@
 
 mod clipboard;
 mod display;
+mod exit_delete;
 mod input;
 mod link;
 mod masked;
@@ -94,6 +95,9 @@ pub(crate) enum Ending {
     Update(Vec<String>),
     /// `/handoff`: the session went to a chat; print how to resume, exit 0.
     Detached(String),
+    /// `/exit --delete --yes`: delete this session once the TUI has left
+    /// it (spec: cli, Exit with delete and profile archive slash forms).
+    Delete(String),
 }
 
 /// The message for `prometheus tui` without a terminal.
@@ -198,7 +202,20 @@ pub fn start(
             crate::output::print(&line)?;
             Ok(0)
         }
+        Ending::Delete(session) => delete_session(scope, &session),
     }
+}
+
+/// Deletes the session the TUI left (as `prometheus sessions delete`
+/// does beside a running daemon).
+fn delete_session(scope: &pmt_config::ProfileScope, session: &str) -> Result<u8, Error> {
+    let id = pmt_core::id::SessionId::parse(session)?;
+    let deleted = pmt_store::Store::open(scope)?.delete_session(id, false)?;
+    let ids: Vec<String> = deleted.sessions.iter().map(ToString::to_string).collect();
+    crate::plugins_host::sessions_deleted(scope, &ids);
+    let strings = pmt_config::language::strings(scope.dir(), pmt_i18n::Surface::Core);
+    crate::output::print(&pmt_i18n::t!(strings, "cli.session_deleted", id = id))?;
+    Ok(0)
 }
 
 /// The home's running daemon, started detached when it is not running

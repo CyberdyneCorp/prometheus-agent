@@ -11,6 +11,9 @@
 //!   requesting chat and thread.
 //! - `/update [check]` needs `update.allow_from_chat = true` in
 //!   `daemon.toml`; `check` only looks for a release and asks nothing.
+//!   A confirmed update runs `prometheus update` detached; its stages are
+//!   relayed here ([`super::update_relay`]), a busy daemon's restart is
+//!   asked here again, and the restarted daemon says `updated to <v>`.
 
 use std::time::Duration;
 
@@ -21,29 +24,27 @@ use tokio::time::Instant;
 
 use super::Lane;
 use crate::messaging::adapter::{Button, Outgoing};
-use crate::messaging::agents::UpdateFromChat;
+use crate::messaging::agents::{UpdateFromChat, UpdateRun};
 use crate::messaging::auth;
 use crate::messaging::cards::{Card, CardKind};
 use crate::messaging::descriptor::Interactive;
 use crate::messaging::key::Routing;
 use crate::messaging::restart;
 
-/// What `/update` answers while updates from chat are off.
-pub(crate) const UPDATES_DISABLED: &str =
-    "updates from chat are disabled (update.allow_from_chat = false)";
-
 /// What a confirmation is for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Action {
     Restart,
     Update,
+    /// Restart a daemon whose turns still run, once they finish.
+    UpdateBusy,
 }
 
 impl Action {
     fn name(self) -> &'static str {
         match self {
             Self::Restart => "restart",
-            Self::Update => "update",
+            Self::Update | Self::UpdateBusy => "update",
         }
     }
 }
@@ -64,17 +65,22 @@ impl Confirm {
     }
 }
 
-/// How an unanswered confirmation ended.
-fn aborted(action: Action, why: &str) -> String {
-    format!("{} aborted: {why}", action.name())
+/// How an unanswered confirmation ended (`why` is a catalog key).
+fn aborted(strings: &pmt_i18n::Strings, action: Action, why: &str) -> String {
+    let why = strings.get(why);
+    pmt_i18n::t!(
+        strings,
+        "gateway.aborted",
+        action = action.name(),
+        why = why
+    )
 }
 
 impl Lane {
     /// `/restart`.
     pub(super) fn restart_command(&mut self, routing: &Routing) {
         let drain = self.shared.options.drain_timeout.as_secs();
-        let question =
-            format!("Restart the gateway daemon? Running turns get up to {drain} s to finish.");
+        let question = pmt_i18n::t!(self.strings(), "gateway.restart_question", secs = drain);
         self.ask_confirmation(routing, Action::Restart, &question);
     }
 
@@ -83,17 +89,16 @@ impl Lane {
         let allowed = pmt_config::daemon::DaemonConfig::load(&self.shared.options.home)
             .is_ok_and(|daemon| daemon.update.allow_from_chat);
         if !allowed {
-            self.say(UPDATES_DISABLED);
+            self.say(self.strings().get("gateway.updates_disabled"));
             return;
         }
         match args.trim() {
-            "check" => self.run_update(routing, true).await,
-            "" => self.ask_confirmation(
-                routing,
-                Action::Update,
-                "Update prometheus now? The daemon restarts once the new version is in place.",
-            ),
-            _ => self.say("Usage: /update [check]"),
+            "check" => self.run_update(routing, true, false).await,
+            "" => {
+                let question = pmt_i18n::t!(self.strings(), "gateway.update_question");
+                self.ask_confirmation(routing, Action::Update, &question);
+            }
+            _ => self.say(self.strings().get("gateway.update_usage")),
         }
     }
 
@@ -105,29 +110,34 @@ impl Lane {
                 .max(1),
         );
         let native = self.tier() == Interactive::Native;
+        let strings = self.strings();
         let card = Card {
             title: question.to_owned(),
             details: if native {
                 Vec::new()
             } else {
-                vec!["Reply /approve to confirm or /deny to cancel.".to_owned()]
+                vec![pmt_i18n::t!(strings, "gateway.confirm_hint")]
             },
             deadline_ms: u64::try_from(timeout.as_millis()).ok(),
-            on_expiry: "it is cancelled",
+            on_expiry: pmt_i18n::t!(strings, "gateway.confirm_on_expiry"),
         };
         let buttons: Vec<Button> = if native {
-            [("Confirm", "yes"), ("Cancel", "no")]
-                .iter()
-                .map(|(label, choice)| Button {
-                    label: (*label).to_owned(),
-                    data: self.shared.card_key.data(CardKind::Confirm, &id, choice),
-                })
-                .collect()
+            [
+                ("gateway.confirm_button", "yes"),
+                ("gateway.cancel_button", "no"),
+            ]
+            .iter()
+            .map(|(label, choice)| Button {
+                label: strings.get(label).to_owned(),
+                data: self.shared.card_key.data(CardKind::Confirm, &id, choice),
+            })
+            .collect()
         } else {
             Vec::new()
         };
         let card_key = format!("confirm:{id}");
-        let body = json!({"text": card.text(&Zoned::now()), "buttons": buttons}).to_string();
+        let text = card.text(&strings, &Zoned::now());
+        let body = json!({"text": text, "buttons": buttons}).to_string();
         self.deliver(card_key.clone(), OutboundKind::Approval, body, None);
         self.confirms.push(Confirm {
             id,
@@ -145,10 +155,7 @@ impl Lane {
             return;
         };
         if !self.may_confirm(routing, &self.confirms[at]) {
-            self.say_privately(
-                routing,
-                "Only the person who asked, or an admin, may answer this.",
-            );
+            self.say_privately(routing, self.strings().get("gateway.confirm_not_yours"));
             return;
         }
         let confirm = self.confirms.remove(at);
@@ -179,14 +186,16 @@ impl Lane {
     }
 
     fn settle(&mut self, routing: &Routing, confirm: &Confirm, yes: bool) {
+        let strings = self.strings();
         let outcome = if yes {
-            format!(
-                "Confirmed {} by {}.",
-                confirm.action.name(),
-                routing.sender_id
+            pmt_i18n::t!(
+                strings,
+                "gateway.confirmed_by",
+                action = confirm.action.name(),
+                who = routing.sender_id
             )
         } else {
-            aborted(confirm.action, "confirmation denied")
+            aborted(&strings, confirm.action, "gateway.confirm_denied")
         };
         self.close_confirmation(confirm, &outcome);
         if !yes {
@@ -221,11 +230,10 @@ impl Lane {
         let (expired, waiting): (Vec<Confirm>, Vec<Confirm>) =
             self.confirms.drain(..).partition(|c| c.deadline <= now);
         self.confirms = waiting;
+        let strings = self.strings();
         for confirm in expired {
-            self.close_confirmation(
-                &confirm,
-                &aborted(confirm.action, "no confirmation in time"),
-            );
+            let text = aborted(&strings, confirm.action, "gateway.confirm_timeout");
+            self.close_confirmation(&confirm, &text);
         }
     }
 
@@ -233,8 +241,19 @@ impl Lane {
     pub(super) async fn confirmed(&mut self, action: Action, routing: &Routing) {
         match action {
             Action::Restart => self.restart_now(routing).await,
-            Action::Update => self.run_update(routing, false).await,
+            Action::Update => self.run_update(routing, false, false).await,
+            Action::UpdateBusy => self.run_update(routing, false, true).await,
         }
+    }
+
+    /// The updater stopped before the swap: the daemon has turns running.
+    pub(super) fn ask_busy_restart(&mut self, routing: &Routing, question: &str) {
+        let question = pmt_i18n::t!(
+            self.strings(),
+            "gateway.update_not_applied_yet",
+            question = question
+        );
+        self.ask_confirmation(routing, Action::UpdateBusy, &question);
     }
 
     async fn restart_now(&self, routing: &Routing) {
@@ -246,11 +265,8 @@ impl Lane {
         };
         restart::remember(&self.shared.options.home, &requester);
         // Said directly: the outbox stops with the daemon.
-        let message = Outgoing::text(
-            &routing.chat_id,
-            routing.thread_id.as_deref(),
-            "Restarting the gateway now.",
-        );
+        let text = pmt_i18n::t!(self.strings(), "gateway.restarting");
+        let message = Outgoing::text(&routing.chat_id, routing.thread_id.as_deref(), &text);
         if let Err(err) = self
             .shared
             .adapters
@@ -267,16 +283,27 @@ impl Lane {
         self.shared.server.request_stop(true);
     }
 
-    async fn run_update(&self, routing: &Routing, check: bool) {
+    async fn run_update(&self, routing: &Routing, check: bool, restart_busy: bool) {
         let request = UpdateFromChat {
             profile: self.profile.clone(),
             platform: routing.platform.clone(),
             chat_id: routing.chat_id.clone(),
             thread_id: routing.thread_id.clone(),
             check,
+            restart_busy,
         };
         match self.shared.agents.update_from_chat(&request).await {
-            Ok(text) => self.say(&text),
+            Ok(UpdateRun::Answer(text)) => self.say(&text),
+            Ok(UpdateRun::Running(feed)) => {
+                self.say(self.strings().get("gateway.update_started"));
+                super::update_relay::spawn(
+                    &self.shared,
+                    self.tx.clone(),
+                    routing.clone(),
+                    feed,
+                    self.strings(),
+                );
+            }
             Err(err) => self.say(err.message()),
         }
     }

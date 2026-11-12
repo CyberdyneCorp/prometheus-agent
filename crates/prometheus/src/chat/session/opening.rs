@@ -120,6 +120,14 @@ impl Factory {
         let (mut prompt, sections) = self.session_prompt(id, skills, memory, notices).await;
         if let Some(spec) = child {
             spec.shape_prompt(&mut prompt);
+        } else if let Ok(Some(api)) = self.store.api_session(id) {
+            // An API caller's instructions, fixed when the session was
+            // created, come after the profile's own prompt and never
+            // replace it (spec: api-server, Caller instructions and
+            // long-term memory scoping).
+            prompt.caller_system = api
+                .instructions
+                .map(|text| format!("# Instructions from the API caller\n{text}"));
         }
         (prompt, sections)
     }
@@ -217,7 +225,11 @@ impl Factory {
         let events = events_to(inputs.recording, inputs.clients);
         let _ = inputs.environment.denials.set(Arc::downgrade(&events));
         let events = self.with_lifecycle_hooks(id, inputs.session, events);
-        let (tee, progress) = progress::Tee::new(events, self.options.interactive);
+        let (tee, progress) = progress::Tee::new(
+            events,
+            self.options.interactive,
+            self.scope.dir().to_path_buf(),
+        );
         self.observe_model(inputs.model, id, tee.notices());
         // An in-process session announces memory changes with its other
         // notices; a daemon binds its clients or chat after opening.

@@ -89,53 +89,54 @@ pub fn status(store: &Store, config: &MemoryConfig) -> Result<Status, Error> {
     })
 }
 
-/// The human form.
+/// The human form, worded with `text`.
 #[must_use]
-pub fn render(status: &Status) -> String {
+pub fn render(text: &dyn pmt_core::text::Catalog, status: &Status) -> String {
     let mut out = String::new();
+    // `indent` is layout, not wording: it stays out of the catalog.
+    let mut line = |indent: &str, key: &str, args: &[(&str, &dyn std::fmt::Display)]| {
+        let _ = writeln!(out, "{indent}{}", text.text(key, args));
+    };
     if status.enabled {
-        let _ = writeln!(
-            out,
-            "Built-in memory: enabled (provider: {})",
-            status.provider
+        line(
+            "",
+            "slash.memory.enabled",
+            &[("provider", &status.provider)],
         );
     } else {
-        out.push_str("Built-in memory is disabled (memory.memory_enabled = false, memory.user_profile_enabled = false); the memory tool is not offered.\n");
+        line("", "slash.memory.disabled", &[]);
     }
     for t in &status.targets {
         if t.enabled {
-            let _ = writeln!(
-                out,
-                "  {}: {} core entries {}, {} archival",
-                t.target,
-                t.core_entries,
-                t.core.indicator(),
-                t.archival_entries
+            line(
+                "  ",
+                "slash.memory.target",
+                &[
+                    ("target", &t.target),
+                    ("entries", &t.core_entries),
+                    ("usage", &t.core.indicator()),
+                    ("archival", &t.archival_entries),
+                ],
             );
         } else {
-            let _ = writeln!(
-                out,
-                "  {}: disabled ({} = false)",
-                t.target,
-                budget::flag(t.target)
+            line(
+                "  ",
+                "slash.memory.target_off",
+                &[("target", &t.target), ("flag", &budget::flag(t.target))],
             );
         }
         if t.blocked > 0 {
-            let _ = writeln!(
-                out,
-                "    {} blocked by the threat scan (prometheus memory list --all)",
-                t.blocked
-            );
+            line("    ", "slash.memory.blocked", &[("count", &t.blocked)]);
         }
     }
     for collision in &status.collisions {
-        let _ = writeln!(out, "  provider tool refused: {collision}");
+        line("  ", "slash.memory.collision", &[("tool", collision)]);
     }
     if status.pending > 0 {
-        let _ = writeln!(
-            out,
-            "  {} pending change(s): prometheus memory pending",
-            status.pending
+        line(
+            "  ",
+            "slash.memory.pending_count",
+            &[("count", &status.pending)],
         );
     }
     out.trim_end().to_owned()

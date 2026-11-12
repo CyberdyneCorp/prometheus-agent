@@ -84,6 +84,14 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "update --check",
     },
     JsonShape {
+        schema: "prometheus.update_dry_run.v1",
+        command: "update --dry-run",
+    },
+    JsonShape {
+        schema: "prometheus.migration_report.v1",
+        command: "migrate from-hermes",
+    },
+    JsonShape {
         schema: "prometheus.runtimes.v1",
         command: "runtimes list",
     },
@@ -314,6 +322,14 @@ pub const JSON_SHAPES: &[JsonShape] = &[
     JsonShape {
         schema: "prometheus.worktrees_list.v1",
         command: "worktrees list",
+    },
+    JsonShape {
+        schema: "prometheus.projects_list.v1",
+        command: "projects list",
+    },
+    JsonShape {
+        schema: "prometheus.project.v1",
+        command: "projects show",
     },
     JsonShape {
         schema: "prometheus.cron_list.v1",

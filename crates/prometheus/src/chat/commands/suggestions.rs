@@ -36,7 +36,7 @@ pub(super) fn suggestions(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
     match words.first().map(String::as_str) {
         None | Some("list") => {
             blueprints::offer_skill_blueprints(store, ctx.scope, ctx.factory.launch())?;
-            Ok(suggest::render(&suggest::pending(store)?))
+            Ok(suggest::render(&*ctx.strings(), &suggest::pending(store)?))
         }
         Some("accept") => {
             let yes = words.iter().any(|w| w == "--yes");
@@ -44,18 +44,27 @@ pub(super) fn suggestions(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
         }
         Some("dismiss") => {
             let row = suggest::dismiss(store, number(words.get(1))?)?;
-            Ok(format!("dismissed {}; it is not offered again", row.title))
+            Ok(pmt_i18n::t!(
+                ctx.strings(),
+                "slash.suggestions.dismissed",
+                title = row.title
+            ))
         }
         Some("catalog") => {
             let added = suggest::offer_catalog(store)?;
+            let head = pmt_i18n::t!(ctx.strings(), "slash.suggestions.added", count = added);
             Ok(format!(
-                "added {added} starter suggestion(s)\n{}",
-                suggest::render(&suggest::pending(store)?)
+                "{head}\n{}",
+                suggest::render(&*ctx.strings(), &suggest::pending(store)?)
             ))
         }
         Some("clear") => {
             let dropped = store.cron_clear_suggestions()?;
-            Ok(format!("cleared {dropped} accepted suggestion(s)"))
+            Ok(pmt_i18n::t!(
+                ctx.strings(),
+                "slash.suggestions.cleared",
+                count = dropped
+            ))
         }
         Some(_) => Err(usage()),
     }

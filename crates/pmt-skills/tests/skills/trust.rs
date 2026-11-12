@@ -59,7 +59,12 @@ async fn trusting_the_root_loads_project_skills_first() {
     let mut profile = Profile::new("");
     let repo = repository(&profile);
     add_skill(&profile.skills(), "evil", "evil", "Profile copy.");
-    activation::trust(profile.scope.profile(), &repo).unwrap();
+    activation::trust(
+        &*pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+        profile.scope.profile(),
+        &repo,
+    )
+    .unwrap();
     let dir = profile.scope.profile().clone();
     profile.scope =
         ProfileScope::open(dir, &Overrides::parse::<&str>(&[]).unwrap(), Launch::Other).unwrap();
@@ -344,7 +349,14 @@ fn disabling_the_essential_skill_fails_validation() {
     );
     // And a write through the config API is refused before it lands.
     std::fs::write(dir.config_file().path(), crate::support::BASE).unwrap();
-    let err = activation::set_disabled(&dir, "prometheus-agent", None, true).unwrap_err();
+    let err = activation::set_disabled(
+        &*pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+        &dir,
+        "prometheus-agent",
+        None,
+        true,
+    )
+    .unwrap_err();
     assert!(
         err.message().contains("skills.disabled"),
         "{}",

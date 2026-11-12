@@ -82,18 +82,28 @@ pub(super) fn notice(link: &Link, text: &str) {
 }
 
 /// Publishes one `automation.state` event per kind of `id` (`none` for a
-/// kind that is not set).
+/// kind that is not set) of a session of `scope`, rows in its language.
 pub(super) fn publish(
+    scope: &pmt_config::ProfileScope,
     store: &pmt_store::Store,
     id: SessionId,
     link: &Link,
-    limits: &pmt_automation::Limits,
 ) {
+    let limits = automation::limits(scope.config());
+    let strings = pmt_config::language::strings(scope.dir(), pmt_i18n::Surface::Core);
     let automation = automation::of(store, id);
     let now = automation::now_ms();
     for kind in Kind::ALL {
-        link.emit::<AutomationStateChanged>(&payload(&automation, kind, id, now, limits));
+        let state = State { kind, id, now };
+        link.emit::<AutomationStateChanged>(&payload(&*strings, &automation, state, &limits));
     }
+}
+
+/// Which kind of which session, when.
+struct State {
+    kind: Kind,
+    id: SessionId,
+    now: i64,
 }
 
 fn at(ms: i64) -> Option<String> {
@@ -135,10 +145,9 @@ fn facts(
 }
 
 fn payload(
+    text: &dyn pmt_core::text::Catalog,
     automation: &pmt_automation::Automation,
-    kind: Kind,
-    id: SessionId,
-    now: i64,
+    State { kind, id, now }: State,
     limits: &pmt_automation::Limits,
 ) -> AutomationStatePayload {
     let only = pmt_automation::Automation {
@@ -155,7 +164,7 @@ fn payload(
         session_id: id.to_string(),
         kind: kind.as_str().to_owned(),
         status,
-        row: only.rows(now, limits).into_iter().next(),
+        row: only.rows(text, now, limits).into_iter().next(),
         count,
         limit,
         next_fire_at,
@@ -183,8 +192,7 @@ impl DaemonHost {
         };
         let next = boundary::after_turn(&boundary, ended).await;
         let scope = session.live.config.get();
-        let limits = automation::limits(scope.config());
-        publish(&session.factory.store, session.live.id, link, &limits);
+        publish(&scope, &session.factory.store, session.live.id, link);
         if session.chat.is_some() && end.from_lane {
             let turn = next.wakeup.map(|w| automated(&w));
             *session.after.lock().expect("after poisoned") = AfterTurn {
@@ -261,7 +269,8 @@ impl DaemonHost {
         let scope = profile.scope();
         let limits = automation::limits(scope.config());
         let store = &profile.store;
-        let (reserved, notices) = boundary::due(store, id, Host::Daemon, &limits);
+        let strings = pmt_config::language::strings(scope.dir(), pmt_i18n::Surface::Core);
+        let (reserved, notices) = boundary::due(&*strings, store, id, Host::Daemon, &limits);
         let owner = automation::load(store, id).unwrap_or_default();
         let link = self.gateway.get().map(|g| g.link(&id.to_string()));
         let name = scope.name().to_string();
@@ -270,7 +279,7 @@ impl DaemonHost {
         }
         let Some(reserved) = reserved else {
             if let Some(link) = &link {
-                publish(store, id, link, &limits);
+                publish(&scope, store, id, link);
             }
             return;
         };
@@ -282,7 +291,7 @@ impl DaemonHost {
             boundary::refund(store, id, reserved);
         }
         if let Some(link) = &link {
-            publish(store, id, link, &limits);
+            publish(&scope, store, id, link);
         }
     }
 
@@ -329,8 +338,7 @@ impl DaemonHost {
                 }
                 tracing::debug!(session = %id, "automated turn dropped by the chat; refunded");
                 boundary::refund(&profile.store, id, reserved);
-                let limits = automation::limits(profile.scope().config());
-                publish(&profile.store, id, &link, &limits);
+                publish(&profile.scope(), &profile.store, id, &link);
                 profile.automation_wake.notify_one();
             }
             .in_current_span(),
@@ -385,6 +393,7 @@ impl DaemonHost {
             link,
             from_lane: false,
             resume: None,
+            api: None,
         };
         Self::start_with(
             Arc::clone(&self.turns),

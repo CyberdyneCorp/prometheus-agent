@@ -275,7 +275,7 @@ fn failure_notice(
         return Ok(());
     }
     let threshold = ctx.config.failure_nudge_threshold;
-    let body = failure::notice(job, status, &error, streak, threshold);
+    let body = failure::notice(ctx.text, job, status, &error, streak, threshold);
     ctx.store.cron_enqueue(&notice_rows(ctx, job, run, &body))
 }
 

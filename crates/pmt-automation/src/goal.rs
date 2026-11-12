@@ -7,6 +7,8 @@
 
 use std::fmt::Write as _;
 
+use pmt_core::text::Catalog;
+
 use crate::command::{GoalCommand, SubgoalCommand};
 use crate::judge::{self, Verdict, WaitOn};
 use crate::state::{Barrier, Gate, Goal, GoalStatus, Limits};
@@ -65,27 +67,34 @@ pub trait Probe {
 
 /// The budget pause line.
 #[must_use]
-pub fn budget_notice(max: u32) -> String {
-    format!(
-        "Goal paused — {max}/{max} turns used. Use /goal resume to keep going, or /goal clear to stop."
-    )
+pub fn budget_notice(text: &dyn Catalog, max: u32) -> String {
+    text.text("slash.goal.budget_paused", &[("max", &max)])
 }
 
 /// Counts one continuation turn, or pauses the goal when the budget is
-/// spent.
-fn continue_turn(goal: &mut Goal, reason: &str, prompt: String, limits: &Limits) -> Step {
+/// spent. `shown` is the reason the user reads (`prompt` is the model's).
+fn continue_turn(
+    text: &dyn Catalog,
+    goal: &mut Goal,
+    shown: &str,
+    prompt: String,
+    limits: &Limits,
+) -> Step {
     let max = limits.goal_max_turns;
     if goal.turns_used >= max {
         goal.status = GoalStatus::Paused;
-        goal.reason = Some(format!("{max}/{max} turns used"));
-        return Step::Paused(budget_notice(max));
+        goal.reason = Some(text.text("slash.goal.turns_spent", &[("max", &max)]));
+        return Step::Paused(budget_notice(text, max));
     }
     goal.turns_used += 1;
-    let mut notice = format!("Continuing toward goal ({}/{max})", goal.turns_used);
-    if !reason.is_empty() {
-        let _ = write!(notice, ": {reason}");
+    let head = text.text(
+        "slash.goal.continuing",
+        &[("used", &goal.turns_used), ("max", &max)],
+    );
+    Step::Continue {
+        prompt,
+        notice: with_reason(&head, shown),
     }
-    Step::Continue { prompt, notice }
 }
 
 /// The last [`GATE_OUTPUT_TAIL`] bytes of `output` (on a char boundary).
@@ -103,7 +112,12 @@ fn output_tail(output: &str) -> &str {
 /// Records this boundary's gate results; `Some` when a gate is red (the
 /// judge is then skipped): a continuation with its exit code and output
 /// tail, or a pause once it failed `goals.gate_max_retries` times in a row.
-pub fn gates(goal: &mut Goal, runs: &[GateRun], limits: &Limits) -> Option<Step> {
+pub fn gates(
+    text: &dyn Catalog,
+    goal: &mut Goal,
+    runs: &[GateRun],
+    limits: &Limits,
+) -> Option<Step> {
     let mut red = None;
     for (index, (gate, run)) in goal.gates.iter_mut().zip(runs).enumerate() {
         if run.exit == 0 {
@@ -119,22 +133,27 @@ pub fn gates(goal: &mut Goal, runs: &[GateRun], limits: &Limits) -> Option<Step>
     let n = index + 1;
     if gate.failures >= limits.gate_max_retries {
         goal.status = GoalStatus::Paused;
-        let notice = format!(
-            "Goal paused — quality gate {n} (`{}`) failed {} times in a row. Fix it and /goal resume, or /goal gate remove {n}.",
-            gate.command, gate.failures
+        let notice = text.text(
+            "slash.goal.gate_paused",
+            &[
+                ("n", &n),
+                ("command", &gate.command),
+                ("failures", &gate.failures),
+            ],
         );
         goal.reason = Some(notice.clone());
         return Some(Step::Paused(notice));
     }
     let tail = output_tail(&run.output);
     let prompt = judge::gate_continuation(goal, n, &gate.command, run.exit, tail);
-    let reason = format!("quality gate {n} failed (exit {})", run.exit);
-    Some(continue_turn(goal, &reason, prompt, limits))
+    let shown = text.text("slash.goal.gate_failed", &[("n", &n), ("exit", &run.exit)]);
+    Some(continue_turn(text, goal, &shown, prompt, limits))
 }
 
 /// Applies the judge's verdict (`Err`: the judge failed, which is
 /// `continue`).
 pub fn verdict(
+    text: &dyn Catalog,
     goal: &mut Goal,
     verdict: Result<Verdict, String>,
     limits: &Limits,
@@ -146,20 +165,22 @@ pub fn verdict(
     match verdict {
         Verdict::Done(reason) => {
             goal.status = GoalStatus::Done;
-            Step::Done(with_reason("Goal achieved", &reason))
+            Step::Done(with_reason(&text.text("slash.goal.achieved", &[]), &reason))
         }
         Verdict::Blocked(reason) => {
             goal.status = GoalStatus::Paused;
-            Step::Paused(with_reason("Goal judged unachievable — paused", &reason))
+            let head = text.text("slash.goal.unachievable", &[]);
+            Step::Paused(with_reason(&head, &reason))
         }
         Verdict::Continue(reason) => {
             let prompt = judge::continuation(goal, &reason);
-            continue_turn(goal, &reason, prompt, limits)
+            continue_turn(text, goal, &reason, prompt, limits)
         }
-        Verdict::Wait { on, reason } => wait(goal, on, &reason, limits, now_ms, probe),
+        Verdict::Wait { on, reason } => wait(text, goal, on, &reason, limits, now_ms, probe),
     }
 }
 
+/// `head: reason` (the reason is the judge's or a catalog line).
 fn with_reason(head: &str, reason: &str) -> String {
     if reason.is_empty() {
         head.to_owned()
@@ -169,6 +190,7 @@ fn with_reason(head: &str, reason: &str) -> String {
 }
 
 fn wait(
+    text: &dyn Catalog,
     goal: &mut Goal,
     on: WaitOn,
     reason: &str,
@@ -198,11 +220,18 @@ fn wait(
     let Some(barrier) = barrier else {
         // Nothing to wait on: keep going.
         let prompt = judge::continuation(goal, reason);
-        return continue_turn(goal, reason, prompt, limits);
+        return continue_turn(text, goal, reason, prompt, limits);
     };
-    let notice = format!("Goal parked on {}", barrier.describe());
+    let notice = parked(text, &barrier);
     goal.barrier = Some(barrier);
     Step::Parked(notice)
+}
+
+fn parked(text: &dyn Catalog, barrier: &Barrier) -> String {
+    text.text(
+        "slash.goal.parked",
+        &[("barrier", &barrier.describe_in(text))],
+    )
 }
 
 fn secs_ms(secs: u64) -> i64 {
@@ -211,7 +240,13 @@ fn secs_ms(secs: u64) -> i64 {
 
 /// Whether a parked goal's barrier released at `now_ms`; when it did the
 /// barrier is dropped and the goal continues (one counted turn).
-pub fn release(goal: &mut Goal, limits: &Limits, now_ms: i64, probe: &dyn Probe) -> Option<Step> {
+pub fn release(
+    text: &dyn Catalog,
+    goal: &mut Goal,
+    limits: &Limits,
+    now_ms: i64,
+    probe: &dyn Probe,
+) -> Option<Step> {
     if goal.status != GoalStatus::Active {
         return None;
     }
@@ -229,14 +264,15 @@ pub fn release(goal: &mut Goal, limits: &Limits, now_ms: i64, probe: &dyn Probe)
     if !released {
         return None;
     }
-    let what = goal
-        .barrier
-        .take()
-        .map(|b| b.describe())
-        .unwrap_or_default();
-    let reason = format!("the wait on {what} is over");
+    let barrier = goal.barrier.take()?;
+    // The model reads the English reason, the user the catalog's.
+    let reason = format!("the wait on {} is over", barrier.describe());
+    let shown = text.text(
+        "slash.goal.wait_over",
+        &[("barrier", &barrier.describe_in(text))],
+    );
     let prompt = judge::continuation(goal, &reason);
-    Some(continue_turn(goal, &reason, prompt, limits))
+    Some(continue_turn(text, goal, &shown, prompt, limits))
 }
 
 /// What a `/goal` or `/subgoal` command did.
@@ -278,6 +314,8 @@ pub struct Context<'a> {
     pub now_ms: i64,
     /// Process liveness.
     pub probe: &'a dyn Probe,
+    /// The profile's UI strings (the replies).
+    pub text: &'a dyn Catalog,
 }
 
 /// Applies a `/goal` command to `slot` (`draft` sets the text as is: the
@@ -291,66 +329,79 @@ pub fn apply(
     command: GoalCommand,
     ctx: Context<'_>,
 ) -> Result<Outcome, String> {
-    let limits = ctx.limits;
+    let (limits, text) = (ctx.limits, ctx.text);
     if ctx.running && !command.runs_while_busy() {
         return Err(crate::command::BUSY_SET.to_owned());
     }
     match command {
-        GoalCommand::Set(text) | GoalCommand::Draft(text) => Ok(set(slot, &text)),
+        GoalCommand::Set(goal) | GoalCommand::Draft(goal) => Ok(set(text, slot, &goal)),
         GoalCommand::Status => Ok(Outcome::says(slot.as_ref().map_or_else(
-            || "No goal set.".to_owned(),
-            |g| g.status_text(limits.goal_max_turns),
+            || text.text("slash.goal.none", &[]),
+            |g| g.status_text(text, limits.goal_max_turns),
         ))),
-        GoalCommand::Show => Ok(Outcome::says(show(slot.as_ref()))),
-        GoalCommand::Clear => Ok(clear(slot)),
+        GoalCommand::Show => Ok(Outcome::says(show(text, slot.as_ref()))),
+        GoalCommand::Clear => Ok(clear(text, slot)),
         GoalCommand::Wait { pid, reason } => park(slot, pid, reason, ctx),
-        other => control(goal_mut(slot)?, other),
+        other => control(text, goal_mut(slot)?, other),
     }
 }
 
 /// Sets `text` (with any inline contract) as the new goal: subgoals, gates
 /// and barriers of a replaced goal go.
-fn set(slot: &mut Option<Goal>, text: &str) -> Outcome {
-    let (headline, contract) = crate::contract::parse_inline(text);
-    set_goal(slot, Goal::new(headline, contract))
+fn set(text: &dyn Catalog, slot: &mut Option<Goal>, goal: &str) -> Outcome {
+    let (headline, contract) = crate::contract::parse_inline(goal);
+    set_goal(text, slot, Goal::new(headline, contract))
 }
 
 /// Sets `goal` (a drafted one keeps its contract); its first turn starts
 /// at the next idle boundary.
 #[must_use]
-pub fn set_goal(slot: &mut Option<Goal>, goal: Goal) -> Outcome {
-    let mut text = format!("Goal set: {}", goal.text);
+pub fn set_goal(text: &dyn Catalog, slot: &mut Option<Goal>, goal: Goal) -> Outcome {
+    let mut reply = text.text("slash.goal.set", &[("goal", &goal.text)]);
     if let Some(contract) = goal.contract.as_ref().filter(|c| !c.is_empty()) {
-        let _ = write!(text, "\n{}", contract.render());
+        let _ = write!(reply, "\n{}", contract.render());
     }
     *slot = Some(goal);
-    Outcome::changed(text)
+    Outcome::changed(reply)
 }
 
-fn show(goal: Option<&Goal>) -> String {
+fn show(text: &dyn Catalog, goal: Option<&Goal>) -> String {
     let Some(goal) = goal else {
-        return "No goal set.".to_owned();
+        return text.text("slash.goal.none", &[]);
     };
-    let mut text = format!("Goal: {}\nstatus: {}", goal.text, goal.status.as_str());
+    let mut reply = text.text(
+        "slash.goal.show",
+        &[("goal", &goal.text), ("status", &goal.status.as_str())],
+    );
     match goal.contract.as_ref().filter(|c| !c.is_empty()) {
         Some(contract) => {
-            let _ = write!(text, "\n{}", contract.render());
+            let _ = write!(reply, "\n{}", contract.render());
         }
-        None => text.push_str("\n(no completion contract)"),
+        None => {
+            let _ = write!(reply, "\n{}", text.text("slash.goal.no_contract", &[]));
+        }
     }
     for (n, subgoal) in goal.subgoals.iter().enumerate() {
-        let _ = write!(text, "\nsubgoal {}: {subgoal}", n + 1);
+        let line = text.text(
+            "slash.goal.subgoal_line",
+            &[("n", &(n + 1)), ("text", subgoal)],
+        );
+        let _ = write!(reply, "\n{line}");
     }
     for (n, gate) in goal.gates.iter().enumerate() {
-        let _ = write!(text, "\ngate {}: {}", n + 1, gate.command);
+        let line = text.text(
+            "slash.goal.gate_line",
+            &[("n", &(n + 1)), ("command", &gate.command)],
+        );
+        let _ = write!(reply, "\n{line}");
     }
-    text
+    reply
 }
 
-fn clear(slot: &mut Option<Goal>) -> Outcome {
+fn clear(text: &dyn Catalog, slot: &mut Option<Goal>) -> Outcome {
     match slot.take() {
-        Some(_) => Outcome::changed("Goal cleared."),
-        None => Outcome::says("No goal set."),
+        Some(_) => Outcome::changed(text.text("slash.goal.cleared", &[])),
+        None => Outcome::says(text.text("slash.goal.none", &[])),
     }
 }
 
@@ -376,17 +427,17 @@ fn park(
         until_ms: ctx.now_ms + secs_ms(ctx.limits.max_wait_secs),
         reason,
     };
-    let text = format!("Goal parked on {}", barrier.describe());
+    let reply = parked(ctx.text, &barrier);
     goal.barrier = Some(barrier);
-    Ok(Outcome::changed(text))
+    Ok(Outcome::changed(reply))
 }
 
-fn control(goal: &mut Goal, command: GoalCommand) -> Result<Outcome, String> {
-    let text = match command {
+fn control(text: &dyn Catalog, goal: &mut Goal, command: GoalCommand) -> Result<Outcome, String> {
+    let key = match command {
         GoalCommand::Pause => {
             goal.status = GoalStatus::Paused;
             goal.barrier = None;
-            "Goal paused. Use /goal resume to keep going."
+            "slash.goal.paused"
         }
         GoalCommand::Resume => {
             goal.status = GoalStatus::Active;
@@ -396,33 +447,37 @@ fn control(goal: &mut Goal, command: GoalCommand) -> Result<Outcome, String> {
             for gate in &mut goal.gates {
                 gate.failures = 0;
             }
-            "Goal resumed."
+            "slash.goal.resumed"
         }
         GoalCommand::Unwait => {
             if goal.barrier.take().is_none() {
-                return Ok(Outcome::says("The goal is not parked."));
+                return Ok(Outcome::says(text.text("slash.goal.not_parked", &[])));
             }
-            "Goal unparked."
+            "slash.goal.unparked"
         }
-        other => return gate_command(goal, other),
+        other => return gate_command(text, goal, other),
     };
-    Ok(Outcome::changed(text))
+    Ok(Outcome::changed(text.text(key, &[])))
 }
 
-fn gate_command(goal: &mut Goal, command: GoalCommand) -> Result<Outcome, String> {
+fn gate_command(
+    text: &dyn Catalog,
+    goal: &mut Goal,
+    command: GoalCommand,
+) -> Result<Outcome, String> {
     match command {
         GoalCommand::GateAdd(command) => {
             goal.gates.push(Gate {
                 command: command.clone(),
                 failures: 0,
             });
-            Ok(Outcome::changed(format!(
-                "Quality gate {} added: {command}",
-                goal.gates.len()
+            Ok(Outcome::changed(text.text(
+                "slash.goal.gate_added",
+                &[("n", &goal.gates.len()), ("command", &command)],
             )))
         }
         GoalCommand::GateList => Ok(Outcome::says(numbered(
-            "No quality gates.",
+            &text.text("slash.goal.no_gates", &[]),
             goal.gates.iter().map(|g| g.command.as_str()),
         ))),
         GoalCommand::GateRemove(n) => {
@@ -430,14 +485,14 @@ fn gate_command(goal: &mut Goal, command: GoalCommand) -> Result<Outcome, String
                 return Err(format!("there is no quality gate {n}"));
             }
             let gate = goal.gates.remove(n - 1);
-            Ok(Outcome::changed(format!(
-                "Quality gate {n} removed: {}",
-                gate.command
+            Ok(Outcome::changed(text.text(
+                "slash.goal.gate_removed",
+                &[("n", &n), ("command", &gate.command)],
             )))
         }
         GoalCommand::GateClear => {
             goal.gates.clear();
-            Ok(Outcome::changed("Quality gates cleared."))
+            Ok(Outcome::changed(text.text("slash.goal.gates_cleared", &[])))
         }
         _ => Err(crate::command::GOAL_USAGE.to_owned()),
     }
@@ -460,21 +515,25 @@ fn numbered<'a>(empty: &str, items: impl Iterator<Item = &'a str>) -> String {
 /// # Errors
 ///
 /// `No active goal.`, or a bad index.
-pub fn subgoal(slot: &mut Option<Goal>, command: SubgoalCommand) -> Result<Outcome, String> {
+pub fn subgoal(
+    text: &dyn Catalog,
+    slot: &mut Option<Goal>,
+    command: SubgoalCommand,
+) -> Result<Outcome, String> {
     let goal = slot
         .as_mut()
         .filter(|g| g.status != GoalStatus::Done)
         .ok_or_else(|| NO_GOAL.to_owned())?;
     match command {
-        SubgoalCommand::Add(text) => {
-            goal.subgoals.push(text.clone());
-            Ok(Outcome::changed(format!(
-                "Subgoal {} added: {text}",
-                goal.subgoals.len()
+        SubgoalCommand::Add(subgoal) => {
+            goal.subgoals.push(subgoal.clone());
+            Ok(Outcome::changed(text.text(
+                "slash.goal.subgoal_added",
+                &[("n", &goal.subgoals.len()), ("text", &subgoal)],
             )))
         }
         SubgoalCommand::List => Ok(Outcome::says(numbered(
-            "No subgoals.",
+            &text.text("slash.goal.no_subgoals", &[]),
             goal.subgoals.iter().map(String::as_str),
         ))),
         SubgoalCommand::Remove(n) => {
@@ -482,11 +541,16 @@ pub fn subgoal(slot: &mut Option<Goal>, command: SubgoalCommand) -> Result<Outco
                 return Err(format!("there is no subgoal {n}"));
             }
             let removed = goal.subgoals.remove(n - 1);
-            Ok(Outcome::changed(format!("Subgoal {n} removed: {removed}")))
+            Ok(Outcome::changed(text.text(
+                "slash.goal.subgoal_removed",
+                &[("n", &n), ("text", &removed)],
+            )))
         }
         SubgoalCommand::Clear => {
             goal.subgoals.clear();
-            Ok(Outcome::changed("Subgoals cleared."))
+            Ok(Outcome::changed(
+                text.text("slash.goal.subgoals_cleared", &[]),
+            ))
         }
     }
 }

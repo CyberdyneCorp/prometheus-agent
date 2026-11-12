@@ -9,6 +9,7 @@
 - [The terminal UI](guide/tui.md)
 - [The offline demo](guide/demo.md)
 - [Installing and updating](guide/install-and-update.md)
+- [Package managers, containers and offline installs](guide/distribution.md)
 - [Setup, onboarding and doctor](guide/setup-and-doctor.md)
 - [Sessions](guide/sessions.md)
 - [Turns and the system prompt](guide/turns.md)
@@ -30,6 +31,8 @@
 - [Tools and toolsets](guide/tools.md)
 - [Subagents and programmatic tool calls](guide/delegation.md)
 - [Git worktrees](guide/worktrees.md)
+- [Projects](guide/projects.md)
+- [UI languages](guide/languages.md)
 - [Scheduled jobs](guide/cron.md)
 - [Session automation](guide/session-automation.md)
 - [Skills](guide/skills.md)
@@ -42,6 +45,8 @@
 - [The python bridge](guide/python-bridge.md)
 - [The daemon and its client protocol](guide/client-protocol.md)
 - [The messaging gateway](guide/gateway.md)
+- [The OpenAI-compatible API server](guide/api-server.md)
+- [Migrating from Hermes and other agents](guide/migration.md)
 
 # Reference
 

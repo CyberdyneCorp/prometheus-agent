@@ -9,6 +9,7 @@
 
 use std::fmt::Write as _;
 
+use pmt_core::text::Catalog;
 use regex::Regex;
 use sha2::{Digest, Sha256};
 
@@ -95,8 +96,9 @@ pub enum LoopEnd {
 }
 
 /// A loop wakeup turn ended at `now_ms` with `reply` (`interrupted`: the
-/// user stopped it).
+/// user stopped it); the notices are worded with `text`.
 pub fn after_loop_turn(
+    text: &dyn Catalog,
     looping: &mut Loop,
     reply: &str,
     interrupted: bool,
@@ -104,12 +106,13 @@ pub fn after_loop_turn(
     limits: &Limits,
 ) -> LoopEnd {
     if interrupted {
-        return pause(looping, "the wakeup turn was interrupted".to_owned());
+        let reason = text.text("slash.loop.interrupted", &[]);
+        return pause(text, looping, reason);
     }
     if reply.trim_end().lines().last().map(str::trim) == Some(LOOP_COMPLETE) {
-        return LoopEnd::Removed("Loop complete.".to_owned());
+        return LoopEnd::Removed(text.text("slash.loop.complete", &[]));
     }
-    if let Some(end) = exhausted(looping, limits) {
+    if let Some(end) = exhausted(text, looping, limits) {
         return end;
     }
     if let Cadence::SelfPaced { wait_secs, digest } = &mut looping.cadence {
@@ -131,45 +134,46 @@ pub fn after_loop_turn(
 /// The end of a loop whose wakeups are spent: `--times N` removes it,
 /// `loops.max_ticks` pauses it. Also checked before a wakeup fires, so a
 /// loop whose wakeup ran a slash command (no turn to end) stops too.
-pub fn exhausted(looping: &mut Loop, limits: &Limits) -> Option<LoopEnd> {
-    if looping.times.is_some_and(|times| looping.fired >= times) {
-        return Some(LoopEnd::Removed(format!(
-            "Loop finished after {} runs.",
-            looping.fired
-        )));
+pub fn exhausted(text: &dyn Catalog, looping: &mut Loop, limits: &Limits) -> Option<LoopEnd> {
+    let fired = looping.fired;
+    if looping.times.is_some_and(|times| fired >= times) {
+        return Some(LoopEnd::Removed(
+            text.text("slash.loop.finished", &[("runs", &fired)]),
+        ));
     }
-    if limits.loop_max_ticks > 0 && looping.fired >= limits.loop_max_ticks {
-        let reason = format!(
-            "{} wakeups (loops.max_ticks); /loop resume to keep going",
-            looping.fired
-        );
-        return Some(pause(looping, reason));
+    if limits.loop_max_ticks > 0 && fired >= limits.loop_max_ticks {
+        let reason = text.text("slash.loop.max_ticks", &[("runs", &fired)]);
+        return Some(pause(text, looping, reason));
     }
     None
 }
 
 /// Applies the `--until` judge verdict (`Err`: the judge failed, which
 /// keeps the loop going).
-pub fn until(looping: &mut Loop, verdict: Result<crate::judge::Verdict, String>) -> LoopEnd {
+pub fn until(
+    text: &dyn Catalog,
+    looping: &mut Loop,
+    verdict: Result<crate::judge::Verdict, String>,
+) -> LoopEnd {
     use crate::judge::Verdict;
     match verdict {
-        Ok(Verdict::Done(reason)) => LoopEnd::Removed(with_reason("Loop condition met", &reason)),
-        Ok(Verdict::Blocked(reason)) => pause(looping, format!("judged unachievable: {reason}")),
+        Ok(Verdict::Done(reason)) if reason.is_empty() => {
+            LoopEnd::Removed(text.text("slash.loop.condition_met", &[]))
+        }
+        Ok(Verdict::Done(reason)) => {
+            LoopEnd::Removed(text.text("slash.loop.condition_met_why", &[("reason", &reason)]))
+        }
+        Ok(Verdict::Blocked(reason)) => {
+            let reason = text.text("slash.loop.unachievable", &[("reason", &reason)]);
+            pause(text, looping, reason)
+        }
         Ok(_) | Err(_) => LoopEnd::Next,
     }
 }
 
-fn with_reason(head: &str, reason: &str) -> String {
-    if reason.is_empty() {
-        format!("{head}.")
-    } else {
-        format!("{head}: {reason}")
-    }
-}
-
-fn pause(looping: &mut Loop, reason: String) -> LoopEnd {
+fn pause(text: &dyn Catalog, looping: &mut Loop, reason: String) -> LoopEnd {
     looping.status = RunStatus::Paused;
-    let notice = format!("Loop paused: {reason}");
+    let notice = text.text("slash.loop.paused_why", &[("reason", &reason)]);
     looping.reason = Some(reason);
     LoopEnd::Paused(notice)
 }
@@ -234,6 +238,11 @@ pub fn resume_heartbeat(heartbeat: &mut Heartbeat, now_ms: i64) {
 mod tests {
     use super::*;
 
+    /// The bundled English strings (what the assertions read).
+    fn en() -> std::sync::Arc<pmt_i18n::Strings> {
+        pmt_i18n::Strings::english(pmt_i18n::Surface::Core)
+    }
+
     fn self_paced() -> Loop {
         new_loop(
             LoopSpec {
@@ -261,6 +270,7 @@ mod tests {
         for at in ["at 10:01:00", "at 10:02:30", "at 2026-11-07T10:05:00Z"] {
             fire_loop(&mut looping, 0);
             after_loop_turn(
+                &*en(),
                 &mut looping,
                 &format!("migration 40% {at}"),
                 false,
@@ -271,7 +281,7 @@ mod tests {
         assert_eq!(wait(&looping), 480);
         assert_eq!(looping.next_fire_ms, 480_000);
         fire_loop(&mut looping, 0);
-        after_loop_turn(&mut looping, "migration 80%", false, 0, &limits);
+        after_loop_turn(&*en(), &mut looping, "migration 80%", false, 0, &limits);
         assert_eq!(wait(&looping), 60);
     }
 
@@ -280,7 +290,7 @@ mod tests {
         let limits = Limits::default();
         let mut looping = self_paced();
         for _ in 0..10 {
-            after_loop_turn(&mut looping, "same", false, 0, &limits);
+            after_loop_turn(&*en(), &mut looping, "same", false, 0, &limits);
         }
         assert_eq!(wait(&looping), 900);
     }
@@ -301,18 +311,25 @@ mod tests {
         for _ in 0..2 {
             fire_loop(&mut looping, 0);
             assert_eq!(
-                after_loop_turn(&mut looping, "pending", false, 0, &limits),
+                after_loop_turn(&*en(), &mut looping, "pending", false, 0, &limits),
                 LoopEnd::Next
             );
         }
         fire_loop(&mut looping, 0);
         assert!(matches!(
-            after_loop_turn(&mut looping, "pending", false, 0, &limits),
+            after_loop_turn(&*en(), &mut looping, "pending", false, 0, &limits),
             LoopEnd::Removed(_)
         ));
         let mut other = self_paced();
         assert!(matches!(
-            after_loop_turn(&mut other, "all good\nLOOP_COMPLETE\n", false, 0, &limits),
+            after_loop_turn(
+                &*en(),
+                &mut other,
+                "all good\nLOOP_COMPLETE\n",
+                false,
+                0,
+                &limits
+            ),
             LoopEnd::Removed(_)
         ));
     }
@@ -325,7 +342,7 @@ mod tests {
         };
         let mut looping = self_paced();
         assert!(matches!(
-            after_loop_turn(&mut looping, "", true, 0, &limits),
+            after_loop_turn(&*en(), &mut looping, "", true, 0, &limits),
             LoopEnd::Paused(_)
         ));
         assert_eq!(looping.status, RunStatus::Paused);
@@ -333,7 +350,7 @@ mod tests {
         fire_loop(&mut looping, 5);
         fire_loop(&mut looping, 5);
         assert!(matches!(
-            after_loop_turn(&mut looping, "x", false, 5, &limits),
+            after_loop_turn(&*en(), &mut looping, "x", false, 5, &limits),
             LoopEnd::Paused(_)
         ));
     }
@@ -346,22 +363,28 @@ mod tests {
         let mut looping = self_paced();
         assert_eq!(
             until(
+                &*en(),
                 &mut looping,
                 Ok(Verdict::Done("the deploy is green".into()))
             ),
             LoopEnd::Removed("Loop condition met: the deploy is green".into())
         );
         assert_eq!(
-            until(&mut looping, Ok(Verdict::Continue("still red".into()))),
+            until(
+                &*en(),
+                &mut looping,
+                Ok(Verdict::Continue("still red".into()))
+            ),
             LoopEnd::Next
         );
         assert_eq!(
-            until(&mut looping, Err("provider unavailable".into())),
+            until(&*en(), &mut looping, Err("provider unavailable".into())),
             LoopEnd::Next
         );
         assert_eq!(looping.status, RunStatus::Active);
         assert_eq!(
             until(
+                &*en(),
                 &mut looping,
                 Ok(Verdict::Blocked("the branch was deleted".into()))
             ),

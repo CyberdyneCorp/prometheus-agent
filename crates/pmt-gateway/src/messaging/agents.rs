@@ -101,6 +101,50 @@ pub struct UpdateFromChat {
     pub thread_id: Option<String>,
     /// Only look for a newer release.
     pub check: bool,
+    /// The sender confirmed restarting a daemon whose turns are still
+    /// running (`prometheus update --yes`).
+    pub restart_busy: bool,
+}
+
+/// What the updater reports while an update from chat runs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UpdateEvent {
+    /// A stage line (`checking`, `downloading <n>%`, `verifying`,
+    /// `self-test`, `swapping`, `restarting`).
+    Progress(String),
+    /// The updater exited.
+    Finished {
+        /// Its exit code (4: restarting a busy daemon needs a yes).
+        code: i32,
+        /// The last line it printed: the result, or why it refused.
+        last_line: String,
+    },
+}
+
+/// A running updater, as the chat that started it follows it.
+pub struct UpdateFeed {
+    /// Its stage lines and its exit.
+    pub events: tokio::sync::mpsc::UnboundedReceiver<UpdateEvent>,
+    /// Queues in `events`, before returning, every stage line the updater
+    /// has written so far. The daemon calls it when it stops for the
+    /// handover: the updater wrote `restarting` before asking it to stop,
+    /// and that line must reach the chat before this daemon is gone.
+    pub catch_up: Box<dyn Fn() + Send + Sync>,
+}
+
+impl std::fmt::Debug for UpdateFeed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UpdateFeed").finish_non_exhaustive()
+    }
+}
+
+/// What `update_from_chat` started.
+#[derive(Debug)]
+pub enum UpdateRun {
+    /// An answer for the chat (`/update check`).
+    Answer(String),
+    /// A running updater and its events.
+    Running(UpdateFeed),
 }
 
 /// The agent side of the messaging gateway.
@@ -232,8 +276,8 @@ pub trait Agents: Host {
         None
     }
     /// Runs the updater for a confirmed `/update` (or `/update check`):
-    /// the text answers the chat.
-    fn update_from_chat<'a>(&'a self, _request: &'a UpdateFromChat) -> HostFuture<'a, String> {
+    /// a check answers at once, an update reports its stages.
+    fn update_from_chat<'a>(&'a self, _request: &'a UpdateFromChat) -> HostFuture<'a, UpdateRun> {
         Box::pin(async {
             Err(pmt_core::error::Error::new(
                 &pmt_core::error::codes::GATEWAY_DAEMON_REQUIRED,

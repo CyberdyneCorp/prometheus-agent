@@ -31,16 +31,15 @@ pub(crate) enum Refused {
 
 impl Refused {
     /// What the user is told.
-    pub(crate) fn notice(&self) -> String {
+    pub(crate) fn notice(&self, strings: &pmt_i18n::Strings) -> String {
         match self {
-            Self::TooLarge(seen, limit) => {
-                format!(
-                    "Attachment too large ({} MB > {} MB)",
-                    mb(*seen),
-                    mb(*limit)
-                )
-            }
-            Self::Failed(why) => format!("An attachment could not be downloaded: {why}"),
+            Self::TooLarge(seen, limit) => pmt_i18n::t!(
+                strings,
+                "gateway.attachment_too_large",
+                size = mb(*seen),
+                max = mb(*limit)
+            ),
+            Self::Failed(why) => pmt_i18n::t!(strings, "gateway.attachment_failed", why = why),
             Self::Unsupported => String::new(),
         }
     }
@@ -184,7 +183,8 @@ mod tests {
 
     #[test]
     fn the_notice_states_both_sizes_in_megabytes() {
-        let notice = Refused::TooLarge(200 * 1024 * 1024, 128 * 1024 * 1024).notice();
+        let english = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
+        let notice = Refused::TooLarge(200 * 1024 * 1024, 128 * 1024 * 1024).notice(&english);
         assert_eq!(notice, "Attachment too large (200 MB > 128 MB)");
     }
 }

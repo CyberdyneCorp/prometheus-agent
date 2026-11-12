@@ -36,6 +36,13 @@ pub struct Session<'a> {
     pub host: Host,
 }
 
+impl Session<'_> {
+    /// The profile's strings now (the status lines).
+    fn strings(&self) -> std::sync::Arc<pmt_i18n::Strings> {
+        pmt_config::language::strings(self.live.config.get().dir(), pmt_i18n::Surface::Core)
+    }
+}
+
 /// How a turn ended.
 #[derive(Debug, Clone, Copy)]
 pub struct Ended<'a> {
@@ -118,9 +125,11 @@ async fn loop_end(session: &Session<'_>, ended: Ended<'_>, limits: &Limits, next
     let store = &session.factory.store;
     let id = session.live.id;
     let now = now_ms();
+    let strings = session.strings();
     let end = modify(store, id, |st| {
         let looping = st.automation.looping.as_mut()?;
-        let end = cadence::after_loop_turn(looping, ended.reply, ended.interrupted, now, limits);
+        let (reply, interrupted) = (ended.reply, ended.interrupted);
+        let end = cadence::after_loop_turn(&*strings, looping, reply, interrupted, now, limits);
         let until = looping.until.clone();
         settle_loop(&mut st.automation, &end);
         Some((end, until))
@@ -142,7 +151,7 @@ async fn loop_end(session: &Session<'_>, ended: Ended<'_>, limits: &Limits, next
                     .automation
                     .looping
                     .as_mut()
-                    .map_or(LoopEnd::Next, |l| cadence::until(l, verdict));
+                    .map_or(LoopEnd::Next, |l| cadence::until(&*strings, l, verdict));
                 settle_loop(&mut st.automation, &end);
                 end
             })
@@ -198,10 +207,11 @@ async fn goal_boundary(
     let store = &session.factory.store;
     let id = session.live.id;
     let probe = LocalProbe::of(id);
+    let strings = session.strings();
     if !goal.gates.is_empty() {
         let runs = super::gates::run(id, &goal.gates, gate_timeout).await;
         let red = modify(store, id, |st| {
-            same(st, goal).map(|g| goal::gates(g, &runs, limits))
+            same(st, goal).map(|g| goal::gates(&*strings, g, &runs, limits))
         });
         match red {
             Ok(Some(Some(step))) => return Some(step),
@@ -221,7 +231,7 @@ async fn goal_boundary(
     });
     let now = now_ms();
     modify(store, id, |st| {
-        same(st, goal).map(|g| goal::verdict(g, verdict, limits, now, &probe))
+        same(st, goal).map(|g| goal::verdict(&*strings, g, verdict, limits, now, &probe))
     })
     .inspect_err(|err| tracing::warn!(error = %err, "goal state not saved"))
     .ok()
@@ -254,6 +264,7 @@ fn restore(stored: &mut Stored, hidden: Automation) {
 /// one) and status lines (a goal that paused when its barrier released).
 #[must_use]
 pub fn due(
+    text: &dyn pmt_core::text::Catalog,
     store: &Store,
     id: SessionId,
     host: Host,
@@ -264,7 +275,7 @@ pub fn due(
     let found = modify(store, id, |st| {
         let before = st.clone();
         let hidden = hidden(st, host);
-        let (wakeup, notice) = arbiter::due(&mut st.automation, now, limits, &probe);
+        let (wakeup, notice) = arbiter::due(text, &mut st.automation, now, limits, &probe);
         restore(st, hidden);
         let reserved = wakeup.map(|wakeup| Reserved {
             wakeup,
@@ -345,6 +356,10 @@ mod tests {
 
     use super::*;
 
+    fn english() -> std::sync::Arc<pmt_i18n::Strings> {
+        pmt_i18n::Strings::english(pmt_i18n::Surface::Core)
+    }
+
     fn store() -> (tempfile::TempDir, Store, SessionId) {
         let root = tempfile::tempdir().unwrap();
         let home = pmt_config::Home::open(root.path()).unwrap();
@@ -391,7 +406,7 @@ mod tests {
         let (_root, store, id) = store();
         set_loop(&store, id);
         let before = looping(&store, id);
-        let (reserved, _) = due(&store, id, Host::Line, &Limits::default());
+        let (reserved, _) = due(&*english(), &store, id, Host::Line, &Limits::default());
         let reserved = reserved.expect("the new loop's first wakeup is due");
         assert_eq!(looping(&store, id).unwrap().fired, 1);
         refund(&store, id, reserved);
@@ -403,7 +418,7 @@ mod tests {
     fn a_refund_leaves_a_loop_stopped_since_alone() {
         let (_root, store, id) = store();
         set_loop(&store, id);
-        let (reserved, _) = due(&store, id, Host::Line, &Limits::default());
+        let (reserved, _) = due(&*english(), &store, id, Host::Line, &Limits::default());
         modify(&store, id, |st| st.automation.looping = None).unwrap();
         refund(&store, id, reserved.unwrap());
         assert_eq!(looping(&store, id), None);

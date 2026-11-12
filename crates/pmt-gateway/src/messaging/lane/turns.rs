@@ -23,10 +23,6 @@ use crate::messaging::agents::Conversation;
 use crate::messaging::key::Routing;
 use crate::messaging::peer;
 
-/// Told once when a suspended session is replaced.
-pub(crate) const SUSPENDED_NOTICE: &str = "Your previous session was suspended after repeated \
-    restarts while it was working; this is a fresh session.";
-
 /// A streamed answer being shown as one edited message.
 #[derive(Debug, Default)]
 pub(crate) struct Draft {
@@ -106,7 +102,7 @@ impl Lane {
             let session = self
                 .transition(routing, Some(ResetReason::Suspended), Some(id.to_string()))
                 .await?;
-            self.say(SUSPENDED_NOTICE);
+            self.say(self.strings().get("gateway.suspended_session"));
             return Ok(session);
         }
         let ended = store.session(id).map_or(true, |s| s.ended_at.is_some());
@@ -215,7 +211,8 @@ impl Lane {
     pub(super) async fn start_turn(&mut self, pending: Pending) {
         if let Some(pause) = pmt_core::pause::active(&self.shared.options.home) {
             tracing::info!(profile = self.profile, "turn refused: the home is paused");
-            self.say(&pause.notice());
+            let text = pause.notice(&*self.strings());
+            self.say(&text);
             return;
         }
         let session = match self.ensure_session(&pending.routing).await {

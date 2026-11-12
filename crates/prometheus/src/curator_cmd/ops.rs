@@ -32,6 +32,9 @@ pub(crate) struct Curator {
     pub(crate) scope: ProfileScope,
     pub(crate) store: Arc<Store>,
     pub(crate) launch: LaunchEnv,
+    /// How replies are worded: English for `prometheus curator`, the
+    /// profile's language for `/curator` ([`Curator::in_language`]).
+    pub(crate) text: Arc<pmt_i18n::Strings>,
 }
 
 /// `curator status`.
@@ -63,7 +66,15 @@ impl Curator {
             scope,
             store,
             launch,
+            text: pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
         })
+    }
+
+    /// The same curator, replying in the profile's language.
+    #[must_use]
+    pub(crate) fn in_language(mut self) -> Self {
+        self.text = pmt_config::language::strings(self.scope.dir(), pmt_i18n::Surface::Core);
+        self
     }
 
     fn catalog(&self) -> Catalog {
@@ -181,11 +192,12 @@ impl Curator {
     /// Store errors.
     pub(crate) fn pause(&self, paused: bool) -> Result<String, Error> {
         self.store.set_curator_paused(paused)?;
-        Ok(if paused {
-            "Curator paused: no automatic pass runs until `curator resume`.".to_owned()
+        let key = if paused {
+            "slash.curator.paused"
         } else {
-            "Curator resumed.".to_owned()
-        })
+            "slash.curator.resumed"
+        };
+        Ok(self.text.get(key).to_owned())
     }
 
     /// The local profile skill `name` (what pin, adopt and archive act on).
@@ -223,11 +235,12 @@ impl Curator {
             )
         })?;
         self.store.set_skill_pinned(&skill.name, pinned)?;
-        Ok(if pinned {
-            format!("Pinned '{}': the curator leaves it alone.", skill.name)
+        let key = if pinned {
+            "slash.curator.pinned"
         } else {
-            format!("Unpinned '{}'.", skill.name)
-        })
+            "slash.curator.unpinned"
+        };
+        Ok(self.text.fmt(key, &[("name", &skill.name)]))
     }
 
     /// `curator adopt <name>`.
@@ -238,10 +251,9 @@ impl Curator {
     pub(crate) fn adopt(&self, name: &str) -> Result<String, Error> {
         let skill = self.local(name)?;
         self.store.set_skill_adopted(&skill.name, true)?;
-        Ok(format!(
-            "Adopted '{}': the curator manages it from now on.",
-            skill.name
-        ))
+        Ok(self
+            .text
+            .fmt("slash.curator.adopted", &[("name", &skill.name)]))
     }
 
     /// `curator list-unmanaged`: the profile's own skills the curator
@@ -308,7 +320,10 @@ impl Curator {
             Actor::User,
             &Evidence::default(),
         )?;
-        Ok(format!("Archived '{}' to skills/{to}.", skill.name))
+        Ok(self.text.fmt(
+            "slash.curator.archived",
+            &[("name", &skill.name), ("to", &to)],
+        ))
     }
 
     /// `curator restore <name>`.
@@ -324,9 +339,7 @@ impl Curator {
             name,
             Actor::User,
         )?;
-        Ok(format!(
-            "Restored '{name}'; it loads from the next session."
-        ))
+        Ok(self.text.fmt("slash.curator.restored", &[("name", &name)]))
     }
 
     /// `curator prune --days <n>`: archives managed skills idle that long
@@ -448,28 +461,31 @@ impl Curator {
 
 /// The ledger rows as text.
 #[must_use]
-pub(crate) fn ledger_text(entries: &[Entry]) -> String {
+pub(crate) fn ledger_text(catalog: &dyn pmt_core::text::Catalog, entries: &[Entry]) -> String {
     use std::fmt::Write as _;
     let mut text = String::new();
     for e in entries {
         let extra = e
             .absorbed_into
             .as_deref()
-            .map(|into| format!("  -> absorbed into '{into}'"))
+            .map(|into| {
+                let into = catalog.text("slash.curator.absorbed", &[("into", &into)]);
+                format!("  -> {into}")
+            })
             .unwrap_or_default();
+        let files = catalog.text("slash.curator.files", &[("count", &e.files.len())]);
         let _ = writeln!(
             text,
-            "{:<6} {} {:<8} {:<11} {} ({} file(s)){extra}",
+            "{:<6} {} {:<8} {:<11} {} ({files}){extra}",
             e.label(),
             e.at.strftime("%Y-%m-%d %H:%M"),
             e.actor,
             e.action,
             e.skill,
-            e.files.len()
         );
     }
     if text.is_empty() {
-        text.push_str("The skill ledger is empty.\n");
+        let _ = writeln!(text, "{}", catalog.text("slash.curator.ledger_empty", &[]));
     }
     text
 }

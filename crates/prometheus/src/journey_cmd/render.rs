@@ -9,6 +9,7 @@ use std::io::Write as _;
 use std::time::Duration;
 
 use jiff::Timestamp;
+use pmt_core::text::Catalog;
 use pmt_rpc::contracts::JourneyNode;
 
 /// How the view is drawn.
@@ -32,9 +33,8 @@ impl Default for Style {
     }
 }
 
-/// What a journey with no node says.
-pub const EMPTY: &str = "Nothing learned yet: skills the agent creates or uses and memory \
-entries appear here as they are learned.";
+/// The catalog key of what a journey with no node says.
+pub const EMPTY: &str = "slash.journey.empty";
 
 const SKILL: char = '◆';
 const MEMORY: char = '●';
@@ -51,23 +51,42 @@ fn paint(text: &str, node: &JourneyNode, color: bool) -> String {
     format!("\x1b[{code}m{text}\x1b[0m")
 }
 
-/// The whole view of `nodes`.
+/// The whole view of `nodes`, in English (`prometheus journey`).
 #[must_use]
 pub fn view(nodes: &[JourneyNode], style: Style) -> String {
+    view_in(
+        &*pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+        nodes,
+        style,
+    )
+}
+
+/// The whole view of `nodes`, worded with `text` (`/journey`).
+#[must_use]
+pub fn view_in(text: &dyn Catalog, nodes: &[JourneyNode], style: Style) -> String {
     if nodes.is_empty() {
-        return format!("{EMPTY}\n");
+        return format!("{}\n", text.text(EMPTY, &[]));
     }
     let skills = nodes.iter().filter(|n| n.kind == "skill").count();
-    let mut out = format!(
-        "Learning journey: {skills} skill{}, {} memor{} (oldest first)\n\n",
-        if skills == 1 { "" } else { "s" },
-        nodes.len() - skills,
-        if nodes.len() - skills == 1 {
-            "y"
-        } else {
-            "ies"
-        },
+    let memories = nodes.len() - skills;
+    let count = |n: usize, one: &str, many: &str| {
+        text.text(if n == 1 { one } else { many }, &[("count", &n)])
+    };
+    let skills = count(
+        skills,
+        "slash.journey.skill_one",
+        "slash.journey.skill_many",
     );
+    let memories = count(
+        memories,
+        "slash.journey.memory_one",
+        "slash.journey.memory_many",
+    );
+    let heading = text.text(
+        "slash.journey.heading",
+        &[("skills", &skills), ("memories", &memories)],
+    );
+    let mut out = format!("{heading}\n\n");
     if style.height > 0 {
         out.push_str(&constellation(nodes, style));
         out.push('\n');
@@ -264,6 +283,10 @@ mod tests {
 
     #[test]
     fn an_empty_journey_says_so() {
-        assert_eq!(view(&[], Style::default()), format!("{EMPTY}\n"));
+        let english = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
+        assert_eq!(
+            view(&[], Style::default()),
+            format!("{}\n", english.get(EMPTY))
+        );
     }
 }

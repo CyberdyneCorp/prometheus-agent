@@ -283,7 +283,7 @@ after the subscription lapsed fails with `auth.plan_not_eligible` pointing
 at the portal.
 
 ```sh
-prometheus setup --portal          # sign in, make nous the main provider, offer to route every category
+prometheus setup --portal          # sign in; show, then write: nous main route, web/image/tts via the gateway
 prometheus portal status           # sign-in, plan and per-category routing
 prometheus portal tools --route image_generation --route tts
 prometheus portal open             # the portal's plan page

@@ -221,6 +221,9 @@ pub struct PluginGrants {
     subject: Subject,
     requested: CapabilitySet,
     live: LiveGrants,
+    /// What was refused so far, in order (the conformance kit's
+    /// capability-grant check reads it).
+    refused: std::sync::Mutex<Vec<String>>,
 }
 
 impl PluginGrants {
@@ -231,7 +234,25 @@ impl PluginGrants {
             subject: identity.subject(),
             requested,
             live: LiveGrants::new(file),
+            refused: std::sync::Mutex::default(),
         }
+    }
+
+    /// Records a refused capability (`network exfil.example.net`).
+    pub fn note_refused(&self, what: &str) {
+        self.refused
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(what.to_owned());
+    }
+
+    /// Every capability refused to this instance so far, in order.
+    #[must_use]
+    pub fn refused(&self) -> Vec<String> {
+        self.refused
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     /// Whose grants these are (`plugin:<id>@<digest>`).
@@ -263,7 +284,9 @@ impl PluginGrants {
         if self.current().allows(capability) {
             Ok(())
         } else {
-            Err(denied(&label(capability)))
+            let what = label(capability);
+            self.note_refused(&what);
+            Err(denied(&what))
         }
     }
 }

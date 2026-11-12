@@ -98,10 +98,15 @@ impl Switcher {
 
     /// The overlay's lines for `width` columns and at most `rows` lines.
     #[must_use]
-    pub fn lines(&self, width: u16, rows: usize, theme: &Theme) -> Vec<Line<'static>> {
+    pub fn lines(
+        &self,
+        width: u16,
+        rows: usize,
+        theme: &Theme,
+        strings: &pmt_i18n::Strings,
+    ) -> Vec<Line<'static>> {
         let width = usize::from(width).max(1);
-        let hint =
-            "sessions: ↑↓ select · Enter switch · Ctrl+D close · Ctrl+N new · Ctrl+R refresh · Esc";
+        let hint = strings.get("tui.switcher_hint");
         let mut lines = vec![Line::from(Span::styled(truncate(hint, width), theme.card))];
         // The hint and `+new` take a row each; the window follows the
         // highlight, keeping the last sessions in view on `+new`.
@@ -110,17 +115,26 @@ impl Switcher {
         let first = (anchor + 1).saturating_sub(shown);
         for (n, row) in self.rows.iter().enumerate().skip(first).take(shown) {
             let mark = if row.shown { '›' } else { ' ' };
-            let title = row.title.as_deref().unwrap_or("untitled");
-            let busy = if row.busy { "  running" } else { "" };
-            let text = format!("{mark} {}  {title}{busy}", row.id);
+            let title = row
+                .title
+                .as_deref()
+                .unwrap_or_else(|| strings.get("tui.untitled"));
+            let mut text = format!("{mark} {}  {title}", row.id);
+            if row.busy {
+                text.push_str("  ");
+                text.push_str(strings.get("tui.running"));
+            }
             lines.push(self.row(n, &text, width, theme));
         }
         let new = match &self.draft {
             Some(draft) => {
-                let model = draft.model.as_deref().unwrap_or("default model");
-                format!("+new [{model}, Tab changes] › {}", draft.prompt)
+                let model = draft
+                    .model
+                    .as_deref()
+                    .unwrap_or_else(|| strings.get("tui.default_model"));
+                pmt_i18n::t!(strings, "tui.new_draft", 0 = model, 1 = draft.prompt)
             }
-            None => "+new".to_owned(),
+            None => pmt_i18n::t!(strings, "tui.new_session"),
         };
         lines.push(self.row(self.rows.len(), &new, width, theme));
         lines

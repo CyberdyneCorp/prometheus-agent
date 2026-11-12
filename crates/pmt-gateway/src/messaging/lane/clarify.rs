@@ -26,9 +26,6 @@ use crate::messaging::adapter::{Button, Interactive, Select};
 use crate::messaging::cards::{self, Card, CardKind};
 use crate::messaging::key::Routing;
 
-/// Told to someone other than the asker who presses a choice.
-pub(crate) const NOT_THE_ASKER: &str = "Only the person who asked may answer this.";
-
 /// An open clarify request.
 #[derive(Debug, Clone)]
 pub(crate) struct Clarify {
@@ -110,24 +107,27 @@ impl Lane {
         let index = clarify.answers.len();
         let question = &clarify.questions[index];
         let options = choices(question);
+        let strings = self.strings();
         let title = if clarify.questions.len() > 1 {
-            format!("Question {}/{}", index + 1, clarify.questions.len())
+            let total = clarify.questions.len();
+            pmt_i18n::t!(strings, "gateway.question_of", n = index + 1, total = total)
         } else {
-            "Question".to_owned()
+            pmt_i18n::t!(strings, "gateway.question")
         };
         let card = Card {
             title,
             details: vec![question["question"].as_str().unwrap_or("?").to_owned()],
             deadline_ms: clarify.left_ms(),
-            on_expiry: "unanswered, the agent goes on without it",
+            on_expiry: pmt_i18n::t!(strings, "gateway.question_on_expiry"),
         };
-        let mut text = card.text(&Zoned::now());
+        let mut text = card.text(&strings, &Zoned::now());
         for (n, choice) in options.iter().enumerate() {
             let _ = write!(text, "\n{}. {}", n + 1, cards::visible(choice));
         }
         let multi = question["multi"].as_bool().unwrap_or(false);
         if multi {
-            text.push_str(MULTIPLE);
+            text.push('\n');
+            text.push_str(strings.get("gateway.multiple_allowed"));
         }
         let native = self.tier() == Interactive::Native;
         let select = (native && multi && !options.is_empty()).then(|| Select {
@@ -170,7 +170,10 @@ impl Lane {
         }
         match clarify_answer(&clarify.questions[clarify.answers.len()], text) {
             Ok(answer) => self.record_clarify_answer(answer),
-            Err(count) => self.say(&format!("Valid choices are 1-{count}.")),
+            Err(count) => {
+                let text = pmt_i18n::t!(self.strings(), "gateway.valid_choices", count = count);
+                self.say(&text);
+            }
         }
         true
     }
@@ -189,7 +192,7 @@ impl Lane {
             return;
         };
         if !clarify.theirs(&routing.sender_id) {
-            self.say_privately(routing, NOT_THE_ASKER);
+            self.say_privately(routing, self.strings().get("gateway.not_the_asker"));
             return;
         }
         let chosen = choice.split_once('.').and_then(|(q, n)| {
@@ -244,9 +247,6 @@ impl Lane {
         );
     }
 }
-
-/// Appended to a multi-select question.
-const MULTIPLE: &str = "\nMultiple selections allowed";
 
 /// The clarify answer a chat message stands for: choice numbers (commas
 /// or spaces between them on a multi-select question), option texts, or

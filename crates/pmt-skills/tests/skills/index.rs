@@ -233,7 +233,10 @@ async fn skills_change_is_deferred_unless_now() {
     let hash = prompt_hash(&profile, session.id);
     let reply = activation::run(&session.skills, "disable terraform", &[]).unwrap();
     assert!(
-        reply.text.ends_with(DEFERRED) && !reply.rebuild_now,
+        reply
+            .text
+            .ends_with(pmt_i18n::Strings::english(pmt_i18n::Surface::Core).get(DEFERRED))
+            && !reply.rebuild_now,
         "{}",
         reply.text
     );

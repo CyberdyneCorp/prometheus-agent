@@ -97,6 +97,8 @@ struct Repl {
     last_interrupt: Option<Instant>,
     start: Start,
     confirm_destructive: bool,
+    /// `/exit --delete` ended the session: delete it after closing.
+    delete_on_exit: bool,
     /// Images that go with the next prompt (`/image`, `--image`).
     attachments: Vec<crate::chat::attach::Image>,
     /// `!!` blocks that go with the next prompt.
@@ -169,10 +171,12 @@ async fn sleep_until(at: Option<tokio::time::Instant>) {
 fn print_notices(
     mut notices: mpsc::UnboundedReceiver<pmt_tools::terminal::process::Notice>,
     printer: input::Printer,
+    strings: std::sync::Arc<pmt_i18n::Strings>,
 ) -> tokio::task::JoinHandle<()> {
     pmt_core::spawn::spawn(async move {
         while let Some(notice) = notices.recv().await {
-            printer.print(&format!("[background] {}", notice.text()));
+            let line = pmt_i18n::t!(strings, "display.background", text = notice.text());
+            printer.print(&line);
         }
     })
 }
@@ -234,6 +238,7 @@ pub async fn run(
         attachments: start.images.clone(),
         start,
         confirm_destructive: config.cli.confirm_destructive,
+        delete_on_exit: false,
         shell_context: Vec::new(),
         running: false,
         status_bar,
@@ -242,7 +247,7 @@ pub async fn run(
         mouth: None,
     };
     repl.attach(live);
-    let notices = print_notices(asks.notices, repl.input.printer());
+    let notices = print_notices(asks.notices, repl.input.printer(), repl.strings());
     if let Some(prompt) = &asks.secret_prompt {
         prompt.listen();
     }
@@ -287,8 +292,33 @@ impl Repl {
                 break;
             }
         }
+        let id = self.live.as_ref().map(|live| live.id);
         self.finish(EndReason::UserExit).await;
-        0
+        match id {
+            Some(id) if self.delete_on_exit => self.delete_session(id),
+            _ => 0,
+        }
+    }
+
+    /// `/exit --delete`: the ended session goes, per the store's deletion
+    /// semantics; exit 0 once it is gone.
+    fn delete_session(&self, id: pmt_core::id::SessionId) -> u8 {
+        match self.factory.store.delete_session(id, false) {
+            Ok(deleted) => {
+                let ids: Vec<String> = deleted.sessions.iter().map(ToString::to_string).collect();
+                crate::plugins_host::sessions_deleted(&self.factory.scope, &ids);
+                self.notice(&pmt_i18n::t!(
+                    self.strings(),
+                    "cli.session_deleted",
+                    id = id
+                ));
+                0
+            }
+            Err(err) => {
+                self.error(&err);
+                err.exit_code()
+            }
+        }
     }
 
     /// Reads and handles one event at the idle prompt.
@@ -308,7 +338,7 @@ impl Repl {
                 return Flow::Continue;
             }
             Some(completion) = self.completions.recv() => {
-                self.notice("Background subagents finished; their results go to the agent.");
+                self.notice(self.strings().get("cli.subagents_done"));
                 self.queue.push_back(completion);
                 return Flow::Continue;
             }
@@ -349,7 +379,7 @@ impl Repl {
             return Flow::Exit;
         }
         self.last_interrupt = Some(now);
-        self.notice("(press Ctrl+C again or Ctrl+D to exit)");
+        self.notice(self.strings().get("cli.press_again"));
         Flow::Continue
     }
 
@@ -479,11 +509,19 @@ impl Repl {
         }
     }
 
+    /// The profile's UI strings now (spec: i18n): a language or overlay
+    /// change shows at the next prompt, and never reaches the model.
+    fn strings(&self) -> std::sync::Arc<pmt_i18n::Strings> {
+        pmt_config::language::strings(self.factory.scope.dir(), pmt_i18n::Surface::Core)
+    }
+
     fn prompt(&self) -> String {
         let symbol = match &self.pending {
-            Some(pending) => pending.prompt(),
-            None if self.display.focus.is_some() => "focus › ".to_owned(),
-            None => "› ".to_owned(),
+            Some(pending) => pending.prompt(&self.strings()),
+            None if self.display.focus.is_some() => {
+                pmt_i18n::t!(self.strings(), "display.focus_prompt")
+            }
+            None => self.display.theme.prompt_symbol(),
         };
         self.display
             .theme
@@ -500,35 +538,41 @@ impl Repl {
             target.provider,
             target.model.as_deref().unwrap_or("default")
         );
+        let branding = self.display.theme.branding.clone();
+        let agent = branding.agent_name.as_deref().unwrap_or("Prometheus");
         let banner = if self.factory.scope.config().display.compact {
-            format!("Prometheus {} · {model}", crate::build_info::VERSION)
+            format!("{agent} {} · {model}", crate::build_info::VERSION)
         } else {
-            format!(
-                "Prometheus {} · profile {} · {model} · /help for commands",
-                crate::build_info::VERSION,
-                self.factory.scope.name()
+            pmt_i18n::t!(
+                self.strings(),
+                "display.banner",
+                agent = agent,
+                version = crate::build_info::VERSION,
+                profile = self.factory.scope.name(),
+                model = model
             )
         };
+        if let Some(art) = &branding.banner {
+            self.say(Role::Accent, art);
+        }
         self.say(Role::Accent, &banner);
         // Spec: security-boundaries, Hardening downgrades are never silent.
         if let Some(marker) = self.live().downgrades.banner_marker() {
-            self.say(Role::Error, &format!("degraded: {marker}"));
+            let line = pmt_i18n::t!(self.strings(), "display.degraded", marker = marker);
+            self.say(Role::Error, &line);
         }
-        self.tip(
-            "slash-help",
-            "Tip: type /help for the commands, /status for this session",
-        );
+        self.tip("slash-help", "tips.slash_help");
     }
 
-    /// Shows the one-time tip `id` unless this profile has seen it (spec:
-    /// cli, Onboarding state).
-    fn tip(&self, id: &str, text: &str) {
+    /// Shows the one-time tip `id` (its text is catalog key `key`) unless
+    /// this profile has seen it (spec: cli, Onboarding state).
+    fn tip(&self, id: &str, key: &str) {
         match self
             .factory
             .store
             .mark_onboarding(pmt_store::onboarding::Step::Tip, id)
         {
-            Ok(true) => self.notice(text),
+            Ok(true) => self.notice(self.strings().get(key)),
             Ok(false) => {}
             Err(err) => tracing::warn!(error = %err, "cannot record the onboarding tip"),
         }
@@ -543,9 +587,12 @@ impl Repl {
         ) else {
             return;
         };
-        if let Some(text) =
-            super::recap::render(&session, &messages, &self.factory.scope.config().display)
-        {
+        if let Some(text) = super::recap::render(
+            &self.strings(),
+            &session,
+            &messages,
+            &self.factory.scope.config().display,
+        ) {
             self.say(Role::Notice, &text);
         }
     }

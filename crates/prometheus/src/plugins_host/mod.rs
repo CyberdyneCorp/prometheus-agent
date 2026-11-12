@@ -12,12 +12,14 @@
 //! once in running sessions; tools, system-prompt sections and skills are
 //! read when a session starts and stay as they were for its lifetime.
 
+pub mod adapter;
 pub mod approvals;
 pub mod bridge;
 pub mod catalog;
 #[cfg(feature = "gateway")]
 pub mod gateway;
 pub mod llm;
+mod locales;
 #[cfg(feature = "gateway")]
 pub mod messaging;
 mod outside;
@@ -26,6 +28,8 @@ pub mod providers;
 pub mod reload;
 pub mod subagents;
 pub mod terminal;
+
+pub use locales::language_packs;
 
 use std::collections::HashMap;
 use std::fmt::Write as _;

@@ -531,6 +531,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "testing-adapter"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "wit-bindgen",
+]
+
+[[package]]
+name = "testing-adapter-nosend"
+version = "0.1.0"
+dependencies = [
+ "wit-bindgen",
+]
+
+[[package]]
 name = "testing-backend"
 version = "0.1.0"
 dependencies = [

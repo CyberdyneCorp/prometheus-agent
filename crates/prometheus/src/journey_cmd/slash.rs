@@ -39,17 +39,21 @@ pub fn run(
     user_home: Option<&Path>,
     args: &str,
 ) -> Result<String, Error> {
+    let strings = pmt_config::language::strings(scope.dir(), pmt_i18n::Surface::Core);
     let journey = Journey {
         scope,
         store,
         user_home,
+        text: &*strings,
     };
     let args = args.trim();
     let (verb, rest) = args.split_once(char::is_whitespace).unwrap_or((args, ""));
     let nodes = || nodes::list(scope, store, user_home, None).map(|l| l.nodes);
     match verb {
-        "" => Ok(render::view(&nodes()?, CHAT).trim_end().to_owned()),
-        "list" => Ok(listing(&nodes()?).trim_end().to_owned()),
+        "" => Ok(render::view_in(journey.text, &nodes()?, CHAT)
+            .trim_end()
+            .to_owned()),
+        "list" => Ok(listing(journey.text, &nodes()?).trim_end().to_owned()),
         "delete" => delete(&journey, rest),
         "edit" => edit(&journey, rest),
         _ => Err(Error::new(&codes::CLI_USAGE, USAGE)),
@@ -63,8 +67,9 @@ fn delete(journey: &Journey<'_>, rest: &str) -> Result<String, Error> {
     if !yes {
         let what = journey.describe(&node)?;
         let id = rest.split_whitespace().next().unwrap_or_default();
-        return Ok(format!(
-            "This would {what}. Send /journey delete {id} --yes to do it."
+        return Ok(journey.text.text(
+            "slash.journey.confirm_delete",
+            &[("what", &what), ("id", &id)],
         ));
     }
     journey.delete(&node)
@@ -78,19 +83,17 @@ fn edit(journey: &Journey<'_>, rest: &str) -> Result<String, Error> {
     let node = Node::parse(id)?;
     if text.trim().is_empty() {
         let current = journey.text(&node)?;
-        return Ok(format!(
-            "{}\n\nSend /journey edit {id} <new text> to replace it, or run prometheus journey edit {id} in a terminal to open it in $EDITOR.",
-            current.trim_end()
-        ));
+        let hint = journey.text.text("slash.journey.edit_hint", &[("id", &id)]);
+        return Ok(format!("{}\n\n{hint}", current.trim_end()));
     }
     journey.apply(&node, text)
 }
 
 /// One line per node: id, kind, origin, created, title.
 #[must_use]
-pub fn listing(nodes: &[JourneyNode]) -> String {
+pub fn listing(text: &dyn pmt_core::text::Catalog, nodes: &[JourneyNode]) -> String {
     if nodes.is_empty() {
-        return format!("{}\n", render::EMPTY);
+        return format!("{}\n", text.text(render::EMPTY, &[]));
     }
     let width = nodes.iter().map(|n| n.id.len()).max().unwrap_or(0);
     let mut out = String::new();

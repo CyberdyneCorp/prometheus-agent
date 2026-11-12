@@ -114,18 +114,19 @@ pub(crate) struct Card {
     /// Milliseconds until the request settles unanswered.
     pub(crate) deadline_ms: Option<u64>,
     /// What happens when nobody answers in time.
-    pub(crate) on_expiry: &'static str,
+    pub(crate) on_expiry: String,
 }
 
 impl Card {
     /// The title, details and expiry line, as of `now`.
-    pub(crate) fn text(&self, now: &Zoned) -> String {
+    pub(crate) fn text(&self, strings: &pmt_i18n::Strings, now: &Zoned) -> String {
         let mut text = visible(&self.title);
         for line in &self.details {
             let _ = write!(text, "\n{}", visible(line));
         }
         if let Some(ms) = self.deadline_ms {
-            let _ = write!(text, "\n{}", expiry_line(ms, now, self.on_expiry));
+            let line = expiry_line(strings, ms, now, &self.on_expiry);
+            let _ = write!(text, "\n{line}");
         }
         text
     }
@@ -134,18 +135,31 @@ impl Card {
 /// `Expires at 14:05 UTC (in 5 min); <on_expiry>`: a chat message cannot
 /// count down, so the wall-clock time is shown with the span it was sent
 /// with.
-pub(crate) fn expiry_line(deadline_ms: u64, now: &Zoned, on_expiry: &str) -> String {
+pub(crate) fn expiry_line(
+    strings: &pmt_i18n::Strings,
+    deadline_ms: u64,
+    now: &Zoned,
+    on_expiry: &str,
+) -> String {
     let span = SignedDuration::from_millis(i64::try_from(deadline_ms).unwrap_or(i64::MAX));
     let at = now.checked_add(span).map_or_else(
-        |_| "later".to_owned(),
+        |_| strings.get("gateway.card_expires_later").to_owned(),
         |at| at.strftime("%H:%M %Z").to_string(),
     );
     let left = if deadline_ms < 60_000 {
-        format!("{} s", deadline_ms.div_ceil(1000))
+        pmt_i18n::t!(
+            strings,
+            "gateway.span_seconds",
+            n = deadline_ms.div_ceil(1000)
+        )
     } else {
-        format!("{} min", deadline_ms.div_ceil(60_000))
+        pmt_i18n::t!(
+            strings,
+            "gateway.span_minutes",
+            n = deadline_ms.div_ceil(60_000)
+        )
     };
-    let mut line = format!("Expires at {at} (in {left})");
+    let mut line = pmt_i18n::t!(strings, "gateway.card_expires", at = at, left = left);
     if !on_expiry.is_empty() {
         let _ = write!(line, "; {on_expiry}");
     }
@@ -178,16 +192,31 @@ pub(crate) fn label(text: &str) -> String {
 }
 
 /// How a card's choices are offered in its text, per interactive tier.
-pub(crate) fn instructions(tier: Interactive, id: &str) -> String {
+pub(crate) fn instructions(strings: &pmt_i18n::Strings, tier: Interactive, id: &str) -> String {
     match tier {
         Interactive::Native => String::new(),
         Interactive::Numbered => format!(
-            "\n1 Once / 2 Session / 3 Always / 4 Deny / 5 Explain\nReply with the number (or the word), optionally followed by {id}."
+            "\n{}\n{}",
+            strings.get("gateway.card_numbered_choices"),
+            pmt_i18n::t!(strings, "gateway.card_numbered_hint", id = id)
         ),
         Interactive::None => format!(
-            "\nReply /approve {id} once, /approve {id} session, /approve {id} always, /approve {id} explain or /deny {id}."
+            "\n{}",
+            pmt_i18n::t!(strings, "gateway.card_command_hint", id = id)
         ),
     }
+}
+
+/// The button label of approval choice `choice` (`once`...).
+pub(crate) fn choice_label(strings: &pmt_i18n::Strings, choice: &str) -> String {
+    let key = match choice {
+        "once" => "gateway.choice_once",
+        "session" => "gateway.choice_session",
+        "always" => "gateway.choice_always",
+        "deny" => "gateway.choice_deny",
+        _ => "gateway.choice_explain",
+    };
+    strings.get(key).to_owned()
 }
 
 /// The choice a numbered reply stands for (`1`..`4` or the word,
@@ -247,12 +276,13 @@ mod tests {
     #[test]
     fn the_expiry_shows_the_wall_clock_time_and_the_span() {
         let now: Zoned = "2026-11-02T14:00:00+00:00[UTC]".parse().unwrap();
+        let english = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
         assert_eq!(
-            expiry_line(300_000, &now, "unanswered, it is denied"),
+            expiry_line(&english, 300_000, &now, "unanswered, it is denied"),
             "Expires at 14:05 UTC (in 5 min); unanswered, it is denied"
         );
         assert_eq!(
-            expiry_line(2_500, &now, ""),
+            expiry_line(&english, 2_500, &now, ""),
             "Expires at 14:00 UTC (in 3 s)"
         );
     }

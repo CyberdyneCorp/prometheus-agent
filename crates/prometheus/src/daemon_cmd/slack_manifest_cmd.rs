@@ -52,11 +52,18 @@ pub struct SlackManifestArgs {
 fn slash_commands(ctx: &Context<'_>) -> Result<Vec<Value>, Error> {
     let scope = ctx.scope()?;
     let registry = profile_registry(&scope);
+    let strings = pmt_config::language::strings(scope.dir(), pmt_i18n::Surface::Core);
     let builtins = registry
         .builtins()
         .iter()
         .filter(|c| c.on(Surface::Gateway))
-        .map(|c| (c.name.to_owned(), c.description.to_owned(), c.usage()));
+        .map(|c| {
+            (
+                c.name.to_owned(),
+                c.description(&strings).to_owned(),
+                c.usage(),
+            )
+        });
     let externals = registry
         .externals()
         .filter(|e| e.surfaces.contains(&Surface::Gateway))

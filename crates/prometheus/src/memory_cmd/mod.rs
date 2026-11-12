@@ -175,7 +175,11 @@ fn status(env: &Env) -> Result<u8, Error> {
     if env.json {
         return json(&status);
     }
-    print_raw(&format!("{}\n", pmt_memory::status::render(&status)))
+    let english = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
+    print_raw(&format!(
+        "{}\n",
+        pmt_memory::status::render(&*english, &status)
+    ))
 }
 
 fn list(
@@ -391,7 +395,8 @@ fn reply(env: &Env, args: &str) -> Result<u8, Error> {
         let pending = env.store.memory_pending()?;
         return json(&pending.iter().map(write::pending_json).collect::<Vec<_>>());
     }
-    let reply = slash::run(&env.store, env.config(), None, args)?;
+    let english = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
+    let reply = slash::run(&*english, &env.store, env.config(), None, args)?;
     print_raw(&format!("{}\n", reply.text))
 }
 

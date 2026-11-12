@@ -92,13 +92,27 @@ struct Report<'a> {
 }
 
 /// Runs `prompt` as the session's one turn and prints the outcome;
-/// returns the exit status.
-pub async fn run(live: &Live, input: TurnInput, json: bool, run_budget: Option<Duration>) -> u8 {
+/// returns the exit status and, for a streamed run, the closing `result`
+/// line, which the caller writes once the session has ended (its
+/// `session.end` comes before it).
+pub async fn run(
+    live: &Live,
+    input: TurnInput,
+    ui: super::Ui,
+    run_budget: Option<Duration>,
+) -> (u8, Option<super::stream::ResultLine>) {
+    // A streamed run's errors are JSON too: its reader parses every line.
+    let json = ui.json || ui.stream;
+    let closing = |answer: Option<&str>, usage: &serde_json::Value, reason: &str| {
+        ui.stream
+            .then(|| super::stream::result_line(&live.id.to_string(), answer, usage, reason))
+    };
+    let null = serde_json::Value::Null;
     // A paused home starts no turn (spec: messaging-gateway, Global
     // emergency pause): exit 69 with the pause notice.
     if let Err(err) = pmt_core::pause::check(live.scope.home()) {
         crate::output::print_error(&err, json);
-        return err.exit_code();
+        return (err.exit_code(), closing(None, &null, "paused"));
     }
     let mut options = TurnOptions::new(&CancelToken::new());
     options.run_budget = run_budget;
@@ -113,16 +127,28 @@ pub async fn run(live: &Live, input: TurnInput, json: bool, run_budget: Option<D
         Ok(result) => result,
         Err(err) => {
             crate::output::print_error(&err, json);
-            return err.exit_code();
+            return (err.exit_code(), closing(None, &null, "error"));
         }
     };
+    let usage = serde_json::to_value(result.usage).unwrap_or_default();
+    let answer = result.final_response.as_deref();
     if live.gate.unobtainable() > 0 {
         let err = Error::new(&codes::CHAT_APPROVAL_REQUIRED, APPROVAL_MESSAGE);
         print_message(&err, json);
-        return APPROVAL_REQUIRED;
+        return (
+            APPROVAL_REQUIRED,
+            closing(answer, &usage, "approval_required"),
+        );
     }
-    report(live, &result, json);
-    signal.unwrap_or_else(|| status(&result))
+    if ui.stream {
+        if let Some(err) = &result.error {
+            crate::output::print_error(err, true);
+        }
+    } else {
+        report(live, &result, json);
+    }
+    let status = signal.unwrap_or_else(|| status(&result));
+    (status, closing(answer, &usage, result.exit_reason.as_str()))
 }
 
 /// Awaits `turn`, stopping it on SIGINT/SIGTERM or as soon as the gate

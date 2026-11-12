@@ -53,6 +53,16 @@ impl Repeat {
         }
     }
 
+    /// The catalog key of the user's stop notice.
+    const fn notice_key(self) -> &'static str {
+        match self {
+            Self::ExactFailure => "display.guardrail_exact_failure",
+            Self::SameToolFailure => "display.guardrail_same_tool_failure",
+            Self::NoProgress => "display.guardrail_no_progress",
+        }
+    }
+
+    /// The English wording the model reads (tool results, errors).
     fn describe(self, tool: &str, count: u32) -> String {
         match self {
             Self::ExactFailure => format!(
@@ -65,6 +75,34 @@ impl Repeat {
                 "this {tool} call returned the same result {count} times; repeating it will not make progress"
             ),
         }
+    }
+}
+
+/// Why a turn must stop: the repetition that reached its hard stop.
+#[derive(Debug, Clone)]
+pub(super) struct Stop {
+    repeat: Repeat,
+    tool: String,
+    count: u32,
+}
+
+impl Stop {
+    /// The English error message (`turn.guardrail_stop`).
+    pub(super) fn message(&self) -> String {
+        format!(
+            "Stopped by the tool loop guardrail: {}.",
+            self.repeat.describe(&self.tool, self.count)
+        )
+    }
+
+    /// The notice the user reads, in the profile's language.
+    pub(super) fn notice(&self, strings: &pmt_i18n::Strings) -> String {
+        pmt_i18n::t!(
+            strings,
+            self.repeat.notice_key(),
+            tool = self.tool,
+            count = self.count
+        )
     }
 }
 
@@ -112,7 +150,7 @@ impl LoopGuard {
         call: &RequestedCall,
         result: &mut ToolResult,
         idempotent: bool,
-    ) -> Option<String> {
+    ) -> Option<Stop> {
         let mut reached = Vec::new();
         if result.status.succeeded() {
             if idempotent {
@@ -149,17 +187,16 @@ impl LoopGuard {
         tool: &str,
         result: &mut ToolResult,
         reached: &[(Repeat, u32)],
-    ) -> Option<String> {
+    ) -> Option<Stop> {
         let stop = reached
             .iter()
             .find(|(repeat, count)| {
                 self.hard_stop && *count >= repeat.threshold(&self.config.hard_stop_after)
             })
-            .map(|(repeat, count)| {
-                format!(
-                    "Stopped by the tool loop guardrail: {}.",
-                    repeat.describe(tool, *count)
-                )
+            .map(|&(repeat, count)| Stop {
+                repeat,
+                tool: tool.to_owned(),
+                count,
             });
         let warning = reached
             .iter()

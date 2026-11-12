@@ -170,6 +170,11 @@ pub struct ChatArgs {
     /// outcome.
     #[arg(long, value_name = "PATH")]
     pub usage_file: Option<PathBuf>,
+    /// Output of a one-shot run: the answer as text, one JSON object
+    /// (as `--json`), or every event as a JSON line ending with a
+    /// `result` line (`stream-json`, one-shot runs only).
+    #[arg(long, value_enum, value_name = "FORMAT")]
+    pub output_format: Option<crate::chat::stream::OutputFormat>,
     /// Script for the `mock` provider.
     #[arg(long, value_name = "PATH")]
     pub mock_script: Option<PathBuf>,

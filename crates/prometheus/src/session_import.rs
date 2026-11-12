@@ -146,6 +146,7 @@ fn session(v: &Value) -> Result<Session, String> {
         compaction_count: u32::try_from(count(v, "compaction_count")).unwrap_or(u32::MAX),
         rewind_count: u32::try_from(count(v, "rewind_count")).unwrap_or(u32::MAX),
         trajectory_purged_at: None,
+        project_id: None,
     })
 }
 

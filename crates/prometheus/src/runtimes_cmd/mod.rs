@@ -6,6 +6,7 @@
 
 pub mod args;
 pub mod browser;
+mod bundle;
 pub mod checks;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -39,7 +40,14 @@ pub fn run(command: &RuntimesCommand, ctx: &Context<'_>) -> Result<u8, Error> {
     let store = Store::open(root);
     match command {
         RuntimesCommand::List => list(&store, &config, ctx.json),
-        RuntimesCommand::Install { names } => install(ctx, &store, &config, names),
+        RuntimesCommand::Install {
+            names,
+            from_bundle: Some(file),
+        } => bundle::install(ctx, &store, &config, names, file),
+        RuntimesCommand::Install {
+            names,
+            from_bundle: None,
+        } => install(ctx, &store, &config, names),
         RuntimesCommand::Remove { name } => remove(&store, name),
         RuntimesCommand::Verify => verify(&store, ctx.json),
         RuntimesCommand::Gc => {
@@ -49,7 +57,9 @@ pub fn run(command: &RuntimesCommand, ctx: &Context<'_>) -> Result<u8, Error> {
         }
         RuntimesCommand::Doctor => checks::print_runtimes(root, ctx.json),
         RuntimesCommand::Exclude { command } => exclude(root, &config, command, ctx.json),
-        RuntimesCommand::Refresh => refresh(ctx, &store, &config),
+        RuntimesCommand::Refresh { bundle_dir } => {
+            refresh(ctx, &store, &config, bundle_dir.as_deref())
+        }
     }
 }
 
@@ -330,7 +340,12 @@ fn exclude(
 /// The updater's post-swap step, run by the new binary: install this
 /// build's pin of every runtime that has some version installed (never an
 /// excluded one), then collect what neither build pins.
-fn refresh(ctx: &Context<'_>, store: &Store, config: &DaemonConfig) -> Result<u8, Error> {
+fn refresh(
+    ctx: &Context<'_>,
+    store: &Store,
+    config: &DaemonConfig,
+    bundle_dir: Option<&Path>,
+) -> Result<u8, Error> {
     let in_use: Vec<String> = store
         .index()
         .names()
@@ -341,7 +356,10 @@ fn refresh(ctx: &Context<'_>, store: &Store, config: &DaemonConfig) -> Result<u8
         .map(str::to_owned)
         .collect();
     if !in_use.is_empty() {
-        let installer = installer(ctx, store.clone(), config);
+        let mut installer = installer(ctx, store.clone(), config);
+        if let Some(dir) = bundle_dir {
+            installer = installer.with_bundle(dir);
+        }
         for name in &in_use {
             block_on(installer.install(name))??;
             eprintln!("refreshed {name}");

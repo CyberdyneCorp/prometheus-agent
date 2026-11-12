@@ -2608,6 +2608,10 @@ pub mod prometheus {
                 pub session_id: _rt::String,
                 pub profile: _rt::String,
                 pub platform: _rt::String,
+                /// The caller identity that scopes long-term memory across
+                /// sessions (an API caller's `X-Prometheus-Session-Key`), when
+                /// there is one.
+                pub user_id: Option<_rt::String>,
             }
             impl ::core::fmt::Debug for SessionInfo {
                 fn fmt(
@@ -2618,6 +2622,7 @@ pub mod prometheus {
                         .field("session-id", &self.session_id)
                         .field("profile", &self.profile)
                         .field("platform", &self.platform)
+                        .field("user-id", &self.user_id)
                         .finish()
                 }
             }
@@ -2723,6 +2728,9 @@ pub mod exports {
                     arg3: usize,
                     arg4: *mut u8,
                     arg5: usize,
+                    arg6: i32,
+                    arg7: *mut u8,
+                    arg8: usize,
                 ) -> *mut u8 {
                     #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
                     let len0 = arg1;
@@ -2731,31 +2739,47 @@ pub mod exports {
                     let bytes1 = _rt::Vec::from_raw_parts(arg2.cast(), len1, len1);
                     let len2 = arg5;
                     let bytes2 = _rt::Vec::from_raw_parts(arg4.cast(), len2, len2);
-                    let result3 = T::initialize(super::super::super::super::prometheus::memory_provider::types::SessionInfo {
+                    let result4 = T::initialize(super::super::super::super::prometheus::memory_provider::types::SessionInfo {
                         session_id: _rt::string_lift(bytes0),
                         profile: _rt::string_lift(bytes1),
                         platform: _rt::string_lift(bytes2),
+                        user_id: match arg6 {
+                            0 => None,
+                            1 => {
+                                let e = {
+                                    let len3 = arg8;
+                                    let bytes3 = _rt::Vec::from_raw_parts(
+                                        arg7.cast(),
+                                        len3,
+                                        len3,
+                                    );
+                                    _rt::string_lift(bytes3)
+                                };
+                                Some(e)
+                            }
+                            _ => _rt::invalid_enum_discriminant(),
+                        },
                     });
-                    let ptr4 = (&raw mut _RET_AREA.0).cast::<u8>();
-                    match result3 {
+                    let ptr5 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result4 {
                         Ok(_) => {
-                            *ptr4.add(0).cast::<u8>() = (0i32) as u8;
+                            *ptr5.add(0).cast::<u8>() = (0i32) as u8;
                         }
                         Err(e) => {
-                            *ptr4.add(0).cast::<u8>() = (1i32) as u8;
-                            let vec5 = (e.into_bytes()).into_boxed_slice();
-                            let ptr5 = vec5.as_ptr().cast::<u8>();
-                            let len5 = vec5.len();
-                            ::core::mem::forget(vec5);
-                            *ptr4
+                            *ptr5.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec6 = (e.into_bytes()).into_boxed_slice();
+                            let ptr6 = vec6.as_ptr().cast::<u8>();
+                            let len6 = vec6.len();
+                            ::core::mem::forget(vec6);
+                            *ptr5
                                 .add(2 * ::core::mem::size_of::<*const u8>())
-                                .cast::<usize>() = len5;
-                            *ptr4
+                                .cast::<usize>() = len6;
+                            *ptr5
                                 .add(::core::mem::size_of::<*const u8>())
-                                .cast::<*mut u8>() = ptr5.cast_mut();
+                                .cast::<*mut u8>() = ptr6.cast_mut();
                         }
                     };
-                    ptr4
+                    ptr5
                 }
                 #[doc(hidden)]
                 #[allow(non_snake_case)]
@@ -2905,10 +2929,11 @@ pub mod exports {
                         #[unsafe (export_name =
                         "prometheus:memory-provider/plugin@1.0.0#initialize")] unsafe
                         extern "C" fn export_initialize(arg0 : * mut u8, arg1 : usize,
-                        arg2 : * mut u8, arg3 : usize, arg4 : * mut u8, arg5 : usize,) ->
-                        * mut u8 { unsafe { $($path_to_types)*::
-                        _export_initialize_cabi::<$ty > (arg0, arg1, arg2, arg3, arg4,
-                        arg5) } } #[unsafe (export_name =
+                        arg2 : * mut u8, arg3 : usize, arg4 : * mut u8, arg5 : usize,
+                        arg6 : i32, arg7 : * mut u8, arg8 : usize,) -> * mut u8 { unsafe
+                        { $($path_to_types)*:: _export_initialize_cabi::<$ty > (arg0,
+                        arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) } } #[unsafe
+                        (export_name =
                         "cabi_post_prometheus:memory-provider/plugin@1.0.0#initialize")]
                         unsafe extern "C" fn _post_return_initialize(arg0 : * mut u8,) {
                         unsafe { $($path_to_types)*:: __post_return_initialize::<$ty >
@@ -3352,6 +3377,9 @@ pub mod exports {
                     arg3: usize,
                     arg4: *mut u8,
                     arg5: usize,
+                    arg6: i32,
+                    arg7: *mut u8,
+                    arg8: usize,
                 ) -> *mut u8 {
                     #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
                     let len0 = arg1;
@@ -3360,31 +3388,47 @@ pub mod exports {
                     let bytes1 = _rt::Vec::from_raw_parts(arg2.cast(), len1, len1);
                     let len2 = arg5;
                     let bytes2 = _rt::Vec::from_raw_parts(arg4.cast(), len2, len2);
-                    let result3 = T::on_session_switch(super::super::super::super::prometheus::memory_provider::types::SessionInfo {
+                    let result4 = T::on_session_switch(super::super::super::super::prometheus::memory_provider::types::SessionInfo {
                         session_id: _rt::string_lift(bytes0),
                         profile: _rt::string_lift(bytes1),
                         platform: _rt::string_lift(bytes2),
+                        user_id: match arg6 {
+                            0 => None,
+                            1 => {
+                                let e = {
+                                    let len3 = arg8;
+                                    let bytes3 = _rt::Vec::from_raw_parts(
+                                        arg7.cast(),
+                                        len3,
+                                        len3,
+                                    );
+                                    _rt::string_lift(bytes3)
+                                };
+                                Some(e)
+                            }
+                            _ => _rt::invalid_enum_discriminant(),
+                        },
                     });
-                    let ptr4 = (&raw mut _RET_AREA.0).cast::<u8>();
-                    match result3 {
+                    let ptr5 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result4 {
                         Ok(_) => {
-                            *ptr4.add(0).cast::<u8>() = (0i32) as u8;
+                            *ptr5.add(0).cast::<u8>() = (0i32) as u8;
                         }
                         Err(e) => {
-                            *ptr4.add(0).cast::<u8>() = (1i32) as u8;
-                            let vec5 = (e.into_bytes()).into_boxed_slice();
-                            let ptr5 = vec5.as_ptr().cast::<u8>();
-                            let len5 = vec5.len();
-                            ::core::mem::forget(vec5);
-                            *ptr4
+                            *ptr5.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec6 = (e.into_bytes()).into_boxed_slice();
+                            let ptr6 = vec6.as_ptr().cast::<u8>();
+                            let len6 = vec6.len();
+                            ::core::mem::forget(vec6);
+                            *ptr5
                                 .add(2 * ::core::mem::size_of::<*const u8>())
-                                .cast::<usize>() = len5;
-                            *ptr4
+                                .cast::<usize>() = len6;
+                            *ptr5
                                 .add(::core::mem::size_of::<*const u8>())
-                                .cast::<*mut u8>() = ptr5.cast_mut();
+                                .cast::<*mut u8>() = ptr6.cast_mut();
                         }
                     };
-                    ptr4
+                    ptr5
                 }
                 #[doc(hidden)]
                 #[allow(non_snake_case)]
@@ -3974,9 +4018,10 @@ pub mod exports {
                         "prometheus:memory-provider/hooks@1.0.0#on-session-switch")]
                         unsafe extern "C" fn export_on_session_switch(arg0 : * mut u8,
                         arg1 : usize, arg2 : * mut u8, arg3 : usize, arg4 : * mut u8,
-                        arg5 : usize,) -> * mut u8 { unsafe { $($path_to_types)*::
+                        arg5 : usize, arg6 : i32, arg7 : * mut u8, arg8 : usize,) -> *
+                        mut u8 { unsafe { $($path_to_types)*::
                         _export_on_session_switch_cabi::<$ty > (arg0, arg1, arg2, arg3,
-                        arg4, arg5) } } #[unsafe (export_name =
+                        arg4, arg5, arg6, arg7, arg8) } } #[unsafe (export_name =
                         "cabi_post_prometheus:memory-provider/hooks@1.0.0#on-session-switch")]
                         unsafe extern "C" fn _post_return_on_session_switch(arg0 : * mut
                         u8,) { unsafe { $($path_to_types)*::
@@ -4198,8 +4243,8 @@ pub(crate) use __export_memory_provider_impl as export;
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 2602] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xa4\x13\x01A\x02\x01\
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 2611] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xad\x13\x01A\x02\x01\
 A\x1e\x01B\x04\x01m\x05\x05trace\x05debug\x04info\x04warn\x05error\x04\0\x05leve\
 l\x03\0\0\x01@\x02\x05level\x01\x07messages\x01\0\x04\0\x03log\x01\x02\x03\0\x19\
 prometheus:host/log@1.0.0\x05\0\x01B\x02\x01q\x03\x06denied\x01s\0\x07invalid\x01\
@@ -4233,32 +4278,32 @@ keys\0\x03\x04\0\x03get\x01\x04\x01j\0\x01\x01\x01@\x02\x03keys\x05values\0\x05\
 \0\x03set\x01\x06\x03\0\x1cprometheus:host/config@1.0.0\x05\x09\x01B\x05\x01ks\x01\
 r\x04\x0asession-id\0\x07profiles\x07surfaces\x03cwd\0\x04\0\x04info\x03\0\x01\x01\
 @\0\0\x02\x04\0\x07current\x01\x03\x03\0\x1dprometheus:host/session@1.0.0\x05\x0a\
-\x01B\x07\x01r\x03\x0asession-ids\x07profiles\x08platforms\x04\0\x0csession-info\
-\x03\0\0\x01r\x03\x04names\x0bdescriptions\x0aparameterss\x04\0\x09tool-spec\x03\
-\0\x02\x01ks\x01r\x05\x03keys\x0bdescriptions\x06secret\x7f\x08required\x7f\x0dd\
-efault-value\x04\x04\0\x0cconfig-field\x03\0\x05\x03\0&prometheus:memory-provide\
-r/types@1.0.0\x05\x0b\x02\x03\0\x0a\x0csession-info\x02\x03\0\x0a\x09tool-spec\x01\
-B\x0e\x02\x03\x02\x01\x0c\x04\0\x0csession-info\x03\0\0\x02\x03\x02\x01\x0d\x04\0\
-\x09tool-spec\x03\0\x02\x01@\0\0s\x04\0\x04name\x01\x04\x01@\0\0\x7f\x04\0\x0cis\
--available\x01\x05\x01j\0\x01s\x01@\x01\x07session\x01\0\x06\x04\0\x0ainitialize\
-\x01\x07\x01p\x03\x01@\0\0\x08\x04\0\x0ctool-schemas\x01\x09\x04\0'prometheus:me\
-mory-provider/plugin@1.0.0\x05\x0e\x02\x03\0\x0a\x0cconfig-field\x01B%\x02\x03\x02\
-\x01\x0c\x04\0\x0csession-info\x03\0\0\x02\x03\x02\x01\x0f\x04\0\x0cconfig-field\
-\x03\0\x02\x01ks\x01@\0\0\x04\x04\0\x13system-prompt-block\x01\x05\x01j\x01\x04\x01\
-s\x01@\x01\x05querys\0\x06\x04\0\x08prefetch\x01\x07\x01j\0\x01s\x01@\x01\x05que\
-rys\0\x08\x04\0\x0equeue-prefetch\x01\x09\x01@\x02\x04users\x09assistants\0\x08\x04\
-\0\x09sync-turn\x01\x0a\x01j\x01s\x01s\x01@\x02\x04names\x09argumentss\0\x0b\x04\
-\0\x10handle-tool-call\x01\x0c\x01@\x01\x04texts\0\x08\x04\0\x0don-turn-start\x01\
-\x0d\x01@\0\0\x08\x04\0\x0eon-session-end\x01\x0e\x01@\x01\x07session\x01\0\x08\x04\
-\0\x11on-session-switch\x01\x0f\x01j\x01\x7f\x01s\x01@\x01\x08messagess\0\x10\x04\
-\0\x0fon-pre-compress\x01\x11\x01@\x01\x04tasks\0\x08\x04\0\x0don-delegation\x01\
-\x12\x01@\x05\x06actions\x06targets\x08entry-ids\x07contents\x10previous-content\
-\x04\0\x08\x04\0\x0fon-memory-write\x01\x13\x01p\x03\x01@\0\0\x14\x04\0\x0dconfi\
-g-schema\x01\x15\x04\0\x0apost-setup\x01\x0e\x04\0\x0drecall-status\x01\x05\x04\0\
-\x12unavailable-reason\x01\x05\x04\0&prometheus:memory-provider/hooks@1.0.0\x05\x10\
-\x04\00prometheus:memory-provider/memory-provider@1.0.0\x04\0\x0b\x15\x01\0\x0fm\
-emory-provider\x03\0\0\0G\x09producers\x01\x0cprocessed-by\x02\x0dwit-component\x07\
-0.227.1\x10wit-bindgen-rust\x060.41.0";
+\x01B\x07\x01ks\x01r\x04\x0asession-ids\x07profiles\x08platforms\x07user-id\0\x04\
+\0\x0csession-info\x03\0\x01\x01r\x03\x04names\x0bdescriptions\x0aparameterss\x04\
+\0\x09tool-spec\x03\0\x03\x01r\x05\x03keys\x0bdescriptions\x06secret\x7f\x08requ\
+ired\x7f\x0ddefault-value\0\x04\0\x0cconfig-field\x03\0\x05\x03\0&prometheus:mem\
+ory-provider/types@1.0.0\x05\x0b\x02\x03\0\x0a\x0csession-info\x02\x03\0\x0a\x09\
+tool-spec\x01B\x0e\x02\x03\x02\x01\x0c\x04\0\x0csession-info\x03\0\0\x02\x03\x02\
+\x01\x0d\x04\0\x09tool-spec\x03\0\x02\x01@\0\0s\x04\0\x04name\x01\x04\x01@\0\0\x7f\
+\x04\0\x0cis-available\x01\x05\x01j\0\x01s\x01@\x01\x07session\x01\0\x06\x04\0\x0a\
+initialize\x01\x07\x01p\x03\x01@\0\0\x08\x04\0\x0ctool-schemas\x01\x09\x04\0'pro\
+metheus:memory-provider/plugin@1.0.0\x05\x0e\x02\x03\0\x0a\x0cconfig-field\x01B%\
+\x02\x03\x02\x01\x0c\x04\0\x0csession-info\x03\0\0\x02\x03\x02\x01\x0f\x04\0\x0c\
+config-field\x03\0\x02\x01ks\x01@\0\0\x04\x04\0\x13system-prompt-block\x01\x05\x01\
+j\x01\x04\x01s\x01@\x01\x05querys\0\x06\x04\0\x08prefetch\x01\x07\x01j\0\x01s\x01\
+@\x01\x05querys\0\x08\x04\0\x0equeue-prefetch\x01\x09\x01@\x02\x04users\x09assis\
+tants\0\x08\x04\0\x09sync-turn\x01\x0a\x01j\x01s\x01s\x01@\x02\x04names\x09argum\
+entss\0\x0b\x04\0\x10handle-tool-call\x01\x0c\x01@\x01\x04texts\0\x08\x04\0\x0do\
+n-turn-start\x01\x0d\x01@\0\0\x08\x04\0\x0eon-session-end\x01\x0e\x01@\x01\x07se\
+ssion\x01\0\x08\x04\0\x11on-session-switch\x01\x0f\x01j\x01\x7f\x01s\x01@\x01\x08\
+messagess\0\x10\x04\0\x0fon-pre-compress\x01\x11\x01@\x01\x04tasks\0\x08\x04\0\x0d\
+on-delegation\x01\x12\x01@\x05\x06actions\x06targets\x08entry-ids\x07contents\x10\
+previous-content\x04\0\x08\x04\0\x0fon-memory-write\x01\x13\x01p\x03\x01@\0\0\x14\
+\x04\0\x0dconfig-schema\x01\x15\x04\0\x0apost-setup\x01\x0e\x04\0\x0drecall-stat\
+us\x01\x05\x04\0\x12unavailable-reason\x01\x05\x04\0&prometheus:memory-provider/\
+hooks@1.0.0\x05\x10\x04\00prometheus:memory-provider/memory-provider@1.0.0\x04\0\
+\x0b\x15\x01\0\x0fmemory-provider\x03\0\0\0G\x09producers\x01\x0cprocessed-by\x02\
+\x0dwit-component\x070.227.1\x10wit-bindgen-rust\x060.41.0";
 #[inline(never)]
 #[doc(hidden)]
 pub fn __link_custom_section_describing_imports() {

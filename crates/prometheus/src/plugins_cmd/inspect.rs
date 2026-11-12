@@ -29,15 +29,16 @@ fn invalid(path: &Path, err: &Error) -> Error {
 
 /// Checks a plugin directory: its manifest, its capability declarations
 /// and, for `wasm`, that its component compiles and exports every world
-/// it declares.
-fn check_dir(dir: &Path) -> Result<Manifest, Error> {
+/// it declares (a data-only plugin, such as a language pack, has no
+/// component).
+pub(super) fn check_dir(dir: &Path) -> Result<Manifest, Error> {
     let manifest =
         Manifest::read_any(dir, &plugins_host::running_version()).map_err(|e| invalid(dir, &e))?;
     manifest
         .capabilities
         .requested(&dir.join("plugin-data"))
         .map_err(|e| invalid(dir, &e))?;
-    if manifest.kind == Kind::Wasm {
+    if manifest.kind == Kind::Wasm && !manifest.is_data_only() {
         let path = dir.join(COMPONENT_FILE);
         let bytes = std::fs::read(&path)
             .map_err(|e| invalid(dir, &Error::io(&codes::PLUGINS_LOAD, &path, &e)))?;
@@ -64,9 +65,35 @@ fn check_dir(dir: &Path) -> Result<Manifest, Error> {
     Ok(manifest)
 }
 
+/// The language pack checks of `manifest` (spec: i18n, Language pack
+/// validation): its warnings, printed; its errors refuse (exit 65).
+fn check_locales(dir: &Path, manifest: &Manifest) -> Result<String, Error> {
+    let ids: Vec<String> = manifest
+        .provides_locales
+        .iter()
+        .map(|l| l.id.clone())
+        .collect();
+    let report = pmt_i18n::validate::pack(dir, &ids);
+    if !report.errors.is_empty() {
+        return Err(invalid(
+            dir,
+            &Error::new(&codes::PLUGINS_MANIFEST, report.errors.join("; ")),
+        ));
+    }
+    let mut text = String::new();
+    for warning in &report.warnings {
+        let _ = writeln!(text, "warning: {warning}");
+    }
+    Ok(text)
+}
+
 /// `validate <path>`.
 pub(super) fn validate(path: &Path) -> Result<u8, Error> {
     let manifest = check_dir(path)?;
+    let warnings = check_locales(path, &manifest)?;
+    if !warnings.is_empty() {
+        print_raw(&warnings)?;
+    }
     if manifest.kind == Kind::Python {
         let report = super::python::audit_dir(path, &manifest)?;
         print_raw(&super::python::report_text(&manifest.id, &report))?;

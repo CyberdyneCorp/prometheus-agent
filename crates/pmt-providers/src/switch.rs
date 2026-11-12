@@ -127,6 +127,13 @@ impl SessionModel {
         (choice.map(|c| c.target), reasoning)
     }
 
+    /// Whether the session chose its own route with `/model` (it wins
+    /// over a route an API request names).
+    #[must_use]
+    pub fn overridden(&self) -> bool {
+        self.session.is_some()
+    }
+
     /// Whether the next turn uses a `--once` choice, after which the
     /// session goes back to the route it had before.
     #[must_use]
@@ -184,6 +191,8 @@ pub struct Context<'a> {
     pub current: &'a Route,
     /// What the session needs.
     pub needs: Requirements,
+    /// How the notice is worded (the profile's language).
+    pub text: &'a (dyn pmt_core::text::Catalog + Sync),
 }
 
 impl std::fmt::Debug for Context<'_> {
@@ -257,9 +266,9 @@ pub async fn switch(
             state.session = Some(choice);
         }
     }
-    let mut notice = notice(ctx.current, &route, scope);
+    let mut notice = notice(ctx.text, ctx.current, &route, scope);
     if let Some(billing) = crate::moa::serves(&route)
-        .then(|| crate::moa::billing_notice(config, &route.model))
+        .then(|| crate::moa::billing_notice_in(ctx.text, config, &route.model))
         .flatten()
     {
         notice = format!("{notice}\n{billing}");
@@ -284,21 +293,26 @@ fn preset_target(reference: &str, config: &pmt_config::Config) -> Option<Target>
     })
 }
 
-fn notice(current: &Route, next: &Route, scope: Scope) -> String {
-    let lasting = match scope {
-        Scope::Once => "for the next turn only",
-        Scope::Session => "from the next turn until the session ends",
-        Scope::Global => "from the next turn, saved as the profile default",
+fn notice(
+    text: &dyn pmt_core::text::Catalog,
+    current: &Route,
+    next: &Route,
+    scope: Scope,
+) -> String {
+    let key = match scope {
+        Scope::Once => "slash.model.switch_once",
+        Scope::Session => "slash.model.switch_session",
+        Scope::Global => "slash.model.switch_global",
     };
-    let text = format!("model: {} {lasting}", next.label());
+    let switched = text.text(key, &[("route", &next.label())]);
     if current.identity() == next.identity() {
-        return text;
+        return switched;
     }
-    format!(
-        "{text}; the prompt cache starts over (cache break: {} cannot reuse the prefix cached for {})",
-        next.label(),
-        current.label()
-    )
+    let cache = text.text(
+        "slash.model.cache_break",
+        &[("route", &next.label()), ("previous", &current.label())],
+    );
+    format!("{switched}; {cache}")
 }
 
 #[cfg(test)]

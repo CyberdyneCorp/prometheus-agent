@@ -114,7 +114,7 @@ impl ProtectedFiles {
                 _ => false,
             })
         });
-        if in_project_config {
+        if in_project_config && !is_plan(path) {
             return Some(protected(&format!("{PROJECT_CONFIG_DIR}/")));
         }
         let name = path.file_name()?.to_string_lossy();
@@ -156,6 +156,21 @@ pub fn warn_if_disabled(security: &SecurityConfig) {
     if !security.protected_instruction_files {
         tracing::warn!("{DISABLED_WARNING}");
     }
+}
+
+/// A Markdown plan `/plan` writes: `.prometheus/plans/<name>.md`. Plans
+/// are read by people, never loaded as configuration or instructions, so
+/// they are not project configuration (spec: cli, Planning-only turn).
+fn is_plan(path: &Path) -> bool {
+    let named = |p: Option<&Path>, name: &str| {
+        p.and_then(Path::file_name)
+            .is_some_and(|n| n.eq_ignore_ascii_case(name))
+    };
+    let dir = path.parent();
+    path.extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("md"))
+        && named(dir, "plans")
+        && named(dir.and_then(Path::parent), PROJECT_CONFIG_DIR)
 }
 
 fn compile(raw: &str) -> Result<Pattern, Error> {
@@ -225,7 +240,24 @@ mod tests {
         ] {
             assert!(rules.requires_approval(Path::new(path)).is_some(), "{path}");
         }
-        for path in ["README.md", "src/agents.rs", ".prometheus", "AGENTS.md.bak"] {
+        assert!(
+            rules
+                .requires_approval(Path::new("proj/.prometheus/plans/notes.toml"))
+                .is_some()
+        );
+        assert!(
+            rules
+                .requires_approval(Path::new("proj/.prometheus/plans/AGENTS.md"))
+                .is_some(),
+            "a plan named like an instruction file stays protected"
+        );
+        for path in [
+            "README.md",
+            "src/agents.rs",
+            ".prometheus",
+            "AGENTS.md.bak",
+            "proj/.prometheus/plans/add-caching.md",
+        ] {
             assert!(rules.requires_approval(Path::new(path)).is_none(), "{path}");
         }
     }

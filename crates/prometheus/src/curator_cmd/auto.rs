@@ -47,6 +47,7 @@ pub(crate) fn check(
         scope: scope.clone(),
         store: Arc::clone(store),
         launch: launch.clone(),
+        text: pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
     };
     let spawned = std::thread::Builder::new()
         .name("pmt-curator".to_owned())

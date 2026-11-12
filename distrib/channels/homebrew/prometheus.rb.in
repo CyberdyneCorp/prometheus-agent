@@ -1,0 +1,43 @@
+# Homebrew formula for the cyberdynecorp/tap tap, rendered for each stable
+# release by `cargo xtask release channels` from the signed release
+# manifest (spec: distribution-and-update, Package-manager and image
+# channels). Do not edit the rendered copy in the tap.
+class Prometheus < Formula
+  desc "Self-hosted personal AI agent harness"
+  homepage "https://github.com/CyberdyneCorp/prometheus-agent"
+  version "@BARE_VERSION@"
+
+  on_macos do
+    url "@URL_universal2-apple-darwin@"
+    sha256 "@SHA256_universal2-apple-darwin@"
+  end
+
+  on_linux do
+    on_intel do
+      url "@URL_x86_64-unknown-linux-musl@"
+      sha256 "@SHA256_x86_64-unknown-linux-musl@"
+    end
+    on_arm do
+      url "@URL_aarch64-unknown-linux-musl@"
+      sha256 "@SHA256_aarch64-unknown-linux-musl@"
+    end
+  end
+
+  def install
+    # The binary lives in libexec so its install receipt (install.json
+    # beside it) is not linked into the shared bin directory.
+    libexec.install "prometheus"
+    bin.install_symlink libexec/"prometheus"
+    bin.install_symlink libexec/"prometheus" => "pmt"
+  end
+
+  def post_install
+    # owner = homebrew: `prometheus update` refuses (exit 69) and names
+    # `brew upgrade prometheus`.
+    system libexec/"prometheus", "install-receipt", "--owner", "homebrew"
+  end
+
+  test do
+    assert_match "owner: homebrew", shell_output("#{bin}/prometheus --home #{testpath} update --status")
+  end
+end

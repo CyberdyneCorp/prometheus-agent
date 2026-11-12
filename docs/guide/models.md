@@ -244,7 +244,12 @@ alibaba-coding-plan (alibaba-coding, dashscope-coding)
 Providers whose own wire format is implemented by a provider plugin
 that is not installed (`copilot` comes from the `github-copilot`
 plugin, `solstice` from its own) fail with `provider.plugin_unavailable`;
-`auto` passes over them. Two provider plugins are bundled with the
+`auto` passes over them. A bridged plugin that serves such a slot keeps
+the provider's sign-in, run by the host: `prometheus auth add copilot`
+signs in with GitHub's device code, and each session exchanges that
+GitHub token for a short-lived Copilot API token
+(`providers.copilot.oauth.exchange_url`), refreshed before it expires;
+calls are billed as `subscription:copilot/<label>`. Two provider plugins are bundled with the
 binary and always available:
 
 - `gemini` speaks Google AI Studio's `gemini_native` format

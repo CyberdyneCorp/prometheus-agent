@@ -259,5 +259,11 @@ async fn disabled_stores_narrow_the_schema_and_refuse_writes() {
         Some(Exclusion::Unavailable(_))
     ));
     let status = pmt_memory::status::status(&off.store, &off.scope.config().memory).unwrap();
-    assert!(pmt_memory::status::render(&status).contains("Built-in memory is disabled"));
+    assert!(
+        pmt_memory::status::render(
+            &*pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+            &status
+        )
+        .contains("Built-in memory is disabled")
+    );
 }

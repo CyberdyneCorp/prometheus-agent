@@ -16,11 +16,20 @@ use crate::prompt::{self, PromptInputs};
 impl Turn<'_> {
     pub(super) async fn freeze(&mut self, route: &RouteInfo) -> Result<Frozen, Error> {
         let setup = &self.agent.setup;
+        if let Some(boundary) = &setup.compaction_boundary {
+            boundary.settle_tools().await;
+        }
         let pending = self.agent.take_rebuild();
         if matches!(pending, Some(Rebuild::Compaction))
             && let Some(boundary) = &setup.compaction_boundary
         {
             boundary.refresh_tools().await;
+        }
+        if pending.is_none()
+            && self.agent.keeps_prompt()
+            && let Some(kept) = frozen::stored_any_route(&setup.store, setup.session)?
+        {
+            return Ok(kept);
         }
         let (why, stored) =
             match frozen::stored(&setup.store, setup.session, &route.provider, &route.model)? {

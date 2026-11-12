@@ -4,9 +4,11 @@
 //! TUI as a gauge line, messaging as one notice per level crossing); it is
 //! never added to the model's context. It also words the compaction
 //! lifecycle notices (`compression.started|committed|failed`) every
-//! surface shows.
+//! surface shows. The wording comes from the profile's catalog.
 
 use serde_json::Value;
+
+use crate::text::Catalog;
 
 /// The info level starts here (percent of the compaction trigger).
 pub const INFO_PERCENT: u64 = 60;
@@ -45,26 +47,30 @@ pub const fn level(percent: u64) -> Option<Level> {
     }
 }
 
-/// The CLI/TUI gauge line: `context ████████████░░░░░░░░ 62% to compaction`.
+/// The CLI/TUI gauge line: `context ████████████░░░░░░░░ 62% to compaction`,
+/// flagged at the warning level.
 #[must_use]
-pub fn gauge(percent: u64) -> String {
+pub fn gauge(text: &dyn Catalog, percent: u64, level: Level) -> String {
     let filled = percent.min(100) * CELLS / 100;
     let bar: String = (0..CELLS)
         .map(|i| if i < filled { '█' } else { '░' })
         .collect();
-    format!("context {bar} {percent}% to compaction")
+    let key = match level {
+        Level::Info => "display.context_gauge",
+        Level::Warning => "display.context_gauge_soon",
+    };
+    text.text(key, &[("bar", &bar), ("percent", &percent)])
 }
 
 /// The plain-text notice a messaging chat gets when the context crosses
 /// into `level`.
 #[must_use]
-pub fn notice(level: Level, percent: u64) -> String {
-    match level {
-        Level::Info => format!("Context is at {percent}% of the compaction trigger."),
-        Level::Warning => format!(
-            "Context is at {percent}% of the compaction trigger; older messages will be summarized soon."
-        ),
-    }
+pub fn notice(text: &dyn Catalog, level: Level, percent: u64) -> String {
+    let key = match level {
+        Level::Info => "gateway.context_info",
+        Level::Warning => "gateway.context_warning",
+    };
+    text.text(key, &[("percent", &percent)])
 }
 
 /// A compaction lifecycle notice.
@@ -81,11 +87,11 @@ pub struct Notice {
 /// compaction lifecycle event a user should see. Manual `/compress` runs
 /// get none for their start and completion: the command answers itself.
 #[must_use]
-pub fn compaction_notice(kind: &str, payload: &Value) -> Option<Notice> {
+pub fn compaction_notice(text: &dyn Catalog, kind: &str, payload: &Value) -> Option<Notice> {
     let trigger = payload["trigger"].as_str().unwrap_or_default();
-    let routine = |text: String| {
+    let routine = |key: &str, args: &[(&str, &dyn std::fmt::Display)]| {
         Some(Notice {
-            text,
+            text: text.text(key, args),
             routine: true,
         })
     };
@@ -93,24 +99,30 @@ pub fn compaction_notice(kind: &str, payload: &Value) -> Option<Notice> {
     match kind {
         "compression.started" | "compression.committed" if manual => None,
         "compression.started" if payload["attempt"].as_u64().unwrap_or(1) > 1 => {
-            routine("Rewriting the compaction summary: the first one missed details.".to_owned())
+            routine("display.compaction_retry", &[])
         }
-        "compression.started" if trigger == "idle" => {
-            routine("Compacting the context after a long pause...".to_owned())
-        }
-        "compression.started" => routine(format!("Compacting the context ({trigger})...")),
+        "compression.started" if trigger == "idle" => routine("display.compaction_idle", &[]),
+        "compression.started" => routine("display.compaction_started", &[("trigger", &trigger)]),
         "compression.committed" => {
             let before = payload["tokens_before"].as_u64().unwrap_or(0);
             let after = payload["tokens_after"].as_u64().unwrap_or(0);
-            routine(format!(
-                "Context compacted ({trigger}): {before} -> {after} tokens."
-            ))
+            routine(
+                "display.compaction_done",
+                &[
+                    ("trigger", &trigger),
+                    ("before", &before),
+                    ("after", &after),
+                ],
+            )
         }
         "compression.failed" => {
             let reason = payload["reason"].as_str().unwrap_or("unknown");
             let text = match payload["message"].as_str() {
-                Some(message) => format!("Context compaction failed ({reason}): {message}"),
-                None => format!("Context compaction failed ({reason})."),
+                Some(message) => text.text(
+                    "display.compaction_failed_why",
+                    &[("reason", &reason), ("message", &message)],
+                ),
+                None => text.text("display.compaction_failed", &[("reason", &reason)]),
             };
             Some(Notice {
                 text,
@@ -135,27 +147,49 @@ pub fn of_turn_end(payload: &Value) -> Option<(u64, Option<Level>)> {
 mod tests {
     use super::*;
 
+    /// Shows the key and its arguments.
+    struct Keys;
+
+    impl Catalog for Keys {
+        fn text(&self, key: &str, args: &[(&str, &dyn std::fmt::Display)]) -> String {
+            let args: Vec<String> = args.iter().map(|(n, v)| format!("{n}={v}")).collect();
+            format!("{key} {}", args.join(" "))
+        }
+    }
+
     #[test]
     fn the_gauge_fills_one_cell_per_five_percent() {
-        assert_eq!(gauge(62), "context ████████████░░░░░░░░ 62% to compaction");
-        assert_eq!(gauge(130).matches('█').count(), 20);
+        assert_eq!(
+            gauge(&Keys, 62, Level::Info),
+            "display.context_gauge bar=████████████░░░░░░░░ percent=62"
+        );
+        assert_eq!(gauge(&Keys, 130, Level::Warning).matches('█').count(), 20);
     }
 
     #[test]
     fn manual_runs_and_unknown_events_get_no_notice() {
         let manual = serde_json::json!({"trigger": "manual", "attempt": 1});
-        assert_eq!(compaction_notice("compression.started", &manual), None);
-        assert_eq!(compaction_notice("compression.committed", &manual), None);
+        assert_eq!(
+            compaction_notice(&Keys, "compression.started", &manual),
+            None
+        );
+        assert_eq!(
+            compaction_notice(&Keys, "compression.committed", &manual),
+            None
+        );
         let idle = serde_json::json!({"trigger": "idle", "tokens_before": 9, "tokens_after": 3});
-        let done = compaction_notice("compression.committed", &idle).unwrap();
-        assert!(done.routine && done.text.contains("9 -> 3"), "{done:?}");
+        let done = compaction_notice(&Keys, "compression.committed", &idle).unwrap();
+        assert!(
+            done.routine && done.text.contains("before=9 after=3"),
+            "{done:?}"
+        );
         let failed = serde_json::json!({"reason": "aux_failed"});
         assert!(
-            !compaction_notice("compression.failed", &failed)
+            !compaction_notice(&Keys, "compression.failed", &failed)
                 .unwrap()
                 .routine
         );
-        assert_eq!(compaction_notice("turn.end", &failed), None);
+        assert_eq!(compaction_notice(&Keys, "turn.end", &failed), None);
     }
 
     #[test]

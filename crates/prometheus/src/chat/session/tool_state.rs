@@ -6,8 +6,10 @@
 //! `/plugins|/mcp reload --now` rebuild it on request; a compaction
 //! commit rebuilds it on its own when the profile's registry moved on
 //! since (an MCP server's tool list changed, a server or plugin set was
-//! reloaded), because the prompt cache breaks there anyway. Between those
-//! points the session keeps sending the array it froze.
+//! reloaded), because the prompt cache breaks there anyway. A new session
+//! whose MCP servers were still connecting when it opened settles its
+//! array once, before its first prompt is built ([`Deferred`]). Between
+//! those points the session keeps sending the array it froze.
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -131,7 +133,23 @@ pub(super) struct ToolState {
     registry: Mutex<Arc<ToolRegistry>>,
     selection: Mutex<Selection>,
     route: Mutex<RouteTraits>,
+    deferred: tokio::sync::Mutex<Option<Deferred>>,
 }
+
+/// The MCP discovery a new session did not wait for at open (so its
+/// client's prompt is not delayed), and how the session selects its
+/// toolsets from a registry and the extension toolsets that opt in.
+pub(super) struct Deferred {
+    /// Ends once every server connected or the discovery wait ran out.
+    pub(super) discovery: tokio::task::JoinHandle<()>,
+    /// The session's selection over a registry.
+    pub(super) select: Selector,
+}
+
+/// How a session selects its toolsets from a registry and the extension
+/// toolsets that opt in.
+pub(super) type Selector =
+    Box<dyn Fn(&ToolRegistry, &[String]) -> Result<Selection, Error> + Send + Sync>;
 
 impl ToolState {
     /// The state of a session whose `tools` were built from `registry`,
@@ -149,7 +167,39 @@ impl ToolState {
             registry: Mutex::new(registry),
             selection: Mutex::new(selection),
             route: Mutex::new(route),
+            deferred: tokio::sync::Mutex::new(None),
         }
+    }
+
+    /// Settles the tools once `deferred`'s discovery ends, before the
+    /// first prompt ([`CompactionBoundary::settle_tools`]).
+    pub(super) fn defer(&self, deferred: Deferred) {
+        if let Ok(mut slot) = self.deferred.try_lock() {
+            *slot = Some(deferred);
+        }
+    }
+
+    /// Waits for a deferred discovery, then builds the session's tools
+    /// again from the profile's registry, keeping what the session disabled
+    /// or opted into meanwhile: an MCP server's tools are built only from a
+    /// connected server, so the array is rebuilt even when the selection
+    /// did not change. `true` when the tools were rebuilt.
+    async fn settle(&self) -> Result<bool, Error> {
+        // Held while waiting: a second turn waits for the same settling.
+        let mut slot = self.deferred.lock().await;
+        let Some(deferred) = slot.take() else {
+            return Ok(false);
+        };
+        let _ = deferred.discovery.await;
+        let (registry, toolsets) = self.registries.current()?;
+        let old = self.selection();
+        let mut selection = (deferred.select)(&registry, &toolsets)?;
+        selection.tools.retain(|t| !old.disabled.contains(t));
+        selection.disabled.extend(old.disabled.iter().cloned());
+        let selection =
+            selection.with_session_opt_ins(old.session_opt_ins.iter().map(String::as_str));
+        self.rebuild(registry, selection).await?;
+        Ok(true)
     }
 
     /// The port the agent calls the tools through.
@@ -214,6 +264,22 @@ impl ToolState {
 }
 
 impl CompactionBoundary for ToolState {
+    fn settle_tools(&self) -> BoxFuture<'_, ()> {
+        Box::pin(async move {
+            match self.settle().await {
+                Ok(true) => tracing::info!(
+                    session = %self.inputs.session,
+                    "tools of extensions that finished loading joined before the first prompt"
+                ),
+                Ok(false) => {}
+                Err(e) => tracing::warn!(
+                    session = %self.inputs.session,
+                    "the tools could not be settled; keeping the ones the session opened with: {e}"
+                ),
+            }
+        })
+    }
+
     fn refresh_tools(&self) -> BoxFuture<'_, ()> {
         Box::pin(async move {
             match self.refresh_if_stale().await {

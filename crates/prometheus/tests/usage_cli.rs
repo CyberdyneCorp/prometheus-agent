@@ -314,7 +314,15 @@ fn the_usage_command_shows_the_session_cache_hit_rate() {
     let home = temp_home();
     let store = store(home.path(), "default");
     let id = session(&store, None);
-    assert!(usage(&store, id).unwrap().ends_with("cache hit rate —"));
+    assert!(
+        usage(
+            &pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+            &store,
+            id
+        )
+        .unwrap()
+        .ends_with("cache hit rate —")
+    );
     // 90,000 cached of 100,000 input tokens.
     recorder(&store)
         .record_at(
@@ -332,7 +340,12 @@ fn the_usage_command_shows_the_session_cache_hit_rate() {
             Timestamp::now(),
         )
         .unwrap();
-    let text = usage(&store, id).unwrap();
+    let text = usage(
+        &pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+        &store,
+        id,
+    )
+    .unwrap();
     assert!(text.contains("cache read 90000"), "{text}");
     assert!(text.contains("cache hit rate 90%\n"), "{text}");
     // The billing source of the session's calls follows (spec:

@@ -6,6 +6,7 @@
 
 use std::fmt::Write as _;
 
+use pmt_core::text::Catalog;
 use serde::{Deserialize, Serialize};
 
 use crate::contract::Contract;
@@ -177,7 +178,7 @@ impl Barrier {
         }
     }
 
-    /// What `/goal status` says the goal is parked on.
+    /// What the goal is parked on, in English (what the model reads).
     #[must_use]
     pub fn describe(&self) -> String {
         match self {
@@ -185,6 +186,27 @@ impl Barrier {
             Self::Process { id, reason, .. } => with_reason(&format!("process {id}"), reason),
             Self::Seconds { until_ms, reason } => {
                 with_reason(&format!("a timer until {}", rfc3339(*until_ms)), reason)
+            }
+        }
+    }
+
+    /// What `/goal status` says the goal is parked on, in the profile's
+    /// language.
+    #[must_use]
+    pub fn describe_in(&self, text: &dyn Catalog) -> String {
+        match self {
+            Self::Pid { pid, reason, .. } => {
+                with_reason(&text.text("slash.goal.on_pid", &[("pid", pid)]), reason)
+            }
+            Self::Process { id, reason, .. } => {
+                with_reason(&text.text("slash.goal.on_process", &[("id", id)]), reason)
+            }
+            Self::Seconds { until_ms, reason } => {
+                let until = rfc3339(*until_ms);
+                with_reason(
+                    &text.text("slash.goal.on_timer", &[("until", &until)]),
+                    reason,
+                )
             }
         }
     }
@@ -297,27 +319,32 @@ impl Goal {
 
     /// The `/goal status` text.
     #[must_use]
-    pub fn status_text(&self, max_turns: u32) -> String {
-        let mut text = format!(
-            "Goal: {}\nstatus: {} · {}/{} turns used",
-            self.text,
-            self.status.as_str(),
-            self.turns_used,
-            max_turns
+    pub fn status_text(&self, text: &dyn Catalog, max_turns: u32) -> String {
+        let mut reply = text.text(
+            "slash.goal.status",
+            &[
+                ("goal", &self.text),
+                ("status", &self.status.as_str()),
+                ("used", &self.turns_used),
+                ("max", &max_turns),
+            ],
         );
+        let mut line = |key: &str, value: &dyn std::fmt::Display| {
+            let _ = write!(reply, "\n{}", text.text(key, &[("value", value)]));
+        };
         if let Some(barrier) = &self.barrier {
-            let _ = write!(text, "\nparked on {}", barrier.describe());
+            line("slash.goal.status_parked", &barrier.describe_in(text));
         }
         if let Some(reason) = &self.reason {
-            let _ = write!(text, "\nlast reason: {reason}");
+            line("slash.goal.status_reason", reason);
         }
         if !self.subgoals.is_empty() {
-            let _ = write!(text, "\nsubgoals: {}", self.subgoals.len());
+            line("slash.goal.status_subgoals", &self.subgoals.len());
         }
         if !self.gates.is_empty() {
-            let _ = write!(text, "\ngates: {}", self.gates.len());
+            line("slash.goal.status_gates", &self.gates.len());
         }
-        text
+        reply
     }
 }
 
@@ -393,19 +420,25 @@ pub struct Loop {
 impl Loop {
     /// The live row: `loop · every 5m · 2 runs · next in 4m`.
     #[must_use]
-    pub fn row(&self, now_ms: i64) -> String {
+    pub fn row(&self, text: &dyn Catalog, now_ms: i64) -> String {
         let cadence = match &self.cadence {
-            Cadence::Fixed { every_secs } => {
-                format!("every {}", crate::duration::format(*every_secs))
-            }
-            Cadence::SelfPaced { .. } => "self-paced".to_owned(),
+            Cadence::Fixed { every_secs } => every(text, *every_secs),
+            Cadence::SelfPaced { .. } => text.text("slash.loop.self_paced", &[]),
         };
-        let runs = if self.fired == 1 { "run" } else { "runs" };
-        let tail = match self.status {
-            RunStatus::Paused => "paused".to_owned(),
-            RunStatus::Active => next_in(self.next_fire_ms, now_ms),
+        let key = if self.fired == 1 {
+            "slash.loop.row_one"
+        } else {
+            "slash.loop.row"
         };
-        format!("loop · {cadence} · {} {runs} · {tail}", self.fired)
+        let tail = tail(text, self.status, self.next_fire_ms, now_ms);
+        text.text(
+            key,
+            &[
+                ("cadence", &cadence),
+                ("runs", &self.fired),
+                ("tail", &tail),
+            ],
+        )
     }
 }
 
@@ -431,27 +464,40 @@ pub struct Heartbeat {
 impl Heartbeat {
     /// The live row: `heartbeat · every 10m · next in 3m`.
     #[must_use]
-    pub fn row(&self, now_ms: i64) -> String {
-        let tail = match self.status {
-            RunStatus::Paused => "paused".to_owned(),
-            RunStatus::Active => next_in(self.next_fire_ms, now_ms),
-        };
-        format!(
-            "heartbeat · every {} · {tail}",
-            crate::duration::format(self.every_secs)
+    pub fn row(&self, text: &dyn Catalog, now_ms: i64) -> String {
+        let every = every(text, self.every_secs);
+        let tail = tail(text, self.status, self.next_fire_ms, now_ms);
+        text.text(
+            "slash.heartbeat.row",
+            &[("cadence", &every), ("tail", &tail)],
         )
+    }
+}
+
+/// `every 5m`.
+fn every(text: &dyn Catalog, secs: u64) -> String {
+    let interval = crate::duration::format(secs);
+    text.text("slash.loop.every", &[("interval", &interval)])
+}
+
+/// `paused`, or when the next fire is due.
+fn tail(text: &dyn Catalog, status: RunStatus, at_ms: i64, now_ms: i64) -> String {
+    match status {
+        RunStatus::Paused => text.text("slash.loop.paused_tail", &[]),
+        RunStatus::Active => next_in(text, at_ms, now_ms),
     }
 }
 
 /// `next in 4m` (rounded up to whole seconds; `next now` once due).
 #[must_use]
-pub fn next_in(at_ms: i64, now_ms: i64) -> String {
+pub fn next_in(text: &dyn Catalog, at_ms: i64, now_ms: i64) -> String {
     let left = at_ms.saturating_sub(now_ms);
     if left <= 0 {
-        return "next now".to_owned();
+        return text.text("slash.loop.next_now", &[]);
     }
     let secs = u64::try_from((left + 999) / 1_000).unwrap_or(0);
-    format!("next in {}", crate::duration::format(secs))
+    let interval = crate::duration::format(secs);
+    text.text("slash.loop.next_in", &[("interval", &interval)])
 }
 
 /// Everything automated in one session.
@@ -509,26 +555,31 @@ impl Automation {
 
     /// The live rows of every surface (`/agents`, the CLI and TUI rows).
     #[must_use]
-    pub fn rows(&self, now_ms: i64, limits: &Limits) -> Vec<String> {
+    pub fn rows(&self, text: &dyn Catalog, now_ms: i64, limits: &Limits) -> Vec<String> {
         let mut rows = Vec::new();
         if let Some(goal) = &self.goal {
-            let parked = goal
-                .barrier
-                .as_ref()
-                .map_or(String::new(), |b| format!(" · parked on {}", b.describe()));
-            rows.push(format!(
-                "goal · {} · {}/{} turns{parked} · {}",
-                goal.status.as_str(),
-                goal.turns_used,
-                limits.goal_max_turns,
-                goal.text
-            ));
+            let status = goal.status.as_str();
+            let args: [(&str, &dyn std::fmt::Display); 4] = [
+                ("status", &status),
+                ("used", &goal.turns_used),
+                ("max", &limits.goal_max_turns),
+                ("goal", &goal.text),
+            ];
+            rows.push(match &goal.barrier {
+                Some(barrier) => {
+                    let parked = barrier.describe_in(text);
+                    let mut all = args.to_vec();
+                    all.push(("barrier", &parked));
+                    text.text("slash.goal.row_parked", &all)
+                }
+                None => text.text("slash.goal.row", &args),
+            });
         }
         if let Some(looping) = &self.looping {
-            rows.push(looping.row(now_ms));
+            rows.push(looping.row(text, now_ms));
         }
         if let Some(heartbeat) = &self.heartbeat {
-            rows.push(heartbeat.row(now_ms));
+            rows.push(heartbeat.row(text, now_ms));
         }
         rows
     }
@@ -537,6 +588,11 @@ impl Automation {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The bundled English strings (what the assertions read).
+    fn en() -> std::sync::Arc<pmt_i18n::Strings> {
+        pmt_i18n::Strings::english(pmt_i18n::Surface::Core)
+    }
 
     #[test]
     fn times_render_in_utc() {
@@ -557,7 +613,10 @@ mod tests {
             reason: None,
             route: None,
         };
-        assert_eq!(looping.row(0), "loop · every 5m · 2 runs · next in 4m");
+        assert_eq!(
+            looping.row(&*en(), 0),
+            "loop · every 5m · 2 runs · next in 4m"
+        );
     }
 
     #[test]
@@ -574,7 +633,7 @@ mod tests {
         assert_eq!(back, goal);
         assert!(!back.drives());
         assert!(
-            back.status_text(20)
+            back.status_text(&*en(), 20)
                 .contains("parked on pid 4242 (CI running)")
         );
     }

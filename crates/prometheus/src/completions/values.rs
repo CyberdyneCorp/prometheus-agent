@@ -149,12 +149,14 @@ fn config_keys() -> Vec<(String, String)> {
 }
 
 fn slash_commands() -> Vec<(String, String)> {
+    // Completion scripts are generated once, in English.
+    let english = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
     crate::slash::builtins::BUILTINS
         .iter()
         .flat_map(|c| {
             std::iter::once(c.name)
                 .chain(c.aliases.iter().copied())
-                .map(|name| (format!("/{name}"), c.description.to_owned()))
+                .map(|name| (format!("/{name}"), c.description(&english).to_owned()))
         })
         .collect()
 }

@@ -202,7 +202,7 @@ The system SHALL provide `prometheus bridge status` (per sidecar: plugin, profil
 - **THEN** the report SHALL name the plugin and the mismatched package and the command SHALL exit 1
 
 ### Requirement: Migration of Hermes plugins
-When `hermes-migration` imports a Hermes home, the system SHALL copy each user plugin directory into `<profile_home>/plugins/<id>/` as kind `python`, run the static compatibility audit, preserve the Hermes enabled state only for plugins classified `compatible` or `degraded`, propose capability grants inferred from the audit for the user to approve on first enable, and list `incompatible` plugins with their blocking API names in the migration report.
+When `hermes-migration` imports a Hermes home, the system SHALL copy each user plugin directory into `<profile_home>/plugins/<id>/` as kind `python`, run the static compatibility audit, leave every plugin disabled with no grants (as `hermes-migration` › MCP servers and plugins requires; the report notes which `compatible` or `degraded` plugins Hermes had enabled), propose capability grants inferred from the audit for the user to approve on first enable, and list `incompatible` plugins with their blocking API names in the migration report.
 **Milestone:** M2
 
 #### Scenario: Incompatible plugin is imported disabled

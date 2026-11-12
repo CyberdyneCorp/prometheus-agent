@@ -11,6 +11,7 @@ use std::fmt::Write as _;
 
 use pmt_config::ProfileScope;
 use pmt_core::error::{Error, codes};
+use pmt_i18n::{Strings, t};
 use pmt_rpc::contracts as c;
 use pmt_worktrees::create::{self, Request};
 use pmt_worktrees::sweep::{self, Action, Mode};
@@ -28,15 +29,15 @@ use crate::chat::session::{Factory, Live};
 pub async fn worktree(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
     let mut words = args.split_whitespace();
     match words.next() {
-        None | Some("status") => Ok(render_status(&status(ctx.live))),
+        None | Some("status") => Ok(render_status(&ctx.strings(), &status(ctx.live))),
         Some("new") => {
             let created = new(ctx.factory, ctx.live, ctx.scope, words.next()).await?;
-            Ok(render_created(&created))
+            Ok(render_created(&ctx.strings(), &created))
         }
-        Some("list") => list(ctx.live).map(|l| render_listing(&l)),
+        Some("list") => list(ctx.live).map(|l| render_listing(&ctx.strings(), &l)),
         Some("prune") => {
             let dry_run = words.any(|w| w == "--dry-run");
-            prune(ctx.scope, ctx.live, dry_run).map(|p| render_pruned(&p))
+            prune(ctx.scope, ctx.live, dry_run).map(|p| render_pruned(&ctx.strings(), &p))
         }
         Some(other) => Err(Error::new(
             &codes::CLI_USAGE,
@@ -194,56 +195,67 @@ pub fn info(t: &Tree) -> c::WorktreeInfo {
     }
 }
 
-fn render_created(created: &c::WorktreeCreated) -> String {
-    let mut text = format!(
-        "working directory is now {} (branch {}, from {})",
-        created.tree.path,
-        created.tree.branch.as_deref().unwrap_or("detached"),
-        created.base
+fn render_created(strings: &Strings, created: &c::WorktreeCreated) -> String {
+    let mut text = t!(
+        strings,
+        "slash.worktree.created",
+        path = created.tree.path,
+        branch = branch(strings, created.tree.branch.as_deref()),
+        base = created.base
     );
     for notice in &created.notices {
-        let _ = write!(text, "\nnote: {notice}");
+        let _ = write!(
+            text,
+            "\n{}",
+            t!(strings, "slash.worktree.note", notice = notice)
+        );
     }
     text
 }
 
-fn render_status(status: &c::WorktreeStatus) -> String {
+/// A branch name, or `(detached)` in the language of `strings`.
+fn branch<'a>(strings: &'a Strings, name: Option<&'a str>) -> &'a str {
+    name.unwrap_or_else(|| strings.get("slash.worktree.detached"))
+}
+
+fn render_status(strings: &Strings, status: &c::WorktreeStatus) -> String {
     match &status.tree {
-        Some(t) => format!(
-            "worktree {} on branch {} at {}",
-            t.name,
-            t.branch.as_deref().unwrap_or("(detached)"),
-            t.path
+        Some(tree) => t!(
+            strings,
+            "slash.worktree.status",
+            name = tree.name,
+            branch = branch(strings, tree.branch.as_deref()),
+            path = tree.path
         ),
-        None => format!("not in a Prometheus worktree (cwd {})", status.cwd),
+        None => t!(strings, "slash.worktree.none", cwd = status.cwd),
     }
 }
 
 /// The text of a listing (also `prometheus worktrees list`).
 #[must_use]
-pub fn render_listing(listing: &c::WorktreeListing) -> String {
+pub fn render_listing(strings: &Strings, listing: &c::WorktreeListing) -> String {
     let mut text = format!("{}:", listing.repo);
     if listing.trees.is_empty() && listing.archives.is_empty() {
-        text.push_str(" no worktrees or archives");
+        let _ = write!(text, " {}", strings.get("slash.worktree.empty"));
     }
-    for t in &listing.trees {
+    for tree in &listing.trees {
         let _ = write!(
             text,
             "\n  {}  {}  {}  {}",
-            t.name,
-            t.branch.as_deref().unwrap_or("(detached)"),
-            age(t.age_secs),
-            t.last_decision.as_deref().unwrap_or("-")
+            tree.name,
+            branch(strings, tree.branch.as_deref()),
+            age(tree.age_secs),
+            tree.last_decision.as_deref().unwrap_or("-")
         );
     }
     for a in &listing.archives {
+        let archived = t!(strings, "slash.worktree.archived", reason = a.reason);
         let _ = write!(
             text,
-            "\n  {}  {}  {}  archived ({})",
+            "\n  {}  {}  {}  {archived}",
             a.name,
-            a.branch.as_deref().unwrap_or("(detached)"),
+            branch(strings, a.branch.as_deref()),
             age(a.age_secs),
-            a.reason
         );
     }
     text
@@ -251,14 +263,14 @@ pub fn render_listing(listing: &c::WorktreeListing) -> String {
 
 /// The text of a sweep (also `prometheus worktrees prune`).
 #[must_use]
-pub fn render_pruned(pruned: &c::WorktreePruned) -> String {
-    let mut text = format!(
-        "{}{}:",
-        pruned.repo,
-        if pruned.dry_run { " (dry run)" } else { "" }
-    );
+pub fn render_pruned(strings: &Strings, pruned: &c::WorktreePruned) -> String {
+    let mut text = pruned.repo.clone();
+    if pruned.dry_run {
+        let _ = write!(text, " {}", strings.get("slash.worktree.dry_run"));
+    }
+    text.push(':');
     if pruned.decisions.is_empty() {
-        text.push_str(" no worktrees");
+        let _ = write!(text, " {}", strings.get("slash.worktree.no_worktrees"));
     }
     for d in &pruned.decisions {
         let _ = write!(text, "\n  {}  {}", d.name, d.outcome);

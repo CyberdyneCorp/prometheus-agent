@@ -2,11 +2,12 @@
 //! Hermes plugins). `prometheus migrate from-hermes` (hermes-migration)
 //! calls [`import`] with the Hermes plugin directory and the plugins Hermes
 //! had enabled: each plugin is copied into the profile's `plugins/` as a
-//! python plugin with an `adopted` install record, audited, kept enabled
-//! only when it was enabled and is `compatible` or `degraded`, and its
-//! inferred capabilities are proposed for approval at first enable (none
-//! is granted here). `incompatible` plugins are copied, left disabled and
-//! reported with the APIs that block them.
+//! python plugin with an `adopted` install record and audited. Every
+//! plugin arrives disabled with no grants (hermes-migration, MCP servers
+//! and plugins): the report says which were `compatible` or `degraded`
+//! (and enabled in Hermes) and proposes their inferred capabilities for
+//! approval at first enable; `incompatible` plugins are reported with the
+//! APIs that block them.
 
 use std::path::{Path, PathBuf};
 
@@ -24,8 +25,8 @@ pub struct Imported {
     pub id: String,
     /// The audit's verdict.
     pub verdict: Verdict,
-    /// Whether it stays enabled.
-    pub enabled: bool,
+    /// Hermes had it enabled (it arrives disabled all the same).
+    pub was_enabled: bool,
     /// Capabilities to approve at first enable (plain language).
     pub proposed: Vec<String>,
     /// The APIs that make it incompatible.
@@ -61,46 +62,32 @@ impl Report {
 }
 
 /// Imports every plugin directory of `source` (a Hermes `plugins/`
-/// directory); `enabled` are the plugins Hermes had enabled.
+/// directory) but those named in `skip`; `enabled` are the plugins Hermes
+/// had enabled.
 ///
 /// # Errors
 ///
 /// When the source cannot be read or the profile cannot be written.
-pub fn import(scope: &ProfileScope, source: &Path, enabled: &[String]) -> Result<Report, Error> {
+pub fn import(
+    scope: &ProfileScope,
+    source: &Path,
+    enabled: &[String],
+    skip: &[String],
+) -> Result<Report, Error> {
     let mut report = Report::default();
     let mut dirs: Vec<PathBuf> = std::fs::read_dir(source)
         .map_err(|e| Error::io(&codes::PLUGINS_DISCOVERY, source, &e))?
         .flatten()
         .map(|e| e.path())
         .filter(|p| p.join(HERMES_MANIFEST_FILE).is_file())
+        .filter(|p| {
+            p.file_name()
+                .is_none_or(|n| !skip.iter().any(|s| n == s.as_str()))
+        })
         .collect();
     dirs.sort();
-    let mut keep: Vec<String> = Vec::new();
     for dir in dirs {
-        let imported = one(scope, &dir, enabled)?;
-        if imported.enabled {
-            keep.push(imported.id.clone());
-        }
-        report.plugins.push(imported);
-    }
-    if !keep.is_empty() {
-        let mut list = scope.config().plugins.enabled.clone();
-        for id in keep {
-            if !list.contains(&id) {
-                list.push(id);
-            }
-        }
-        let text = format!(
-            "[{}]",
-            list.iter()
-                .map(|i| format!("{i:?}"))
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-        scope
-            .profile()
-            .config_file()
-            .set("plugins.enabled", &text)?;
+        report.plugins.push(one(scope, &dir, enabled)?);
     }
     Ok(report)
 }
@@ -114,7 +101,7 @@ fn one(scope: &ProfileScope, dir: &Path, enabled: &[String]) -> Result<Imported,
     let mut imported = Imported {
         id: id.clone(),
         verdict: Verdict::Compatible,
-        enabled: false,
+        was_enabled: enabled.contains(&id),
         proposed: Vec::new(),
         blocking: Vec::new(),
         skipped: None,
@@ -134,8 +121,6 @@ fn one(scope: &ProfileScope, dir: &Path, enabled: &[String]) -> Result<Imported,
         .requested(&data)
         .map(|set| set.iter().map(describe).collect())
         .unwrap_or_default();
-    let was_enabled = enabled.contains(&id);
-    imported.enabled = was_enabled && report.verdict != Verdict::Incompatible;
     InstallRecord {
         source: Origin::Adopted,
         location: dir.to_string_lossy().into_owned(),
@@ -192,27 +177,28 @@ mod tests {
             copy(&pmt_pybridge::testkit::fixture(name), &to).unwrap();
         }
         let enabled = ["platform".to_owned(), "spotify".to_owned()];
-        let report = import(&scope, &hermes, &enabled).unwrap();
+        let report = import(&scope, &hermes, &enabled, &[]).unwrap();
         let by_id = |id: &str| report.plugins.iter().find(|p| p.id == id).unwrap().clone();
         let platform = by_id("platform");
         assert_eq!(platform.verdict, Verdict::Incompatible);
-        assert!(!platform.enabled);
+        assert!(platform.was_enabled);
         assert_eq!(platform.blocking, ["register_platform"]);
         assert!(scope.dir().join("plugins/platform/__init__.py").is_file());
         assert!(report.incompatible_lines()[0].contains("register_platform"));
         let spotify = by_id("spotify");
-        assert!(spotify.enabled);
+        assert_eq!(spotify.verdict, Verdict::Compatible);
         assert!(
             spotify.proposed.iter().any(|p| p.contains("SPOTIFY_TOKEN")),
             "{:?}",
             spotify.proposed
         );
-        assert!(!by_id("security-guidance").enabled, "not enabled in Hermes");
-        let config = std::fs::read_to_string(scope.dir().join("config.toml")).unwrap();
         assert!(
-            config.contains("spotify") && !config.contains("\"platform\""),
-            "{config}"
+            !by_id("security-guidance").was_enabled,
+            "not enabled in Hermes"
         );
+        // Nothing is enabled, even what Hermes had enabled.
+        let config = std::fs::read_to_string(scope.dir().join("config.toml")).unwrap();
+        assert!(!config.contains("spotify"), "{config}");
         // Proposed, not granted: the plugin waits for approval.
         let grants = std::fs::read_to_string(scope.dir().join("grants.toml")).unwrap_or_default();
         assert!(!grants.contains("spotify"), "{grants}");

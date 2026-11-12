@@ -414,6 +414,48 @@ jobs:
             -Binary target/debug/prometheus.exe -Target x86_64-pc-windows-msvc
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
+  # Distribution channels (spec: distribution-and-update): the NixOS and
+  # Home Manager modules in a NixOS VM test (Nix-owned keys read-only, no
+  # restart loop on exit 78, natively and in container mode) around a
+  # static binary of this commit, and the Home Manager evaluation test. The container image
+  # tests run in the x86_64 gnu check job (tests/container_image.rs).
+  channels:
+    name: distribution channels (NixOS module)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+        with:
+          target: x86_64-unknown-linux-musl
+          build-warnings: ""
+          cache-key: channels
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Install musl-tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends musl-tools
+
+      - name: Build a static binary
+        run: cargo build --locked -p prometheus --target x86_64-unknown-linux-musl
+
+      - name: Enable KVM for the NixOS VM test
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
+        with:
+          extra_nix_config: |
+            system-features = nixos-test benchmark big-parallel kvm
+
+      - name: NixOS module VM test (tests/nix_module.rs)
+        env:
+          PMT_TEST_NIX: require
+        run: |
+          PMT_TEST_NIX_BINARY=$PWD/target/x86_64-unknown-linux-musl/debug/prometheus \
+            cargo test --locked -p prometheus --test nix_module
+
   # Reproducible, locked builds (spec: distribution-and-update): the same
   # commit built twice on separate runners, as the release builds it
   # (`--locked`, the `dist` profile, the commit time as build date), must

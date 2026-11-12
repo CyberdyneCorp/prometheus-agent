@@ -178,7 +178,11 @@ fn run_hub(command: &SkillsCommand, env: &Env, ctx: &Context<'_>) -> Option<Resu
 }
 
 fn untrust(env: &Env, root: &Path) -> Result<u8, Error> {
-    let message = activation::untrust(env.scope.profile(), root)?;
+    let message = activation::untrust(
+        &*pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+        env.scope.profile(),
+        root,
+    )?;
     if env.json {
         return json(&json!({"profile": env.scope.name().as_str(), "untrusted": root}));
     }
@@ -187,7 +191,11 @@ fn untrust(env: &Env, root: &Path) -> Result<u8, Error> {
 }
 
 fn trust(env: &Env, root: &Path) -> Result<u8, Error> {
-    let message = activation::trust(env.scope.profile(), root)?;
+    let message = activation::trust(
+        &*pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+        env.scope.profile(),
+        root,
+    )?;
     if env.json {
         return json(
             &json!({"profile": env.scope.name().as_str(), "trusted": root.canonicalize().ok()}),
@@ -198,7 +206,13 @@ fn trust(env: &Env, root: &Path) -> Result<u8, Error> {
 }
 
 fn enable(env: &Env, name: &str, platform: Option<&str>, disabled: bool) -> Result<u8, Error> {
-    let message = activation::set_disabled(env.scope.profile(), name, platform, disabled)?;
+    let message = activation::set_disabled(
+        &*pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+        env.scope.profile(),
+        name,
+        platform,
+        disabled,
+    )?;
     let action = if disabled { "disable" } else { "enable" };
     crate::plugins_host::skill_changed(&env.scope, name, action);
     if env.json {

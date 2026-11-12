@@ -121,6 +121,14 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `import.id_collision` | `conflict` | 75 | A session, message or usage id of the import file already exists in this profile; nothing was imported. Rerun with `--remap-ids` to import under new ids. |
 | `import.invalid` | `invalid_input` | 65 | The import file is not a valid `prometheus.sessions` version 1 export (or a record in it is malformed); nothing was imported. |
 | `import.too_large` | `invalid_input` | 65 | The import file holds more than 500 sessions, 50000 messages or 256 MiB; nothing was imported. Export fewer sessions per file. |
+| `migrate.unknown_component` | `usage` | 2 | `--only` and `--skip` take config, secrets, identity, memory, skills, sessions, cron, mcp, plugins and gateway. |
+| `migrate.source_missing` | `not_found` | 66 | No Hermes home exists at `--hermes-home` (default `~/.hermes`, `%LOCALAPPDATA%\hermes` on Windows). |
+| `migrate.usage` | `usage` | 2 | `--into-profile` needs exactly one `--profile`; `--profile` and `--all` exclude each other. |
+| `migrate.confirmation_required` | `permission_denied` | 77 | Without a terminal the migration cannot ask before writing; rerun with `--yes` (exit 4). Nothing was written. |
+| `migrate.interrupted` | `cancelled` | 130 | The migration stopped at a commit boundary: every committed component and session batch is kept and recorded in the ledger; rerun the same command to continue. |
+| `migrate.source_busy` | `conflict` | 75 | The other agent is running and holds the directory `migrate cleanup` would archive (exit 75); stop it and rerun. Nothing was renamed. |
+| `migrate.destination` | `io` | 74 | The Prometheus home or profile cannot be created or written (permissions, read-only file system); nothing of that profile was imported (exit 73). |
+| `migrate.component` | `invalid_input` | 65 | A component of the Hermes profile could not be imported (an unsupported config or state.db version, an unreadable file); the other components proceed and the report names the cause. |
 | `store.fork_target_invalid` | `invalid_input` | 65 | `session.fork` names an `at_message_id` that is not an active message of the forked session. |
 | `store.rewind_conflict` | `conflict` | 75 | The messages the rewind or restore expected changed in the meantime; nothing changed. Look at the transcript again and retry. |
 | `session.in_use` | `conflict` | 75 | A live turn lease or compaction lock is held on the session; retry when the turn or compaction finished. |
@@ -293,6 +301,9 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `update.rollback_refused` | `tool` | 1 | There is no `prometheus.prev` to roll back to, or a profile's storage was migrated beyond what the previous binary reads; rerun with `--restore-snapshots` to restore the pre-update snapshots. |
 | `update.invalid_argument` | `usage` | 2 | A release version is not `vMAJOR.MINOR.PATCH` (or `vMAJOR.MINOR.PATCH-canary.YYYYMMDDHHMMSS`), or a channel is not `stable` or `canary`. |
 | `store.schema_unreadable` | `tool` | 1 | `state.db` was migrated by a newer Prometheus to a schema this build cannot read; it was not modified. Update Prometheus, or roll back with `prometheus update --rollback --restore-snapshots`. |
+| `update.confirmation_required` | `permission_denied` | 77 | A running gateway daemon has turns in progress, and restarting it on the new build needs a confirmation that cannot be asked without a terminal; the update stopped before the swap (exit 4) and nothing changed. Rerun with `--yes` (it restarts once the turns finish) or `--no-restart`. |
+| `uninstall.confirmation_required` | `permission_denied` | 77 | `prometheus uninstall --purge` or `--data-only` deletes the Prometheus home and asks first; without a terminal it needs `--yes`. Nothing was removed. Run `prometheus uninstall --dry-run` to see what it would delete. |
+| `uninstall.owned_elsewhere` | `unavailable` | 69 | This binary was installed by a package manager, the container image or a desktop package, which removes it; `prometheus uninstall` refuses to delete it and names that removal method. `--data-only` (and `--desktop-data`) still remove Prometheus data. |
 | `update.backup_failed` | `io` | 74 | The pre-update backup (`update.pre_update_backup`, `--backup`) could not be written, usually because the home volume is full; the update stopped before the swap (exit 73) and the installed binary is unchanged. Free space, or rerun with `--no-backup`. |
 | `demo.output_not_empty` | `usage` | 2 | `prometheus demo --output DIR` names a directory that is not empty; the demo only runs in a new or empty directory, so it never removes files it did not create. |
 | `demo.io` | `io` | 74 | `prometheus demo` could not create its directory, home, ledger repository or mock script. |
@@ -360,6 +371,8 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `rpc.session_denied` | `permission_denied` | 77 | The session is not one of the connection's profile, or a mutating method was called without attaching to it; the error does not say whether the session exists elsewhere. |
 | `rpc.connection` | `unavailable` | 69 | The connection to the daemon could not be opened or was closed (the WebSocket close code is in the message). |
 | `rpc.ticket` | `auth` | 78 | The control channel refused the ticket request (unknown profile or purpose, several profiles for a purpose other than `profile-admin`). |
+| `webhook.not_found` | `not_found` | 66 | The profile has no webhook subscription of that name; `prometheus webhooks list` shows them. |
+| `webhook.test_failed` | `unavailable` | 69 | The test delivery did not reach the route: the payload file is unreadable, the daemon's listener is not running, or it refused the delivery (the status is in the message). |
 | `daemon.not_running` | `unavailable` | 69 | No gateway daemon runs for this home; start it with `prometheus daemon start`. |
 | `daemon.start_failed` | `unavailable` | 69 | `prometheus daemon start` launched the daemon but it exited or did not publish its endpoint in time; see `prometheus logs daemon` and the exit status in the message. |
 | `daemon.no_profile` | `config` | 78 | Every profile of the home failed to load (each error is logged), so the daemon has nothing to serve. |
@@ -424,3 +437,9 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `service.needs_root` | `permission_denied` | 77 | `prometheus daemon install-service --system` installs a boot-time unit and must run as root (administrator on Windows); the per-user install needs no elevation. |
 | `service.manager` | `unavailable` | 69 | The OS service manager (systemd, launchd or Task Scheduler) refused the operation or is not available; the message carries its output. |
 | `service.unsupported` | `unavailable` | 69 | `prometheus daemon install-service` knows systemd (Linux), launchd (macOS) and Task Scheduler (Windows); on other OSes (Android/Termux, the BSDs) run `prometheus daemon run` under your own supervisor. |
+| `project.not_found` | `not_found` | 66 | No project of the profile has this id or slug; `prometheus projects list --all` shows every project, archived ones included. |
+| `project.invalid_slug` | `usage` | 2 | A project slug must match `^[a-z0-9][a-z0-9_-]{0,63}$`; a name with no letter or digit needs an explicit `--slug`. |
+| `project.slug_in_use` | `tool` | 1 | Project slugs are unique per profile (archived projects keep theirs); pick another `--slug`. |
+| `project.folder_claimed` | `tool` | 1 | A folder belongs to at most one non-archived project: remove it from the project that owns it (or archive that project) first. Restoring an archived project fails the same way when one of its folders was claimed meanwhile. |
+| `project.folder_invalid` | `tool` | 1 | The folder does not exist (folders are stored canonicalised, so they must exist when added), or it is not a folder of the project (`set-primary` and `remove-folder` take one of the project's folders). |
+| `project.archived` | `tool` | 1 | The project is archived: `prometheus projects restore <project>` brings it back before it can be activated or edited. |

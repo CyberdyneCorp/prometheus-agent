@@ -368,6 +368,30 @@ error_codes! {
     /// `sessions import` read a file over the import bounds.
     IMPORT_TOO_LARGE = ("import.too_large", InvalidInput,
         "The import file holds more than 500 sessions, 50000 messages or 256 MiB; nothing was imported. Export fewer sessions per file.");
+    /// `migrate from-hermes --only/--skip` named an unknown component.
+    MIGRATE_UNKNOWN_COMPONENT = ("migrate.unknown_component", Usage,
+        "`--only` and `--skip` take config, secrets, identity, memory, skills, sessions, cron, mcp, plugins and gateway.");
+    /// `migrate from-hermes` found no Hermes home.
+    MIGRATE_SOURCE_MISSING = ("migrate.source_missing", NotFound,
+        "No Hermes home exists at `--hermes-home` (default `~/.hermes`, `%LOCALAPPDATA%\\hermes` on Windows).");
+    /// `migrate from-hermes` options that do not go together.
+    MIGRATE_USAGE = ("migrate.usage", Usage,
+        "`--into-profile` needs exactly one `--profile`; `--profile` and `--all` exclude each other.");
+    /// `migrate from-hermes` needs `--yes` without a terminal.
+    MIGRATE_CONFIRMATION_REQUIRED = ("migrate.confirmation_required", PermissionDenied,
+        "Without a terminal the migration cannot ask before writing; rerun with `--yes` (exit 4). Nothing was written.");
+    /// A migration was interrupted (Ctrl+C) between two commits.
+    MIGRATE_INTERRUPTED = ("migrate.interrupted", Cancelled,
+        "The migration stopped at a commit boundary: every committed component and session batch is kept and recorded in the ledger; rerun the same command to continue.");
+    /// `migrate cleanup` found the source agent running.
+    MIGRATE_SOURCE_BUSY = ("migrate.source_busy", Conflict,
+        "The other agent is running and holds the directory `migrate cleanup` would archive (exit 75); stop it and rerun. Nothing was renamed.");
+    /// The migration cannot write the Prometheus profile.
+    MIGRATE_DESTINATION = ("migrate.destination", Io,
+        "The Prometheus home or profile cannot be created or written (permissions, read-only file system); nothing of that profile was imported (exit 73).");
+    /// A Hermes component could not be read or imported.
+    MIGRATE_COMPONENT = ("migrate.component", InvalidInput,
+        "A component of the Hermes profile could not be imported (an unsupported config or state.db version, an unreadable file); the other components proceed and the report names the cause.");
     /// The fork point is not an active message of the session.
     STORE_FORK_TARGET_INVALID = ("store.fork_target_invalid", InvalidInput,
         "`session.fork` names an `at_message_id` that is not an active message of the forked session.");
@@ -886,6 +910,16 @@ error_codes! {
     /// A `state.db` was written by a build this one cannot read.
     STORE_SCHEMA_UNREADABLE = ("store.schema_unreadable", Tool,
         "`state.db` was migrated by a newer Prometheus to a schema this build cannot read; it was not modified. Update Prometheus, or roll back with `prometheus update --rollback --restore-snapshots`.");
+    /// Restarting a busy daemon needs a confirmation nobody can give.
+    UPDATE_CONFIRMATION_REQUIRED = ("update.confirmation_required", PermissionDenied,
+        "A running gateway daemon has turns in progress, and restarting it on the new build needs a confirmation that cannot be asked without a terminal; the update stopped before the swap (exit 4) and nothing changed. Rerun with `--yes` (it restarts once the turns finish) or `--no-restart`.");
+    /// `prometheus uninstall` removed nothing because it needs a
+    /// confirmation nobody can give.
+    UNINSTALL_CONFIRMATION_REQUIRED = ("uninstall.confirmation_required", PermissionDenied,
+        "`prometheus uninstall --purge` or `--data-only` deletes the Prometheus home and asks first; without a terminal it needs `--yes`. Nothing was removed. Run `prometheus uninstall --dry-run` to see what it would delete.");
+    /// The install is removed by its package manager.
+    UNINSTALL_OWNED_ELSEWHERE = ("uninstall.owned_elsewhere", Unavailable,
+        "This binary was installed by a package manager, the container image or a desktop package, which removes it; `prometheus uninstall` refuses to delete it and names that removal method. `--data-only` (and `--desktop-data`) still remove Prometheus data.");
     /// The pre-update backup could not be written.
     UPDATE_BACKUP_FAILED = ("update.backup_failed", Io,
         "The pre-update backup (`update.pre_update_backup`, `--backup`) could not be written, usually because the home volume is full; the update stopped before the swap (exit 73) and the installed binary is unchanged. Free space, or rerun with `--no-backup`.");
@@ -1087,6 +1121,12 @@ error_codes! {
     /// No ticket, an unknown, expired or reused one, or a bad request on the control channel.
     RPC_TICKET = ("rpc.ticket", Auth,
         "The control channel refused the ticket request (unknown profile or purpose, several profiles for a purpose other than `profile-admin`).");
+    /// No webhook subscription has the name.
+    WEBHOOK_NOT_FOUND = ("webhook.not_found", NotFound,
+        "The profile has no webhook subscription of that name; `prometheus webhooks list` shows them.");
+    /// A webhook test delivery could not be made.
+    WEBHOOK_TEST_FAILED = ("webhook.test_failed", Unavailable,
+        "The test delivery did not reach the route: the payload file is unreadable, the daemon's listener is not running, or it refused the delivery (the status is in the message).");
     /// No daemon runs for the home.
     DAEMON_NOT_RUNNING = ("daemon.not_running", Unavailable,
         "No gateway daemon runs for this home; start it with `prometheus daemon start`.");
@@ -1281,6 +1321,24 @@ error_codes! {
     /// No supported service manager on this OS.
     SERVICE_UNSUPPORTED = ("service.unsupported", Unavailable,
         "`prometheus daemon install-service` knows systemd (Linux), launchd (macOS) and Task Scheduler (Windows); on other OSes (Android/Termux, the BSDs) run `prometheus daemon run` under your own supervisor.");
+    /// No project matches a reference.
+    PROJECT_NOT_FOUND = ("project.not_found", NotFound,
+        "No project of the profile has this id or slug; `prometheus projects list --all` shows every project, archived ones included.");
+    /// A project slug outside the slug pattern.
+    PROJECT_INVALID_SLUG = ("project.invalid_slug", Usage,
+        "A project slug must match `^[a-z0-9][a-z0-9_-]{0,63}$`; a name with no letter or digit needs an explicit `--slug`.");
+    /// Another project already uses the slug.
+    PROJECT_SLUG_IN_USE = ("project.slug_in_use", Tool,
+        "Project slugs are unique per profile (archived projects keep theirs); pick another `--slug`.");
+    /// A folder already owned by another live project.
+    PROJECT_FOLDER_CLAIMED = ("project.folder_claimed", Tool,
+        "A folder belongs to at most one non-archived project: remove it from the project that owns it (or archive that project) first. Restoring an archived project fails the same way when one of its folders was claimed meanwhile.");
+    /// A folder argument that is not usable.
+    PROJECT_FOLDER_INVALID = ("project.folder_invalid", Tool,
+        "The folder does not exist (folders are stored canonicalised, so they must exist when added), or it is not a folder of the project (`set-primary` and `remove-folder` take one of the project's folders).");
+    /// The command needs a live project.
+    PROJECT_ARCHIVED = ("project.archived", Tool,
+        "The project is archived: `prometheus projects restore <project>` brings it back before it can be activated or edited.");
 }
 
 /// A user-visible error: a catalog code (which fixes the kind), a one-line

@@ -26,6 +26,9 @@ pub(super) trait Out {
     /// A piece of the answer while the turn generates it (the whole
     /// answer still comes through [`Out::answer`]).
     fn delta(&self, _text: &str) {}
+    /// Every `session.event` as it arrives (a streamed one-shot run
+    /// writes the trajectory events among them as JSON lines).
+    fn raw_event(&self, _event: &pmt_rpc::contracts::Envelope) {}
     /// An error.
     fn error(&self, err: &Error);
 }
@@ -73,19 +76,21 @@ impl Out for Plain {
 }
 
 /// Shows one `session.event` of the session.
-pub(super) fn event(out: &dyn Out, data: &Value) {
+pub(super) fn event(out: &dyn Out, data: &Value, strings: &pmt_i18n::Strings) {
     match data["type"].as_str() {
         Some("tool.call") => {
             let tool = data["payload"]["tool"].as_str().unwrap_or("tool");
             out.tool(&format!("· {tool}"));
         }
         Some(COMMAND_NOTICE) => out.notice(data["payload"]["text"].as_str().unwrap_or_default()),
-        Some(PROCESS_NOTICE) => out.notice(&format!(
-            "[background] {}",
-            data["payload"]["text"].as_str().unwrap_or_default()
+        Some(PROCESS_NOTICE) => out.notice(&pmt_i18n::t!(
+            strings,
+            "display.background",
+            text = data["payload"]["text"].as_str().unwrap_or_default()
         )),
         Some(kind) => {
-            if let Some(line) = crate::chat::session::progress::context_line(kind, &data["payload"])
+            if let Some(line) =
+                crate::chat::session::progress::context_line(strings, kind, &data["payload"])
             {
                 out.notice(&line);
             }

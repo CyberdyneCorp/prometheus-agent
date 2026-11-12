@@ -60,14 +60,18 @@ struct Report<'a> {
 /// Home, profile and store errors.
 pub fn run(args: &StatusArgs, ctx: &Context<'_>) -> Result<u8, Error> {
     let home = ctx.home()?.root().to_path_buf();
-    let facts = daemon::facts(&home)?;
     if args.liveness {
-        let alive = facts.health_url.as_deref().is_some_and(daemon::healthz);
+        // Only the health endpoint (2 s bounds): a container health check
+        // must answer within its timeout even when the daemon hangs.
+        let alive = daemon::health_url(&home)?
+            .as_deref()
+            .is_some_and(daemon::healthz);
         if !alive {
             eprintln!("daemon: not live");
         }
         return Ok(u8::from(!alive));
     }
+    let facts = daemon::facts(&home)?;
     let scope = ctx.scope()?;
     if args.exports {
         let live = facts.status.as_ref().and_then(|s| s.export.as_ref());

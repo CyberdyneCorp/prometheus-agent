@@ -250,7 +250,13 @@ async fn sync_back_cap() {
     let report = sync.sync().unwrap();
     assert_eq!(report.copied, ["a.txt", "out/b.bin", "out/d.bin"]);
     assert_eq!(report.skipped, [("out/c.bin".to_owned(), 4096)]);
-    assert!(report.notice(3 * 1024).unwrap().contains("out/c.bin"));
+    let english = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
+    assert!(
+        report
+            .notice(&*english, 3 * 1024)
+            .unwrap()
+            .contains("out/c.bin")
+    );
     assert_eq!(
         std::fs::metadata(host.join("out/b.bin")).unwrap().len(),
         1024

@@ -23,9 +23,6 @@ use crate::chat::attach;
 use crate::chat::repl::queue;
 use crate::slash::{Registry, Resolution, Surface, split_line};
 
-/// Commands that ask `once / always / cancel` first.
-const DESTRUCTIVE: &[&str] = &["clear", "new", "undo", "rewind"];
-
 /// `args` without `--yes`/`-y`, and whether one was there.
 fn take_yes(args: &str) -> (String, bool) {
     let kept: Vec<&str> = args
@@ -46,7 +43,10 @@ impl Chat<'_, '_> {
             return Ok(Flow::Continue);
         };
         let (args, yes) = take_yes(&args);
-        if DESTRUCTIVE.contains(&command.name) && !yes && !self.confirmed(command.name).await? {
+        if crate::slash::is_destructive(command.name, &args)
+            && !yes
+            && !self.confirmed(command.name).await?
+        {
             return Ok(Flow::Continue);
         }
         if let Some(flow) = self.local(command.name, &args).await? {
@@ -62,9 +62,8 @@ impl Chat<'_, '_> {
         if !self.confirm_destructive {
             return Ok(true);
         }
-        self.screen.ask(&format!(
-            "/{name} changes this session. Run it [o]nce, [a]lways (stop asking), or [c]ancel?"
-        ));
+        let question = pmt_i18n::t!(self.strings(), "cli.confirm_destructive", command = name);
+        self.screen.ask(&question);
         let answer = match self.lines.next().await {
             Typed::Line(line) => line.trim().to_lowercase(),
             _ => String::new(),
@@ -90,6 +89,7 @@ impl Chat<'_, '_> {
     /// Runs `name` here when it is a client command.
     async fn local(&mut self, name: &str, args: &str) -> Result<Option<Flow>, Error> {
         let text = match name {
+            "exit" if crate::slash::exit_deletes(args) => return Ok(Some(Flow::ExitDelete)),
             "exit" => return Ok(Some(Flow::Exit)),
             "voice" => {
                 self.voice_command(args).await;
@@ -102,6 +102,7 @@ impl Chat<'_, '_> {
                     scope.name().as_str(),
                     &self.attached.session,
                     args,
+                    self.strings(),
                 )
                 .await;
                 return Ok(Some(match handed {
@@ -142,7 +143,7 @@ impl Chat<'_, '_> {
             }
             "stop" => {
                 self.interrupt().await;
-                Ok("nothing is running".to_owned())
+                Ok(pmt_i18n::t!(self.strings(), "cli.nothing_running"))
             }
             "prompt" => return self.compose(args).await.map(Some),
             other => match self.display_command(other, args) {
@@ -160,15 +161,15 @@ impl Chat<'_, '_> {
     /// What this terminal shows and carries with the next prompt.
     fn display_command(&mut self, name: &str, args: &str) -> Option<Result<String, Error>> {
         let scope = self.start.scope;
+        let strings = self.strings();
         let display = &mut self.screen.display;
         Some(match name {
             "theme" => display.set_theme(scope, args),
-            "verbose" => Ok(display.verbose()),
-            "focus" => Ok(display.focus(args)),
+            "verbose" => Ok(display.verbose(&strings)),
+            "focus" => Ok(display.focus(args, &strings)),
             "timestamps" => display.set_timestamps(scope, args),
-            "queue" => {
-                queue::parse(args).and_then(|action| queue::apply(&mut self.lines.queue, action))
-            }
+            "queue" => queue::parse(args)
+                .and_then(|action| queue::apply(&strings, &mut self.lines.queue, action)),
             "image" => self.image(args),
             "redraw" => {
                 self.lines.redraw();
@@ -182,10 +183,11 @@ impl Chat<'_, '_> {
 
     /// `/image <path>` attaches, bare `/image` lists, `/image clear` drops.
     fn image(&mut self, args: &str) -> Result<String, Error> {
+        let strings = self.strings();
         match args.trim() {
-            "" if self.images.is_empty() => Ok("no pending images".to_owned()),
+            "" if self.images.is_empty() => Ok(pmt_i18n::t!(strings, "cli.no_images")),
             "" => {
-                let mut text = String::from("pending images (sent with the next prompt):");
+                let mut text = pmt_i18n::t!(strings, "cli.images_heading");
                 for path in &self.images {
                     let _ = write!(text, "\n  {}", path.display());
                 }
@@ -194,16 +196,17 @@ impl Chat<'_, '_> {
             "clear" => {
                 let n = self.images.len();
                 self.images.clear();
-                Ok(format!("dropped {n} pending image(s)"))
+                Ok(pmt_i18n::t!(strings, "cli.images_dropped", count = n))
             }
             path => {
                 let path = self.start.cwd.join(path);
                 let image = attach::load(&path)?;
                 self.images.push(path);
-                Ok(format!(
-                    "attached {} ({} pending; sent with the next prompt)",
-                    image.name,
-                    self.images.len()
+                Ok(pmt_i18n::t!(
+                    strings,
+                    "cli.remote_image_attached",
+                    name = image.name,
+                    count = self.images.len()
                 ))
             }
         }
@@ -220,7 +223,7 @@ impl Chat<'_, '_> {
         let dir = self.start.scope.path("cache/compose");
         match crate::chat::repl::compose::edit_message(&dir, editor, initial) {
             Ok(Some(text)) => self.submit(text).await?,
-            Ok(None) => self.screen.notice(crate::chat::repl::compose::EMPTY),
+            Ok(None) => self.screen.notice(self.strings().get("cli.empty_prompt")),
             Err(err) => self.screen.error(&err),
         }
         Ok(Flow::Continue)
@@ -239,10 +242,13 @@ impl Chat<'_, '_> {
             .await
             .map_err(|e| error_of(&e))?;
         open::resume(client, &forked.session_id, &self.start.setup).await?;
-        self.screen.notice(&format!(
-            "forked {} into {}",
-            self.attached.session, forked.session_id
-        ));
+        let text = pmt_i18n::t!(
+            self.strings(),
+            "cli.forked",
+            parent = self.attached.session,
+            child = forked.session_id
+        );
+        self.screen.notice(&text);
         Ok(forked.session_id)
     }
 

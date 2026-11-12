@@ -59,8 +59,8 @@ impl Repl {
             Work::Input(input) => input.origin.clone(),
             Work::Resume(..) => None,
         };
-        if let Err(err) = pmt_core::pause::check(live.scope.home()) {
-            self.error(&err);
+        if let Some(pause) = pmt_core::pause::active(live.scope.home()) {
+            self.say(Role::Error, &pause.notice(&*self.strings()));
             self.live = Some(live);
             return;
         }
@@ -110,11 +110,22 @@ impl Repl {
         self.after_turn(&live, result, started.elapsed(), calls)
             .await;
         self.automation_after(&live, outcome).await;
+        if let Some(plan) = live.tools.end_plan() {
+            self.notice(&crate::chat::commands::planning::finished(
+                &self.strings(),
+                &plan,
+            ));
+        }
         if let Some(back) = live.model.end_turn() {
-            self.notice(&format!(
-                "model: back to {}/{}",
+            let route = format!(
+                "{}/{}",
                 back.provider,
                 back.model.as_deref().unwrap_or("default")
+            );
+            self.notice(&pmt_i18n::t!(
+                self.strings(),
+                "display.model_back",
+                route = route
             ));
         }
         self.spacer();
@@ -142,7 +153,8 @@ impl Repl {
                 }
                 Some(prompt) = next(&mut self.approvals) => {
                     self.ring_bell();
-                    self.say(Role::Notice, &prompts::approval_question(prompt.request()));
+                    let question = prompts::approval_question(prompt.request(), &self.strings());
+                    self.say(Role::Notice, &question);
                     self.ask(Pending::Approval(prompt));
                 }
                 Some(prompt) = next(&mut self.clarify) => {
@@ -179,12 +191,13 @@ impl Repl {
         if let Some(old) = self.pending.replace(pending) {
             old.cancel();
         }
+        let strings = self.strings();
         self.say(
             Role::Prompt,
             &self
                 .pending
                 .as_ref()
-                .map(Pending::prompt)
+                .map(|p| p.prompt(&strings))
                 .unwrap_or_default(),
         );
     }
@@ -207,17 +220,17 @@ impl Repl {
                     self.queue.push_back("/exit".to_owned());
                 }
             }
-            Event::SuspendRefused => self.notice("cannot suspend while the agent is working"),
+            Event::SuspendRefused => self.notice(self.strings().get("cli.cannot_suspend")),
             // Voice records between turns only.
             Event::Record => {}
             Event::Compose(_) => {
-                self.notice("/prompt is unavailable while the agent is working; use /stop first");
+                self.notice(self.strings().get("cli.prompt_busy"));
             }
             Event::Line(text) => {
                 if let Some(pending) = self.pending.take() {
                     self.answer_now(pending, &text);
                 } else if text.trim_start().starts_with('!') {
-                    self.notice(super::shell::BUSY);
+                    self.notice(self.strings().get("cli.shell_busy"));
                 } else if text.trim_start().starts_with('/') {
                     self.busy_slash(text.trim(), session, interrupt).await;
                 } else if !text.trim().is_empty() {
@@ -240,12 +253,20 @@ impl Repl {
             }
         };
         match policy {
-            BusyPolicy::Reject => self.notice(&format!(
-                "/{name} is unavailable while the agent is working; use /stop first"
-            )),
+            BusyPolicy::Reject => {
+                self.notice(&pmt_i18n::t!(
+                    self.strings(),
+                    "cli.command_busy",
+                    name = name
+                ));
+            }
             BusyPolicy::Queue => {
                 self.queue.push_back(typed.to_owned());
-                self.notice(&format!("/{name} queued; it runs after this turn"));
+                self.notice(&pmt_i18n::t!(
+                    self.strings(),
+                    "cli.command_queued",
+                    name = name
+                ));
             }
             BusyPolicy::InterruptThenDispatch => {
                 interrupt.stop(Issuer::User);
@@ -266,10 +287,10 @@ impl Repl {
         match self.factory.scope.config().busy.input_mode {
             BusyInputMode::Queue => {
                 self.queue.push_back(text);
-                self.notice("queued; it is sent when this turn ends");
+                self.notice(self.strings().get("cli.text_queued"));
             }
             BusyInputMode::Steer => match live.agent.steer(&text) {
-                Ok(()) => self.notice("steering the running turn"),
+                Ok(()) => self.notice(self.strings().get("cli.steering")),
                 Err(err) => self.error(&err),
             },
             BusyInputMode::Interrupt => {
@@ -283,10 +304,14 @@ impl Repl {
     pub(super) fn answer_now(&mut self, pending: Pending, line: &str) {
         match pending {
             Pending::Approval(prompt) => {
+                let strings = self.strings();
                 if let Some(decision) = prompts::decision(line) {
+                    if let Some(outcome) = prompts::outcome(decision, &strings) {
+                        self.notice(outcome);
+                    }
                     prompt.respond(decision);
                 } else {
-                    self.notice("answer o(nce), s(ession), a(lways) or d(eny)");
+                    self.notice(strings.get("approval.answer_hint"));
                     self.pending = Some(Pending::Approval(prompt));
                 }
             }
@@ -359,8 +384,15 @@ impl Repl {
         self.turn_summary(elapsed, calls, &result.usage);
         match result.exit_reason {
             ExitReason::Completed => {}
-            ExitReason::InterruptedByUser => self.notice("interrupted"),
-            other => self.notice(&format!("turn ended: {}", other.as_str())),
+            ExitReason::InterruptedByUser => self.notice(self.strings().get("display.interrupted")),
+            other => {
+                let text = pmt_i18n::t!(
+                    self.strings(),
+                    "display.turn_ended",
+                    reason = other.as_str()
+                );
+                self.notice(&text);
+            }
         }
         if let Some(err) = &result.error {
             self.error(err);
@@ -422,14 +454,14 @@ impl Repl {
             Err(err) => return self.error(&err),
         };
         let tools = unfinished.interrupted_tools();
-        let running = if tools.is_empty() {
-            String::new()
+        let strings = self.strings();
+        let text = if tools.is_empty() {
+            pmt_i18n::t!(strings, "display.unfinished")
         } else {
-            format!(" while {} ran", tools.join(", "))
+            let tools = tools.join(", ");
+            pmt_i18n::t!(strings, "display.unfinished_tools", tools = tools)
         };
-        self.notice(&format!(
-            "The last turn of this session stopped when the process ended{running}."
-        ));
+        self.notice(&text);
         match self.factory.scope.config().agent.resume_on_crash {
             ResumeOnCrash::Auto => self.run_work(Work::Resume(unfinished, true)).await,
             ResumeOnCrash::Never => self.run_work(Work::Resume(unfinished, false)).await,
@@ -450,7 +482,7 @@ impl Repl {
         );
         match due {
             Ok(true) => {
-                self.notice(super::super::autoprune::QUESTION);
+                self.notice(&super::super::autoprune::question(&self.factory.scope));
                 self.ask(Pending::Autoprune);
             }
             Ok(false) => {}

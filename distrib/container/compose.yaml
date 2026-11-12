@@ -1,0 +1,53 @@
+# Reference deployment of the Prometheus image (spec: distribution-and-
+# update, Container filesystem, init and health; Container audio bridge and
+# host services). One container serves every profile under /data/profiles
+# through its one daemon.
+#
+#   docker compose up -d
+#   docker compose exec prometheus prometheus status
+#   docker compose run --rm -it prometheus prometheus chat
+#   docker compose --profile audio up -d prometheus-audio   # voice mode
+#
+# No port is published: add one per daemon-wide listener you enable in
+# /data/daemon.toml (each serves every profile by path), e.g. "8644:8644"
+# for gateway.http with listen = "0.0.0.0:8644" and public = true.
+
+x-prometheus: &prometheus
+  image: ghcr.io/cyberdynecorp/prometheus:${PROMETHEUS_VERSION:-latest}
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp
+  volumes:
+    - prometheus-data:/data
+  mem_limit: 2g
+  pids_limit: 512
+  extra_hosts:
+    # A provider on the host (Ollama, LM Studio, llama.cpp) is
+    # http://host.docker.internal:<port>, not localhost.
+    - "host.docker.internal:host-gateway"
+  healthcheck:
+    test: ["CMD", "prometheus", "status", "--liveness"]
+    interval: 30s
+    timeout: 5s
+    retries: 3
+    start_period: 20s
+
+services:
+  prometheus:
+    <<: *prometheus
+
+  # Voice mode in a container: the host's PulseAudio-compatible socket
+  # (PulseAudio or PipeWire-Pulse) at /run/pulse/native; set PULSE_SOCKET
+  # to the host path (default: the logged-in user's).
+  prometheus-audio:
+    <<: *prometheus
+    profiles: ["audio"]
+    volumes:
+      - prometheus-data:/data
+      - ${PULSE_SOCKET:-/run/user/1000/pulse/native}:/run/pulse/native
+    environment:
+      PULSE_SERVER: unix:/run/pulse/native
+
+volumes:
+  prometheus-data:

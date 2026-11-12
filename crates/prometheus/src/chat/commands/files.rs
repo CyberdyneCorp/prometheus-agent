@@ -119,7 +119,11 @@ pub fn undo(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
             Err(err) => return Err(err),
         }
     }
-    let _ = write!(text, "undid the last exchange ({messages} messages)");
+    text.push_str(&pmt_i18n::t!(
+        ctx.strings(),
+        "slash.files.undid",
+        count = messages
+    ));
     Ok(text)
 }
 
@@ -166,10 +170,12 @@ pub fn rollback_live(
     diff: bool,
     all: bool,
 ) -> Result<String, Error> {
+    let strings = pmt_config::language::strings(live.scope.dir(), pmt_i18n::Surface::Core);
     let Some(snapshots) = &live.place.snapshots() else {
-        return Ok("file snapshots are off for this session".to_owned());
+        return Ok(pmt_i18n::t!(strings, "slash.files.snapshots_off"));
     };
     let reply = rollback_reply(
+        &strings,
         snapshots.store(),
         snapshots.tree(),
         snapshots.workspace(),
@@ -194,7 +200,9 @@ pub fn rollback_live(
 /// # Errors
 ///
 /// An unknown checkpoint, store I/O.
+#[allow(clippy::too_many_arguments)] // the rollback's own flags, plus where and in which language
 pub fn rollback_reply(
+    strings: &pmt_i18n::Strings,
     store: &SnapshotStore,
     tree: &dyn Tree,
     dir: &Path,
@@ -206,21 +214,24 @@ pub fn rollback_reply(
     let checkpoints = restore::checkpoints(store, tree, dir);
     let Some(number) = number else {
         if checkpoints.is_empty() {
-            return Ok("no checkpoints for this workspace".to_owned());
+            return Ok(pmt_i18n::t!(strings, "slash.files.no_checkpoints"));
         }
-        let mut text = String::from(
-            "checkpoints (newest first; /rollback N restores, /rollback diff N previews):\n",
-        );
+        let mut text = format!("{}\n", strings.get("slash.files.checkpoints"));
         for row in restore::listing(store, tree, &checkpoints) {
             let at = jiff::Timestamp::from_millisecond(row.created_ms).map_or_else(
                 |_| "?".to_owned(),
                 |t| t.strftime("%Y-%m-%d %H:%M:%S").to_string(),
             );
-            let _ = writeln!(
-                text,
-                "  {}. {at}  {}  {} files, {} lines changed since",
-                row.number, row.tool, row.files_changed, row.lines_changed
+            let line = pmt_i18n::t!(
+                strings,
+                "slash.files.checkpoint_row",
+                n = row.number,
+                at = at,
+                tool = row.tool,
+                files = row.files_changed,
+                lines = row.lines_changed
             );
+            let _ = writeln!(text, "  {line}");
         }
         return Ok(text);
     };

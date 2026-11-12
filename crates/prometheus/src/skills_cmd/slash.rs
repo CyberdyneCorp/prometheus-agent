@@ -8,6 +8,7 @@ use std::path::Path;
 use pmt_config::ProfileScope;
 use pmt_core::env::LaunchEnv;
 use pmt_core::error::{Error, codes};
+use pmt_core::text::Catalog;
 use pmt_skillhub::install::{self, Options};
 use pmt_skillhub::{Identifier, inspect, maintain, search, taps};
 use pmt_skills::activation;
@@ -105,52 +106,52 @@ pub(crate) fn run(
 
 fn dispatch(env: &Env, verb: &str, p: &Parsed<'_>) -> Result<String, Error> {
     let rest = &p.words[1..];
+    let strings = pmt_config::language::strings(env.scope.dir(), pmt_i18n::Surface::Core);
+    let text: &dyn Catalog = &*strings;
+    let deferred = || text.text(activation::DEFERRED, &[]);
     match (verb, rest) {
-        ("browse", []) => Ok(listing_text(&search::browse(
-            &hub(env)?,
-            p.value("--source"),
-        ))),
+        ("browse", []) => Ok(listing_text(
+            text,
+            &search::browse(&hub(env)?, p.value("--source")),
+        )),
         ("search", [_, ..]) => {
             let query = rest.join(" ");
-            Ok(listing_text(&search::search(
-                &hub(env)?,
-                &query,
-                p.value("--source"),
-            )))
-        }
-        ("inspect", [id]) => Ok(inspect_text(&inspect::inspect(
-            &hub(env)?,
-            &Identifier::parse(id)?,
-        )?)),
-        ("install", [id]) => install(env, id, p),
-        ("uninstall", [name]) => {
-            maintain::uninstall(&hub(env)?, name)?;
-            Ok(format!("Uninstalled '{name}'. {}", activation::DEFERRED))
-        }
-        ("check", [] | [_]) => Ok(check_text(&maintain::check(
-            &hub(env)?,
-            rest.first().copied(),
-        )?)),
-        ("update", [] | [_]) => Ok(update_text(&maintain::update(
-            &hub(env)?,
-            rest.first().copied(),
-            p.flag("--force"),
-        )?)),
-        ("audit", []) => Ok(audit_text(&maintain::audit(&hub(env)?)?)),
-        ("accept", [name]) => {
-            maintain::accept(&hub(env)?, name)?;
-            Ok(format!(
-                "Accepted the current files of '{name}'. {}",
-                activation::DEFERRED
+            Ok(listing_text(
+                text,
+                &search::search(&hub(env)?, &query, p.value("--source")),
             ))
         }
-        ("tap", _) => tap(env, rest, p),
-        ("untrust", [root]) => activation::untrust(env.scope.profile(), Path::new(root)),
+        ("inspect", [id]) => Ok(inspect_text(
+            text,
+            &inspect::inspect(&hub(env)?, &Identifier::parse(id)?)?,
+        )),
+        ("install", [id]) => install(text, env, id, p),
+        ("uninstall", [name]) => {
+            maintain::uninstall(&hub(env)?, name)?;
+            let done = text.text("slash.skills.uninstalled", &[("name", name)]);
+            Ok(format!("{done} {}", deferred()))
+        }
+        ("check", [] | [_]) => Ok(check_text(
+            text,
+            &maintain::check(&hub(env)?, rest.first().copied())?,
+        )),
+        ("update", [] | [_]) => Ok(update_text(
+            text,
+            &maintain::update(&hub(env)?, rest.first().copied(), p.flag("--force"))?,
+        )),
+        ("audit", []) => Ok(audit_text(text, &maintain::audit(&hub(env)?)?)),
+        ("accept", [name]) => {
+            maintain::accept(&hub(env)?, name)?;
+            let done = text.text("slash.skills.accepted", &[("name", name)]);
+            Ok(format!("{done} {}", deferred()))
+        }
+        ("tap", _) => tap(text, env, rest, p),
+        ("untrust", [root]) => activation::untrust(text, env.scope.profile(), Path::new(root)),
         _ => Err(usage()),
     }
 }
 
-fn install(env: &Env, id: &str, p: &Parsed<'_>) -> Result<String, Error> {
+fn install(text: &dyn Catalog, env: &Env, id: &str, p: &Parsed<'_>) -> Result<String, Error> {
     let options = Options {
         force: p.flag("--force"),
         name: p.value("--name").map(str::to_owned),
@@ -158,31 +159,34 @@ fn install(env: &Env, id: &str, p: &Parsed<'_>) -> Result<String, Error> {
     };
     let installed = install::install(&hub(env)?, &Identifier::parse(id)?, &options)?;
     after_install(env, &installed);
-    Ok(install_text(&installed))
+    Ok(install_text(text, &installed))
 }
 
-fn tap(env: &Env, rest: &[&str], p: &Parsed<'_>) -> Result<String, Error> {
+fn tap(text: &dyn Catalog, env: &Env, rest: &[&str], p: &Parsed<'_>) -> Result<String, Error> {
     let dir = env.scope.dir();
     match rest {
         ["list"] | [] => {
             let list = taps::read(dir)?;
             if list.is_empty() {
-                return Ok("No taps.".to_owned());
+                return Ok(text.text("slash.skills.no_taps", &[]));
             }
             Ok(list
                 .iter()
-                .map(|t| format!("{} (path {})", t.repo, t.path))
+                .map(|t| text.text("slash.skills.tap", &[("repo", &t.repo), ("path", &t.path)]))
                 .collect::<Vec<_>>()
                 .join("\n"))
         }
         ["add", repo] => {
             taps::add(dir, repo, p.value("--path"))?;
             let trust = pmt_skillhub::sources::trust_text(hub(env)?.repo_trust(repo));
-            Ok(format!("Added tap {repo} (trust {trust})."))
+            Ok(text.text(
+                "slash.skills.tap_added",
+                &[("repo", repo), ("trust", &trust)],
+            ))
         }
         ["remove", repo] => {
             taps::remove(dir, repo)?;
-            Ok(format!("Removed tap {repo}."))
+            Ok(text.text("slash.skills.tap_removed", &[("repo", repo)]))
         }
         _ => Err(usage()),
     }

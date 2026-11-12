@@ -47,6 +47,10 @@ pub struct Installer {
     sources: Sources,
     budget: Budget,
     progress: Progress,
+    /// An unpacked offline bundle's archives for this platform
+    /// (`<bundle>/runtimes/<platform>/<name>/<archive>`): used instead of
+    /// any download, still checked against this binary's pinned digests.
+    bundle: Option<PathBuf>,
 }
 
 impl std::fmt::Debug for Installer {
@@ -82,7 +86,16 @@ impl Installer {
             sources,
             budget: Budget::default(),
             progress,
+            bundle: None,
         }
+    }
+
+    /// Installs from the offline bundle unpacked at `dir` instead of
+    /// downloading (`prometheus runtimes install --from-bundle`).
+    #[must_use]
+    pub fn with_bundle(mut self, dir: &Path) -> Self {
+        self.bundle = Some(dir.join("runtimes").join(self.store.platform()));
+        self
     }
 
     /// Replaces the retry budget (tests use short delays).
@@ -198,6 +211,24 @@ impl Installer {
         artifact: &PinnedArtifact,
         partial: &Path,
     ) -> Result<(String, &'static str, Stats), Error> {
+        if let Some(bundle) = &self.bundle {
+            let file = bundle.join(name).join(artifact.file_name());
+            std::fs::copy(&file, partial).map_err(|e| {
+                Error::new(
+                    &codes::RUNTIME_DOWNLOAD,
+                    format!(
+                        "the bundle has no {name} {} for {}: {e}",
+                        pin.version,
+                        self.store.platform()
+                    ),
+                )
+            })?;
+            return Ok((
+                format!("bundle:{}", file.display()),
+                "bundle",
+                Stats::default(),
+            ));
+        }
         let mut last = None;
         for (url, source) in self.urls(name, pin, artifact) {
             let mut sink =

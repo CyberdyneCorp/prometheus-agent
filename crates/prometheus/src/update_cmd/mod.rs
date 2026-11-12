@@ -1,10 +1,16 @@
 //! `prometheus update` (spec: distribution-and-update): `--status`,
-//! `--check`, `--set-channel`, `--rollback [--restore-snapshots]` and the
-//! update itself. The work lives in `pmt-update`; this module builds the
+//! `--check`, `--dry-run`, `--set-channel`, `--rollback
+//! [--restore-snapshots]` and the update itself (from the release origin
+//! or `--from-bundle`), which hands a running daemon over to the new build
+//! ([`handover`]). The work lives in `pmt-update`; this module builds the
 //! install description, prints results and maps them to exit codes (0, 1,
 //! 2, 4, 10, 69, 73, 75, 77).
 
-use std::path::PathBuf;
+mod handover;
+mod preview;
+
+use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use pmt_config::daemon::{DaemonConfig, PreUpdateBackup};
 use pmt_core::error::{Error, codes};
@@ -12,12 +18,13 @@ use pmt_net::OutboundPolicy;
 use pmt_update::flow::{
     self, Checked, Install, RollbackOptions, RolledBack, Session, UpdateOptions, Updated,
 };
-use pmt_update::{Channel, Identity, ReleaseVersion, Releases, TrustRoot};
+use pmt_update::{Channel, Identity, ReleaseVersion, Releases, TrustRoot, bundle};
 use serde_json::json;
 
 use crate::cli::UpdateArgs;
 use crate::context::Context;
 use crate::{build_info, output, prompt};
+use handover::RunningDaemon;
 
 /// Runs `prometheus update`.
 ///
@@ -54,17 +61,12 @@ fn run_update(args: &UpdateArgs, ctx: &Context<'_>) -> Result<u8, Error> {
         return rollback(&install, args);
     }
     let config = DaemonConfig::load(install.home.root())?.update;
-    let releases = Releases::new(
-        config.mirror_url.as_deref(),
-        Identity {
-            version: build_info::VERSION,
-            target: build_info::TARGET,
-        },
-        &outbound_policy(ctx),
-        TrustRoot::embedded(),
-        config.require_transparency_log,
-    )?
-    .with_fallback(config.mirror_fallback);
+    let bundle = args
+        .from_bundle
+        .as_deref()
+        .map(|path| open_bundle(path, install.home.root()))
+        .transpose()?;
+    let releases = releases(ctx, &config, bundle.as_ref())?;
     let progress = |line: &str| eprintln!("{line}");
     let session = Session {
         install: &install,
@@ -85,23 +87,81 @@ fn run_update(args: &UpdateArgs, ctx: &Context<'_>) -> Result<u8, Error> {
         let checked = runtime.block_on(flow::check(&session, channel))?;
         return print_check(&checked, ctx.json);
     }
+    let daemon = RunningDaemon::new(
+        install.home.root(),
+        &install.binary,
+        args.no_restart,
+        args.yes,
+        Duration::from_secs(config.drain_timeout_secs),
+    );
+    if args.dry_run {
+        let plan = runtime.block_on(flow::dry_run::dry_run(
+            &session,
+            channel,
+            daemon.is_running(),
+        ))?;
+        return preview::print(&plan, ctx.json);
+    }
     let options = UpdateOptions {
         channel,
         allow_downgrade: args.allow_downgrade,
         backup: backup_override(args),
+        daemon: Some(&daemon),
+        bundle: bundle.as_ref().map(|b| b.dir.as_path()),
     };
-    match runtime.block_on(flow::update(&session, options)) {
+    updated(runtime.block_on(flow::update(&session, options)), ctx.json)
+}
+
+/// The release origin client: the mirror or default origin, or the
+/// unpacked `--from-bundle`.
+fn releases(
+    ctx: &Context<'_>,
+    config: &pmt_config::daemon::UpdateConfig,
+    bundle: Option<&bundle::Opened>,
+) -> Result<Releases, Error> {
+    let releases = Releases::new(
+        config.mirror_url.as_deref(),
+        Identity {
+            version: build_info::VERSION,
+            target: build_info::TARGET,
+        },
+        &outbound_policy(ctx),
+        TrustRoot::embedded(),
+        config.require_transparency_log,
+    )?
+    .with_fallback(config.mirror_fallback);
+    Ok(match bundle {
+        Some(bundle) => releases.from_bundle(&bundle.dir, bundle.manifest.version),
+        None => releases,
+    })
+}
+
+/// Prints an update's result and maps it to its exit code.
+fn updated(result: Result<Updated, Error>, json: bool) -> Result<u8, Error> {
+    match result {
         Ok(updated) => {
             print_updated(&updated);
             Ok(pmt_core::exit::SUCCESS)
         }
         // A backup that cannot be written exits 73 (cannot create output).
         Err(err) if err.code().code == codes::UPDATE_BACKUP_FAILED.code => {
-            output::print_error(&err, ctx.json);
+            output::print_error(&err, json);
             Ok(pmt_core::exit::CANNOT_CREATE_OUTPUT)
+        }
+        // A busy daemon's restart needs a confirmation nobody can give.
+        Err(err) if err.code().code == codes::UPDATE_CONFIRMATION_REQUIRED.code => {
+            output::print_error(&err, json);
+            Ok(pmt_core::exit::APPROVAL_REQUIRED)
         }
         Err(err) => Err(err),
     }
+}
+
+/// Unpacks `--from-bundle` and checks it is for this host.
+fn open_bundle(path: &Path, home: &Path) -> Result<bundle::Opened, Error> {
+    let opened = bundle::open(path, &home.join("updates").join("staging"))?;
+    bundle::check_target(&opened.manifest.target, build_info::TARGET)?;
+    Ok(opened)
 }
 
 /// `--backup` forces `full`, `--no-backup` forces `off` (clap refuses both

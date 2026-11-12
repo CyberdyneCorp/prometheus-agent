@@ -38,6 +38,9 @@ pub enum SessionsCommand {
         /// Only pinned sessions.
         #[arg(long)]
         pinned: bool,
+        /// Only sessions of this project (id or slug).
+        #[arg(long, value_name = "PROJECT")]
+        project: Option<String>,
     },
     /// Show a session (id, id prefix or title).
     Show {
@@ -137,10 +140,19 @@ pub enum SessionsCommand {
         #[arg(long)]
         auto_only: bool,
     },
-    /// Show a session's and its lineage's message and token totals.
+    /// Show a session's and its lineage's message and token totals, or the
+    /// whole profile's with --profile-total.
     Stats {
         /// Session id, id prefix or title.
-        session: String,
+        #[arg(
+            required_unless_present = "profile_total",
+            conflicts_with = "profile_total"
+        )]
+        session: Option<String>,
+        /// The totals of every session of the profile (imported history
+        /// included).
+        #[arg(long)]
+        profile_total: bool,
     },
     /// Export sessions (jsonl, md, html, prompts or trace).
     Export(ExportArgs),

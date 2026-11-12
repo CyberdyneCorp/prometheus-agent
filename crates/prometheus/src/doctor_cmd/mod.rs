@@ -13,6 +13,7 @@ mod bridge;
 mod daemon;
 mod fix;
 mod groups;
+mod isolation;
 mod media;
 mod system;
 mod wsl;
@@ -88,6 +89,9 @@ pub fn run(args: &DoctorArgs, ctx: &Context<'_>) -> Result<u8, Error> {
             ),
         ));
     }
+    if args.allowlist {
+        return allowlist(args, ctx);
+    }
     let profiles: Vec<Option<String>> = if args.all_profiles {
         groups::profile_names(&pmt_config::home::resolve(ctx.home_flag, ctx.launch)?)
             .into_iter()
@@ -105,6 +109,33 @@ pub fn run(args: &DoctorArgs, ctx: &Context<'_>) -> Result<u8, Error> {
         status = status.max(run_profile(args, &ctx)?);
     }
     Ok(status)
+}
+
+/// `doctor network --allowlist`: the egress proxy's allowlist for every
+/// profile of the home.
+fn allowlist(args: &DoctorArgs, ctx: &Context<'_>) -> Result<u8, Error> {
+    if args.group.as_deref() != Some("network") {
+        return Err(Error::new(
+            &codes::CLI_USAGE,
+            "--allowlist goes with the network group: prometheus doctor network --allowlist",
+        ));
+    }
+    let root = pmt_config::home::resolve(ctx.home_flag, ctx.launch)?;
+    let mut scopes = Vec::new();
+    for name in groups::profile_names(&root) {
+        let ctx = Context {
+            profile: Some(&name),
+            ..*ctx
+        };
+        scopes.push(ctx.scope()?);
+    }
+    let daemon = pmt_config::DaemonConfig::load(&root)?;
+    let mut out = String::new();
+    for host in isolation::allowlist(&scopes, &daemon) {
+        out.push_str(&host);
+        out.push('\n');
+    }
+    print_raw(&out)
 }
 
 fn run_profile(args: &DoctorArgs, ctx: &Context<'_>) -> Result<u8, Error> {

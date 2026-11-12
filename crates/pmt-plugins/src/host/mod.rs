@@ -30,11 +30,13 @@ pub use bindings::exports::prometheus::delegation_router::plugin as delegation_r
 pub use bindings::exports::prometheus::hook::extensions as extensions_world;
 pub use bindings::exports::prometheus::hook::plugin as hook_world;
 pub use bindings::exports::prometheus::hook::surfaces as surfaces_world;
+pub use bindings::exports::prometheus::platform_adapter::plugin as platform_adapter_world;
 pub use bindings::exports::prometheus::provider::plugin as provider_world;
 pub use bindings::exports::prometheus::terminal_backend::plugin as terminal_backend_world;
 pub use bindings::exports::prometheus::tool::plugin as tool_world;
 pub use bindings::prometheus::memory_provider::types as memory_provider_types;
 pub use imports::{CallInfo, Console, Context};
+pub(crate) use instance::REQUIRED_OPERATIONS as ADAPTER_OPERATIONS;
 pub use instance::{Instance, MemoryWrite};
 
 /// How often the epoch advances; a call overruns its deadline by at most
@@ -162,6 +164,38 @@ impl Runtime {
             .component_type()
             .exports(&self.engine)
             .filter_map(|(name, _)| crate::worlds::WorldRef::from_export(name))
+            .collect()
+    }
+
+    /// The operations of `required` that the component's
+    /// `prometheus:<world>/plugin` export lacks (none when it does not
+    /// export the world at all: that is refused on its own).
+    #[must_use]
+    pub fn missing_operations(
+        &self,
+        component: &Component,
+        world: &str,
+        required: &[&'static str],
+    ) -> Vec<&'static str> {
+        let prefix = format!("prometheus:{world}/plugin@");
+        let ty = component.component_type();
+        let interface = ty
+            .exports(&self.engine)
+            .find_map(|(name, export)| match export.ty {
+                wasmtime::component::types::ComponentItem::ComponentInstance(instance)
+                    if name.starts_with(&prefix) =>
+                {
+                    Some(instance)
+                }
+                _ => None,
+            });
+        let Some(interface) = interface else {
+            return Vec::new();
+        };
+        required
+            .iter()
+            .copied()
+            .filter(|op| interface.get_export(&self.engine, op).is_none())
             .collect()
     }
 

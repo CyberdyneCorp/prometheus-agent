@@ -271,7 +271,7 @@ pub async fn invoke(session: &SkillsSession, bundle: &Bundle, args: &str) -> Str
 /// One line per bundle and per problem file (`/bundles`, `skills bundles
 /// list`).
 #[must_use]
-pub fn listing(bundles: &Bundles) -> String {
+pub fn listing(text_of: &dyn pmt_core::text::Catalog, bundles: &Bundles) -> String {
     let mut text = String::new();
     for bundle in bundles.bundles.values() {
         let names: Vec<&str> = bundle.file.skills.iter().map(Member::name).collect();
@@ -285,7 +285,7 @@ pub fn listing(bundles: &Bundles) -> String {
         let _ = writeln!(text, "{}: {why}", path.display());
     }
     if text.is_empty() {
-        text.push_str("No skill bundles.\n");
+        let _ = writeln!(text, "{}", text_of.text("slash.bundles.none", &[]));
     }
     text
 }

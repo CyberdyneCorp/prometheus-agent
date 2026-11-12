@@ -17,9 +17,15 @@ use pmt_store::Store;
 
 /// The retention `on` sets: 90 days.
 pub const ON_RETENTION_SECS: u64 = 7_776_000;
-/// The question.
-pub const QUESTION: &str =
-    "Disk space is low. Turn on auto-prune of sessions inactive for 90 days? [on/off/later]";
+/// The question, in the profile's language.
+#[must_use]
+pub fn question(scope: &ProfileScope) -> String {
+    pmt_i18n::t!(strings(scope), "cli.autoprune_question")
+}
+
+fn strings(scope: &ProfileScope) -> std::sync::Arc<pmt_i18n::Strings> {
+    pmt_config::language::strings(scope.dir(), pmt_i18n::Surface::Core)
+}
 
 const ANSWER: &str = "autoprune.answer";
 const CHECKED: &str = "autoprune.checked_at";
@@ -120,18 +126,15 @@ pub fn apply(
                     .set("sessions.retention_secs", &ON_RETENTION_SECS.to_string())?;
             }
             store.set_pref(ANSWER, "on")?;
-            Ok("Auto-prune on: ended sessions inactive for 90 days are pruned (sessions.retention_secs = 7776000).".to_owned())
+            Ok(pmt_i18n::t!(strings(scope), "cli.autoprune_on"))
         }
         Answer::Off => {
             store.set_pref(ANSWER, "off")?;
-            Ok(
-                "Auto-prune stays off; you will not be asked again (/autoprune on turns it on)."
-                    .to_owned(),
-            )
+            Ok(pmt_i18n::t!(strings(scope), "cli.autoprune_off"))
         }
         Answer::Later => {
             store.set_pref(ANSWER, &format!("later:{}", now.as_millisecond()))?;
-            Ok("Asking again in a week.".to_owned())
+            Ok(pmt_i18n::t!(strings(scope), "cli.autoprune_later"))
         }
     }
 }
@@ -152,15 +155,21 @@ fn status(scope: &ProfileScope, store: &Store) -> String {
             std::fs::metadata(name).ok().map(|m| m.len())
         })
         .sum();
-    let free = free_space(scope.dir()).map_or_else(|| "unknown".to_owned(), megabytes);
+    let strings = strings(scope);
+    let free =
+        free_space(scope.dir()).map_or_else(|| pmt_i18n::t!(strings, "cli.unknown"), megabytes);
     let pruning = if retention == 0 {
-        "off".to_owned()
+        pmt_i18n::t!(strings, "cli.off")
     } else {
-        format!("on, {} days", retention / 86_400)
+        pmt_i18n::t!(strings, "cli.autoprune_days", days = retention / 86_400)
     };
-    format!(
-        "auto-prune: {pruning} (sessions.retention_secs = {retention})\nstore size: {}\nfree space: {free}",
-        megabytes(size)
+    pmt_i18n::t!(
+        strings,
+        "cli.autoprune_status",
+        pruning = pruning,
+        retention = retention,
+        size = megabytes(size),
+        free = free
     )
 }
 

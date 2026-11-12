@@ -281,6 +281,10 @@ pub struct ClarifyAnswer {
 pub struct SubagentSpawned {
     /// The child's id.
     pub subagent_id: String,
+    /// The `dg-<ULID>` dispatch the child belongs to (empty in
+    /// trajectories written before it was recorded).
+    #[serde(default)]
+    pub delegation_id: String,
     /// The child's session.
     pub child_session_id: String,
     /// Delegation depth from 1.
@@ -314,6 +318,14 @@ pub struct SubagentProgress {
 pub struct SubagentFinished {
     /// The child's id.
     pub subagent_id: String,
+    /// The `dg-<ULID>` dispatch the child belongs to (empty in
+    /// trajectories written before it was recorded).
+    #[serde(default)]
+    pub delegation_id: String,
+    /// The child's session; `None` when it never opened one (refused,
+    /// cancelled while queued).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub child_session_id: Option<String>,
     /// `completed`, `failed`, `cancelled` or `timeout`.
     pub status: String,
     /// The child's summary.

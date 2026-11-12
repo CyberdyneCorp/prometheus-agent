@@ -17,6 +17,7 @@
 //! the whole file validates in one place.
 
 mod agent;
+mod api_server;
 mod automation;
 mod connectors;
 mod cron;
@@ -55,6 +56,7 @@ pub use agent::{
     PlatformHint, PromptCacheConfig, PromptCacheTtl, PromptConfig, ReasoningLevel, ResumeOnCrash,
     TailMode, ToolLoopGuardrails, VerifyOnStop, VisionConfig,
 };
+pub use api_server::{ApiModelRoute, ApiResponsesConfig, ApiServerConfig};
 pub use automation::{GoalsConfig, HeartbeatConfig, LoopsConfig};
 pub use connectors::{ConnectorsConfig, DEFAULT_CONNECTOR_GATEWAY};
 pub use cron::{ContinuableSurface, CronConfig, CronDeliveryConfig, CronProvider};
@@ -156,6 +158,8 @@ pub struct Config {
     pub schema_version: u32,
     /// Turn loop limits, retries and reasoning effort.
     pub agent: AgentConfig,
+    /// The OpenAI-compatible API server's view of this profile.
+    pub api_server: ApiServerConfig,
     /// Approval modes for dangerous tool calls.
     pub approvals: ApprovalsConfig,
     /// Where received attachments are kept.
@@ -305,6 +309,7 @@ impl Default for Config {
         Self {
             schema_version: SCHEMA_VERSION,
             agent: AgentConfig::default(),
+            api_server: ApiServerConfig::default(),
             approvals: ApprovalsConfig::default(),
             attachments: AttachmentsConfig::default(),
             auth: AuthConfig::default(),
@@ -385,6 +390,9 @@ pub const MACHINE_WIDE_SECTIONS: &[&str] =
 
 /// `[gateway]` keys that are daemon-wide and live in `daemon.toml`.
 pub const MACHINE_WIDE_GATEWAY_KEYS: &[&str] = &["http", "relay", "on_all_adapters_down"];
+
+/// `[api_server]` keys that are daemon-wide and live in `daemon.toml`.
+pub const MACHINE_WIDE_API_KEYS: &[&str] = &["listen", "public", "cors_origins", "public_host"];
 
 /// The name of a secret in the secrets store (`^[A-Z][A-Z0-9_]{0,127}$`).
 /// Config keys that need a credential hold a name, never the value.

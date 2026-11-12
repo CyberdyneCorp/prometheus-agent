@@ -29,10 +29,6 @@ const PER_PAGE: usize = 8;
 /// Pickers whose buttons still answer (older cards go stale).
 const KEPT: usize = 4;
 
-/// What `/model --clear` answers.
-pub(crate) const CLEARED: &str =
-    "Chat model override cleared; new sessions here use the profile's model.";
-
 /// One picker card: its id and the choices it was drawn from.
 #[derive(Debug, Clone)]
 pub(super) struct Picker {
@@ -138,7 +134,7 @@ impl Lane {
             }
             "--clear" => {
                 self.set_chat_model(routing, None);
-                self.say(CLEARED);
+                self.say(self.strings().get("gateway.model_cleared"));
             }
             "status" => self.model_status(routing).await,
             _ => {
@@ -172,18 +168,24 @@ impl Lane {
     /// the chat's override.
     async fn model_status(&mut self, routing: &Routing) {
         let current = self.registry_answer(routing, "/model").await;
+        let strings = self.strings();
         let over = self.chat_model(routing).map_or_else(
-            || "none (new sessions use the profile's model)".to_owned(),
-            |m| format!("{m} (new sessions here start on it; /model --clear removes it)"),
+            || pmt_i18n::t!(strings, "gateway.model_override_none"),
+            |m| pmt_i18n::t!(strings, "gateway.model_override_set", model = m),
         );
-        self.say(&format!("{current}\nChat override: {over}"));
+        self.say(&pmt_i18n::t!(
+            strings,
+            "gateway.model_status",
+            current = current,
+            override = over
+        ));
     }
 
     /// Switches the session as `/model <args>` does; on success the named
     /// model becomes the chat's override.
     pub(super) async fn switch_model(&mut self, routing: &Routing, args: &str) {
         if self.running.is_some() {
-            self.say(&super::commands::rejected("model"));
+            self.say(&self.rejected("model"));
             return;
         }
         let session = match self.ensure_session(routing).await {
@@ -205,10 +207,12 @@ impl Lane {
                 let mut text = notice;
                 if let Some(reference) = reference_of(args) {
                     self.set_chat_model(routing, Some(&reference));
-                    let _ = write!(
-                        text,
-                        "\nNew sessions in this chat use {reference} (/model --clear to undo)."
+                    let line = pmt_i18n::t!(
+                        self.strings(),
+                        "gateway.model_chat_default",
+                        model = reference
                     );
+                    let _ = write!(text, "\n{line}");
                 }
                 self.say(text.trim());
             }
@@ -243,9 +247,11 @@ impl Lane {
         let all = numbered(&self.shared.agents.model_choices(&self.profile));
         match n.checked_sub(1).and_then(|i| all.get(i)) {
             Some(reference) => self.switch_model(routing, &reference.clone()).await,
-            None => self.say(&format!(
-                "There is no model {n}; /model lists {} models.",
-                all.len()
+            None => self.say(&pmt_i18n::t!(
+                self.strings(),
+                "gateway.model_no_number",
+                n = n,
+                count = all.len()
             )),
         }
     }
@@ -253,7 +259,7 @@ impl Lane {
     /// Bare `/model`: a picker card, or a numbered list without buttons.
     fn model_picker(&mut self, choices: Vec<ModelChoice>) {
         if self.tier() != Interactive::Native {
-            let mut text = String::from("Models (answer with /model <n>):");
+            let mut text = pmt_i18n::t!(self.strings(), "gateway.models_heading");
             for (i, reference) in numbered(&choices).iter().enumerate() {
                 let _ = write!(text, "\n{}. {reference}", i + 1);
             }
@@ -277,7 +283,7 @@ impl Lane {
             return;
         };
         if !self.pickers.iter().any(|p| p.id == id) {
-            self.say("This model picker has expired; send /model again.");
+            self.say(self.strings().get("gateway.picker_expired"));
             return;
         }
         if let Press::Select(provider, model) = press {
@@ -290,7 +296,8 @@ impl Lane {
             let Some(reference) = reference else {
                 return;
             };
-            self.close_picker(id, &format!("Model: {reference}"));
+            let text = pmt_i18n::t!(self.strings(), "gateway.model_picked", model = reference);
+            self.close_picker(id, &text);
             if let Some(tx) = self.tx.upgrade() {
                 let _ = tx.send(super::Msg::ModelPicked {
                     reference,
@@ -308,6 +315,7 @@ impl Lane {
             return;
         };
         let key = &self.shared.card_key;
+        let strings = self.strings();
         let button = |label: String, press: Press| Button {
             label,
             data: key.data(CardKind::Page, id, &press.choice()),
@@ -320,7 +328,11 @@ impl Lane {
                     .map(|(i, c)| button(c.provider, Press::Models(i, 1)))
                     .collect();
                 let paging = (n, pages, Press::Providers(n - 1), Press::Providers(n + 1));
-                ("Choose a provider:".to_owned(), buttons, paging)
+                (
+                    pmt_i18n::t!(strings, "gateway.choose_provider"),
+                    buttons,
+                    paging,
+                )
             }
             Press::Models(provider, n) | Press::Select(provider, n) => {
                 let Some(choice) = picker.choices.get(provider) else {
@@ -331,26 +343,28 @@ impl Lane {
                     .into_iter()
                     .map(|(i, m)| button(m, Press::Select(provider, i)))
                     .collect();
-                buttons.push(button("\u{2039} Providers".to_owned(), Press::Providers(1)));
+                let providers = pmt_i18n::t!(strings, "gateway.providers_button");
+                buttons.push(button(providers, Press::Providers(1)));
                 let paging = (
                     n,
                     pages,
                     Press::Models(provider, n - 1),
                     Press::Models(provider, n + 1),
                 );
-                (
-                    format!("Choose a {} model:", choice.provider),
-                    buttons,
-                    paging,
-                )
+                let text =
+                    pmt_i18n::t!(strings, "gateway.choose_model", provider = choice.provider);
+                (text, buttons, paging)
             }
         };
         let (n, pages, previous, next) = paging;
         if n > 1 {
-            buttons.push(button("\u{2039} Previous".to_owned(), previous));
+            buttons.push(button(
+                pmt_i18n::t!(strings, "gateway.previous_button"),
+                previous,
+            ));
         }
         if n < pages {
-            buttons.push(button("Next \u{203a}".to_owned(), next));
+            buttons.push(button(pmt_i18n::t!(strings, "gateway.next_button"), next));
         }
         let body = json!({"text": text, "buttons": buttons}).to_string();
         self.picker_deliver(id, body, first);

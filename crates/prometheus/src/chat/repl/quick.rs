@@ -18,13 +18,18 @@ impl Repl {
             .get(name)
             .cloned()
         else {
-            self.notice(&format!("Unknown command: /{name}"));
+            self.notice(&pmt_i18n::t!(
+                self.strings(),
+                "cli.unknown_command",
+                name = name
+            ));
             return Flow::Continue;
         };
         match command.kind {
             QuickCommandKind::Alias => {
                 if depth >= MAX_DEPTH {
-                    self.notice(&format!("quick command '{name}' nests too deeply"));
+                    let text = pmt_i18n::t!(self.strings(), "cli.quick_nested", name = name);
+                    self.notice(&text);
                     return Flow::Continue;
                 }
                 Box::pin(self.slash_at_depth(alias_line(&command, args), depth + 1)).await

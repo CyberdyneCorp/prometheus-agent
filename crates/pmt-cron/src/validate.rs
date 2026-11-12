@@ -39,6 +39,18 @@ fn invalid(message: impl Into<String>) -> Error {
     Error::new(&codes::CRON_INVALID_JOB, message)
 }
 
+/// Whether `script`, joined to a directory, names something inside it
+/// lexically: relative, with no `..`, root or prefix component. Checked
+/// before any path is built from a script name.
+#[must_use]
+pub fn stays_inside(script: &str) -> bool {
+    let relative = Path::new(script);
+    !relative.is_absolute()
+        && relative
+            .components()
+            .all(|c| matches!(c, Component::Normal(_) | Component::CurDir))
+}
+
 /// The script file of `script` inside `scripts_dir`.
 ///
 /// # Errors
@@ -52,15 +64,10 @@ pub fn script_path(scripts_dir: &Path, script: &str) -> Result<PathBuf, Error> {
             scripts_dir.display()
         ))
     };
-    let relative = Path::new(script);
-    if relative.is_absolute()
-        || relative
-            .components()
-            .any(|c| !matches!(c, Component::Normal(_) | Component::CurDir))
-    {
+    if !stays_inside(script) {
         return Err(outside());
     }
-    let path = scripts_dir.join(relative);
+    let path = scripts_dir.join(script);
     let resolved = path.canonicalize().map_err(|_| {
         invalid(format!(
             "script '{script}' not found in {}",

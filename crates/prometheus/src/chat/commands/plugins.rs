@@ -18,7 +18,7 @@ pub(super) async fn plugins(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> 
     let now = words.contains(&"--now");
     let rest: Vec<&str> = words.into_iter().filter(|w| *w != "--now").collect();
     match rest.as_slice() {
-        [] | ["list"] if !now => Ok(listing(&ctx.live.plugins.current())),
+        [] | ["list"] if !now => Ok(listing(&ctx.strings(), &ctx.live.plugins.current())),
         ["reload"] => reload(ctx, None, now).await,
         ["reload", id] => reload(ctx, Some(id), now).await,
         _ => Err(Error::new(
@@ -29,9 +29,9 @@ pub(super) async fn plugins(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> 
 }
 
 /// One line per plugin: id, version, kind, state and load error.
-fn listing(loaded: &Loaded) -> String {
+fn listing(strings: &pmt_i18n::Strings, loaded: &Loaded) -> String {
     if loaded.statuses.is_empty() {
-        return "no plugins".to_owned();
+        return pmt_i18n::t!(strings, "slash.plugins.none");
     }
     let mut text = String::new();
     for status in &loaded.statuses {

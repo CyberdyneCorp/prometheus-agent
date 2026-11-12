@@ -581,4 +581,9 @@ pub struct NetworkConfig {
     /// Extra PEM CA bundle trusted in addition to the platform store.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra_ca_file: Option<String>,
+    /// The deployment is network-isolated (the egress proxy in
+    /// `network.proxy` is the only way out, as in the image's
+    /// `compose.isolated.yaml`): `prometheus doctor network --online`
+    /// fails when a direct connection succeeds.
+    pub expect_isolated: bool,
 }

@@ -180,6 +180,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-openai"
+version = "0.43.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c30702b56c3a8e7d9b01c94b0d7927019f3fe6aa2d7af7d2f1968bbdb858eec"
+dependencies = [
+ "async-openai-macros",
+ "base64 0.22.1",
+ "bytes",
+ "derive_builder",
+ "eventsource-stream",
+ "futures",
+ "getrandom 0.3.4",
+ "rand 0.9.5",
+ "reqwest",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tower",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "async-openai-macros"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "492a944774207eed3acf425214eadbd6ce84a2b89331164ff1c11bae92b26302"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.92"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -840,12 +879,36 @@ dependencies = [
 
 [[package]]
 name = "darling"
+version = "0.20.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc7f46116c46ff9ab3eb1597a45688b6715c6e628b5c133e288e709a29bcb4ee"
+dependencies = [
+ "darling_core 0.20.11",
+ "darling_macro 0.20.11",
+]
+
+[[package]]
+name = "darling"
 version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed17f5901b6630b993ca003def43f2f8ef4014fc13b047b57aad617ff32bc2ec"
 dependencies = [
- "darling_core",
- "darling_macro",
+ "darling_core 0.24.1",
+ "darling_macro 0.24.1",
+]
+
+[[package]]
+name = "darling_core"
+version = "0.20.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d00b9596d185e565c2207a0b01f8bd1a135483d02d9b7b0a54b11da8d53412e"
+dependencies = [
+ "fnv",
+ "ident_case",
+ "proc-macro2",
+ "quote",
+ "strsim",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -863,11 +926,22 @@ dependencies = [
 
 [[package]]
 name = "darling_macro"
+version = "0.20.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc34b93ccb385b40dc71c6fceac4b2ad23662c7eeb248cf10d529b7e055b6ead"
+dependencies = [
+ "darling_core 0.20.11",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "darling_macro"
 version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2ac7135c3ef02b2f7833bbeb1be5ba7f966dcde8a87c6b87f65a778d71a02785"
 dependencies = [
- "darling_core",
+ "darling_core 0.24.1",
  "quote",
  "syn 3.0.9",
 ]
@@ -1003,6 +1077,37 @@ name = "deranged"
 version = "0.5.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e9de72ce2ad1f90dc62fa25f0f430ef85eb4b0d8fa0be4f30373bc40a21d28e"
+
+[[package]]
+name = "derive_builder"
+version = "0.20.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "507dfb09ea8b7fa618fcf76e953f4f5e192547945816d5358edffe39f6f94947"
+dependencies = [
+ "derive_builder_macro",
+]
+
+[[package]]
+name = "derive_builder_core"
+version = "0.20.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d5bcf7b024d6835cfb3d473887cd966994907effbe9227e8c8219824d06c4e8"
+dependencies = [
+ "darling 0.20.11",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "derive_builder_macro"
+version = "0.20.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab63b0e2bf4d5928aff72e83a7dace85d7bba5fe12dcc3c5a572d78caffd3f3c"
+dependencies = [
+ "derive_builder_core",
+ "syn 2.0.119",
+]
 
 [[package]]
 name = "derive_more"
@@ -1168,6 +1273,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1a05365e3b1c6d1650318537c7460c6923f1abdd272ad6842baa2b509957a06"
 dependencies = [
  "num-traits",
+]
+
+[[package]]
+name = "eventsource-stream"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "74fef4569247a5f429d9156b9d0a2599914385dd189c539334c625d8099d90ab"
+dependencies = [
+ "futures-core",
+ "nom",
+ "pin-project-lite",
 ]
 
 [[package]]
@@ -1389,6 +1505,20 @@ dependencies = [
 
 [[package]]
 name = "getrandom"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "899def5c37c4fd7b2664648c28120ecec138e4d395b459e5ca34f9cce2dd77fd"
+dependencies = [
+ "cfg-if",
+ "js-sys",
+ "libc",
+ "r-efi 5.3.0",
+ "wasip2",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "getrandom"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099"
@@ -1396,7 +1526,7 @@ dependencies = [
  "cfg-if",
  "js-sys",
  "libc",
- "r-efi",
+ "r-efi 6.0.0",
  "rand_core 0.10.1",
  "wasm-bindgen",
 ]
@@ -1882,7 +2012,7 @@ version = "0.3.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c3b5acc1e2fd9375041a388da33d1eb8aed5f7a8c0dd3543e3ea2805adfbe20"
 dependencies = [
- "darling",
+ "darling 0.24.1",
  "indoc",
  "proc-macro2",
  "quote",
@@ -2198,6 +2328,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "md-5"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69b6441f590336821bb897fb28fc622898ccceb1d6cea3fde5ea86b090c4de98"
+dependencies = [
+ "cfg-if",
+ "digest 0.11.3",
+]
+
+[[package]]
 name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2219,6 +2359,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5de893c32cde5f383baa4c04c5d6dbdd735cfd4a794b0debdb2bb1b421da5ff4"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "mime"
+version = "0.3.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d5848f5a9e8117cf94f2f90faac24a87ff81600ff8628c1e3deaab572e76bfa1"
+
+[[package]]
+name = "mime_guess"
+version = "2.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7c44f8e672c00fe5308fa235f821cb4198414e1c77935c1ab6948d3fd78550e"
+dependencies = [
+ "mime",
+ "unicase",
 ]
 
 [[package]]
@@ -2906,6 +3062,7 @@ dependencies = [
  "jiff",
  "pmt-config",
  "pmt-core",
+ "pmt-i18n",
  "pmt-net",
  "pmt-obs",
  "pmt-providers",
@@ -2925,9 +3082,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "pmt-api"
+version = "0.1.0"
+dependencies = [
+ "base64 0.23.1",
+ "bytes",
+ "futures-util",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "jiff",
+ "pmt-config",
+ "pmt-core",
+ "pmt-gateway",
+ "pmt-net",
+ "pmt-obs",
+ "pmt-rpc",
+ "pmt-store",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
+ "ulid",
+]
+
+[[package]]
 name = "pmt-automation"
 version = "0.1.0"
 dependencies = [
+ "pmt-core",
+ "pmt-i18n",
  "regex",
  "serde",
  "serde_json",
@@ -2968,6 +3154,7 @@ dependencies = [
  "known-folders",
  "nix 0.31.3",
  "pmt-core",
+ "pmt-i18n",
  "regex",
  "schemars",
  "serde",
@@ -3015,6 +3202,7 @@ dependencies = [
  "pmt-agent",
  "pmt-config",
  "pmt-core",
+ "pmt-i18n",
  "pmt-store",
  "regex",
  "serde",
@@ -3082,6 +3270,7 @@ dependencies = [
  "jiff",
  "pmt-config",
  "pmt-core",
+ "pmt-i18n",
  "pmt-net",
  "pmt-obs",
  "pmt-rpc",
@@ -3100,6 +3289,17 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "pmt-i18n"
+version = "0.1.0"
+dependencies = [
+ "pmt-core",
+ "serde_json",
+ "tempfile",
+ "toml",
+ "tracing",
 ]
 
 [[package]]
@@ -3195,6 +3395,7 @@ dependencies = [
  "pmt-agent",
  "pmt-config",
  "pmt-core",
+ "pmt-i18n",
  "pmt-net",
  "pmt-obs",
  "pmt-providers",
@@ -3213,6 +3414,29 @@ dependencies = [
 [[package]]
 name = "pmt-migrate"
 version = "0.1.0"
+dependencies = [
+ "jiff",
+ "md-5",
+ "pmt-backup",
+ "pmt-config",
+ "pmt-core",
+ "pmt-cron",
+ "pmt-i18n",
+ "pmt-memory",
+ "pmt-obs",
+ "pmt-providers",
+ "pmt-skills",
+ "pmt-store",
+ "rusqlite",
+ "saphyr-parser",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tempfile",
+ "toml",
+ "toml_edit",
+ "tracing",
+]
 
 [[package]]
 name = "pmt-net"
@@ -3241,6 +3465,7 @@ dependencies = [
  "jiff",
  "pmt-config",
  "pmt-core",
+ "pmt-i18n",
  "pmt-net",
  "pmt-store",
  "prost",
@@ -3269,6 +3494,7 @@ dependencies = [
  "minisign-verify",
  "pmt-config",
  "pmt-core",
+ "pmt-i18n",
  "pmt-obs",
  "pmt-plugins",
  "pmt-providers",
@@ -3302,6 +3528,7 @@ dependencies = [
  "percent-encoding",
  "pmt-config",
  "pmt-core",
+ "pmt-i18n",
  "pmt-net",
  "pmt-obs",
  "pmt-store",
@@ -3422,6 +3649,7 @@ dependencies = [
  "pmt-agent",
  "pmt-config",
  "pmt-core",
+ "pmt-i18n",
  "pmt-net",
  "pmt-obs",
  "pmt-providers",
@@ -3480,6 +3708,7 @@ dependencies = [
  "percent-encoding",
  "pmt-config",
  "pmt-core",
+ "pmt-i18n",
  "pmt-net",
  "pmt-sandbox",
  "pmt-vault",
@@ -3521,6 +3750,7 @@ dependencies = [
  "nix 0.31.3",
  "pmt-config",
  "pmt-core",
+ "pmt-i18n",
  "ratatui",
  "tempfile",
  "unicode-width",
@@ -3678,6 +3908,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a6394b9e965e73d0a289ee54f589087e2c676aedf60885baf52c76b771e4958"
 
 [[package]]
+name = "ppv-lite86"
+version = "0.2.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85eae3c4ed2f50dcfe72643da4befc30deadb458a9b590d720cde2f2b1e97da9"
+dependencies = [
+ "zerocopy",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.107"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3690,11 +3929,13 @@ dependencies = [
 name = "prometheus"
 version = "0.1.0"
 dependencies = [
+ "async-openai",
  "base64 0.23.1",
  "clap",
  "crossterm",
  "expectrl",
  "flate2",
+ "futures-util",
  "ignore",
  "image",
  "jiff",
@@ -3710,6 +3951,7 @@ dependencies = [
  "pmt-adapters-webhook",
  "pmt-adapters-whatsapp",
  "pmt-agent",
+ "pmt-api",
  "pmt-automation",
  "pmt-backup",
  "pmt-config",
@@ -3718,10 +3960,12 @@ dependencies = [
  "pmt-delegation",
  "pmt-eval",
  "pmt-gateway",
+ "pmt-i18n",
  "pmt-local",
  "pmt-mcp",
  "pmt-media",
  "pmt-memory",
+ "pmt-migrate",
  "pmt-net",
  "pmt-obs",
  "pmt-plugins",
@@ -3754,6 +3998,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.11.1",
+ "shlex",
  "sysinfo",
  "tar",
  "tempfile",
@@ -3779,7 +4024,7 @@ dependencies = [
  "chacha20",
  "core_detect",
  "num-traits",
- "rand",
+ "rand 0.10.3",
  "rand_xorshift",
  "regex-syntax",
  "unarray",
@@ -3880,6 +4125,12 @@ dependencies = [
 
 [[package]]
 name = "r-efi"
+version = "5.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69cdb34c158ceb288df11e18b4bd39de994f6657d83847bdffdbd7f346754b0f"
+
+[[package]]
+name = "r-efi"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
@@ -3896,6 +4147,16 @@ dependencies = [
 
 [[package]]
 name = "rand"
+version = "0.9.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9ef1d0d795eb7d84685bca4f72f3649f064e6641543d3a8c415898726a57b41"
+dependencies = [
+ "rand_chacha",
+ "rand_core 0.9.5",
+]
+
+[[package]]
+name = "rand"
 version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "65c9fb96cbc91e3478eaae79a69fcd3f1ae4ad052e471fe6732fff548984b4af"
@@ -3906,10 +4167,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "rand_chacha"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3022b5f1df60f26e1ffddd6c66e8aa15de382ae63b3a0c1bfc0e4d3e3f325cb"
+dependencies = [
+ "ppv-lite86",
+ "rand_core 0.9.5",
+]
+
+[[package]]
 name = "rand_core"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
+
+[[package]]
+name = "rand_core"
+version = "0.9.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76afc826de14238e6e8c374ddcc1fa19e374fd8dd986b0d2af0d02377261d83c"
+dependencies = [
+ "getrandom 0.3.4",
+]
 
 [[package]]
 name = "rand_core"
@@ -4098,6 +4378,7 @@ dependencies = [
  "hyper-util",
  "js-sys",
  "log",
+ "mime_guess",
  "percent-encoding",
  "pin-project-lite",
  "rustls",
@@ -4105,6 +4386,7 @@ dependencies = [
  "rustls-platform-verifier",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "sync_wrapper",
  "tokio",
  "tokio-rustls",
@@ -4175,7 +4457,7 @@ dependencies = [
  "libc",
  "pastey",
  "pin-project-lite",
- "rand",
+ "rand 0.10.3",
  "reqwest",
  "schemars",
  "serde",
@@ -4483,6 +4765,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "secrecy"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e891af845473308773346dc847b2c23ee78fe442e0472ac50e22a18a93d3ae5a"
+dependencies = [
+ "serde",
+ "zeroize",
+]
+
+[[package]]
 name = "security-framework"
 version = "3.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4578,6 +4870,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e7523beb55eece201a2356bee0bbca0d1ab466c14c07703b2e0ee6d42cb0c2c"
 dependencies = [
  "serde_core",
+]
+
+[[package]]
+name = "serde_urlencoded"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3491c14715ca2294c4d6a88f15e84739788c1d030eed8c110436aafdaa2f3fd"
+dependencies = [
+ "form_urlencoded",
+ "itoa",
+ "ryu",
+ "serde",
 ]
 
 [[package]]
@@ -5178,8 +5482,10 @@ dependencies = [
  "pin-project-lite",
  "sync_wrapper",
  "tokio",
+ "tokio-util",
  "tower-layer",
  "tower-service",
+ "tracing",
 ]
 
 [[package]]
@@ -5345,7 +5651,7 @@ dependencies = [
  "http",
  "httparse",
  "log",
- "rand",
+ "rand 0.10.3",
  "sha1",
  "thiserror",
 ]
@@ -5368,7 +5674,7 @@ version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "947dde63b6d514cc5e044edad4e0ca7261afd1099d16c83d942cb2b2f348689c"
 dependencies = [
- "rand",
+ "rand 0.10.3",
  "web-time",
 ]
 
@@ -5519,6 +5825,15 @@ name = "wasi"
 version = "0.11.1+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b"
+
+[[package]]
+name = "wasip2"
+version = "1.0.4+wasi-0.2.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b67efb37e106e55ce722a510d6b5f9c17f083e5fc79afc2badeb12cc313d9487"
+dependencies = [
+ "wit-bindgen",
+]
 
 [[package]]
 name = "wasm-bindgen"
@@ -6207,6 +6522,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "wit-bindgen"
+version = "0.57.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
+
+[[package]]
 name = "wit-component"
 version = "0.254.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6273,15 +6594,18 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "flate2",
  "jiff",
  "minisign",
  "nix 0.31.3",
  "pmt-agent",
  "pmt-config",
  "pmt-core",
+ "pmt-i18n",
  "pmt-net",
  "pmt-obs",
  "pmt-rpc",
+ "pmt-store",
  "pmt-tools",
  "pmt-update",
  "proc-macro2",
@@ -6291,8 +6615,10 @@ dependencies = [
  "serde",
  "serde_json",
  "syn 3.0.9",
+ "tar",
  "tokio",
  "toml",
+ "zip",
 ]
 
 [[package]]
@@ -6326,6 +6652,26 @@ dependencies = [
  "quote",
  "syn 3.0.9",
  "synstructure 0.14.0",
+]
+
+[[package]]
+name = "zerocopy"
+version = "0.8.63"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e5fe1f8f1b06191a00962174c61aa5005e0bb391a6d80d07e24d115c01a92ed8"
+dependencies = [
+ "zerocopy-derive",
+]
+
+[[package]]
+name = "zerocopy-derive"
+version = "0.8.63"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "863ad3ac83293fb4d740aedbfdc9240dd8d1a50c1099acd76ce80ce7c7230c7f"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]

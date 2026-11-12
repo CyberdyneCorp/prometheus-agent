@@ -9,6 +9,7 @@ use pmt_agent::turn::model::{
     BoxFuture, DeltaSink, ModelFailure, ModelPort, ModelReply, RouteInfo,
 };
 use pmt_config::schema::FastMode;
+use pmt_i18n::{Strings, Surface};
 use pmt_providers::cost::CallContext;
 use pmt_providers::fast::Speed;
 use pmt_providers::request::Request;
@@ -91,7 +92,10 @@ async fn auto_asks_the_priority_tier_only_within_the_first_minute_of_the_turn() 
         "{speeds:?}"
     );
     assert!(speeds[6..].iter().all(Option::is_none), "{speeds:?}");
-    assert!(notices.iter().all(|n| n != NO_TIER_NOTICE));
+    let no_tier = Strings::english(Surface::Core)
+        .get(NO_TIER_NOTICE)
+        .to_owned();
+    assert!(notices.iter().all(|n| *n != no_tier));
 }
 
 #[tokio::test(start_paused = true)]
@@ -118,9 +122,30 @@ async fn cold_applies_to_the_first_turn_only_and_fast_to_every_request() {
 async fn a_route_without_a_tier_sends_no_tier_and_says_so_once() {
     let (speeds, notices) = speeds("[agent]\nfast_mode = \"fast\"\n", false, false).await;
     assert!(speeds.iter().all(Option::is_none));
+    let no_tier = Strings::english(Surface::Core)
+        .get(NO_TIER_NOTICE)
+        .to_owned();
     assert_eq!(
-        notices.iter().filter(|n| *n == NO_TIER_NOTICE).count(),
+        notices.iter().filter(|n| **n == no_tier).count(),
         1,
         "{notices:?}"
     );
+}
+
+/// Scenario: Static UI string catalogs (a turn notice follows the
+/// profile's language and stays out of the model's requests).
+#[tokio::test(start_paused = true)]
+async fn the_no_tier_notice_speaks_the_profile_language() {
+    let config = "[agent]\nfast_mode = \"fast\"\n\n[display]\nlanguage = \"de\"\n";
+    let (_, notices) = speeds(config, false, false).await;
+    assert!(
+        notices
+            .iter()
+            .any(|n| n.starts_with("Schnellmodus wird auf dieser Route ignoriert")),
+        "{notices:?}"
+    );
+    let english = Strings::english(Surface::Core)
+        .get(NO_TIER_NOTICE)
+        .to_owned();
+    assert!(notices.iter().all(|n| *n != english), "{notices:?}");
 }

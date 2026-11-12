@@ -11,7 +11,7 @@ name = "terminal"
 arguments = { command = "rm -rf ~/important" }
 
 [[rule]]
-tool_result = "DENIED"
+tool_result = "BLOCKED"
 text = "The cleanup was denied."
 
 [[rule]]

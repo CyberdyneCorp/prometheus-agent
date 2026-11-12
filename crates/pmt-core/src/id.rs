@@ -156,6 +156,12 @@ prefixed_id!(
     "bg"
 );
 
+prefixed_id!(
+    /// A project of a profile, `prj_<ULID>` (spec: projects, Project records).
+    ProjectId,
+    "prj"
+);
+
 #[cfg(test)]
 mod tests {
     use super::{MessageId, SessionId};

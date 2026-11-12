@@ -504,55 +504,55 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 54. M2 Distribution channels
 
-- [ ] 54.1 Publish package-manager and image channels (Homebrew tap, WinGet, container image, Nix flake) with receipts naming the owner; verify that self-update is refused for each with exit 69 (spec: distribution-and-update)
-- [ ] 54.2 Implement running-daemon handover on update, update dry-run with changelog preview, offline bundles and `prometheus uninstall`; verify with a local release server (spec: distribution-and-update)
-- [ ] 54.3 Implement the NixOS and Home Manager modules (Nix-owned keys read-only, bad config does not restart-loop); verify with a NixOS VM test (spec: distribution-and-update)
-- [ ] 54.4 Implement the container image run modes, filesystem, init and health check, multiple profiles in one container, the audio bridge and host services, and the network-isolated deployment recipe; verify with container tests that zombies are reaped and isolation is verified (spec: distribution-and-update)
-- [ ] 54.5 Implement update from chat (disabled by default, admin only) and uninstall scopes with dry run; verify that a dry run lists the service unit and a data wipe on a package-manager install is handled (spec: distribution-and-update)
+- [x] 54.1 Publish package-manager and image channels (Homebrew tap, WinGet, container image, Nix flake) with receipts naming the owner; verify that self-update is refused for each with exit 69 (spec: distribution-and-update)
+- [x] 54.2 Implement running-daemon handover on update, update dry-run with changelog preview, offline bundles and `prometheus uninstall`; verify with a local release server (spec: distribution-and-update)
+- [x] 54.3 Implement the NixOS and Home Manager modules (Nix-owned keys read-only, bad config does not restart-loop); verify with a NixOS VM test (spec: distribution-and-update)
+- [x] 54.4 Implement the container image run modes, filesystem, init and health check, multiple profiles in one container, the audio bridge and host services, and the network-isolated deployment recipe; verify with container tests that zombies are reaped and isolation is verified (spec: distribution-and-update)
+- [x] 54.5 Implement update from chat (disabled by default, admin only) and uninstall scopes with dry run; verify that a dry run lists the service unit and a data wipe on a package-manager install is handled (spec: distribution-and-update)
 
 ## 55. M2 Hermes migration
 
-- [ ] 55.1 Implement `prometheus migrate from-hermes` surface, the read-only source guarantee, profile discovery/mapping, dry run and mapping report; verify against a fixture Hermes home that the source tree hash is unchanged (spec: hermes-migration)
-- [ ] 55.2 Implement config translation from user-set values only (supported versions, fail-closed ambiguous YAML, env references), `.env` re-sorting into secrets and config, credential files and typed-name validation; verify with fixture configs (spec: hermes-migration)
-- [ ] 55.3 Implement streaming verified session import with lineage and usage events, memory and identity import, and skills import with scanning; verify counts and FTS search after import (spec: hermes-migration)
-- [ ] 55.4 Implement cron jobs imported paused, MCP servers and plugins (bridge), gateway settings and pairing allowlists; verify with fixtures (spec: hermes-migration)
-- [ ] 55.5 Implement idempotent incremental re-runs, per-component atomicity and resumability, exit codes and confirmation; verify that a second run imports nothing new and an interrupted run resumes (spec: hermes-migration)
-- [ ] 55.6 Implement importers for other agents (detection, broken settings reported), the rule that other agents never yield secrets by default, the Claude Code, Codex CLI and Cursor mappings and the OpenClaw mapping; verify with fixture homes for each agent (spec: hermes-migration)
-- [ ] 55.7 Implement source archiving after import (explicit cleanup only), keeping imports in sync (token refreshes do not trigger syncs) and session transcripts from other agent CLIs (idempotent re-import); verify with fixture homes (spec: hermes-migration)
-- [ ] 55.8 Write the migration guide and verify its commands against the fixture home (spec: hermes-migration)
+- [x] 55.1 Implement `prometheus migrate from-hermes` surface, the read-only source guarantee, profile discovery/mapping, dry run and mapping report; verify against a fixture Hermes home that the source tree hash is unchanged (spec: hermes-migration)
+- [x] 55.2 Implement config translation from user-set values only (supported versions, fail-closed ambiguous YAML, env references), `.env` re-sorting into secrets and config, credential files and typed-name validation; verify with fixture configs (spec: hermes-migration)
+- [x] 55.3 Implement streaming verified session import with lineage and usage events, memory and identity import, and skills import with scanning; verify counts and FTS search after import (spec: hermes-migration)
+- [x] 55.4 Implement cron jobs imported paused, MCP servers and plugins (bridge), gateway settings and pairing allowlists; verify with fixtures (spec: hermes-migration)
+- [x] 55.5 Implement idempotent incremental re-runs, per-component atomicity and resumability, exit codes and confirmation; verify that a second run imports nothing new and an interrupted run resumes (spec: hermes-migration)
+- [x] 55.6 Implement importers for other agents (detection, broken settings reported), the rule that other agents never yield secrets by default, the Claude Code, Codex CLI and Cursor mappings and the OpenClaw mapping; verify with fixture homes for each agent (spec: hermes-migration)
+- [x] 55.7 Implement source archiving after import (explicit cleanup only), keeping imports in sync (token refreshes do not trigger syncs) and session transcripts from other agent CLIs (idempotent re-import); verify with fixture homes (spec: hermes-migration)
+- [x] 55.8 Write the migration guide and verify its commands against the fixture home (spec: hermes-migration)
 
 ## 56. M2 Projects
 
-- [ ] 56.1 Implement project records (one owner per folder), project commands (create, activate, list, show), the active project with path ownership (nested folders resolved) and archive and restore (an archived active project is cleared); verify with CLI tests (spec: projects)
-- [ ] 56.2 Include projects in backups and exports (missing folders flagged on restore); verify with a backup round trip (spec: projects)
+- [x] 56.1 Implement project records (one owner per folder), project commands (create, activate, list, show), the active project with path ownership (nested folders resolved) and archive and restore (an archived active project is cleared); verify with CLI tests (spec: projects)
+- [x] 56.2 Include projects in backups and exports (missing folders flagged on restore); verify with a backup round trip (spec: projects)
 
 ## 57. M2 Internationalization
 
-- [ ] 57.1 Implement static UI string catalogs (language changes keep the prompt cache), the bundled languages, `display.language` selection per profile (unknown ids refused) and layered lookup with partial catalogs; verify with catalog tests (spec: i18n)
-- [ ] 57.2 Implement placeholder and value validation (misspelled placeholders fall back), language-pack plugins with pack validation (unknown keys warned), language changes applied without restart and migration of Hermes language settings; verify with a no-code pack fixture (spec: i18n)
+- [x] 57.1 Implement static UI string catalogs (language changes keep the prompt cache), the bundled languages, `display.language` selection per profile (unknown ids refused) and layered lookup with partial catalogs; verify with catalog tests (spec: i18n)
+- [x] 57.2 Implement placeholder and value validation (misspelled placeholders fall back), language-pack plugins with pack validation (unknown keys warned), language changes applied without restart and migration of Hermes language settings; verify with a no-code pack fixture (spec: i18n)
 
 ## 58. M2 CLI upgrades
 
-- [ ] 58.1 Implement streaming JSONL output (ends with a result record), the planning-only turn (writes outside plans refused) and exit-with-delete and profile archive slash forms; verify with CLI tests (spec: cli)
-- [ ] 58.2 Implement theme commands with branding keys, setup wizard modes (quick setup asks only unset values, adapter fields from the schema) and the Windows console behaviour (code page restored); verify with snapshot tests (spec: cli)
-- [ ] 58.3 Implement the safe command console (shell metacharacters refused) and webhook subscriptions (secret printed once); verify with CLI tests. Background sessions (`/background`, alias `/bg`) are owned by subagent-delegation › User-launched background sessions and already implemented by task 40.1: do not build a second one (spec: cli)
+- [x] 58.1 Implement streaming JSONL output (ends with a result record), the planning-only turn (writes outside plans refused) and exit-with-delete and profile archive slash forms; verify with CLI tests (spec: cli)
+- [x] 58.2 Implement theme commands with branding keys, setup wizard modes (quick setup asks only unset values, adapter fields from the schema) and the Windows console behaviour (code page restored); verify with snapshot tests (spec: cli)
+- [x] 58.3 Implement the safe command console (shell metacharacters refused) and webhook subscriptions (secret printed once); verify with CLI tests. Background sessions (`/background`, alias `/bg`) are owned by subagent-delegation › User-launched background sessions and already implemented by task 40.1: do not build a second one (spec: cli)
 
 ## 59. M2 OpenAI-compatible API server
 
-- [ ] 59.1 Implement the opt-in API listener on `8642` that fails closed without a per-profile key (public binds need explicit opt-in), profile-bound routing with bearer authentication, and browser access rules with Host checks and security headers; verify with HTTP security tests (spec: api-server)
-- [ ] 59.2 Implement model listing with Open WebUI compatibility, the Chat Completions endpoint (budget exhaustion is not success, uploaded files refused), API session identity and ownership, and caller instructions with long-term memory scoping; verify with an OpenAI SDK client test (spec: api-server)
-- [ ] 59.3 Implement the Responses endpoint with its response store (chained turns, echoed reasoning items ignored) and idempotent admission for Chat Completions and Responses (key reuse for different work refused); verify that a retried request after network loss runs once (spec: api-server)
-- [ ] 59.4 Implement the Runs API lifecycle, the run idempotency ledger (replay after restart), the run events stream (reconnect without loss), run controls (stale approval generations refused), unattended approvals with the API toolset, per-request model selection and the concurrent run cap; verify with integration tests (spec: api-server)
-- [ ] 59.5 Implement the Sessions REST API (fork and continue, light transcripts), the Jobs REST API and discovery and readiness endpoints that hide secrets; verify with HTTP tests and document the API server (spec: api-server)
+- [x] 59.1 Implement the opt-in API listener on `8642` that fails closed without a per-profile key (public binds need explicit opt-in), profile-bound routing with bearer authentication, and browser access rules with Host checks and security headers; verify with HTTP security tests (spec: api-server)
+- [x] 59.2 Implement model listing with Open WebUI compatibility, the Chat Completions endpoint (budget exhaustion is not success, uploaded files refused), API session identity and ownership, and caller instructions with long-term memory scoping; verify with an OpenAI SDK client test (spec: api-server)
+- [x] 59.3 Implement the Responses endpoint with its response store (chained turns, echoed reasoning items ignored) and idempotent admission for Chat Completions and Responses (key reuse for different work refused); verify that a retried request after network loss runs once (spec: api-server)
+- [x] 59.4 Implement the Runs API lifecycle, the run idempotency ledger (replay after restart), the run events stream (reconnect without loss), run controls (stale approval generations refused), unattended approvals with the API toolset, per-request model selection and the concurrent run cap; verify with integration tests (spec: api-server)
+- [x] 59.5 Implement the Sessions REST API (fork and continue, light transcripts), the Jobs REST API and discovery and readiness endpoints that hide secrets; verify with HTTP tests and document the API server (spec: api-server)
 
 ## 60. M2 Exit criteria
 
-- [ ] 60.1 M2 exit: an end-to-end test starts the daemon, attaches the TUI and a CLI client, sends a message through the mock platform adapter, receives a streamed reply, and resumes after a dropped connection with no lost events (spec: workspace-architecture, spec: tui, spec: messaging-gateway)
-- [ ] 60.2 M2 exit: a WASM plugin, an MCP server and a Hermes Python plugin each register a tool that the agent calls under grants, and an ungranted capability is refused in each (spec: plugin-system, spec: python-bridge)
-- [ ] 60.3 M2 exit: a cron job delegating to a background subagent fires exactly once across a daemon restart and delivers via the outbox (spec: scheduled-jobs, spec: subagent-delegation)
-- [ ] 60.4 M2 exit: an OpenAI SDK client completes a chat and an idempotent retried run through the API server, a `/goal` session reaches completion under the mock judge, a MoA preset answers through the mock provider, and a delegated child commits in its own git worktree (spec: api-server, spec: session-automation, spec: mixture-of-agents, spec: git-worktrees)
-- [ ] 60.5 M2 exit: voice mode transcribes a recorded fixture and speaks the reply through mock STT/TTS, an LSP diagnostic is reported after an edit, a connector tool is reached through tool search, a stub local model answers offline, a project is created and activated, `gateway send` delivers to a home channel, and the TUI renders in a bundled non-English language (spec: voice-mode, spec: web-and-media-tools, spec: lsp-diagnostics, spec: connectors, spec: local-models, spec: projects, spec: agent-interop, spec: i18n)
-- [ ] 60.6 M2 exit: migrating the fixture Hermes home and running the golden replay suite pass in CI; every M2 scenario across specs maps to a passing test in the scenario index
+- [x] 60.1 M2 exit: an end-to-end test starts the daemon, attaches the TUI and a CLI client, sends a message through the mock platform adapter, receives a streamed reply, and resumes after a dropped connection with no lost events (spec: workspace-architecture, spec: tui, spec: messaging-gateway)
+- [x] 60.2 M2 exit: a WASM plugin, an MCP server and a Hermes Python plugin each register a tool that the agent calls under grants, and an ungranted capability is refused in each (spec: plugin-system, spec: python-bridge)
+- [x] 60.3 M2 exit: a cron job delegating to a background subagent fires exactly once across a daemon restart and delivers via the outbox (spec: scheduled-jobs, spec: subagent-delegation)
+- [x] 60.4 M2 exit: an OpenAI SDK client completes a chat and an idempotent retried run through the API server, a `/goal` session reaches completion under the mock judge, a MoA preset answers through the mock provider, and a delegated child commits in its own git worktree (spec: api-server, spec: session-automation, spec: mixture-of-agents, spec: git-worktrees)
+- [x] 60.5 M2 exit: voice mode transcribes a recorded fixture and speaks the reply through mock STT/TTS, an LSP diagnostic is reported after an edit, a connector tool is reached through tool search, a stub local model answers offline, a project is created and activated, `gateway send` delivers to a home channel, and the TUI renders in a bundled non-English language (spec: voice-mode, spec: web-and-media-tools, spec: lsp-diagnostics, spec: connectors, spec: local-models, spec: projects, spec: agent-interop, spec: i18n)
+- [x] 60.6 M2 exit: migrating the fixture Hermes home and running the golden replay suite pass in CI; every M2 scenario across specs maps to a passing test in the scenario index
 
 ## 61. M3 Web dashboard
 

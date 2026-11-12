@@ -336,10 +336,10 @@ fn unpriced(
     refusal(error, &limit, spent, None, warnings)
 }
 
-/// The user-visible notice of a warning:
+/// The user-visible notice of a warning, in the profile's language:
 /// `budget warning: root spend $0.81 of $1.00 (81%)`.
 #[must_use]
-pub fn notice(warning: &Budget) -> String {
+pub fn notice(text: &dyn pmt_core::text::Catalog, warning: &Budget) -> String {
     let unit = if warning.unit == "tokens" {
         Unit::Tokens
     } else {
@@ -350,10 +350,14 @@ pub fn notice(warning: &Budget) -> String {
     } else {
         100.0
     };
-    format!(
-        "budget warning: {} spend {} of {} ({percent:.0}%)",
-        warning.scope,
-        format_amount(unit, warning.spent),
-        format_amount(unit, warning.limit),
+    let percent = format!("{percent:.0}");
+    text.text(
+        "display.budget_warning",
+        &[
+            ("scope", &warning.scope),
+            ("spent", &format_amount(unit, warning.spent)),
+            ("limit", &format_amount(unit, warning.limit)),
+            ("percent", &percent),
+        ],
     )
 }

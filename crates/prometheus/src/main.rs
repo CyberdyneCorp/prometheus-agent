@@ -30,6 +30,9 @@ fn main() -> ExitCode {
         Ok(cli) => cli,
         Err(err) => return usage_failure(&err),
     };
+    if let Some(code) = before_anything(&cli) {
+        return code;
+    }
     if cli.print_version {
         return ExitCode::from(version::run(cli.json, cli.verbose > 0));
     }
@@ -91,6 +94,7 @@ fn main() -> ExitCode {
         launch.user_home().cloned(),
     ));
     pmt_config::gateway_check::register_roles(prometheus::daemon_client::role_resolver());
+    pmt_config::language::register_packs(Box::new(prometheus::plugins_host::language_packs));
     let home = pmt_config::home::resolve(cli.home.as_deref(), &launch)
         .ok()
         .filter(|_| !matches!(cli.command, Some(Command::Demo(_) | Command::SmokeSuite(_))));
@@ -112,6 +116,41 @@ fn main() -> ExitCode {
     }
 }
 
+/// What runs before the launch environment, logging or the home exist:
+/// the container init (as PID 1, the command runs as a child of a minimal
+/// init that reaps orphans and forwards signals) and a package build
+/// stamping its receipt (it has no home and must not grow one).
+fn before_anything(cli: &Cli) -> Option<ExitCode> {
+    if let Some(code) = prometheus::init::run_if_pid1(is_daemon_run(cli)) {
+        return Some(ExitCode::from(code));
+    }
+    let Some(Command::InstallReceipt(args)) = &cli.command else {
+        return None;
+    };
+    Some(match prometheus::install_receipt_cmd::run(args) {
+        Ok(code) => ExitCode::from(code),
+        Err(err) => failure(&err, cli.json),
+    })
+}
+
+/// Whether the command line runs the gateway daemon in the foreground.
+fn is_daemon_run(cli: &Cli) -> bool {
+    #[cfg(feature = "gateway")]
+    {
+        matches!(
+            cli.command,
+            Some(Command::Daemon {
+                command: prometheus::daemon_cmd::DaemonCommand::Run { .. }
+            })
+        )
+    }
+    #[cfg(not(feature = "gateway"))]
+    {
+        let _ = cli;
+        false
+    }
+}
+
 /// `--set` overrides plus the ones `--accept-hooks` and `--safe-mode`
 /// stand for.
 fn global_set(cli: &Cli) -> Vec<String> {
@@ -127,12 +166,12 @@ fn global_set(cli: &Cli) -> Vec<String> {
 
 fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
     let set = global_set(cli);
-    let ctx = Context {
-        home_flag: cli.home.as_deref(),
-        launch,
-        profile: cli.profile.as_deref(),
-        set: &set,
-        json: cli.json,
+    let ctx = match context(cli, launch, &set) {
+        Ok(ctx) => ctx,
+        Err(err) => {
+            print_error(&err, cli.json);
+            return err.exit_code();
+        }
     };
     let result = match &cli.command {
         Some(Command::Version) => Ok(version::run(cli.json, cli.verbose > 0)),
@@ -143,15 +182,6 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Config { command }) => config_cmd::run(command, &ctx),
         Some(Command::Secrets { command }) => secrets_cmd::run(command, &ctx),
         Some(Command::Grants { command }) => grants_cmd::run(command, &ctx),
-        Some(Command::Security { command }) => prometheus::security_cmd::run(command, &ctx),
-        Some(Command::Browser { command }) => prometheus::browser_cmd::run(command, &ctx),
-        Some(Command::Lsp { command }) => prometheus::lsp_cmd::run(command, &ctx),
-        Some(Command::Cron { command }) => prometheus::cron_cmd::run(command, &ctx),
-        Some(Command::Worktrees { command }) => prometheus::worktrees_cmd::run(command, &ctx),
-        Some(Command::Vault { command }) => prometheus::vault_cmd::run(command, &ctx),
-        Some(Command::Files { command }) => prometheus::files_cmd::run(command, &ctx),
-        Some(Command::Cache { command }) => prometheus::cache_cmd::run(command, &ctx),
-        Some(Command::Replay { command }) => prometheus::replay_cmd::run(command, &ctx),
         Some(Command::Verify(args)) => prometheus::verify_cmd::run(args, &ctx),
         Some(Command::Skills { command }) => skills_cmd::run(command, &ctx),
         Some(Command::Curator { command }) => prometheus::curator_cmd::run(command, &ctx),
@@ -176,6 +206,11 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Toolsets { command }) => tools_cmd::toolsets(command, &ctx),
         Some(Command::Approvals { command }) => approvals_cmd::run(command, &ctx),
         Some(Command::Update(args)) => update_cmd::run(args, &ctx),
+        Some(Command::Bundle { command }) => prometheus::bundle_cmd::run(command, &ctx),
+        Some(Command::Migrate { command }) => {
+            prometheus::migrate_cmd::run(command, &ctx, &cli.profile)
+        }
+        Some(Command::Uninstall(args)) => prometheus::uninstall_cmd::run(args, &ctx),
         Some(Command::Pause(args)) => prometheus::pause_cmd::run(args, &ctx),
         Some(Command::Portal { command }) => prometheus::portal_cmd::run(command, &ctx),
         #[cfg(feature = "gateway")]
@@ -196,7 +231,7 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::SelfTest) => Ok(self_test_cmd::run(&ctx)),
         Some(Command::SmokeSuite(args)) => prometheus::smoke_suite::runner::run(args),
         Some(Command::Completions { shell }) => prometheus::completions::script(*shell),
-        Some(Command::Complete { .. }) => Ok(0),
+        Some(Command::Complete { .. } | Command::InstallReceipt(_)) => Ok(0),
         Some(Command::Runtimes { command }) => runtimes_cmd::run(command, &ctx),
         Some(Command::Chat(args)) => chat::run(&safe(args, cli), &ctx, ui(cli)),
         #[cfg(feature = "tui")]
@@ -216,11 +251,62 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         #[cfg(not(feature = "eval"))]
         Some(Command::Eval(_)) => prometheus::surface::require("eval").map(|()| 0),
         None => chat::run(&safe(&cli.chat, cli), &ctx, ui(cli)),
+        // Every other command is a record/workspace group.
+        Some(command) => workspace(command, &ctx),
     };
     result.unwrap_or_else(|err| {
         print_error(&err, cli.json);
         err.exit_code()
     })
+}
+
+/// The subcommand groups over the profile's records and workspaces
+/// (kept out of [`run`] to bound its length).
+fn workspace(command: &Command, ctx: &Context<'_>) -> Result<u8, Error> {
+    match command {
+        Command::Security { command } => prometheus::security_cmd::run(command, ctx),
+        Command::Browser { command } => prometheus::browser_cmd::run(command, ctx),
+        Command::Lsp { command } => prometheus::lsp_cmd::run(command, ctx),
+        Command::Cron { command } => prometheus::cron_cmd::run(command, ctx),
+        Command::Cache { command } => prometheus::cache_cmd::run(command, ctx),
+        Command::Replay { command } => prometheus::replay_cmd::run(command, ctx),
+        Command::Worktrees { command } => prometheus::worktrees_cmd::run(command, ctx),
+        Command::Projects { command } => prometheus::projects_cmd::run(command, ctx),
+        Command::Vault { command } => prometheus::vault_cmd::run(command, ctx),
+        Command::Files { command } => prometheus::files_cmd::run(command, ctx),
+        Command::Themes { command } => prometheus::themes_cmd::run(command, ctx),
+        Command::Console => prometheus::console_cmd::run(ctx),
+        Command::Webhooks { command } => prometheus::webhooks_cmd::run(command, ctx),
+        _ => unreachable!("run() dispatches every other command itself"),
+    }
+}
+
+fn context<'a>(
+    cli: &'a Cli,
+    launch: &'a LaunchEnv,
+    set: &'a [String],
+) -> Result<Context<'a>, Error> {
+    Ok(Context {
+        home_flag: cli.home.as_deref(),
+        launch,
+        profile: profile_flag(cli)?,
+        set,
+        json: cli.json,
+    })
+}
+
+/// The one `-p/--profile` of the command line; only `migrate from-hermes`
+/// takes several (the Hermes profiles to migrate).
+fn profile_flag(cli: &Cli) -> Result<Option<&str>, Error> {
+    match cli.profile.as_slice() {
+        [] => Ok(None),
+        [one] => Ok(Some(one.as_str())),
+        _ if matches!(cli.command, Some(Command::Migrate { .. })) => Ok(None),
+        _ => Err(Error::new(
+            &codes::CLI_USAGE,
+            "-p/--profile is given more than once",
+        )),
+    }
 }
 
 /// The chat flags with the global `--safe-mode`.
@@ -237,6 +323,7 @@ fn ui(cli: &Cli) -> chat::Ui {
         quiet: cli.quiet,
         no_color: cli.no_color,
         verbose: cli.verbose,
+        stream: false,
     }
 }
 

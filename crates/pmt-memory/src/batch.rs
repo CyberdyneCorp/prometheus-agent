@@ -152,6 +152,18 @@ fn over_budget(ctx: &Context, before: usize, after: usize) -> String {
     )
 }
 
+/// `now`, or one millisecond after the newest entry when that is not
+/// earlier: entries list by creation time (ids are random), so the adds
+/// of one batch keep their order.
+fn after_last(entries: &[MemoryEntry], now: Timestamp) -> Timestamp {
+    match entries.iter().map(|e| e.created_at).max() {
+        Some(last) if last >= now => last
+            .checked_add(jiff::SignedDuration::from_millis(1))
+            .unwrap_or(last),
+        _ => now,
+    }
+}
+
 fn add(entries: &mut Vec<MemoryEntry>, op: &Op, ctx: &Context) -> (OpResult, Option<Op>) {
     let content = op.content.clone().unwrap_or_default();
     if let Some(existing) = entries.iter().find(|e| {
@@ -164,6 +176,7 @@ fn add(entries: &mut Vec<MemoryEntry>, op: &Op, ctx: &Context) -> (OpResult, Opt
         };
         return (result, None);
     }
+    let created_at = after_last(entries, ctx.now);
     let entry = MemoryEntry {
         id: crate::id::entry(),
         target: ctx.target,
@@ -173,7 +186,8 @@ fn add(entries: &mut Vec<MemoryEntry>, op: &Op, ctx: &Context) -> (OpResult, Opt
         pinned: false,
         status: MemoryStatus::Active,
         expires_at: op.expires_at,
-        created_at: ctx.now,
+        created_at,
+        // `updated_at == now` marks what this batch wrote.
         updated_at: ctx.now,
         last_recalled_at: None,
         recall_count: 0,

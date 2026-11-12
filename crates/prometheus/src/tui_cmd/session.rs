@@ -4,6 +4,7 @@
 //! deadline, and a request settled elsewhere (answered by another window,
 //! timed out, no responder) withdraws its card.
 
+use pmt_i18n::{Strings, Surface, t};
 use pmt_rpc::RpcError;
 use pmt_rpc::client::ServerCall;
 use pmt_rpc::contracts::{
@@ -17,12 +18,13 @@ use serde_json::{Value, json};
 use super::masked;
 use super::screen::{Asked, Done, Tui};
 
-/// How to answer an approval card.
-const APPROVAL_HINT: &str = "[o]nce  [s]ession  [a]lways  [d]eny  [e]xplain";
-/// How to answer a question card.
-const CLARIFY_HINT: &str = "type a number, your own answer, or nothing to skip; Enter sends";
-
 impl Tui<'_> {
+    /// The profile's TUI strings now (spec: i18n): a language, overlay or
+    /// pack change shows at the next redraw.
+    pub(super) fn strings(&self) -> std::sync::Arc<Strings> {
+        pmt_config::language::strings(self.open.scope.dir(), Surface::Tui)
+    }
+
     /// Reloads the transcript and the status (on open, after a switch, or
     /// when a re-attachment could not replay what was missed).
     pub(super) async fn reload(&mut self) {
@@ -87,9 +89,13 @@ impl Tui<'_> {
                 }
             }
             "request.cancel" => {
-                self.withdraw(&event.data, "timed out or nobody could answer it; denied");
+                let why = self.strings().get("tui.withdrawn_timeout").to_owned();
+                self.withdraw(&event.data, &why);
             }
-            "request.resolved" => self.withdraw(&event.data, "answered in another window"),
+            "request.resolved" => {
+                let why = self.strings().get("tui.withdrawn_elsewhere").to_owned();
+                self.withdraw(&event.data, &why);
+            }
             "automation.state" if shown => self.on_automation(&event.data),
             _ => {}
         }
@@ -124,15 +130,21 @@ impl Tui<'_> {
             Some("tool.call") => self.app.transcript.push(Kind::Tool, text("tool")),
             Some(ASSISTANT_DELTA) => self.voice_delta(data),
             Some(COMMAND_NOTICE) => self.notice(text("text")),
-            Some(PROCESS_NOTICE) => self.notice(format!("[background] {}", text("text"))),
+            Some(PROCESS_NOTICE) => {
+                let line = self
+                    .strings()
+                    .fmt("tui.background", &[("0", &text("text"))]);
+                self.notice(line);
+            }
             Some(kind @ ("subagent.spawned" | "subagent.progress" | "subagent.finished")) => {
                 if let Some(line) = self.subagents.line(kind, &data["payload"]) {
                     self.notice(line);
                 }
             }
             Some(kind) => {
+                let strings = pmt_config::language::strings(self.open.scope.dir(), Surface::Core);
                 if let Some(line) =
-                    crate::chat::session::progress::context_line(kind, &data["payload"])
+                    crate::chat::session::progress::context_line(&*strings, kind, &data["payload"])
                 {
                     self.notice(line);
                 }
@@ -146,9 +158,7 @@ impl Tui<'_> {
             turns.remove(&finished.turn_id);
         }
         if !shown {
-            self.notice(format!(
-                "(session {session} finished a turn in the background)"
-            ));
+            self.notice(t!(self.strings(), "tui.background_finished", 0 = session));
             return;
         }
         self.voice_turn_finished(finished);
@@ -187,10 +197,12 @@ impl Tui<'_> {
             .count();
         let asked = self.clarify.len();
         let typed = self.masked.chars().count();
+        let strings = self.strings();
         self.app.card = self
             .asking
             .front()
-            .map(|a| card(a, asked, typed))
+            .map(|a| card(a, asked, typed, &strings))
+            .or_else(|| self.delete_card())
             .or_else(|| self.setup_card())
             .or_else(|| self.prune_card());
     }
@@ -204,7 +216,7 @@ impl Tui<'_> {
         }
         self.asking.retain(|a| a.call.id != id);
         if self.asking.len() != before {
-            self.notice(format!("(the question {why})"));
+            self.notice(t!(self.strings(), "tui.question_withdrawn", 0 = why));
             self.show_question();
         }
     }
@@ -295,7 +307,7 @@ impl Tui<'_> {
                 self.shown_changed();
                 self.reload().await;
                 let shown = self.link.session.clone();
-                self.notice(format!("session {shown}"));
+                self.notice(t!(self.strings(), "tui.session_shown", 0 = shown));
                 // `/resume` of a stored session; a new or forked one has none.
                 self.memory_summary(&shown).await;
                 if let Some(prompt) = prompt {
@@ -315,9 +327,9 @@ impl Tui<'_> {
     fn admitted(&mut self, session: &str, turn: &str, admission: Admission) {
         match admission {
             Admission::Started => {}
-            Admission::Queued => self.notice("queued; it runs when the current turn ends"),
+            Admission::Queued => self.notice(t!(self.strings(), "tui.queued")),
             Admission::Steered => {
-                self.notice("steering the running turn");
+                self.notice(t!(self.strings(), "tui.steering"));
                 return;
             }
             // No turn runs (its notice was shown).
@@ -344,24 +356,35 @@ impl Tui<'_> {
 
 /// The card of a request; for a clarify request, of its question `index`;
 /// `typed` is how many characters a secret or sudo card holds.
-fn card(asked: &Asked, index: usize, typed: usize) -> Card {
+fn card(asked: &Asked, index: usize, typed: usize, strings: &Strings) -> Card {
+    card_at(asked, index, typed, strings, tokio::time::Instant::now())
+}
+
+/// [`card`] as seen at `now` (the countdown's clock).
+fn card_at(
+    asked: &Asked,
+    index: usize,
+    typed: usize,
+    strings: &Strings,
+    now: tokio::time::Instant,
+) -> Card {
     let within = asked
         .deadline
         .map(|deadline| {
-            let left = deadline.saturating_duration_since(tokio::time::Instant::now());
+            let left = deadline.saturating_duration_since(now);
             let secs = u64::try_from(left.as_millis().div_ceil(1000)).unwrap_or(u64::MAX);
-            format!("   (answer within {secs} s)")
+            strings.fmt("tui.answer_within", &[("0", &secs)])
         })
         .unwrap_or_default();
     let p = &asked.call.params;
     match asked.method() {
-        "approval.request" => approval_card(p, &within),
-        masked::SECRET | masked::SUDO => masked::card(asked.method(), p, typed, &within),
-        _ => clarify_card(&p["questions"][index], &within),
+        "approval.request" => approval_card(p, &within, strings),
+        masked::SECRET | masked::SUDO => masked::card(strings, asked.method(), p, typed, &within),
+        _ => clarify_card(&p["questions"][index], &within, strings),
     }
 }
 
-fn approval_card(p: &Value, within: &str) -> Card {
+fn approval_card(p: &Value, within: &str, strings: &Strings) -> Card {
     let findings: Vec<String> = p["findings"]
         .as_array()
         .into_iter()
@@ -381,17 +404,19 @@ fn approval_card(p: &Value, within: &str) -> Card {
         body.push_str(explanation);
     }
     Card {
-        title: format!(
-            "approval needed: {} {}",
-            p["tool"].as_str().unwrap_or("tool"),
-            p["subject"].as_str().unwrap_or_default()
+        title: strings.fmt(
+            "tui.approval_title",
+            &[
+                ("0", &p["tool"].as_str().unwrap_or("tool")),
+                ("1", &p["subject"].as_str().unwrap_or_default()),
+            ],
         ),
         body,
-        hint: format!("{APPROVAL_HINT}{within}"),
+        hint: format!("{}{within}", strings.get("tui.approval_hint")),
     }
 }
 
-fn clarify_card(question: &Value, within: &str) -> Card {
+fn clarify_card(question: &Value, within: &str, strings: &Strings) -> Card {
     let choices: Vec<String> = question["choices"]
         .as_array()
         .into_iter()
@@ -402,7 +427,7 @@ fn clarify_card(question: &Value, within: &str) -> Card {
     Card {
         title: question["question"].as_str().unwrap_or_default().to_owned(),
         body: choices.join("\n"),
-        hint: format!("{CLARIFY_HINT}{within}"),
+        hint: format!("{}{within}", strings.get("tui.clarify_hint")),
     }
 }
 
@@ -413,7 +438,11 @@ mod tests {
     use pmt_rpc::client::ServerCall;
     use serde_json::json;
 
-    use super::{Asked, card};
+    use super::{Asked, card, card_at};
+
+    fn english() -> std::sync::Arc<pmt_i18n::Strings> {
+        pmt_i18n::Strings::english(pmt_i18n::Surface::Tui)
+    }
 
     fn asked(method: &str, deadline_ms: Option<u64>) -> Asked {
         let mut params = json!({"name": "DEPLOY_TOKEN", "command": "sudo id", "tool": "terminal"});
@@ -429,22 +458,32 @@ mod tests {
 
     #[test]
     fn a_card_counts_down_to_its_deadline() {
-        let mut waiting = asked("sudo.request", Some(2_500));
-        assert!(card(&waiting, 0, 0).hint.ends_with("(answer within 3 s)"));
-        waiting.deadline = waiting.deadline.map(|d| d - Duration::from_secs(1));
-        assert!(card(&waiting, 0, 0).hint.ends_with("(answer within 2 s)"));
-        waiting.deadline = waiting.deadline.map(|d| d - Duration::from_secs(5));
-        assert!(card(&waiting, 0, 0).hint.ends_with("(answer within 0 s)"));
+        let waiting = asked("sudo.request", Some(3_000));
+        let deadline = waiting.deadline.unwrap();
+        let hint = |left_ms: u64| {
+            let now = deadline - Duration::from_millis(left_ms);
+            card_at(&waiting, 0, 0, &english(), now).hint
+        };
+        assert!(hint(2_500).ends_with("(answer within 3 s)"));
+        assert!(hint(1_500).ends_with("(answer within 2 s)"));
+        let late = card_at(
+            &waiting,
+            0,
+            0,
+            &english(),
+            deadline + Duration::from_secs(4),
+        );
+        assert!(late.hint.ends_with("(answer within 0 s)"));
         let open = asked("approval.request", None);
-        assert!(!card(&open, 0, 0).hint.contains("within"));
+        assert!(!card(&open, 0, 0, &english()).hint.contains("within"));
     }
 
     #[test]
     fn a_secret_card_shows_one_bullet_per_typed_character_and_never_the_value() {
-        let shown = card(&asked("secret.request", None), 0, 5);
+        let shown = card(&asked("secret.request", None), 0, 5, &english());
         assert_eq!(shown.title, "secret needed: DEPLOY_TOKEN");
         assert!(shown.body.ends_with("› •••••"), "{}", shown.body);
-        let sudo = card(&asked("sudo.request", None), 0, 0);
+        let sudo = card(&asked("sudo.request", None), 0, 0, &english());
         assert_eq!(sudo.body, "for: sudo id\n› ");
     }
 }

@@ -24,6 +24,7 @@ pub mod index;
 pub mod install;
 pub mod lazy;
 pub mod lease;
+pub mod seed;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};

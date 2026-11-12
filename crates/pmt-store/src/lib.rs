@@ -21,8 +21,10 @@
 //!   [`mcp_spend`] what conversations spent on costed MCP tools, and
 //!   [`process_receipts`] what ended background processes left behind, and
 //!   [`verification`] `prometheus verify` evidence, and [`cron`] scheduled
-//!   jobs, their runs, delivery outbox and tick lease.
+//!   jobs, their runs, delivery outbox and tick lease, and [`projects`]
+//!   projects, their folders and the active project.
 
+pub mod api;
 pub mod automation;
 pub mod blobs;
 pub mod compaction;
@@ -42,6 +44,7 @@ pub mod inspect;
 pub mod integrity;
 pub mod journal;
 pub mod leases;
+pub mod legacy;
 pub mod listing;
 pub mod location;
 pub mod mcp_spend;
@@ -58,6 +61,7 @@ pub mod portable;
 pub mod prefill;
 pub mod prefs;
 pub mod process_receipts;
+pub mod projects;
 pub mod prompts;
 pub mod provider_state;
 pub mod rebind;
@@ -100,6 +104,7 @@ pub use model::{
 pub use pins::Pin;
 pub use prefill::SessionPrefill;
 pub use process_receipts::ProcessReceipt;
+pub use projects::{Folder, NewProject, Project, ProjectsExport};
 pub use prompts::{PromptTier, SessionPrompt};
 pub use retention::Maintenance;
 pub use rewind::Rewound;
@@ -117,7 +122,7 @@ pub use usage_query::UsageFilter;
 /// The newest `state.db` schema version this build reads and writes
 /// (`store_meta.schema_version`); every embedded migration bumps it, and a
 /// newer store opens read-only. Reported by `prometheus version --json`.
-pub const SCHEMA_VERSION: u32 = 35;
+pub const SCHEMA_VERSION: u32 = 38;
 
 #[cfg(test)]
 mod tests {

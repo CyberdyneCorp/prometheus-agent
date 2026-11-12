@@ -4,8 +4,9 @@
 #![allow(unsafe_code)]
 
 use windows_sys::Win32::System::Console::{
-    CTRL_BREAK_EVENT, GenerateConsoleCtrlEvent, GetConsoleCP, GetConsoleOutputCP, SetConsoleCP,
-    SetConsoleOutputCP,
+    CTRL_BREAK_EVENT, ENABLE_VIRTUAL_TERMINAL_PROCESSING, GenerateConsoleCtrlEvent, GetConsoleCP,
+    GetConsoleMode, GetConsoleOutputCP, GetStdHandle, STD_OUTPUT_HANDLE, SetConsoleCP,
+    SetConsoleMode, SetConsoleOutputCP,
 };
 
 /// `(input, output)`; `None` when the process has no console.
@@ -36,3 +37,25 @@ pub(crate) fn ctrl_break(group: u32) -> std::io::Result<()> {
     }
     Ok(())
 }
+
+/// The output console's mode, `None` when stdout is not a console.
+pub(crate) fn output_mode() -> Option<u32> {
+    let mut mode = 0u32;
+    // SAFETY: GetStdHandle takes a constant; GetConsoleMode writes one u32
+    // to a valid pointer and fails (returning 0) for a handle that is not
+    // a console, such as a redirected stdout.
+    let ok = unsafe { GetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), &raw mut mode) };
+    (ok != 0).then_some(mode)
+}
+
+/// Sets the output console's mode (a failure leaves it as it was).
+pub(crate) fn set_output_mode(mode: u32) {
+    // SAFETY: plain integer arguments on the process's own stdout handle;
+    // the call fails harmlessly when it is not a console.
+    unsafe {
+        SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), mode);
+    }
+}
+
+/// The mode bit that makes the console interpret ANSI sequences.
+pub(crate) const VIRTUAL_TERMINAL: u32 = ENABLE_VIRTUAL_TERMINAL_PROCESSING;

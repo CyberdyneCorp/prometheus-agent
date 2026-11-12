@@ -8,6 +8,7 @@
 
 use std::path::PathBuf;
 
+use pmt_i18n::t;
 use pmt_rpc::contracts::PromptImage;
 use pmt_tui::app::Card;
 use pmt_tui::transcript::Kind;
@@ -30,16 +31,18 @@ pub(super) enum Grabbed {
 impl Tui<'_> {
     /// A bracketed paste: a chip when it is long.
     pub(super) fn paste_text(&mut self, text: &str) {
-        self.app.composer.paste(text, self.collapse);
+        let strings = self.strings();
+        self.app.composer.paste(text, self.collapse, &strings);
     }
 
     /// `/paste` (`text_first: false`) or `Ctrl+V` (`true`): reads the
     /// clipboard in the background.
     pub(super) fn paste_clipboard(&mut self, text_first: bool) {
-        let clipboard = match clipboard::detect(&Env::of(&self.open.env)) {
+        let strings = self.strings();
+        let clipboard = match clipboard::detect(&Env::of(&self.open.env), &strings) {
             Ok(clipboard) => clipboard,
             Err(reason) => {
-                self.notice(clipboard::unavailable(&reason));
+                self.notice(clipboard::unavailable(&strings, &reason));
                 return;
             }
         };
@@ -48,7 +51,8 @@ impl Tui<'_> {
                 if text_first && let Some(text) = clipboard.text() {
                     return Ok(Grabbed::Text(text));
                 }
-                Ok(clipboard.image()?.map_or(Grabbed::Nothing, Grabbed::Image))
+                let image = clipboard.image(&strings)?;
+                Ok(image.map_or(Grabbed::Nothing, Grabbed::Image))
             })
             .await
             .unwrap_or_else(|e| Err(e.to_string()));
@@ -61,8 +65,8 @@ impl Tui<'_> {
         match grabbed {
             Ok(Grabbed::Text(text)) => self.paste_text(&text),
             Ok(Grabbed::Image(bytes)) => self.attach_clipboard_image(&bytes),
-            Ok(Grabbed::Nothing) => self.notice("the clipboard holds no image"),
-            Err(reason) => self.notice(clipboard::unavailable(&reason)),
+            Ok(Grabbed::Nothing) => self.notice(t!(self.strings(), "tui.clip_empty")),
+            Err(reason) => self.notice(clipboard::unavailable(&self.strings(), &reason)),
         }
     }
 
@@ -72,7 +76,7 @@ impl Tui<'_> {
         let saved = pmt_core::private_fs::create_dir(&dir)
             .and_then(|()| pmt_core::private_fs::write_atomic(&path, bytes));
         if let Err(err) = saved {
-            self.notice(format!("cannot keep the clipboard image: {err}"));
+            self.notice(t!(self.strings(), "tui.clip_not_kept", 0 = err));
             return;
         }
         // The same checks as `/image` (format, size).
@@ -81,8 +85,9 @@ impl Tui<'_> {
             self.error(&err);
             return;
         }
-        let label = self.app.composer.attach_image(path);
-        self.notice(format!("{label} attached; Backspace removes it"));
+        let strings = self.strings();
+        let label = self.app.composer.attach_image(path, &strings);
+        self.notice(t!(strings, "tui.image_attached", 0 = label));
     }
 
     /// The composer's prompt: chips expanded, badges as images.
@@ -100,20 +105,21 @@ impl Tui<'_> {
     pub(super) fn terminal_setup(&mut self) {
         let targets = terminal_setup::targets(&self.open.env);
         if targets.is_empty() {
-            self.notice("no VS Code, Cursor or Windsurf settings found; nothing to set up");
+            self.notice(t!(self.strings(), "tui.setup_none"));
             return;
         }
-        self.notice(terminal_setup::describe(&targets));
+        self.notice(terminal_setup::describe(&self.strings(), &targets));
         self.setup = Some(targets);
         self.show_question();
     }
 
     /// The card asking to apply `/terminal-setup`, when it waits.
     pub(super) fn setup_card(&self) -> Option<Card> {
+        let strings = self.strings();
         self.setup.as_ref().map(|targets| Card {
-            title: format!("add the Ctrl+V keybinding to {} file(s)?", targets.len()),
+            title: t!(strings, "tui.setup_question", 0 = targets.len()),
             body: String::new(),
-            hint: "[y]es  [n]o".to_owned(),
+            hint: t!(strings, "tui.yes_no"),
         })
     }
 
@@ -129,13 +135,13 @@ impl Tui<'_> {
         };
         if yes {
             for target in &targets {
-                match terminal_setup::apply(target) {
+                match terminal_setup::apply(&self.strings(), target) {
                     Ok(done) => self.notice(done),
                     Err(why) => self.app.transcript.push(Kind::Error, why),
                 }
             }
         } else {
-            self.notice("terminal setup cancelled; nothing changed");
+            self.notice(t!(self.strings(), "tui.setup_cancelled"));
         }
         self.show_question();
         true

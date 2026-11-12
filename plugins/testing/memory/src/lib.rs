@@ -1,6 +1,8 @@
 //! Test plugin: an external memory provider whose behaviour the host's
 //! tests can observe through its plugin state (`<profile>/plugin-data/<id>/`).
 //!
+//! - every initialized session is appended to state key `sessions`, and
+//!   with its memory scope (`user_id`) to `users`;
 //! - every synced turn is appended to state key `synced`, every mirrored
 //!   write to `writes`, every delegation to `delegations`;
 //! - `prefetch` answers `remembered: <query>`; a query containing `slow`
@@ -45,6 +47,9 @@ impl Guest for Provider {
     }
 
     fn initialize(session: SessionInfo) -> Result<(), String> {
+        if let Some(user) = &session.user_id {
+            append("users", &format!("{} {user}", session.session_id))?;
+        }
         append("sessions", &format!("{} {}", session.profile, session.session_id))
     }
 

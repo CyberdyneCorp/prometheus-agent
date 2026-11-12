@@ -14,8 +14,13 @@ const USAGE: &str = "usage: /handoff <platform>[:<chat_id>[:<thread_id>]]";
 
 /// What the client prints as it detaches.
 #[must_use]
-pub fn detached(platform: &str, session: &str) -> String {
-    format!("continued on {platform}; resume locally with prometheus chat --resume {session}")
+pub fn detached(strings: &pmt_i18n::Strings, platform: &str, session: &str) -> String {
+    pmt_i18n::t!(
+        strings,
+        "cli.handed_off",
+        platform = platform,
+        session = session
+    )
 }
 
 /// Hands `session` of `profile` in `home` over to `target`; the line to
@@ -31,6 +36,7 @@ pub async fn handoff(
     profile: &str,
     session: &str,
     target: &str,
+    strings: std::sync::Arc<pmt_i18n::Strings>,
 ) -> Result<String, Error> {
     let target = target.trim();
     if target.is_empty() {
@@ -63,5 +69,5 @@ pub async fn handoff(
     let done = response
         .handoff
         .ok_or_else(|| Error::new(&codes::RPC_CONNECTION, "the daemon did not hand off"))?;
-    Ok(detached(&done.platform, session))
+    Ok(detached(&strings, &done.platform, session))
 }

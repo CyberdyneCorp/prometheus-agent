@@ -9,6 +9,7 @@ use std::fmt::Write as _;
 use pmt_config::ProfileScope;
 use pmt_config::schema::ToolProgress;
 use pmt_core::error::Error;
+use pmt_i18n::t;
 
 use super::theme::{self, Role, Theme};
 
@@ -78,20 +79,19 @@ impl Display {
     /// The config write fails.
     pub fn set_theme(&mut self, scope: &ProfileScope, args: &str) -> Result<String, Error> {
         let dir = scope.dir();
+        let strings = pmt_config::language::strings(dir, pmt_i18n::Surface::Core);
         let available = theme::available(dir);
         if args.is_empty() || !available.iter().any(|t| t == args) {
             let mut text = String::new();
             if !args.is_empty() {
-                let _ = writeln!(text, "no theme '{args}'");
+                let _ = writeln!(text, "{}", t!(strings, "display.no_theme", name = args));
             }
-            let _ = write!(text, "themes:");
+            text.push_str(strings.get("display.themes"));
             for name in &available {
-                let mark = if *name == self.theme.name {
-                    " (current)"
-                } else {
-                    ""
-                };
-                let _ = write!(text, "\n  {name}{mark}");
+                let _ = write!(text, "\n  {name}");
+                if *name == self.theme.name {
+                    let _ = write!(text, " {}", strings.get("display.current_mark"));
+                }
             }
             return Ok(text);
         }
@@ -99,39 +99,43 @@ impl Display {
             Ok(theme) => {
                 self.theme = theme;
                 scope.profile().config_file().set("display.theme", args)?;
-                Ok(format!("theme {args}"))
+                Ok(t!(strings, "display.theme_set", name = args))
             }
             Err(why) => Ok(why),
         }
     }
 
     /// `/focus [on|off|status]`.
-    pub fn focus(&mut self, args: &str) -> String {
+    pub fn focus(&mut self, args: &str, strings: &pmt_i18n::Strings) -> String {
         match args.trim() {
             "on" => {
                 if self.focus.is_none() {
                     self.focus = Some(self.progress);
                     self.progress = ToolProgress::Off;
                 }
-                "focus on: tool progress hidden".to_owned()
+                t!(strings, "display.focus_on")
             }
             "off" => match self.focus.take() {
                 Some(previous) => {
                     self.progress = previous;
-                    format!("focus off: tool progress {}", mode_name(previous))
+                    t!(strings, "display.focus_off", mode = mode_name(previous))
                 }
-                None => "focus is off".to_owned(),
+                None => t!(strings, "display.focus_is_off"),
             },
             _ => match self.focus {
-                Some(_) => "focus is on".to_owned(),
-                None => format!("focus is off (tool progress {})", mode_name(self.progress)),
+                Some(_) => t!(strings, "display.focus_is_on"),
+                None => t!(
+                    strings,
+                    "display.focus_status_off",
+                    mode = mode_name(self.progress)
+                ),
             },
         }
     }
 
     /// `/verbose`: the next progress mode (the one focus restores while
     /// focus is on).
-    pub fn verbose(&mut self) -> String {
+    pub fn verbose(&mut self, strings: &pmt_i18n::Strings) -> String {
         let slot = match &mut self.focus {
             Some(saved) => saved,
             None => &mut self.progress,
@@ -142,7 +146,7 @@ impl Display {
             ToolProgress::All => ToolProgress::Verbose,
             ToolProgress::Verbose => ToolProgress::Off,
         };
-        format!("tool progress: {}", mode_name(*slot))
+        t!(strings, "display.tool_progress", mode = mode_name(*slot))
     }
 
     /// `/timestamps [on|off|status]` (alias `/ts`), saved in
@@ -152,12 +156,14 @@ impl Display {
     ///
     /// The config write fails.
     pub fn set_timestamps(&mut self, scope: &ProfileScope, args: &str) -> Result<String, Error> {
+        let strings = pmt_config::language::strings(scope.dir(), pmt_i18n::Surface::Core);
+        let state = |on: bool| strings.get(if on { "cli.on" } else { "cli.off" });
         let on = match args.trim() {
             "on" => true,
             "off" => false,
             _ => {
-                let state = if self.timestamps { "on" } else { "off" };
-                return Ok(format!("timestamps are {state}"));
+                let state = state(self.timestamps);
+                return Ok(t!(strings, "display.timestamps_are", state = state));
             }
         };
         scope
@@ -165,7 +171,7 @@ impl Display {
             .config_file()
             .set("display.timestamps", if on { "true" } else { "false" })?;
         self.timestamps = on;
-        Ok(format!("timestamps {}", if on { "on" } else { "off" }))
+        Ok(t!(strings, "display.timestamps_set", state = state(on)))
     }
 
     /// `text` with the time prefix when timestamps are on.

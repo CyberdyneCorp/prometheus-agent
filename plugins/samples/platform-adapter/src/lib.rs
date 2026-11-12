@@ -27,6 +27,10 @@ impl Guest for Sample {
         Ok("sample-1".to_owned())
     }
 
+    fn chat_info(chat: String) -> Result<String, String> {
+        Ok(format!(r#"{{"name":"{chat}","chat_type":"dm"}}"#))
+    }
+
     fn handle_http(_request: HttpRequest) -> HttpResponse {
         HttpResponse {
             status: 404,

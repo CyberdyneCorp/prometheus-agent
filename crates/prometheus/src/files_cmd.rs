@@ -185,6 +185,7 @@ fn rollback(store: &SnapshotStore, args: &RollbackArgs, json: bool) -> Result<u8
         None => std::env::current_dir().map_err(|e| io(Path::new("."), &e))?,
     };
     let reply = crate::chat::commands::files::rollback_reply(
+        &pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
         store,
         &HostTree,
         &dir,

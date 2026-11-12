@@ -101,7 +101,10 @@ impl Gateway {
         let resume = Automated {
             origin: super::RESUME_ORIGIN.to_owned(),
             text: String::new(),
-            notice: Some(super::RESUMING.to_owned()),
+            notice: Some(pmt_i18n::t!(
+                self.shared.strings(profile),
+                "gateway.restarted_resuming"
+            )),
             started: None,
         };
         if self.automate(profile, session_id, resume) == Admission::Dropped {

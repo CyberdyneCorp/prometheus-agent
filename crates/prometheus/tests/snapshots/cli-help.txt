@@ -19,6 +19,10 @@ Commands:
   lsp          Language servers behind the diagnostics of file edits: status, registry, installs, restart
   cron         Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and the headless tick
   worktrees    Git worktrees of sessions and subagents: list, sweep and restore archived trees
+  projects     Projects: named workspaces spanning folders, the active project, archive and restore
+  themes       Themes: list them, use one, set a colour, spinner or branding key of the custom theme, show the one in use
+  console      A console that runs only read-mostly prometheus commands (status, doctor, logs, sessions list/show/export, config show/get/validate, usage, version, update --check, daemon status/restart, gateway status), never a shell
+  webhooks     Webhook routes kept in the profile's state: subscribe (prints the route URL and, once, its signing secret), list, remove and test
   vault        The credential vault: logins, cards and addresses the browser fills by handle
   security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one
@@ -45,6 +49,9 @@ Commands:
   toolsets     List toolsets and show the tools a toolset resolves to
   approvals    Check how the approval gate treats a command, without running it
   update       Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
+  bundle       Offline bundles: one file holding a signed release (and runtimes) for installs and updates without network access
+  migrate      Import another agent's home: `from-hermes` reads a Hermes Agent home (never changing it) into Prometheus profiles
+  uninstall    Remove this install: the binary, its alias, `prometheus.prev` and its service units; the home only with `--purge` (`--dry-run` lists all)
   pause        Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
   portal       The Nous Portal subscription and its tool gateway routing
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
@@ -188,6 +195,14 @@ Options:
 
       --usage-file <PATH>
           Write this run's usage as JSON to PATH when it ends, whatever the outcome
+
+      --output-format <FORMAT>
+          Output of a one-shot run: the answer as text, one JSON object (as `--json`), or every event as a JSON line ending with a `result` line (`stream-json`, one-shot runs only)
+
+          Possible values:
+          - text:        The answer as text (the default)
+          - json:        One JSON object at the end (as `--json`)
+          - stream-json: One JSON object per event as it happens, then a `result` line
 
       --mock-script <PATH>
           Script for the `mock` provider

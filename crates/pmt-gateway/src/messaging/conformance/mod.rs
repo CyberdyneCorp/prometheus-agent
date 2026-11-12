@@ -7,9 +7,13 @@
 //! descriptor capability gets a pass, fail or skip line; see
 //! [`capabilities`]) and the card rendering of its interactive tier. A
 //! platform's mock server implements [`MockPlatform`];
-//! `prometheus plugins test-adapter` runs the same suite.
+//! `prometheus plugins test-adapter` runs the same suite, a plugin adapter
+//! against the [`Reference`] platform.
 
 mod capabilities;
+mod reference;
+
+pub use reference::Reference;
 
 use std::fmt::Write as _;
 use std::sync::{Arc, Mutex};
@@ -251,6 +255,14 @@ impl Report {
             };
         }
         text
+    }
+
+    /// Records `name`'s outcome, replacing an earlier check of that name
+    /// (a runner that knows more, such as the plugin kit's capability-grant
+    /// check, settles a check the suite skipped).
+    pub fn set(&mut self, name: &'static str, outcome: Result<(), String>) {
+        self.checks.retain(|c| c.name != name);
+        self.add(name, outcome);
     }
 
     fn add(&mut self, name: &'static str, outcome: Result<(), String>) {

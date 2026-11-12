@@ -16,9 +16,6 @@ use serde_json::Value;
 
 use super::Ctx;
 
-/// What a started review answers.
-const STARTED: &str = "Review started. Results will return here.";
-
 /// User and assistant messages the reviewer sees.
 const EVIDENCE: usize = 10;
 
@@ -49,7 +46,7 @@ pub(super) async fn review(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
         .dispatch_labelled(request)
         .await
         .map_err(|refusal| refusal.error())?;
-    Ok(STARTED.to_owned())
+    Ok(pmt_i18n::t!(ctx.strings(), "slash.review.started"))
 }
 
 fn goal(focus: &str) -> String {

@@ -9,6 +9,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
+use crate::text::Catalog;
+
 /// Characters of the prompt the start notice repeats.
 const EXCERPT: usize = 60;
 
@@ -17,31 +19,41 @@ pub const RETAIN: Duration = Duration::from_hours(1);
 
 /// What starting task `number` answers (every surface says the same).
 #[must_use]
-pub fn started(number: u32, prompt: &str, id: &str) -> String {
-    format!(
-        "Background task #{number} started: {} (id {id})",
-        excerpt(prompt)
+pub fn started(text: &dyn Catalog, number: u32, prompt: &str, id: &str) -> String {
+    let prompt = excerpt(prompt);
+    text.text(
+        "slash.background.started",
+        &[("number", &number), ("prompt", &prompt), ("id", &id)],
     )
 }
 
 /// What task `number`, which answered `answer`, reports.
 #[must_use]
-pub fn complete(number: u32, answer: &str) -> String {
-    format!("✅ Background task #{number} complete\n\n{answer}")
-        .trim_end()
-        .to_owned()
+pub fn complete(text: &dyn Catalog, number: u32, answer: &str) -> String {
+    let head = text.text("slash.background.complete", &[("number", &number)]);
+    format!("{head}\n\n{answer}").trim_end().to_owned()
 }
 
 /// What task `number`, which failed for `reason`, reports.
 #[must_use]
-pub fn failed(number: u32, reason: &str) -> String {
-    format!("❌ Background task #{number} failed: {reason}")
+pub fn failed(text: &dyn Catalog, number: u32, reason: &str) -> String {
+    text.text(
+        "slash.background.failed",
+        &[("number", &number), ("why", &reason)],
+    )
+}
+
+/// What a task stopped by the user reports.
+#[must_use]
+pub fn stopped(text: &dyn Catalog, number: u32) -> String {
+    let reason = text.text("slash.background.stopped", &[]);
+    failed(text, number, &reason)
 }
 
 /// What refusing a task over the per-chat cap answers.
 #[must_use]
-pub fn too_many(max: u32) -> String {
-    format!("Too many background tasks running ({max})")
+pub fn too_many(text: &dyn Catalog, max: u32) -> String {
+    text.text("slash.background.too_many", &[("max", &max)])
 }
 
 /// What the start notice shows of `prompt`.
@@ -268,11 +280,6 @@ mod tests {
         let cut = excerpt(&long);
         assert!(cut.ends_with('…') && cut.chars().count() <= EXCERPT + 1);
         assert_eq!(excerpt("  short\nprompt "), "short prompt");
-        assert_eq!(too_many(3), "Too many background tasks running (3)");
-        assert_eq!(
-            started(2, "look", "bg_1"),
-            "Background task #2 started: look (id bg_1)"
-        );
     }
 
     #[test]

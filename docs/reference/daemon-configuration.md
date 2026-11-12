@@ -8,6 +8,10 @@ Every key `<PROMETHEUS_HOME>/daemon.toml` accepts: machine-wide settings shared 
 
 | Key | Type | Default | Allowed values | Apply | Description |
 |---|---|---|---|---|---|
+| `api_server.cors_origins` | array of string | `[]` | any | `restart` | Exact browser origins (`https://chat.example.com`) allowed to call the API; empty sends no CORS headers and refuses every request carrying an `Origin`. |
+| `api_server.listen` | string | `"127.0.0.1:8642"` | any | `restart` | Where the API server listens. |
+| `api_server.public` | boolean | `false` | any | `restart` | Allow a non-loopback `listen` address (logged at WARN on every start). |
+| `api_server.public_host` | string | unset | any | `restart` | A host name accepted in the `Host` header besides the loopback names (a reverse proxy's name for a loopback listener). |
 | `daemon.autostart` | boolean | `true` | any | `restart` | Interactive clients (`prometheus tui`, the ACP adapter) start the daemon detached when it is not running; `false` makes them exit 69 instead. |
 | `daemon.idle_session_close_secs` | integer | `3600` | ≥ 1 | `restart` | A session with no attached client, no running turn, no open request and no queued input is closed after this many seconds. |
 | `daemon.restart_drain_secs` | integer | `120` | ≥ 0 | `restart` | Seconds `prometheus daemon restart` waits for running turns to reach a turn boundary before it replaces the daemon anyway. |
@@ -44,6 +48,7 @@ Every key `<PROMETHEUS_HOME>/daemon.toml` accepts: machine-wide settings shared 
 | `update.allow_from_chat` | boolean | `false` | any | `restart` | Let gateway admins run `/update` from a chat. |
 | `update.auto_apply` | boolean | `false` | any | `restart` | Install a release found by the background check without asking. |
 | `update.check_interval_secs` | integer | `86400` | ≥ 0 | `restart` | Seconds between background checks for a newer release; `0` disables them. A check sends only the version and target (in the user agent). |
+| `update.drain_timeout_secs` | integer | `120` | 1 to 86400 | `restart` | How long an update waits for a running daemon's turns to finish before restarting it on the new build; when they are still running the daemon keeps the old build and the update reports `daemon_restart_pending`. |
 | `update.mirror_fallback` | boolean | `false` | any | `restart` | When a mirror (`update.mirror_url`, `runtimes.mirrors.runtimes`) still fails after the retry budget, download from the default origin instead of failing. |
 | `update.mirror_url` | string | unset | any | `restart` | Base URL serving release indexes and archives in place of the default origin (`<url>/channels/<channel>.json`, `<url>/<tag>/release-manifest.json`, ...). Everything downloaded from it is still verified against the embedded release keys. |
 | `update.pre_update_backup` | one of "state", "full", "off" | `"state"` | `"state"`, `"full"`, `"off"` | `restart` | What to save before the binary is swapped. |

@@ -19,7 +19,7 @@ use pmt_store::gateway::outbox::{NewOutbound, OutboundKind};
 
 use std::sync::Arc;
 
-use pmt_core::tasks::{NewTask, Registry, State, complete, failed, started, too_many};
+use pmt_core::tasks::{NewTask, Registry, State, complete, failed, started, stopped, too_many};
 
 use super::Shared;
 use super::agents::Conversation;
@@ -59,19 +59,23 @@ fn chat_of(routing: &Routing) -> (String, String, String, Option<String>) {
 }
 
 /// What finished task `number` tells its chat, and its end state.
-pub(crate) fn outcome(number: u32, finished: &TurnFinished) -> (String, State) {
+pub(crate) fn outcome(
+    strings: &pmt_i18n::Strings,
+    number: u32,
+    finished: &TurnFinished,
+) -> (String, State) {
     if finished.exit_reason == "completed" {
         let answer = finished.final_response.as_deref().unwrap_or_default();
-        return (complete(number, answer), State::Completed);
+        return (complete(strings, number, answer), State::Completed);
     }
     if finished.exit_reason.starts_with("interrupted") {
-        return (failed(number, "stopped"), State::Interrupted);
+        return (stopped(strings, number), State::Interrupted);
     }
     let reason = finished.error.as_ref().map_or_else(
         || finished.exit_reason.replace('_', " "),
         |e| e.message.clone(),
     );
-    (failed(number, &reason), State::Failed(reason))
+    (failed(strings, number, &reason), State::Failed(reason))
 }
 
 impl Tasks {
@@ -118,15 +122,16 @@ pub(crate) async fn start(
     launcher: Option<&str>,
 ) -> String {
     let prompt = prompt.trim();
+    let strings = shared.strings(&routing.profile);
     if prompt.is_empty() {
-        return "Usage: /background <prompt>".to_owned();
+        return pmt_i18n::t!(strings, "slash.background.usage");
     }
     let max = shared
         .agents
         .scope(&routing.profile)
         .map_or(3, |s| s.config().gateway.background.max_per_chat);
     if shared.tasks.running_in(routing) >= max as usize {
-        return too_many(max);
+        return too_many(&*strings, max);
     }
     let conversation = Conversation {
         platform: routing.platform.clone(),
@@ -143,7 +148,9 @@ pub(crate) async fn start(
         .await
     {
         Ok(session) => session,
-        Err(err) => return format!("❌ Background task failed: {}", err.message()),
+        Err(err) => {
+            return pmt_i18n::t!(strings, "slash.background.not_started", why = err.message());
+        }
     };
     let launcher = launcher.map_or_else(
         || format!("chat:{}:{}", routing.platform, routing.chat_id),
@@ -167,7 +174,7 @@ pub(crate) async fn start(
     let me = Arc::clone(shared);
     let (routing, text) = (routing.clone(), prompt.to_owned());
     pmt_core::spawn::spawn(async move { run(&me, &routing, &session, text).await });
-    started(entry.number, prompt, &entry.id)
+    started(&*strings, entry.number, prompt, &entry.id)
 }
 
 /// Registers the task of `session` in the process's registry; stopping it
@@ -279,7 +286,8 @@ fn end(shared: &Shared, session: &str, finished: &TurnFinished) {
     let Some(task) = shared.tasks.take(session) else {
         return;
     };
-    let (body, state) = outcome(task.entry.number, finished);
+    let strings = shared.strings(&task.profile);
+    let (body, state) = outcome(&strings, task.entry.number, finished);
     tracing::info!(
         profile = task.profile,
         task = task.entry.id,
@@ -321,12 +329,13 @@ mod tests {
 
     #[test]
     fn the_outcome_names_success_or_the_reason() {
+        let en = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
         assert_eq!(
-            outcome(2, &ended("completed", Some("done"))).0,
+            outcome(&en, 2, &ended("completed", Some("done"))).0,
             "✅ Background task #2 complete\n\ndone"
         );
         assert_eq!(
-            outcome(1, &ended("budget_exhausted", None)).0,
+            outcome(&en, 1, &ended("budget_exhausted", None)).0,
             "❌ Background task #1 failed: budget exhausted"
         );
     }

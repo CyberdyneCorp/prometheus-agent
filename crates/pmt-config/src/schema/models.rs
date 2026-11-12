@@ -358,6 +358,11 @@ pub struct OAuthEndpoints {
     /// Hosts the sign-in endpoints may be on (exact, or a leading `*.`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub allowed_hosts: Option<Vec<String>>,
+    /// Endpoint exchanging the sign-in token for a short-lived API token
+    /// before each request (GitHub Copilot's
+    /// `https://api.github.com/copilot_internal/v2/token`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exchange_url: Option<String>,
 }
 
 /// OAuth sign-in flows.

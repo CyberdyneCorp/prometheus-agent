@@ -30,6 +30,8 @@ use tracing::Instrument as _;
 
 use super::turn::{SecretsToClients, SudoToClients, ToClients, approvals, clarify};
 
+mod api;
+mod api_profile;
 mod automation;
 mod commands;
 mod crash;
@@ -149,6 +151,10 @@ pub(super) struct DaemonHost {
     slots: pmt_gateway::slots::Slots,
     /// The messaging gateway, for the `send_message` tool.
     gateway: send_tool::GatewayCell,
+    /// The API server's view of the profiles' keys.
+    api_keys: api::KeyCache,
+    /// The API server, once started (it is told when the daemon drains).
+    api: std::sync::OnceLock<pmt_api::ApiServer>,
 }
 
 fn session_id(text: &str) -> Result<SessionId, Error> {
@@ -232,6 +238,8 @@ impl DaemonHost {
             turns: Arc::default(),
             slots: pmt_gateway::slots::Slots::new(0),
             gateway: Arc::default(),
+            api_keys: api::KeyCache::default(),
+            api: std::sync::OnceLock::new(),
         })
     }
 
@@ -239,6 +247,11 @@ impl DaemonHost {
     pub(super) fn with_turn_cap(mut self, max: u32) -> Self {
         self.slots = pmt_gateway::slots::Slots::new(max);
         self
+    }
+
+    /// Keeps the started API server (it is told when the daemon drains).
+    pub(super) fn set_api(&self, api: pmt_api::ApiServer) {
+        let _ = self.api.set(api);
     }
 
     /// Hands sessions the started messaging gateway (`send_message`).
@@ -314,9 +327,13 @@ impl DaemonHost {
         let target = factory.models.primary(&setup::flags(&setup)).await?;
         // A chat's session tells the chat when its background processes
         // end; an interactive client session tells its clients. Other
-        // sessions (one-shot runs, cron, subagents) cannot receive a later
-        // notice, so quiet-wait never promises one there.
+        // sessions (one-shot runs, API calls, cron, subagents) cannot
+        // receive a later notice, so quiet-wait never promises one there.
         let oneshot = row.source_tag.as_deref() == Some(pmt_store::sessions::ONESHOT_TAG);
+        // An API session answers one HTTP request at a time and has no
+        // attached client to notify, prompt or hand a later completion to
+        // (spec: subagent-delegation, Background and synchronous dispatch).
+        let interactive = !oneshot && row.source != pmt_store::Source::Api;
         let chat = matches!(row.origin, pmt_store::Origin::Gateway { .. })
             .then(|| Arc::clone(&self.gateway));
         let completions = match row.origin {
@@ -325,18 +342,18 @@ impl DaemonHost {
                 profile.scope().name().to_string(),
                 id.to_string(),
             )),
-            pmt_store::Origin::None if !oneshot => Some(notify::to_clients(link.clone())),
+            pmt_store::Origin::None if interactive => Some(notify::to_clients(link.clone())),
             _ => None,
         };
         // Only a person at a client of an interactive session is asked
         // for a sudo password.
-        let sudo = matches!(row.origin, pmt_store::Origin::None if !oneshot).then(|| {
+        let sudo = matches!(row.origin, pmt_store::Origin::None if interactive).then(|| {
             Arc::new(SudoToClients {
                 link: link.clone(),
                 runtime: tokio::runtime::Handle::current(),
             }) as Arc<dyn pmt_tools::terminal::sudo::SudoPrompt>
         });
-        let (inbox, delegation) = self.delegation_inbox(profile, &row, id, link, oneshot)?;
+        let (inbox, delegation) = self.delegation_inbox(profile, &row, id, link, interactive)?;
         let clients = Clients {
             delegation: delegation.clone(),
             events: Arc::new(ToClients { link: link.clone() }),
@@ -395,7 +412,8 @@ impl DaemonHost {
 
     /// Where a loaded session's background delegations deliver: a client
     /// session gets a queued turn, a gateway chat an injected one; other
-    /// sessions (one-shot runs, cron, subagents) wait for their children.
+    /// sessions (one-shot runs, API calls, cron, subagents) wait for their
+    /// children.
     #[allow(clippy::type_complexity)] // the inbox and its trait object
     fn delegation_inbox(
         &self,
@@ -403,7 +421,7 @@ impl DaemonHost {
         row: &pmt_store::Session,
         id: SessionId,
         link: &Link,
-        oneshot: bool,
+        interactive: bool,
     ) -> Result<
         (
             Option<Arc<delegations::ClientInbox>>,
@@ -421,7 +439,7 @@ impl DaemonHost {
                     session: id.to_string(),
                 }) as _),
             ),
-            pmt_store::Origin::None if !oneshot => {
+            pmt_store::Origin::None if interactive => {
                 let inbox =
                     delegations::ClientInbox::new(self, &self.profile(&name)?, id, link.clone());
                 (Some(Arc::clone(&inbox)), Some(inbox as _))
@@ -463,6 +481,19 @@ impl DaemonHost {
 }
 
 /// The stored source of a session a client of kind `client` creates.
+/// Where a GUI session (desktop, TUI) given no directory works: the
+/// active project's primary folder (spec: projects, Active project and
+/// path ownership). Other surfaces keep the profile workspace.
+fn gui_default_cwd(profile: &Profile, source: Source) -> Result<Option<String>, Error> {
+    if !matches!(source, Source::Desktop | Source::Tui) {
+        return Ok(None);
+    }
+    Ok(profile
+        .store
+        .active_project()?
+        .and_then(|p| p.primary_path().map(str::to_owned)))
+}
+
 fn source_of(client: Option<ClientKind>) -> Source {
     match client {
         Some(ClientKind::Tui) => Source::Tui,
@@ -517,12 +548,17 @@ impl Host for DaemonHost {
     ) -> HostFuture<'a, SessionRef> {
         Box::pin(async move {
             let profile = &self.profile(profile)?;
-            let cwd = Self::cwd_of(profile, params.cwd.as_deref());
+            let source = source_of(params.source);
+            let given = match &params.cwd {
+                Some(cwd) => Some(cwd.clone()),
+                None => gui_default_cwd(profile, source)?,
+            };
+            let cwd = Self::cwd_of(profile, given.as_deref());
             std::fs::create_dir_all(&cwd).map_err(|e| Error::io(&codes::HOME_IO, &cwd, &e))?;
             let setup = params.setup.clone();
             let factory = self.factory(profile, cwd.clone(), &setup)?;
             let target = factory.models.primary(&setup::flags(&setup)).await?;
-            let mut new = NewSession::new(source_of(params.source));
+            let mut new = NewSession::new(source);
             new.provider = Some(target.provider.clone());
             new.model.clone_from(&target.model);
             if let Some(tag) = &params.source_tag {
@@ -771,7 +807,7 @@ impl Host for DaemonHost {
         use crate::chat::autoprune;
         let served = self.profile(profile)?;
         let due = autoprune::due(&served.scope(), &served.store, jiff::Timestamp::now())?;
-        Ok(due.then(|| autoprune::QUESTION.to_owned()))
+        Ok(due.then(|| autoprune::question(&served.scope())))
     }
 
     fn cron_blueprints(&self, profile: &str) -> Result<pmt_rpc::contracts::BlueprintList, Error> {
@@ -868,7 +904,7 @@ impl Host for DaemonHost {
         Box::pin(
             async move {
                 let profile = &self.profile(profile)?;
-                self.submit_turn(profile, params, (author, link), None)
+                self.submit_turn(profile, params, (author, link), None, None)
                     .await
             }
             .instrument(span),
@@ -1082,9 +1118,18 @@ impl Host for DaemonHost {
         deadline: Duration,
     ) -> Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
         Box::pin(async move {
+            if let Some(api) = self.api.get() {
+                api.begin_drain();
+            }
             let until = tokio::time::Instant::now() + deadline;
             while self.turns.load(Ordering::Acquire) > 0 && tokio::time::Instant::now() < until {
                 tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+            // API runs still active are recorded `interrupted` before their
+            // agents are stopped (spec: api-server, Runs API lifecycle).
+            if let Some(api) = self.api.get() {
+                api.interrupt_active();
+                api.stop();
             }
             for (name, profile) in self.all_profiles() {
                 Self::close_all(&name, &profile).await;

@@ -23,6 +23,7 @@ pub mod reviews;
 pub mod session;
 pub(crate) mod signals;
 pub mod status_bar;
+pub mod stream;
 pub mod terminal;
 pub mod theme;
 pub mod usage_file;
@@ -57,6 +58,25 @@ pub struct Ui {
     pub no_color: bool,
     /// `-v` count.
     pub verbose: u8,
+    /// `--output-format stream-json`: every event as a JSON line.
+    pub stream: bool,
+}
+
+impl Ui {
+    /// These flags with a chat's `--output-format` (`json` is `--json`).
+    #[must_use]
+    pub fn with_format(self, format: Option<stream::OutputFormat>) -> Self {
+        use stream::OutputFormat;
+        match format {
+            Some(OutputFormat::Json) => Self { json: true, ..self },
+            Some(OutputFormat::StreamJson) => Self {
+                json: false,
+                stream: true,
+                ..self
+            },
+            Some(OutputFormat::Text) | None => self,
+        }
+    }
 }
 
 /// How the session runs.
@@ -105,6 +125,7 @@ pub fn mode(args: &ChatArgs, terminals: bool, interface: Interface, quiet: bool)
 /// Usage, configuration, store and session errors (the caller prints and
 /// exits with their code); a finished run returns its own status.
 pub fn run(args: &ChatArgs, ctx: &Context<'_>, ui: Ui) -> Result<u8, Error> {
+    let ui = ui.with_format(args.output_format);
     let record = Arc::new(usage_file::RunRecord::default());
     let mut outcome = run_recorded(args, ctx, ui, &record);
     if offers_setup(args, &outcome) && crate::setup_cmd::offer(ctx)? {
@@ -115,10 +136,6 @@ pub fn run(args: &ChatArgs, ctx: &Context<'_>, ui: Ui) -> Result<u8, Error> {
         None => outcome,
     }
 }
-
-/// What every safe-mode start shows (spec: plugin-system, Safe mode).
-pub const SAFE_MODE_BANNER: &str =
-    "safe mode is active: no plugins, MCP servers, sidecars, hooks or webhooks are loaded";
 
 /// An interactive start on a profile with no model offers `setup model`
 /// (spec: cli, Setup wizard).
@@ -161,7 +178,9 @@ fn run_recorded(
     };
     crate::startup::start_export(&scope);
     if scope.config().plugins.safe_mode && !ui.quiet {
-        eprintln!("{SAFE_MODE_BANNER}");
+        // What every safe-mode start shows (spec: plugin-system, Safe mode).
+        let strings = pmt_config::language::strings(scope.dir(), pmt_i18n::Surface::Core);
+        eprintln!("{}", strings.get("cli.safe_mode"));
     }
     let mode = mode(
         args,
@@ -169,6 +188,12 @@ fn run_recorded(
         scope.config().ui.interface,
         ui.quiet,
     );
+    if ui.stream && mode != Mode::OneShot {
+        return Err(Error::new(
+            &codes::CLI_USAGE,
+            "--output-format stream-json is for one-shot runs (-z or piped); an interactive or TUI session cannot stream",
+        ));
+    }
     // Only a foreground interactive chat asks about unapproved shell hooks
     // (spec: plugin-system, Shell hooks with first-use consent).
     if mode != Mode::OneShot && terminal::interactive() {
@@ -278,6 +303,9 @@ impl Run<'_> {
             .with_config_reread(set.clone());
         record.store(&factory.store);
         factory.record = Arc::clone(record);
+        if ui.stream {
+            factory = factory.with_event_stream();
+        }
         let first = First {
             text: first,
             images,
@@ -437,7 +465,7 @@ async fn start(
                 images,
                 ..TurnInput::text(first.text.unwrap_or_default())
             };
-            let status = oneshot::run(&live, input, ui.json, run_budget).await;
+            let (status, closing) = oneshot::run(&live, input, ui, run_budget).await;
             let mode = factory.scope.config().memory.review_mode;
             if let Ok(Some(line)) =
                 pmt_memory::journal::summary(&factory.store, mode, &live.id.to_string())
@@ -445,6 +473,9 @@ async fn start(
                 eprintln!("{line}");
             }
             live.close(&factory.store, end_reason(status)).await;
+            if let Some(line) = closing {
+                stream::write_line(&line);
+            }
             Ok(status)
         }
         // A TUI run never gets here: it opened the TUI before.
@@ -484,7 +515,8 @@ fn restore_cwd(factory: &mut Factory, id: SessionId, mode: Mode) -> Result<(), E
     }
     change_dir(&recorded)?;
     factory.options.cwd = current_dir()?;
-    let line = format!("cwd restored to {}", recorded.display());
+    let strings = pmt_config::language::strings(factory.scope.dir(), pmt_i18n::Surface::Core);
+    let line = pmt_i18n::t!(strings, "cli.cwd_restored", dir = recorded.display());
     match mode {
         Mode::Line | Mode::Tui => println!("{line}"),
         Mode::OneShot => eprintln!("{line}"),

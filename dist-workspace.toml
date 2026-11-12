@@ -57,8 +57,8 @@ aarch64-pc-windows-msvc = "windows-11-arm"
 aarch64-linux-android = "ubuntu-24.04"
 
 [dist.github-custom-job-permissions]
-"release-finalize" = { contents = "read", id-token = "write", attestations = "write" }
-"release-channels" = { contents = "write" }
+"release-finalize" = { contents = "read", id-token = "write", attestations = "write", packages = "write" }
+"release-channels" = { contents = "write", packages = "write" }
 
 # Every action pinned to a full commit SHA, like ci.yml.
 [dist.github-action-commits]

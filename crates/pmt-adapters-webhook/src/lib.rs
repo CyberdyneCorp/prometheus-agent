@@ -26,6 +26,7 @@ mod filter;
 mod guard;
 mod jobs;
 mod render;
+mod routes;
 mod script;
 mod signature;
 
@@ -73,7 +74,7 @@ fn sender(route: &str) -> String {
 /// The webhook routes of one profile.
 pub struct Webhook {
     scope: ProfileScope,
-    routes: BTreeMap<String, WebhookRoute>,
+    routes: routes::Routes,
     /// Each route's secret (`None`: unsigned requests admitted); unset
     /// until connected.
     secrets: Mutex<Option<BTreeMap<String, Option<String>>>>,
@@ -94,7 +95,10 @@ impl std::fmt::Debug for Webhook {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Webhook")
             .field("profile", &self.scope.name().as_str())
-            .field("routes", &self.routes.keys().collect::<Vec<_>>())
+            .field(
+                "routes",
+                &self.routes.configured().keys().collect::<Vec<_>>(),
+            )
             .finish_non_exhaustive()
     }
 }
@@ -149,7 +153,7 @@ impl Webhook {
             .and_then(|(builder, _)| builder.build().ok());
         Self {
             scope: setup.scope.clone(),
-            routes: setup.config.routes.clone(),
+            routes: routes::Routes::new(setup.config.routes.clone()),
             secrets: Mutex::default(),
             link: Mutex::default(),
             sent: AtomicU64::new(0),
@@ -159,6 +163,11 @@ impl Webhook {
             client,
             deliveries: delivery::Deliveries::default(),
         }
+    }
+
+    /// Every route served now (configured and subscribed).
+    fn served(&self) -> Arc<routes::RouteMap> {
+        self.routes.current(&self.scope)
     }
 
     fn log_file(&self, route: &str) -> PathBuf {
@@ -198,9 +207,9 @@ impl Webhook {
     }
 
     fn connect_with(&self, link: Arc<dyn AdapterLink>) -> Result<(), AdapterError> {
-        Self::check_unsigned(link.as_ref(), &self.routes)?;
+        Self::check_unsigned(link.as_ref(), self.routes.configured())?;
         let mut secrets = BTreeMap::new();
-        for (name, route) in &self.routes {
+        for (name, route) in self.routes.configured() {
             let secret = match (&route.secret_secret, route.insecure_no_auth) {
                 (Some(secret), _) => Some(credential(&self.scope, &secret.0)?),
                 (None, true) => None,
@@ -223,7 +232,8 @@ impl Webhook {
 
     /// Handles a verified request for `route`.
     async fn deliver(&self, route_name: &str, request: &HttpRequest) -> HttpResponse {
-        let Some(route) = self.routes.get(route_name) else {
+        let routes = self.served();
+        let Some(route) = routes.get(route_name) else {
             return status(404, &json!({"error": "unknown route"}));
         };
         if request.method != "POST" {
@@ -403,7 +413,8 @@ impl Webhook {
     /// Delivers one answer of a run as its route says, then to each
     /// `deliver_extra` target.
     async fn answer(&self, message: &Outgoing) -> Result<Sent, SendError> {
-        let Some(route) = self.routes.get(&message.chat_id) else {
+        let routes = self.served();
+        let Some(route) = routes.get(&message.chat_id) else {
             return self.record(message);
         };
         let delivery = message.thread_id.as_deref().unwrap_or_default();
@@ -505,7 +516,7 @@ impl Webhook {
     }
 
     fn record(&self, message: &Outgoing) -> Result<Sent, SendError> {
-        if !self.routes.contains_key(&message.chat_id) {
+        if !self.served().contains_key(&message.chat_id) {
             return Err(SendError::Permanent(format!(
                 "no webhook route named '{}'",
                 message.chat_id
@@ -568,7 +579,7 @@ impl Adapter for Webhook {
 
     fn connect(&self, link: Arc<dyn AdapterLink>) -> AdapterFuture<'_, Result<(), AdapterError>> {
         Box::pin(async move {
-            jobs::check_routes(link.as_ref(), &self.routes).await?;
+            jobs::check_routes(link.as_ref(), self.routes.configured()).await?;
             self.connect_with(link)
         })
     }
@@ -585,7 +596,7 @@ impl Adapter for Webhook {
 
     fn chat_info<'a>(&'a self, chat_id: &'a str) -> AdapterFuture<'a, Result<ChatInfo, SendError>> {
         Box::pin(async move {
-            if self.routes.contains_key(chat_id) {
+            if self.served().contains_key(chat_id) {
                 Ok(ChatInfo {
                     name: format!("webhook route {chat_id}"),
                     chat_type: ChatType::Dm,
@@ -604,7 +615,7 @@ impl Adapter for Webhook {
     ) -> AdapterFuture<'a, Result<SenderVerdict, AdapterError>> {
         // Only verified requests become events: a route's own sender is
         // vouched for, anything else is not this adapter's to judge.
-        let ours = self.routes.contains_key(&inbound.chat_id)
+        let ours = self.served().contains_key(&inbound.chat_id)
             && inbound.sender_id == sender(&inbound.chat_id);
         Box::pin(async move {
             Ok(if ours {
@@ -622,10 +633,19 @@ impl Adapter for Webhook {
             .split('/')
             .next()
             .unwrap_or_default();
+        let served = self.served();
         let secrets = self.secrets.lock().expect("secrets poisoned");
         let Some(secrets) = secrets.as_ref() else {
             return false;
         };
+        // A subscribed route is signed with its own generated secret.
+        let subscribed = (served.contains_key(route) && !secrets.contains_key(route))
+            .then(|| self.routes.subscribed_secret(route));
+        if let Some(secret) = subscribed {
+            return secret.is_some_and(|secret| {
+                signature::verify(request, &secret, jiff::Timestamp::now().as_second())
+            });
+        }
         match secrets.get(route) {
             // Unknown routes are answered 404 and admit nothing; a route
             // without a secret admits unsigned requests.
@@ -641,7 +661,7 @@ impl Adapter for Webhook {
     }
 
     fn session_hints(&self, chat_id: &str, _thread_id: Option<&str>) -> SessionHints {
-        self.routes
+        self.served()
             .get(chat_id)
             .filter(|r| !r.deliver_only)
             .map(|route| SessionHints {

@@ -171,6 +171,9 @@ pub struct Call {
 pub struct Server {
     identity: Identity,
     instance_id: String,
+    /// The executable it started from, read at start: an update replaces
+    /// the file under a running daemon.
+    binary: Option<std::path::PathBuf>,
     catalog: Arc<Catalog>,
     digest: String,
     /// Grows when `gateway reload` serves a profile created since start.
@@ -194,6 +197,9 @@ pub struct Server {
     next_conn: AtomicU64,
     started: Instant,
     started_at: String,
+    /// Decided at startup, while the process that started the daemon is
+    /// still its parent (see `pmt_core::supervisor`).
+    supervised: bool,
     endpoint: OnceLock<Endpoint>,
     idle_session_close: Duration,
     max_live_client_sessions: u32,
@@ -253,6 +259,7 @@ impl Server {
         let server = Self {
             identity: options.identity,
             instance_id: random_hex(16),
+            binary: std::env::current_exe().and_then(std::fs::canonicalize).ok(),
             digest: catalog.digest(),
             catalog,
             profiles: std::sync::RwLock::new(options.profiles),
@@ -273,6 +280,7 @@ impl Server {
             next_conn: AtomicU64::new(1),
             started: Instant::now(),
             started_at: jiff::Timestamp::now().to_string(),
+            supervised: pmt_core::supervisor::supervised(),
             endpoint: OnceLock::new(),
             idle_session_close: options.idle_session_close,
             max_live_client_sessions: options.max_live_client_sessions,
@@ -468,7 +476,7 @@ impl Server {
     }
 
     /// A new connection's number.
-    pub(crate) fn next_conn_id(&self) -> ConnId {
+    pub fn next_conn_id(&self) -> ConnId {
         self.next_conn.fetch_add(1, Ordering::Relaxed)
     }
 
@@ -546,6 +554,8 @@ impl Server {
             sessions,
             active_turns,
             retiring: self.retiring(),
+            supervised: self.supervised,
+            binary: self.binary.clone(),
             config: self.host.config(),
             adapters: self
                 .messaging()

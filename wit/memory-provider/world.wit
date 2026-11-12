@@ -18,6 +18,10 @@ interface types {
         session-id: string,
         profile: string,
         platform: string,
+        /// The caller identity that scopes long-term memory across
+        /// sessions (an API caller's `X-Prometheus-Session-Key`), when
+        /// there is one.
+        user-id: option<string>,
     }
 
     /// A tool the provider offers (`parameters` is a JSON Schema).

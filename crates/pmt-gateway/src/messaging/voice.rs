@@ -126,6 +126,7 @@ pub(crate) struct Heard {
 
 /// Transcribes the clip at `path` per `config`.
 pub(crate) async fn hear(
+    strings: &pmt_i18n::Strings,
     speech: Option<&dyn Speech>,
     config: &VoiceConfig,
     path: &Path,
@@ -143,7 +144,7 @@ pub(crate) async fn hear(
         Ok((transcript, billed)) if !transcript.trim().is_empty() => Heard {
             echo: config
                 .echo_transcripts
-                .then(|| format!("Heard: \"{}\"", transcript.trim())),
+                .then(|| pmt_i18n::t!(strings, "gateway.voice_heard", text = transcript.trim())),
             text: transcript.trim().to_owned(),
             billed,
         },

@@ -9,6 +9,7 @@
 
 use pmt_agent::prompt::frozen::Rebuild;
 use pmt_core::error::{Error, codes};
+use pmt_i18n::t;
 use pmt_obs::trajectory::events::Event;
 use pmt_obs::trajectory::payload::ToolsRebuilt;
 
@@ -23,14 +24,12 @@ pub(super) async fn delegation(ctx: &Ctx<'_>, args: &str) -> Result<String, Erro
     let (args, now) = take_now(args);
     let words: Vec<&str> = args.split_whitespace().collect();
     let pause = ctx.scope.dir().join(PAUSE_FILE);
+    let strings = ctx.strings();
     match words.as_slice() {
         [] | ["status"] => Ok(status(ctx, pause.exists())),
         ["pause"] => {
             std::fs::write(&pause, b"").map_err(|e| Error::io(&codes::HOME_IO, &pause, &e))?;
-            Ok(
-                "Delegation spawning is paused for this profile. Resume with /delegation resume."
-                    .to_owned(),
-            )
+            Ok(t!(strings, "slash.delegation.paused"))
         }
         ["resume"] => {
             match std::fs::remove_file(&pause) {
@@ -38,7 +37,7 @@ pub(super) async fn delegation(ctx: &Ctx<'_>, args: &str) -> Result<String, Erro
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
                 Err(e) => return Err(Error::io(&codes::HOME_IO, &pause, &e)),
             }
-            Ok("Delegation spawning resumed.".to_owned())
+            Ok(t!(strings, "slash.delegation.resumed"))
         }
         ["router", name] => router(ctx, name, now).await,
         _ => Err(Error::new(&codes::CLI_USAGE, USAGE)),
@@ -46,23 +45,28 @@ pub(super) async fn delegation(ctx: &Ctx<'_>, args: &str) -> Result<String, Erro
 }
 
 fn status(ctx: &Ctx<'_>, paused: bool) -> String {
-    let mut lines = vec![format!(
-        "Delegation: {} (router {})",
-        if paused { "paused" } else { "spawning" },
-        ctx.scope.config().delegation.router
-    )];
+    let strings = ctx.strings();
+    let key = if paused {
+        "slash.delegation.status_paused"
+    } else {
+        "slash.delegation.status_spawning"
+    };
+    let router = ctx.scope.config().delegation.router.clone();
+    let mut lines = vec![t!(strings, key, router = router)];
     if let Some(delegator) = &ctx.live.delegation {
         let tree = pmt_delegation::tree::Registry::process().tree(&delegator.conversation());
         for entry in tree {
             let snapshot = entry.snapshot();
-            lines.push(format!(
-                "  {} [{}] depth {} — {} ({} tool calls)",
-                entry.subagent_id,
-                entry.state().name(),
-                entry.depth,
-                pmt_core::subagent_tree::one_line(&entry.goal),
-                snapshot.tool_calls
-            ));
+            let line = t!(
+                strings,
+                "slash.delegation.entry",
+                id = entry.subagent_id,
+                state = entry.state().name(),
+                depth = entry.depth,
+                goal = pmt_core::subagent_tree::one_line(&entry.goal),
+                calls = snapshot.tool_calls
+            );
+            lines.push(format!("  {line}"));
         }
     }
     lines.join("\n")
@@ -73,8 +77,10 @@ async fn router(ctx: &Ctx<'_>, name: &str, now: bool) -> Result<String, Error> {
         .profile()
         .config_file()
         .set("delegation.router", name)?;
+    let strings = ctx.strings();
     if !now {
-        return Ok(deferred(&format!("Delegation router '{name}' applies")));
+        let what = t!(strings, "slash.delegation.router_later", name = name);
+        return Ok(deferred(&strings, &what));
     }
     let live = ctx.live;
     if let Some(delegator) = &live.delegation {
@@ -100,7 +106,5 @@ async fn router(ctx: &Ctx<'_>, name: &str, now: bool) -> Result<String, Error> {
         tools,
     }))
     .await;
-    Ok(format!(
-        "Delegation router '{name}' applies now; this session's tools were rebuilt for its next request."
-    ))
+    Ok(t!(strings, "slash.delegation.router_now", name = name))
 }

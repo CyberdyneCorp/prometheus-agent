@@ -221,6 +221,7 @@ impl HostRunner {
         let scripts = scripts_dir(&self.scope);
         let config = self.scope.config().cron.clone();
         let zone = profile_zone(&self.scope).unwrap_or(TimeZone::UTC);
+        let strings = pmt_config::language::strings(self.scope.dir(), pmt_i18n::Surface::Core);
         let ctx = Exec {
             store: &self.store,
             profile: self.scope.name().as_str(),
@@ -229,6 +230,7 @@ impl HostRunner {
             config: &config,
             runner: self,
             clock: &SystemClock,
+            text: &*strings,
         };
         // The run's `cron.run` span; its agent session hangs under it.
         let mut span = pmt_obs::otel::Standalone::start(

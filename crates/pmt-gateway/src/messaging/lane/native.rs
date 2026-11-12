@@ -17,9 +17,6 @@ use pmt_config::schema::StreamTransport;
 use super::Lane;
 use crate::messaging::adapter::{Outgoing, TaskCard, TaskStatus};
 
-/// What the working status says.
-pub(crate) const THINKING: &str = "is thinking…";
-
 /// How a turn's answer streams.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Transport {
@@ -235,7 +232,8 @@ impl Lane {
             .thread_id
             .as_deref()
             .or_else(|| self.running.as_ref().and_then(|r| r.reply_to.as_deref()));
-        let status = on.then_some(THINKING);
+        let thinking = pmt_i18n::t!(self.strings(), "gateway.thinking_status");
+        let status = on.then_some(thinking.as_str());
         if let Err(err) = adapter
             .set_status(&self.routing.chat_id, thread, status)
             .await

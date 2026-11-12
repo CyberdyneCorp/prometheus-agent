@@ -18,7 +18,10 @@ pub(super) async fn mcp(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
     let now = words.contains(&"--now");
     let rest: Vec<&str> = words.into_iter().filter(|w| *w != "--now").collect();
     match rest.as_slice() {
-        [] | ["status"] if !now => Ok(status(&ctx.factory.extensions_scope(ctx.scope))),
+        [] | ["status"] if !now => Ok(status(
+            &ctx.strings(),
+            &ctx.factory.extensions_scope(ctx.scope),
+        )),
         ["reload"] => reload(ctx, now).await,
         _ => Err(Error::new(
             &codes::CLI_USAGE,
@@ -27,10 +30,10 @@ pub(super) async fn mcp(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
     }
 }
 
-fn status(scope: &pmt_config::ProfileScope) -> String {
+fn status(strings: &pmt_i18n::Strings, scope: &pmt_config::ProfileScope) -> String {
     let rows = crate::mcp_host::rows(scope);
     if rows.is_empty() {
-        return "no MCP servers are configured".to_owned();
+        return pmt_i18n::t!(strings, "slash.mcp.none");
     }
     let mut text = String::new();
     for row in rows {
@@ -38,7 +41,8 @@ fn status(scope: &pmt_config::ProfileScope) -> String {
         if let Some(reason) = &row.reason {
             let _ = write!(text, ": {reason}");
         }
-        let _ = writeln!(text, ", {} tools", row.tools);
+        let tools = pmt_i18n::t!(strings, "slash.mcp.tools", count = row.tools);
+        let _ = writeln!(text, ", {tools}");
     }
     text.trim_end().to_owned()
 }
@@ -50,10 +54,11 @@ async fn reload(ctx: &Ctx<'_>, now: bool) -> Result<String, Error> {
     if now {
         ctx.factory.apply_tools_now(ctx.live, "mcp").await?;
     }
-    let when = if now {
-        "now (this session; its prompt cache starts over)"
+    let strings = ctx.strings();
+    let when = strings.get(if now {
+        "slash.mcp.now"
     } else {
-        "next session"
-    };
-    Ok(format!("{}\ntools: {when}", status(&scope)))
+        "slash.mcp.next"
+    });
+    Ok(format!("{}\n{when}", status(&strings, &scope)))
 }

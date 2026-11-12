@@ -123,6 +123,10 @@ pub mod pty;
 #[cfg(unix)]
 pub mod tui;
 
+pub mod release;
+
+pub mod hermes;
+
 #[cfg(feature = "gateway")]
 pub mod daemon;
 
@@ -322,3 +326,5 @@ pub fn browser_sign_in(cmd: &mut std::process::Command) -> (Option<i32>, String)
     }
     (child.wait().unwrap().code(), seen)
 }
+#[cfg(feature = "gateway")]
+pub mod api;

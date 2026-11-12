@@ -26,6 +26,8 @@ pub struct ListOptions {
     pub sources: Vec<Source>,
     /// Only pinned sessions.
     pub pinned_only: bool,
+    /// Only sessions recorded under this project.
+    pub project: Option<pmt_core::id::ProjectId>,
 }
 
 /// Session counts of a store.
@@ -103,6 +105,10 @@ impl Store {
         }
         if options.pinned_only {
             clauses.push("pinned = 1".to_owned());
+        }
+        if let Some(project) = options.project {
+            clauses.push("project_id = ?".to_owned());
+            params.push(Value::Text(project.to_string()));
         }
         let filter = clauses.join(" AND ");
         self.read(|conn| query_sessions(conn, &filter, &params, options.limit))

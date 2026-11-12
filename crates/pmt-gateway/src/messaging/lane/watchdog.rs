@@ -31,16 +31,18 @@ const PROGRESS: &[&str] = &[
 pub(crate) const STALLED: &str = "stalled";
 
 /// What the chat is told when a turn shows no progress.
-pub(crate) fn no_progress(timeout: Duration) -> String {
-    format!("No progress for {}; send /stop to cancel", span(timeout))
+pub(crate) fn no_progress(strings: &pmt_i18n::Strings, timeout: Duration) -> String {
+    pmt_i18n::t!(
+        strings,
+        "gateway.no_progress",
+        span = span(strings, timeout)
+    )
 }
 
 /// What the chat is told when the watchdog interrupts the turn.
-pub(crate) fn interrupted(timeout: Duration) -> String {
-    format!(
-        "The turn was interrupted as stalled: no progress for {}.",
-        span(timeout * 2)
-    )
+pub(crate) fn interrupted(strings: &pmt_i18n::Strings, timeout: Duration) -> String {
+    let span = span(strings, timeout * 2);
+    pmt_i18n::t!(strings, "gateway.stalled_interrupted", span = span)
 }
 
 /// The watchdog's view of a running turn.
@@ -124,15 +126,17 @@ impl Lane {
             running.stopped = true;
             tracing::warn!(session_id = session, "interrupting a stalled turn");
             self.interrupt().await;
-            self.say_as(OutboundKind::Warning, &interrupted(timeout), None);
+            let text = interrupted(&self.strings(), timeout);
+            self.say_as(OutboundKind::Warning, &text, None);
         } else {
             running.watch.told = true;
             tracing::warn!(
                 session_id = session,
-                "the turn shows no progress for {}",
-                span(timeout)
+                timeout_secs = timeout.as_secs(),
+                "the turn shows no progress"
             );
-            self.say_as(OutboundKind::Warning, &no_progress(timeout), None);
+            let text = no_progress(&self.strings(), timeout);
+            self.say_as(OutboundKind::Warning, &text, None);
         }
     }
 }
@@ -144,12 +148,13 @@ mod tests {
     #[test]
     fn five_minutes_without_progress() {
         let timeout = Duration::from_mins(5);
+        let english = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
         assert_eq!(
-            no_progress(timeout),
+            no_progress(&english, timeout),
             "No progress for 5 min; send /stop to cancel"
         );
         assert_eq!(
-            interrupted(timeout),
+            interrupted(&english, timeout),
             "The turn was interrupted as stalled: no progress for 10 min."
         );
     }

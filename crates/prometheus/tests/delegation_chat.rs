@@ -151,7 +151,7 @@ name = "terminal"
 arguments = { command = "rm -rf build" }
 
 [[rule]]
-tool_result_regex = "DENIED"
+tool_result_regex = "BLOCKED"
 text = "the child was denied"
 "#,
     );

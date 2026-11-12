@@ -88,6 +88,7 @@ impl ProviderBackend for BridgedBackend {
             "session_id": session.session_id,
             "profile": session.profile,
             "platform": session.platform,
+            "user_id": session.user_id,
         });
         let switching = self
             .session

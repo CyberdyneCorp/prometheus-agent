@@ -78,6 +78,35 @@ fn events_after_a_dropped_connection_are_replayed_in_order() {
     assert_eq!(replay.epoch, "epoch-a");
 }
 
+/// Regression: a turn and a usage report publishing on two threads at
+/// once must still reach a connection in `seq` order (the second one's
+/// event was sent before the first one's).
+#[test]
+fn concurrent_publishers_reach_a_connection_in_seq_order() {
+    let hub = hub();
+    hub.register(S, "default");
+    let (p, mut rx) = peer(false);
+    hub.attach(1, S, p, None);
+    let publishers: Vec<_> = (0..4)
+        .map(|_| {
+            let hub = Arc::clone(&hub);
+            std::thread::spawn(move || {
+                for n in 0..500 {
+                    hub.publish(S, "session.event", event(n));
+                }
+            })
+        })
+        .collect();
+    for publisher in publishers {
+        publisher.join().unwrap();
+    }
+    let seen: Vec<u64> = frames(&mut rx)
+        .iter()
+        .map(|f| f["params"]["seq"].as_u64().unwrap())
+        .collect();
+    assert_eq!(seen, (1..=2000).collect::<Vec<u64>>());
+}
+
 #[test]
 fn evicted_events_mark_the_replay_truncated() {
     let hub = hub_with(Limits {

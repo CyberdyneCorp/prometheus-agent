@@ -7,6 +7,8 @@
 mod apply;
 pub mod backup;
 mod check;
+pub mod dry_run;
+pub mod handover;
 mod rollback;
 
 use std::fmt::Write as _;
@@ -18,6 +20,7 @@ use pmt_core::error::{Error, codes};
 
 pub use apply::{UpdateOptions, Updated, update};
 pub use check::{Checked, check, set_channel};
+pub use handover::{Daemon, HandedOver};
 pub use rollback::{Confirm, RollbackOptions, RolledBack, rollback};
 
 use crate::fetch::Releases;
@@ -39,13 +42,27 @@ pub struct Install {
 }
 
 impl Install {
-    /// The install receipt; `None` for a source build.
+    /// The install receipt; for a binary without one, the receipt its
+    /// location implies ([`crate::install::inferred_owner`]); `None` for a
+    /// source build.
     ///
     /// # Errors
     ///
     /// `update.failed` for an unreadable receipt.
     pub fn receipt(&self) -> Result<Option<InstallReceipt>, Error> {
-        InstallReceipt::read(&self.binary, self.home.root())
+        if let Some(receipt) = InstallReceipt::read(&self.binary, self.home.root())? {
+            return Ok(Some(receipt));
+        }
+        Ok(
+            crate::install::inferred_owner(&self.binary).map(|owner| InstallReceipt {
+                owner,
+                channel: Channel::Stable,
+                version: self.version.to_string(),
+                target: self.target.clone(),
+                installed_at: String::new(),
+                binary: self.binary.clone(),
+            }),
+        )
     }
 
     fn root(&self) -> &Path {
@@ -61,8 +78,10 @@ pub struct Session<'a> {
     pub config: &'a UpdateConfig,
     /// The release origin client.
     pub releases: &'a Releases,
-    /// Progress lines (stderr in the CLI).
-    pub progress: &'a dyn Fn(&str),
+    /// Progress lines (stderr in the CLI), each starting with its stage:
+    /// `checking`, `downloading <n>%`, `verifying`, `self-test`,
+    /// `swapping`, `restarting` (what an update from chat relays).
+    pub progress: &'a (dyn Fn(&str) + Sync),
 }
 
 /// `prometheus update --status`.

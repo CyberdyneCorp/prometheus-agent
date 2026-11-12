@@ -44,6 +44,11 @@ impl State {
         }
     }
 
+    /// Why the last reload of the file failed, while it does.
+    pub(super) fn error(&self) -> Option<&str> {
+        self.error.as_deref()
+    }
+
     /// The `--set` pins holding `restart` keys at their start values.
     pub(super) fn pins(&self) -> Vec<String> {
         self.pins.clone()

@@ -6,14 +6,13 @@
 use pmt_agent::turn::TurnInput;
 use pmt_core::error::Error;
 
-use super::prompts::{Confirmation, Pending};
+use super::prompts::Pending;
 use super::{Flow, Repl};
 use crate::chat::commands::{self, Reply};
 use crate::chat::session::Live;
-use crate::slash::{Command, Resolution, Source, Surface};
-
-/// Commands that ask `once / always / cancel` first.
-const DESTRUCTIVE: &[&str] = &["clear", "new", "undo", "rewind"];
+use crate::slash::{
+    Command, Confirmation, Resolution, Source, Surface, confirmation, exit_deletes, is_destructive,
+};
 
 /// `args` without `--yes`/`-y`, and whether one was there.
 fn take_yes(args: &str) -> (String, bool) {
@@ -60,8 +59,13 @@ impl Repl {
 
     async fn builtin(&mut self, command: &'static Command, args: &str, line: &str) -> Flow {
         let (args, yes) = take_yes(args);
-        if DESTRUCTIVE.contains(&command.name) && self.confirm_destructive && !yes {
-            self.notice(&format!("/{} changes this session.", command.name));
+        if is_destructive(command.name, &args) && self.confirm_destructive && !yes {
+            let text = pmt_i18n::t!(
+                self.strings(),
+                "cli.changes_session",
+                command = command.name
+            );
+            self.notice(&text);
             self.pending = Some(Pending::Confirm {
                 line: line.to_owned(),
             });
@@ -72,7 +76,7 @@ impl Repl {
 
     /// The answer to a destructive command's confirmation.
     pub(super) async fn confirmed(&mut self, line: &str, answer: &str) -> Flow {
-        match super::prompts::confirmation(answer) {
+        match confirmation(answer) {
             Confirmation::Cancel => {
                 self.notice("cancelled");
                 Flow::Continue
@@ -106,12 +110,15 @@ impl Repl {
         if let Some(delegation) = self.live.as_ref().and_then(|l| l.delegation.as_ref()) {
             delegation.stop_all();
         }
-        "Stopped every subagent of this session.".to_owned()
+        pmt_i18n::t!(self.strings(), "cli.stopped_all")
     }
 
     async fn run_builtin(&mut self, name: &str, args: &str) -> Flow {
         let result = match name {
-            "exit" => return Flow::Exit,
+            "exit" => {
+                self.delete_on_exit = exit_deletes(args);
+                return Flow::Exit;
+            }
             "handoff" => return self.handoff(args).await,
             "new" => self.new_session(None, None).await,
             "clear" => {
@@ -119,7 +126,7 @@ impl Repl {
                 self.new_session(None, None).await
             }
             "stop" if args.trim() == "all" => Ok(self.stop_all()),
-            "stop" => Ok("nothing is running".to_owned()),
+            "stop" => Ok(pmt_i18n::t!(self.strings(), "cli.nothing_running")),
             "fork" => self.fork(args).await,
             "resume" => self.resume(args).await,
             "prompt" => return self.compose(args).await,
@@ -128,7 +135,7 @@ impl Repl {
                 self.voice_command(args).await;
                 return Flow::Continue;
             }
-            "retry" | "learn" | "tools" | "model" | "moa" => {
+            "retry" | "learn" | "tools" | "model" | "moa" | "plan" => {
                 return Box::pin(self.session_reply(name, args)).await;
             }
             _ => {
@@ -156,7 +163,8 @@ impl Repl {
         let scope = &self.factory.scope;
         let home = scope.home().to_path_buf();
         let profile = scope.name().to_string();
-        match crate::chat::handoff::handoff(&home, &profile, &session, args).await {
+        let strings = self.strings();
+        match crate::chat::handoff::handoff(&home, &profile, &session, args, strings).await {
             Ok(line) => {
                 self.notice(&line);
                 Flow::Exit
@@ -201,7 +209,7 @@ impl Repl {
     pub(super) async fn immediate(&mut self, name: &str, args: &str, live: &Live) {
         let result = match name {
             "queue" => super::queue::parse(args)
-                .and_then(|action| super::queue::apply(&mut self.queue, action)),
+                .and_then(|action| super::queue::apply(&self.strings(), &mut self.queue, action)),
             "image" => self.image(args),
             "theme" => self.theme(args),
             "verbose" => Ok(self.verbose()),

@@ -1,14 +1,21 @@
-//! `prometheus setup [model|secrets|tools|terminal|memory|gateway]` (spec:
-//! cli, Setup wizard; Onboarding state; configuration-and-profiles,
+//! `prometheus setup [model|secrets|tools|terminal|memory|tts|agent|gateway]`
+//! (spec: cli, Setup wizard; Setup wizard modes; Onboarding state;
+//! configuration-and-profiles,
 //! Secrets are not configuration): a line-by-line wizard that shows each
 //! current value, keeps it on Enter and writes only through the config
 //! writer (`config.toml`) and the secrets store (`secrets.toml` / the
 //! keychain), so accepting every default changes nothing. `--non-
 //! interactive` takes values from `--set` and secrets from the
-//! environment, exiting 78 when a required one is missing.
+//! environment, exiting 78 when a required one is missing. `--quick` asks
+//! only for what the profile has not set, `--reset` restores a section's
+//! settings to their defaults (secrets kept), and the first full setup of
+//! a profile offers to import another agent's home.
 
 pub mod args;
+#[cfg(feature = "gateway")]
+mod gateway;
 mod model;
+mod more;
 pub mod sections;
 
 use std::io::{self, BufRead, Write};
@@ -25,6 +32,8 @@ pub(crate) struct Wizard<'a> {
     out: Box<dyn Write + 'a>,
     /// Whether stdin is a terminal (secrets are then read hidden).
     tty: bool,
+    /// `--quick`: only values the profile has not set are asked for.
+    pub(crate) quick: bool,
 }
 
 impl Wizard<'_> {
@@ -34,6 +43,7 @@ impl Wizard<'_> {
             input: Box::new(io::BufReader::new(io::stdin())),
             out: Box::new(io::stderr()),
             tty: crate::prompt::stdin_is_tty(),
+            quick: false,
         }
     }
 
@@ -100,6 +110,13 @@ pub fn run(args: &SetupArgs, ctx: &Context<'_>) -> Result<u8, Error> {
         let removed = pmt_store::Store::open(&scope)?.reset_onboarding()?;
         return crate::output::print(&format!("onboarding reset ({removed} records cleared)"));
     }
+    if args.platform.is_some() && args.section != Some(SetupSection::Gateway) {
+        return Err(Error::new(
+            &codes::CLI_USAGE,
+            "a platform goes with `setup gateway <platform>`",
+        ));
+    }
+    let platform = args.platform.as_deref();
     let sections = match args.section {
         Some(section) => vec![section],
         None => vec![
@@ -107,14 +124,23 @@ pub fn run(args: &SetupArgs, ctx: &Context<'_>) -> Result<u8, Error> {
             SetupSection::Secrets,
             SetupSection::Terminal,
             SetupSection::Memory,
+            SetupSection::Tts,
+            SetupSection::Agent,
         ],
     };
+    if args.reset {
+        return more::reset(ctx, &sections, platform);
+    }
     if args.non_interactive {
-        return sections::non_interactive(ctx, &sections);
+        return sections::non_interactive(ctx, &sections, platform);
     }
     let mut wizard = Wizard::stdio();
+    wizard.quick = args.quick;
+    if args.section.is_none() {
+        more::offer_import(ctx, &mut wizard)?;
+    }
     for section in sections {
-        run_section(ctx, &mut wizard, section)?;
+        run_section(ctx, &mut wizard, section, platform)?;
     }
     wizard.say("setup done")?;
     Ok(0)
@@ -124,14 +150,26 @@ fn run_section(
     ctx: &Context<'_>,
     wizard: &mut Wizard<'_>,
     section: SetupSection,
+    platform: Option<&str>,
 ) -> Result<(), Error> {
     match section {
+        SetupSection::Model if wizard.quick && model::configured(&ctx.scope()?) => {
+            wizard.say("Model — configured (--quick keeps it)")
+        }
         SetupSection::Model => model::interactive(ctx, wizard),
         SetupSection::Secrets => sections::secrets(&ctx.scope()?, wizard),
         SetupSection::Tools => crate::tools_cmd::configure::interactive(ctx, None, wizard),
         SetupSection::Terminal => sections::terminal(&ctx.scope()?, wizard),
         SetupSection::Memory => sections::memory(&ctx.scope()?, wizard),
-        SetupSection::Gateway => Err(sections::gateway_unavailable()),
+        SetupSection::Tts => more::tts(&ctx.scope()?, wizard),
+        SetupSection::Agent => more::agent(&ctx.scope()?, wizard),
+        #[cfg(feature = "gateway")]
+        SetupSection::Gateway => gateway::interactive(ctx, wizard, platform),
+        #[cfg(not(feature = "gateway"))]
+        SetupSection::Gateway => {
+            let _ = platform;
+            Err(sections::gateway_unavailable())
+        }
     }
 }
 

@@ -474,6 +474,10 @@ pub(super) async fn providers(inputs: &Inputs<'_>) -> Result<Vec<Check>, Error> 
     checks.extend(
         super::wsl::checks(pmt_providers::wsl::detect(), &local, super::wsl::answers).await,
     );
+    checks.extend(super::isolation::loopback_checks(
+        &super::system::provider_urls(inputs.scope),
+        pmt_core::container::in_container(),
+    ));
     for (provider, host, port) in super::system::provider_endpoints(inputs.scope) {
         checks.push(if inputs.online {
             reach(&provider, &host, port).await

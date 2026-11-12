@@ -295,7 +295,9 @@ kit (connect and reconnect, descriptor, normalization, deduplication,
 splitting at the declared limit, retry classification, cards and every
 optional capability: edit, typing, reactions, threads, delete, inbound and
 outbound media with one file per declared kind, streamed reply audio)
-against a built-in mock of any first-party platform, prints one `pass`,
+against a built-in mock of any first-party platform (or, given a
+`platform-adapter` plugin directory, against the kit's reference platform;
+see the plugins guide), prints one `pass`,
 `FAIL` or `skip` line per check (an undeclared capability is skipped with
 its reason) and exits 0 only when none failed. Where a bot cannot post
 voice notes (Slack, Signal) a voice reply arrives as an audio file;
@@ -374,6 +376,27 @@ What the gateway does for every adapter:
   gateway.http.listen` (default `127.0.0.1:8644`), at
   `/p/<profile>/<platform>/`; an unsigned request gets 401. A
   non-loopback address needs `gateway.http.public = true`.
+
+### Webhook subscriptions
+
+`prometheus webhooks subscribe <name> [--events <list>] [--skills <list>]
+[--deliver <target>] [--prompt <template>] [--secret-name <NAME>]
+[--deliver-only] [--script <path>] [--cron-job <id|name>]
+[--mirror-to-session]` creates a webhook route kept in the profile's state
+(`<profile>/webhooks.toml`, never `config.toml`); the flags are the route
+fields above. Without `--secret-name` a 32-byte signing secret is
+generated into the secrets store (`WEBHOOK_<NAME>`) and printed once,
+with the route's URL `/p/<profile>/webhook/<name>` on the shared
+listener. The running webhook adapter serves a new subscription without a
+restart (a configured route of the same name wins). `list` shows the
+routes without their secrets, `remove <name>` deletes one (and its
+generated secret), and `test <name> [--payload FILE]` posts a signed
+sample through the listener and prints the session it started.
+
+```text
+prometheus webhooks subscribe deploys --events push --deliver telegram:123
+prometheus webhooks test deploys
+```
 
 ## Who may talk to the agent
 

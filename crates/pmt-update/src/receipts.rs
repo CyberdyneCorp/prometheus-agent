@@ -138,6 +138,9 @@ pub struct UpdateReceipt {
     /// Every pre-update backup written, with its size.
     #[serde(default)]
     pub backups: Vec<BackupRef>,
+    /// Where the release came from when not the release origin (`bundle`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }
 
 impl UpdateReceipt {
@@ -212,6 +215,7 @@ impl ReceiptWriter {
             errors: Vec::new(),
             snapshots: Vec::new(),
             backups: Vec::new(),
+            source: None,
         };
         let writer = Self { dir, path, receipt };
         writer.save()?;

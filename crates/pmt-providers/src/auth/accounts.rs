@@ -16,6 +16,7 @@ use pmt_core::error::Error;
 
 use super::borrowed::Borrowed;
 use super::credentials::{Credentials, Status, reauth_required};
+use super::exchange::Exchanges;
 use super::mint::Minter;
 use super::refresh::{EARLY, Refresher};
 use super::token::RefreshError;
@@ -41,6 +42,7 @@ pub struct Accounts {
     spend: Option<SpendCaps>,
     quota: Option<QuotaTracker>,
     minter: Option<Minter>,
+    exchanges: Option<Exchanges>,
     detector: Option<crate::detect::Detector>,
     local_runtime: Option<Arc<dyn crate::local_runtime::LocalRuntime>>,
 }
@@ -73,6 +75,7 @@ impl Accounts {
             spend: None,
             quota: None,
             minter: None,
+            exchanges: None,
             detector: None,
             local_runtime: None,
         }
@@ -101,6 +104,53 @@ impl Accounts {
     pub fn with_minter(mut self, minter: Minter) -> Self {
         self.minter = Some(minter);
         self
+    }
+
+    /// Exchanges the sign-in tokens of providers whose sign-in names an
+    /// `exchange_url` (GitHub Copilot) with `exchanges`.
+    #[must_use]
+    pub fn with_exchanges(mut self, exchanges: Exchanges) -> Self {
+        self.exchanges = Some(exchanges);
+        self
+    }
+
+    /// The short-lived API token of `signed_in` when `provider`'s sign-in
+    /// exchanges its tokens; `None` when it sends them as they are.
+    async fn exchanged(
+        &self,
+        provider: &Provider,
+        signed_in: &SignedIn,
+    ) -> Result<Option<pmt_core::secret::SecretString>, Error> {
+        let Some(exchanges) = &self.exchanges else {
+            return Ok(None);
+        };
+        let Some(spec) = super::spec::for_provider(provider)
+            .ok()
+            .filter(|s| s.exchange_url.is_some())
+        else {
+            return Ok(None);
+        };
+        spec.check()?;
+        let url = spec.exchange_url.as_deref().unwrap_or_default();
+        let token = exchanges
+            .token(url, provider.id(), &signed_in.label, &signed_in.token)
+            .await?;
+        Ok(Some(token))
+    }
+
+    /// Drops the exchanged token of `provider`'s sign-in `label`; `true`
+    /// when the provider exchanges its tokens (a refusal then exchanges
+    /// anew instead of refreshing the sign-in).
+    fn drop_exchanged(&self, provider: &Provider, label: &str) -> bool {
+        let exchanging =
+            super::spec::for_provider(provider).is_ok_and(|s| s.exchange_url.is_some());
+        match (&self.exchanges, exchanging) {
+            (Some(exchanges), true) => {
+                exchanges.invalidate(provider.id(), label);
+                true
+            }
+            _ => false,
+        }
     }
 
     /// Refuses requests to a provider whose spend cap is reached.
@@ -233,7 +283,10 @@ impl Accounts {
                 }
             }
             CredentialSource::Subscription { label, .. } => {
-                let signed_in = self.owned_token(provider, label, now).await?;
+                let mut signed_in = self.owned_token(provider, label, now).await?;
+                if let Some(token) = self.exchanged(provider, &signed_in).await? {
+                    signed_in.token = token;
+                }
                 Ok(Credential::subscription(provider.id(), signed_in))
             }
             CredentialSource::Borrowed { cli, .. } => {
@@ -331,8 +384,16 @@ impl Accounts {
         }
     }
 
-    /// After HTTP 401 on a sign-in: refreshes the refused token.
+    /// After HTTP 401 on a sign-in: exchanges an exchanged token anew, else
+    /// refreshes the refused token.
     async fn recover(&self, provider: &Provider, route: &Route) -> Recovery {
+        // An exchanged token was refused: exchange anew rather than
+        // refresh the sign-in it came from.
+        if let CredentialSource::Subscription { label, .. } = &route.credential.source
+            && self.drop_exchanged(provider, label)
+        {
+            return Recovery::RetryNow;
+        }
         let (Some(refresher), Some(refused)) = (&self.refresher, route.credential.value()) else {
             return Recovery::Continue;
         };

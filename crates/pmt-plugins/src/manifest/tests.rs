@@ -143,3 +143,25 @@ fn labels_use_the_manifest_words() {
         "read the secret GITHUB_TOKEN"
     );
 }
+
+#[test]
+fn a_language_pack_declares_its_locales_and_needs_no_code() {
+    let m = Manifest::parse(
+        &(BASE.replace("worlds = [\"tool@1.0\"]", "worlds = []")
+            + "[[provides_locales]]\nid = \"pl\"\nendonym = \"Polski\"\n\n[[provides_locales]]\nid = \"fa\"\nrtl = true\n"),
+        &running(),
+    )
+    .unwrap();
+    assert!(m.is_data_only());
+    assert_eq!(m.provides_locales.len(), 2);
+    assert_eq!(m.provides_locales[0].endonym, "Polski");
+    assert_eq!(m.provides_locales[1].endonym, "fa", "the id by default");
+    assert!(m.provides_locales[1].rtl);
+    for bad in [
+        "[[provides_locales]]\nid = \"Polish\"\n",
+        "[[provides_locales]]\nid = \"pl\"\nscript = \"x\"\n",
+        "[[provides_locales]]\nid = \"pl\"\n[[provides_locales]]\nid = \"pl\"\n",
+    ] {
+        assert!(parse(bad).is_err(), "{bad}");
+    }
+}

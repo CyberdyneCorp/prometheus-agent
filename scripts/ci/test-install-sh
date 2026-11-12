@@ -62,4 +62,21 @@ status=$?
 set -e
 [ "$status" = 77 ] || fail "tampered release exited $status, expected 77"
 [ "$(cksum <"$bin/prometheus")" = "$before" ] || fail "tampered release changed the binary"
+# An offline bundle installs with no network access (spec: distribution-
+# and-update, Offline bundles) and stamps owner = bundle.
+target="$(uname -m | sed 's/amd64/x86_64/; s/arm64/aarch64/')-unknown-linux-musl"
+bundle_dir="${TMPDIR:-/tmp}/bundle.$$"
+mkdir -p "$bundle_dir/$tag"
+for file in release-manifest.json "prometheus-$target.tar.gz"; do
+    curl -fsS -o "$bundle_dir/$tag/$file" "$base_url/$tag/$file" || fail "cannot fetch $file"
+    curl -fsS -o "$bundle_dir/$tag/$file.minisig" "$base_url/$tag/$file.minisig" || fail "cannot fetch $file.minisig"
+done
+printf '{\n  "schema": "prometheus.bundle.v1",\n  "version": "%s",\n  "target": "%s",\n  "created_at": "2026-11-01T00:00:00Z",\n  "runtimes": []\n}\n' \
+    "$tag" "$target" >"$bundle_dir/bundle.json"
+tar -cf "$bundle_dir.bundle" -C "$bundle_dir" bundle.json "$tag"
+rm -f "$bin/prometheus" "$bin/install.json"
+sh "$installer" --bundle "$bundle_dir.bundle" --base-url http://127.0.0.1:9 --no-modify-path >/dev/null ||
+    fail "install.sh --bundle failed"
+grep -q '"owner": "bundle"' "$bin/install.json" || fail "a bundle install's receipt owner is not bundle"
+"$bin/prometheus" version >/dev/null || fail "the binary installed from the bundle does not run"
 echo "install.sh checks passed"

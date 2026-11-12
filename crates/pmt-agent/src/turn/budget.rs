@@ -86,7 +86,7 @@ impl Turn<'_> {
 
     async fn warn(&mut self, warnings: Vec<Budget>) {
         for warning in warnings {
-            self.notices.push(budget::notice(&warning));
+            self.notices.push(budget::notice(&*self.strings, &warning));
             self.emit(Event::BudgetWarning(warning)).await;
         }
     }

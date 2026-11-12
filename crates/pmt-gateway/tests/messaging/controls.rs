@@ -7,10 +7,9 @@ use std::time::Duration;
 
 use pmt_gateway::messaging::{
     AdapterError, AdapterState, Admission, ChatType, Descriptor, Inbound, Interactive, MenuCommand,
-    RESTARTED,
 };
 
-use crate::support::{Did, Harness, Setup, config, eventually, open, said};
+use crate::support::{Did, Harness, Setup, config, en, eventually, open, said};
 
 fn menu(n: usize) -> Vec<MenuCommand> {
     (0..n)
@@ -184,7 +183,7 @@ fn discard_marks_the_pending_turn_and_runs_the_queue_in_order() {
     let home = crashed_mid_turn(&open("telegram"));
     phase(async {
         let h = Harness::start_in(home, Setup::new(&open("telegram"))).await;
-        said(&h.adapter("telegram"), RESTARTED).await;
+        said(&h.adapter("telegram"), &en("gateway.restarted_retry")).await;
         h.dm("telegram", "1", "first").await;
         said(&h.adapter("telegram"), "reply /retry").await;
         h.dm("telegram", "1", "second").await;
@@ -210,7 +209,7 @@ fn retry_runs_the_pending_turn_before_the_waiting_input() {
     let home = crashed_mid_turn(&open("telegram"));
     phase(async {
         let h = Harness::start_in(home, Setup::new(&open("telegram"))).await;
-        said(&h.adapter("telegram"), RESTARTED).await;
+        said(&h.adapter("telegram"), &en("gateway.restarted_retry")).await;
         h.dm("telegram", "1", "later").await;
         said(&h.adapter("telegram"), "reply /retry").await;
         h.dm("telegram", "1", "/retry").await;
@@ -230,7 +229,7 @@ fn an_unanswered_pending_turn_is_dropped_after_its_ttl() {
     let home = crashed_mid_turn(&config);
     phase(async {
         let h = Harness::start_in(home, Setup::new(&config)).await;
-        said(&h.adapter("telegram"), RESTARTED).await;
+        said(&h.adapter("telegram"), &en("gateway.restarted_retry")).await;
         h.dm("telegram", "1", "waiting").await;
         said(&h.adapter("telegram"), "echo: waiting").await;
         said(&h.adapter("telegram"), "dropped after 1 s").await;

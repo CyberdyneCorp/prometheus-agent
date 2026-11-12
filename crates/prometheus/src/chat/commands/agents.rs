@@ -16,6 +16,7 @@ use std::fmt::Write as _;
 use pmt_core::error::{Error, codes};
 use pmt_core::tasks::Registry;
 use pmt_delegation::monitor;
+use pmt_i18n::t;
 use pmt_store::Visibility;
 use pmt_tools::environments::Environments;
 use pmt_tools::terminal::process::ProcessArgs;
@@ -47,17 +48,19 @@ pub(super) async fn agents(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
 
 /// Everything that runs for the session.
 async fn listing(ctx: &Ctx<'_>, conversation: &str) -> String {
+    let strings = ctx.strings();
+    let heading = |key: &str| format!("{}\n", strings.get(key));
     let mut out = String::new();
     let tree = monitor::tree(conversation);
     if !tree.is_empty() {
-        out.push_str("Subagents\n");
+        out.push_str(&heading("slash.agents.subagents"));
         for line in tree {
             let _ = writeln!(out, "{line}");
         }
     }
     let tasks = Registry::process().of(&ctx.live.id.to_string());
     if !tasks.is_empty() {
-        out.push_str("Background tasks\n");
+        out.push_str(&heading("slash.agents.tasks"));
         for task in tasks {
             let _ = writeln!(
                 out,
@@ -74,23 +77,22 @@ async fn listing(ctx: &Ctx<'_>, conversation: &str) -> String {
     }
     let processes = processes(ctx).await;
     if !processes.is_empty() {
-        out.push_str("Processes\n");
+        out.push_str(&heading("slash.agents.processes"));
         out.push_str(&processes);
     }
     // The session's goal, loop and heartbeat (spec: session-automation,
     // Automation status on every surface).
     let scope = ctx.live.config.get();
     let limits = crate::automation::limits(scope.config());
-    let rows = crate::automation::rows(&ctx.factory.store, ctx.live.id, &limits);
+    let rows = crate::automation::rows(&*ctx.strings(), &ctx.factory.store, ctx.live.id, &limits);
     if !rows.is_empty() {
-        out.push_str("Automation\n");
+        out.push_str(&heading("slash.agents.automation"));
         for row in rows {
             let _ = writeln!(out, "  {row}");
         }
     }
     if out.is_empty() {
-        return "Nothing runs for this session: no subagents, background tasks or processes."
-            .to_owned();
+        return t!(strings, "slash.agents.nothing");
     }
     out.trim_end().to_owned()
 }
@@ -109,7 +111,8 @@ fn usage(ctx: &Ctx<'_>, session: Option<&str>) -> String {
     };
     let t = &sum.tokens;
     let tokens = t.input + t.output + t.cache_read + t.cache_write;
-    format!(" {tokens} tokens ${:.4}", sum.cost_usd)
+    let tokens = t!(ctx.strings(), "slash.agents.tokens", tokens = tokens);
+    format!(" {tokens} ${:.4}", sum.cost_usd)
 }
 
 /// The session's background processes, one per line.
@@ -158,9 +161,11 @@ fn process_args(action: &str, id: Option<&str>) -> ProcessArgs {
 async fn stop(ctx: &Ctx<'_>, conversation: &str, id: &str) -> Result<String, Error> {
     if let Some(task) = Registry::process().find(&ctx.live.id.to_string(), id) {
         task.stop();
-        return Ok(format!(
-            "Stopping background task #{} ({}).",
-            task.number, task.id
+        return Ok(t!(
+            ctx.strings(),
+            "slash.agents.stopping",
+            number = task.number,
+            id = task.id
         ));
     }
     if id.starts_with("proc_") {
@@ -185,11 +190,18 @@ fn inspect(ctx: &Ctx<'_>, conversation: &str, id: &str) -> Result<String, Error>
         Some(task) => task.session(),
         None => Some(monitor::returned_session(conversation, id).map_err(|r| r.error())?),
     };
+    let strings = ctx.strings();
     let Some(session) = session.and_then(|s| s.parse().ok()) else {
-        return Ok(format!("{id} has no session yet."));
+        return Ok(t!(strings, "slash.agents.no_session", id = id));
     };
     let messages = ctx.factory.store.messages(session, Visibility::Active)?;
-    let mut out = format!("{id} (session {session})\n");
+    let mut out = t!(
+        strings,
+        "slash.agents.inspect_heading",
+        id = id,
+        session = session
+    );
+    out.push('\n');
     for m in messages {
         let text = m.content.unwrap_or_default();
         let calls = m
@@ -204,7 +216,7 @@ fn inspect(ctx: &Ctx<'_>, conversation: &str, id: &str) -> Result<String, Error>
                     .join(", ")
             })
             .filter(|names| !names.is_empty())
-            .map(|names| format!(" [calls {names}]"))
+            .map(|names| format!(" {}", t!(strings, "slash.agents.calls", names = names)))
             .unwrap_or_default();
         let _ = writeln!(
             out,

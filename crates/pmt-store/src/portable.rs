@@ -116,13 +116,19 @@ fn insert_session(
         other => other.clone(),
     };
     let ms = |t: jiff::Timestamp| t.as_millisecond();
+    // An imported session joins the project owning its cwd here; the
+    // source's project ids mean nothing in this profile.
+    let project = match session.cwd.as_deref() {
+        Some(cwd) => crate::projects::owner_id(tx, &crate::projects::lookup_path(cwd))?,
+        None => None,
+    };
     tx.execute(
         "INSERT INTO sessions (id, profile_id, source, source_tag, origin, model, provider, cwd, \
          git_repo_root, git_branch, title, title_source, started_at, last_activity_at, ended_at, \
          end_reason, pinned, archived, hidden, bot_chat, parent_session_id, lineage_kind, \
-         parent_deleted, root_session_id, compaction_count, rewind_count) \
+         parent_deleted, root_session_id, compaction_count, rewind_count, project_id) \
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, \
-         ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)",
+         ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27)",
         params![
             session.id.to_string(),
             profile_id,
@@ -152,6 +158,7 @@ fn insert_session(
             root.to_string(),
             session.compaction_count,
             session.rewind_count,
+            project,
         ],
     )
     .map_err(sql)?;
@@ -266,6 +273,21 @@ impl Store {
     /// `store.constraint` (an id that exists: nothing is written),
     /// `store.io`, `store.sqlite`.
     pub fn import_portable(&self, sessions: &[Portable]) -> Result<(), Error> {
+        self.import_linked(sessions, &[])
+    }
+
+    /// [`Store::import_portable`] that also records, in the same
+    /// transaction, the id each session had in the agent it came from.
+    ///
+    /// # Errors
+    ///
+    /// As [`Store::import_portable`]; `store.constraint` for a legacy id
+    /// already recorded.
+    pub fn import_linked(
+        &self,
+        sessions: &[Portable],
+        links: &[crate::legacy::LegacyLink],
+    ) -> Result<(), Error> {
         self.ensure_writable()?;
         let blob_dir = self.location().blobs().to_path_buf();
         let redactor = self.redactor();
@@ -285,7 +307,40 @@ impl Store {
             for (portable, rows) in sessions.iter().zip(&prepared) {
                 write_one(tx, portable, rows, (&profile_id, &profile), &imported)?;
             }
-            Ok(())
+            crate::legacy::insert(tx, links)
+        })
+    }
+}
+
+impl Store {
+    /// Appends `messages` (rows of an imported session that grew in the
+    /// agent it came from) after the session's last row and advances its
+    /// legacy link to `link`, in one transaction.
+    ///
+    /// # Errors
+    ///
+    /// `session.not_found`, `store.sqlite`.
+    pub fn append_linked(
+        &self,
+        messages: &[Message],
+        link: &crate::legacy::LegacyLink,
+    ) -> Result<(), Error> {
+        self.ensure_writable()?;
+        let blob_dir = self.location().blobs().to_path_buf();
+        let redactor = self.redactor();
+        let rows = messages
+            .iter()
+            .map(|m| messages::prepare(&blob_dir, &new_message(m), redactor.as_ref()))
+            .collect::<Result<Vec<_>, _>>()?;
+        self.write(|tx| {
+            if sessions::load(tx, link.session)?.is_none() {
+                return Err(sessions::not_found(link.session));
+            }
+            if !rows.is_empty() {
+                let first = messages::next_seq(tx, link.session)?;
+                messages::insert(tx, link.session, &rows, first)?;
+            }
+            crate::legacy::insert(tx, std::slice::from_ref(link))
         })
     }
 }

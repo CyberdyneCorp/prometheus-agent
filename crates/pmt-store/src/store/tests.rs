@@ -19,6 +19,29 @@ fn six_versions() -> Vec<Migration> {
     MIGRATIONS[..6].to_vec()
 }
 
+/// Inserts a session row with raw SQL: on a store left at an older schema
+/// the current session code (which reads every current column) cannot.
+fn seed_session(store: &Store, id: &str, tag: Option<&str>, parent: Option<(&str, &str)>) {
+    let root = parent.map_or(id, |(p, _)| p);
+    let db = store.location().database().to_path_buf();
+    Connection::open(db)
+        .unwrap()
+        .execute(
+            "INSERT INTO sessions (id, profile_id, source, source_tag, origin, started_at, \
+             last_activity_at, parent_session_id, lineage_kind, root_session_id) \
+             VALUES (?1, ?2, 'tui', ?3, '{\"kind\":\"none\"}', 1, 1, ?4, ?5, ?6)",
+            rusqlite::params![
+                id,
+                store.profile_id().to_string(),
+                tag,
+                parent.map(|(p, _)| p),
+                parent.map(|(_, k)| k),
+                root
+            ],
+        )
+        .unwrap();
+}
+
 fn meta(path: &std::path::Path, key: &str) -> String {
     Connection::open(path)
         .unwrap()
@@ -45,7 +68,8 @@ fn older_store_is_upgraded_with_a_backup() {
     let scope = scope(root.path());
     let all = six_versions();
     let store = Store::open_with(&scope, &all[..3]).unwrap();
-    let session = store.create_session(&NewSession::new(Source::Cli)).unwrap();
+    let session = pmt_core::id::SessionId::new();
+    seed_session(&store, &session.to_string(), None, None);
     drop(store);
     let db = scope.path("state.db");
     assert_eq!(meta(&db, "schema_version"), "3");
@@ -72,7 +96,12 @@ fn older_store_is_upgraded_with_a_backup() {
             .unwrap();
         assert!(exists, "{table}");
     }
-    assert_eq!(store.session(session.id).unwrap().id, session.id);
+    drop(store);
+    let kept: String = Connection::open(&db)
+        .unwrap()
+        .query_row("SELECT id FROM sessions", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(kept, session.to_string());
 }
 
 #[test]
@@ -203,23 +232,28 @@ fn v22_sessions_survive_the_v23_rebuild_that_admits_background_tasks() {
     use crate::LineageKind;
     let root = tempfile::tempdir().unwrap();
     let scope = scope(root.path());
-    let (parent, fork) = {
+    let (parent, fork) = (
+        pmt_core::id::SessionId::new(),
+        pmt_core::id::SessionId::new(),
+    );
+    {
         let store = Store::open_with(&scope, &MIGRATIONS[..22]).unwrap();
-        let mut new = NewSession::new(Source::Tui);
-        new.source_tag = Some("demo".to_owned());
-        let parent = store.create_session(&new).unwrap();
-        let fork = store
-            .create_session(&NewSession::child(
-                Source::Tui,
-                parent.id,
-                LineageKind::Fork,
-            ))
-            .unwrap();
-        (parent, fork)
-    };
+        seed_session(&store, &parent.to_string(), Some("demo"), None);
+        let parent_text = parent.to_string();
+        seed_session(
+            &store,
+            &fork.to_string(),
+            None,
+            Some((parent_text.as_str(), "fork")),
+        );
+    }
     let store = Store::open(&scope).unwrap();
-    assert_eq!(store.session(parent.id).unwrap(), parent);
-    assert_eq!(store.session(fork.id).unwrap(), fork);
+    let parent = store.session(parent).unwrap();
+    assert_eq!(parent.source_tag.as_deref(), Some("demo"));
+    let fork = store.session(fork).unwrap();
+    assert_eq!(fork.parent_session_id, Some(parent.id));
+    assert_eq!(fork.lineage_kind, Some(LineageKind::Fork));
+    assert_eq!(fork.root_session_id, parent.id);
     let task = store
         .create_session(&NewSession::child(
             Source::Background,

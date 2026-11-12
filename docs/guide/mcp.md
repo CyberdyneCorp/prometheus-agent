@@ -164,7 +164,11 @@ it, then one call is let through to probe it.
 Session start waits for servers still connecting at most
 `mcp.discovery_wait_ms` (1,500) interactively and
 `mcp.single_query_discovery_wait_ms` (15,000) for one-shot runs; a server
-that misses the window joins later sessions. A `lazy = true` server
+that misses the window joins later sessions. A new interactive session
+does not hold its prompt for that wait: it shows the prompt at once and
+waits (what is left of the window) before its first request, so a slow
+server never delays the prompt; `/mcp reload --now` brings a late server's
+tools into the running session. A `lazy = true` server
 registers its tools from the cached tool list and starts on its first call.
 A `stdio` server with `idle_timeout_secs` or `max_lifetime_secs` is stopped
 after that idle time or age and restarted on its next call; its tools stay.

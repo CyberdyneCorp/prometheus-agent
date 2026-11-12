@@ -202,8 +202,9 @@ impl Bindings {
         Ok(Self { bound })
     }
 
-    /// The action `event` is bound to. `Shift+Enter` always inserts a line
-    /// break, on terminals that report it.
+    /// The action `event` is bound to. `Shift+Enter` and `Ctrl+Enter`
+    /// (the Windows console's newline chord) always insert a line break,
+    /// on terminals that report them.
     #[must_use]
     pub fn action(&self, event: &KeyEvent) -> Option<Action> {
         if event.kind == KeyEventKind::Release {
@@ -215,7 +216,8 @@ impl Bindings {
             .iter()
             .find(|(_, _, c)| *c == chord)
             .map(|(action, _, _)| *action);
-        bound.or_else(|| (chord == shift_enter()).then_some(Action::Newline))
+        let newline = chord == shift_enter() || chord == Chord::ctrl(Key::Enter);
+        bound.or_else(|| newline.then_some(Action::Newline))
     }
 
     /// `/keys`: each action's name and chord, one per line.
@@ -306,7 +308,7 @@ mod tests {
     }
 
     #[test]
-    fn both_alt_and_shift_enter_insert_a_line_break() {
+    fn alt_shift_and_ctrl_enter_insert_a_line_break() {
         let bindings = Bindings::default();
         assert_eq!(
             bindings.action(&key(KeyCode::Enter, KeyModifiers::ALT)),
@@ -314,6 +316,10 @@ mod tests {
         );
         assert_eq!(
             bindings.action(&key(KeyCode::Enter, KeyModifiers::SHIFT)),
+            Some(Action::Newline)
+        );
+        assert_eq!(
+            bindings.action(&key(KeyCode::Enter, KeyModifiers::CONTROL)),
             Some(Action::Newline)
         );
         assert_eq!(

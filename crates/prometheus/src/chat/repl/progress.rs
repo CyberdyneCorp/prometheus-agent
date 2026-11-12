@@ -7,6 +7,7 @@ use std::fmt::Write as _;
 use pmt_agent::turn::TurnUsage;
 use pmt_config::schema::{ToolProgress, ToolProgressGrouping};
 use pmt_core::error::Error;
+use pmt_i18n::t;
 
 use super::Repl;
 use crate::chat::session::progress::Progress;
@@ -48,7 +49,12 @@ impl Repl {
             Progress::Result { tool, ok, text } => {
                 if self.display.focus.is_none() && self.display.progress == ToolProgress::Verbose {
                     let limit = self.factory.scope.config().display.tool_preview_length;
-                    let status = if ok { "ok" } else { "failed" };
+                    let key = if ok {
+                        "display.tool_ok"
+                    } else {
+                        "display.tool_failed"
+                    };
+                    let status = t!(self.strings(), key);
                     let line = format!("    ↳ {tool} {status}: {}", preview(&text, limit));
                     self.say(Role::Tool, &line);
                 }
@@ -59,7 +65,8 @@ impl Repl {
             Progress::Assistant(text) => self.view.assistant = Some(text),
             Progress::Reasoning(text) => {
                 if self.factory.scope.config().display.show_reasoning {
-                    self.say(Role::Notice, &format!("(reasoning) {}", text.trim()));
+                    let line = t!(self.strings(), "display.reasoning", text = text.trim());
+                    self.say(Role::Notice, &line);
                 }
             }
             Progress::Notice(text) => self.notice(&text),
@@ -134,7 +141,8 @@ impl Repl {
         self.flush_group();
         let view = std::mem::take(&mut self.view);
         if self.display.focus.is_some() && view.hidden > 0 {
-            self.say(Role::Notice, &format!("{} tool lines hidden", view.hidden));
+            let line = t!(self.strings(), "display.tools_hidden", count = view.hidden);
+            self.say(Role::Notice, &line);
         }
         view.calls
     }
@@ -145,19 +153,21 @@ impl Repl {
         if display.turn_summary && !self.display.quiet {
             self.say(
                 Role::Notice,
-                &summary(elapsed, calls, usage, display.show_cost),
+                &summary(&self.strings(), elapsed, calls, usage, display.show_cost),
             );
         }
     }
 
     /// `/focus [on|off|status]`.
     pub(super) fn focus(&mut self, args: &str) -> String {
-        self.display.focus(args)
+        let strings = self.strings();
+        self.display.focus(args, &strings)
     }
 
     /// `/verbose`: the next progress mode.
     pub(super) fn verbose(&mut self) -> String {
-        self.display.verbose()
+        let strings = self.strings();
+        self.display.verbose(&strings)
     }
 
     /// `/timestamps [on|off|status]`, saved in `display.timestamps`.
@@ -174,22 +184,29 @@ impl Repl {
 /// The one-line turn summary: duration, tool calls, tokens (and cost).
 #[must_use]
 pub(super) fn summary(
+    strings: &pmt_i18n::Strings,
     elapsed: std::time::Duration,
     calls: u32,
     usage: &TurnUsage,
     cost: bool,
 ) -> String {
-    let tools = if calls == 1 { "tool" } else { "tools" };
-    let mut line = format!(
-        "· {:.1}s · {calls} {tools} · {} in / {} out tokens",
-        elapsed.as_secs_f64(),
-        usage.input_tokens + usage.cache_read_tokens + usage.cache_write_tokens,
-        usage.output_tokens
+    let key = if calls == 1 {
+        "display.summary_one"
+    } else {
+        "display.summary_many"
+    };
+    let mut line = t!(
+        strings,
+        key,
+        secs = format!("{:.1}", elapsed.as_secs_f64()),
+        calls = calls,
+        input = usage.input_tokens + usage.cache_read_tokens + usage.cache_write_tokens,
+        output = usage.output_tokens
     );
     if cost {
         let _ = match usage.cost_usd {
             Some(usd) => write!(line, " · ${usd:.4}"),
-            None => write!(line, " · cost unknown"),
+            None => write!(line, " · {}", strings.get("display.cost_unknown")),
         };
     }
     line
@@ -214,7 +231,8 @@ mod tests {
             cost_usd: Some(0.5),
             ..TurnUsage::default()
         };
-        let line = summary(std::time::Duration::from_millis(1500), 2, &usage, true);
+        let en = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
+        let line = summary(&en, std::time::Duration::from_millis(1500), 2, &usage, true);
         assert_eq!(line, "· 1.5s · 2 tools · 10 in / 5 out tokens · $0.5000");
     }
 }

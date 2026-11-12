@@ -3,11 +3,12 @@
 
 use jiff::Timestamp;
 use pmt_core::error::{Error, codes};
-use pmt_core::id::SessionId;
+use pmt_core::id::{ProjectId, SessionId};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use crate::error::{corrupt, sql};
 use crate::model::{Archived, EndReason, LineageKind, Origin, Source, TitleSource};
+use crate::projects;
 use crate::store::Store;
 use crate::titles;
 
@@ -142,6 +143,8 @@ pub struct Session {
     pub rewind_count: u32,
     /// When the retention sweep deleted the session's trajectory.
     pub trajectory_purged_at: Option<Timestamp>,
+    /// The project owning `cwd` when the session was created.
+    pub project_id: Option<ProjectId>,
 }
 
 /// One descendant in [`Store::tree`].
@@ -161,7 +164,7 @@ pub(crate) const COLUMNS: &str = "id, profile_id, source, origin, model, provide
     git_repo_root, git_branch, title, title_source, started_at, last_activity_at, ended_at, \
     end_reason, pinned, archived, hidden, bot_chat, system_prompt_hash, parent_session_id, \
     lineage_kind, root_session_id, message_count, tool_call_count, compaction_count, source_tag, \
-    parent_deleted, rewind_count, trajectory_purged_at";
+    parent_deleted, rewind_count, trajectory_purged_at, project_id";
 
 pub(crate) fn now_ms() -> i64 {
     Timestamp::now().as_millisecond()
@@ -208,6 +211,7 @@ pub(crate) fn session_from_row(row: &Row<'_>) -> Result<Session, Error> {
         parent_deleted: get_flag(27)?,
         rewind_count: u32::try_from(get_int(28)?).unwrap_or(0),
         trajectory_purged_at: row.get::<_, Option<i64>>(29).map_err(sql)?.map(timestamp),
+        project_id: get_text(30)?.as_deref().map(ProjectId::parse).transpose()?,
     })
 }
 
@@ -579,6 +583,14 @@ fn insert(
     (id, given_title): (SessionId, Option<&str>),
     profile_id: &str,
 ) -> Result<Session, Error> {
+    // The project is fixed at creation: later folder changes never move
+    // a session (spec: projects, Active project and path ownership).
+    let project = match new.cwd.as_deref() {
+        Some(cwd) => projects::owner_id(tx, &projects::lookup_path(cwd))?,
+        None => None,
+    };
+    // Set by a separate update so stores migrated only part of the way
+    // (older-schema tests) still accept sessions without a project.
     let origin = serde_json::to_string(&new.origin).expect("origins serialize");
     let parent = new
         .parent
@@ -630,5 +642,12 @@ fn insert(
         ],
     )
     .map_err(sql)?;
+    if let Some(project) = project {
+        tx.execute(
+            "UPDATE sessions SET project_id = ?2 WHERE id = ?1",
+            params![id.to_string(), project],
+        )
+        .map_err(sql)?;
+    }
     load(tx, id)?.ok_or_else(|| not_found(id))
 }

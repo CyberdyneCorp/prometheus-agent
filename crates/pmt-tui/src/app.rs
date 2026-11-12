@@ -7,6 +7,9 @@
 //! (banner headers, the `<n> live` status item) landed, for the mouse.
 
 use std::cell::RefCell;
+use std::sync::Arc;
+
+use pmt_i18n::{Strings, Surface};
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Position, Rect};
@@ -27,8 +30,8 @@ use crate::wrap::{truncate, wrap};
 const COMPOSER_ROWS: usize = 6;
 /// Completion rows shown at most.
 const COMPLETION_ROWS: usize = 6;
-/// The composer's prompt.
-const PROMPT: &str = "› ";
+/// The composer's prompt unless the theme brands it.
+pub const PROMPT: &str = "› ";
 
 /// An overlay above the composer that takes the keys while open.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -85,6 +88,10 @@ pub struct App {
     pub overlay: Option<Overlay>,
     /// The status line is shown (`ui.status_bar`).
     pub status_visible: bool,
+    /// The composer's prompt (a theme's `branding.prompt_symbol`).
+    pub prompt: String,
+    /// The profile's TUI strings (spec: i18n).
+    pub strings: Arc<Strings>,
     /// Where the last frame drew clickable parts: `(row, columns, hit)`.
     hits: RefCell<Vec<(u16, std::ops::Range<u16>, Hit)>>,
 }
@@ -104,6 +111,8 @@ impl App {
             banner: None,
             overlay: None,
             status_visible: true,
+            strings: Strings::english(Surface::Tui),
+            prompt: PROMPT.to_owned(),
             hits: RefCell::new(Vec::new()),
         }
     }
@@ -162,10 +171,10 @@ impl App {
         self.render_composer(frame, composer);
         if status_rows > 0 {
             frame.render_widget(
-                Paragraph::new(self.status.line(status.width, &self.theme)),
+                Paragraph::new(self.status.line(status.width, &self.theme, &self.strings)),
                 status,
             );
-            if let Some(columns) = self.status.live_columns(status.width) {
+            if let Some(columns) = self.status.live_columns(status.width, &self.strings) {
                 self.hits.borrow_mut().push((status.y, columns, Hit::Live));
             }
         }
@@ -174,8 +183,12 @@ impl App {
     /// Rows of the overlay, else of the completion list.
     fn below_rows(&self, width: u16) -> usize {
         match &self.overlay {
-            Some(Overlay::Palette(p)) => p.lines(width, OVERLAY_ROWS, &self.theme).len(),
-            Some(Overlay::Switcher(s)) => s.lines(width, OVERLAY_ROWS, &self.theme).len(),
+            Some(Overlay::Palette(p)) => p
+                .lines(width, OVERLAY_ROWS, &self.theme, &self.strings)
+                .len(),
+            Some(Overlay::Switcher(s)) => s
+                .lines(width, OVERLAY_ROWS, &self.theme, &self.strings)
+                .len(),
             None => self.completions.len().min(COMPLETION_ROWS),
         }
     }
@@ -183,8 +196,8 @@ impl App {
     fn render_below(&self, frame: &mut Frame<'_>, area: Rect) {
         let rows = usize::from(area.height);
         let lines = match &self.overlay {
-            Some(Overlay::Palette(p)) => p.lines(area.width, rows, &self.theme),
-            Some(Overlay::Switcher(s)) => s.lines(area.width, rows, &self.theme),
+            Some(Overlay::Palette(p)) => p.lines(area.width, rows, &self.theme, &self.strings),
+            Some(Overlay::Switcher(s)) => s.lines(area.width, rows, &self.theme, &self.strings),
             None => return self.render_completions(frame, area),
         };
         frame.render_widget(Paragraph::new(lines), area);
@@ -194,7 +207,7 @@ impl App {
         let mut lines: Vec<(Line<'static>, Option<usize>)> = self
             .banner
             .as_ref()
-            .map(|b| b.lines(area.width, &self.theme))
+            .map(|b| b.lines(area.width, &self.theme, &self.strings))
             .unwrap_or_default();
         if !lines.is_empty() && !self.transcript.entries().is_empty() {
             lines.push((Line::default(), None));
@@ -260,7 +273,8 @@ impl App {
         let (row, column) = self.composer.cursor_position();
         let rows = usize::from(inner.height).max(1);
         let first = (row + 1).saturating_sub(rows);
-        let room = usize::from(inner.width).saturating_sub(PROMPT.width());
+        let prompt = self.prompt.as_str();
+        let room = usize::from(inner.width).saturating_sub(prompt.width());
         // The cursor's column stays visible on a long line.
         let shift = (column + 1).saturating_sub(room);
         let text = self.composer.text();
@@ -270,7 +284,11 @@ impl App {
             .skip(first)
             .take(rows)
             .map(|(n, line)| {
-                let lead = if n == 0 { PROMPT } else { "  " };
+                let lead = if n == 0 {
+                    prompt.to_owned()
+                } else {
+                    " ".repeat(prompt.width())
+                };
                 let shown: String = if n == row {
                     skip_columns(line, shift)
                 } else {
@@ -280,7 +298,7 @@ impl App {
             })
             .collect();
         frame.render_widget(Paragraph::new(lines), inner);
-        let x = inner.x + u16::try_from(PROMPT.width() + column - shift).unwrap_or(0);
+        let x = inner.x + u16::try_from(prompt.width() + column - shift).unwrap_or(0);
         let y = inner.y + u16::try_from(row - first).unwrap_or(0);
         frame.set_cursor_position(Position::new(x.min(inner.right().saturating_sub(1)), y));
     }

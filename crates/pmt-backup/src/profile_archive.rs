@@ -1,7 +1,7 @@
 //! Portable profile archives (spec: configuration-and-profiles, Profile
 //! lifecycle commands; Profile export excludes credentials by default):
 //! `profile export` writes a `.tar.zst` holding the profile's config,
-//! identity file, memory, skills, themes, scripts and cron job
+//! identity file, memory, projects, skills, themes, scripts and cron job
 //! definitions, never its secrets, `state.db`, blobs, logs or backups;
 //! sessions join with `--with-sessions` and secrets, sealed under a
 //! passphrase ([`crate::sealed`]), with `--with-secrets`. `profile import`
@@ -30,6 +30,8 @@ pub const SCHEMA: &str = "prometheus.profile_export.v1";
 pub const MEMORY_ENTRY: &str = "memory.json";
 /// The sealed secrets.
 pub const SECRETS_ENTRY: &str = "secrets.sealed";
+/// The projects and the active project (they live in `state.db`), as JSON.
+pub const PROJECTS_ENTRY: &str = "projects.json";
 
 /// Profile files every export holds.
 const FILES: &[&str] = &["config.toml", "SOUL.md"];
@@ -67,6 +69,8 @@ pub struct ExportOptions {
     pub with_sessions: bool,
     /// The memory entries as JSON.
     pub memory: Option<Vec<u8>>,
+    /// The projects as JSON.
+    pub projects: Option<Vec<u8>>,
     /// The sealed secrets ([`crate::sealed::seal`]).
     pub sealed_secrets: Option<Vec<u8>>,
 }
@@ -113,6 +117,7 @@ fn write_export(
     }
     for (name, bytes) in [
         (MEMORY_ENTRY, &options.memory),
+        (PROJECTS_ENTRY, &options.projects),
         (SECRETS_ENTRY, &options.sealed_secrets),
     ] {
         if let Some(bytes) = bytes {
@@ -247,7 +252,7 @@ pub fn stage(home: &Home, archive: &Path) -> Result<Staged, Error> {
 
 impl Staged {
     /// A member the caller restores itself ([`MEMORY_ENTRY`],
-    /// [`SECRETS_ENTRY`]).
+    /// [`PROJECTS_ENTRY`], [`SECRETS_ENTRY`]).
     ///
     /// # Errors
     ///
@@ -271,7 +276,7 @@ impl Staged {
         for member in &self.manifest.members {
             let staged = members::on_disk(&self.dir, &member.path);
             match member.path.as_str() {
-                MEMORY_ENTRY | SECRETS_ENTRY => {}
+                MEMORY_ENTRY | PROJECTS_ENTRY | SECRETS_ENTRY => {}
                 DATABASE => sqlite::restore(&staged, &profile.path().join(DATABASE))?,
                 relative => {
                     let target = members::on_disk(profile.path(), relative);
@@ -290,7 +295,7 @@ impl Staged {
 fn importable(relative: &str) -> bool {
     let top = relative.split('/').next().unwrap_or_default();
     FILES.contains(&relative)
-        || [MEMORY_ENTRY, SECRETS_ENTRY, DATABASE].contains(&relative)
+        || [MEMORY_ENTRY, PROJECTS_ENTRY, SECRETS_ENTRY, DATABASE].contains(&relative)
         || (relative.contains('/') && (DIRS.contains(&top) || SESSION_DIRS.contains(&top)))
 }
 

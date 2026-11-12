@@ -34,6 +34,7 @@ mod requests;
 mod resume;
 mod topic;
 mod turns;
+pub(crate) mod update_relay;
 mod watchdog;
 
 use std::collections::VecDeque;
@@ -106,6 +107,14 @@ pub(crate) enum Msg {
     Automated(crate::messaging::automation::Automated),
     /// A status line to say in the chat.
     Say(String),
+    /// An update from chat stopped because restarting the busy daemon
+    /// needs a yes: ask it here.
+    UpdateBusy {
+        routing: Box<Routing>,
+        question: String,
+    },
+    /// Answered once every message sent before it is handled.
+    Barrier(tokio::sync::oneshot::Sender<()>),
 }
 
 /// What a lane shows outside its task.
@@ -530,6 +539,10 @@ impl Lane {
             }
             Msg::Automated(automated) => self.automated(automated).await,
             Msg::Say(text) => self.say(&text),
+            Msg::UpdateBusy { routing, question } => self.ask_busy_restart(&routing, &question),
+            Msg::Barrier(ack) => {
+                let _ = ack.send(());
+            }
             Msg::Mirror(row) => {
                 self.mirrors.push(row);
                 if self.running.is_none() {
@@ -592,6 +605,13 @@ impl Lane {
     /// The profile's gateway configuration now.
     fn config(&self) -> Option<pmt_config::ProfileScope> {
         self.shared.agents.scope(&self.profile)
+    }
+
+    /// The profile's UI strings now (spec: i18n): each profile served by
+    /// this gateway speaks its own language, and a language, overlay or
+    /// pack change shows in the next notice without a restart.
+    fn strings(&self) -> std::sync::Arc<pmt_i18n::Strings> {
+        self.shared.strings(&self.profile)
     }
 
     /// Appends the waiting mirrored messages to the session (never while

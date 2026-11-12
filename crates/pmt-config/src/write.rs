@@ -71,6 +71,16 @@ impl ConfigFile {
         }
     }
 
+    /// The file's `schema_version`; `None` when missing or unreadable
+    /// (loading reports those errors).
+    #[must_use]
+    pub fn schema_version(&self) -> Option<u32> {
+        let text = self.raw().ok()??;
+        migrate::in_memory(&self.path, &text)
+            .ok()
+            .map(|(version, _)| version)
+    }
+
     /// The file's `schema_version` when it is older than this build (a
     /// migration is pending); `None` when current, missing or unreadable
     /// (loading reports those errors).
@@ -139,6 +149,27 @@ impl ConfigFile {
         self.modify(|doc| {
             for (key, value) in typed {
                 edit::set(doc, key, value)
+                    .map_err(|message| Error::new(&codes::CONFIG_INVALID_ARGUMENT, message))?;
+            }
+            Ok(())
+        })
+    }
+
+    /// Sets every `(key, value)` already typed by the caller (tables
+    /// included: an MCP server, a platform) in one write that is validated
+    /// as a whole (all or none). `hermes-migration` writes this way.
+    ///
+    /// # Errors
+    ///
+    /// `config.managed_key` for a locked key, `config.invalid_argument`
+    /// when a parent is not a table, the validation errors of the result.
+    pub fn set_values(&self, values: &[(String, toml_edit::Value)]) -> Result<(), Error> {
+        for (key, _) in values {
+            crate::managed::check_writable(key)?;
+        }
+        self.modify(|doc| {
+            for (key, value) in values {
+                edit::set(doc, key, value.clone())
                     .map_err(|message| Error::new(&codes::CONFIG_INVALID_ARGUMENT, message))?;
             }
             Ok(())
@@ -265,6 +296,11 @@ impl ConfigFile {
         check_document(&self.path, text)?;
         let old = self.raw()?;
         refuse_locked_changes(old.as_deref().unwrap_or_default(), text)?;
+        crate::language::check_change(
+            old.as_deref().unwrap_or_default(),
+            &parse::config(&self.path, text)?,
+            profile_dir(&self.path),
+        )?;
         self.commit(old.as_deref(), text)
     }
 
@@ -277,7 +313,9 @@ impl ConfigFile {
         let mut doc = parse::document(&self.path, &old)?.into_mut();
         change(&mut doc)?;
         let new = doc.to_string();
-        crate::essential::semantic(&parse::config(&self.path, &new)?, profile_dir(&self.path))?;
+        let config = parse::config(&self.path, &new)?;
+        crate::essential::semantic(&config, profile_dir(&self.path))?;
+        crate::language::check_change(&old, &config, profile_dir(&self.path))?;
         if new == old {
             return Ok(());
         }
@@ -285,6 +323,7 @@ impl ConfigFile {
     }
 
     fn commit(&self, old: Option<&str>, new: &str) -> Result<(), Error> {
+        crate::generated::check_writable(profile_dir(&self.path))?;
         if let Some(old) = old.filter(|old| *old != new) {
             backups::save(&self.backups, "config", old)?;
             backups::prune(&self.backups);

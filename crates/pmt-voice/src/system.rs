@@ -18,6 +18,27 @@ use crate::pcm;
 /// Bytes read from a recorder at a time (100 ms).
 const READ_BYTES: usize = 3_200;
 
+/// Where the reference compose file's `audio` profile mounts the host's
+/// PulseAudio-compatible socket inside the container (spec:
+/// distribution-and-update, Container audio bridge and host services).
+pub const CONTAINER_PULSE_SOCKET: &str = "/run/pulse/native";
+
+/// The `PULSE_SERVER` the audio tools need: the mounted container socket
+/// when it exists and nothing else names a server, so device probing
+/// finds the host's devices instead of reporting none.
+fn pulse_server(socket: &Path, configured: Option<&std::ffi::OsStr>) -> Option<String> {
+    (configured.is_none_or(std::ffi::OsStr::is_empty) && socket.exists())
+        .then(|| format!("unix:{}", socket.display()))
+}
+
+/// Points an audio tool at the container's `PulseAudio` socket when needed.
+fn with_pulse(command: &mut Command) {
+    let configured = std::env::var_os("PULSE_SERVER");
+    if let Some(server) = pulse_server(Path::new(CONTAINER_PULSE_SOCKET), configured.as_deref()) {
+        command.env("PULSE_SERVER", server);
+    }
+}
+
 /// The executable `name` on `PATH`, if any.
 #[must_use]
 pub fn find(name: &str) -> Option<PathBuf> {
@@ -113,13 +134,16 @@ impl SystemMicrophone {
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .kill_on_drop(true);
+        with_pulse(&mut command);
         command
     }
 }
 
 /// The text a lister prints (stdout and stderr: ffmpeg lists on stderr).
 async fn listing(program: &Path, args: &[&str]) -> String {
-    let output = Command::new(program)
+    let mut command = Command::new(program);
+    with_pulse(&mut command);
+    let output = command
         .args(args)
         .stdin(Stdio::null())
         .kill_on_drop(true)
@@ -369,6 +393,7 @@ impl SystemPlayer {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .kill_on_drop(true);
+        with_pulse(&mut command);
         command
     }
 
@@ -423,6 +448,7 @@ impl SystemPlayer {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .kill_on_drop(true);
+        with_pulse(&mut command);
         Some(command)
     }
 
@@ -555,6 +581,24 @@ impl Player for SystemPlayer {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_mounted_container_socket_becomes_the_pulse_server() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket = dir.path().join("native");
+        assert_eq!(
+            super::pulse_server(&socket, None),
+            None,
+            "no socket mounted"
+        );
+        std::fs::write(&socket, "").unwrap();
+        assert_eq!(
+            super::pulse_server(&socket, None),
+            Some(format!("unix:{}", socket.display()))
+        );
+        let configured = std::ffi::OsString::from("tcp:host:4713");
+        assert_eq!(super::pulse_server(&socket, Some(&configured)), None);
+    }
+
     use super::*;
 
     #[test]

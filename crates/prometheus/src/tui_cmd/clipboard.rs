@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 use pmt_core::env::LaunchEnv;
+use pmt_i18n::{Strings, t};
 use pmt_tools::terminal::shell::find_executable;
 
 /// What [`detect`] reads the environment for.
@@ -85,12 +86,10 @@ pub(super) enum Clipboard {
 /// # Errors
 ///
 /// The reason no clipboard is reachable.
-pub(super) fn detect(env: &Env) -> Result<Clipboard, String> {
-    let missing = |what: &str| format!("{what} was not found on PATH");
+pub(super) fn detect(env: &Env, strings: &Strings) -> Result<Clipboard, String> {
+    let missing = |what: &str| t!(strings, "tui.clip_missing", 0 = what);
     match env.os {
-        _ if env.ssh && env.os != "linux" => {
-            Err("running over SSH, the clipboard here is not yours".to_owned())
-        }
+        _ if env.ssh && env.os != "linux" => Err(t!(strings, "tui.clip_ssh")),
         "macos" => env
             .find("osascript")
             .map(|osascript| Clipboard::MacOs { osascript })
@@ -99,21 +98,24 @@ pub(super) fn detect(env: &Env) -> Result<Clipboard, String> {
             .find("powershell")
             .map(|powershell| Clipboard::Windows { powershell })
             .ok_or_else(|| missing("powershell")),
-        _ => unix(env),
+        _ => unix(env, strings),
     }
 }
 
-fn unix(env: &Env) -> Result<Clipboard, String> {
+fn unix(env: &Env, strings: &Strings) -> Result<Clipboard, String> {
     if env.wsl
         && let Some(powershell) = env.find("powershell.exe")
     {
         return Ok(Clipboard::Windows { powershell });
     }
     if !env.wayland && !env.x11 {
-        let over = if env.ssh { " (over SSH)" } else { "" };
-        return Err(format!(
-            "no display{over}: WAYLAND_DISPLAY and DISPLAY are unset"
-        ));
+        return Err(strings
+            .get(if env.ssh {
+                "tui.clip_no_display_ssh"
+            } else {
+                "tui.clip_no_display"
+            })
+            .to_owned());
     }
     if env.wayland
         && let Some(wl_paste) = env.find("wl-paste")
@@ -128,7 +130,7 @@ fn unix(env: &Env) -> Result<Clipboard, String> {
             return Ok(Clipboard::Xsel { xsel });
         }
     }
-    Err("no clipboard tool: install wl-clipboard (Wayland) or xclip (X11)".to_owned())
+    Err(t!(strings, "tui.clip_no_tool"))
 }
 
 const WINDOWS_IMAGE: &str = "Add-Type -AssemblyName System.Windows.Forms; \
@@ -143,7 +145,7 @@ impl Clipboard {
     /// # Errors
     ///
     /// The tool cannot read images (`xsel`) or failed to run.
-    pub(super) fn image(&self) -> Result<Option<Vec<u8>>, String> {
+    pub(super) fn image(&self, strings: &Strings) -> Result<Option<Vec<u8>>, String> {
         match self {
             Self::MacOs { osascript } => {
                 let out = run(osascript, &["-e", "the clipboard as «class PNGf»"]);
@@ -168,9 +170,7 @@ impl Clipboard {
                         .to_vec()
                 }))
             }
-            Self::Xsel { .. } => {
-                Err("xsel cannot read images; install xclip or wl-clipboard".to_owned())
-            }
+            Self::Xsel { .. } => Err(t!(strings, "tui.clip_xsel")),
         }
     }
 
@@ -230,13 +230,13 @@ fn from_applescript(text: &str) -> Option<Vec<u8>> {
 }
 
 /// What `/paste` prints when no clipboard is reachable.
-pub(super) fn unavailable(reason: &str) -> String {
-    format!("clipboard image unavailable here: {reason}; attach a file path with @path instead")
+pub(super) fn unavailable(strings: &Strings, reason: &str) -> String {
+    t!(strings, "tui.clip_unavailable", 0 = reason)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Clipboard, Env, detect, from_applescript, unavailable};
+    use super::{Clipboard, Env, Strings, detect, from_applescript, unavailable};
 
     fn bin_with(tools: &[&str]) -> (tempfile::TempDir, Env) {
         let dir = tempfile::tempdir().unwrap();
@@ -262,40 +262,42 @@ mod tests {
     fn over_ssh_without_a_display_there_is_no_clipboard() {
         let (_dir, mut env) = bin_with(&["xclip", "wl-paste"]);
         env.ssh = true;
-        let why = detect(&env).unwrap_err();
+        let en = Strings::english(pmt_i18n::Surface::Tui);
+        let why = detect(&env, &en).unwrap_err();
         assert_eq!(
             why,
             "no display (over SSH): WAYLAND_DISPLAY and DISPLAY are unset"
         );
         assert_eq!(
-            unavailable(&why),
+            unavailable(&en, &why),
             "clipboard image unavailable here: no display (over SSH): WAYLAND_DISPLAY and DISPLAY are unset; attach a file path with @path instead"
         );
         env.os = "macos";
-        assert!(detect(&env).unwrap_err().contains("over SSH"));
+        assert!(detect(&env, &en).unwrap_err().contains("over SSH"));
     }
 
     #[cfg(unix)]
     #[test]
     fn wayland_then_x11_tools_are_preferred_in_order() {
+        let en = Strings::english(pmt_i18n::Surface::Tui);
         let (dir, mut env) = bin_with(&["xclip", "wl-paste", "xsel"]);
         env.x11 = true;
         assert_eq!(
-            detect(&env),
+            detect(&env, &en),
             Ok(Clipboard::Xclip {
                 xclip: dir.path().join("xclip")
             })
         );
         env.wayland = true;
         assert_eq!(
-            detect(&env),
+            detect(&env, &en),
             Ok(Clipboard::Wayland {
                 wl_paste: dir.path().join("wl-paste")
             })
         );
         let (dir, mut env) = bin_with(&["xsel"]);
         env.x11 = true;
-        let xsel = detect(&env).unwrap();
+        let xsel = detect(&env, &en).unwrap();
         assert_eq!(
             xsel,
             Clipboard::Xsel {
@@ -303,14 +305,14 @@ mod tests {
             }
         );
         assert!(
-            xsel.image()
+            xsel.image(&en)
                 .unwrap_err()
                 .contains("xsel cannot read images")
         );
         let (dir, mut env) = bin_with(&["powershell.exe"]);
         env.wsl = true;
         assert_eq!(
-            detect(&env),
+            detect(&env, &en),
             Ok(Clipboard::Windows {
                 powershell: dir.path().join("powershell.exe")
             })

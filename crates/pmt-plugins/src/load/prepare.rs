@@ -112,6 +112,7 @@ fn prepare(job: Job) -> Result<(LoadedPlugin, Registration), Error> {
             ));
         }
     }
+    check_adapter_operations(&job.runtime, &component, &manifest)?;
     let registration = read_registration(&instance)?;
     Ok((
         LoadedPlugin {
@@ -123,6 +124,39 @@ fn prepare(job: Job) -> Result<(LoadedPlugin, Registration), Error> {
         },
         registration,
     ))
+}
+
+/// A `platform-adapter` component must export every operation of the
+/// adapter contract (spec: platform-adapters, Adapter contract: a plugin
+/// missing a required export is refused, naming it).
+fn check_adapter_operations(
+    runtime: &crate::host::Runtime,
+    component: &wasmtime::component::Component,
+    manifest: &Manifest,
+) -> Result<(), Error> {
+    if manifest.adapter_platform().is_none() {
+        return Ok(());
+    }
+    let missing = runtime.missing_operations(
+        component,
+        "platform-adapter",
+        crate::host::ADAPTER_OPERATIONS,
+    );
+    match missing.as_slice() {
+        [] => Ok(()),
+        ops => Err(Error::new(
+            &codes::PLUGINS_LOAD,
+            format!(
+                "plugin '{}' is a platform adapter but does not export the required operation{} {}",
+                manifest.id,
+                if ops.len() == 1 { "" } else { "s" },
+                ops.iter()
+                    .map(|op| format!("'{op}'"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        )),
+    }
 }
 
 fn read_registration(instance: &Instance) -> Result<Registration, Error> {

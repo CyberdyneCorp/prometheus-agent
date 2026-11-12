@@ -170,7 +170,7 @@ fn available(
 pub async fn start(
     scope: &ProfileScope,
     plugins: &ProfilePlugins,
-    (session, platform): (&str, &str),
+    (session, platform, user_id): (&str, &str, Option<String>),
     redactor: &Redactor,
     call: &CallInfo,
 ) -> Option<Arc<ProviderSession>> {
@@ -190,6 +190,7 @@ pub async fn start(
             session_id: session.to_owned(),
             profile: profile.to_owned(),
             platform: platform.to_owned(),
+            user_id,
         },
         redactor: redactor.clone(),
     })

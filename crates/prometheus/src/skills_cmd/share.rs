@@ -274,6 +274,7 @@ fn browser_token(ctx: &Context<'_>) -> Result<String, Error> {
         authorize_params: Vec::new(),
         token_encoding: TokenEncoding::Form,
         allowed_hosts: vec!["oauth2.sigstore.dev".to_owned()],
+        exchange_url: None,
     };
     let ui = crate::auth_cmd::TerminalUi { launch: ctx.launch };
     let place = crate::auth_cmd::place(ctx);

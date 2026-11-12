@@ -55,8 +55,16 @@ pub struct LocalCommand {
     pub name: &'static str,
     /// Other names.
     pub aliases: &'static [&'static str],
-    /// One line.
-    pub description: &'static str,
+    /// The catalog key (`tui` surface) of its one-line description.
+    pub key: &'static str,
+}
+
+impl LocalCommand {
+    /// Its one-line description in the language of `strings`.
+    #[must_use]
+    pub fn description<'a>(&self, strings: &'a pmt_i18n::Strings) -> &'a str {
+        strings.get(self.key)
+    }
 }
 
 /// The TUI's own commands.
@@ -65,115 +73,115 @@ pub const LOCAL: &[LocalCommand] = &[
         command: Local::Quit,
         name: "quit",
         aliases: &["exit", "q"],
-        description: "leave the TUI; the session stays in the gateway",
+        key: "tui.cmd_quit",
     },
     LocalCommand {
         command: Local::Clear,
         name: "clear",
         aliases: &[],
-        description: "clear the screen (the session is unchanged)",
+        key: "tui.cmd_clear",
     },
     LocalCommand {
         command: Local::Copy,
         name: "copy",
         aliases: &[],
-        description: "copy the last answer to the clipboard",
+        key: "tui.cmd_copy",
     },
     LocalCommand {
         command: Local::Theme,
         name: "theme",
         aliases: &[],
-        description: "show or set the colour theme (dark, light) for this run",
+        key: "tui.cmd_theme",
     },
     LocalCommand {
         command: Local::Keys,
         name: "keys",
         aliases: &[],
-        description: "list the key bindings (ui.tui.keys)",
+        key: "tui.cmd_keys",
     },
     LocalCommand {
         command: Local::Update,
         name: "update",
         aliases: &[],
-        description: "leave the TUI and update prometheus",
+        key: "tui.cmd_update",
     },
     LocalCommand {
         command: Local::New,
         name: "new",
         aliases: &["reset"],
-        description: "start a new session (the old one stays in the gateway)",
+        key: "tui.cmd_new",
     },
     LocalCommand {
         command: Local::Resume,
         name: "resume",
         aliases: &[],
-        description: "switch to another session: /resume <id|title>",
+        key: "tui.cmd_resume",
     },
     LocalCommand {
         command: Local::Fork,
         name: "fork",
         aliases: &["branch"],
-        description: "fork the session at its last message and switch to the fork",
+        key: "tui.cmd_fork",
     },
     LocalCommand {
         command: Local::Redraw,
         name: "redraw",
         aliases: &[],
-        description: "clear and repaint the screen",
+        key: "tui.cmd_redraw",
     },
     LocalCommand {
         command: Local::StatusBar,
         name: "statusbar",
         aliases: &["sb"],
-        description: "show or hide the status bar",
+        key: "tui.cmd_statusbar",
     },
     LocalCommand {
         command: Local::Battery,
         name: "battery",
         aliases: &[],
-        description: "battery in the status bar: /battery [on|off|status]",
+        key: "tui.cmd_battery",
     },
     LocalCommand {
         command: Local::Indicator,
         name: "indicator",
         aliases: &[],
-        description: "busy indicator style: kaomoji, emoji, unicode, ascii",
+        key: "tui.cmd_indicator",
     },
     LocalCommand {
         command: Local::Palette,
         name: "palette",
         aliases: &[],
-        description: "find a command (Enter puts it in the composer)",
+        key: "tui.cmd_palette",
     },
     LocalCommand {
         command: Local::Sessions,
         name: "sessions",
         aliases: &["switch"],
-        description: "switch between live sessions; /sessions new starts one",
+        key: "tui.cmd_sessions",
     },
     LocalCommand {
         command: Local::Paste,
         name: "paste",
         aliases: &[],
-        description: "attach the clipboard's image to the next prompt",
+        key: "tui.cmd_paste",
     },
     LocalCommand {
         command: Local::TerminalSetup,
         name: "terminal-setup",
         aliases: &[],
-        description: "make Ctrl+V reach the TUI in VS Code, Cursor or Windsurf",
+        key: "tui.cmd_terminal_setup",
     },
     LocalCommand {
         command: Local::Handoff,
         name: "handoff",
         aliases: &[],
-        description: "continue this session in a chat: /handoff <platform>[:<chat>[:<thread>]]",
+        key: "tui.cmd_handoff",
     },
     LocalCommand {
         command: Local::Voice,
         name: "voice",
         aliases: &[],
-        description: "voice mode: /voice [on|off|tts|status]; the record key talks",
+        key: "tui.cmd_voice",
     },
 ];
 

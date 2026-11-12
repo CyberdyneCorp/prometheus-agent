@@ -120,7 +120,15 @@ async fn memory_review_lists_diffs_and_keeps_or_reverts_each_change() {
     patch(&memory, &id, "Lives in Porto.").await;
     let config = &profile.scope.config().memory;
     let sid = session.to_string();
-    let run = |args: &str| pmt_memory::slash::run(&profile.store, config, Some(&sid), args);
+    let run = |args: &str| {
+        pmt_memory::slash::run(
+            &*pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+            &profile.store,
+            config,
+            Some(&sid),
+            args,
+        )
+    };
 
     let listing = run("review").unwrap().text;
     assert!(

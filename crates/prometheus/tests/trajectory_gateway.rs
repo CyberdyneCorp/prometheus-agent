@@ -13,7 +13,7 @@ use std::net::TcpStream;
 use std::path::Path;
 use std::time::Duration;
 
-use self::common::gateway::{Daemon, gateway_home_with, wait};
+use self::common::gateway::{Daemon, gateway_home_with};
 use self::common::{ok, run, run_with_stdin};
 use serde_json::Value;
 
@@ -34,14 +34,6 @@ step = 1
 tool_result = "remember the milk"
 text = "The note says: remember the milk."
 "#;
-
-fn free_port() -> u16 {
-    std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port()
-}
 
 /// One signed POST on the webhook listener; the response body.
 fn post(port: u16, path: &str, body: &str) -> String {
@@ -141,10 +133,9 @@ fn a_webhook_session_records_the_same_trajectory_as_chat() {
         common::stderr(&out)
     );
 
-    let port = free_port();
     std::fs::write(
         home.join("daemon.toml"),
-        format!("[gateway.http]\nlisten = \"127.0.0.1:{port}\"\n"),
+        "[gateway.http]\nlisten = \"127.0.0.1:0\"\n",
     )
     .unwrap();
     ok(&run_with_stdin(
@@ -153,9 +144,7 @@ fn a_webhook_session_records_the_same_trajectory_as_chat() {
         SECRET,
     ));
     let daemon = Daemon::start(home);
-    wait("the webhook listener", Duration::from_secs(30), || {
-        TcpStream::connect(("127.0.0.1", port)).is_ok()
-    });
+    let port = common::daemon::bound_port(home, "listener:gateway.http");
     let answer = post(
         port,
         "/p/default/webhook/ask",

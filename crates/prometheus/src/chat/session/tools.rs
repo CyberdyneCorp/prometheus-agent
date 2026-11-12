@@ -184,7 +184,10 @@ pub fn selection(
     plugins: &[String],
     surface: &SessionSurface,
 ) -> Result<Selection, Error> {
-    let mut enabled = surface.starting_toolsets(registry, &config.tools, &config.toolsets);
+    let mut enabled = match (surface, &config.api_server.toolsets) {
+        (SessionSurface::Api, Some(listed)) => api_toolsets(registry, config, listed),
+        _ => surface.starting_toolsets(registry, &config.tools, &config.toolsets),
+    };
     crate::tools_cmd::opt_in(&mut enabled, plugins, surface);
     let selection = Selection::resolve(registry, &enabled, &config.tools.disabled_toolsets)?;
     Ok(if interactive {
@@ -192,6 +195,39 @@ pub fn selection(
     } else {
         selection.without_interactive(registry)
     })
+}
+
+/// `api_server.toolsets`, keeping only toolsets whose tools the profile
+/// enables (`tools.enabled_toolsets`, `core` standing for the API
+/// surface's own default); the others are dropped with a warning (spec:
+/// api-server, Unattended approvals and the API toolset).
+fn api_toolsets(registry: &ToolRegistry, config: &Config, listed: &[String]) -> Vec<String> {
+    let profile = SessionSurface::Api.starting_toolsets(
+        registry,
+        &config.tools,
+        &pmt_config::schema::ToolsetsConfig::default(),
+    );
+    let allowed: std::collections::BTreeSet<String> = profile
+        .iter()
+        .filter_map(|name| registry.members(name).ok())
+        .flatten()
+        .collect();
+    listed
+        .iter()
+        .filter(|name| {
+            let within = registry
+                .members(name)
+                .is_ok_and(|members| members.iter().all(|m| allowed.contains(m)));
+            if !within {
+                tracing::warn!(
+                    toolset = name.as_str(),
+                    "api_server.toolsets names a toolset the profile does not enable; dropped"
+                );
+            }
+            within
+        })
+        .cloned()
+        .collect()
 }
 
 /// The surface stored session `session` was started from: a messaging
@@ -374,6 +410,8 @@ pub struct SwappableTools {
     /// A replay's recorded results (spec: replay-and-evaluation, Replay
     /// modes).
     replay: std::sync::OnceLock<Arc<dyn crate::replay::ToolReplay>>,
+    /// The restriction of a running `/plan` turn.
+    plan: std::sync::Mutex<Option<super::plan::Plan>>,
 }
 
 impl SwappableTools {
@@ -386,7 +424,36 @@ impl SwappableTools {
             delegation: std::sync::OnceLock::new(),
             recording: std::sync::OnceLock::new(),
             replay: std::sync::OnceLock::new(),
+            plan: std::sync::Mutex::default(),
         }
+    }
+
+    /// Restricts the calls of the next turn to `plan` (`/plan`).
+    pub fn begin_plan(&self, plan: super::plan::Plan) {
+        *self.plan.lock().unwrap_or_else(PoisonError::into_inner) = Some(plan);
+    }
+
+    /// Lifts the planning restriction (at the end of every turn); the plan
+    /// that was in force.
+    pub fn end_plan(&self) -> Option<super::plan::Plan> {
+        self.plan
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
+    }
+
+    /// The calls of `calls` the running `/plan` admits (all without one),
+    /// as a mask in call order.
+    fn plan_mask(&self, calls: &[RequestedCall]) -> Option<Vec<bool>> {
+        let plan = self.plan.lock().unwrap_or_else(PoisonError::into_inner);
+        let plan = plan.as_ref()?;
+        let tools = self.tools();
+        Some(
+            calls
+                .iter()
+                .map(|call| plan.admits(call, tools.declared(&call.name).as_ref()))
+                .collect(),
+        )
     }
 
     /// Keeps every call's result in `session`'s recording.
@@ -408,6 +475,11 @@ impl SwappableTools {
         cancel: &CancelToken,
         journal: Option<Arc<dyn pmt_agent::turn::CallJournal>>,
     ) -> ToolBatch {
+        if let Some(mask) = self.plan_mask(calls)
+            && mask.contains(&false)
+        {
+            return Box::pin(self.run_planned(calls, &mask, turn_id, cancel, journal)).await;
+        }
         let tools = self.tools();
         let batch = match self.replay.get() {
             Some(replay) => {
@@ -417,6 +489,44 @@ impl SwappableTools {
         };
         self.record(calls, &batch);
         self.with_announcement(batch)
+    }
+
+    /// A batch under `/plan`: the admitted calls run, the others are
+    /// refused, the outcomes stay in call order.
+    async fn run_planned(
+        &self,
+        calls: &[RequestedCall],
+        mask: &[bool],
+        turn_id: &str,
+        cancel: &CancelToken,
+        journal: Option<Arc<dyn pmt_agent::turn::CallJournal>>,
+    ) -> ToolBatch {
+        let admitted: Vec<RequestedCall> = calls
+            .iter()
+            .zip(mask)
+            .filter(|(_, ok)| **ok)
+            .map(|(call, _)| call.clone())
+            .collect();
+        let ran = if admitted.is_empty() {
+            ToolBatch::default()
+        } else {
+            Box::pin(self.run_batch(&admitted, turn_id, cancel, journal)).await
+        };
+        let mut ran = ran.outcomes.into_iter();
+        let outcomes = mask
+            .iter()
+            .map(|ok| {
+                if *ok {
+                    ran.next().unwrap_or_else(super::plan::refused)
+                } else {
+                    super::plan::refused()
+                }
+            })
+            .collect();
+        ToolBatch {
+            outcomes,
+            plan: None,
+        }
     }
 
     fn record(&self, calls: &[RequestedCall], batch: &ToolBatch) {

@@ -145,6 +145,8 @@ pub struct Exec<'a> {
     pub runner: &'a dyn Runner,
     /// Where run and delivery times come from.
     pub clock: &'a dyn crate::clock::Clock,
+    /// The profile's UI strings (failure notices).
+    pub text: &'a (dyn pmt_core::text::Catalog + Sync),
 }
 
 impl Exec<'_> {

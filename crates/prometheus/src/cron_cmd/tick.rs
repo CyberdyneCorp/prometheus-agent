@@ -73,6 +73,7 @@ pub(super) fn replay(env: &Env<'_>, id: &str, live: bool, deliver: bool) -> Resu
     let scripts = scripts_dir(&env.scope);
     let config = env.scope.config().cron.clone();
     let zone = crate::cron_host::profile_zone(&env.scope)?;
+    let strings = pmt_config::language::strings(env.scope.dir(), pmt_i18n::Surface::Core);
     let ctx = pmt_cron::exec::Exec {
         store: &env.store,
         profile: env.scope.name().as_str(),
@@ -81,6 +82,7 @@ pub(super) fn replay(env: &Env<'_>, id: &str, live: bool, deliver: bool) -> Resu
         config: &config,
         runner: &runner,
         clock: &pmt_cron::clock::SystemClock,
+        text: &*strings,
     };
     let new = crate::model_cmd::block_on(pmt_cron::exec::replay(&ctx, &job, &original, deliver))??;
     let old_text = original.output.as_deref().unwrap_or_default();

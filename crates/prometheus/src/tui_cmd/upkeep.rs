@@ -31,10 +31,11 @@ impl Tui<'_> {
 
     /// The card asking about auto-prune, while it waits.
     pub(super) fn prune_card(&self) -> Option<Card> {
+        let strings = self.strings();
         self.prune.then(|| Card {
-            title: "turn on auto-prune of sessions inactive for 90 days?".to_owned(),
+            title: pmt_i18n::t!(strings, "tui.prune_title"),
             body: String::new(),
-            hint: "type on, off (never ask again) or later; Enter alone is later".to_owned(),
+            hint: pmt_i18n::t!(strings, "tui.prune_hint"),
         })
     }
 

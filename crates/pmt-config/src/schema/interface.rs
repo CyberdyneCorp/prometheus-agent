@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 #[serde(default, deny_unknown_fields)]
 #[schemars(extend("x-apply" = "live"))]
 pub struct CliConfig {
-    /// Ask `once / always / cancel` before `/clear`, `/new`, `/undo` and
-    /// `/rewind`.
+    /// Ask `once / always / cancel` before `/clear`, `/new`, `/undo`,
+    /// `/rewind` and `/exit --delete`.
     pub confirm_destructive: bool,
 }
 
@@ -208,6 +208,12 @@ pub enum Interface {
 #[schemars(extend("x-apply" = "live"))]
 #[allow(clippy::struct_excessive_bools)] // independent user switches
 pub struct DisplayConfig {
+    /// The UI language: `en` or another bundled id (`af`, `ar`, `de`,
+    /// `es`, `fr`, `ga`, `hu`, `it`, `ja`, `ko`, `pt`, `ru`, `tr`, `uk`,
+    /// `zh`, `zh-hant`), a language a profile overlay
+    /// (`<profile_home>/locales/<id>.toml`) or an enabled language pack
+    /// supplies. Localizes static UI text only, never what the model sees.
+    pub language: String,
     /// Theme: a built-in (`default`, `mono`, `daylight`, `slate`) or a
     /// file in `<profile>/themes/`.
     pub theme: String,
@@ -260,6 +266,7 @@ pub struct DisplayConfig {
 impl Default for DisplayConfig {
     fn default() -> Self {
         Self {
+            language: "en".to_owned(),
             theme: "default".to_owned(),
             bell_on_complete: false,
             bell_on_prompt: false,

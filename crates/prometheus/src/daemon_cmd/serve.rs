@@ -47,6 +47,7 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result
         .collect();
     let lock = WriterLock::acquire(home, Role::Daemon, names)?;
     let config = DaemonConfig::load(home)?;
+    seed_image_runtimes(home);
     let launch_profile = layout.select_profile(ctx.profile)?;
     let scopes = served_profiles(&layout, &launch_profile, ctx)?;
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -116,6 +117,7 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result
                 ctx.launch,
                 enabled_adapters(&scopes_of(&server, &host)),
             );
+            start_api(&config, &server, &host).await;
             if let Some(systemd) = &systemd {
                 systemd.notify("READY=1");
             }
@@ -138,8 +140,39 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result
     Ok(exit)
 }
 
+/// Starts the API server when a served profile enables it; a listener
+/// that cannot start is logged and reported `down` as health component
+/// `listener:api_server`, and the rest of the daemon (chats, adapters,
+/// schedulers) keeps running (spec: api-server, Opt-in listener that
+/// fails closed; distribution-and-update, Multiple profiles in one
+/// container).
+async fn start_api(config: &DaemonConfig, server: &Arc<Server>, host: &Arc<DaemonHost>) {
+    let api_host = Arc::clone(host) as Arc<dyn pmt_api::ApiHost>;
+    match pmt_api::ApiServer::start(&config.api_server, Arc::clone(server), api_host).await {
+        Ok(Some(api)) => host.set_api(api),
+        Ok(None) => {}
+        Err(err) => tracing::error!("api server not started: {err}"),
+    }
+}
+
 /// The liveness side of a new daemon: a degraded predecessor's record is
 /// forgotten, and the watchdog (with its systemd heartbeats) starts.
+/// In the `-full` image, the runtimes its build installed are copied into
+/// the home's store on first start (spec: distribution-and-update,
+/// Container image run modes).
+fn seed_image_runtimes(home: &Path) {
+    let seed = Path::new(pmt_update::runtimes::seed::IMAGE_SEED);
+    if !pmt_core::container::in_container() || !seed.is_dir() {
+        return;
+    }
+    let store = pmt_update::runtimes::Store::open(home);
+    match pmt_update::runtimes::seed::copy_missing(seed, store.root()) {
+        Ok(copied) if copied.is_empty() => {}
+        Ok(copied) => tracing::info!("runtimes copied from the image: {}", copied.join(", ")),
+        Err(err) => tracing::warn!("the image's runtimes were not copied: {err}"),
+    }
+}
+
 fn liveness(
     home: &Path,
     ctx: &Context<'_>,

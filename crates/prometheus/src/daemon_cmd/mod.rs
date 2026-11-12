@@ -286,6 +286,10 @@ fn spawn_detached(home: &Path, profile: Option<&str>) -> Result<std::process::Ch
     if let Some(profile) = profile {
         command.args(["--profile", profile]);
     }
+    // A daemon this command starts has no supervisor to restart it.
+    for marker in pmt_core::supervisor::MARKERS {
+        command.env_remove(marker);
+    }
     command
         .args(["daemon", "run"])
         .stdin(Stdio::null())
@@ -307,7 +311,7 @@ fn control_call(
 }
 
 /// Asks the daemon to stop and waits until it has; `false` when none ran.
-fn stop_and_wait(home: &Path, restart: bool, wait: Duration) -> Result<bool, Error> {
+pub(crate) fn stop_and_wait(home: &Path, restart: bool, wait: Duration) -> Result<bool, Error> {
     let Some(record) = wait_running(home, Duration::from_secs(5))? else {
         return Ok(false);
     };
@@ -329,7 +333,7 @@ fn stop_and_wait(home: &Path, restart: bool, wait: Duration) -> Result<bool, Err
 }
 
 /// How long a drain may take, plus slack for the shutdown itself.
-fn drain_wait(home: &Path) -> Duration {
+pub(crate) fn drain_wait(home: &Path) -> Duration {
     let drain = pmt_config::DaemonConfig::load(home).map_or(120, |c| c.daemon.restart_drain_secs);
     Duration::from_secs(drain + 15)
 }
@@ -346,9 +350,47 @@ fn stop(home: &Path, json: bool) -> Result<u8, Error> {
     })
 }
 
+/// `daemon restart`: a supervised daemon (container init, systemd,
+/// launchd) is restarted in place by its supervisor after it exits 75, so
+/// the container or unit keeps running; an unsupervised one is stopped and
+/// started again.
 fn restart(home: &Path, ctx: &Context<'_>) -> Result<u8, Error> {
-    stop_and_wait(home, true, drain_wait(home))?;
-    start(home, ctx)
+    let running = wait_running(home, Duration::from_secs(5))?;
+    let supervised = running
+        .as_ref()
+        .and_then(|record| control_call(record, &ControlRequest::Status).ok())
+        .and_then(|response| response.status)
+        .filter(|status| status.supervised);
+    let (Some(record), Some(_)) = (running, supervised) else {
+        stop_and_wait(home, true, drain_wait(home))?;
+        return start(home, ctx);
+    };
+    control_call(&record, &ControlRequest::Stop { restart: true })?;
+    let old = record.endpoint.instance_id;
+    let deadline = std::time::Instant::now() + drain_wait(home) + Duration::from_secs(30);
+    loop {
+        // Done once the new daemon answers: a `daemon status` right after
+        // this command then reports what the new daemon serves.
+        if let Discovery::Running(new) = discover(home)?
+            && new.endpoint.instance_id != old
+            && control_call(&new, &ControlRequest::Status).is_ok_and(|r| r.status.is_some())
+        {
+            return crate::output::print(&format!(
+                "daemon restarted in place by its supervisor (pid {})",
+                new.process.pid
+            ));
+        }
+        if std::time::Instant::now() > deadline {
+            return Err(Error::new(
+                &codes::DAEMON_START_FAILED,
+                "the supervisor did not start the daemon again in time",
+            )
+            .with_hint(
+                "check the supervisor's log (docker logs, journalctl --user -u prometheus)",
+            ));
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
 }
 
 /// `daemon status --json`.

@@ -43,6 +43,9 @@ pub(super) fn open(
 pub(super) struct Recording {
     pub trajectory: Option<Arc<TrajectoryWriter>>,
     pub trace: Arc<SessionTrace>,
+    /// `--output-format stream-json`: stdout (a top-level session of this
+    /// process only).
+    pub stream: Option<Arc<dyn EventSink>>,
 }
 
 /// Where a session's events go: its trace, then its trajectory (when on)
@@ -55,7 +58,7 @@ pub(super) fn events_to(
         .trajectory
         .clone()
         .map_or_else(|| Arc::new(NoEvents) as Arc<dyn EventSink>, |t| t as _);
-    let events = match clients {
+    let events = match clients.or_else(|| recording.stream.clone()) {
         Some(clients) => Arc::new(progress::Both(events, clients)),
         None => events,
     };

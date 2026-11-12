@@ -1,7 +1,8 @@
 //! Questions the session asks the person and the line that answers them:
 //! command approvals, clarify questions, memory approvals, a skill's
 //! missing secrets (read with the input hidden) and the
-//! `once / always / cancel` confirmation of destructive commands.
+//! `once / always / cancel` confirmation of destructive commands (its
+//! answers are read by `crate::slash::confirmation`).
 
 use std::fmt::Write as _;
 
@@ -11,6 +12,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use pmt_core::human::Prompt;
 use pmt_core::secret::SecretString;
+use pmt_i18n::Strings;
 use pmt_memory::session::Approver;
 use pmt_skills::secrets::SecretPrompt;
 use pmt_tools::approval::{ApprovalRequest, Decision, printable};
@@ -130,20 +132,19 @@ pub(super) enum Pending {
 }
 
 impl Pending {
-    /// The prompt shown while this is pending.
-    pub(super) fn prompt(&self) -> String {
-        match self {
-            Self::Approval(_) => {
-                "approve? [o]nce [s]ession [a]lways [d]eny [e]xplain › ".to_owned()
-            }
-            Self::Clarify { .. } => "answer › ".to_owned(),
-            Self::Memory(_) => "save to memory? [y/n] › ".to_owned(),
-            Self::Install(_) => "install? [Y/n] › ".to_owned(),
-            Self::Secret(_) => "secret › ".to_owned(),
-            Self::Confirm { .. } => "once / always / cancel › ".to_owned(),
-            Self::Resume(_) => "resume the interrupted turn? [y/N] › ".to_owned(),
-            Self::Autoprune => "auto-prune? [on/off/later] › ".to_owned(),
-        }
+    /// The prompt shown while this is pending, in the profile's language.
+    pub(super) fn prompt(&self, strings: &Strings) -> String {
+        let key = match self {
+            Self::Approval(_) => "approval.prompt",
+            Self::Clarify { .. } => "cli.answer_prompt",
+            Self::Memory(_) => "cli.memory_prompt",
+            Self::Install(_) => "cli.install_prompt",
+            Self::Secret(_) => "cli.secret_prompt",
+            Self::Confirm { .. } => "cli.confirm_prompt",
+            Self::Resume(_) => "cli.resume_prompt",
+            Self::Autoprune => "cli.autoprune_prompt",
+        };
+        strings.get(key).to_owned()
     }
 
     /// Gives up: denies, skips or cancels.
@@ -163,16 +164,25 @@ impl Pending {
     }
 }
 
-/// The question text of an approval.
-pub(super) fn approval_question(request: &ApprovalRequest) -> String {
+/// The question text of an approval, in the profile's language.
+pub(super) fn approval_question(request: &ApprovalRequest, strings: &Strings) -> String {
     // The subject and findings may come from the model: escaped so a
     // control sequence cannot hide part of what is approved.
     let subject = request.subject.as_deref().unwrap_or(&request.tool);
-    let mut text = format!(
-        "{} wants to run: {}\n  why: {}",
-        printable(&request.tool),
-        printable(subject),
-        printable(&request.summary())
+    let mut text = strings.fmt(
+        "approval.question",
+        &[
+            ("tool", &printable(&request.tool)),
+            ("subject", &printable(subject)),
+        ],
+    );
+    let _ = write!(
+        text,
+        "\n  {}",
+        strings.fmt(
+            "approval.why",
+            &[("reason", &printable(&request.summary()))]
+        )
     );
     if let Some(explanation) = &request.explanation {
         for line in explanation.lines() {
@@ -180,6 +190,19 @@ pub(super) fn approval_question(request: &ApprovalRequest) -> String {
         }
     }
     text
+}
+
+/// What the person sees once an approval is answered (`None` for
+/// `explain`, which asks again).
+pub(super) fn outcome(decision: Decision, strings: &Strings) -> Option<&str> {
+    let key = match decision {
+        Decision::Once => "approval.allowed_once",
+        Decision::Session => "approval.allowed_session",
+        Decision::Always => "approval.allowed_always",
+        Decision::Deny => "approval.denied",
+        Decision::Explain => return None,
+    };
+    Some(strings.get(key))
 }
 
 /// The decision a line gives, if it is one.
@@ -245,26 +268,6 @@ pub(super) fn clarify_answer(request: &ClarifyRequest, index: usize, line: &str)
     }
 }
 
-/// What a confirmation line chose.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Confirmation {
-    /// Run it this time.
-    Once,
-    /// Run it and stop asking.
-    Always,
-    /// Leave everything as it is.
-    Cancel,
-}
-
-/// The choice of a confirmation line (anything else cancels).
-pub(super) fn confirmation(line: &str) -> Confirmation {
-    match line.trim().to_lowercase().as_str() {
-        "o" | "once" | "y" | "yes" => Confirmation::Once,
-        "a" | "always" => Confirmation::Always,
-        _ => Confirmation::Cancel,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use pmt_agent::tools::clarify::Question;
@@ -283,7 +286,7 @@ mod tests {
             remember: None,
             explanation: None,
         };
-        let text = approval_question(&request);
+        let text = approval_question(&request, &Strings::english(pmt_i18n::Surface::Core));
         assert!(
             text.starts_with("terminal wants to run: rm -rf ~^[[2K\\rls\n"),
             "{text}"
@@ -295,8 +298,6 @@ mod tests {
     fn lines_map_to_answers() {
         assert_eq!(decision(" S "), Some(Decision::Session));
         assert_eq!(decision("maybe"), None);
-        assert_eq!(confirmation("always"), Confirmation::Always);
-        assert_eq!(confirmation(""), Confirmation::Cancel);
         let request = ClarifyRequest {
             questions: vec![Question {
                 question: "Which?".into(),

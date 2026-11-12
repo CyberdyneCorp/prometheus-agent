@@ -82,12 +82,15 @@ pub fn version(binary: &Path) -> Result<BuildInfo, Error> {
 /// # Errors
 ///
 /// A one-line reason.
-pub fn refresh_runtimes(binary: &Path, home: &Path) -> Result<(), String> {
+pub fn refresh_runtimes(binary: &Path, home: &Path, bundle: Option<&Path>) -> Result<(), String> {
     let mut command = Command::new(binary);
     command
         .arg("--home")
         .arg(home)
         .args(["runtimes", "refresh"]);
+    if let Some(dir) = bundle {
+        command.arg("--bundle-dir").arg(dir);
+    }
     run(command, REFRESH_TIMEOUT).map(drop)
 }
 

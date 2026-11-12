@@ -109,7 +109,13 @@ pub fn texts(home: &Path, profile: &str) -> Vec<String> {
 }
 
 pub fn wait_said(home: &Path, profile: &str, text: &str) {
-    let deadline = Instant::now() + Duration::from_mins(1);
+    wait_said_within(home, profile, text, Duration::from_mins(1));
+}
+
+/// [`wait_said`] with a budget of its own, for a step that takes longer
+/// on a slow runner (an update's download, self-test and handover).
+pub fn wait_said_within(home: &Path, profile: &str, text: &str, budget: Duration) {
+    let deadline = Instant::now() + budget;
     while !texts(home, profile).iter().any(|t| t.contains(text)) {
         assert!(
             Instant::now() < deadline,

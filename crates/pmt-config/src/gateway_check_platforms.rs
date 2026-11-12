@@ -208,24 +208,41 @@ fn check_routes(config: &Config, platform: &str, table: &PlatformConfig) -> Resu
                 "{key}: only the webhook platform has routes"
             )));
         }
-        check_route_name(&key, name)?;
-        if route.secret_secret.is_none() && !route.insecure_no_auth {
-            return Err(invalid(format!(
-                "{key}.secret_secret: required unless insecure_no_auth = true"
-            )));
-        }
-        check_route_delivery(&key, route)?;
-        crate::gateway_check::check_narrowing(config, route.toolsets.as_deref(), &key, "a route")?;
-        if let Some(script) = &route.script {
-            check_confined(
-                &format!("{key}.script"),
-                script,
-                "the profile's scripts directory",
-            )?;
-        }
-        for condition in route.filters.iter().flat_map(WebhookFilters::conditions) {
-            check_filter(&format!("{key}.filters"), condition)?;
-        }
+        check_route(config, &key, name, route)?;
+    }
+    Ok(())
+}
+
+/// One webhook route named `name` (described as `key` in messages): its
+/// name, signing secret, delivery, toolsets, script and filters
+/// (`prometheus webhooks subscribe` checks its routes with it too).
+///
+/// # Errors
+///
+/// `config.invalid` naming the first problem.
+pub fn check_route(
+    config: &Config,
+    key: &str,
+    name: &str,
+    route: &WebhookRoute,
+) -> Result<(), Error> {
+    check_route_name(key, name)?;
+    if route.secret_secret.is_none() && !route.insecure_no_auth {
+        return Err(invalid(format!(
+            "{key}.secret_secret: required unless insecure_no_auth = true"
+        )));
+    }
+    check_route_delivery(key, route)?;
+    crate::gateway_check::check_narrowing(config, route.toolsets.as_deref(), key, "a route")?;
+    if let Some(script) = &route.script {
+        check_confined(
+            &format!("{key}.script"),
+            script,
+            "the profile's scripts directory",
+        )?;
+    }
+    for condition in route.filters.iter().flat_map(WebhookFilters::conditions) {
+        check_filter(&format!("{key}.filters"), condition)?;
     }
     Ok(())
 }

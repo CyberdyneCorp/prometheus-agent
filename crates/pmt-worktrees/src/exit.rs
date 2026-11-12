@@ -23,9 +23,6 @@ pub enum Choice {
 }
 
 impl Choice {
-    /// The prompt's options, in order.
-    pub const PROMPT: &'static str = "[k]eep (default), [a]rchive and remove, [r]emove and discard";
-
     /// The choice an answer stands for; anything unrecognized (Enter, Esc,
     /// a typo) keeps the tree.
     #[must_use]

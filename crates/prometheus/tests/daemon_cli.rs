@@ -340,3 +340,118 @@ fn doctor_warns_about_a_daemon_of_another_build() {
     );
     assert!(text.contains("build another-build"), "{text}");
 }
+
+/// Regression: a foreground `daemon run` in a shell that inherited a
+/// service manager's markers (a CI runner or GNOME Terminal under systemd:
+/// `INVOCATION_ID`; an app launchd started: `XPC_SERVICE_NAME`) took itself
+/// for supervised, so a restart or update handover waited for a supervisor
+/// that never comes. Only a daemon the manager itself started counts.
+#[test]
+fn a_foreground_daemon_under_an_inherited_service_marker_is_unsupervised() {
+    let home = mock_home();
+    let mut first = common::command(home.path())
+        .args(["daemon", "run"])
+        .env("INVOCATION_ID", "0123456789abcdef")
+        .env("XPC_SERVICE_NAME", "application.com.example.runner")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let _stopper = Stopper(home.path());
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while !matches!(discover(home.path()), Ok(Discovery::Running(_))) {
+        assert!(std::time::Instant::now() < deadline, "the daemon never ran");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let status: Value =
+        serde_json::from_str(&ok(&run(home.path(), &["--json", "daemon", "status"]))).unwrap();
+    assert_eq!(status["daemon"]["supervised"], false, "{status}");
+    let restarted = common::command(home.path())
+        .args(["daemon", "restart"])
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    ok(&restarted);
+    assert!(first.wait().is_ok());
+    assert_ne!(daemon_pid(home.path()), first.id());
+}
+
+/// Regression: a daemon `daemon start` launched from inside a systemd
+/// service (a CI runner: `INVOCATION_ID` set) took itself for supervised,
+/// so `daemon restart` asked it to exit 75 and waited for a supervisor
+/// that never restarts it. It is unsupervised and restarts in place.
+#[test]
+fn a_daemon_started_from_a_systemd_service_restarts_itself() {
+    let home = mock_home();
+    let out = common::command(home.path())
+        .args(["daemon", "start"])
+        .env("INVOCATION_ID", "0123456789abcdef")
+        .env("XPC_SERVICE_NAME", "application.com.example.runner")
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    assert!(ok(&out).starts_with("daemon started (pid "));
+    let _stopper = Stopper(home.path());
+    let first = daemon_pid(home.path());
+    let status: Value =
+        serde_json::from_str(&ok(&run(home.path(), &["--json", "daemon", "status"]))).unwrap();
+    assert_eq!(status["daemon"]["supervised"], false, "{status}");
+    let restarted = common::command(home.path())
+        .args(["daemon", "restart"])
+        .env("INVOCATION_ID", "0123456789abcdef")
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    ok(&restarted);
+    assert_ne!(daemon_pid(home.path()), first);
+}
+
+/// A container-init-like supervisor: runs the multiplexing daemon of
+/// `home` marked supervised and starts it again whenever it exits 75.
+fn supervise(home: &Path) -> std::thread::JoinHandle<()> {
+    let home = home.to_owned();
+    std::thread::spawn(move || {
+        loop {
+            let status = common::command(&home)
+                .args(["--set", "gateway.multiplex=true", "daemon", "run"])
+                .env("PMT_SUPERVISOR", "test")
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .unwrap();
+            if status.code() != Some(75) {
+                return;
+            }
+        }
+    })
+}
+
+/// A supervised `daemon restart` returns once the new daemon answers, so a
+/// `daemon status` straight after it already lists a profile created
+/// before the restart (the container image's in-place restart check).
+#[test]
+fn a_status_right_after_a_supervised_restart_lists_a_new_profile() {
+    let home = mock_home();
+    let supervisor = supervise(home.path());
+    let stopper = Stopper(home.path());
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while !matches!(discover(home.path()), Ok(Discovery::Running(_))) {
+        assert!(std::time::Instant::now() < deadline, "the daemon never ran");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    ok(&run(home.path(), &["profile", "create", "work"]));
+    let restarted = ok(&run(home.path(), &["daemon", "restart"]));
+    assert!(
+        restarted.starts_with("daemon restarted in place by its supervisor"),
+        "{restarted}"
+    );
+    let status: Value =
+        serde_json::from_str(&ok(&run(home.path(), &["--json", "daemon", "status"]))).unwrap();
+    assert_eq!(status["daemon"]["supervised"], true, "{status}");
+    let profiles = status["daemon"]["profiles"].as_array().unwrap();
+    assert!(profiles.iter().any(|p| p == "work"), "{status}");
+    drop(stopper);
+    supervisor.join().unwrap();
+}

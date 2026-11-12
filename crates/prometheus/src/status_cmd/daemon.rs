@@ -101,6 +101,14 @@ fn stale(updated_at: Option<&str>) -> Option<u64> {
 }
 
 /// `GET <health_url>/healthz` within 2 s: whether it answered 200.
+/// The running daemon's health endpoint, read from its record only.
+pub(super) fn health_url(home: &Path) -> Result<Option<String>, Error> {
+    Ok(match discover(home)? {
+        Discovery::Running(record) => record.endpoint.health_url,
+        Discovery::Starting(_) | Discovery::NotRunning => None,
+    })
+}
+
 pub(super) fn healthz(health_url: &str) -> bool {
     let addr = health_url
         .trim_start_matches("http://")

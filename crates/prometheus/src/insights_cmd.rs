@@ -48,7 +48,7 @@ pub fn run(args: &InsightsArgs, ctx: &Context<'_>) -> Result<u8, Error> {
     let text: Vec<String> = profiles
         .iter()
         .map(|p| {
-            let body = render(&p.insights);
+            let body = render(&*english(), &p.insights);
             if args.all_profiles {
                 format!("== {} ==\n{body}", p.profile)
             } else {
@@ -103,7 +103,13 @@ pub fn slash(scope: &ProfileScope, store: &Store, args: &str) -> Result<String, 
                 )
             })?,
     };
-    Ok(render(&report(scope, store, days, None)?)
+    let strings = pmt_config::language::strings(scope.dir(), pmt_i18n::Surface::Core);
+    Ok(render(&*strings, &report(scope, store, days, None)?)
         .trim_end()
         .to_owned())
+}
+
+/// The command's reports are English, like every `prometheus` command's.
+fn english() -> std::sync::Arc<pmt_i18n::Strings> {
+    pmt_i18n::Strings::english(pmt_i18n::Surface::Core)
 }

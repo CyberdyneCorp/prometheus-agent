@@ -1,0 +1,14 @@
+Gateway — telegram: every field of its configuration (Enter keeps the value shown)
+  TELEGRAM_BOT_TOKEN (the adapter's credential): missing
+value for TELEGRAM_BOT_TOKEN (input hidden; Enter skips): TELEGRAM_BOT_TOKEN stored in the secrets store
+  ignore_root_dm: Ignore ordinary messages in the root of a private chat (slash commands are still accepted).
+ignore_root_dm (true, false) [false]:   mode: How updates arrive: long polling, or webhook posts on the shared listener at `/p/<profile>/telegram/`.
+mode (polling, webhook) [polling]: mode takes (polling, webhook)
+mode (polling, webhook) [polling]:   poll_timeout_secs: Seconds one long-poll `getUpdates` call waits for updates.
+poll_timeout_secs (a number) [30]:   rich_messages: Send replies as Telegram rich messages (Bot API 10.1 `sendRichMessage`: the raw Markdown, up to 32768 characters), falling back to `MarkdownV2` when Telegram refuses one.
+rich_messages (true, false) [false]:   slash_commands: Register the gateway's commands and skills as the bot's command menu; `false` on a follower daemon sharing one bot.
+slash_commands (true, false) [true]:   webhook_public_url: The public HTTPS URL Telegram posts updates to in webhook mode (it must reach `/p/<profile>/telegram/` on the shared listener).
+webhook_public_url [unset]:   TELEGRAM_WEBHOOK_SECRET (The secret token Telegram sends with every webhook update (required in webhook mode).): missing
+value for TELEGRAM_WEBHOOK_SECRET (input hidden; Enter skips): gateway.platforms.telegram saved
+the telegram adapter starts with the daemon: prometheus daemon start
+setup done

@@ -48,6 +48,45 @@ pub const ALL_SURFACES: &[Surface] = &[
 /// The interactive terminal surfaces.
 pub const TERMINALS: &[Surface] = &[Surface::Cli, Surface::Tui, Surface::Desktop];
 
+/// Commands that ask `once / always / cancel` first (spec: cli,
+/// Destructive command confirmation).
+const DESTRUCTIVE: &[&str] = &["clear", "new", "undo", "rewind"];
+
+/// Whether `/name args` changes or removes the session: the destructive
+/// commands and `/exit --delete`.
+#[must_use]
+pub fn is_destructive(name: &str, args: &str) -> bool {
+    DESTRUCTIVE.contains(&name) || (name == "exit" && exit_deletes(args))
+}
+
+/// Whether `/exit` arguments ask to delete the session (`--delete`).
+#[must_use]
+pub fn exit_deletes(args: &str) -> bool {
+    args.split_whitespace().any(|w| w == "--delete")
+}
+
+/// What a confirmation line chose.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Confirmation {
+    /// Run it this time.
+    Once,
+    /// Run it and stop asking.
+    Always,
+    /// Leave everything as it is.
+    Cancel,
+}
+
+/// The choice of a destructive confirmation's answer line (anything else
+/// cancels).
+#[must_use]
+pub fn confirmation(line: &str) -> Confirmation {
+    match line.trim().to_lowercase().as_str() {
+        "o" | "once" | "y" | "yes" => Confirmation::Once,
+        "a" | "always" => Confirmation::Always,
+        _ => Confirmation::Cancel,
+    }
+}
+
 /// What a command typed while a turn runs does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BusyPolicy {
@@ -92,14 +131,15 @@ pub enum Category {
 }
 
 impl Category {
-    fn title(self) -> &'static str {
+    /// The catalog key of its `/help` heading.
+    fn key(self) -> &'static str {
         match self {
-            Self::Session => "Session",
-            Self::Model => "Model",
-            Self::Tools => "Tools, skills and memory",
-            Self::Config => "Configuration and display",
-            Self::Info => "Information",
-            Self::Exit => "Exit",
+            Self::Session => "slash.category.session",
+            Self::Model => "slash.category.model",
+            Self::Tools => "slash.category.tools",
+            Self::Config => "slash.category.config",
+            Self::Info => "slash.category.info",
+            Self::Exit => "slash.category.exit",
         }
     }
 }
@@ -137,8 +177,8 @@ pub struct Command {
     pub aliases: &'static [&'static str],
     /// `/help` group.
     pub category: Category,
-    /// One line for `/help`.
-    pub description: &'static str,
+    /// The catalog key of its one line for `/help` (`slash.desc.<name>`).
+    pub key: &'static str,
     /// Arguments.
     pub args: &'static [Arg],
     /// Where it runs.
@@ -150,6 +190,13 @@ pub struct Command {
 }
 
 impl Command {
+    /// Its one line for `/help` in the language of `strings` (the
+    /// bundled English for shell completions and app manifests).
+    #[must_use]
+    pub fn description<'a>(&self, strings: &'a pmt_i18n::Strings) -> &'a str {
+        strings.get(self.key)
+    }
+
     /// Whether the command runs on `surface`.
     #[must_use]
     pub fn on(&self, surface: Surface) -> bool {
@@ -373,14 +420,14 @@ impl Registry {
     /// `/help` for `surface`: the commands available there, grouped by
     /// category, then the registered ones.
     #[must_use]
-    pub fn help(&self, surface: Surface) -> String {
+    pub fn help(&self, surface: Surface, strings: &pmt_i18n::Strings) -> String {
         let mut groups: BTreeMap<Category, Vec<&Command>> = BTreeMap::new();
         for command in self.builtins.iter().filter(|c| c.on(surface)) {
             groups.entry(command.category).or_default().push(command);
         }
         let mut text = String::new();
         for (category, commands) in groups {
-            let _ = writeln!(text, "{}:", category.title());
+            let _ = writeln!(text, "{}:", strings.get(category.key()));
             for command in commands {
                 let aliases: Vec<String> =
                     command.aliases.iter().map(|a| format!("/{a}")).collect();
@@ -393,7 +440,7 @@ impl Registry {
                     text,
                     "  {:<28} {}{aliases}",
                     command.usage(),
-                    command.description
+                    command.description(strings)
                 );
             }
         }
@@ -403,7 +450,7 @@ impl Registry {
             .filter(|e| e.surfaces.contains(&surface))
             .collect();
         if !externals.is_empty() {
-            text.push_str("Your commands:\n");
+            let _ = writeln!(text, "{}", strings.get("slash.your_commands"));
             for external in externals {
                 let _ = writeln!(
                     text,

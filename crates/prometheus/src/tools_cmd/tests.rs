@@ -201,7 +201,8 @@ fn slash_listing_marks_active_toolsets() {
     let registry = registry();
     let selection =
         Selection::resolve(&registry, &["core".to_owned(), "web".to_owned()], &[]).unwrap();
-    let text = slash_toolsets(&registry, &selection).unwrap();
+    let english = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
+    let text = slash_toolsets(&*english, &registry, &selection).unwrap();
     let line = |name: &str| {
         text.lines()
             .find(|l| l.split_whitespace().nth(usize::from(l.starts_with('*'))) == Some(name))

@@ -51,6 +51,8 @@ pub struct Summary {
     pub blocked: Vec<String>,
     /// Items skipped because they hold a credential.
     pub secrets_skipped: usize,
+    /// The core tier ended over its budget ([`Limits::Exceed`] only).
+    pub over_budget: bool,
 }
 
 impl Summary {
@@ -315,6 +317,16 @@ fn infer_target(path: &Path) -> Option<MemoryTarget> {
     }
 }
 
+/// Whether an import may leave the core tier over its budget.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Limits {
+    /// Refuse an import that would (`memory import`).
+    Enforce,
+    /// Import every entry and report [`Summary::over_budget`] (a
+    /// migration keeps everything; `memory curate` trims it after).
+    Exceed,
+}
+
 /// Imports `items` as one batch: exact duplicates of active entries are
 /// skipped, an id the store has is updated in place, an id it lacks is
 /// restored as is, credentials are skipped and threat matches are kept
@@ -322,13 +334,46 @@ fn infer_target(path: &Path) -> Option<MemoryTarget> {
 ///
 /// # Errors
 ///
-/// `memory.over_budget`, `memory.invalid`; store errors. Nothing is
-/// written on error.
+/// `memory.over_budget` (under [`Limits::Enforce`]), `memory.invalid`;
+/// store errors. Nothing is written on error.
 pub fn import(
     store: &Store,
     config: &MemoryConfig,
     items: &[Item],
     redactor: &Redactor,
+) -> Result<Summary, Error> {
+    import_with(store, config, items, redactor, Limits::Enforce)
+}
+
+/// [`import`] under explicit `limits`.
+///
+/// # Errors
+///
+/// As [`import`].
+pub fn import_with(
+    store: &Store,
+    config: &MemoryConfig,
+    items: &[Item],
+    redactor: &Redactor,
+    limits: Limits,
+) -> Result<Summary, Error> {
+    import_from(store, config, items, redactor, limits, None)
+}
+
+/// [`import_with`] recording `provenance` (for example
+/// `import:claude-code`) as the entries' origin session, the text the
+/// memory view shows for where an entry came from.
+///
+/// # Errors
+///
+/// As [`import`].
+pub fn import_from(
+    store: &Store,
+    config: &MemoryConfig,
+    items: &[Item],
+    redactor: &Redactor,
+    limits: Limits,
+    provenance: Option<&str>,
 ) -> Result<Summary, Error> {
     let mut summary = Summary::default();
     let kept: Vec<&Item> = items
@@ -343,7 +388,7 @@ pub fn import(
     store.memory_batch(None, |b| {
         b.author = Some(pmt_store::Author {
             origin: MemoryOrigin::Import,
-            session: None,
+            session: provenance.map(str::to_owned),
         });
         let mut summary = Summary {
             secrets_skipped: skipped,
@@ -359,8 +404,13 @@ pub fn import(
             if ours.is_empty() {
                 continue;
             }
-            let ctx = write::context(config, target, MemoryOrigin::Import, None);
-            import_target(&mut entries, &ours, &ctx, &mut summary).map_err(refused)?;
+            let ctx = write::context(
+                config,
+                target,
+                MemoryOrigin::Import,
+                provenance.map(str::to_owned),
+            );
+            import_target(&mut entries, &ours, &ctx, &mut summary, limits).map_err(refused)?;
         }
         b.entries = entries;
         Ok(summary)
@@ -372,6 +422,7 @@ fn import_target(
     items: &[&Item],
     ctx: &Context,
     summary: &mut Summary,
+    limits: Limits,
 ) -> Result<(), String> {
     let before = budget::core_chars(entries, ctx.target);
     let mut ops = Vec::new();
@@ -390,7 +441,14 @@ fn import_target(
         }
     }
     summary.updated += patched.len();
-    batch::check_limits(entries, ctx, before)?;
+    match limits {
+        Limits::Enforce => {
+            batch::check_limits(entries, ctx, before)?;
+        }
+        Limits::Exceed => {
+            summary.over_budget |= batch::check_limits(entries, ctx, before).is_err();
+        }
+    }
     block_threats(entries, ctx, summary);
     Ok(())
 }

@@ -30,6 +30,18 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `agent.tool_concurrency` | integer | `8` | 1 to 64 | `next_session` | Tool calls of one batch that may run at once. |
 | `agent.verify_guidance` | boolean | `true` | any | `next_session` | Append clean-diff guidance to the verification nudge. |
 | `agent.verify_on_stop` | boolean or one of "auto" | `false` | any | `next_session` | Refuse a final answer after unverified code edits: `true`, `false` or `"auto"` (on for CLI, TUI, desktop, ACP and API callers). |
+| `api_server.direct_model_requests` | boolean | `false` | any | `live` | Honour a bare `model` without `provider` on Chat Completions and Responses (generic clients send `gpt-4o`; off keeps the profile's default). |
+| `api_server.enabled` | boolean | `false` | any | `restart` | Serve this profile on the daemon's API listener (`/p/<profile>/`, and without prefix for `default`). It also needs the key named by `key_secret`. |
+| `api_server.key_secret` | string | `"API_SERVER_KEY"` | a secret name | `live` | The secret holding this profile's bearer key (at least 32 characters); without it the profile's routes answer 404. |
+| `api_server.max_concurrent_runs` | integer | `10` | 0 to 10000 | `live` | Runs executing at once for this profile; `0` disables the cap. |
+| `api_server.model_name` | string | unset | any | `live` | The model id `/v1/models` advertises (default: the profile name, `prometheus-agent` for `default`). |
+| `api_server.model_routes.<name>.model` | string | unset | any | `live` | The model at the provider (default: the provider's default). |
+| `api_server.model_routes.<name>.provider` | string | unset | any | `live` | The provider id. |
+| `api_server.responses.history_tool_output_max_chars` | integer | `0` | ≥ 0 | `live` | Characters kept of each stored tool output (its head plus `...[<n> more chars]`); `0` keeps them verbatim. |
+| `api_server.responses.max_stored` | integer | `100` | 1 to 100000 | `live` | Stored responses kept; the least recently used go first. |
+| `api_server.tool_progress_events` | boolean | `true` | any | `live` | Stream tool starts as `prometheus.tool.progress` SSE events. |
+| `api_server.toolsets` | array | unset | any | `live` | Toolsets of API sessions instead of the `api_server` default; toolsets the profile does not enable are dropped. |
+| `api_server.unattended_approvals` | one of "deny", "approve" | `"deny"` | `"deny"`, `"approve"` | `live` | The decision for approvals on Chat Completions and Responses, which have no answer channel (Runs and session chat ask). |
 | `approvals.cron_mode` | one of "deny", "approve" | `"deny"` | `"deny"`, `"approve"` | `live` | Decision for approvals in cron jobs. |
 | `approvals.denial_breaker_threshold` | integer | `3` | ≥ 0 | `live` | In `smart` mode, after this many consecutive denials by the approval guardian the denial tells the model to stop trying variations (`0` disables); a human approval resets the count. |
 | `approvals.deny` | array of string | `[]` | any | `live` | Command patterns that are always blocked. |
@@ -139,7 +151,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `budgets.unattended_root_usd` | number | `5.0` | ≥ 0.0 | `live` | USD per root lineage of cron, unattended gateway sessions, background delegations and harness evolution. |
 | `budgets.warn_ratio` | number | `0.8` | 0.0 to 1.0 | `live` | Fraction of a limit at which a budget warning is emitted. |
 | `busy.input_mode` | one of "queue", "steer", "interrupt" | `"queue"` | `"queue"`, `"steer"`, `"interrupt"` | `live` | What plain text typed while a turn runs does: `queue` runs it as the next turn, `steer` hands it to the running turn after its current tool step, `interrupt` stops the turn and then runs it. |
-| `cli.confirm_destructive` | boolean | `true` | any | `live` | Ask `once / always / cancel` before `/clear`, `/new`, `/undo` and `/rewind`. |
+| `cli.confirm_destructive` | boolean | `true` | any | `live` | Ask `once / always / cancel` before `/clear`, `/new`, `/undo`, `/rewind` and `/exit --delete`. |
 | `code_execution.allowed_tools` | array of string | `["read_file","write_file","search_files","patch","terminal","web_search","web_extract"]` | any | `next_session` | Tools a script may call through its stubs; a session sees the intersection with its own granted tools. |
 | `code_execution.kernel_idle_timeout_secs` | integer | `1800` | 1 to 604800 | `next_session` | Seconds an unused Python kernel stays alive before it is stopped. |
 | `code_execution.max_session_kernels` | integer | `4` | 1 to 64 | `next_session` | Top-level sessions keeping a Python kernel at once; the least recently used one loses its kernel beyond this (children's kernels are not counted). |
@@ -237,6 +249,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `display.final_response_markdown` | one of "render", "raw" | `"render"` | `"render"`, `"raw"` | `live` | How the final response is printed. |
 | `display.inline_diffs` | boolean | `true` | any | `live` | Show file-edit diffs inline. |
 | `display.interim_messages` | boolean | `true` | any | `live` | Show assistant text between tool calls. |
+| `display.language` | string | `"en"` | any | `live` | The UI language: `en` or another bundled id (`af`, `ar`, `de`, `es`, `fr`, `ga`, `hu`, `it`, `ja`, `ko`, `pt`, `ru`, `tr`, `uk`, `zh`, `zh-hant`), a language a profile overlay (`<profile_home>/locales/<id>.toml`) or an enabled language pack supplies. Localizes static UI text only, never what the model sees. |
 | `display.reasoning_full` | boolean | `false` | any | `live` | Show reasoning in full instead of clamped. |
 | `display.resume_display` | one of "full", "minimal", "off" | `"full"` | `"full"`, `"minimal"`, `"off"` | `live` | Recap printed when a session is resumed. |
 | `display.resume_exchanges` | integer | `10` | ≥ 0 | `live` | User/assistant exchanges shown in the recap. |
@@ -548,6 +561,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `model.min_context_window` | integer | `64000` | ≥ 16000 | `next_session` | Smallest context window (tokens) a session may start with. |
 | `model.provider` | string | unset | any | `next_session` | Provider id or alias; unset means `auto`. |
 | `models` | table | `{}` | any | `next_session` | Model aliases and metadata overrides, keyed by name or `"<provider>/<model>"`. |
+| `network.expect_isolated` | boolean | `false` | any | `restart` | The deployment is network-isolated (the egress proxy in `network.proxy` is the only way out, as in the image's `compose.isolated.yaml`): `prometheus doctor network --online` fails when a direct connection succeeds. |
 | `network.extra_ca_file` | string | unset | any | `restart` | Extra PEM CA bundle trusted in addition to the platform store. |
 | `network.force_ipv4` | boolean | `false` | any | `restart` | Resolve and connect every outbound client (providers, MCP over HTTP, web tools, adapters, OTLP, downloads) over IPv4 only; loopback listeners are unaffected. Set it when `prometheus doctor network --online` reports a blackholed IPv6 route. |
 | `network.proxy` | string | unset | any | `restart` | Outbound HTTP(S) proxy URL. |
@@ -629,6 +643,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `providers.<name>.oauth.client_id` | string | unset | any | `next_session` | The OAuth client id. |
 | `providers.<name>.oauth.device_authorization_url` | string | unset | any | `next_session` | Device authorization endpoint of the device-code flow. |
 | `providers.<name>.oauth.device_poll_url` | string | unset | any | `next_session` | Polling endpoint of a device flow that polls somewhere other than the token endpoint (OpenAI's). |
+| `providers.<name>.oauth.exchange_url` | string | unset | any | `next_session` | Endpoint exchanging the sign-in token for a short-lived API token before each request (GitHub Copilot's `https://api.github.com/copilot_internal/v2/token`). |
 | `providers.<name>.oauth.redirect_path` | string | unset | any | `next_session` | Path of the loopback redirect. |
 | `providers.<name>.oauth.redirect_port` | integer | unset | 0 to 65535 | `next_session` | Loopback redirect port of the browser flow; 0 lets the OS assign one (only for providers that accept any port). |
 | `providers.<name>.oauth.revoke_url` | string | unset | any | `next_session` | Token revocation endpoint (`auth remove` revokes the refresh token). |

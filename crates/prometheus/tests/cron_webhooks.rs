@@ -19,14 +19,6 @@ use self::common::{ok, run, run_with_stdin};
 
 const SECRET: &str = "pr-signing-key";
 
-fn free_port() -> u16 {
-    std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port()
-}
-
 /// One signed GitHub-style POST of `event`; the status code and body.
 fn post(port: u16, event: &str, delivery: &str, body: &str) -> (u16, Value) {
     let sig = pmt_adapters_webhook::github_signature(SECRET, body.as_bytes());
@@ -83,10 +75,9 @@ fn a_signed_review_event_fires_the_sweeper_job_once() {
          prompt = \"Review {review.state} on pull request {pull_request.number}\" }\n",
     );
     let home = home.path();
-    let port = free_port();
     std::fs::write(
         home.join("daemon.toml"),
-        format!("[gateway.http]\nlisten = \"127.0.0.1:{port}\"\n"),
+        "[gateway.http]\nlisten = \"127.0.0.1:0\"\n",
     )
     .unwrap();
     ok(&run_with_stdin(
@@ -113,9 +104,7 @@ fn a_signed_review_event_fires_the_sweeper_job_once() {
         .unwrap()
         .to_owned();
     let daemon = Daemon::start(home);
-    wait("the webhook listener", Duration::from_secs(30), || {
-        TcpStream::connect(("127.0.0.1", port)).is_ok()
-    });
+    let port = common::daemon::bound_port(home, "listener:gateway.http");
 
     let (status, answer) = post(port, "pull_request_review", "d-1", &review(42));
     assert_eq!(status, 202, "{answer}");

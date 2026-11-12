@@ -253,6 +253,7 @@ jobs:
       "attestations": "write"
       "contents": "read"
       "id-token": "write"
+      "packages": "write"
   # Determines if we should publish/announce
   host:
     needs:
@@ -333,6 +334,7 @@ jobs:
     # publish jobs get escalated permissions
     permissions:
       "contents": "write"
+      "packages": "write"
 
   announce:
     needs:

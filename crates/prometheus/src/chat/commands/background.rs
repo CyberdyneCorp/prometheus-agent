@@ -63,8 +63,9 @@ pub(super) async fn background(ctx: &Ctx<'_>, args: &str) -> Result<String, Erro
         return Err(Error::new(&codes::CLI_USAGE, "usage: /background <prompt>"));
     }
     let max = ctx.scope.config().gateway.background.max_per_chat;
+    let strings = ctx.strings();
     let Some(slot) = slot(ctx.live.id, max) else {
-        return Ok(tasks::too_many(max));
+        return Ok(tasks::too_many(&*strings, max));
     };
     let delegation = &ctx.scope.config().delegation;
     let admission = Limiter::for_profile(
@@ -93,12 +94,13 @@ pub(super) async fn background(ctx: &Ctx<'_>, args: &str) -> Result<String, Erro
     });
     task.set_session(&live.id.to_string());
     tracing::info!(task = task.id, session = %live.id, "background task started");
-    let started = tasks::started(task.number, prompt, &task.id);
+    let started = tasks::started(&*strings, task.number, prompt, &task.id);
     let run = Run {
         live,
         task,
         interrupt,
         prompt: prompt.to_owned(),
+        strings,
     };
     let post = Arc::clone(&ctx.post);
     pmt_core::spawn::spawn(async move {
@@ -138,6 +140,8 @@ struct Run {
     task: Arc<Task>,
     interrupt: Interrupt,
     prompt: String,
+    /// The profile's UI strings, for the notice.
+    strings: Arc<pmt_i18n::Strings>,
 }
 
 impl Run {
@@ -149,6 +153,7 @@ impl Run {
             task,
             interrupt,
             prompt,
+            strings,
         } = self;
         let permit = tokio::select! {
             permit = admission.ready() => permit,
@@ -165,9 +170,9 @@ impl Run {
                     .agent
                     .run_turn(Some(&live.scope), live.id, TurnInput::text(prompt), options)
                     .await;
-                outcome(task.number, result)
+                outcome(&strings, task.number, result)
             }
-            None => (State::Interrupted, tasks::failed(task.number, "stopped")),
+            None => (State::Interrupted, tasks::stopped(&*strings, task.number)),
         };
         tracing::info!(
             task = task.id,
@@ -182,25 +187,29 @@ impl Run {
 }
 
 /// The task's end state and notice from its turn.
-fn outcome(number: u32, result: Result<TurnResult, Error>) -> (State, String) {
+fn outcome(
+    text: &pmt_i18n::Strings,
+    number: u32,
+    result: Result<TurnResult, Error>,
+) -> (State, String) {
     match result {
-        Ok(done) if done.exit_reason.as_str() == "completed" => (
-            State::Completed,
-            tasks::complete(number, done.final_response.as_deref().unwrap_or_default()),
-        ),
+        Ok(done) if done.exit_reason.as_str() == "completed" => {
+            let answer = done.final_response.as_deref().unwrap_or_default();
+            (State::Completed, tasks::complete(text, number, answer))
+        }
         Ok(done) if done.exit_reason.as_str().starts_with("interrupted") => {
-            (State::Interrupted, tasks::failed(number, "stopped"))
+            (State::Interrupted, tasks::stopped(text, number))
         }
         Ok(done) => {
             let reason = done.exit_reason.as_str().replace('_', " ");
             (
                 State::Failed(reason.clone()),
-                tasks::failed(number, &reason),
+                tasks::failed(text, number, &reason),
             )
         }
         Err(err) => (
             State::Failed(err.message().to_owned()),
-            tasks::failed(number, err.message()),
+            tasks::failed(text, number, err.message()),
         ),
     }
 }

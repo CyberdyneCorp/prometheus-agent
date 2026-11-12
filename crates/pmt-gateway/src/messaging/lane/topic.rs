@@ -11,9 +11,6 @@ use pmt_store::Origin;
 use super::Lane;
 use crate::messaging::adapter::SendError;
 use crate::messaging::key::Routing;
-use crate::messaging::topics::DEFAULT_NAME;
-
-const USAGE: &str = "Usage: /topic new <name> | list | rename <name> | restore <session-id>";
 
 impl Lane {
     /// `/topic ...`.
@@ -22,7 +19,7 @@ impl Lane {
         let (verb, rest) = args.split_once(' ').unwrap_or((args, ""));
         let rest = rest.trim();
         if !self.topics_enabled(routing) {
-            self.say("Topics are not enabled in this chat.");
+            self.say(self.strings().get("gateway.topics_disabled"));
             return;
         }
         match verb {
@@ -30,7 +27,7 @@ impl Lane {
             "list" => self.topic_list(routing),
             "rename" => self.topic_rename(routing, rest).await,
             "restore" => self.topic_restore(routing, rest).await,
-            _ => self.say(USAGE),
+            _ => self.say(self.strings().get("gateway.topic_usage")),
         }
     }
 
@@ -63,11 +60,10 @@ impl Lane {
                         &routing.chat_id,
                         &why,
                     );
-                    self.say(
-                        "Topics are unavailable in this chat; it continues as one conversation.",
-                    );
+                    self.say(self.strings().get("gateway.topics_unavailable"));
                 } else {
-                    self.say(&format!("The topic was not created: {why}"));
+                    let text = pmt_i18n::t!(self.strings(), "gateway.topic_not_created", why = why);
+                    self.say(&text);
                 }
                 None
             }
@@ -75,7 +71,12 @@ impl Lane {
     }
 
     async fn topic_new(&mut self, routing: &Routing, name: &str) {
-        let title = if name.is_empty() { DEFAULT_NAME } else { name };
+        let strings = self.strings();
+        let title = if name.is_empty() {
+            strings.get("gateway.topic_default_name")
+        } else {
+            name
+        };
         let Some(thread) = self.open_topic(routing, title).await else {
             return;
         };
@@ -92,12 +93,13 @@ impl Lane {
             ..routing.clone()
         };
         let session = self.session.clone().unwrap_or_default();
-        self.post_in(
-            &topic,
-            &session,
-            &format!("Topic \"{title}\" is ready; write here."),
-        );
-        self.say(&format!("Topic \"{title}\" created."));
+        let ready = pmt_i18n::t!(strings, "gateway.topic_ready", title = title);
+        self.post_in(&topic, &session, &ready);
+        self.say(&pmt_i18n::t!(
+            strings,
+            "gateway.topic_created",
+            title = title
+        ));
     }
 
     fn topic_list(&self, routing: &Routing) {
@@ -107,29 +109,36 @@ impl Lane {
         let routes = store
             .thread_routes(&routing.platform, &routing.chat_id)
             .unwrap_or_default();
+        let strings = self.strings();
         if routes.is_empty() {
-            self.say("No topics with a session yet; /topic new <name> opens one.");
+            self.say(strings.get("gateway.topics_none"));
             return;
         }
-        let mut text = String::from("Topics in this chat:");
+        let mut text = pmt_i18n::t!(strings, "gateway.topics_heading");
         for route in routes {
             let label = store.session(route.session_id).map_or_else(
                 |_| route.session_id.to_string(),
                 |s| super::history::label(&s),
             );
             let thread = route.thread_id.unwrap_or_default();
-            let _ = write!(text, "\n- topic {thread}: {label}");
+            let line = pmt_i18n::t!(
+                strings,
+                "gateway.topic_line",
+                thread = thread,
+                label = label
+            );
+            let _ = write!(text, "\n{line}");
         }
         self.say(&text);
     }
 
     async fn topic_rename(&mut self, routing: &Routing, name: &str) {
         let Some(thread) = routing.thread_id.clone() else {
-            self.say("Send /topic rename <name> inside the topic to rename.");
+            self.say(self.strings().get("gateway.topic_rename_where"));
             return;
         };
         if name.is_empty() {
-            self.say(USAGE);
+            self.say(self.strings().get("gateway.topic_usage"));
             return;
         }
         let Some(adapter) = self
@@ -147,9 +156,20 @@ impl Lane {
                     &routing.chat_id,
                     &thread,
                 );
-                self.say(&format!("Topic renamed to \"{name}\"."));
+                self.say(&pmt_i18n::t!(
+                    self.strings(),
+                    "gateway.topic_renamed",
+                    name = name
+                ));
             }
-            Err(err) => self.say(&format!("The topic was not renamed: {}", err.describe())),
+            Err(err) => {
+                let why = err.describe();
+                self.say(&pmt_i18n::t!(
+                    self.strings(),
+                    "gateway.topic_not_renamed",
+                    why = why
+                ));
+            }
         }
     }
 
@@ -167,14 +187,18 @@ impl Lane {
                 matches!(&s.origin, Origin::Gateway { platform, chat, .. }
                     if *platform == routing.platform && *chat == routing.chat_id)
             });
+        let strings = self.strings();
         let Some(session) = found else {
-            self.say(&format!("No session {wanted} of this chat to restore."));
+            self.say(&pmt_i18n::t!(
+                strings,
+                "gateway.topic_no_session",
+                id = wanted
+            ));
             return;
         };
-        let title = session
-            .title
-            .clone()
-            .unwrap_or_else(|| format!("Restored {}", session.id));
+        let title = session.title.clone().unwrap_or_else(|| {
+            pmt_i18n::t!(strings, "gateway.topic_restored_title", id = session.id)
+        });
         let Some(thread) = self.open_topic(routing, &title).await else {
             return;
         };
@@ -193,12 +217,14 @@ impl Lane {
             self.say(err.message());
             return;
         }
-        self.post_in(
-            &topic,
-            &id,
-            &format!("Restored \"{title}\"; continue here."),
-        );
-        self.say(&format!("Topic \"{title}\" continues session {id}."));
+        let restored = pmt_i18n::t!(strings, "gateway.topic_restored", title = title);
+        self.post_in(&topic, &id, &restored);
+        self.say(&pmt_i18n::t!(
+            strings,
+            "gateway.topic_continues",
+            title = title,
+            id = id
+        ));
     }
 
     /// After a topic session's first turn: a topic still carrying its

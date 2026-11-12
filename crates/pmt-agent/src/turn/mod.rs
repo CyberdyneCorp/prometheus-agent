@@ -214,6 +214,17 @@ pub trait CompactionBoundary: Send + Sync {
     /// the prompt frozen next reads their definitions. A failure keeps
     /// the current tools (the implementation reports it).
     fn refresh_tools(&self) -> model::BoxFuture<'_, ()>;
+
+    /// Settles the tools of a session that started while extensions were
+    /// still loading in the background (an MCP server still connecting):
+    /// called before every freeze, it waits once, before the session's
+    /// first prompt is built, for what the session start would have waited
+    /// for, so that wait never delays the client's prompt (spec:
+    /// workspace-architecture, Background loading and daemon readiness
+    /// budgets). Later calls return at once.
+    fn settle_tools(&self) -> model::BoxFuture<'_, ()> {
+        Box::pin(async {})
+    }
 }
 
 /// Plugin hooks the turn loop fires (spec: plugin-system, `pre_llm_call`
@@ -447,6 +458,9 @@ pub struct Agent {
     fast: Mutex<Option<pmt_config::schema::FastMode>>,
     /// A route without a fast tier was announced.
     fast_noticed: std::sync::atomic::AtomicBool,
+    /// The running turn's route is a request's own (an API request's
+    /// model): the session's frozen prompt is kept as it is.
+    keep_prompt: std::sync::atomic::AtomicBool,
 }
 
 impl Agent {
@@ -474,6 +488,7 @@ impl Agent {
             server_compaction_logged: std::sync::atomic::AtomicBool::new(false),
             fast: Mutex::new(None),
             fast_noticed: std::sync::atomic::AtomicBool::new(false),
+            keep_prompt: std::sync::atomic::AtomicBool::new(false),
         })
     }
 
@@ -580,6 +595,19 @@ impl Agent {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
+    }
+
+    /// Keeps the session's frozen system prompt and tools for the turns
+    /// that follow while `keep` holds, whatever route they take (a
+    /// per-request model changes only the model call; spec: api-server,
+    /// Per-request model selection).
+    pub fn keep_prompt(&self, keep: bool) {
+        self.keep_prompt
+            .store(keep, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn keeps_prompt(&self) -> bool {
+        self.keep_prompt.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     fn take_rebuild(&self) -> Option<Rebuild> {

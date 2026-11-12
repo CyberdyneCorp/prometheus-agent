@@ -22,6 +22,7 @@ const CHECK_EVERY: Duration = Duration::from_secs(1);
 
 /// The notice the profile's other home channels get.
 pub(crate) fn notice(
+    strings: &pmt_i18n::Strings,
     platform: &str,
     outage: Duration,
     state: AdapterState,
@@ -33,19 +34,22 @@ pub(crate) fn notice(
         .and_then(|v| v.as_str().map(str::to_owned))
         .unwrap_or_default();
     let why = code.map_or(state.clone(), |code| format!("{state}: {code}"));
-    format!(
-        "{name} has been unavailable for {} ({why}); I still answer here.",
-        span(outage)
+    pmt_i18n::t!(
+        strings,
+        "gateway.adapter_unavailable",
+        name = name,
+        span = span(strings, outage),
+        why = why
     )
 }
 
 /// `n min` from a minute on, `n s` below.
-pub(crate) fn span(duration: Duration) -> String {
+pub(crate) fn span(strings: &pmt_i18n::Strings, duration: Duration) -> String {
     let secs = duration.as_secs();
     if secs >= 60 {
-        format!("{} min", secs / 60)
+        pmt_i18n::t!(strings, "gateway.span_minutes", n = secs / 60)
     } else {
-        format!("{secs} s")
+        pmt_i18n::t!(strings, "gateway.span_seconds", n = secs)
     }
 }
 
@@ -89,10 +93,17 @@ fn check(shared: &Shared, now: Instant) {
         tracing::warn!(
             profile,
             platform,
-            "the adapter has been unavailable for {}",
-            span(outage)
+            outage_secs = outage.as_secs(),
+            "the adapter has been unavailable"
         );
-        let text = notice(&platform, outage, status.state, status.code.as_deref());
+        let strings = shared.strings(&profile);
+        let text = notice(
+            &strings,
+            &platform,
+            outage,
+            status.state,
+            status.code.as_deref(),
+        );
         let started = jiff::Timestamp::now().as_second()
             - i64::try_from(outage.as_secs()).unwrap_or(i64::MAX);
         tell_home_channels(shared, &profile, &platform, started, &text);
@@ -137,6 +148,7 @@ mod tests {
     fn an_eleven_minute_outage_is_named_in_minutes() {
         assert_eq!(
             notice(
+                &pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
                 "discord",
                 Duration::from_mins(11),
                 AdapterState::Retrying,
@@ -144,6 +156,7 @@ mod tests {
             ),
             "Discord has been unavailable for 11 min (retrying: network); I still answer here."
         );
-        assert_eq!(span(Duration::from_secs(5)), "5 s");
+        let english = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
+        assert_eq!(span(&english, Duration::from_secs(5)), "5 s");
     }
 }

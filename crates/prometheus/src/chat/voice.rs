@@ -317,15 +317,26 @@ impl VoiceClient {
 
 /// The meter line while recording: `● REC 3.4s ▅▅▅▅▅▁▁▁ speech`.
 #[must_use]
-pub fn meter_line(level: pmt_voice::record::Level, key: &str) -> String {
+pub fn meter_line(
+    strings: &pmt_i18n::Strings,
+    level: pmt_voice::record::Level,
+    key: &str,
+) -> String {
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let bars = ((level.rms.max(1.0).log10() / 4.0) * 8.0).clamp(0.0, 8.0) as usize;
     #[allow(clippy::cast_precision_loss)]
     let seconds = level.elapsed_ms as f64 / 1_000.0;
-    format!(
-        "● REC {seconds:.1}s {}{} {} · {key} stops",
-        "▅".repeat(bars),
-        "▁".repeat(8 - bars),
-        if level.speech { "speech" } else { "listening" }
+    let state = strings.get(if level.speech {
+        "display.recording_speech"
+    } else {
+        "display.recording_listening"
+    });
+    pmt_i18n::t!(
+        strings,
+        "display.recording",
+        seconds = format!("{seconds:.1}"),
+        meter = format!("{}{}", "▅".repeat(bars), "▁".repeat(8 - bars)),
+        state = state,
+        key = key
     )
 }

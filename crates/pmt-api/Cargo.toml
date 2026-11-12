@@ -1,0 +1,37 @@
+[package]
+name = "pmt-api"
+description = "Prometheus OpenAI-compatible API server: Chat Completions, Responses, Runs, sessions and jobs over HTTP, served by the gateway daemon"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+base64.workspace = true
+bytes.workspace = true
+futures-util.workspace = true
+http-body-util.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+jiff.workspace = true
+pmt-config.workspace = true
+pmt-core.workspace = true
+pmt-gateway.workspace = true
+pmt-net.workspace = true
+pmt-obs.workspace = true
+pmt-rpc.workspace = true
+pmt-store.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+tracing.workspace = true
+ulid.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+
+[lints]
+workspace = true

@@ -12,6 +12,8 @@ use pmt_core::error::{Error, codes};
 
 use crate::schema::{ChatPolicy, Config};
 
+pub use crate::gateway_check_platforms::check_route as check_webhook_route;
+
 /// Expands toolset names to the tools they select; `Err(name)` for an
 /// unknown toolset.
 pub type ToolsetExpander = fn(&[String]) -> Result<BTreeSet<String>, String>;

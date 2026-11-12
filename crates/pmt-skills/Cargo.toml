@@ -13,6 +13,7 @@ jiff.workspace = true
 pmt-agent.workspace = true
 pmt-config.workspace = true
 pmt-core.workspace = true
+pmt-i18n.workspace = true
 pmt-sandbox.workspace = true
 pmt-store.workspace = true
 pmt-tools.workspace = true

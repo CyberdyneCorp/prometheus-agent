@@ -3,6 +3,7 @@
 //! requests and turning Ctrl-C into `session.interrupt`.
 
 use pmt_core::error::{Error, codes};
+use pmt_i18n::Strings;
 use pmt_rpc::RpcError;
 use pmt_rpc::client::{ServerCall, error_of};
 use pmt_rpc::contracts::{
@@ -113,7 +114,8 @@ pub(super) async fn run(
                 if event.event == "automation.state" {
                     render::automation(&mut attached.automation, &attached.session, &event.data);
                 }
-                if let Some(finished) = on_event(&event, &turn_id, out, &mut asking) {
+                let strings = attached.strings();
+                if let Some(finished) = on_event(&event, &turn_id, out, &mut asking, &strings) {
                     if let Some(report) = &finished.report {
                         attached.record.remote_turn(report);
                     }
@@ -162,14 +164,18 @@ fn on_event(
     turn_id: &str,
     out: &dyn Out,
     asking: &mut Option<Asking>,
+    strings: &Strings,
 ) -> Option<TurnFinished> {
+    if event.event == "session.event" {
+        out.raw_event(event);
+    }
     match event.event.as_str() {
         "session.event"
             if event.data["type"] == ASSISTANT_DELTA && event.data["turn_id"] == turn_id =>
         {
             out.delta(event.data["payload"]["text"].as_str().unwrap_or_default());
         }
-        "session.event" => render::event(out, &event.data),
+        "session.event" => render::event(out, &event.data, strings),
         "turn.finished" => {
             let finished: TurnFinished = serde_json::from_value(event.data.clone()).ok()?;
             return (finished.turn_id == turn_id).then_some(finished);
@@ -178,7 +184,7 @@ fn on_event(
             let id = event.data["id"].as_str().unwrap_or_default();
             if asking.as_ref().is_some_and(|a| a.id() == id) {
                 *asking = None;
-                out.notice("(the question was answered elsewhere or timed out)");
+                out.notice(strings.get("cli.question_elsewhere"));
             }
         }
         _ => {}
@@ -231,7 +237,7 @@ async fn ask(
             None
         }
         (Asker::Line(_), "approval.request") => {
-            out.ask(&approval_text(&call.params));
+            out.ask(&approval_text(&call.params, &attached.strings()));
             Some(Asking::Approval { id: call.id })
         }
         (Asker::Line(_), "clarify.request") => {
@@ -239,7 +245,7 @@ async fn ask(
                 .as_array()
                 .cloned()
                 .unwrap_or_default();
-            show_question(out, questions.first());
+            show_question(out, questions.first(), &attached.strings());
             Some(Asking::Clarify {
                 id: call.id,
                 questions,
@@ -250,6 +256,13 @@ async fn ask(
             client.respond(&call.id, Err(unanswered()));
             None
         }
+    }
+}
+
+impl Attached {
+    /// The profile's UI strings now.
+    pub(super) fn strings(&self) -> std::sync::Arc<Strings> {
+        pmt_config::language::strings(&self.profile_dir, pmt_i18n::Surface::Core)
     }
 }
 
@@ -293,7 +306,7 @@ fn on_line(
                     .respond(&id, Ok(json!({ "decision": decision })));
                 None
             } else {
-                out.ask(ALLOW);
+                out.ask(attached.strings().get("approval.remote_choices"));
                 Some(Asking::Approval { id })
             }
         }
@@ -305,7 +318,7 @@ fn on_line(
             let question = &questions[answers.len()];
             answers.push(clarify_answer(question, &line));
             if answers.len() < questions.len() {
-                show_question(out, questions.get(answers.len()));
+                show_question(out, questions.get(answers.len()), &attached.strings());
                 return Some(Asking::Clarify {
                     id,
                     questions,
@@ -320,10 +333,7 @@ fn on_line(
     }
 }
 
-/// The approval choices.
-const ALLOW: &str = "allow? [o]nce, [s]ession, [a]lways, [d]eny, [e]xplain";
-
-fn approval_text(params: &Value) -> String {
+fn approval_text(params: &Value, strings: &Strings) -> String {
     use std::fmt::Write as _;
     // Every field may come from the model: escaped so a control sequence
     // cannot hide part of what is approved.
@@ -331,7 +341,10 @@ fn approval_text(params: &Value) -> String {
     let tool = params["tool"]
         .as_str()
         .map_or_else(|| "tool".to_owned(), printable);
-    let mut text = format!("approval needed: {tool} {}", field(&params["subject"]));
+    let mut text = strings.fmt(
+        "approval.remote_title",
+        &[("tool", &tool), ("subject", &field(&params["subject"]))],
+    );
     for finding in params["findings"].as_array().into_iter().flatten() {
         let _ = write!(
             text,
@@ -346,7 +359,7 @@ fn approval_text(params: &Value) -> String {
             let _ = write!(text, "\n  {}", printable(line));
         }
     }
-    let _ = write!(text, "\n{ALLOW}");
+    let _ = write!(text, "\n{}", strings.get("approval.remote_choices"));
     text
 }
 
@@ -361,7 +374,7 @@ pub(crate) fn decision(line: &str) -> Option<&'static str> {
     }
 }
 
-fn show_question(out: &dyn Out, question: Option<&Value>) {
+fn show_question(out: &dyn Out, question: Option<&Value>, strings: &Strings) {
     use std::fmt::Write as _;
     let Some(question) = question else { return };
     let mut text = format!("? {}", question["question"].as_str().unwrap_or_default());
@@ -378,7 +391,8 @@ fn show_question(out: &dyn Out, question: Option<&Value>) {
             choice.as_str().unwrap_or_default()
         );
     }
-    text.push_str("\nanswer (a number, your own text, or empty to skip)");
+    text.push('\n');
+    text.push_str(strings.get("cli.clarify_answer"));
     out.ask(&text);
 }
 
@@ -420,11 +434,14 @@ mod tests {
     /// on the attached approval prompt.
     #[test]
     fn the_approval_prompt_shows_control_sequences() {
-        let text = approval_text(&json!({
-            "tool": "terminal",
-            "subject": "rm -rf ~\u{1b}[2K\rls",
-            "findings": [{"detector": "dangerous", "reason": "deletes", "fragment": "rm\u{1b}[1A"}],
-        }));
+        let text = approval_text(
+            &json!({
+                "tool": "terminal",
+                "subject": "rm -rf ~\u{1b}[2K\rls",
+                "findings": [{"detector": "dangerous", "reason": "deletes", "fragment": "rm\u{1b}[1A"}],
+            }),
+            &pmt_i18n::Strings::english(pmt_i18n::Surface::Core),
+        );
         assert!(
             text.starts_with("approval needed: terminal rm -rf ~^[[2K\\rls\n"),
             "{text}"

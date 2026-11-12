@@ -16,11 +16,9 @@ use super::Ctx;
 use crate::chat::session::Factory;
 use crate::chat::session::model::target_of;
 
-/// The `--now` notice of a deferred change.
-pub(crate) fn deferred(what: &str) -> String {
-    format!(
-        "{what} in your next session. Use /new to start one now, or add --now to apply immediately (invalidates prompt cache)."
-    )
+/// The `--now` notice of a deferred change (`what` already localized).
+pub(crate) fn deferred(strings: &pmt_i18n::Strings, what: &str) -> String {
+    pmt_i18n::t!(strings, "slash.deferred", what = what)
 }
 
 /// `args` without `--now`, and whether it was there.
@@ -48,8 +46,9 @@ pub(crate) fn retry(factory: &Factory, id: SessionId) -> Result<Option<TurnInput
 /// before message N.
 pub(super) fn rewind(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
     let users = user_messages(ctx.factory, ctx.live.id)?;
+    let strings = ctx.strings();
     if args.is_empty() {
-        let mut text = String::from("recent messages (/rewind N goes back to before N):");
+        let mut text = pmt_i18n::t!(strings, "slash.rewind.heading");
         let start = users.len().saturating_sub(10);
         for (n, (_, text_of)) in users.iter().enumerate().skip(start) {
             let first = text_of.lines().next().unwrap_or_default();
@@ -69,7 +68,8 @@ pub(super) fn rewind(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
         })?;
     let (target, _) = &users[n - 1];
     let rewound = ctx.factory.store.rewind(ctx.live.id, *target, None, None)?;
-    Ok(format!("rewound {} messages", rewound.messages.len()))
+    let count = rewound.messages.len();
+    Ok(pmt_i18n::t!(strings, "slash.rewind.done", count = count))
 }
 
 /// `/compress [--preview] [here [N]] [focus]`.
@@ -77,11 +77,15 @@ pub(super) async fn compress(ctx: &Ctx<'_>, args: &str) -> Result<String, Error>
     let manual = pmt_agent::compress::manual::parse(args)?;
     let live = ctx.live;
     let outcome = live.agent.compress(&live.config.get(), &manual).await?;
-    let mut said = format!(
-        "compress: {:?}, context {} -> {} tokens",
-        outcome.status, outcome.tokens_before, outcome.tokens_after
-    )
-    .to_lowercase();
+    let strings = ctx.strings();
+    let status = format!("{:?}", outcome.status).to_lowercase();
+    let mut said = pmt_i18n::t!(
+        strings,
+        "slash.compress.done",
+        status = strings.get(&format!("slash.compress.status_{status}")),
+        before = outcome.tokens_before,
+        after = outcome.tokens_after
+    );
     if let Some(failure) = &outcome.failure {
         let _ = write!(said, " ({}: {})", failure.kind.as_str(), failure.message);
     }
@@ -96,7 +100,12 @@ pub(super) fn pin(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
     let pinned = pmt_agent::compress::pins::pin(&ctx.factory.store, ctx.live.id, args, max)?;
     let first = pinned.text.lines().next().unwrap_or_default();
     let preview: String = first.chars().take(60).collect();
-    Ok(format!("pinned {}: {preview}", pinned.id))
+    Ok(pmt_i18n::t!(
+        ctx.strings(),
+        "slash.pin.done",
+        id = pinned.id,
+        preview = preview
+    ))
 }
 
 /// `/unpin <message-id>`.
@@ -105,7 +114,7 @@ pub(super) fn unpin(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
         return Err(Error::new(&codes::CLI_USAGE, "usage: /unpin <message-id>"));
     }
     let id = pmt_agent::compress::pins::unpin(&ctx.factory.store, ctx.live.id, args)?;
-    Ok(format!("unpinned {id}"))
+    Ok(pmt_i18n::t!(ctx.strings(), "slash.unpin.done", id = id))
 }
 
 /// `/model [<ref>] [...]`: shows the route or switches it from the next
@@ -122,11 +131,13 @@ pub(super) async fn model(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
         tools: true,
         min_context_window: ctx.scope.config().model.min_context_window,
     };
+    let strings = ctx.strings();
     let switch = pmt_providers::switch::Context {
         resolver: &resolver,
         catalog: models.catalog(),
         current: &current,
         needs,
+        text: &*strings,
     };
     let mut session = live.model.session();
     let text = crate::model_slash::model(ctx.scope, &mut session, &switch, args).await?;
@@ -181,7 +192,11 @@ pub(super) async fn tools(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
     let registry = &ctx.live.registry();
     let (enable, toolset) = match words.as_slice() {
         [] | ["list"] => {
-            return crate::tools_cmd::slash_toolsets(registry, &ctx.live.selection());
+            return crate::tools_cmd::slash_toolsets(
+                &*ctx.strings(),
+                registry,
+                &ctx.live.selection(),
+            );
         }
         ["enable", name] => (true, *name),
         ["disable", name] => (false, *name),
@@ -196,14 +211,23 @@ pub(super) async fn tools(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
         return Err(crate::tools_cmd::unknown_toolset(registry, toolset));
     }
     crate::tools_cmd::configure::persist_toolset(ctx.scope, toolset, enable)?;
-    let verb = if enable { "enabled" } else { "disabled" };
+    let strings = ctx.strings();
     if !now {
-        return Ok(deferred(&format!("Toolset '{toolset}' is {verb}")));
+        let key = if enable {
+            "slash.tools.enabled_later"
+        } else {
+            "slash.tools.disabled_later"
+        };
+        let what = pmt_i18n::t!(strings, key, toolset = toolset);
+        return Ok(deferred(&strings, &what));
     }
     apply_tools_now(ctx, toolset, enable).await?;
-    Ok(format!(
-        "Toolset '{toolset}' {verb} now; the next request uses the new tool set."
-    ))
+    let key = if enable {
+        "slash.tools.enabled_now"
+    } else {
+        "slash.tools.disabled_now"
+    };
+    Ok(pmt_i18n::t!(strings, key, toolset = toolset))
 }
 
 /// `/tools enable|disable <toolset> --now`: the same session's next
@@ -236,34 +260,37 @@ pub(super) fn usage(ctx: &Ctx<'_>) -> Result<String, Error> {
     let id = ctx.live.id;
     let session = store.usage_totals(UsageScope::Session(id))?;
     let lineage = store.usage_totals(UsageScope::Lineage(id))?;
+    let strings = ctx.strings();
     let mut text = format!(
         "{}\n{}",
-        totals_line("session", &session),
-        totals_line("lineage", &lineage)
+        totals_line(&strings, "slash.usage.session_label", &session),
+        totals_line(&strings, "slash.usage.lineage_label", &lineage)
     );
     let scope = ctx.scope;
-    let (budgets, _) =
-        crate::slash_handlers::budget(scope, store, id, &scope.config().budgets, "")?;
-    if budgets != "no budgets set" {
+    if let Some(budgets) =
+        crate::slash_handlers::budget_lines(scope, store, id, &scope.config().budgets)?
+    {
         let _ = write!(text, "\n{budgets}");
     }
-    if let Some(billing) = crate::slash_handlers::billing_lines(store, id)? {
+    if let Some(billing) = crate::slash_handlers::billing_lines(&strings, store, id)? {
         let _ = write!(text, "\n{billing}");
     }
     Ok(text)
 }
 
-fn totals_line(label: &str, totals: &UsageTotals) -> String {
+fn totals_line(strings: &pmt_i18n::Strings, label: &str, totals: &UsageTotals) -> String {
     let t = &totals.tokens;
-    format!(
-        "{label:<8} calls {}  input {}  output {}  cache read {}  cache write {}  reasoning {}  cost {}",
-        totals.calls,
-        t.input,
-        t.output,
-        t.cache_read,
-        t.cache_write,
-        t.reasoning,
-        pmt_obs::usage::format_total_cost(totals)
+    pmt_i18n::t!(
+        strings,
+        "slash.usage.totals",
+        label = format!("{:<8}", strings.get(label)),
+        calls = totals.calls,
+        input = t.input,
+        output = t.output,
+        cache_read = t.cache_read,
+        cache_write = t.cache_write,
+        reasoning = t.reasoning,
+        cost = pmt_obs::usage::format_total_cost(totals)
     )
 }
 
@@ -277,15 +304,15 @@ pub(crate) fn list(factory: &Factory) -> Result<String, Error> {
         limit: Some(10),
         ..ListOptions::default()
     })?;
-    let mut text = String::from("recent sessions (/resume <id or title>):");
+    let strings = pmt_config::language::strings(factory.scope.dir(), pmt_i18n::Surface::Core);
+    let mut text = pmt_i18n::t!(strings, "slash.resume.heading");
     for session in sessions {
-        let _ = write!(
-            text,
-            "\n  {}  {}  {}",
-            session.id,
-            session.last_activity_at.strftime("%Y-%m-%d %H:%M"),
-            session.title.as_deref().unwrap_or("(untitled)")
-        );
+        let title = session
+            .title
+            .as_deref()
+            .unwrap_or_else(|| strings.get("slash.sessions.untitled"));
+        let at = session.last_activity_at.strftime("%Y-%m-%d %H:%M");
+        let _ = write!(text, "\n  {}  {at}  {title}", session.id);
     }
     Ok(text)
 }

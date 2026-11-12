@@ -39,10 +39,11 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "PATH")]
     #[arg(help = "Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)")]
     pub home: Option<PathBuf>,
-    /// Profile to use.
-    #[arg(short = 'p', long, global = true, value_name = "NAME")]
+    /// Profile to use (`migrate from-hermes` takes it repeatedly, naming
+    /// Hermes profiles).
+    #[arg(short = 'p', long, global = true, value_name = "NAME", action = ArgAction::Append)]
     #[arg(help = "Profile to use (default: the home's active_profile, else default)")]
-    pub profile: Option<String>,
+    pub profile: Vec<String>,
     /// `key=value` config overrides for this invocation only.
     #[arg(long = "set", global = true, value_name = "KEY=VALUE")]
     #[arg(help = "Override a config key for this invocation only; repeatable, never saved")]
@@ -168,6 +169,32 @@ pub enum Command {
         /// The worktrees subcommand.
         #[command(subcommand)]
         command: crate::worktrees_cmd::WorktreesCommand,
+    },
+    /// Projects: named workspaces spanning folders, the active project,
+    /// archive and restore.
+    Projects {
+        /// The projects subcommand.
+        #[command(subcommand)]
+        command: crate::projects_cmd::ProjectsCommand,
+    },
+    /// Themes: list them, use one, set a colour, spinner or branding key
+    /// of the custom theme, show the one in use.
+    Themes {
+        /// The themes subcommand.
+        #[command(subcommand)]
+        command: crate::themes_cmd::ThemesCommand,
+    },
+    /// A console that runs only read-mostly prometheus commands (status,
+    /// doctor, logs, sessions list/show/export, config show/get/validate,
+    /// usage, version, update --check, daemon status/restart, gateway
+    /// status), never a shell.
+    Console,
+    /// Webhook routes kept in the profile's state: subscribe (prints the
+    /// route URL and, once, its signing secret), list, remove and test.
+    Webhooks {
+        /// The webhooks subcommand.
+        #[command(subcommand)]
+        command: crate::webhooks_cmd::WebhooksCommand,
     },
     /// The credential vault: logins, cards and addresses the browser fills
     /// by handle.
@@ -312,6 +339,23 @@ pub enum Command {
     /// Update this install to its channel's newest signed release, check
     /// for one (exit 10 when available), change the channel, or roll back.
     Update(UpdateArgs),
+    /// Offline bundles: one file holding a signed release (and runtimes)
+    /// for installs and updates without network access.
+    Bundle {
+        /// The bundle subcommand.
+        #[command(subcommand)]
+        command: crate::bundle_cmd::BundleCommand,
+    },
+    /// Import another agent's home: `from-hermes` reads a Hermes Agent home
+    /// (never changing it) into Prometheus profiles.
+    Migrate {
+        /// The migrate subcommand.
+        #[command(subcommand)]
+        command: crate::migrate_cmd::MigrateCommand,
+    },
+    /// Remove this install: the binary, its alias, `prometheus.prev` and its
+    /// service units; the home only with `--purge` (`--dry-run` lists all).
+    Uninstall(crate::uninstall_cmd::UninstallArgs),
     /// Emergency pause: no new turns or scheduled jobs on any profile of
     /// this home until `pause off` (running turns finish).
     Pause(crate::pause_cmd::PauseArgs),
@@ -419,6 +463,11 @@ pub enum Command {
         #[arg(last = true, allow_hyphen_values = true)]
         words: Vec<String>,
     },
+    /// Stamp the install receipt beside this binary for a package channel
+    /// (run by the Homebrew formula, Dockerfile, Nix derivation and Termux
+    /// package; no home is touched).
+    #[command(name = "install-receipt", hide = true)]
+    InstallReceipt(crate::install_receipt_cmd::InstallReceiptArgs),
     /// Check this build against the home before an update installs it
     /// (run by `prometheus update` on the staged binary).
     #[command(hide = true)]
@@ -537,9 +586,24 @@ pub struct UpdateArgs {
     /// sessions created since the update (asks first).
     #[arg(long, requires = "rollback")]
     pub restore_snapshots: bool,
-    /// Confirm `--restore-snapshots` without asking.
+    /// Confirm without asking: `--restore-snapshots`, and restarting a
+    /// daemon whose turns are still running (once they finish).
     #[arg(long, short = 'y')]
     pub yes: bool,
+    /// Show what the update would do (versions, download size, changelog,
+    /// migrations per profile, runtime pin changes, daemon restart)
+    /// without downloading the binary or changing anything; exits 0 or 10
+    /// like `--check`.
+    #[arg(long, conflicts_with_all = ["status", "rollback", "set_channel", "check"])]
+    pub dry_run: bool,
+    /// Update from an offline bundle (`prometheus bundle create`) with no
+    /// network access; the install becomes `owner = bundle`.
+    #[arg(long, value_name = "FILE", conflicts_with_all = ["status", "rollback", "set_channel", "check", "channel"])]
+    pub from_bundle: Option<PathBuf>,
+    /// Leave a running daemon on the old build (the receipt lists
+    /// `daemon_restart_pending`).
+    #[arg(long, conflicts_with_all = ["status", "rollback", "set_channel", "check"])]
+    pub no_restart: bool,
     /// Also write a full home archive before the swap
     /// (`update.pre_update_backup = "full"` for this run).
     #[arg(long, conflicts_with_all = ["no_backup", "rollback", "check", "status", "set_channel"])]

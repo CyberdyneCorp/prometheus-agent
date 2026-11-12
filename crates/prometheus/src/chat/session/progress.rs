@@ -6,10 +6,12 @@
 //! one-shot run writes them to stderr (spec: model-providers, In-turn
 //! fallback activation; Borrowed CLI logins).
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use pmt_agent::turn::EventSink;
 use pmt_agent::turn::model::BoxFuture;
+use pmt_core::text::Catalog;
 use pmt_obs::trajectory::events::Event;
 use pmt_obs::trajectory::writer::Emit;
 use serde_json::Value;
@@ -68,24 +70,32 @@ impl pmt_memory::notices::NoticeSink for Notices {
 
 /// The notice of a provider fallback.
 #[must_use]
-pub fn fallback_notice(fallback: &pmt_obs::trajectory::payload::ProviderFallback) -> String {
-    let mut notice = format!(
-        "switched from {} to {} ({})",
-        fallback.from, fallback.to, fallback.reason
-    );
-    if let (true, Some(from), Some(to)) = (
+pub fn fallback_notice(
+    text: &dyn Catalog,
+    fallback: &pmt_obs::trajectory::payload::ProviderFallback,
+) -> String {
+    use pmt_providers::fallback::billing_label;
+    let (from, to, reason) = (&fallback.from, &fallback.to, &fallback.reason);
+    if let (true, Some(was), Some(now)) = (
         fallback.billing_change,
         &fallback.from_billing,
         &fallback.to_billing,
     ) {
-        use pmt_providers::fallback::billing_label;
-        notice = format!(
-            "{notice}; now billing {} instead of {}",
-            billing_label(to),
-            billing_label(from)
+        return text.text(
+            "display.fallback_billing",
+            &[
+                ("from", from),
+                ("to", to),
+                ("reason", reason),
+                ("billing", &billing_label(now)),
+                ("previous", &billing_label(was)),
+            ],
         );
     }
-    notice
+    text.text(
+        "display.fallback",
+        &[("from", from), ("to", to), ("reason", reason)],
+    )
 }
 
 /// The CLI/TUI line of a compaction lifecycle event or of a turn's
@@ -93,16 +103,13 @@ pub fn fallback_notice(fallback: &pmt_obs::trajectory::payload::ProviderFallback
 /// notices and context pressure gauge): the gauge from 60% of the
 /// compaction trigger, flagged from 85%. Display only.
 #[must_use]
-pub fn context_line(kind: &str, payload: &Value) -> Option<String> {
-    use pmt_core::context_pressure::{Level, compaction_notice, gauge, of_turn_end};
+pub fn context_line(text: &dyn Catalog, kind: &str, payload: &Value) -> Option<String> {
+    use pmt_core::context_pressure::{compaction_notice, gauge, of_turn_end};
     if kind == "turn.end" {
-        return match of_turn_end(payload)? {
-            (percent, Some(Level::Info)) => Some(gauge(percent)),
-            (percent, Some(Level::Warning)) => Some(format!("{} (compacts soon)", gauge(percent))),
-            (_, None) => None,
-        };
+        let (percent, level) = of_turn_end(payload)?;
+        return level.map(|level| gauge(text, percent, level));
     }
-    compaction_notice(kind, payload).map(|n| n.text)
+    compaction_notice(text, kind, payload).map(|n| n.text)
 }
 
 /// Forwards every event to `inner`, tool activity to the line interface
@@ -111,6 +118,8 @@ pub struct Tee {
     inner: Arc<dyn EventSink>,
     notices: Notices,
     tree: std::sync::Mutex<pmt_core::subagent_tree::TreeLines>,
+    /// The profile directory whose language the notices speak.
+    profile_dir: PathBuf,
 }
 
 impl Tee {
@@ -120,6 +129,7 @@ impl Tee {
     pub fn new(
         inner: Arc<dyn EventSink>,
         interactive: bool,
+        profile_dir: PathBuf,
     ) -> (Self, Option<mpsc::UnboundedReceiver<Progress>>) {
         let (activity, rx) = if interactive {
             let (tx, rx) = mpsc::unbounded_channel();
@@ -134,6 +144,7 @@ impl Tee {
                 inner,
                 notices,
                 tree,
+                profile_dir,
             },
             rx,
         )
@@ -143,6 +154,12 @@ impl Tee {
     #[must_use]
     pub fn notices(&self) -> Notices {
         self.notices.clone()
+    }
+
+    /// The profile's strings now (a language change shows at the next
+    /// notice).
+    fn strings(&self) -> Arc<pmt_i18n::Strings> {
+        pmt_config::language::strings(&self.profile_dir, pmt_i18n::Surface::Core)
     }
 }
 
@@ -178,14 +195,16 @@ impl EventSink for Tee {
                 None
             }
             Event::ProviderFallback(fallback) => {
-                self.notices.show(fallback_notice(fallback));
+                self.notices
+                    .show(fallback_notice(&*self.strings(), fallback));
                 None
             }
             Event::CompressionStarted(_)
             | Event::CompressionCommitted(_)
             | Event::CompressionFailed(_)
             | Event::TurnEnd(_) => {
-                if let Some(line) = context_line(emit.event.kind(), &emit.event.payload()) {
+                let line = context_line(&*self.strings(), emit.event.kind(), &emit.event.payload());
+                if let Some(line) = line {
                     self.notices.show(line);
                 }
                 None
@@ -229,14 +248,15 @@ mod tests {
             from_billing: Some("subscription:openai-codex/personal".to_owned()),
             to_billing: Some("api_key:openrouter/default".to_owned()),
         };
+        let english = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
         assert_eq!(
-            fallback_notice(&fallback),
+            fallback_notice(&*english, &fallback),
             "switched from openai-codex/gpt-5 to openrouter/m (auth.credentials_benched); now billing API key openrouter/default instead of subscription openai-codex/personal"
         );
         let same = ProviderFallback {
             billing_change: false,
             ..fallback
         };
-        assert!(!fallback_notice(&same).contains("billing"));
+        assert!(!fallback_notice(&*english, &same).contains("billing"));
     }
 }

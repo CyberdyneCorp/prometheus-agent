@@ -15,6 +15,39 @@
         }
       ]
     },
+    "ApiListener": {
+      "additionalProperties": false,
+      "description": "`daemon.toml [api_server]`.",
+      "properties": {
+        "cors_origins": {
+          "default": [],
+          "description": "Exact browser origins (`https://chat.example.com`) allowed to call\nthe API; empty sends no CORS headers and refuses every request\ncarrying an `Origin`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "listen": {
+          "default": "127.0.0.1:8642",
+          "description": "Where the API server listens.",
+          "type": "string"
+        },
+        "public": {
+          "default": false,
+          "description": "Allow a non-loopback `listen` address (logged at WARN on every\nstart).",
+          "type": "boolean"
+        },
+        "public_host": {
+          "default": null,
+          "description": "A host name accepted in the `Host` header besides the loopback\nnames (a reverse proxy's name for a loopback listener).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "DaemonGateway": {
       "additionalProperties": false,
       "description": "`daemon.toml [gateway]`: the messaging gateway keys every served\nprofile shares.",
@@ -423,6 +456,14 @@
           "minimum": 0,
           "type": "integer"
         },
+        "drain_timeout_secs": {
+          "default": 120,
+          "description": "How long an update waits for a running daemon's turns to finish\nbefore restarting it on the new build; when they are still running\nthe daemon keeps the old build and the update reports\n`daemon_restart_pending`.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        },
         "mirror_fallback": {
           "default": false,
           "description": "When a mirror (`update.mirror_url`, `runtimes.mirrors.runtimes`)\nstill fails after the retry budget, download from the default origin\ninstead of failing.",
@@ -490,6 +531,16 @@
   "additionalProperties": false,
   "description": "Root of `daemon.toml`.",
   "properties": {
+    "api_server": {
+      "$ref": "#/$defs/ApiListener",
+      "default": {
+        "cors_origins": [],
+        "listen": "127.0.0.1:8642",
+        "public": false,
+        "public_host": null
+      },
+      "description": "The OpenAI-compatible API server's listener (spec: api-server)."
+    },
     "daemon": {
       "$ref": "#/$defs/DaemonSection",
       "default": {
@@ -568,6 +619,7 @@
         "allow_from_chat": false,
         "auto_apply": false,
         "check_interval_secs": 86400,
+        "drain_timeout_secs": 120,
         "mirror_fallback": false,
         "mirror_url": null,
         "pre_update_backup": "state",

@@ -41,34 +41,52 @@ pub struct RunReport {
 }
 
 impl RunReport {
-    /// The one-paragraph summary a chat shows.
+    /// The one-paragraph summary, in English (the log).
     #[must_use]
     pub fn summary(&self) -> String {
+        self.summary_in(&*pmt_i18n::Strings::english(pmt_i18n::Surface::Core))
+    }
+
+    /// The one-paragraph summary a chat shows, worded with `text`.
+    #[must_use]
+    pub fn summary_in(&self, text: &dyn pmt_core::text::Catalog) -> String {
         let count = |to: &str| self.transitions.iter().filter(|t| t.to == to).count();
-        let verb = if self.dry_run { "would mark" } else { "marked" };
-        let mut text = format!(
-            "Curator {}: {verb} {} stale, {} active again, {} archived",
-            if self.dry_run { "dry run" } else { "pass" },
-            count("stale"),
-            count("active"),
-            count("archived"),
+        let key = if self.dry_run {
+            "slash.curator.summary_dry"
+        } else {
+            "slash.curator.summary"
+        };
+        let mut out = text.text(
+            key,
+            &[
+                ("stale", &count("stale")),
+                ("active", &count("active")),
+                ("archived", &count("archived")),
+            ],
         );
         if !self.consolidated.is_empty() {
-            let _ = write!(text, ", {} merge(s)", self.consolidated.len());
+            let merges = text.text(
+                "slash.curator.merges",
+                &[("count", &self.consolidated.len())],
+            );
+            let _ = write!(out, ", {merges}");
         }
-        text.push('.');
+        out.push('.');
         if !self.rename_map.is_empty() {
             let renames: Vec<String> = self
                 .rename_map
                 .iter()
                 .map(|(old, new)| format!("{old} → {new}"))
                 .collect();
-            let _ = write!(text, " Renamed: {}.", renames.join(", "));
+            let line = text.text("slash.curator.renamed", &[("renames", &renames.join(", "))]);
+            let _ = write!(out, " {line}");
         }
         if let Some(dir) = &self.report_dir {
-            let _ = write!(text, " Report: {}", dir.join("REPORT.md").display());
+            let path = dir.join("REPORT.md");
+            let report = text.text("slash.curator.report", &[("path", &path.display())]);
+            let _ = write!(out, " {report}");
         }
-        text
+        out
     }
 
     /// The `REPORT.md` text.

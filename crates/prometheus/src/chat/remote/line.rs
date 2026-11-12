@@ -19,6 +19,7 @@ use std::time::Instant;
 
 use pmt_config::schema::MarkdownMode;
 use pmt_core::error::Error;
+use pmt_i18n::Strings;
 use pmt_rpc::client::error_of;
 use pmt_rpc::contracts::{CommandDispatch, DispatchParams, Dispatched, Envelope, SessionRef};
 
@@ -70,7 +71,8 @@ impl Lines {
         })?;
         Ok(Self {
             editor,
-            prompt: "› ".to_owned(),
+            prompt: crate::chat::theme::Theme::load(scope.dir(), &scope.config().display.theme)
+                .map_or_else(|_| "› ".to_owned(), |t| t.prompt_symbol()),
             queue: VecDeque::new(),
             closed: false,
         })
@@ -204,6 +206,8 @@ pub(super) struct Chat<'a, 'b> {
 pub(super) enum Flow {
     Continue,
     Exit,
+    /// `/exit --delete`: leave, then delete the session.
+    ExitDelete,
 }
 
 /// Runs the attached line interface until `/exit` or the end of input.
@@ -240,13 +244,16 @@ pub(super) async fn run(attached: &mut Attached, start: &Start<'_>) -> Result<u8
         mouth: None,
     };
     chat.refresh_model().await;
-    chat.screen.say(
-        Role::Accent,
-        &format!(
-            "attached to the gateway daemon (pid {}) · session {} · /help for commands",
-            chat.attached.daemon_pid, chat.attached.session
-        ),
+    let banner = pmt_i18n::t!(
+        chat.strings(),
+        "cli.attached_banner",
+        pid = chat.attached.daemon_pid,
+        session = chat.attached.session
     );
+    if let Some(art) = &chat.screen.display.theme.branding.banner {
+        chat.screen.say(Role::Accent, art);
+    }
+    chat.screen.say(Role::Accent, &banner);
     // A resumed session's summary (a new one has none), then the low-disk
     // prune question when it is due.
     chat.memory_summary().await;
@@ -263,6 +270,11 @@ pub(super) async fn run(attached: &mut Attached, start: &Start<'_>) -> Result<u8
 }
 
 impl Chat<'_, '_> {
+    /// The profile's UI strings now (spec: i18n).
+    pub(super) fn strings(&self) -> std::sync::Arc<Strings> {
+        self.attached.strings()
+    }
+
     async fn main_loop(&mut self) -> Result<u8, Error> {
         let mut last_interrupt: Option<Instant> = None;
         loop {
@@ -301,13 +313,15 @@ impl Chat<'_, '_> {
                         return Ok(0);
                     }
                     last_interrupt = Some(Instant::now());
-                    self.screen.notice("(press Ctrl+C again or Ctrl+D to exit)");
+                    self.screen.notice(self.strings().get("cli.press_again"));
                     continue;
                 }
             };
             last_interrupt = None;
-            if let Flow::Exit = self.line(line).await? {
-                return Ok(0);
+            match self.line(line).await? {
+                Flow::Continue => {}
+                Flow::Exit => return Ok(0),
+                Flow::ExitDelete => return self.exit_delete().await,
             }
         }
     }
@@ -332,9 +346,7 @@ impl Chat<'_, '_> {
             return self.slash(text.to_owned()).await;
         }
         if text.starts_with('!') {
-            self.screen.notice(
-                "the shell escape runs in the session's terminal, which the gateway daemon holds; it is not available while attached",
-            );
+            self.screen.notice(self.strings().get("cli.remote_shell"));
             return Ok(Flow::Continue);
         }
         self.submit(line).await?;
@@ -420,7 +432,7 @@ impl Chat<'_, '_> {
             "session.event" if !render::is_notice(&event.data) => self.daemon_turn = true,
             _ => {}
         }
-        show_followed(event, &self.screen);
+        show_followed(event, &self.screen, &self.strings());
     }
 
     /// Hands the bottom status line to the editor (none when quiet or
@@ -498,6 +510,28 @@ impl Chat<'_, '_> {
     }
 
     /// Leaves the current session for `next` (or reports why not).
+    /// `/exit --delete` on a daemon session: detach from it, then delete
+    /// it in the profile's store (as `prometheus sessions delete` does
+    /// beside a running daemon).
+    async fn exit_delete(&mut self) -> Result<u8, Error> {
+        let session = SessionRef {
+            session_id: self.attached.session.clone(),
+        };
+        let _ = self
+            .attached
+            .client
+            .call_typed::<pmt_rpc::contracts::SessionDetach>(&session)
+            .await;
+        let id = pmt_core::id::SessionId::parse(&session.session_id)?;
+        let store = pmt_store::Store::open(self.start.scope)?;
+        let deleted = store.delete_session(id, false)?;
+        let ids: Vec<String> = deleted.sessions.iter().map(ToString::to_string).collect();
+        crate::plugins_host::sessions_deleted(self.start.scope, &ids);
+        let text = pmt_i18n::t!(self.strings(), "cli.session_deleted", id = id);
+        self.screen.notice(&text);
+        Ok(0)
+    }
+
     pub(super) async fn switch(&mut self, next: Result<String, Error>) {
         match next {
             Ok(next) => {
@@ -512,8 +546,12 @@ impl Chat<'_, '_> {
                     .client
                     .call_typed::<pmt_rpc::contracts::SessionDetach>(&old)
                     .await;
-                self.screen
-                    .notice(&format!("session {}", self.attached.session));
+                let text = pmt_i18n::t!(
+                    self.strings(),
+                    "cli.session_shown",
+                    id = self.attached.session
+                );
+                self.screen.notice(&text);
                 self.memory_summary().await;
             }
             Err(err) => self.screen.error(&err),
@@ -541,9 +579,11 @@ pub(super) async fn follow(attached: &mut Attached, start: &Start<'_>) -> Result
         quiet: start.ui.quiet,
         json: false,
     };
-    out.notice(&format!(
-        "following session {} read-only; Ctrl+C leaves",
-        attached.session
+    let strings = attached.strings();
+    out.notice(&pmt_i18n::t!(
+        strings,
+        "cli.following",
+        id = attached.session
     ));
     let mut signals = Signals::listen();
     loop {
@@ -555,20 +595,20 @@ pub(super) async fn follow(attached: &mut Attached, start: &Start<'_>) -> Result
                 {
                     out.notice(row);
                 }
-                show_followed(&event, &out);
+                show_followed(&event, &out, &strings);
             }
             _ = signals.next() => return Ok(0),
         }
     }
 }
 
-fn show_followed(event: &pmt_rpc::contracts::Envelope, out: &dyn Out) {
+fn show_followed(event: &pmt_rpc::contracts::Envelope, out: &dyn Out, strings: &Strings) {
     match event.event.as_str() {
         "session.event" if event.data["type"] == "user.message" => {
             let text = event.data["payload"]["text"].as_str().unwrap_or_default();
             out.notice(&format!("› {text}"));
         }
-        "session.event" => render::event(out, &event.data),
+        "session.event" => render::event(out, &event.data, strings),
         "turn.finished" => {
             if let Ok(finished) = serde_json::from_value(event.data.clone()) {
                 render::finished(out, &finished);
