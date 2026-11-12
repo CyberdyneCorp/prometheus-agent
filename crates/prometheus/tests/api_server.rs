@@ -45,8 +45,9 @@ fn sessions_of(home: &Path) -> usize {
 fn a_profile_without_a_key_is_not_served_but_health_answers() {
     let home = mock_home();
     append_config(home.path(), "\n[api_server]\nenabled = true\n");
-    let port = api::listen(home.path(), "");
+    api::listen(home.path(), "");
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let health = Request::new("GET", "/health").send(port);
     assert_eq!(health.status, 200);
     assert_eq!(health.json(), json!({"status": "ok"}));
@@ -90,8 +91,9 @@ fn each_profile_answers_only_its_own_key_and_model_and_ids() {
     api::multiplex(home.path());
     api::profile(home.path(), "alice", "");
     api::profile(home.path(), "bob", "");
-    let port = api::listen(home.path(), "");
+    api::listen(home.path(), "");
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let wrong = Request::new("GET", "/p/alice/v1/models")
         .auth("default")
         .send(port);
@@ -143,8 +145,9 @@ fn each_profile_answers_only_its_own_key_and_model_and_ids() {
 /// Scenario: Web page on another origin. Scenario: Rebinding host refused.
 #[test]
 fn browser_origins_and_foreign_hosts_are_refused_before_any_work() {
-    let (home, port) = api::home("");
+    let home = api::home("");
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let evil = Request::new("POST", "/v1/chat/completions")
         .auth("default")
         .header("Origin", "https://evil.example")
@@ -167,8 +170,9 @@ fn browser_origins_and_foreign_hosts_are_refused_before_any_work() {
 fn an_allowlisted_origin_gets_cors_headers_and_preflights() {
     let home = mock_home();
     api::enable(home.path(), "default", "");
-    let port = api::listen(home.path(), "cors_origins = [\"http://localhost:3000\"]");
+    api::listen(home.path(), "cors_origins = [\"http://localhost:3000\"]");
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let preflight = Request::new("OPTIONS", "/v1/chat/completions")
         .header("Origin", "http://localhost:3000")
         .header("Access-Control-Request-Method", "POST")
@@ -201,8 +205,9 @@ fn an_allowlisted_origin_gets_cors_headers_and_preflights() {
 /// Scenario: Unknown OpenAI field ignored.
 #[test]
 fn unknown_openai_fields_are_ignored() {
-    let (home, port) = api::home("");
+    let home = api::home("");
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let answer = chat(
         port,
         "default",
@@ -231,7 +236,7 @@ fn unknown_openai_fields_are_ignored() {
 /// Scenario: Budget exhausted is not success.
 #[test]
 fn an_exhausted_iteration_budget_answers_length() {
-    let (home, port) = api::home("");
+    let home = api::home("");
     append_config(home.path(), "\n[agent]\nmax_iterations = 1\n");
     script(
         home.path(),
@@ -239,6 +244,7 @@ fn an_exhausted_iteration_budget_answers_length() {
          [[rule]]\nrepeat = true\n[[rule.tool_calls]]\nname = \"todo\"\narguments = { todos = [] }\n",
     );
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let answer = chat(port, "default", &user("loop forever"));
     let body = answer.json();
     assert_eq!(body["choices"][0]["finish_reason"], "length", "{body}");
@@ -252,8 +258,9 @@ fn an_exhausted_iteration_budget_answers_length() {
 /// Scenario: Uploaded file refused.
 #[test]
 fn an_uploaded_file_is_refused_before_a_turn() {
-    let (home, port) = api::home("");
+    let home = api::home("");
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let answer = chat(
         port,
         "default",
@@ -270,13 +277,14 @@ fn an_uploaded_file_is_refused_before_a_turn() {
 /// Scenario: Header continues the session.
 #[test]
 fn the_session_header_continues_from_stored_history() {
-    let (home, port) = api::home("");
+    let home = api::home("");
     script(
         home.path(),
         "[[rule]]\nstep = 2\ntext = \"saw two prior turns\"\nrepeat = true\n\
          [[rule]]\ntext = \"ok\"\nrepeat = true\n",
     );
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let first = chat(port, "default", &user("first"));
     let session = first.header("x-prometheus-session-id").unwrap().to_owned();
     let with = |text: &str| {
@@ -315,8 +323,9 @@ fn the_session_header_continues_from_stored_history() {
 /// Scenario: Foreign session refused.
 #[test]
 fn a_session_of_another_surface_is_refused() {
-    let (home, port) = api::home("");
+    let home = api::home("");
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let out = common::ok(&run(home.path(), &["--json", "-z", "a cli turn"]));
     let report: Value = serde_json::from_str(&out).unwrap();
     let foreign = report["session_id"].as_str().unwrap();
@@ -352,13 +361,14 @@ fn stored_prompt(home: &Path, session: &str) -> (String, String) {
 /// Scenario: Instructions do not replace the agent.
 #[test]
 fn caller_instructions_are_layered_after_the_profile_prompt() {
-    let (home, port) = api::home("");
+    let home = api::home("");
     script(
         home.path(),
         "[[rule]]\ntools = \"terminal\"\ntext = \"Voici les fichiers\"\nrepeat = true\n\
          [[rule]]\ntext = \"no tools\"\nrepeat = true\n",
     );
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let answer = chat(
         port,
         "default",
@@ -408,7 +418,7 @@ fn caller_instructions_are_layered_after_the_profile_prompt() {
 /// Scenario: Approval over Chat Completions.
 #[test]
 fn an_approval_without_an_answer_channel_is_denied_at_once() {
-    let (home, port) = api::home("");
+    let home = api::home("");
     script(
         home.path(),
         "[[rule]]\ntool_result_regex = \"^BLOCKED: \"\ntext = \"it was blocked\"\nrepeat = true\n\
@@ -417,6 +427,7 @@ fn an_approval_without_an_answer_channel_is_denied_at_once() {
     );
     std::fs::create_dir_all(home.path().join("profiles/default/workspace/build")).unwrap();
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let started = std::time::Instant::now();
     let answer = chat(port, "default", &user("clean the build"));
     assert_eq!(
@@ -436,7 +447,7 @@ fn an_approval_without_an_answer_channel_is_denied_at_once() {
 /// Scenario: Generic client model ignored. Scenario: Route alias conflict.
 #[test]
 fn request_models_follow_the_selection_order() {
-    let (home, port) =
+    let home =
         api::home("[api_server.model_routes.fast]\nprovider = \"mock\"\nmodel = \"quick\"\n");
     script(
         home.path(),
@@ -445,6 +456,7 @@ fn request_models_follow_the_selection_order() {
          [[rule]]\ntext = \"default model\"\nrepeat = true\n",
     );
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let generic = chat(
         port,
         "default",
@@ -613,12 +625,13 @@ fn append_config_of(home: &Path, profile: &str, text: &str) {
 /// Scenario: Eleventh run refused (with a cap of one).
 #[test]
 fn runs_past_the_concurrent_cap_are_refused() {
-    let (home, port) = api::home("max_concurrent_runs = 1");
+    let home = api::home("max_concurrent_runs = 1");
     script(
         home.path(),
         "latency_ms = 3000\n[[rule]]\ntext = \"slow\"\nrepeat = true\n",
     );
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let first = Request::new("POST", "/v1/runs")
         .auth("default")
         .json(&json!({"input": "one"}))

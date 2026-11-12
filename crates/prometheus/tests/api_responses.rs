@@ -47,7 +47,7 @@ fn kinds(response: &Value) -> Vec<String> {
 /// Scenario: Chained turn.
 #[test]
 fn a_chained_response_sees_the_earlier_tool_call_and_lists_only_its_own_items() {
-    let (home, port) = api::home("");
+    let home = api::home("");
     script(
         home.path(),
         "[[rule]]\nuser = \"README\"\nstep = 2\ntext = \"saw the earlier listing\"\nrepeat = true\n\
@@ -56,6 +56,7 @@ fn a_chained_response_sees_the_earlier_tool_call_and_lists_only_its_own_items() 
          [[rule]]\ntext = \"other\"\nrepeat = true\n",
     );
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let first = respond(port, &json!({"input": "list the files"}));
     assert_eq!(first.status, 200, "{}", first.body);
     let first = first.json();
@@ -98,7 +99,7 @@ fn a_chained_response_sees_the_earlier_tool_call_and_lists_only_its_own_items() 
 /// Scenario: Echoed reasoning items ignored on input.
 #[test]
 fn echoed_reasoning_items_are_not_user_turns() {
-    let (home, port) = api::home("");
+    let home = api::home("");
     script(
         home.path(),
         "[[rule]]\nreasoning = \"thinking it over\"\ntext = \"first answer\"\nstep = 0\n\
@@ -106,6 +107,7 @@ fn echoed_reasoning_items_are_not_user_turns() {
          [[rule]]\ntext = \"echo treated as a turn\"\nrepeat = true\n",
     );
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let first = respond(port, &json!({"input": "start"})).json();
     assert_eq!(kinds(&first), ["reasoning", "message"], "{first}");
     let mut input = first["output"].as_array().unwrap().clone();
@@ -128,8 +130,9 @@ fn echoed_reasoning_items_are_not_user_turns() {
 /// different work.
 #[test]
 fn a_retried_request_replays_the_original_answer_and_runs_once() {
-    let (home, port) = api::home("");
+    let home = api::home("");
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let send = |body: &Value| {
         Request::new("POST", "/v1/chat/completions")
             .auth("default")
@@ -221,9 +224,10 @@ fn memory_provider(home: &Path) {
 /// Scenario: Session key scopes memory.
 #[test]
 fn the_session_key_is_the_memory_scope_across_chats() {
-    let (home, port) = api::home("");
+    let home = api::home("");
     memory_provider(home.path());
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let mut sessions = Vec::new();
     for opening in ["chat one", "chat two"] {
         let answer = Request::new("POST", "/v1/chat/completions")
@@ -289,8 +293,9 @@ fn an_openai_sdk_client_completes_chats_and_responses() {
     };
     use futures_util::StreamExt as _;
 
-    let (home, port) = api::home("");
+    let home = api::home("");
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let config = OpenAIConfig::new()
         .with_api_base(format!("http://127.0.0.1:{port}/v1"))
         .with_api_key(key_of("default"));

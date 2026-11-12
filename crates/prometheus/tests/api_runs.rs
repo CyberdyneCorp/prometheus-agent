@@ -58,10 +58,11 @@ fn events(id: &str, last: Option<&str>) -> Request<'static> {
 /// Scenario: Replay after restart.
 #[test]
 fn an_idempotent_run_is_replayed_after_a_restart() {
-    let (home, port) = api::home("");
+    let home = api::home("");
     let body = json!({"input": "ticket work"});
     let id = {
         let _daemon = daemon::start(home.path(), &[]);
+        let port = api::port(home.path());
         let first = Request::new("POST", "/v1/runs")
             .auth("default")
             .header("Idempotency-Key", "ticket-123")
@@ -78,6 +79,7 @@ fn an_idempotent_run_is_replayed_after_a_restart() {
         id
     };
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let retry = Request::new("POST", "/v1/runs")
         .auth("default")
         .header("Idempotency-Key", "ticket-123")
@@ -100,13 +102,14 @@ fn an_idempotent_run_is_replayed_after_a_restart() {
 /// Scenario: Reconnect without loss.
 #[test]
 fn a_reconnecting_client_resumes_after_its_last_event() {
-    let (home, port) = api::home("");
+    let home = api::home("");
     script(
         home.path(),
         "[[rule]]\nstep = 0\n[[rule.tool_calls]]\nname = \"terminal\"\narguments = { command = \"sleep 2\" }\n\
          [[rule]]\ntext = \"slept\"\nrepeat = true\n",
     );
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let id = run_id(&create(port, &json!({"input": "nap"})));
     let seen = events(&id, None).stream_until(port, |(_, event, _)| {
         event.as_deref() == Some("tool.started")
@@ -152,9 +155,10 @@ fn approval_script(home: &Path) {
 /// distinguishable.
 #[test]
 fn approvals_are_pending_controls_answered_with_their_generation() {
-    let (home, port) = api::home("");
+    let home = api::home("");
     approval_script(home.path());
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let id = run_id(&create(port, &json!({"input": "clean the build"})));
     let waiting = run_until(port, "default", &id, |r| {
         r["status"] == "waiting_for_approval"
@@ -232,13 +236,14 @@ fn approvals_are_pending_controls_answered_with_their_generation() {
 
 #[test]
 fn a_stopped_run_ends_cancelled_and_steering_reaches_a_running_one() {
-    let (home, port) = api::home("");
+    let home = api::home("");
     script(
         home.path(),
         "[[rule]]\nstep = 0\n[[rule.tool_calls]]\nname = \"terminal\"\narguments = { command = \"sleep 20\" }\n\
          [[rule]]\ntext = \"finished\"\nrepeat = true\n",
     );
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let id = run_id(&create(port, &json!({"input": "long work"})));
     run_until(port, "default", &id, |r| r["status"] == "running");
     let steer = control(port, &id, "steer", &json!({"text": "hurry up"}));
@@ -254,16 +259,18 @@ fn a_stopped_run_ends_cancelled_and_steering_reaches_a_running_one() {
 fn a_run_active_at_shutdown_is_recorded_interrupted() {
     let home = common::mock_home();
     api::enable(home.path(), "default", "");
-    let port = api::listen(home.path(), "\n[daemon]\nrestart_drain_secs = 1");
+    api::listen(home.path(), "\n[daemon]\nrestart_drain_secs = 1");
     script(
         home.path(),
         "[[rule]]\nlatency_ms = 30000\ntext = \"too late\"\nrepeat = true\n",
     );
     let daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let id = run_id(&create(port, &json!({"input": "slow work"})));
     run_until(port, "default", &id, |r| r["status"] == "running");
     drop(daemon);
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let after = Request::new("GET", &format!("/v1/runs/{id}"))
         .auth("default")
         .send(port)
@@ -280,7 +287,7 @@ fn a_run_active_at_shutdown_is_recorded_interrupted() {
 /// Scenario: Fallback reflected in runtime.
 #[test]
 fn the_runtime_names_the_fallback_pair_that_served_the_run() {
-    let (home, port) = api::home("");
+    let home = api::home("");
     ok(&run(
         home.path(),
         &["config", "set", "model.default", "primary"],
@@ -295,6 +302,7 @@ fn the_runtime_names_the_fallback_pair_that_served_the_run() {
          [[rule]]\nmodel = \"secondary\"\ntext = \"answered by the secondary\"\nrepeat = true\n",
     );
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let id = run_id(&create(port, &json!({"input": "hi"})));
     let done = run_until_terminal(port, "default", &id);
     assert_eq!(done["output"], "answered by the secondary", "{done}");
@@ -306,13 +314,14 @@ fn the_runtime_names_the_fallback_pair_that_served_the_run() {
 #[cfg(unix)]
 #[test]
 fn an_unknown_run_is_resolved_and_its_session_follower_runs() {
-    let (home, port) = api::home("");
+    let home = api::home("");
     script(
         home.path(),
         "[[rule]]\nuser = \"lost\"\nlatency_ms = 60000\ntext = \"never seen\"\nrepeat = true\n\
          [[rule]]\nuser = \"follow\"\ntext = \"follower answered\"\nrepeat = true\n",
     );
     let crashed = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let lost = create(port, &json!({"input": "lost work"}));
     let lost_id = run_id(&lost);
     let session = lost.json()["session_id"].as_str().unwrap().to_owned();
@@ -335,6 +344,7 @@ fn an_unknown_run_is_resolved_and_its_session_follower_runs() {
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let unknown = Request::new("GET", &format!("/v1/runs/{lost_id}"))
         .auth("default")
         .send(port)
@@ -389,7 +399,7 @@ fn an_unknown_run_is_resolved_and_its_session_follower_runs() {
 #[test]
 fn tool_previews_redact_known_secrets_even_when_redaction_is_off() {
     const VALUE: &str = "horse-battery-staple-9417";
-    let (home, port) = api::home("");
+    let home = api::home("");
     ok(&run(
         home.path(),
         &["config", "set", "security.redact_secrets", "false"],
@@ -411,6 +421,7 @@ fn tool_previews_redact_known_secrets_even_when_redaction_is_off() {
          [[rule]]\ntext = \"read\"\nrepeat = true\n",
     );
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let id = run_id(&create(port, &json!({"input": "read the notes"})));
     run_until_terminal(port, "default", &id);
     let all = events(&id, None).send(port).events();

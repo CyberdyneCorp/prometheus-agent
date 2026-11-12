@@ -17,15 +17,6 @@ pub fn key_of(profile: &str) -> String {
     format!("test-key-{profile}-0123456789abcdefghijklmnopqrstuvwxyz")
 }
 
-/// A free loopback port (bound and released).
-pub fn free_port() -> u16 {
-    std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port()
-}
-
 /// Enables the API server in `profile` (with its key) and appends `extra`
 /// to its configuration.
 pub fn enable(home: &Path, profile: &str, extra: &str) {
@@ -40,24 +31,27 @@ pub fn enable(home: &Path, profile: &str, extra: &str) {
     ));
 }
 
-/// A mock home whose default profile serves the API with `extra` config;
-/// the listener port is returned with it.
-pub fn home(extra: &str) -> (tempfile::TempDir, u16) {
+/// A mock home whose default profile serves the API with `extra` config
+/// (the port is known once the daemon runs: [`port`]).
+pub fn home(extra: &str) -> tempfile::TempDir {
     let home = mock_home();
     enable(home.path(), "default", extra);
-    let port = listen(home.path(), "");
-    (home, port)
+    listen(home.path(), "");
+    home
 }
 
-/// Writes `daemon.toml` with the API listener on a free port and `extra`.
-pub fn listen(home: &Path, extra: &str) -> u16 {
-    let port = free_port();
+/// Writes `daemon.toml` with the API listener on port 0 and `extra`.
+pub fn listen(home: &Path, extra: &str) {
     std::fs::write(
         home.join("daemon.toml"),
-        format!("[api_server]\nlisten = \"127.0.0.1:{port}\"\n{extra}\n"),
+        format!("[api_server]\nlisten = \"127.0.0.1:0\"\n{extra}\n"),
     )
     .unwrap();
-    port
+}
+
+/// The port the running daemon's API listener is bound to.
+pub fn port(home: &Path) -> u16 {
+    super::daemon::bound_port(home, "listener:api_server")
 }
 
 /// Creates profile `name` (mock provider) served by the same daemon.

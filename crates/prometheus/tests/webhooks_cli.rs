@@ -17,14 +17,6 @@ fn json_of(text: &str) -> Value {
     serde_json::from_str(text).unwrap_or_else(|e| panic!("{e}: {text}"))
 }
 
-fn free_port() -> u16 {
-    std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port()
-}
-
 /// A POST without a signature; its status code.
 fn unsigned_post(port: u16, path: &str) -> u16 {
     use std::io::{Read as _, Write as _};
@@ -117,16 +109,20 @@ fn test_delivers_a_signed_sample_through_the_running_daemon() {
         "\n[gateway.platforms.webhook]\nenabled = true\n",
     );
     let home = home.path();
-    let port = free_port();
+    std::fs::write(
+        home.join("daemon.toml"),
+        "[gateway.http]\nlisten = \"127.0.0.1:0\"\n",
+    )
+    .unwrap();
+    let daemon = Daemon::start(home);
+    let port = common::daemon::bound_port(home, "listener:gateway.http");
+    // `webhooks test` posts to the configured address, so it names the
+    // port the listener got.
     std::fs::write(
         home.join("daemon.toml"),
         format!("[gateway.http]\nlisten = \"127.0.0.1:{port}\"\n"),
     )
     .unwrap();
-    let daemon = Daemon::start(home);
-    wait("the webhook listener", Duration::from_secs(30), || {
-        std::net::TcpStream::connect(("127.0.0.1", port)).is_ok()
-    });
     ok(&run(
         home,
         &[

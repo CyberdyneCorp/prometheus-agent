@@ -65,3 +65,33 @@ pub async fn connect(home: &Path, profile: &str) -> (Client, Inbox) {
     .await
     .unwrap()
 }
+
+/// The port the running daemon's listener `component` (health component,
+/// e.g. `listener:api_server`) is bound to, once it listens.
+///
+/// Tests configure their listeners on port 0 and read the port back here:
+/// a port picked free and released by the test can be bound by another
+/// test's daemon (or mock server) before this daemon binds it, and every
+/// test home's profile has the same API key, so the requests would be
+/// answered by the wrong daemon.
+pub fn bound_port(home: &Path, component: &str) -> u16 {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        let out = run(home, &["--json", "daemon", "status"]);
+        let status: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap_or_default();
+        let listener = status["daemon"]["health"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|c| c["component"] == component);
+        let reason = listener.and_then(|c| c["reason"].as_str());
+        if let Some(addr) = reason.and_then(|r| r.strip_prefix("listening on ")) {
+            return addr.parse::<std::net::SocketAddr>().unwrap().port();
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "{component} never listened: {listener:?}"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}

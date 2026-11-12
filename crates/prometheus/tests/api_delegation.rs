@@ -37,8 +37,8 @@ repeat = true
 text = "parent got no child result"
 "#;
 
-fn home() -> (tempfile::TempDir, u16) {
-    let (home, port) = api::home("");
+fn home() -> tempfile::TempDir {
+    let home = api::home("");
     let path = home.path().join("api-script.toml");
     std::fs::write(&path, DELEGATING).unwrap();
     append_config(
@@ -48,7 +48,7 @@ fn home() -> (tempfile::TempDir, u16) {
             path.to_string_lossy()
         ),
     );
-    (home, port)
+    home
 }
 
 /// The `delegate_task` result stored in `session`.
@@ -87,8 +87,9 @@ fn assert_waited(result: &str) {
 /// events stream reports the child, with its session and `dg-` dispatch.
 #[test]
 fn a_run_waits_for_its_children_and_streams_their_events() {
-    let (home, port) = home();
+    let home = home();
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let created = Request::new("POST", "/v1/runs")
         .auth("default")
         .json(&json!({"input": "please delegate"}))
@@ -142,8 +143,9 @@ fn a_run_waits_for_its_children_and_streams_their_events() {
 /// and answers with the delegated work done.
 #[test]
 fn a_chat_completion_waits_for_its_children() {
-    let (home, port) = home();
+    let home = home();
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let answer = chat(
         port,
         "default",

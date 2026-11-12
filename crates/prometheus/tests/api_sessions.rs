@@ -40,13 +40,14 @@ fn post(port: u16, path: &str, body: &Value) -> api::Answer {
 /// Scenario: Fork and continue.
 #[test]
 fn a_fork_continues_with_its_parents_history() {
-    let (home, port) = api::home("");
+    let home = api::home("");
     script(
         home.path(),
         "[[rule]]\nstep = 1\nuser = \"what was it\"\ntext = \"saw the parent turn\"\nrepeat = true\n\
          [[rule]]\ntext = \"noted\"\nrepeat = true\n",
     );
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let first = chat(
         port,
         "default",
@@ -114,8 +115,9 @@ fn a_fork_continues_with_its_parents_history() {
 
 #[test]
 fn sessions_of_other_surfaces_are_readable_but_not_writable() {
-    let (home, port) = api::home("");
+    let home = api::home("");
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let out = ok(&run(home.path(), &["--json", "-z", "a cli turn"]));
     let report: Value = serde_json::from_str(&out).unwrap();
     let foreign = report["session_id"].as_str().unwrap();
@@ -153,8 +155,9 @@ fn sessions_of_other_surfaces_are_readable_but_not_writable() {
 /// Scenario: Light transcript.
 #[test]
 fn a_light_transcript_shows_image_placeholders() {
-    let (home, port) = api::home("");
+    let home = api::home("");
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let png = base64::engine::general_purpose::STANDARD.encode(PNG);
     let answer = chat(
         port,
@@ -198,8 +201,9 @@ fn a_light_transcript_shows_image_placeholders() {
 /// Scenario: Past one-shot resume.
 #[test]
 fn jobs_follow_the_cron_rules_over_rest() {
-    let (home, port) = api::home("");
+    let home = api::home("");
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let soon = (jiff::Timestamp::now() + jiff::SignedDuration::from_secs(2)).to_string();
     let job = json!({"schedule": soon, "prompt": "say hi", "paused": true, "name": "soon"});
     let asked = post(port, "/api/jobs", &job);
@@ -255,8 +259,9 @@ fn jobs_follow_the_cron_rules_over_rest() {
 
 #[test]
 fn discovery_endpoints_describe_the_profile() {
-    let (home, port) = api::home("");
+    let home = api::home("");
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let capabilities = get(port, "/v1/capabilities").json();
     assert_eq!(capabilities["object"], "prometheus.api_server.capabilities");
     assert_eq!(
@@ -307,7 +312,7 @@ fn discovery_endpoints_describe_the_profile() {
 /// Scenario: Readiness hides secrets.
 #[test]
 fn detailed_health_reports_failures_without_secrets_or_paths() {
-    let (home, port) = api::home("");
+    let home = api::home("");
     ok(&run(
         home.path(),
         &["config", "set", "model.provider", "openai"],
@@ -317,6 +322,7 @@ fn detailed_health_reports_failures_without_secrets_or_paths() {
         &["config", "set", "model.default", "gpt-4o"],
     ));
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let unauthenticated = Request::new("GET", "/health/detailed").send(port);
     assert_eq!(unauthenticated.status, 401);
     let health = get(port, "/health/detailed");

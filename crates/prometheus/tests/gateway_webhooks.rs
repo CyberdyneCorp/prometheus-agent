@@ -17,14 +17,6 @@ use self::common::{ok, run_with_stdin};
 
 const SECRET: &str = "alert-signing-key";
 
-fn free_port() -> u16 {
-    std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port()
-}
-
 /// One signed POST on the listener; the status code and body.
 fn post(port: u16, path: &str, delivery: &str, body: &str, declared_len: usize) -> (u16, String) {
     let sig = pmt_adapters_webhook::github_signature(SECRET, body.as_bytes());
@@ -54,10 +46,6 @@ fn post(port: u16, path: &str, delivery: &str, body: &str, declared_len: usize) 
     (status, body)
 }
 
-fn listener_up(port: u16) -> bool {
-    TcpStream::connect(("127.0.0.1", port)).is_ok()
-}
-
 fn messages_stored(home: &Path) -> i64 {
     let db = home.join("profiles/default/state.db");
     if !db.exists() {
@@ -80,10 +68,9 @@ fn a_deliver_only_route_forwards_an_alert_to_the_home_channel_without_a_model_ca
          prompt = \"ALERT {alert.name} on {alert.host}\" }\n",
     );
     let home = home.path();
-    let port = free_port();
     std::fs::write(
         home.join("daemon.toml"),
-        format!("[gateway.http]\nlisten = \"127.0.0.1:{port}\"\n"),
+        "[gateway.http]\nlisten = \"127.0.0.1:0\"\n",
     )
     .unwrap();
     ok(&run_with_stdin(
@@ -92,9 +79,7 @@ fn a_deliver_only_route_forwards_an_alert_to_the_home_channel_without_a_model_ca
         SECRET,
     ));
     let daemon = Daemon::start(home);
-    wait("the webhook listener", Duration::from_secs(30), || {
-        listener_up(port)
-    });
+    let port = common::daemon::bound_port(home, "listener:gateway.http");
 
     let alert = r#"{"alert": {"name": "disk full", "host": "db1"}}"#;
     let (status, body) = post(port, "/p/default/webhook/alert", "a-1", alert, alert.len());
@@ -148,10 +133,9 @@ fn a_route_without_toolsets_runs_read_only_and_answers_the_caller() {
     let home = home.path();
     let build = home.join("profiles/default/workspace/build");
     std::fs::create_dir_all(&build).unwrap();
-    let port = free_port();
     std::fs::write(
         home.join("daemon.toml"),
-        format!("[gateway.http]\nlisten = \"127.0.0.1:{port}\"\n"),
+        "[gateway.http]\nlisten = \"127.0.0.1:0\"\n",
     )
     .unwrap();
     ok(&run_with_stdin(
@@ -160,9 +144,7 @@ fn a_route_without_toolsets_runs_read_only_and_answers_the_caller() {
         SECRET,
     ));
     let daemon = Daemon::start(home);
-    wait("the webhook listener", Duration::from_secs(30), || {
-        listener_up(port)
-    });
+    let port = common::daemon::bound_port(home, "listener:gateway.http");
     let body = r#"{"request": "please run rm -rf build"}"#;
     let (status, answer) = post(port, "/p/default/webhook/ask", "r-1", body, body.len());
     assert_eq!(status, 200, "{answer}");

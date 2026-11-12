@@ -121,7 +121,7 @@ fn repo(home: &Path) -> PathBuf {
 
 /// A mock home serving the API, with MoA presets on mock models,
 /// worktree isolation for children and the script above.
-fn automation_home() -> (tempfile::TempDir, u16, PathBuf) {
+fn automation_home() -> (tempfile::TempDir, PathBuf) {
     let home = mock_home();
     let work = repo(home.path());
     std::fs::write(
@@ -138,8 +138,8 @@ fn automation_home() -> (tempfile::TempDir, u16, PathBuf) {
          aggregator = {provider = \"mock\", model = \"agg\"}\n",
     );
     api::enable(home.path(), "default", "");
-    let port = api::listen(home.path(), "");
-    (home, port, work)
+    api::listen(home.path(), "");
+    (home, work)
 }
 
 fn sdk_part(port: u16) {
@@ -213,8 +213,9 @@ fn worktree_part(home: &Path, work: &Path) {
 #[cfg(unix)]
 #[test]
 fn sdk_runs_goals_mixtures_and_worktree_children_share_one_daemon() {
-    let (home, port, work) = automation_home();
+    let (home, work) = automation_home();
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     sdk_part(port);
     line_chat_part(home.path());
     worktree_part(home.path(), &work);

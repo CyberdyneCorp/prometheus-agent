@@ -20,8 +20,8 @@ const VALUE: &str = "horse-battery-staple-9417";
 
 /// A home whose known secret `TICKET_TOKEN` is `VALUE`, with redaction
 /// switched off, where the model runs `echo` of the secret.
-fn secret_home() -> (tempfile::TempDir, u16) {
-    let (home, port) = api::home("");
+fn secret_home() -> tempfile::TempDir {
+    let home = api::home("");
     ok(&run(
         home.path(),
         &["config", "set", "security.redact_secrets", "false"],
@@ -48,7 +48,7 @@ fn secret_home() -> (tempfile::TempDir, u16) {
             script.to_string_lossy()
         ),
     );
-    (home, port)
+    home
 }
 
 fn assert_redacted(preview: &Value, all: &str) {
@@ -61,8 +61,9 @@ fn assert_redacted(preview: &Value, all: &str) {
 /// redacted even with `security.redact_secrets = false`.
 #[test]
 fn session_chat_previews_redact_known_secrets() {
-    let (home, port) = secret_home();
+    let home = secret_home();
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let created = Request::new("POST", "/api/sessions")
         .auth("default")
         .json(&json!({}))
@@ -87,8 +88,9 @@ fn session_chat_previews_redact_known_secrets() {
 /// Chat Completions stream: the tool progress preview is redacted.
 #[test]
 fn chat_completion_progress_previews_redact_known_secrets() {
-    let (home, port) = secret_home();
+    let home = secret_home();
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let answer = chat(
         port,
         "default",
@@ -107,8 +109,9 @@ fn chat_completion_progress_previews_redact_known_secrets() {
 /// with `unsupported_content_type` and nothing is written.
 #[test]
 fn an_image_media_type_never_names_a_file() {
-    let (home, port) = api::home("");
+    let home = api::home("");
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let profile = home.path().join("profiles/default");
     for media_type in [
         "image/../../../escaped",
@@ -143,8 +146,9 @@ fn an_image_media_type_never_names_a_file() {
 /// without the daemon waiting for (or buffering) the body.
 #[test]
 fn an_unauthenticated_upload_is_refused_before_its_body() {
-    let (home, port) = api::home("");
+    let home = api::home("");
     let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
     let answer = refused_without_body(port);
     assert!(answer.starts_with("HTTP/1.1 401"), "{answer}");
 }
