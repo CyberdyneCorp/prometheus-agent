@@ -33,10 +33,9 @@ capabilities = [
     "replay-and-evaluation",
 ]
 
-# M2 is being implemented (task groups 22-60): its scenarios are indexed as
-# their tasks land; unindexed ones are pending, indexed ones are checked.
+# M2 (task groups 22-60) is complete: every scenario of its requirements
+# maps to tests (task 60.6).
 [milestones.M2]
-partial = true
 capabilities = [
     "agent-interop",
     "agent-turn-loop",
@@ -542,6 +541,7 @@ capabilities = [
 "No terminal toolset" = ["crates/pmt-tools/tests/toolsets.rs::browser_exec_needs_the_terminal_toolset"]
 
 [model-providers."Hermes model-provider plugins hosted by the Python bridge"]
+"Copilot through the bridge" = { tests = ["crates/prometheus/tests/copilot_bridge.rs::a_device_code_sign_in_reaches_the_bridged_copilot_with_a_short_lived_token", "crates/pmt-providers/src/auth/exchange.rs::a_token_is_used_until_a_minute_before_expiry_or_its_refresh_time"], note = "fake GitHub device-code, token-exchange and Copilot endpoints on loopback through [providers.copilot.oauth] overrides; the Copilot-shaped fixture plugin stands in for github-copilot" }
 "Profile references a missing bridged provider" = ["crates/prometheus/tests/python_bridge.rs::a_profile_naming_a_missing_bridged_provider_fails_closed"]
 
 [model-providers."Typed profile-scoped provider registry"]
@@ -1761,6 +1761,7 @@ capabilities = [
 # the telegram and discord adapters (25.5)
 [platform-adapters."Adapter contract"]
 "Reconnect does not drop updates" = ["crates/pmt-adapters-telegram/tests/telegram.rs::updates_arriving_while_disconnected_arrive_once_after_reconnecting", "crates/pmt-adapters-telegram/tests/telegram.rs::the_adapter_passes_the_conformance_kit", "crates/pmt-adapters-discord/tests/discord.rs::a_lost_connection_resumes_and_replays_what_was_missed"]
+"Plugin missing a required export" = ["crates/pmt-plugins/tests/adapters.rs::an_adapter_without_send_is_refused_naming_the_operation"]
 
 [platform-adapters."Scoped credential access"]
 "Secondary profile secret miss" = ["crates/pmt-adapters-telegram/tests/telegram.rs::a_secondary_profile_never_uses_the_default_profiles_token"]
@@ -1774,6 +1775,7 @@ capabilities = [
 
 [platform-adapters."First-party platforms and typed platform names"]
 "Unknown platform table" = ["crates/pmt-config/src/validate_platforms.rs::an_unknown_platform_table_fails_validation"]
+"Plugin platform accepted" = ["crates/prometheus/tests/plugins_adapter.rs::a_plugin_adapter_serves_its_platform_under_its_grants_and_a_trap_restarts_only_it", "crates/pmt-config/src/platforms.rs::plugin_platforms_are_known_once_registered_in_lower_case"]
 
 [platform-adapters."Default first-party message limits"]
 "Raising a limit is rejected" = ["crates/pmt-config/src/validate_platforms.rs::raising_a_first_party_limit_is_rejected", "crates/pmt-gateway/tests/messaging/platforms.rs::a_lowered_limit_applies_and_a_raised_one_fails_the_load"]
@@ -3913,3 +3915,10 @@ capabilities = [
 [messaging-gateway."Event subscription and owned replay"]
 "Reconnect resumes without gaps" = { tests = ["crates/prometheus/tests/m2_exit/daemon_clients.rs::the_daemon_serves_tui_cli_and_platform_and_a_dropped_client_resumes_without_gaps", "crates/pmt-gateway/tests/sessions.rs::events_missed_while_disconnected_are_replayed", "crates/pmt-gateway/src/hub/tests.rs::concurrent_publishers_reach_a_connection_in_seq_order"], note = "the exit test's client drops between two platform turns and replays the missed turn's events gap-free before the next live one; unix only (the TUI runs in a pseudo-terminal)" }
 "Foreign profile session is invisible" = ["crates/prometheus/tests/m2_exit/daemon_clients.rs::the_daemon_serves_tui_cli_and_platform_and_a_dropped_client_resumes_without_gaps", "crates/pmt-gateway/tests/sessions.rs::another_profiles_events_are_denied_without_revealing_the_session"]
+
+[workspace-architecture."Background loading and daemon readiness budgets"]
+"Slow MCP server" = { tests = ["crates/prometheus/tests/mcp_client.rs::a_slow_mcp_server_never_delays_the_prompt_and_joins_by_reload_now", "crates/prometheus/tests/mcp_client.rs::a_server_connecting_within_the_wait_joins_the_first_turn"], note = "unix only (pseudo-terminal); a new interactive session starts its MCP discovery in the background and waits for it before its first prompt is built, so the prompt is shown at once; the 150 ms figure is the startup budget the perf gate measures on the reference runner; `/reload-mcp --now` is `/mcp reload --now` here" }
+
+[platform-adapters."WASM adapter plugin isolation"]
+"Undeclared host blocked" = ["crates/prometheus/tests/plugins_adapter.rs::a_plugin_adapter_serves_its_platform_under_its_grants_and_a_trap_restarts_only_it", "crates/pmt-plugins/tests/runtime.rs::an_undeclared_host_is_blocked_before_any_connection"]
+"Crash is contained" = ["crates/prometheus/tests/plugins_adapter.rs::a_plugin_adapter_serves_its_platform_under_its_grants_and_a_trap_restarts_only_it", "crates/prometheus/src/plugins_host/adapter.rs::the_fifth_crash_within_ten_minutes_is_fatal"]
