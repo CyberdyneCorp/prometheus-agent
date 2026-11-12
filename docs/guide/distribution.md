@@ -55,7 +55,9 @@ With `update.allow_from_chat = true` in `daemon.toml` (off by default),
 gateway admins can send `/update` (and `/update check`) from a chat. After
 a confirmation in the same chat, the same updater runs detached; its stages
 (`checking`, `downloading <n>%`, `verifying`, `self-test`, `swapping`,
-`restarting`) arrive at most once every 2 s, refusals (another owner, the
+`restarting`) arrive at most once every 2 s (a newer stage replaces one
+still waiting; the last one, `restarting`, is always said before the old
+daemon exits), refusals (another owner, the
 update lock, a bad signature) arrive with their message, a busy daemon's
 restart is asked in the chat (no answer within `approvals.timeout_secs` is
 a no), and the restarted daemon says `updated to <version>`.

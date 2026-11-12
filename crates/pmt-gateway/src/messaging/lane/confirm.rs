@@ -294,12 +294,13 @@ impl Lane {
         };
         match self.shared.agents.update_from_chat(&request).await {
             Ok(UpdateRun::Answer(text)) => self.say(&text),
-            Ok(UpdateRun::Running(events)) => {
+            Ok(UpdateRun::Running(feed)) => {
                 self.say(self.strings().get("gateway.update_started"));
                 super::update_relay::spawn(
+                    &self.shared,
                     self.tx.clone(),
                     routing.clone(),
-                    events,
+                    feed,
                     self.strings(),
                 );
             }

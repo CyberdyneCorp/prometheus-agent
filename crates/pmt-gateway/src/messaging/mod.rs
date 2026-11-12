@@ -105,7 +105,8 @@ pub use adapter::{
     SendError, SenderVerdict, Sent, SessionHints, TaskCard, TaskStatus,
 };
 pub use agents::{
-    Agents, BusyPolicy, Conversation, Lookup, ModelChoice, UpdateEvent, UpdateFromChat, UpdateRun,
+    Agents, BusyPolicy, Conversation, Lookup, ModelChoice, UpdateEvent, UpdateFeed, UpdateFromChat,
+    UpdateRun,
 };
 pub use hooks::{Hook, HookBridge, Hooks, PreCommand};
 pub use http::HttpOptions;
@@ -227,6 +228,8 @@ pub(crate) struct Shared {
     unserved: Mutex<HashMap<String, tokio::time::Instant>>,
     outbox_wake: Notify,
     stop: CancellationToken,
+    /// Updates from chat being relayed (the shutdown waits for them).
+    update_relays: lane::update_relay::Relays,
 }
 
 impl Shared {
@@ -387,6 +390,7 @@ impl Gateway {
             unserved: Mutex::default(),
             outbox_wake: Notify::new(),
             stop: CancellationToken::new(),
+            update_relays: Mutex::default(),
             server: Arc::clone(&server),
             agents,
             options,
@@ -543,6 +547,7 @@ impl Gateway {
             .health
             .add("prometheus.gateway.lifecycle", &[("event", "shutdown")]);
         shared.stop.cancel();
+        lane::update_relay::settle(&shared.update_relays).await;
         let drained = lane::drain(shared, shared.options.drain_timeout).await;
         for profile in &shared.server.profiles() {
             shared

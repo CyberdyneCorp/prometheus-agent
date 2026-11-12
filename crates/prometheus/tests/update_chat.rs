@@ -61,10 +61,17 @@ fn an_admin_updates_from_the_chat() {
         &format!("updated to {next}"),
         Duration::from_mins(4),
     );
-    // Stage lines, at most one per 2 s (a newer stage replaces a waiting
-    // one, so a fast download may show none of its percentages).
+    // Stage lines, at most one per 2 s: a newer stage replaces a waiting
+    // one, so which middle stages show depends on timing. The last one,
+    // written just before the handover stops this daemon, always shows.
     let said = texts(&f.home, "default");
-    assert!(said.iter().any(|t| t == "swapping the binary"), "{said:?}");
+    let at = |line: &str| {
+        said.iter()
+            .position(|t| t == line)
+            .unwrap_or_else(|| panic!("never said {line:?}: {said:?}"))
+    };
+    assert!(at("checking the stable channel") < at("restarting the daemon"));
+    assert!(at("restarting the daemon") < at(&format!("updated to {next}")));
     assert_eq!(f.latest_receipt()["outcome"], "success");
     // The first daemon exited for the handover; the new one runs.
     assert!(first.wait().is_ok());

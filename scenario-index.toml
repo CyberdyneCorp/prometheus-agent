@@ -3637,7 +3637,7 @@ capabilities = [
 "Misconfigured network" = ["crates/prometheus/tests/container_image.rs::the_image_runs_as_the_spec_says", "crates/prometheus/src/doctor_cmd/isolation.rs::open_egress_fails_only_when_isolation_is_expected"]
 
 [distribution-and-update."Update from chat"]
-"Admin updates from Telegram" = ["crates/prometheus/tests/update_chat.rs::an_admin_updates_from_the_chat", "crates/prometheus/tests/daemon_cli.rs::a_foreground_daemon_under_an_inherited_service_marker_is_unsupervised", "crates/pmt-gateway/src/messaging/lane/update_relay.rs::stages_are_relayed_at_most_every_two_seconds", "crates/pmt-gateway/src/messaging/lane/update_relay.rs::a_busy_daemon_is_asked_about_in_the_chat"]
+"Admin updates from Telegram" = ["crates/prometheus/tests/update_chat.rs::an_admin_updates_from_the_chat", "crates/prometheus/tests/daemon_cli.rs::a_foreground_daemon_under_an_inherited_service_marker_is_unsupervised", "crates/pmt-gateway/src/messaging/lane/update_relay.rs::stages_are_relayed_at_most_every_two_seconds", "crates/pmt-gateway/src/messaging/lane/update_relay.rs::a_busy_daemon_is_asked_about_in_the_chat", "crates/pmt-gateway/src/messaging/lane/update_relay.rs::the_last_stage_is_said_before_the_daemon_stops"]
 "Disabled by default" = ["crates/pmt-gateway/tests/messaging/operations.rs::update_from_chat_is_off_by_default"]
 
 [distribution-and-update."Uninstall scopes and dry run"]

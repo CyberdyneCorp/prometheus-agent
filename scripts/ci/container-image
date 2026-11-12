@@ -22,6 +22,9 @@
 #
 # usage: scripts/ci/container-image <static linux prometheus binary>
 set -euo pipefail
+# Outputs are captured before grep -q searches them: grep exits at its
+# first match, and under pipefail a writer still feeding it (docker exec
+# relays a command's output in pieces) dies of SIGPIPE and fails the check.
 
 binary=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -79,8 +82,9 @@ wait_for 60 "a healthy daemon" is_health healthy
 pass "read-only container with /data and tmpfs /tmp is healthy"
 
 [ "$(docker exec "$c" id -u)" = 10001 ] || fail "docker exec does not run as uid 10001"
-docker exec "$c" prometheus daemon status | grep -q "gateway running" ||
-    fail "docker exec does not see the daemon of /data"
+status=$(docker exec "$c" prometheus daemon status) || fail "daemon status failed"
+grep -q "gateway running" <<<"$status" ||
+    fail "docker exec does not see the daemon of /data: $status"
 pass "exec as the runtime user on the same /data"
 
 writable=$(docker exec "$c" sh -c 'find /usr /etc /opt /bin /sbin /lib -xdev -writable ! -type l 2>/dev/null | head -n 5')
@@ -97,14 +101,15 @@ started=$(docker inspect -f '{{.State.StartedAt}}' "$c")
 docker exec "$c" prometheus profile create work >/dev/null
 docker exec "$c" prometheus daemon restart >/dev/null || fail "daemon restart failed"
 [ "$(docker inspect -f '{{.State.StartedAt}}' "$c")" = "$started" ] || fail "the container restarted"
-docker exec "$c" prometheus daemon status | grep -q "profiles: .*work" ||
-    fail "the new profile is not served after daemon restart"
+status=$(docker exec "$c" prometheus daemon status) || fail "daemon status failed after daemon restart"
+grep -q "profiles: .*work" <<<"$status" ||
+    fail "the new profile is not served after daemon restart: $status"
 pass "a new profile is served after an in-place daemon restart"
 
 docker exec "$c" prometheus config set model.provider ollama >/dev/null
-docker exec "$c" prometheus doctor providers 2>&1 |
-    grep -q "ollama points at the container's own loopback; use http://host.docker.internal:11434 to reach a server on the host" ||
-    fail "doctor providers does not warn about the container loopback"
+doctor=$(docker exec "$c" prometheus doctor providers 2>&1) || fail "doctor providers failed: $doctor"
+grep -q "ollama points at the container's own loopback; use http://host.docker.internal:11434 to reach a server on the host" <<<"$doctor" ||
+    fail "doctor providers does not warn about the container loopback: $doctor"
 pass "doctor providers points a loopback provider at host.docker.internal"
 
 pid=$(docker exec "$c" sh -c 'sed -n "s/.*\"pid\": *\([0-9]*\).*/\1/p" /data/run/gateway.json | head -n 1')
@@ -147,15 +152,15 @@ docker run -d --name "$c-proxy" --network "pmt-egress-$suffix" \
 docker network connect "pmt-isolated-$suffix" "$c-proxy"
 sleep 5
 out=$(run_iso prometheus doctor network --online 2>&1) || fail "isolated doctor failed: $out"
-echo "$out" | grep -q "direct egress: blocked" || fail "egress not blocked: $out"
-echo "$out" | grep -q "reachable through the proxy" || fail "no host reachable through the proxy: $out"
+grep -q "direct egress: blocked" <<<"$out" || fail "egress not blocked: $out"
+grep -q "reachable through the proxy" <<<"$out" || fail "no host reachable through the proxy: $out"
 pass "isolation verified: direct egress blocked, provider hosts through the proxy"
 
 docker create --name "$c-isolated" --network "pmt-isolated-$suffix" -v "pmt-iso-$suffix:/data" \
     "$image" prometheus doctor network --online >/dev/null
 docker network connect bridge "$c-isolated"
 if out=$(docker start -a "$c-isolated" 2>&1); then fail "the misconfigured network passed: $out"; fi
-echo "$out" | grep -q "direct egress succeeded although network.expect_isolated = true" ||
+grep -q "direct egress succeeded although network.expect_isolated = true" <<<"$out" ||
     fail "no misconfiguration message: $out"
 pass "a misconfigured network fails the doctor"
 echo "container image: all checks passed"

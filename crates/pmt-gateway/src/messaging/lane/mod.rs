@@ -34,7 +34,7 @@ mod requests;
 mod resume;
 mod topic;
 mod turns;
-mod update_relay;
+pub(crate) mod update_relay;
 mod watchdog;
 
 use std::collections::VecDeque;
@@ -113,6 +113,8 @@ pub(crate) enum Msg {
         routing: Box<Routing>,
         question: String,
     },
+    /// Answered once every message sent before it is handled.
+    Barrier(tokio::sync::oneshot::Sender<()>),
 }
 
 /// What a lane shows outside its task.
@@ -538,6 +540,9 @@ impl Lane {
             Msg::Automated(automated) => self.automated(automated).await,
             Msg::Say(text) => self.say(&text),
             Msg::UpdateBusy { routing, question } => self.ask_busy_restart(&routing, &question),
+            Msg::Barrier(ack) => {
+                let _ = ack.send(());
+            }
             Msg::Mirror(row) => {
                 self.mirrors.push(row);
                 if self.running.is_none() {

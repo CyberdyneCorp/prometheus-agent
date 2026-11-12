@@ -121,13 +121,30 @@ pub enum UpdateEvent {
     },
 }
 
+/// A running updater, as the chat that started it follows it.
+pub struct UpdateFeed {
+    /// Its stage lines and its exit.
+    pub events: tokio::sync::mpsc::UnboundedReceiver<UpdateEvent>,
+    /// Queues in `events`, before returning, every stage line the updater
+    /// has written so far. The daemon calls it when it stops for the
+    /// handover: the updater wrote `restarting` before asking it to stop,
+    /// and that line must reach the chat before this daemon is gone.
+    pub catch_up: Box<dyn Fn() + Send + Sync>,
+}
+
+impl std::fmt::Debug for UpdateFeed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UpdateFeed").finish_non_exhaustive()
+    }
+}
+
 /// What `update_from_chat` started.
 #[derive(Debug)]
 pub enum UpdateRun {
     /// An answer for the chat (`/update check`).
     Answer(String),
     /// A running updater and its events.
-    Running(tokio::sync::mpsc::UnboundedReceiver<UpdateEvent>),
+    Running(UpdateFeed),
 }
 
 /// The agent side of the messaging gateway.

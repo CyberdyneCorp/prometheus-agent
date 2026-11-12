@@ -3,16 +3,18 @@
 //! run as a detached child process of this binary (it holds the update
 //! lock and outlives the daemon it replaces), its output in
 //! `logs/update-from-chat.log`. A thread follows that log and reports the
-//! stage lines and the exit to the chat's relay. `/update check` runs
-//! `update --check` and answers with what it printed.
+//! stage lines and the exit to the chat's relay; the relay can also catch
+//! up at once when this daemon stops for the handover. `/update check`
+//! runs `update --check` and answers with what it printed.
 
 use std::io::{Read as _, Seek as _, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use pmt_core::error::{Error, codes};
-use pmt_gateway::messaging::{UpdateEvent, UpdateFromChat, UpdateRun};
+use pmt_gateway::messaging::{UpdateEvent, UpdateFeed, UpdateFromChat, UpdateRun};
 use tokio::sync::mpsc;
 
 /// The progress lines worth relaying start with a stage name.
@@ -78,39 +80,73 @@ pub(super) fn run(home: &Path, request: &UpdateFromChat) -> Result<UpdateRun, Er
         pmt_gateway::messaging::forget_update(home);
         failed("the updater did not start", &e)
     })?;
-    let (tx, rx) = mpsc::unbounded_channel();
+    let (tx, events) = mpsc::unbounded_channel();
+    let reader = Arc::new(Mutex::new(Reader {
+        log,
+        tx,
+        offset: 0,
+        partial: String::new(),
+        last_line: String::new(),
+    }));
+    let follower = Arc::clone(&reader);
     let home = home.to_owned();
-    std::thread::spawn(move || follow(child, &log, &home, &tx));
-    Ok(UpdateRun::Running(rx))
+    std::thread::spawn(move || follow(child, &follower, &home));
+    Ok(UpdateRun::Running(UpdateFeed {
+        events,
+        catch_up: Box::new(move || reader.lock().expect("update reader poisoned").read()),
+    }))
+}
+
+/// Reads the updater's log and reports its stage lines, from the
+/// following thread or from the relay catching up; the lock keeps the
+/// lines in order.
+struct Reader {
+    log: PathBuf,
+    tx: mpsc::UnboundedSender<UpdateEvent>,
+    offset: u64,
+    partial: String,
+    last_line: String,
+}
+
+impl Reader {
+    /// Reports the stage lines written since the last read.
+    fn read(&mut self) {
+        for line in read_lines(&self.log, &mut self.offset, &mut self.partial) {
+            if !line.trim().is_empty() {
+                self.last_line.clone_from(&line);
+            }
+            if STAGES.iter().any(|stage| line.starts_with(stage)) {
+                let _ = self.tx.send(UpdateEvent::Progress(line));
+            }
+        }
+    }
+
+    /// Reports the updater's exit, with the last line it printed.
+    fn exited(&mut self, code: i32) {
+        self.read();
+        if !self.partial.trim().is_empty() {
+            self.last_line = std::mem::take(&mut self.partial);
+        }
+        let _ = self.tx.send(UpdateEvent::Finished {
+            code,
+            last_line: std::mem::take(&mut self.last_line),
+        });
+    }
 }
 
 /// Reports the log's stage lines until the updater exits, then its exit.
-fn follow(mut child: Child, log: &Path, home: &Path, tx: &mpsc::UnboundedSender<UpdateEvent>) {
-    let mut offset = 0;
-    let mut partial = String::new();
-    let mut last_line = String::new();
+fn follow(mut child: Child, reader: &Mutex<Reader>, home: &Path) {
     loop {
         let exited = child.try_wait().ok().flatten();
-        for line in read_lines(log, &mut offset, &mut partial) {
-            if !line.trim().is_empty() {
-                last_line.clone_from(&line);
-            }
-            if STAGES.iter().any(|stage| line.starts_with(stage)) {
-                let _ = tx.send(UpdateEvent::Progress(line));
-            }
-        }
+        let mut reader = reader.lock().expect("update reader poisoned");
         if let Some(status) = exited {
-            if !partial.trim().is_empty() {
-                last_line = std::mem::take(&mut partial);
-            }
             // This daemon is still here: no new one will say the result.
             pmt_gateway::messaging::forget_update(home);
-            let _ = tx.send(UpdateEvent::Finished {
-                code: status.code().unwrap_or(1),
-                last_line,
-            });
+            reader.exited(status.code().unwrap_or(1));
             return;
         }
+        reader.read();
+        drop(reader);
         std::thread::sleep(Duration::from_millis(200));
     }
 }

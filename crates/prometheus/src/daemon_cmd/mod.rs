@@ -369,8 +369,11 @@ fn restart(home: &Path, ctx: &Context<'_>) -> Result<u8, Error> {
     let old = record.endpoint.instance_id;
     let deadline = std::time::Instant::now() + drain_wait(home) + Duration::from_secs(30);
     loop {
+        // Done once the new daemon answers: a `daemon status` right after
+        // this command then reports what the new daemon serves.
         if let Discovery::Running(new) = discover(home)?
             && new.endpoint.instance_id != old
+            && control_call(&new, &ControlRequest::Status).is_ok_and(|r| r.status.is_some())
         {
             return crate::output::print(&format!(
                 "daemon restarted in place by its supervisor (pid {})",
