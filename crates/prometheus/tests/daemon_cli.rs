@@ -341,6 +341,42 @@ fn doctor_warns_about_a_daemon_of_another_build() {
     assert!(text.contains("build another-build"), "{text}");
 }
 
+/// Regression: a foreground `daemon run` in a shell that inherited a
+/// service manager's markers (a CI runner or GNOME Terminal under systemd:
+/// `INVOCATION_ID`; an app launchd started: `XPC_SERVICE_NAME`) took itself
+/// for supervised, so a restart or update handover waited for a supervisor
+/// that never comes. Only a daemon the manager itself started counts.
+#[test]
+fn a_foreground_daemon_under_an_inherited_service_marker_is_unsupervised() {
+    let home = mock_home();
+    let mut first = common::command(home.path())
+        .args(["daemon", "run"])
+        .env("INVOCATION_ID", "0123456789abcdef")
+        .env("XPC_SERVICE_NAME", "application.com.example.runner")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let _stopper = Stopper(home.path());
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while !matches!(discover(home.path()), Ok(Discovery::Running(_))) {
+        assert!(std::time::Instant::now() < deadline, "the daemon never ran");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let status: Value =
+        serde_json::from_str(&ok(&run(home.path(), &["--json", "daemon", "status"]))).unwrap();
+    assert_eq!(status["daemon"]["supervised"], false, "{status}");
+    let restarted = common::command(home.path())
+        .args(["daemon", "restart"])
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    ok(&restarted);
+    assert!(first.wait().is_ok());
+    assert_ne!(daemon_pid(home.path()), first.id());
+}
+
 /// Regression: a daemon `daemon start` launched from inside a systemd
 /// service (a CI runner: `INVOCATION_ID` set) took itself for supervised,
 /// so `daemon restart` asked it to exit 75 and waited for a supervisor

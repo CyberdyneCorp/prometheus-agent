@@ -74,22 +74,21 @@ impl Bundled {
 }
 
 /// The parsed bundled catalog of `id` for `surface` (empty when not
-/// bundled). Bundled catalogs are checked by this crate's tests, so a
-/// parse failure cannot ship; it would read as empty.
+/// bundled). Each catalog is parsed on first use only: a process needs one
+/// language plus English, and parsing all of them would cost every CLI
+/// start (chat included) time and memory. Bundled catalogs are checked by
+/// this crate's tests, so a parse failure cannot ship; it would read as
+/// empty.
 pub(crate) fn entries(id: &str, surface: Surface) -> &'static Entries {
-    static PARSED: OnceLock<Vec<[Entries; 3]>> = OnceLock::new();
+    static PARSED: OnceLock<Vec<[OnceLock<Entries>; 3]>> = OnceLock::new();
     static EMPTY: Entries = Entries::new();
-    let parsed = PARSED.get_or_init(|| {
-        BUNDLED
-            .iter()
-            .map(|b| Surface::ALL.map(|s| catalog::parse(b.text(s)).unwrap_or_default()))
-            .collect()
-    });
+    let Some(index) = BUNDLED.iter().position(|b| b.id == id) else {
+        return &EMPTY;
+    };
     let slot = Surface::ALL.iter().position(|s| *s == surface).unwrap_or(0);
-    BUNDLED
-        .iter()
-        .position(|b| b.id == id)
-        .map_or(&EMPTY, |index| &parsed[index][slot])
+    let parsed = PARSED.get_or_init(|| BUNDLED.iter().map(|_| Default::default()).collect());
+    parsed[index][slot]
+        .get_or_init(|| catalog::parse(BUNDLED[index].text(surface)).unwrap_or_default())
 }
 
 /// The English bundled catalog of `surface`.

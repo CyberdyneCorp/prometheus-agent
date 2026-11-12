@@ -207,7 +207,25 @@ adapter contract (`descriptor`, `start`, `stop`, `poll`, `send`,
 refused naming it. The plugin reaches its platform only through the host
 `http` import under its `network` grant; a trap or timeout puts only that
 adapter into `retrying` (reconnected with backoff on a fresh instance),
-and five crashes within ten minutes make it `fatal`.
+and five crashes within ten minutes make it `fatal`. A failed `send`
+names its kind by the error's prefix: `rate_limited[: <secs>]`,
+`server: ...`, `formatting: ...`, `ambiguous: ...`, `permanent: ...`
+(never retried) or `unsupported`; any other error is a network failure
+and is retried.
+
+`prometheus plugins test-adapter <plugin dir>` runs the adapter
+conformance kit against the plugin in a throwaway home: the plugin is
+granted exactly what it declares plus the kit's reference platform, a
+loopback HTTP API passed as its `api` option (`GET /updates` answers the
+messages since the last poll as a JSON list of `{id, chat, chat_type,
+sender, text, callback?}`; `POST /send` takes the host's outgoing JSON and
+answers the message id, or `429` with `{"retry_after": <secs>}`, `5xx`,
+`400` or `403`; a dropped connection is one `503` to the next poll). It
+prints the same `pass`/`FAIL`/`skip` lines as for a first-party adapter
+plus `capability grants`, which fails when any host call was refused
+during the run, and exits 0 only when no check failed. A
+`platform-adapter` plugin is listed in the plugin catalog only with a
+passing report for its listed version.
 
 ## Limits
 

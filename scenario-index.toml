@@ -1385,7 +1385,7 @@ capabilities = [
 "First run on a fresh machine" = ["crates/prometheus/tests/demo_cli.rs::first_run_on_a_fresh_machine", "crates/prometheus/tests/demo_cli.rs::inside_a_git_tree_the_demo_starts_and_installs_no_language_server"]
 
 # ---------------------------------------------------------------------------
-# M2 (partial): indexed as each task group lands.
+# M2: every scenario indexed (task groups 22-60).
 # Group 22: daemon and client RPC protocol (tasks 22.1-22.6).
 
 [workspace-architecture."One daemon per Prometheus home"]
@@ -1761,7 +1761,7 @@ capabilities = [
 # the telegram and discord adapters (25.5)
 [platform-adapters."Adapter contract"]
 "Reconnect does not drop updates" = ["crates/pmt-adapters-telegram/tests/telegram.rs::updates_arriving_while_disconnected_arrive_once_after_reconnecting", "crates/pmt-adapters-telegram/tests/telegram.rs::the_adapter_passes_the_conformance_kit", "crates/pmt-adapters-discord/tests/discord.rs::a_lost_connection_resumes_and_replays_what_was_missed"]
-"Plugin missing a required export" = ["crates/pmt-plugins/tests/adapters.rs::an_adapter_without_send_is_refused_naming_the_operation"]
+"Plugin missing a required export" = ["crates/pmt-plugins/tests/adapters.rs::an_adapter_without_send_is_refused_naming_the_operation", "crates/prometheus/tests/plugins_test_adapter.rs::a_plugin_adapter_missing_an_operation_is_refused_naming_it"]
 
 [platform-adapters."Scoped credential access"]
 "Secondary profile secret miss" = ["crates/pmt-adapters-telegram/tests/telegram.rs::a_secondary_profile_never_uses_the_default_profiles_token"]
@@ -1841,7 +1841,7 @@ capabilities = [
 # platform-adapters, the slack, email, matrix, signal, whatsapp and webhook
 # adapters (25.6-25.8) and the conformance kit command (25.9)
 [platform-adapters."Adapter conformance kit (upgrade)"]
-"Wrong unit detected" = { tests = ["crates/pmt-adapters-telegram/tests/telegram.rs::the_kit_catches_a_wrong_length_unit", "crates/prometheus/tests/plugins_cli.rs::the_kit_passes_for_all_eight_first_party_adapters"], note = "the kit's report fails the splitting check; `prometheus plugins test-adapter` exits 1 whenever a check fails and 0 for all eight first-party adapters" }
+"Wrong unit detected" = { tests = ["crates/pmt-adapters-telegram/tests/telegram.rs::the_kit_catches_a_wrong_length_unit", "crates/prometheus/tests/plugins_cli.rs::the_kit_passes_for_all_eight_first_party_adapters", "crates/prometheus/tests/plugins_test_adapter.rs::a_plugin_adapter_passes_the_suite_under_its_own_grants"], note = "the kit's report fails the splitting check; `prometheus plugins test-adapter` exits 1 whenever a check fails and 0 for all eight first-party adapters and for a platform-adapter plugin run against the reference platform" }
 
 [platform-adapters."Inbound event normalization"]
 "WhatsApp alias flip" = ["crates/pmt-adapters-whatsapp/tests/whatsapp.rs::whatsapp_alias_flip_keeps_one_sender_and_one_chat", "crates/pmt-adapters-whatsapp/src/normalize.rs::a_person_is_one_sender_and_one_chat_under_either_identifier"]
@@ -3637,7 +3637,7 @@ capabilities = [
 "Misconfigured network" = ["crates/prometheus/tests/container_image.rs::the_image_runs_as_the_spec_says", "crates/prometheus/src/doctor_cmd/isolation.rs::open_egress_fails_only_when_isolation_is_expected"]
 
 [distribution-and-update."Update from chat"]
-"Admin updates from Telegram" = ["crates/prometheus/tests/update_chat.rs::an_admin_updates_from_the_chat", "crates/pmt-gateway/src/messaging/lane/update_relay.rs::stages_are_relayed_at_most_every_two_seconds", "crates/pmt-gateway/src/messaging/lane/update_relay.rs::a_busy_daemon_is_asked_about_in_the_chat"]
+"Admin updates from Telegram" = ["crates/prometheus/tests/update_chat.rs::an_admin_updates_from_the_chat", "crates/prometheus/tests/daemon_cli.rs::a_foreground_daemon_under_an_inherited_service_marker_is_unsupervised", "crates/pmt-gateway/src/messaging/lane/update_relay.rs::stages_are_relayed_at_most_every_two_seconds", "crates/pmt-gateway/src/messaging/lane/update_relay.rs::a_busy_daemon_is_asked_about_in_the_chat"]
 "Disabled by default" = ["crates/pmt-gateway/tests/messaging/operations.rs::update_from_chat_is_off_by_default"]
 
 [distribution-and-update."Uninstall scopes and dry run"]

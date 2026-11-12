@@ -80,7 +80,7 @@ fn the_kit_passes_for_all_eight_first_party_adapters() {
 }
 
 #[test]
-fn unknown_names_and_plugin_directories_are_refused() {
+fn unknown_names_and_invalid_plugin_directories_are_refused() {
     let home = tempfile::tempdir().unwrap();
     let out = run_kit(home.path(), &["plugins", "test-adapter", "myspace"]);
     assert_eq!(out.status.code(), Some(2), "{}", stderr(&out));
@@ -96,9 +96,11 @@ fn unknown_names_and_plugin_directories_are_refused() {
         home.path(),
         &["plugins", "test-adapter", plugin.to_str().unwrap()],
     );
-    assert_eq!(out.status.code(), Some(69), "{}", stderr(&out));
+    // A plugin directory is tested as a plugin: an invalid manifest is
+    // refused as such (exit 65).
+    assert_eq!(out.status.code(), Some(65), "{}", stderr(&out));
     assert!(
-        stderr(&out).contains("platform-adapter world host"),
+        stderr(&out).contains("unknown manifest field 'name'"),
         "{}",
         stderr(&out)
     );

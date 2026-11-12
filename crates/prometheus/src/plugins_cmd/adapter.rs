@@ -1,11 +1,13 @@
 //! `prometheus plugins test-adapter <platform|path>` (spec:
 //! platform-adapters, Adapter conformance kit): runs the conformance suite
-//! against a built-in mock of the platform in a throwaway home, prints one
+//! against a mock of the platform in a throwaway home, prints one
 //! `pass`/`FAIL`/`skip` line per check and exits 0 only when nothing
 //! failed. Every first-party adapter is tested by its platform name in a
 //! build with the `adapter-kits` feature (the mocks are developer and CI
 //! tooling, left out of release binaries to keep them within the size
-//! budget); a plugin directory needs the WASM plugin host.
+//! budget); a `platform-adapter` plugin directory is tested in every build
+//! with the gateway, against the kit's reference platform (see
+//! `adapter_plugin`).
 
 use pmt_core::error::Error;
 #[cfg(feature = "gateway")]
@@ -16,8 +18,17 @@ pub(super) fn test_adapter(_path: &str) -> Result<u8, Error> {
     crate::surface::require("gateway").map(|()| 0)
 }
 
-#[cfg(all(feature = "gateway", not(feature = "adapter-kits")))]
+#[cfg(feature = "gateway")]
 pub(super) fn test_adapter(path: &str) -> Result<u8, Error> {
+    let dir = std::path::Path::new(path);
+    if dir.join("plugin.toml").is_file() {
+        return super::adapter_plugin::test_plugin(dir);
+    }
+    first_party(path)
+}
+
+#[cfg(all(feature = "gateway", not(feature = "adapter-kits")))]
+fn first_party(path: &str) -> Result<u8, Error> {
     if pmt_config::platforms::first_party(&path.to_lowercase()).is_some() {
         return Err(Error::new(
             &codes::SURFACE_NOT_INCLUDED,
@@ -31,7 +42,7 @@ pub(super) fn test_adapter(path: &str) -> Result<u8, Error> {
 }
 
 #[cfg(feature = "adapter-kits")]
-pub(super) fn test_adapter(path: &str) -> Result<u8, Error> {
+fn first_party(path: &str) -> Result<u8, Error> {
     let Some(kit) = kits::find(path) else {
         return Err(not_an_adapter(path));
     };
@@ -56,18 +67,10 @@ pub(super) fn test_adapter(path: &str) -> Result<u8, Error> {
     Ok(u8::from(!report.passed()))
 }
 
-/// The refusal of something that is not an adapter the kit can load.
+/// The refusal of something that is neither a first-party adapter nor a
+/// plugin directory.
 #[cfg(feature = "gateway")]
 fn not_an_adapter(path: &str) -> Error {
-    let dir = std::path::Path::new(path);
-    if dir.join("plugin.toml").is_file() {
-        return Error::new(
-            &codes::PLUGINS_HOST_UNAVAILABLE,
-            format!(
-                "'{path}' is a plugin; testing a plugin adapter needs the platform-adapter world host, which is not available yet"
-            ),
-        );
-    }
     Error::new(
         &codes::CLI_USAGE,
         format!(

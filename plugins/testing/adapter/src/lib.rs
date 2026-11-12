@@ -2,7 +2,10 @@
 //! whose API is the loopback server named by the `api` option. Inbound
 //! messages come from `GET <api>/updates`, sends go to `POST <api>/send`.
 //! A message `trap` makes the poll trap; a message mentioning
-//! `exfiltrate` makes it try an undeclared host first.
+//! `exfiltrate` makes it try an undeclared host first. Failed requests
+//! are classified as the host expects (429 rate limited with the body's
+//! `retry_after`, 5xx server, other 4xx permanent), so the conformance
+//! kit's reference platform can drive it.
 
 wit_bindgen::generate!({
     path: ["../../../wit/host", "../../../wit/platform-adapter"],
@@ -33,8 +36,19 @@ fn request(method: &str, url: &str, body: Option<Vec<u8>>) -> Result<String, Str
         body,
     };
     let response = http::send(&request).map_err(|e| format!("{e:?}"))?;
-    if response.status >= 300 {
-        return Err(format!("status {}", response.status));
+    // The host classifies a failure by its prefix (WIT `send`).
+    match response.status {
+        429 => {
+            let body: Value = serde_json::from_slice(&response.body).unwrap_or_default();
+            return Err(match body["retry_after"].as_u64() {
+                Some(secs) => format!("rate_limited: {secs}"),
+                None => "rate_limited".to_owned(),
+            });
+        }
+        500.. => return Err(format!("server: status {}", response.status)),
+        400.. => return Err(format!("permanent: status {}", response.status)),
+        300.. => return Err(format!("status {}", response.status)),
+        _ => {}
     }
     Ok(String::from_utf8_lossy(&response.body).into_owned())
 }

@@ -81,6 +81,7 @@ impl HostState {
         if self.ctx.grants.current().allows(capability) {
             return Ok(());
         }
+        self.ctx.grants.note_refused(what);
         let message = format!("capability_denied: {what}");
         tracing::warn!(plugin = %self.ctx.plugin, profile = %self.ctx.profile, "{message}");
         Err(HostError::Denied(message))

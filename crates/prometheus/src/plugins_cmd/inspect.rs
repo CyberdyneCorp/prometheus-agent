@@ -31,7 +31,7 @@ fn invalid(path: &Path, err: &Error) -> Error {
 /// and, for `wasm`, that its component compiles and exports every world
 /// it declares (a data-only plugin, such as a language pack, has no
 /// component).
-fn check_dir(dir: &Path) -> Result<Manifest, Error> {
+pub(super) fn check_dir(dir: &Path) -> Result<Manifest, Error> {
     let manifest =
         Manifest::read_any(dir, &plugins_host::running_version()).map_err(|e| invalid(dir, &e))?;
     manifest

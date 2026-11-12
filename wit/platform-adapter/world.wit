@@ -26,6 +26,10 @@ interface plugin {
     /// Inbound messages received since the last poll (JSON list).
     poll: func() -> result<string, string>;
     /// Sends one outgoing message (JSON); returns the platform message id.
+    /// An error's prefix classifies the failure: `rate_limited[: <secs>]`,
+    /// `server: ...`, `formatting: ...`, `ambiguous: ...`, `permanent: ...`
+    /// (never retried) or `unsupported`; any other error is a network
+    /// failure and is retried.
     send: func(message: string) -> result<string, string>;
     /// A chat's name and kind: `{"name", "chat_type"}` (JSON) with
     /// `chat_type` one of `dm`, `group`, `channel`, `thread`.

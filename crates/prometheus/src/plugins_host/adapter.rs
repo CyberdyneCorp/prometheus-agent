@@ -222,7 +222,8 @@ fn crash_error(err: &Error) -> AdapterError {
     }
 }
 
-/// One polled message: `{id, chat, chat_type, sender, text, thread}`.
+/// One polled message: `{id, chat, chat_type, sender, text, thread,
+/// sender_name, callback}` (a button press carries its `callback` data).
 fn inbound(value: &Value) -> Inbound {
     let text = |key: &str| value[key].as_str().map(str::to_owned);
     let chat_type = value["chat_type"]
@@ -238,6 +239,7 @@ fn inbound(value: &Value) -> Inbound {
     inbound.message_id = text("id").unwrap_or_default();
     inbound.thread_id = text("thread");
     inbound.sender_name = text("sender_name");
+    inbound.callback = text("callback");
     inbound
 }
 
@@ -284,12 +286,26 @@ async fn poll(
     }
 }
 
-/// A send failure the plugin names: `permanent: ...` is never retried,
-/// anything else is.
+/// A send failure as the plugin classifies it by prefix (WIT `send`):
+/// `rate_limited[: <retry after secs>]`, `server: ..`, `formatting: ..`,
+/// `ambiguous: ..`, `permanent: ..` (never retried) or `unsupported`;
+/// anything else is a network failure, retried.
 fn send_error(why: String) -> SendError {
-    match why.strip_prefix("permanent:") {
-        Some(rest) => SendError::Permanent(rest.trim().to_owned()),
-        None => SendError::Network(why),
+    let (kind, rest) = why
+        .split_once(':')
+        .map_or((why.as_str(), ""), |(kind, rest)| {
+            (kind.trim(), rest.trim())
+        });
+    match kind {
+        "rate_limited" => SendError::RateLimited {
+            retry_after: rest.parse().ok().map(Duration::from_secs),
+        },
+        "server" => SendError::Server(rest.to_owned()),
+        "formatting" => SendError::Formatting(rest.to_owned()),
+        "ambiguous" => SendError::Ambiguous(rest.to_owned()),
+        "permanent" => SendError::Permanent(rest.to_owned()),
+        "unsupported" => SendError::Unsupported,
+        _ => SendError::Network(why),
     }
 }
 
@@ -356,6 +372,7 @@ impl Adapter for PluginAdapter {
             "thread": message.thread_id,
             "reply_to": message.reply_to,
             "text": message.text,
+            "buttons": message.buttons,
         })
         .to_string();
         Box::pin(async move {
@@ -474,14 +491,33 @@ mod tests {
     }
 
     #[test]
-    fn only_a_permanent_send_failure_is_not_retried() {
-        assert_eq!(
-            send_error("permanent: chat archived".to_owned()),
-            SendError::Permanent("chat archived".to_owned())
-        );
-        assert_eq!(
-            send_error("timed out".to_owned()),
-            SendError::Network("timed out".to_owned())
-        );
+    fn the_plugin_classifies_a_send_failure_by_prefix() {
+        let cases = [
+            (
+                "permanent: chat archived",
+                SendError::Permanent("chat archived".to_owned()),
+            ),
+            (
+                "rate_limited: 7",
+                SendError::RateLimited {
+                    retry_after: Some(Duration::from_secs(7)),
+                },
+            ),
+            ("rate_limited", SendError::RateLimited { retry_after: None }),
+            (
+                "server: status 502",
+                SendError::Server("status 502".to_owned()),
+            ),
+            (
+                "formatting: bad markup",
+                SendError::Formatting("bad markup".to_owned()),
+            ),
+            ("unsupported", SendError::Unsupported),
+            ("timed out", SendError::Network("timed out".to_owned())),
+            ("status 503", SendError::Network("status 503".to_owned())),
+        ];
+        for (why, want) in cases {
+            assert_eq!(send_error(why.to_owned()), want, "{why}");
+        }
     }
 }

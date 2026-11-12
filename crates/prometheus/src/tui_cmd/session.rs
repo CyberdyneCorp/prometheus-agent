@@ -357,10 +357,21 @@ impl Tui<'_> {
 /// The card of a request; for a clarify request, of its question `index`;
 /// `typed` is how many characters a secret or sudo card holds.
 fn card(asked: &Asked, index: usize, typed: usize, strings: &Strings) -> Card {
+    card_at(asked, index, typed, strings, tokio::time::Instant::now())
+}
+
+/// [`card`] as seen at `now` (the countdown's clock).
+fn card_at(
+    asked: &Asked,
+    index: usize,
+    typed: usize,
+    strings: &Strings,
+    now: tokio::time::Instant,
+) -> Card {
     let within = asked
         .deadline
         .map(|deadline| {
-            let left = deadline.saturating_duration_since(tokio::time::Instant::now());
+            let left = deadline.saturating_duration_since(now);
             let secs = u64::try_from(left.as_millis().div_ceil(1000)).unwrap_or(u64::MAX);
             strings.fmt("tui.answer_within", &[("0", &secs)])
         })
@@ -427,7 +438,7 @@ mod tests {
     use pmt_rpc::client::ServerCall;
     use serde_json::json;
 
-    use super::{Asked, card};
+    use super::{Asked, card, card_at};
 
     fn english() -> std::sync::Arc<pmt_i18n::Strings> {
         pmt_i18n::Strings::english(pmt_i18n::Surface::Tui)
@@ -447,26 +458,22 @@ mod tests {
 
     #[test]
     fn a_card_counts_down_to_its_deadline() {
-        // Just under 3 s: a test thread stalled by a loaded machine still
-        // reads the same whole second.
-        let mut waiting = asked("sudo.request", Some(2_950));
-        assert!(
-            card(&waiting, 0, 0, &english())
-                .hint
-                .ends_with("(answer within 3 s)")
+        let waiting = asked("sudo.request", Some(3_000));
+        let deadline = waiting.deadline.unwrap();
+        let hint = |left_ms: u64| {
+            let now = deadline - Duration::from_millis(left_ms);
+            card_at(&waiting, 0, 0, &english(), now).hint
+        };
+        assert!(hint(2_500).ends_with("(answer within 3 s)"));
+        assert!(hint(1_500).ends_with("(answer within 2 s)"));
+        let late = card_at(
+            &waiting,
+            0,
+            0,
+            &english(),
+            deadline + Duration::from_secs(4),
         );
-        waiting.deadline = waiting.deadline.map(|d| d - Duration::from_secs(1));
-        assert!(
-            card(&waiting, 0, 0, &english())
-                .hint
-                .ends_with("(answer within 2 s)")
-        );
-        waiting.deadline = waiting.deadline.map(|d| d - Duration::from_secs(5));
-        assert!(
-            card(&waiting, 0, 0, &english())
-                .hint
-                .ends_with("(answer within 0 s)")
-        );
+        assert!(late.hint.ends_with("(answer within 0 s)"));
         let open = asked("approval.request", None);
         assert!(!card(&open, 0, 0, &english()).hint.contains("within"));
     }

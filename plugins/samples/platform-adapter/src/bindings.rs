@@ -3114,6 +3114,10 @@ pub mod exports {
                     /// Inbound messages received since the last poll (JSON list).
                     fn poll() -> Result<_rt::String, _rt::String>;
                     /// Sends one outgoing message (JSON); returns the platform message id.
+                    /// An error's prefix classifies the failure: `rate_limited[: <secs>]`,
+                    /// `server: ...`, `formatting: ...`, `ambiguous: ...`, `permanent: ...`
+                    /// (never retried) or `unsupported`; any other error is a network
+                    /// failure and is retried.
                     fn send(message: _rt::String) -> Result<_rt::String, _rt::String>;
                     /// A chat's name and kind: `{"name", "chat_type"}` (JSON) with
                     /// `chat_type` one of `dm`, `group`, `channel`, `thread`.

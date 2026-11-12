@@ -295,7 +295,9 @@ kit (connect and reconnect, descriptor, normalization, deduplication,
 splitting at the declared limit, retry classification, cards and every
 optional capability: edit, typing, reactions, threads, delete, inbound and
 outbound media with one file per declared kind, streamed reply audio)
-against a built-in mock of any first-party platform, prints one `pass`,
+against a built-in mock of any first-party platform (or, given a
+`platform-adapter` plugin directory, against the kit's reference platform;
+see the plugins guide), prints one `pass`,
 `FAIL` or `skip` line per check (an undeclared capability is skipped with
 its reason) and exits 0 only when none failed. Where a bot cannot post
 voice notes (Slack, Signal) a voice reply arrives as an audio file;

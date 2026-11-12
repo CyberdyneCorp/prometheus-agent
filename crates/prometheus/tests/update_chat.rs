@@ -9,7 +9,7 @@ mod common;
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 
-use common::gateway::{adapter_dir, send, texts, wait, wait_said};
+use common::gateway::{adapter_dir, send, texts, wait, wait_said, wait_said_within};
 use common::release::{Fixture, next_patch};
 use pmt_rpc::discovery::{Discovery, discover};
 use pmt_update::Channel;
@@ -53,7 +53,14 @@ fn an_admin_updates_from_the_chat() {
     send(&f.home, "default", "boss", "/approve");
     wait_said(&f.home, "default", "Update started");
     wait_said(&f.home, "default", "checking the stable channel");
-    wait_said(&f.home, "default", &format!("updated to {next}"));
+    // Download, self-test, swap and handover: minutes on the slow Intel
+    // macOS runner (a ~100 MB debug-build tarball).
+    wait_said_within(
+        &f.home,
+        "default",
+        &format!("updated to {next}"),
+        Duration::from_mins(4),
+    );
     // Stage lines, at most one per 2 s (a newer stage replaces a waiting
     // one, so a fast download may show none of its percentages).
     let said = texts(&f.home, "default");

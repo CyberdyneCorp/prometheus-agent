@@ -8,6 +8,8 @@
 //! `hooks` (shell hooks) arrive with their owners.
 
 mod adapter;
+#[cfg(feature = "gateway")]
+mod adapter_plugin;
 mod catalog_cmd;
 pub mod hooks_cmd;
 mod inspect;
