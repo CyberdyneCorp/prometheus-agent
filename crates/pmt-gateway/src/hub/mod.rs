@@ -507,12 +507,16 @@ impl Hub {
             self.violations.report(event, &violation);
             return;
         }
-        let delivery = self.record(session_id, event, data);
+        let mut state = self.state();
+        let delivery = self.record(&mut state, session_id, event, data);
+        // Sent before the lock is released: two publishers of one session
+        // (a turn and a usage report on another task) must not hand a
+        // connection their events out of `seq` order. The sends only
+        // queue on each connection's unbounded channel.
         self.deliver(&delivery);
     }
 
-    fn record(&self, session_id: &str, event: &str, data: Value) -> Delivery {
-        let mut state = self.state();
+    fn record(&self, state: &mut State, session_id: &str, event: &str, data: Value) -> Delivery {
         let log = state.sessions.entry(session_id.to_owned()).or_default();
         log.next_seq += 1;
         let envelope = Envelope {
@@ -532,7 +536,7 @@ impl Hub {
         let seq = envelope.seq;
         state.total_bytes += bytes;
         state.order.push_back((session_id.to_owned(), seq));
-        self.enforce(&mut state, session_id);
+        self.enforce(state, session_id);
         Delivery { envelope, peers }
     }
 
