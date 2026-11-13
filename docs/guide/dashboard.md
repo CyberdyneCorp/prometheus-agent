@@ -142,6 +142,7 @@ configuration, secrets, sessions or the vault. A change over the API gets
 |---|---|
 | `/chat` | A session, rendered from the client protocol: streamed answers, tool calls, subagent status, and approval and clarify cards. |
 | `/sessions` | The profile's sessions, with full-text search, deletion and a badge on sessions waiting for an approval. |
+| `/projects` | The profile's explicit projects, the repositories of its sessions and the repositories found by [repository discovery](projects.md#repository-discovery), each with **Create project** (one click, `projects.create`). |
 | `/usage` | Cost and tokens from the usage ledger, by root session (subagents and continuations are listed under their root), by day, with the cache-hit ratio, the daily and monthly budget bars, and a CSV export. |
 | `/status` | The daemon's version, uptime, clients, sessions, adapters and platform support matrix. |
 | `/config` | Forms built from the configuration schema of the running build. A save is one validated write. Keys that only apply to new sessions are marked "applies next session". |

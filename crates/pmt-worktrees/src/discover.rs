@@ -1,8 +1,8 @@
 //! Repository discovery (spec: projects, Repository discovery): the git
 //! repositories under the scan roots, found without following symlinks
 //! and without entering hidden folders, dependency folders, excluded
-//! subtrees or folders that cannot be read. A repository is not searched
-//! for nested ones.
+//! subtrees, subtrees the sandbox denies or folders that cannot be read.
+//! A repository is not searched for nested ones.
 
 use std::path::{Path, PathBuf};
 
@@ -18,6 +18,9 @@ pub struct Scan {
     pub max_depth: u32,
     /// Subtrees never entered.
     pub exclude: Vec<PathBuf>,
+    /// Subtrees the sandbox may not read (canonical paths, as the sandbox
+    /// policy names them); never entered either.
+    pub denied: Vec<PathBuf>,
 }
 
 impl Scan {
@@ -34,7 +37,15 @@ impl Scan {
             roots,
             max_depth,
             exclude: exclude.iter().map(|e| expand(e, home)).collect(),
+            denied: Vec::new(),
         }
+    }
+
+    /// This scan, also skipping `denied` (the sandbox's unreadable paths).
+    #[must_use]
+    pub fn denying(mut self, denied: Vec<PathBuf>) -> Self {
+        self.denied = denied;
+        self
     }
 
     /// The repositories found, sorted, each once.
@@ -42,38 +53,55 @@ impl Scan {
     pub fn run(&self) -> Vec<PathBuf> {
         let mut found = Vec::new();
         for root in &self.roots {
-            self.walk(root, 0, &mut found);
+            let skip = self.skipped_below(root);
+            walk(root, 0, self.max_depth, &skip, &mut found);
         }
         found.sort();
         found.dedup();
         found
     }
 
-    fn walk(&self, dir: &Path, depth: u32, found: &mut Vec<PathBuf>) {
-        if self.exclude.iter().any(|e| dir.starts_with(e)) {
-            return;
+    /// The subtrees skipped below `root`: the excluded ones and the denied
+    /// ones, the latter also under `root`'s own spelling when the root
+    /// goes through a symlink (the walk compares paths as it builds them).
+    fn skipped_below(&self, root: &Path) -> Vec<PathBuf> {
+        let mut skip: Vec<PathBuf> = self.exclude.iter().chain(&self.denied).cloned().collect();
+        if let Ok(canonical) = root.canonicalize() {
+            skip.extend(
+                self.denied
+                    .iter()
+                    .filter_map(|d| d.strip_prefix(&canonical).ok())
+                    .map(|rest| root.join(rest)),
+            );
         }
-        if dir.join(".git").exists() {
-            found.push(dir.to_path_buf());
-            return;
+        skip
+    }
+}
+
+fn walk(dir: &Path, depth: u32, max_depth: u32, skip: &[PathBuf], found: &mut Vec<PathBuf>) {
+    if skip.iter().any(|s| dir.starts_with(s)) {
+        return;
+    }
+    if dir.join(".git").exists() {
+        found.push(dir.to_path_buf());
+        return;
+    }
+    if depth >= max_depth {
+        return;
+    }
+    // A folder the OS will not list (permissions) is skipped.
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with('.') || DEPENDENCY_DIRS.contains(&name.as_ref()) {
+            continue;
         }
-        if depth >= self.max_depth {
-            return;
-        }
-        // An unreadable folder (permissions, the sandbox) is skipped.
-        let Ok(entries) = std::fs::read_dir(dir) else {
-            return;
-        };
-        for entry in entries.flatten() {
-            let name = entry.file_name();
-            let name = name.to_string_lossy();
-            if name.starts_with('.') || DEPENDENCY_DIRS.contains(&name.as_ref()) {
-                continue;
-            }
-            // `file_type` does not follow symlinks.
-            if entry.file_type().is_ok_and(|t| t.is_dir()) {
-                self.walk(&entry.path(), depth + 1, found);
-            }
+        // `file_type` does not follow symlinks.
+        if entry.file_type().is_ok_and(|t| t.is_dir()) {
+            walk(&entry.path(), depth + 1, max_depth, skip, found);
         }
     }
 }
@@ -118,5 +146,36 @@ mod tests {
         std::os::unix::fs::symlink(outside.path(), home.path().join("link")).unwrap();
         let scan = Scan::from_keys(&["~".to_owned()], 4, &[], home.path());
         assert!(scan.run().is_empty());
+    }
+
+    /// A subtree or a whole root the sandbox denies is not listed, also
+    /// when the scan reaches it under another spelling than the
+    /// sandbox's canonical one.
+    #[test]
+    fn subtrees_the_sandbox_denies_are_skipped() {
+        let home = tempfile::tempdir().unwrap();
+        let h = home.path();
+        repo(&h.join("code/app"));
+        repo(&h.join("keys/vault/repo"));
+        repo(&h.join("denied-root/repo"));
+        let canonical = h.canonicalize().unwrap();
+        let scan = Scan::from_keys(&["~".to_owned(), "~/denied-root".to_owned()], 4, &[], h)
+            .denying(vec![canonical.join("keys"), canonical.join("denied-root")]);
+        assert_eq!(scan.run(), vec![h.join("code/app")]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_denied_subtree_is_skipped_below_a_symlinked_root() {
+        let real = tempfile::tempdir().unwrap();
+        let links = tempfile::tempdir().unwrap();
+        repo(&real.path().join("code/app"));
+        repo(&real.path().join("keys/repo"));
+        let root = links.path().join("home");
+        std::os::unix::fs::symlink(real.path(), &root).unwrap();
+        let denied = real.path().canonicalize().unwrap().join("keys");
+        let scan =
+            Scan::from_keys(&[root.display().to_string()], 4, &[], &root).denying(vec![denied]);
+        assert_eq!(scan.run(), vec![root.join("code/app")]);
     }
 }

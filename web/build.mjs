@@ -12,8 +12,9 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const check = process.argv.includes("--check");
 
-/** Bundles `entry` and returns the files of its dist, by name. */
-async function bundle(entry, dist, styles, html, scripts = {}) {
+/** Bundles `entry` and returns the files of its dist, by name; `assets`
+ *  are copied as they are (published name -> source). */
+async function bundle(entry, dist, styles, html, scripts = {}, assets = {}) {
   const result = await build({
     entryPoints: { app: entry },
     bundle: true,
@@ -35,6 +36,7 @@ async function bundle(entry, dist, styles, html, scripts = {}) {
     const script = await build({ entryPoints: [path], bundle: true, format: "iife", target: "es2022", minify: true, legalComments: "none", charset: "utf8", write: false, logLevel: "warning" });
     outputs.set(`${name}.js`, script.outputFiles[0].contents);
   }
+  for (const [name, path] of Object.entries(assets)) outputs.set(name, readFileSync(path));
   return outputs;
 }
 
@@ -52,7 +54,7 @@ function emit(dist, outputs, label) {
       }
       if (!Buffer.from(bytes).equals(current)) stale.push(name);
     } else {
-      mkdirSync(dist, { recursive: true });
+      mkdirSync(dirname(path), { recursive: true });
       writeFileSync(path, bytes);
     }
   }
@@ -75,6 +77,10 @@ const app = emit(
     join(desktop, "src/index.html"),
     // Installed by the shell in every frame (the preview's annotate agent).
     { annotate: join(desktop, "src/annotate-agent.ts") },
+    // The terminal pane's bundled monospace font (SIL OFL 1.1, licence beside it).
+    Object.fromEntries(
+      ["jetbrains-mono-latin-400-normal.woff2", "jetbrains-mono-latin-ext-400-normal.woff2", "JetBrainsMono-OFL.txt"].map((f) => [`fonts/${f}`, join(desktop, "src/fonts", f)]),
+    ),
   ),
   "apps/desktop/dist",
 );

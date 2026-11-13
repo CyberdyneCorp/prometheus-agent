@@ -8,7 +8,13 @@
 //! asks and the cache holds nothing for the current scan keys (or is a
 //! day old); its rows are cached in the profile's store with the
 //! fingerprint of those keys, so changing any key invalidates only this
-//! profile's cache, and turning scanning off clears it.
+//! profile's cache, and turning scanning off clears it. The scan skips
+//! what the profile's sandbox may not read (its credential stores and the
+//! Prometheus home below a scan root).
+//!
+//! Only the desktop scans by default; another client (the dashboard)
+//! reads the same cache and starts a scan only when the profile turns
+//! scanning on explicitly.
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::hash::{Hash, Hasher};
@@ -17,6 +23,8 @@ use std::sync::{Arc, LazyLock, Mutex, PoisonError};
 use std::time::Instant;
 
 use jiff::Timestamp;
+use pmt_config::ProfileScope;
+use pmt_config::grants::{GrantsFile, Subject, baseline};
 use pmt_config::schema::ProjectsConfig;
 use pmt_core::error::Error;
 use pmt_rpc::contracts::{ProjectRow, ProjectsList, RepoRow};
@@ -94,8 +102,51 @@ fn inferred(store: &Store) -> Result<BTreeSet<PathBuf>, Error> {
         .collect())
 }
 
+/// The subtrees below `roots` the profile's sandbox denies reading: the
+/// sandbox policy of a session working in each root (the profile's
+/// baseline and grants), as the session's file tools would apply it.
+fn sandbox_denied(
+    scope: &ProfileScope,
+    home: &Path,
+    roots: &[PathBuf],
+) -> Result<Vec<PathBuf>, Error> {
+    let granted = GrantsFile::of(scope.profile())
+        .load()?
+        .capabilities(&Subject::Profile);
+    let capabilities = baseline(&scope.config().security).union(&granted);
+    Ok(denied_below(&capabilities, home, scope.home(), roots))
+}
+
+fn denied_below(
+    capabilities: &pmt_core::capability::CapabilitySet,
+    home: &Path,
+    prometheus_home: &Path,
+    roots: &[PathBuf],
+) -> Vec<PathBuf> {
+    let mut denied: Vec<PathBuf> = roots
+        .iter()
+        .flat_map(|root| {
+            let paths = pmt_sandbox::Paths {
+                user_home: home.to_path_buf(),
+                prometheus_home: prometheus_home.to_path_buf(),
+                workspace: root.clone(),
+                scratch: Vec::new(),
+            };
+            pmt_sandbox::Policy::from_set(capabilities, &paths)
+                .denied()
+                .into_iter()
+                .map(Path::to_path_buf)
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    denied.sort();
+    denied.dedup();
+    denied
+}
+
 /// Scans in the background and caches what it found.
-fn start_scan(profile: &str, store: Arc<Store>, config: &ProjectsConfig, home: &Path) {
+fn start_scan(profile: &str, store: Arc<Store>, scope: &ProfileScope, home: &Path) {
+    let config = &scope.config().projects;
     let fingerprint = settings(config);
     {
         let mut scanned = SCANNED.lock().unwrap_or_else(PoisonError::into_inner);
@@ -113,6 +164,14 @@ fn start_scan(profile: &str, store: Arc<Store>, config: &ProjectsConfig, home: &
         &config.repo_scan_exclude_paths,
         home,
     );
+    let scan = match sandbox_denied(scope, home, &scan.roots) {
+        Ok(denied) => scan.denying(denied),
+        Err(err) => {
+            tracing::warn!(profile, "the repository scan did not start: {err}");
+            scanning().remove(profile);
+            return;
+        }
+    };
     let profile = profile.to_owned();
     drop(pmt_core::spawn::blocking(move || {
         let found: Vec<(String, String)> = scan
@@ -130,19 +189,19 @@ fn start_scan(profile: &str, store: Arc<Store>, config: &ProjectsConfig, home: &
     }));
 }
 
-/// The discovered rows for `config` (starting a scan when due); the
-/// cache is cleared when scanning is off.
+/// The discovered rows for the profile's scan keys, starting a scan when
+/// `scans` and the cache is due; the cache is cleared when scanning is
+/// turned off.
 fn discovered(
     profile: &str,
     store: &Arc<Store>,
-    config: &ProjectsConfig,
-    sees: bool,
+    scope: &ProfileScope,
+    scans: bool,
     home: Option<PathBuf>,
 ) -> Result<Vec<RepoRow>, Error> {
-    if !sees {
-        if config.repo_scan_enabled == Some(false) {
-            store.clear_discovered_repos()?;
-        }
+    let config = &scope.config().projects;
+    if config.repo_scan_enabled == Some(false) {
+        store.clear_discovered_repos()?;
         return Ok(Vec::new());
     }
     let cached = store.discovered_repos(&settings(config))?;
@@ -150,8 +209,11 @@ fn discovered(
         cached.iter().map(|r| r.last_seen).min().is_none_or(|seen| {
             Timestamp::now().as_second() - seen.as_second() > REFRESH_AFTER_SECS
         });
-    if stale && let Some(home) = home {
-        start_scan(profile, Arc::clone(store), config, &home);
+    if scans
+        && stale
+        && let Some(home) = home
+    {
+        start_scan(profile, Arc::clone(store), scope, &home);
     }
     Ok(cached
         .iter()
@@ -159,8 +221,8 @@ fn discovered(
         .collect())
 }
 
-/// The sidebar's rows of `profile`; `desktop`: the asking client sees
-/// discovery unless it is turned off.
+/// The sidebar's rows of `profile`; `desktop`: the asking client scans
+/// unless scanning is turned off (others only when it is turned on).
 pub(super) fn list(
     name: &str,
     profile: &Profile,
@@ -168,7 +230,8 @@ pub(super) fn list(
     home: Option<PathBuf>,
 ) -> Result<ProjectsList, Error> {
     let store = &profile.store;
-    let config = profile.scope().config().projects.clone();
+    let scope = profile.scope();
+    let scans = scope.config().projects.scans_for(desktop);
     let projects = store.projects(false)?;
     let owned = |path: &Path| {
         projects
@@ -180,7 +243,7 @@ pub(super) fn list(
         .filter(|p| !owned(p))
         .map(|p| repo_row(p, None))
         .collect();
-    let discovered = discovered(name, store, &config, config.scans_for(desktop), home)?
+    let discovered = discovered(name, store, &scope, scans, home)?
         .into_iter()
         .filter(|r| !owned(Path::new(&r.path)) && !inferred.iter().any(|i| i.path == r.path))
         .collect();
@@ -206,4 +269,36 @@ pub(super) fn create(
         ..NewProject::default()
     };
     Ok(row(&profile.store.create_project(&new, false)?))
+}
+
+#[cfg(test)]
+mod tests {
+    use pmt_config::grants::baseline;
+    use pmt_worktrees::discover::Scan;
+
+    use super::denied_below;
+
+    fn repo(at: &std::path::Path) {
+        std::fs::create_dir_all(at.join(".git")).unwrap();
+    }
+
+    /// Scenario support (projects, Repository discovery): a Prometheus
+    /// home below the scanned home is what the sandbox denies, so a
+    /// repository inside it is never discovered.
+    #[test]
+    fn the_scan_skips_what_the_profile_sandbox_denies() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("user");
+        let prometheus = home.join("prometheus-home");
+        repo(&home.join("code/app"));
+        repo(&prometheus.join("profiles/work/workspace/repo"));
+        let capabilities = baseline(&pmt_config::schema::SecurityConfig::default());
+        let scan = Scan::from_keys(&[], 4, &[], &home);
+        let denied = denied_below(&capabilities, &home, &prometheus, &scan.roots);
+        assert!(
+            denied.contains(&prometheus.canonicalize().unwrap()),
+            "{denied:?}"
+        );
+        assert_eq!(scan.denying(denied).run(), vec![home.join("code/app")]);
+    }
 }

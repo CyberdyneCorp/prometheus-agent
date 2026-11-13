@@ -18,6 +18,7 @@ import { filesPage } from "./pages/files";
 import { profileBuilderPage } from "./pages/profile-builder";
 import { applyTheme, currentLayout, currentTheme, themesPage } from "./pages/themes";
 import { pluginsPage } from "./pages/plugins";
+import { projectsPage } from "./pages/projects";
 import { webhooksPage } from "./pages/webhooks";
 import {
   cronPage,
@@ -41,6 +42,7 @@ import { workspacePage } from "./pages/workspace";
 const NAV: [string, string][] = [
   ["/chat", "Chat"],
   ["/sessions", "Sessions"],
+  ["/projects", "Projects"],
   ["/usage", "Usage"],
   ["/models", "Models"],
   ["/skills", "Skills"],
@@ -76,6 +78,7 @@ const PENDING: [string, string, string][] = [
 function routes(): void {
   route("/chat", chatPage);
   route("/sessions", sessionsPage);
+  route("/projects", projectsPage);
   route("/usage", usagePage);
   route("/models", modelsPage);
   route("/skills", skillsPage);

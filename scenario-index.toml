@@ -3794,7 +3794,7 @@ capabilities = [
 "Archived active project cleared" = ["crates/prometheus/tests/projects_cli.rs::archiving_the_active_project_clears_it_and_hides_it"]
 
 [projects."Repository discovery"]
-"Excluded path skipped" = { tests = ["crates/pmt-worktrees/src/discover.rs::excluded_hidden_dependency_and_deep_folders_are_skipped"], note = "~/scratch excluded: ~/scratch/tmp is not listed (hidden, dependency, nested and too-deep repositories are skipped too); the daemon's cache and the desktop's rows are in crates/prometheus/tests/desktop_manage.rs" }
+"Excluded path skipped" = { tests = ["crates/pmt-worktrees/src/discover.rs::excluded_hidden_dependency_and_deep_folders_are_skipped", "crates/pmt-worktrees/src/discover.rs::subtrees_the_sandbox_denies_are_skipped", "crates/prometheus/src/daemon_cmd/host/projects.rs::the_scan_skips_what_the_profile_sandbox_denies", "crates/prometheus/tests/dashboard_browser.rs::the_projects_page_offers_discovered_repositories"], note = "~/scratch excluded: ~/scratch/tmp is not listed (hidden, dependency, nested and too-deep repositories are skipped too, and so are subtrees the profile sandbox denies: credential stores, a Prometheus home below a scan root); the dashboard /projects page (web/e2e/projects.spec.ts) offers the discovered repositories with one-click Create project and does not list ~/code/scratch/tmp; the daemon cache and the desktop sidebar rows are in crates/prometheus/tests/desktop_manage.rs" }
 
 [projects."Projects in backups and exports"]
 "Missing folder flagged" = ["crates/prometheus/tests/projects_backup.rs::an_imported_profile_keeps_folders_missing_on_this_machine"]
@@ -4020,7 +4020,7 @@ capabilities = [
 
 [desktop-app."Telegram quick setup by QR"]
 "Successful QR setup" = { tests = ["crates/prometheus/tests/desktop_manage.rs::desktop_management_messaging_projects_shortcuts_and_profile_files", "crates/prometheus/tests/dashboard_channels.rs::telegram_create_with_qr_saves_the_token_and_allowlists_the_owner"], note = "a stand-in onboarding service and Bot API (PMT_TEST_TELEGRAM_API, debug builds): the desktop dialog shows the QR and deep link, the token is stored as TELEGRAM_BOT_TOKEN, 4242 is the only allowlisted user and the Telegram row reaches `connected`" }
-"Cancelled setup" = { tests = ["crates/prometheus/tests/dashboard_channels.rs::a_cancelled_telegram_setup_writes_nothing"], note = "the daemon flow the dashboard Channels page hosts (the desktop Messaging pane reuses it, 62.x): a result arriving after DELETE adapters/telegram/pairing is discarded and no secret is written" }
+"Cancelled setup" = { tests = ["crates/prometheus/tests/dashboard_channels.rs::a_cancelled_telegram_setup_writes_nothing", "crates/prometheus/tests/desktop_manage.rs::desktop_management_messaging_projects_shortcuts_and_profile_files"], note = "dashboard: a result arriving after DELETE adapters/telegram/pairing is discarded and no secret is written; desktop (web/e2e/desktop-manage.spec.ts, closing the QR dialog...): Close sends adapters.pairing.cancel while the stand-in holds the poll, the stand-in then answers ready and the daemon discards it: TELEGRAM_BOT_TOKEN stays unset and config.toml (allowlist) is unchanged" }
 
 [web-dashboard."Files page"]
 "Symlink escape" = { tests = ["crates/prometheus/tests/dashboard_pages.rs::files_outside_the_workspace_root_are_refused_and_never_listed"], note = "cfg(unix): the fixture is a symbolic link to /etc" }

@@ -1,4 +1,9 @@
 /* The desktop window's layout on top of the dashboard's styles. */
+/* The terminal pane's bundled monospace font (JetBrains Mono, SIL OFL 1.1:
+   fonts/JetBrainsMono-OFL.txt), used when desktop.terminal_font_family is
+   empty and behind the chosen family otherwise. */
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/jetbrains-mono-latin-ext-400-normal.woff2") format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 [hidden] { display: none !important; }
 body { height: 100vh; display: flex; flex-direction: column; }
 #app { flex: 1; display: flex; flex-direction: column; min-height: 0; }
@@ -69,7 +74,7 @@ nav.chat-tabs { display: flex; gap: 4px; flex: 1; overflow: auto; }
 nav.chat-tabs button[aria-selected="true"] { border-color: var(--accent); }
 .center section.chat { flex: 1; }
 section.terminals { border-top: 1px solid var(--line); padding: 6px 12px; max-height: 40%; display: flex; flex-direction: column; }
-.terminal-screen { flex: 1; min-height: 120px; overflow: auto; background: var(--panel); padding: 6px; margin: 4px 0; font-family: var(--terminal-font, ui-monospace, monospace); white-space: pre-wrap; }
+.terminal-screen { flex: 1; min-height: 120px; overflow: auto; background: var(--panel); padding: 6px; margin: 4px 0; font-family: var(--terminal-font, "JetBrains Mono", monospace); white-space: pre-wrap; }
 .terminal-screen:focus { outline: 1px solid var(--accent); }
 section.subagents-frame { border: 1px solid var(--line); border-radius: var(--radius); padding: 4px 8px; margin: 6px 0; }
 section.subagents-frame ul { list-style: none; margin: 0; padding: 0; }

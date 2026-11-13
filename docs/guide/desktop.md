@@ -432,8 +432,8 @@ two actions on one chord are both flagged and neither runs until one
 changes. Bindings are a machine-wide display preference; the zoom
 (`CommandOrControl+=`, `-`, `0`, half a step each) belongs to the window.
 `desktop.font_family` goes in front of the theme's fonts and
-`desktop.terminal_font_family` sets the terminal's (empty: the default
-monospace fonts). Exporting a profile runs `profile export` without
+`desktop.terminal_font_family` sets the terminal's (empty: the bundled
+JetBrains Mono, SIL Open Font License 1.1). Exporting a profile runs `profile export` without
 secrets and adds the appearance (theme, mode, shortcuts, zoom) as an
 overlay that an import applies again.
 

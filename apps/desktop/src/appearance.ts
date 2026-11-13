@@ -1,7 +1,8 @@
 // Fonts, zoom and the appearance overlay (spec: desktop-app, Fonts,
 // shortcuts, palette and profile files). `desktop.font_family` goes in
-// front of the theme's font stack and `desktop.terminal_font_family`
-// replaces the terminal's (empty keeps the defaults); the interface zooms
+// front of the theme's font stack and `desktop.terminal_font_family` goes
+// in front of the terminal's bundled monospace font (desktop.css; empty
+// uses that font alone); the interface zooms
 // in half steps; a profile export can carry the appearance (theme, mode,
 // accent, density, shortcuts, zoom), which an import applies again.
 
@@ -48,7 +49,7 @@ export async function applyFonts(client: DesktopClient): Promise<void> {
   const terminal = await value("desktop.terminal_font_family");
   if (ui) root.setProperty("--ui-font", `${family(ui)},`);
   else root.removeProperty("--ui-font");
-  if (terminal) root.setProperty("--terminal-font", `${family(terminal)}, ui-monospace, monospace`);
+  if (terminal) root.setProperty("--terminal-font", `${family(terminal)}, "JetBrains Mono", monospace`);
   else root.removeProperty("--terminal-font");
 }
 

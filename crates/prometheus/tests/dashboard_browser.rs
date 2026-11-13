@@ -7,7 +7,7 @@
 mod common;
 
 use common::dashboard::playwright;
-use common::{daemon, mock_home};
+use common::{append_config, daemon, mock_home, ok, run};
 
 fn webapp_home() -> tempfile::TempDir {
     let home = mock_home();
@@ -43,6 +43,37 @@ fn the_webhooks_and_docs_pages_work_in_the_browser() {
     let home = mock_home();
     let _daemon = daemon::start(home.path(), &[]);
     playwright(home.path(), "m3pages.spec.ts", &[]);
+}
+
+/// Scenario: Excluded path skipped (projects, Repository discovery), on
+/// the dashboard's Projects page: discovered repositories are offered as
+/// one-click project creation.
+#[test]
+fn the_projects_page_offers_discovered_repositories() {
+    let home = mock_home();
+    let code = common::user_home(home.path()).join("code");
+    for repo in ["alpha", "beta", "gamma", "scratch/tmp"] {
+        std::fs::create_dir_all(code.join(repo).join(".git")).unwrap();
+    }
+    ok(&run(
+        home.path(),
+        &[
+            "projects",
+            "create",
+            "gamma",
+            code.join("gamma").to_str().unwrap(),
+        ],
+    ));
+    append_config(
+        home.path(),
+        &format!(
+            "\n[projects]\nrepo_scan_enabled = true\nrepo_scan_roots = [{:?}]\n\
+             repo_scan_exclude_paths = [\"~/code/scratch\"]\n",
+            code.display().to_string()
+        ),
+    );
+    let _daemon = daemon::start(home.path(), &[]);
+    playwright(home.path(), "projects.spec.ts", &[]);
 }
 
 /// A foreground daemon, killed when dropped.

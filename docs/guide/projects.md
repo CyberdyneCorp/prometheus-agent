@@ -110,13 +110,17 @@ for every other surface), the daemon scans `projects.repo_scan_roots`
 (default 4) levels for git repositories, in the background and without
 following symlinks. It skips `projects.repo_scan_exclude_paths` subtrees
 (`~` is your home), hidden folders, dependency folders (`node_modules`,
-`target`, `.venv`, `vendor`) and folders it cannot read, and does not
-look inside a repository for more. What it found is cached per profile in
+`target`, `.venv`, `vendor`), folders the OS will not list and subtrees
+the profile's sandbox may not read (its credential stores, such as
+`~/.ssh` or browser profiles, and the Prometheus home when it lies below
+a scan root), and does not look inside a repository for more. What it found is cached per profile in
 `state.db` with when it was last seen; changing a scan key invalidates
 only that profile's cache, and turning scanning off clears it.
 Discovered repositories are only offered (the desktop's Projects sidebar
-creates a project in one click, `projects.create`); no project is ever
-created automatically.
+and the dashboard's `/projects` page create a project in one click,
+`projects.create`); no project is ever created automatically. The
+dashboard shows what the cache holds (a desktop scan included) and starts
+a scan itself only when `projects.repo_scan_enabled = true`.
 
 ## Backups and exports
 

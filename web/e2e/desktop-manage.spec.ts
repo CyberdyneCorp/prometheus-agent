@@ -3,9 +3,12 @@
 // (spec: desktop-app, Management panes; Messaging pane shows saved versus
 // running state; Telegram quick setup by QR; Repository discovery for the
 // Projects sidebar; Fonts, shortcuts, palette and profile files), driven
-// by crates/prometheus/tests/desktop_manage.rs.
+// by crates/prometheus/tests/desktop_manage.rs, which passes the Telegram
+// onboarding stand-in's URL in PMT_TELEGRAM_SETUP.
 import { expect, type Page, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
 import { openDesktop, sent } from "./desktop";
+import { cli, env } from "./helpers";
 
 async function manage(page: Page, sub: string): Promise<void> {
   await page.click('button[name=pane][data-pane="manage"]');
@@ -40,6 +43,33 @@ test("a saved token of a disabled adapter shows saved, and a toggle asks for a r
   const enabled = page.locator('article.adapter[data-platform="slack"]');
   await expect(enabled.locator(".restart-banner")).toBeVisible();
   await expect(enabled.locator(".adapter-state")).toHaveAttribute("data-state", "pending_restart");
+});
+
+test("closing the QR dialog while polling discards the late result and writes nothing", async ({ page }) => {
+  test.setTimeout(90_000);
+  const sockets = await openDesktop(page);
+  const config = `${env("PMT_HOME")}/profiles/default/config.toml`;
+  const before = readFileSync(config, "utf8");
+  await manage(page, "messaging");
+  const telegram = page.locator('article.adapter[data-platform="telegram"] .adapter-state');
+  const state = await telegram.getAttribute("data-state");
+  await page.locator('article.adapter[data-platform="telegram"] button[name=create-with-qr]').click();
+  // The QR shows once the pairing exists; the stand-in holds the first poll.
+  await expect(page.locator(".qr-dialog .qr-step img.qr")).toBeVisible({ timeout: 30_000 });
+  await page.click("button[name=close-qr]");
+  await expect(page.locator(".qr-dialog")).toHaveCount(0);
+  await expect.poll(() => sent(sockets, "adapters.pairing.cancel").length).toBe(1);
+  // Let the daemon handle the cancel before the held poll answers.
+  await page.waitForTimeout(1_000);
+  const released = (await (await fetch(`${env("PMT_TELEGRAM_SETUP")}/release`, { method: "POST" })).json()) as { delivered: boolean };
+  expect(released.delivered).toBe(true);
+  // The late "ready" reached the daemon; give it time to (not) act on it.
+  await page.waitForTimeout(2_000);
+  expect(cli("--json", "secrets", "list")).not.toContain("TELEGRAM_BOT_TOKEN");
+  expect(readFileSync(config, "utf8")).toBe(before);
+  await manage(page, "messaging");
+  await expect(telegram).toHaveAttribute("data-state", state ?? "");
+  await expect(page.locator('article.adapter[data-platform="telegram"] input[name=TELEGRAM_BOT_TOKEN]')).toHaveAttribute("placeholder", "not set");
 });
 
 test("Create with QR stores the token, allowlists the owner and connects Telegram", async ({ page }) => {
@@ -104,6 +134,18 @@ test("the palette finds pages, sessions and actions and exports a profile withou
   await expect(page.locator(".notices")).toContainText("Exported profile work", { timeout: 30_000 });
   // desktop.font_family goes in front of the theme's font stack.
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).fontFamily)).toContain("Fira Sans");
+  // desktop.terminal_font_family is empty: the terminal uses the bundled font.
+  const terminal = await page.evaluate(async () => {
+    const probe = document.createElement("pre");
+    probe.className = "terminal-screen";
+    document.body.append(probe);
+    const family = getComputedStyle(probe).fontFamily;
+    probe.remove();
+    const faces = await document.fonts.load('16px "JetBrains Mono"', "prometheus");
+    return { family, loaded: faces.filter((f) => f.status === "loaded").length };
+  });
+  expect(terminal.family).toMatch(/^"JetBrains Mono"/);
+  expect(terminal.loaded).toBeGreaterThan(0);
   // Zoom goes in half steps.
   await page.keyboard.press("Control+=");
   await expect(page.locator("html")).toHaveAttribute("data-zoom", "0.5");

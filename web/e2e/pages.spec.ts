@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 import { signIn } from "./helpers";
 
 const ROUTES = [
-  "/chat", "/sessions", "/usage", "/models", "/skills", "/plugins", "/mcp", "/cron", "/adapters",
+  "/chat", "/sessions", "/projects", "/usage", "/models", "/skills", "/plugins", "/mcp", "/cron", "/adapters",
   "/pairing", "/webhooks", "/memory", "/logs", "/status", "/profiles", "/config", "/secrets",
   "/kanban", "/evolution", "/experience", "/files", "/docs", "/profile-builder", "/themes", "/achievements",
 ];
