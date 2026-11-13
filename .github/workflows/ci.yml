@@ -225,6 +225,14 @@ jobs:
         if: runner.os == 'Windows' && !cancelled()
         run: cargo test -p pmt-sandbox --test sandbox --locked --target "${{ matrix.target }}" -- "windows::"
 
+      # The dashboard's platform support matrix (web-dashboard, Honest
+      # platform support matrix — Sandbox strength on Windows): the
+      # sandbox.local row reports the AppContainer's real enforcement, and
+      # a policy it cannot fully enforce is degraded with the reason.
+      - name: Windows platform support matrix tests
+        if: runner.os == 'Windows' && !cancelled()
+        run: cargo test -p prometheus --lib --locked --target "${{ matrix.target }}" -- "daemon_cmd::support_matrix::"
+
       # A real local browser inside the AppContainer (execution-environments,
       # Local browser isolation): the pinned chrome-headless-shell runtime
       # (downloaded per job), DevTools over inherited pipe handles, every

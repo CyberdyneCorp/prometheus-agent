@@ -19,6 +19,14 @@ pub enum Catalog {
     Toolsets,
     /// The provider/model pairs it is configured with.
     Models,
+    /// Its plugins with their load state and problem.
+    Plugins,
+    /// Its configured MCP servers.
+    Mcp,
+    /// Its cron jobs with their state and next run.
+    Cron,
+    /// Its memory entries.
+    Memory,
 }
 
 /// The daemon side of the dashboard.

@@ -9,10 +9,8 @@ use hyper::header::{CONTENT_DISPOSITION, CONTENT_LENGTH, HeaderValue};
 use pmt_store::BlobRef;
 use serde_json::json;
 
-use super::Caller;
 use super::profile::Profile;
 use crate::Shared;
-use crate::auth::sessions::Role;
 use crate::http::{Reply, Req, bytes, error, from_error, json_reply, read_body};
 
 fn too_large(max: u64) -> Reply {
@@ -25,16 +23,7 @@ fn too_large(max: u64) -> Reply {
 
 /// `POST uploads` with the file as the body: the blob reference and the
 /// daemon-side path a `prompt.submit` attaches.
-pub(crate) async fn upload(
-    shared: &Shared,
-    caller: &Caller,
-    at: &Profile<'_>,
-    req: &Req,
-    body: Incoming,
-) -> Reply {
-    if caller.signed.role == Role::Observer {
-        return error(403, "observer", "observers cannot upload");
-    }
+pub(crate) async fn upload(shared: &Shared, at: &Profile<'_>, req: &Req, body: Incoming) -> Reply {
     let max = shared.config.max_upload_bytes;
     let declared = req
         .header(CONTENT_LENGTH.as_str())

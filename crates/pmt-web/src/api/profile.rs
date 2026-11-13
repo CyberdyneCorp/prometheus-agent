@@ -1,7 +1,11 @@
 //! `/api/profiles/{profile}/...` (spec: web-dashboard, Profile-addressed
 //! routes): the profile must be one the daemon serves (`404 {"error":
 //! "unknown profile <name>"}` otherwise), and every handler works on that
-//! profile's own scope and store only.
+//! profile's own scope and store only. Observers (remote users not in
+//! `dashboard.auth.drivers`) are read-only: every state-changing route is
+//! refused here with `403 {"error": "observer"}` (spec: web-dashboard,
+//! Remote dashboard users are observers by default), so routes added
+//! later inherit the refusal.
 
 use std::sync::Arc;
 
@@ -11,8 +15,9 @@ use serde_json::json;
 
 use super::{Caller, config, secrets, sessions, uploads, usage};
 use crate::Shared;
+use crate::auth::sessions::Role;
 use crate::host::Catalog;
-use crate::http::{Reply, Req, from_error, json_reply, not_found};
+use crate::http::{Reply, Req, error, from_error, json_reply, not_found};
 
 pub(crate) async fn route(
     shared: &Arc<Shared>,
@@ -29,6 +34,10 @@ pub(crate) async fn route(
     ) else {
         return json_reply(404, &json!({"error": format!("unknown profile {profile}")}));
     };
+    let reads = matches!(req.method, Method::GET | Method::HEAD);
+    if !reads && caller.signed.role == Role::Observer {
+        return error(403, "observer", "observers have read-only access");
+    }
     let at = Profile {
         name: profile,
         scope: &scope,
@@ -50,7 +59,11 @@ pub(crate) async fn route(
         (&Method::GET, ["skills"]) => catalog(shared, profile, Catalog::Skills).await,
         (&Method::GET, ["toolsets"]) => catalog(shared, profile, Catalog::Toolsets).await,
         (&Method::GET, ["models"]) => catalog(shared, profile, Catalog::Models).await,
-        (&Method::POST, ["uploads"]) => uploads::upload(shared, caller, &at, req, body).await,
+        (&Method::GET, ["plugins"]) => catalog(shared, profile, Catalog::Plugins).await,
+        (&Method::GET, ["mcp"]) => catalog(shared, profile, Catalog::Mcp).await,
+        (&Method::GET, ["cron"]) => catalog(shared, profile, Catalog::Cron).await,
+        (&Method::GET, ["memory"]) => catalog(shared, profile, Catalog::Memory).await,
+        (&Method::POST, ["uploads"]) => uploads::upload(shared, &at, req, body).await,
         (&Method::GET, ["blobs", sha]) => uploads::download(&at, sha),
         _ => not_found(),
     }

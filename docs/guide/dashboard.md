@@ -107,10 +107,13 @@ drivers = ["password"]       # subjects that may send messages
   with PKCE, checks the ID token's signature (ES256 or RS256) and the
   claims, and uses `<origin>/auth/callback` as the redirect URI.
 
-Remote users are **observers**. They can follow sessions, but they cannot
-send messages, answer approvals or upload files, unless their subject is
-in `dashboard.auth.drivers`. Your own login links always give a driver
-session.
+Remote users are **observers**, unless their subject is in
+`dashboard.auth.drivers`. Observers have read-only access: they can follow
+sessions and read every page, but they cannot send messages, answer
+approvals or upload files. They also cannot change anything else, such as
+configuration, secrets, sessions or the vault. A change over the API gets
+`403 {"error": "observer"}`, and a change over `/api/rpc` gets `-32002`
+(`session.observer`). Your own login links always give a driver session.
 
 ## Pages
 
@@ -124,11 +127,12 @@ session.
 | `/secrets` | Secret names, where each one comes from, and when it changed. You can set or delete a secret, but values are write-only: no page or API returns one. |
 | `/logs` | The last records (at most 5000) of a log from the daemon's list, redacted. |
 | `/models`, `/skills`, `/profiles`, `/adapters` | The profile's catalogs and the daemon's profiles and adapters. |
+| `/plugins`, `/mcp`, `/cron`, `/memory` | The profile's plugins (with their load state and any problem), MCP servers, cron jobs (with their state and next run) and memory entries. These pages are read-only for now: change them with `prometheus plugins`, `mcp`, `cron` and `memory`. |
 
 These pages are listed in the navigation, but this build does not
-implement them yet, so each one says so: `/plugins`, `/mcp`, `/cron`,
-`/pairing`, `/webhooks`, `/memory`, `/kanban`, `/files`, `/docs`,
-`/profile-builder`, `/themes` and `/achievements`. The `/evolution` and
+implement them yet, so each one says so: `/pairing`, `/webhooks`,
+`/kanban`, `/files`, `/docs`, `/profile-builder`, `/themes` and
+`/achievements`. The `/evolution` and
 `/experience` pages read the harness-evolution and experience-library
 methods of the client protocol, and they report when the daemon does not
 serve those yet.
@@ -147,7 +151,9 @@ names a feature (`sandbox.local`, `containers`, `terminal.pty`,
 `secrets.keychain`, `service.autostart`), a state (`supported`, `degraded`
 or `unsupported`) and the reason. The reason names whichever is actually
 missing: the operating system (no Landlock in this kernel) or a dependency
-(no Docker on the `PATH`).
+(no Docker on the `PATH`). The sandbox row reports the enforcement the
+host's sandbox (Landlock and seccomp, Seatbelt, or an `AppContainer` on
+Windows) gives the baseline policy, without starting a sandbox.
 
 ## API
 
@@ -167,6 +173,7 @@ session cookie:
   `GET sessions/<id>/messages`, `DELETE sessions/<id>`, `GET|PATCH config`
   (`{"set": {"<key>": <value>}}`), `GET config/schema`,
   `GET config/defaults`, `GET secrets`, `PUT|DELETE secrets/<NAME>`,
-  `GET usage` and `usage.csv`, `GET skills|toolsets|models`,
+  `GET usage` and `usage.csv`,
+  `GET skills|toolsets|models|plugins|mcp|cron|memory`,
   `POST uploads` (the file as the body), and `GET blobs/<sha256>` (only
   blobs that a session of the profile references).

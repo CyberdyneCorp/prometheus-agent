@@ -33,6 +33,7 @@ pub mod messaging;
 pub mod methods;
 pub mod moa;
 pub mod observability;
+mod observer;
 pub mod router;
 pub mod server;
 pub mod slots;

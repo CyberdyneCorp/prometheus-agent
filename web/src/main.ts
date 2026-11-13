@@ -7,7 +7,17 @@ import { h } from "./lib/dom";
 import { href, notFound, route, start } from "./lib/router";
 import { state } from "./lib/state";
 import { chatPage } from "./pages/chat";
-import { adaptersPage, modelsPage, profilesPage, skillsPage, toolsetsPage } from "./pages/catalog";
+import {
+  adaptersPage,
+  cronPage,
+  mcpPage,
+  memoryPage,
+  modelsPage,
+  pluginsPage,
+  profilesPage,
+  skillsPage,
+  toolsetsPage,
+} from "./pages/catalog";
 import { configPage } from "./pages/config";
 import { logsPage } from "./pages/logs";
 import { notFoundPage } from "./pages/notfound";
@@ -47,12 +57,8 @@ const NAV: [string, string][] = [
 
 /** Pages whose backends arrive with later capabilities. */
 const PENDING: [string, string, string][] = [
-  ["/plugins", "Plugins", "Plugin management in the dashboard"],
-  ["/mcp", "MCP", "MCP server management in the dashboard"],
-  ["/cron", "Cron", "Scheduled job management in the dashboard"],
   ["/pairing", "Pairing", "Pairing approval in the dashboard"],
   ["/webhooks", "Webhooks", "The webhooks page"],
-  ["/memory", "Memory", "Memory editing in the dashboard"],
   ["/kanban", "Kanban", "The kanban board"],
   ["/files", "Files", "The files page"],
   ["/docs", "Docs", "The embedded documentation"],
@@ -67,6 +73,10 @@ function routes(): void {
   route("/usage", usagePage);
   route("/models", modelsPage);
   route("/skills", skillsPage);
+  route("/plugins", pluginsPage);
+  route("/mcp", mcpPage);
+  route("/cron", cronPage);
+  route("/memory", memoryPage);
   route("/toolsets", toolsetsPage);
   route("/adapters", adaptersPage);
   route("/logs", logsPage);

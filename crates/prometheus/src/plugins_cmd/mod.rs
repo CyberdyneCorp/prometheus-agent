@@ -14,7 +14,7 @@ mod catalog_cmd;
 pub mod hooks_cmd;
 mod inspect;
 pub(crate) mod install;
-mod manage;
+pub(crate) mod manage;
 mod package_cmd;
 mod python;
 mod reload;

@@ -151,6 +151,91 @@ fn a_remote_user_not_listed_as_driver_cannot_submit() {
     assert_eq!(health["auth_providers"], json!(["login_link", "oidc"]));
 }
 
+/// Scenario: OIDC viewer submits (profile writers): an observer is
+/// read-only on the REST API and the client protocol too. Config, secret
+/// and session writes answer `403 {"error": "observer"}`, `vault.add`
+/// and `vault.remove` answer -32002, and nothing changes.
+#[test]
+fn a_remote_observer_cannot_change_profile_state() {
+    let home = mock_home();
+    let issuer = common::oidc::start("viewer@example.com");
+    std::fs::write(
+        home.path().join("daemon.toml"),
+        common::oidc::daemon_toml(&issuer, &["viewer@example.com"], &[]),
+    )
+    .unwrap();
+    let _daemon = daemon::start(home.path(), &[]);
+    let opened = dashboard::open(home.path(), &[]);
+    let owner = sign_in(&opened);
+    let viewer = dashboard::sign_in_remote(&opened);
+    let secret = "/api/profiles/default/secrets/SERVICE_TOKEN";
+    let put = call(
+        opened.port,
+        "PUT",
+        secret,
+        &owner,
+        Some(&json!({"value": "owner-value"})),
+    );
+    assert_eq!(put.status, 200, "{put:?}");
+    let rt = runtime();
+    let session = create_session(&rt, opened.port, &owner, "default");
+    let profile = home.path().join("profiles/default");
+    let config = profile.join("config.toml");
+    let before = std::fs::read(&config).unwrap();
+    let writes = [
+        (
+            "PATCH",
+            "/api/profiles/default/config".to_owned(),
+            Some(json!({"set": {"approvals.mode": "off"}})),
+        ),
+        (
+            "PUT",
+            secret.to_owned(),
+            Some(json!({"value": "viewer-value"})),
+        ),
+        ("DELETE", secret.to_owned(), None),
+        (
+            "DELETE",
+            format!("/api/profiles/default/sessions/{session}"),
+            None,
+        ),
+    ];
+    for (method, path, body) in &writes {
+        let refused = call(opened.port, method, path, &viewer, body.as_ref());
+        assert_eq!(refused.status, 403, "{method} {path}: {refused:?}");
+        assert_eq!(refused.json()["error"], "observer", "{method} {path}");
+    }
+    assert_eq!(std::fs::read(&config).unwrap(), before, "config unchanged");
+    let secrets = std::fs::read_to_string(profile.join("secrets.toml")).unwrap();
+    assert!(secrets.contains("owner-value"), "secret unchanged");
+    assert_eq!(listed(opened.port, &viewer, "default"), vec![session]);
+    let (added, removed, items) = rt.block_on(async {
+        let mut ws = dashboard::rpc(opened.port, &viewer).await;
+        let login =
+            json!({"origins": ["https://example.com"], "identifier": "me", "password": "pw"});
+        let added = request_on(
+            &mut ws,
+            &frame(1, "vault.add", &json!({"label": "x", "login": login})),
+        )
+        .await;
+        let removed = request_on(
+            &mut ws,
+            &frame(2, "vault.remove", &json!({"handle": "login-1"})),
+        )
+        .await;
+        let items = request_on(&mut ws, &frame(3, "vault.list", &json!({}))).await;
+        (added, removed, items)
+    });
+    for refused in [&added, &removed] {
+        assert_eq!(refused["error"]["code"], -32002, "{refused}");
+        assert_eq!(
+            refused["error"]["data"]["code"], "session.observer",
+            "{refused}"
+        );
+    }
+    assert_eq!(items["result"]["items"], json!([]), "{items}");
+}
+
 /// Scenario: Approval badge (the stream): an approval pending in a
 /// session of profile `work` reaches `/api/events` filtered to `work`.
 #[test]

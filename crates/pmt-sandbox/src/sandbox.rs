@@ -36,6 +36,20 @@ pub struct Sandbox {
 }
 
 impl Sandbox {
+    /// What this host would enforce of `policy` under `config`, without
+    /// preparing anything (no `AppContainer`, no ACL change): the platform
+    /// support matrix reports it at daemon start.
+    #[must_use]
+    pub fn strength(policy: &Policy, config: &SandboxConfig) -> StrengthReport {
+        match config.mode {
+            SandboxMode::Off => StrengthReport::none(
+                "off",
+                &Gap::new(DegradedFeature::All, "security.sandbox.mode is off"),
+            ),
+            SandboxMode::Enforce => platform::probe(policy),
+        }
+    }
+
     /// Probes this host for `policy` under `config`, logging a WARN for every
     /// allowed downgrade.
     ///
@@ -57,12 +71,8 @@ impl Sandbox {
         options: Options,
     ) -> Result<Self, Error> {
         let report = match (config.mode, options.report) {
-            (SandboxMode::Off, _) => StrengthReport::none(
-                "off",
-                &Gap::new(DegradedFeature::All, "security.sandbox.mode is off"),
-            ),
             (SandboxMode::Enforce, Some(report)) => report,
-            (SandboxMode::Enforce, None) => platform::probe(&policy),
+            _ => Self::strength(&policy, config),
         };
         let gaps = report.gaps();
         let refusal = gaps

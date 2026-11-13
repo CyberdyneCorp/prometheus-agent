@@ -100,11 +100,20 @@ fn daemon_retirement_closes_dashboard_sockets_with_1001() {
         &[("Cookie", &signed.cookie)],
         &format!("prometheus-events, csrf.{}", signed.csrf),
     ));
+    // The clock starts before `daemon stop` is spawned and stops after it
+    // returned, so it over-counts the retirement itself: passing under 3 s
+    // proves the spec's bound.
     let started = std::time::Instant::now();
     drop(daemon);
     let code = rt.block_on(close_code(&mut events));
+    let elapsed = started.elapsed();
     assert_eq!(code, Some(1001));
-    assert!(started.elapsed() < std::time::Duration::from_secs(10));
+    assert!(
+        elapsed < std::time::Duration::from_secs(3),
+        "the dashboard closed after {elapsed:?}"
+    );
+    let gone = std::net::TcpStream::connect(("127.0.0.1", opened.port));
+    assert!(gone.is_err(), "the listener is shut down");
 }
 
 fn header<'a>(answer: &'a common::api::Answer, name: &str) -> Option<&'a str> {

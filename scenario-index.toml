@@ -3976,7 +3976,7 @@ capabilities = [
 "Approval from the browser" = ["crates/prometheus/tests/dashboard_e2e.rs::an_approval_is_answered_from_the_browser_over_the_client_protocol"]
 
 [web-dashboard."Remote dashboard users are observers by default"]
-"OIDC viewer submits" = { tests = ["crates/prometheus/tests/dashboard_e2e.rs::an_oidc_viewer_sees_a_disabled_composer_and_cannot_submit", "crates/prometheus/tests/dashboard_api.rs::a_remote_user_not_listed_as_driver_cannot_submit"], note = "against a fake OpenID Connect provider (crates/prometheus/tests/common/oidc.rs) issuing ES256 ID tokens" }
+"OIDC viewer submits" = { tests = ["crates/prometheus/tests/dashboard_e2e.rs::an_oidc_viewer_sees_a_disabled_composer_and_cannot_submit", "crates/prometheus/tests/dashboard_api.rs::a_remote_user_not_listed_as_driver_cannot_submit", "crates/prometheus/tests/dashboard_api.rs::a_remote_observer_cannot_change_profile_state"], note = "against a fake OpenID Connect provider (crates/prometheus/tests/common/oidc.rs) issuing ES256 ID tokens" }
 
 [web-dashboard."Live event stream"]
 "Approval badge" = ["crates/prometheus/tests/dashboard_e2e.rs::a_session_waiting_for_approval_shows_a_badge_on_the_sessions_page", "crates/prometheus/tests/dashboard_api.rs::a_pending_approval_reaches_the_event_stream_of_its_profile", "crates/pmt-web/src/events.rs::an_approval_request_becomes_a_dashboard_event_with_its_profile"]
@@ -3989,6 +3989,9 @@ capabilities = [
 
 [web-dashboard."Config editing is schema-driven"]
 "Invalid value" = ["crates/prometheus/tests/dashboard_api.rs::an_invalid_config_value_is_refused_and_the_file_unchanged", "crates/prometheus/tests/dashboard_e2e.rs::the_config_page_refuses_an_invalid_value_and_keeps_the_file"]
+
+[web-dashboard."Honest platform support matrix"]
+"Sandbox strength on Windows" = { tests = ["crates/prometheus/src/daemon_cmd/support_matrix.rs::the_windows_sandbox_row_reports_the_appcontainer", "crates/prometheus/src/daemon_cmd/support_matrix.rs::a_degraded_sandbox_row_gives_the_reason_of_each_gap", "crates/prometheus/tests/dashboard_api.rs::the_platform_matrix_is_served_over_http_and_in_the_hello"], note = "the AppContainer test is cfg(windows) and runs in the CI step \"Windows platform support matrix tests\" on both Windows targets; /status renders the served rows" }
 
 [web-dashboard."Cost and usage view (upgrade)"]
 "Delegation cost rolls up" = ["crates/prometheus/tests/dashboard_e2e.rs::the_usage_page_rolls_children_up_and_shows_the_budget"]

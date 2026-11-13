@@ -205,3 +205,42 @@ fn the_usage_page_rolls_children_up_and_shows_the_budget() {
         &[("PMT_ROOT_SESSION", &root.to_string())],
     );
 }
+
+/// Scenario: Status page exists (the pages beside it): `/plugins`, `/mcp`,
+/// `/cron` and `/memory` show the profile's plugins, MCP servers, cron
+/// jobs and memory entries from the daemon.
+#[test]
+fn the_plugin_mcp_cron_and_memory_pages_show_the_profiles_data() {
+    let home = mock_home();
+    let plugin = home.path().join("profiles/default/plugins/weather");
+    pmt_plugins::testkit::install("example-weather", &plugin);
+    std::fs::copy(
+        Path::new(WEB).join("../plugins/examples/weather/plugin.toml"),
+        plugin.join("plugin.toml"),
+    )
+    .unwrap();
+    append_config(
+        home.path(),
+        "\n[mcp.servers.docs]\ncommand = \"/bin/sh\"\nargs = [\"-c\", \"true\"]\n",
+    );
+    let added = ok(&run(
+        home.path(),
+        &[
+            "--json",
+            "cron",
+            "add",
+            "every 1h",
+            "--prompt",
+            "nightly report",
+            "--yes",
+        ],
+    ));
+    let added: serde_json::Value = serde_json::from_str(&added).unwrap();
+    let job = added["job"]["name"].as_str().unwrap().to_owned();
+    ok(&run(
+        home.path(),
+        &["memory", "add", "The deploy window is Tuesday."],
+    ));
+    let _daemon = daemon::start(home.path(), &[]);
+    playwright(home.path(), "catalogs.spec.ts", &[("PMT_CRON_JOB", &job)]);
+}

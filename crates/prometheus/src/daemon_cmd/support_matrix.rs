@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 use pmt_config::schema::SandboxConfig;
 use pmt_rpc::contracts::FeatureSupport;
-use pmt_sandbox::{Enforcement, Paths, Policy, Sandbox};
+use pmt_sandbox::{Enforcement, Paths, Policy, Sandbox, StrengthReport};
 
 fn row(feature: &str, state: &str, reason: impl Into<String>) -> FeatureSupport {
     FeatureSupport {
@@ -22,7 +22,9 @@ fn row(feature: &str, state: &str, reason: impl Into<String>) -> FeatureSupport 
 }
 
 /// The local OS sandbox: the enforcement this host gives the baseline
-/// policy, each gap with the reason the sandbox reported.
+/// policy, each gap with the reason the sandbox reported. Only the
+/// strength is probed: preparing a sandbox would create an `AppContainer`
+/// and rewrite ACLs on Windows at every daemon start.
 fn sandbox(home: &Path) -> FeatureSupport {
     let scratch = std::env::temp_dir();
     let paths = Paths {
@@ -31,19 +33,19 @@ fn sandbox(home: &Path) -> FeatureSupport {
         workspace: scratch.clone(),
         scratch: vec![scratch],
     };
-    let probed =
-        Policy::baseline(&paths).and_then(|policy| Sandbox::new(policy, &SandboxConfig::default()));
-    let sandbox = match probed {
-        Ok(sandbox) => sandbox,
-        Err(err) => {
-            return row(
-                "sandbox.local",
-                "unsupported",
-                format!("the sandbox could not be prepared: {}", err.message()),
-            );
-        }
-    };
-    let report = sandbox.report();
+    match Policy::baseline(&paths) {
+        Ok(policy) => sandbox_row(&Sandbox::strength(&policy, &SandboxConfig::default())),
+        Err(err) => row(
+            "sandbox.local",
+            "unsupported",
+            format!("the sandbox policy could not be built: {}", err.message()),
+        ),
+    }
+}
+
+/// The `sandbox.local` row of a strength report: a degraded row names the
+/// platform and every gap with its reason.
+fn sandbox_row(report: &StrengthReport) -> FeatureSupport {
     match report.enforcement() {
         Enforcement::Full => row(
             "sandbox.local",
@@ -170,12 +172,18 @@ pub(super) fn probe(home: &Path) -> Vec<FeatureSupport> {
 
 #[cfg(test)]
 mod tests {
-    use super::probe;
+    use pmt_config::schema::DegradedFeature;
+    use pmt_sandbox::{Feature, FeatureReport, Gap, Level, StrengthReport};
+
+    use super::{probe, sandbox_row};
+
+    fn scratch() -> tempfile::TempDir {
+        tempfile::tempdir_in(concat!(env!("CARGO_MANIFEST_DIR"), "/../../target")).unwrap()
+    }
 
     #[test]
     fn every_row_has_a_known_state_and_a_reason() {
-        let home =
-            tempfile::tempdir_in(concat!(env!("CARGO_MANIFEST_DIR"), "/../../target")).unwrap();
+        let home = scratch();
         let rows = probe(home.path());
         assert_eq!(rows.len(), 5);
         assert_eq!(rows[0].feature, "sandbox.local");
@@ -186,5 +194,65 @@ mod tests {
             );
             assert!(!row.reason.is_empty(), "{row:?}");
         }
+    }
+
+    /// Scenario: Sandbox strength on Windows (the rendering, any OS): a
+    /// degraded row names the platform and the reason of every gap.
+    #[test]
+    fn a_degraded_sandbox_row_gives_the_reason_of_each_gap() {
+        let gap = Gap::new(
+            DegradedFeature::Appcontainer,
+            "AppContainer network capabilities cannot filter ports or hosts",
+        );
+        let report = StrengthReport {
+            platform: "appcontainer",
+            features: vec![
+                FeatureReport::full(Feature::Fs, Level::Enforced, "appcontainer"),
+                FeatureReport::degraded(Feature::Net, Level::Partial, "appcontainer", gap),
+            ],
+        };
+        let row = sandbox_row(&report);
+        assert_eq!(row.state, "degraded");
+        assert_eq!(
+            row.reason,
+            "appcontainer enforces partially (appcontainer: AppContainer network capabilities cannot filter ports or hosts)"
+        );
+    }
+
+    /// Scenario: Sandbox strength on Windows: the row reports the
+    /// `AppContainer` enforcement this host really gives, and a policy the
+    /// `AppContainer` cannot fully enforce is shown degraded with the
+    /// reason. Runs in the Windows CI job.
+    #[cfg(windows)]
+    #[test]
+    fn the_windows_sandbox_row_reports_the_appcontainer() {
+        use pmt_config::schema::SandboxConfig;
+        use pmt_sandbox::{Paths, Policy, Sandbox};
+
+        let home = scratch();
+        let row = probe(home.path()).remove(0);
+        assert_eq!(row.feature, "sandbox.local");
+        assert_eq!(row.state, "supported", "{row:?}");
+        assert_eq!(row.reason, "appcontainer enforces every feature");
+        let paths = Paths {
+            user_home: home.path().to_path_buf(),
+            prometheus_home: home.path().to_path_buf(),
+            workspace: home.path().to_path_buf(),
+            scratch: vec![home.path().to_path_buf()],
+        };
+        let caps: Vec<&str> = pmt_core::capability::BASELINE
+            .iter()
+            .copied()
+            .filter(|c| *c != "net.connect:*")
+            .chain(["net.connect:api.example.com:443"])
+            .collect();
+        let policy = Policy::from_capabilities(&caps, &paths).unwrap();
+        let row = sandbox_row(&Sandbox::strength(&policy, &SandboxConfig::default()));
+        assert_eq!(row.state, "degraded", "{row:?}");
+        assert!(
+            row.reason
+                .contains("AppContainer network capabilities cannot filter"),
+            "{row:?}"
+        );
     }
 }

@@ -202,26 +202,34 @@ fn remove(ctx: &Context<'_>, name: &str) -> Result<u8, Error> {
     Ok(0)
 }
 
-fn list(scope: &ProfileScope, json: bool) -> u8 {
-    let config = scope.config();
-    if json {
-        let servers: Vec<serde_json::Value> = config
-            .mcp
-            .servers
-            .iter()
-            .map(|(name, server)| {
-                serde_json::json!({
-                    "name": name,
-                    "transport": server.transport.as_str(),
-                    "target": crate::mcp_host::target(server),
-                    "trust": trust(server.trust),
-                    "enabled": server.enabled,
-                })
+/// The profile's MCP servers as `mcp list --json` and the dashboard's
+/// `/mcp` page show them.
+#[must_use]
+pub fn servers_json(scope: &ProfileScope) -> serde_json::Value {
+    let servers: Vec<serde_json::Value> = scope
+        .config()
+        .mcp
+        .servers
+        .iter()
+        .map(|(name, server)| {
+            serde_json::json!({
+                "name": name,
+                "transport": server.transport.as_str(),
+                "target": crate::mcp_host::target(server),
+                "trust": trust(server.trust),
+                "enabled": server.enabled,
             })
-            .collect();
-        println!("{}", serde_json::json!({"servers": servers}));
+        })
+        .collect();
+    serde_json::json!({"servers": servers})
+}
+
+fn list(scope: &ProfileScope, json: bool) -> u8 {
+    if json {
+        println!("{}", servers_json(scope));
         return 0;
     }
+    let config = scope.config();
     if config.mcp.servers.is_empty() {
         println!("no MCP servers are configured (add one with: prometheus mcp add)");
         return 0;
