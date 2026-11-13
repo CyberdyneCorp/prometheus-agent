@@ -77,6 +77,7 @@ macro_rules! event {
 }
 
 mod automation;
+mod chat;
 mod cron;
 mod desktop;
 mod files;
@@ -90,8 +91,10 @@ mod security;
 mod tui;
 mod turn;
 mod upkeep;
+mod workspace;
 mod worktree;
 pub use automation::*;
+pub use chat::*;
 pub use cron::*;
 pub use desktop::*;
 pub use files::*;
@@ -105,6 +108,7 @@ pub use security::*;
 pub use tui::*;
 pub use turn::*;
 pub use upkeep::*;
+pub use workspace::*;
 pub use worktree::*;
 
 /// A `<major>.<minor>` protocol version on the wire.
@@ -650,6 +654,10 @@ pub struct ContextUsage {
     /// The subscription the current route bills, when it is one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subscription: Option<SubscriptionStatus>,
+    /// `tokens` by category; they sum to `tokens` (empty when the session
+    /// is not loaded).
+    #[serde(default)]
+    pub categories: Vec<ContextCategory>,
 }
 
 /// A subscription's status in `session.context_usage`.

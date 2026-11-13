@@ -236,6 +236,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `delegation.model` | string | unset | any | `next_session` | The model children run on unless the task or its agent names one (`provider/model`); unset: the parent's current route. |
 | `delegation.oneshot_max_children` | integer | `2` | ≥ 0 | `next_session` | Children a finite one-shot run (`chat -z`, cron, eval) may spawn (`0` is unlimited); interactive and gateway sessions are never charged. |
 | `delegation.progress_events` | boolean | `true` | any | `next_session` | Publish `subagent.*` progress events on the root session's stream. |
+| `delegation.reasoning_effort` | one of "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra" | unset | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`, `"ultra"` | `next_session` | The reasoning effort children request (clamped to their model's most); unset: the parent profile's `agent.reasoning_effort`. |
 | `delegation.request_overrides` | table | unset | any | `next_session` | Request parameters set on every child model call, winning over the route's own; the `extra_body` table is merged one level deep into the request body. |
 | `delegation.review.model` | string | unset | any | `next_session` | The reviewer's model (with `provider`, a model id there; alone, `provider/model`). |
 | `delegation.review.provider` | string | unset | any | `next_session` | Provider of the reviewer's model. |

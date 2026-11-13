@@ -1247,6 +1247,27 @@
       ],
       "type": "object"
     },
+    "ContextCategory": {
+      "additionalProperties": false,
+      "description": "One category of `session.context_usage`.",
+      "properties": {
+        "category": {
+          "description": "`system_prompt`, `tool_definitions`, `skills`, `memory`, `rules`,\n`mcp`, `subagent_definitions` or `conversation`.",
+          "type": "string"
+        },
+        "tokens": {
+          "description": "Its estimated tokens.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "category",
+        "tokens"
+      ],
+      "type": "object"
+    },
     "ContextUsage": {
       "additionalProperties": false,
       "description": "`session.context_usage` result.",
@@ -1257,6 +1278,14 @@
             "string",
             "null"
           ]
+        },
+        "categories": {
+          "default": [],
+          "description": "`tokens` by category; they sum to `tokens` (empty when the session\nis not loaded).",
+          "items": {
+            "$ref": "#/$defs/ContextCategory"
+          },
+          "type": "array"
         },
         "context_window": {
           "description": "The model's context window, when known.",
@@ -1819,6 +1848,164 @@
       "required": [
         "sha256",
         "text"
+      ],
+      "type": "object"
+    },
+    "FsEntry": {
+      "additionalProperties": false,
+      "description": "One listed entry.",
+      "properties": {
+        "dir": {
+          "description": "A directory (expanded lazily with another `fs.list`).",
+          "type": "boolean"
+        },
+        "ignored": {
+          "default": false,
+          "description": "Ignored by a `.gitignore` (listed only with `show_ignored`).",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "The file name.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Its path as the session names it (relative to the workspace when\ninside it).",
+          "type": "string"
+        },
+        "size": {
+          "default": null,
+          "description": "Its size in bytes, for a file.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "dir"
+      ],
+      "type": "object"
+    },
+    "FsFile": {
+      "additionalProperties": false,
+      "description": "`fs.read` result.",
+      "properties": {
+        "data": {
+          "description": "The bytes read, base64.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "`text`, `image` or `binary`.",
+          "type": "string"
+        },
+        "mime": {
+          "default": null,
+          "description": "The media type of an image (`image/png`...).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "The file as the session names it.",
+          "type": "string"
+        },
+        "size": {
+          "description": "Its whole size in bytes.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "truncated": {
+          "description": "Only the first `max_bytes` are in `data`.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path",
+        "size",
+        "truncated",
+        "kind",
+        "data"
+      ],
+      "type": "object"
+    },
+    "FsListParams": {
+      "additionalProperties": false,
+      "description": "`fs.list` params.",
+      "properties": {
+        "path": {
+          "default": ".",
+          "description": "A directory, relative to the session's workspace (`.` its root).",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session (attached).",
+          "type": "string"
+        },
+        "show_ignored": {
+          "default": false,
+          "description": "Also list entries `.gitignore` files ignore.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "FsListing": {
+      "additionalProperties": false,
+      "description": "`fs.list` result.",
+      "properties": {
+        "entries": {
+          "description": "Directories first, then files, by name.",
+          "items": {
+            "$ref": "#/$defs/FsEntry"
+          },
+          "type": "array"
+        },
+        "path": {
+          "description": "The listed directory.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "entries"
+      ],
+      "type": "object"
+    },
+    "FsReadParams": {
+      "additionalProperties": false,
+      "description": "`fs.read` params.",
+      "properties": {
+        "max_bytes": {
+          "default": null,
+          "description": "Read at most this many bytes from the start (default and cap\n8 MiB); the pane previews the first 2 MiB.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "The file, relative to the session's workspace or absolute.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session (attached).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "path"
       ],
       "type": "object"
     },
@@ -2643,9 +2830,25 @@
           "description": "`<provider>/<model>`.",
           "type": "string"
         },
+        "max_reasoning": {
+          "default": null,
+          "description": "The most reasoning the model takes (`none` when it does not\nreason); a higher requested level is clamped to it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "provider": {
           "description": "The provider.",
           "type": "string"
+        },
+        "risky": {
+          "default": null,
+          "description": "Why switching the session to it is risky (the conversation does\nnot fit its window, it cannot call tools...); clients confirm.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -2677,6 +2880,29 @@
       "required": [
         "models"
       ],
+      "type": "object"
+    },
+    "ModelOptionsParams": {
+      "additionalProperties": false,
+      "description": "`model.options` params: a session's options, or a profile's before\nany session exists (the composer's picker of a new chat).",
+      "properties": {
+        "profile": {
+          "default": null,
+          "description": "The profile, when no session is named.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_id": {
+          "default": null,
+          "description": "The session (it must be attached).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "OpenRequest": {
@@ -2826,6 +3052,100 @@
           "type": "object"
         }
       ]
+    },
+    "QueueEditParams": {
+      "additionalProperties": false,
+      "description": "`queue.edit` params.",
+      "properties": {
+        "id": {
+          "description": "The queued input.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        },
+        "text": {
+          "description": "Its new text.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "id",
+        "text"
+      ],
+      "type": "object"
+    },
+    "QueueEntry": {
+      "additionalProperties": false,
+      "description": "One input waiting in a session's queue.",
+      "properties": {
+        "id": {
+          "description": "The input's turn id.",
+          "type": "string"
+        },
+        "lost": {
+          "default": false,
+          "description": "A turn whose outcome was lost when the daemon stopped during it:\nit blocks the queue until it is deleted (Discard), and is never\nsent again.",
+          "type": "boolean"
+        },
+        "text": {
+          "description": "The prompt text.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text"
+      ],
+      "type": "object"
+    },
+    "QueueItemParams": {
+      "additionalProperties": false,
+      "description": "`queue.delete` params.",
+      "properties": {
+        "id": {
+          "description": "The queued input (or the lost turn, to discard it).",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "id"
+      ],
+      "type": "object"
+    },
+    "QueueState": {
+      "additionalProperties": false,
+      "description": "A session's queue.",
+      "properties": {
+        "entries": {
+          "description": "In run order; a lost turn comes first.",
+          "items": {
+            "$ref": "#/$defs/QueueEntry"
+          },
+          "type": "array"
+        },
+        "paused": {
+          "description": "Paused: no queued input starts until `queue.resume`.",
+          "type": "boolean"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "entries",
+        "paused"
+      ],
+      "type": "object"
     },
     "QuotaStatus": {
       "additionalProperties": false,
@@ -4644,6 +4964,13 @@
       "owner": "desktop-app",
       "since": "1.0"
     },
+    "queue.changed": {
+      "owner": "desktop-app",
+      "payload": {
+        "$ref": "#/$defs/QueueState"
+      },
+      "since": "1.0"
+    },
     "request.cancel": {
       "owner": "workspace-architecture",
       "payload": {
@@ -4954,6 +5281,28 @@
       },
       "since": "1.0"
     },
+    "fs.list": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/FsListParams"
+      },
+      "result": {
+        "$ref": "#/$defs/FsListing"
+      },
+      "since": "1.0"
+    },
+    "fs.read": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/FsReadParams"
+      },
+      "result": {
+        "$ref": "#/$defs/FsFile"
+      },
+      "since": "1.0"
+    },
     "grants.list": {
       "declared": false,
       "owner": "security-boundaries",
@@ -5203,7 +5552,7 @@
       "long": true,
       "owner": "tui",
       "params": {
-        "$ref": "#/$defs/SessionRef"
+        "$ref": "#/$defs/ModelOptionsParams"
       },
       "result": {
         "$ref": "#/$defs/ModelOptions"
@@ -5227,6 +5576,56 @@
       },
       "result": {
         "$ref": "#/$defs/Submitted"
+      },
+      "since": "1.0"
+    },
+    "queue.delete": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/QueueItemParams"
+      },
+      "result": {
+        "$ref": "#/$defs/QueueState"
+      },
+      "since": "1.0"
+    },
+    "queue.edit": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/QueueEditParams"
+      },
+      "result": {
+        "$ref": "#/$defs/QueueState"
+      },
+      "since": "1.0"
+    },
+    "queue.list": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/QueueState"
+      },
+      "since": "1.0"
+    },
+    "queue.pause": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/QueueState"
+      },
+      "since": "1.0"
+    },
+    "queue.resume": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/QueueState"
       },
       "since": "1.0"
     },

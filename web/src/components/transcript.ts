@@ -17,7 +17,7 @@ export class Transcript {
   private answer: HTMLElement | null = null;
   /** The running turn showed answer text. */
   private answered = false;
-  private tools = new Map<string, HTMLElement>();
+  protected tools = new Map<string, HTMLElement>();
   private subagents = new Map<string, HTMLElement>();
   private cards = new Map<string, HTMLElement>();
 
@@ -30,9 +30,14 @@ export class Transcript {
 
   message(role: string, text: string): HTMLElement {
     const el = h("div", { class: `message ${role}`, "data-role": role }, h("span", { class: "who" }, role === "user" ? "You" : "Agent"), h("div", { class: "text" }, text));
+    this.add(el);
+    return el;
+  }
+
+  /** Appends a row of the live turn and follows the output. */
+  protected add(el: HTMLElement): void {
     this.el.append(el);
     this.el.scrollTop = this.el.scrollHeight;
-    return el;
   }
 
   /** Applies one client protocol event of this session. */
@@ -57,8 +62,7 @@ export class Transcript {
 
   card(id: string, el: HTMLElement): void {
     this.cards.set(id, el);
-    this.el.append(el);
-    this.el.scrollTop = this.el.scrollHeight;
+    this.add(el);
   }
 
   private text(target: HTMLElement): HTMLElement {
@@ -84,15 +88,12 @@ export class Transcript {
       case "tool.call": {
         const el = h("div", { class: "tool", "data-tool": String(p.tool) }, h("span", { class: "tool-name" }, String(p.tool)), h("span", { class: "tool-state" }, "running"));
         this.tools.set(String(p.call_id), el);
-        this.el.append(el);
+        this.add(el);
         break;
       }
-      case "tool.result": {
-        const el = this.tools.get(String(p.call_id));
-        const state = el?.querySelector(".tool-state");
-        if (state) state.textContent = p.ok ? "done" : "failed";
+      case "tool.result":
+        this.toolResult(p);
         break;
-      }
       case "subagent.spawned":
       case "subagent.progress":
       case "subagent.finished":
@@ -103,13 +104,20 @@ export class Transcript {
     }
   }
 
+  /** A tool call ended: its row shows the outcome. */
+  protected toolResult(p: Record<string, unknown>): void {
+    const el = this.tools.get(String(p.call_id));
+    const state = el?.querySelector(".tool-state");
+    if (state) state.textContent = p.ok ? "done" : "failed";
+  }
+
   private subagent(type: string, p: Record<string, unknown>): void {
     const id = String(p.subagent_id ?? "");
     let el = this.subagents.get(id);
     if (!el) {
       el = h("div", { class: "subagent", "data-subagent": id });
       this.subagents.set(id, el);
-      this.el.append(el);
+      this.add(el);
     }
     const what = type === "subagent.spawned" ? `Subagent started: ${String(p.goal ?? "")}` : type === "subagent.finished" ? `Subagent ${String(p.status ?? "finished")}: ${String(p.summary ?? "")}` : `Subagent: ${String(p.activity ?? "")}`;
     el.textContent = what;
@@ -119,6 +127,6 @@ export class Transcript {
     if (!this.answered && data.final_response) this.message("assistant", data.final_response);
     this.answer = null;
     this.answered = false;
-    if (data.error) this.el.append(h("p", { class: "notice error", role: "alert" }, `${data.error.message}${data.error.hint ? ` (${data.error.hint})` : ""}`));
+    if (data.error) this.add(h("p", { class: "notice error", role: "alert" }, `${data.error.message}${data.error.hint ? ` (${data.error.hint})` : ""}`));
   }
 }

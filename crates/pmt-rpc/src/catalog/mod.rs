@@ -164,6 +164,13 @@ pub fn declare_builtin(d: &mut Declarations) {
         .method::<c::BotChatEnsure>()
         .method::<c::UiPrefsGet>()
         .method::<c::UiPrefsPatch>()
+        .method::<c::QueueList>()
+        .method::<c::QueueEdit>()
+        .method::<c::QueueDelete>()
+        .method::<c::QueuePause>()
+        .method::<c::QueueResume>()
+        .method::<c::FsList>()
+        .method::<c::FsRead>()
         .server_request::<c::ApprovalAsk>()
         .server_request::<c::ClarifyAsk>()
         .server_request::<c::SecretAsk>()
@@ -176,7 +183,8 @@ pub fn declare_builtin(d: &mut Declarations) {
         .event::<c::TurnEnded>()
         .event::<c::UsageUpdatedEvent>()
         .event::<c::HealthChangedEvent>()
-        .event::<c::UiPrefsChanged>();
+        .event::<c::UiPrefsChanged>()
+        .event::<c::QueueChanged>();
 }
 
 impl Catalog {

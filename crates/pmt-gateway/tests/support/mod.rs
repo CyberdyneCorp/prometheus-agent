@@ -231,6 +231,7 @@ impl Host for FakeHost {
                 cost_usd: None,
                 billing_source: None,
                 subscription: None,
+                categories: Vec::new(),
             })
         })
     }
@@ -366,7 +367,7 @@ impl Host for FakeHost {
         })
     }
 
-    fn model_options<'a>(&'a self, _: &'a str, _: &'a str) -> HostFuture<'a, ModelOptions> {
+    fn model_options<'a>(&'a self, _: &'a str, _: Option<&'a str>) -> HostFuture<'a, ModelOptions> {
         Box::pin(async {
             Ok(ModelOptions {
                 current: Some("mock/m1".into()),
@@ -374,6 +375,8 @@ impl Host for FakeHost {
                     id: "mock/m1".into(),
                     provider: "mock".into(),
                     context_window: Some(8000),
+                    max_reasoning: None,
+                    risky: None,
                 }],
             })
         })

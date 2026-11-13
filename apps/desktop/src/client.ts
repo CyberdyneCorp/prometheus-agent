@@ -43,6 +43,8 @@ export class DesktopClient {
   onEvent: (envelope: Envelope) => void = () => {};
   onRequest: (request: ServerRequest) => void = () => {};
   onState: (state: Connection) => void = () => {};
+  /** Every open session was re-attached after a (re)connect. */
+  onReattached: () => void = () => {};
   /** A re-attached session whose missed events were evicted. */
   onTruncated: (sessionId: string) => void = () => {};
   private readonly listeners = new Map<string, Set<(envelope: Envelope) => void>>();
@@ -97,6 +99,7 @@ export class DesktopClient {
     rpc.onClose = () => this.lost(rpc);
     this.setState("connected");
     await this.reattach();
+    this.onReattached();
   }
 
   private lost(rpc: Rpc): void {

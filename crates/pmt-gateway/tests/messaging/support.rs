@@ -398,7 +398,7 @@ impl Host for FakeAgents {
         not_here()
     }
 
-    fn model_options<'a>(&'a self, _: &'a str, _: &'a str) -> HostFuture<'a, ModelOptions> {
+    fn model_options<'a>(&'a self, _: &'a str, _: Option<&'a str>) -> HostFuture<'a, ModelOptions> {
         not_here()
     }
 

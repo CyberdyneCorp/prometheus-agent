@@ -128,7 +128,7 @@ impl Shell {
             Request::PlatformSupport => to_json(&json!({
                 "features": crate::platform::probe(&self.native.facts()),
             })),
-            Request::LaunchOptions => Ok(self.launch_options()),
+            Request::LaunchOptions => Ok(self.launch_options(window)),
             Request::RestartApp => self.native.restart().map(|()| ok()),
             Request::TakeLinks => {
                 let mut links = self.links.lock().map_err(|e| e.to_string())?;
@@ -171,7 +171,7 @@ impl Shell {
         }
     }
 
-    fn launch_options(&self) -> Value {
+    fn launch_options(&self, window: &str) -> Value {
         let o = &self.options.options;
         let hotkey = self
             .hotkey
@@ -179,6 +179,8 @@ impl Shell {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone();
         json!({
+            // The calling window's label: the page keeps its drafts per window.
+            "window": window,
             "notices": self.options.notices,
             "keep_in_tray": o.keep_in_tray,
             "hotkey": hotkey,

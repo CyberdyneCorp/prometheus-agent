@@ -10,6 +10,7 @@
 //! failed-turn boundary row and emits `turn.end`. A turn always ends with
 //! exactly one [`ExitReason`].
 
+pub mod breakdown;
 pub mod breakpoints;
 mod budget;
 mod cache;

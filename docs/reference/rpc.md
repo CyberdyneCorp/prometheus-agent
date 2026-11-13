@@ -82,6 +82,8 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `experience.show` | `experience-library` | 1.0 | not served yet | |
 | `files.rollback` | `execution-environments` | 1.0 | [`FilesRollbackParams`](#filesrollbackparams) | [`FilesRolledBack`](#filesrolledback) |
 | `files.undo` | `execution-environments` | 1.0 | [`FilesUndoParams`](#filesundoparams) | [`FilesUndone`](#filesundone) |
+| `fs.list` | `desktop-app` | 1.0 | [`FsListParams`](#fslistparams) | [`FsListing`](#fslisting) |
+| `fs.read` | `desktop-app` | 1.0 | [`FsReadParams`](#fsreadparams) | [`FsFile`](#fsfile) |
 | `grants.list` | `security-boundaries` | 1.0 | not served yet | |
 | `grants.revoke` | `security-boundaries` | 1.0 | not served yet | |
 | `groups.capabilities` | `bot-mode` | 1.0 | not served yet | |
@@ -111,9 +113,14 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `moa.presets.delete` | `mixture-of-agents` | 1.0 | [`MoaPresetsDeleteParams`](#moapresetsdeleteparams) | [`MoaPresetList`](#moapresetlist) |
 | `moa.presets.list` | `mixture-of-agents` | 1.0 | [`MoaPresetsListParams`](#moapresetslistparams) | [`MoaPresetList`](#moapresetlist) |
 | `moa.presets.put` | `mixture-of-agents` | 1.0 | [`MoaPresetsPutParams`](#moapresetsputparams) | [`MoaPresetList`](#moapresetlist) |
-| `model.options` | `tui` | 1.0 | [`SessionRef`](#sessionref) | [`ModelOptions`](#modeloptions) |
+| `model.options` | `tui` | 1.0 | [`ModelOptionsParams`](#modeloptionsparams) | [`ModelOptions`](#modeloptions) |
 | `pairing.approve` | `messaging-gateway` | 1.0 | [`PairingApproveParams`](#pairingapproveparams) | [`PairingApproved`](#pairingapproved) |
 | `prompt.submit` | `workspace-architecture` | 1.0 | [`SubmitParams`](#submitparams) | [`Submitted`](#submitted) |
+| `queue.delete` | `desktop-app` | 1.0 | [`QueueItemParams`](#queueitemparams) | [`QueueState`](#queuestate) |
+| `queue.edit` | `desktop-app` | 1.0 | [`QueueEditParams`](#queueeditparams) | [`QueueState`](#queuestate) |
+| `queue.list` | `desktop-app` | 1.0 | [`SessionRef`](#sessionref) | [`QueueState`](#queuestate) |
+| `queue.pause` | `desktop-app` | 1.0 | [`SessionRef`](#sessionref) | [`QueueState`](#queuestate) |
+| `queue.resume` | `desktop-app` | 1.0 | [`SessionRef`](#sessionref) | [`QueueState`](#queuestate) |
 | `rpc.hello` | `workspace-architecture` | 1.0 | [`HelloParams`](#helloparams) | [`HelloResult`](#helloresult) |
 | `rpc.ping` | `workspace-architecture` | 1.0 | [`Empty`](#empty) | [`Ack`](#ack) |
 | `screen.handback` | `execution-environments` | 1.0 | not served yet | |
@@ -173,6 +180,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `local_model.context_grown` | `local-models` | 1.0 | not served yet |
 | `message.delivery` | `messaging-gateway` | 1.0 | not served yet |
 | `message.reaction` | `desktop-app` | 1.0 | not served yet |
+| `queue.changed` | `desktop-app` | 1.0 | [`QueueState`](#queuestate) |
 | `request.cancel` | `workspace-architecture` | 1.0 | [`RequestCancel`](#requestcancel) |
 | `request.resolved` | `workspace-architecture` | 1.0 | [`RequestResolved`](#requestresolved) |
 | `session.event` | `workspace-architecture` | 1.0 | any |
@@ -615,6 +623,15 @@ One change of a `config.patch`.
 | `source` | string | yes | The layer it comes from (`default`, `file`, `set`, `managed`). |
 | `value` | any | yes | Its effective value (secrets are never configuration values). |
 
+### `ContextCategory`
+
+One category of `session.context_usage`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `category` | string | yes | `system_prompt`, `tool_definitions`, `skills`, `memory`, `rules`, `mcp`, `subagent_definitions` or `conversation`. |
+| `tokens` | integer | yes | Its estimated tokens. |
+
 ### `ContextUsage`
 
 `session.context_usage` result.
@@ -622,6 +639,7 @@ One change of a `config.patch`.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `billing_source` | string or null | no | The current route's `billing_source` (`subscription:<provider>/<label>`, `api_key:<provider>[/<label>]`, `local`...), when the session is loaded. |
+| `categories` | array of [`ContextCategory`](#contextcategory) | no | `tokens` by category; they sum to `tokens` (empty when the session is not loaded). |
 | `context_window` | integer or null | no | The model's context window, when known. |
 | `cost_usd` | number or null | no | The session's cost so far in the usage ledger's currency (USD), priced calls only. |
 | `subscription` | [`SubscriptionStatus`](#subscriptionstatus) or null | no | The subscription the current route bills, when it is one. |
@@ -798,6 +816,60 @@ The system prompt a session froze on its first turn.
 |---|---|---|---|
 | `sha256` | string | yes | `sha256:<hex>` of the prompt text. |
 | `text` | string | yes | The prompt text, its tiers joined in request order. |
+
+### `FsEntry`
+
+One listed entry.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `dir` | boolean | yes | A directory (expanded lazily with another `fs.list`). |
+| `ignored` | boolean | no | Ignored by a `.gitignore` (listed only with `show_ignored`). |
+| `name` | string | yes | The file name. |
+| `path` | string | yes | Its path as the session names it (relative to the workspace when inside it). |
+| `size` | integer or null | no | Its size in bytes, for a file. |
+
+### `FsFile`
+
+`fs.read` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `data` | string | yes | The bytes read, base64. |
+| `kind` | string | yes | `text`, `image` or `binary`. |
+| `mime` | string or null | no | The media type of an image (`image/png`...). |
+| `path` | string | yes | The file as the session names it. |
+| `size` | integer | yes | Its whole size in bytes. |
+| `truncated` | boolean | yes | Only the first `max_bytes` are in `data`. |
+
+### `FsListParams`
+
+`fs.list` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `path` | string | no | A directory, relative to the session's workspace (`.` its root). |
+| `session_id` | string | yes | The session (attached). |
+| `show_ignored` | boolean | no | Also list entries `.gitignore` files ignore. |
+
+### `FsListing`
+
+`fs.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `entries` | array of [`FsEntry`](#fsentry) | yes | Directories first, then files, by name. |
+| `path` | string | yes | The listed directory. |
+
+### `FsReadParams`
+
+`fs.read` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `max_bytes` | integer or null | no | Read at most this many bytes from the start (default and cap 8 MiB); the pane previews the first 2 MiB. |
+| `path` | string | yes | The file, relative to the session's workspace or absolute. |
+| `session_id` | string | yes | The session (attached). |
 
 ### `HealthChanged`
 
@@ -1074,7 +1146,9 @@ One `model.options` entry.
 |---|---|---|---|
 | `context_window` | integer or null | no | The model's context window, when known. |
 | `id` | string | yes | `<provider>/<model>`. |
+| `max_reasoning` | string or null | no | The most reasoning the model takes (`none` when it does not reason); a higher requested level is clamped to it. |
 | `provider` | string | yes | The provider. |
+| `risky` | string or null | no | Why switching the session to it is risky (the conversation does not fit its window, it cannot call tools...); clients confirm. |
 
 ### `ModelOptions`
 
@@ -1084,6 +1158,15 @@ One `model.options` entry.
 |---|---|---|---|
 | `current` | string or null | no | The session's model (`<provider>/<model>`). |
 | `models` | array of [`ModelOption`](#modeloption) | yes | The models a `/model` switch may pick, current first. |
+
+### `ModelOptionsParams`
+
+`model.options` params: a session's options, or a profile's before any session exists (the composer's picker of a new chat).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string or null | no | The profile, when no session is named. |
+| `session_id` | string or null | no | The session (it must be attached). |
 
 ### `OpenRequest`
 
@@ -1141,6 +1224,45 @@ An image attached to a prompt: a file the daemon reads (checked like `chat --ima
 |---|---|
 | `` | An absolute path on the daemon's machine. |
 | `` | A blob reference (`blob:sha256:<hex>`) of one of the session's earlier user messages. |
+
+### `QueueEditParams`
+
+`queue.edit` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | yes | The queued input. |
+| `session_id` | string | yes | The session. |
+| `text` | string | yes | Its new text. |
+
+### `QueueEntry`
+
+One input waiting in a session's queue.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | yes | The input's turn id. |
+| `lost` | boolean | no | A turn whose outcome was lost when the daemon stopped during it: it blocks the queue until it is deleted (Discard), and is never sent again. |
+| `text` | string | yes | The prompt text. |
+
+### `QueueItemParams`
+
+`queue.delete` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | yes | The queued input (or the lost turn, to discard it). |
+| `session_id` | string | yes | The session. |
+
+### `QueueState`
+
+A session's queue.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `entries` | array of [`QueueEntry`](#queueentry) | yes | In run order; a lost turn comes first. |
+| `paused` | boolean | yes | Paused: no queued input starts until `queue.resume`. |
+| `session_id` | string | yes | The session. |
 
 ### `QuotaStatus`
 

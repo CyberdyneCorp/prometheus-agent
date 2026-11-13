@@ -125,6 +125,7 @@ impl Host for AskingHost {
             cost_usd: None,
             billing_source: None,
             subscription: None,
+            categories: Vec::new(),
         })
     }
 
@@ -189,7 +190,7 @@ impl Host for AskingHost {
         ready(Completions::default())
     }
 
-    fn model_options<'a>(&'a self, _: &'a str, _: &'a str) -> HostFuture<'a, ModelOptions> {
+    fn model_options<'a>(&'a self, _: &'a str, _: Option<&'a str>) -> HostFuture<'a, ModelOptions> {
         ready(ModelOptions::default())
     }
 

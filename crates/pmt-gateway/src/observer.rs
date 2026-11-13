@@ -43,6 +43,9 @@ const READS: &[&str] = &[
     "local.jobs",
     "local.search",
     "cron.blueprints.list",
+    "queue.list",
+    "fs.list",
+    "fs.read",
 ];
 
 /// `-32002 session.observer` when an observer-only connection calls a

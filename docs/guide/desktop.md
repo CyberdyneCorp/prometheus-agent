@@ -242,6 +242,64 @@ window's profile; switching profiles detaches the window's sessions and
 dials again for the new profile. "Reload configuration" sends
 `config.reload {profile}`.
 
+## The chat window
+
+**Transcript.** Answers stream in with a row per tool call; a tool row
+whose output names an image file expands to show it, read with
+`fs.read {session_id, path}` over the session's own connection (never
+from a local path). Cron and delegation completions are collapsed
+disclosures showing the result only. From 4 prompts on, a timeline rail
+has a marker per prompt; reopening a session renders its last 10 prompts,
+a marker jumps to its prompt and `Show earlier` loads the page before.
+`CommandOrControl+F` searches the rendered transcript. Each session keeps
+its distance from the bottom when you leave it, and new output is
+followed only while the view is at the bottom.
+
+**Drafts.** Every chat of every window keeps its composer text and staged
+images across relaunches. When a chat's session was deleted elsewhere,
+its draft moves into the fresh draft with a `Restored your unsent
+message` strip offering Undo; an image message the daemon never
+acknowledged is offered once as `Restore image draft`. Nothing is sent
+for you.
+
+**History and queue.** In an empty composer `Up`/`Down` recall the
+profile's earlier prompts. Prompts sent while a turn runs wait in the
+session's queue, which the daemon holds (`queue.list`, `queue.edit`,
+`queue.delete`, `queue.pause`, `queue.resume`, and the `queue.changed`
+event), so every window shows the same list and it survives restarts
+(`<profile>/queues/<session>.json`). Stop or `Esc` interrupts the turn
+and pauses the queue. A turn whose outcome a daemon restart lost shows as
+`Turn lost during restart` with one action, Discard, which unblocks the
+queue without sending it again.
+
+**Status bar.** A per-session approval bypass (like `/yolo`; confirmed
+when turned on, gone with the session), a context meter whose popover
+lists the tokens of the system prompt, tool definitions, skills, memory,
+rules, MCP, subagent definitions and the conversation
+(`session.context_usage` `categories`, which sum to the meter), and
+optional cache-hit and output-speed readouts chosen from the bar's
+context menu. `CommandOrControl+Shift+S` hides or shows the bar.
+
+**Model picker.** The composer lists every model of every connected
+provider (`model.options {profile}` before a chat exists), favourites
+first in starring order. The last pick of this device is used for new
+chats without changing `model.default` (a profile with no default keeps
+its first pick as the default). Switching mid-chat lasts for the session
+(`/model <id> --session`) after a warning that the next message re-reads
+the conversation, and asks again when the daemon flags the switch as
+risky (`risky`). Each model's reasoning effort and fast preset come back
+when it is picked; the pill shows `Ultra→Max` when the route clamps the
+level.
+
+**Subagents.** Settings → Model → Subagents edits the delegated agent's
+provider and model, `delegation.max_iterations`,
+`delegation.max_concurrent_children`,
+`delegation.inactivity_timeout_secs` and `delegation.reasoning_effort` for
+the profile in `Applies to` (shown with two or more profiles). Changes
+stay a draft until Apply, which writes one `config.patch`; Cancel, another
+page or another `Applies to` discards them, and a provider without a
+model is refused unless `Use parent model` is checked.
+
 ## Building and testing
 
 The shell's logic lives in `crates/pmt-desktop` (built and tested on

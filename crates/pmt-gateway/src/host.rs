@@ -23,6 +23,44 @@ fn not_served(why: &str) -> Error {
     Error::new(&pmt_core::error::codes::RPC_NOT_SERVED, why)
 }
 
+/// A `queue.*` call.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum QueueOp {
+    /// `queue.list`.
+    List(String),
+    /// `queue.edit`.
+    Edit {
+        /// The session.
+        session_id: String,
+        /// The queued input.
+        id: String,
+        /// Its new text.
+        text: String,
+    },
+    /// `queue.delete` (the lost turn too).
+    Delete {
+        /// The session.
+        session_id: String,
+        /// The queued input.
+        id: String,
+    },
+    /// `queue.pause`.
+    Pause(String),
+    /// `queue.resume`.
+    Resume(String),
+}
+
+impl QueueOp {
+    /// The session it addresses.
+    #[must_use]
+    pub fn session_id(&self) -> &str {
+        match self {
+            Self::List(s) | Self::Pause(s) | Self::Resume(s) => s,
+            Self::Edit { session_id, .. } | Self::Delete { session_id, .. } => session_id,
+        }
+    }
+}
+
 /// A boxed host future.
 pub type HostFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, Error>> + Send + 'a>>;
 
@@ -369,11 +407,12 @@ pub trait Host: Send + Sync + 'static {
         params: CompleteParams,
     ) -> HostFuture<'a, Completions>;
 
-    /// The models the session may switch to.
+    /// The models the session (or, without one, a new chat of
+    /// `profile`) may use.
     fn model_options<'a>(
         &'a self,
         profile: &'a str,
-        session_id: &'a str,
+        session_id: Option<&'a str>,
     ) -> HostFuture<'a, ModelOptions>;
 
     /// The session's delegated children (none until a host delegates).
@@ -438,6 +477,40 @@ pub trait Host: Send + Sync + 'static {
         _profile: &'a str,
     ) -> HostFuture<'a, pmt_rpc::contracts::ConfigReloaded> {
         Box::pin(async { Err(not_served("this host has no configuration files")) })
+    }
+
+    /// One `queue.*` call on a session of `profile` (spec: desktop-app,
+    /// Composer history and queue editing); the session's clients learn
+    /// of a change through `link` (`queue.changed`).
+    fn queue<'a>(
+        &'a self,
+        _profile: &'a str,
+        _op: QueueOp,
+        _link: Link,
+    ) -> HostFuture<'a, pmt_rpc::contracts::QueueState> {
+        Box::pin(async { Err(not_served("this host keeps no prompt queues")) })
+    }
+
+    /// One directory of a session's workspace (`fs.list`), through the
+    /// session's own terminal backend.
+    fn fs_list<'a>(
+        &'a self,
+        _profile: &'a str,
+        _params: pmt_rpc::contracts::FsListParams,
+        _link: Link,
+    ) -> HostFuture<'a, pmt_rpc::contracts::FsListing> {
+        Box::pin(async { Err(not_served("this host has no session workspaces")) })
+    }
+
+    /// The start of one file of a session (`fs.read`), through the
+    /// session's own terminal backend.
+    fn fs_read<'a>(
+        &'a self,
+        _profile: &'a str,
+        _params: pmt_rpc::contracts::FsReadParams,
+        _link: Link,
+    ) -> HostFuture<'a, pmt_rpc::contracts::FsFile> {
+        Box::pin(async { Err(not_served("this host has no session workspaces")) })
     }
 
     /// `profile`'s canonical Bot Chat, created when it has none

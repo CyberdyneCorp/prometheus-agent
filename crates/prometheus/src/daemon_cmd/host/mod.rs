@@ -51,17 +51,21 @@ mod desktop;
 mod discovery;
 mod gateway;
 mod health_sample;
+mod model_picker;
 mod notify;
 #[cfg(feature = "dashboard")]
 mod profile_create;
+mod queue;
 mod reload;
 mod send_tool;
 #[cfg(feature = "dashboard")]
 mod session_file;
 mod setup;
 mod speech;
+mod status_bar;
 mod turns;
 mod usage_events;
+mod workspace_fs;
 mod worktrees;
 
 use crate::chat::resume;
@@ -88,6 +92,8 @@ struct Loaded {
     /// Inputs admitted while a turn ran, first in first out; `busy` is
     /// only cleared under this lock once it is empty.
     queue: Mutex<std::collections::VecDeque<turns::Queued>>,
+    /// What the queue holds besides its jobs (pause, the lost turn).
+    queue_meta: Mutex<queue::Meta>,
     /// The running turn's id (a steered input joins it).
     current: Mutex<Option<String>>,
     /// A one-shot run's session: it ends once its turn is done, as an
@@ -316,10 +322,11 @@ impl DaemonHost {
         link: &Link,
     ) -> Result<Arc<Loaded>, Error> {
         let mut loaded = profile.loaded.lock().await;
-        if let Some(session) = loaded.get(&id) {
-            return Ok(Arc::clone(session));
+        let row = profile.store.session(id);
+        if let Some(session) = loaded.get(&id).cloned() {
+            return still_stored(&mut loaded, id, row.map(|_| session));
         }
-        let row = profile.store.session(id)?;
+        let row = row?;
         let max = profile.scope().config().sessions.max_resume_messages;
         profile.store.check_resumable(id, max)?;
         if row.ended_at.is_some() {
@@ -402,6 +409,7 @@ impl DaemonHost {
             idle: tokio::sync::Notify::new(),
             interrupt: Mutex::default(),
             queue: Mutex::default(),
+            queue_meta: Mutex::default(),
             current: Mutex::default(),
             oneshot,
             chat,
@@ -416,6 +424,7 @@ impl DaemonHost {
             delegations::deliver_owed(profile, &session, delegation);
         }
         if let Ok(owner) = self.profile(&profile.scope().name().to_string()) {
+            self.restore_queue(&owner, id, &session, link).await;
             self.after_crash(owner, id, &session, link);
         }
         Ok(session)
@@ -696,12 +705,12 @@ impl Host for DaemonHost {
                 .filter_map(|m| m.content.as_ref().map(String::len))
                 .sum();
             let loaded = profile.loaded.lock().await.get(&id).cloned();
-            let route = match loaded {
+            let (route, categories) = match &loaded {
                 Some(session) => {
-                    use pmt_agent::turn::model::ModelPort as _;
-                    Some(session.live.model.route().await)
+                    let (route, categories) = Self::breakdown(session, chars).await;
+                    (Some(route), categories)
                 }
-                None => None,
+                None => (None, Vec::new()),
             };
             let context_window = route.as_ref().and_then(|r| r.context_window);
             let subscription = route
@@ -710,13 +719,20 @@ impl Host for DaemonHost {
             let cost = profile
                 .store
                 .usage_totals(pmt_store::UsageScope::Session(id))?;
-            // The same rough estimate the budget engine uses: 4 bytes a token.
+            // The same rough estimate the budget engine uses: 4 bytes a
+            // token; with a breakdown, the meter is its sum.
+            let tokens = if categories.is_empty() {
+                u64::try_from(chars.div_ceil(4)).unwrap_or(u64::MAX)
+            } else {
+                categories.iter().map(|c| c.tokens).sum()
+            };
             Ok(ContextUsage {
-                tokens: u64::try_from(chars.div_ceil(4)).unwrap_or(u64::MAX),
+                tokens,
                 context_window,
                 cost_usd: (cost.calls > cost.unpriced_calls).then_some(cost.cost_usd),
                 billing_source: route.map(|r| r.billing_source),
                 subscription,
+                categories,
             })
         })
     }
@@ -950,7 +966,7 @@ impl Host for DaemonHost {
     fn model_options<'a>(
         &'a self,
         profile: &'a str,
-        session_id: &'a str,
+        session_id: Option<&'a str>,
     ) -> HostFuture<'a, ModelOptions> {
         Box::pin(async move {
             let profile = &self.profile(profile)?;
@@ -993,6 +1009,39 @@ impl Host for DaemonHost {
         profile: &'a str,
     ) -> HostFuture<'a, pmt_rpc::contracts::ConfigReloaded> {
         Box::pin(self.reload_config(profile))
+    }
+
+    fn queue<'a>(
+        &'a self,
+        profile: &'a str,
+        op: pmt_gateway::host::QueueOp,
+        link: Link,
+    ) -> HostFuture<'a, pmt_rpc::contracts::QueueState> {
+        Box::pin(async move { self.queue_op(&self.profile(profile)?, op, &link).await })
+    }
+
+    fn fs_list<'a>(
+        &'a self,
+        profile: &'a str,
+        params: pmt_rpc::contracts::FsListParams,
+        link: Link,
+    ) -> HostFuture<'a, pmt_rpc::contracts::FsListing> {
+        Box::pin(async move {
+            self.fs_list_of(&self.profile(profile)?, params, &link)
+                .await
+        })
+    }
+
+    fn fs_read<'a>(
+        &'a self,
+        profile: &'a str,
+        params: pmt_rpc::contracts::FsReadParams,
+        link: Link,
+    ) -> HostFuture<'a, pmt_rpc::contracts::FsFile> {
+        Box::pin(async move {
+            self.fs_read_of(&self.profile(profile)?, params, &link)
+                .await
+        })
     }
 
     fn bot_chat<'a>(&'a self, profile: &'a str) -> HostFuture<'a, (String, bool)> {
@@ -1156,6 +1205,8 @@ impl Host for DaemonHost {
             if let Some(api) = self.api.get() {
                 api.begin_drain();
             }
+            // Running turns may finish; queued input waits for the next start.
+            self.hold_queues().await;
             let until = tokio::time::Instant::now() + deadline;
             while self.turns.load(Ordering::Acquire) > 0 && tokio::time::Instant::now() < until {
                 tokio::time::sleep(Duration::from_millis(50)).await;
@@ -1171,6 +1222,22 @@ impl Host for DaemonHost {
             }
         })
     }
+}
+
+/// A loaded session, unless its stored row is gone: a session deleted
+/// behind the daemon's back (`sessions delete` from the CLI) is gone for
+/// its clients too, and leaves the daemon.
+fn still_stored(
+    loaded: &mut HashMap<SessionId, Arc<Loaded>>,
+    id: SessionId,
+    found: Result<Arc<Loaded>, Error>,
+) -> Result<Arc<Loaded>, Error> {
+    if let Err(err) = &found
+        && std::ptr::eq(err.code(), &codes::SESSION_NOT_FOUND)
+    {
+        loaded.remove(&id);
+    }
+    found
 }
 
 /// The setup of the chat policy frozen with a gateway session, which keeps

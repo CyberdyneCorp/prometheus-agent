@@ -16,7 +16,7 @@ import { desktopSettings } from "./desktop-settings";
 import { type InstallLink, installDialog } from "./install";
 import { PanelHost } from "./panels";
 import { LAST_PROFILE } from "./quickask";
-import { settingsPanel } from "./settings";
+import { SettingsPanel } from "./settings";
 import { type Attach, onShellEvent, shell } from "./shell";
 import { NOT_FOUND } from "./verdict";
 
@@ -29,6 +29,8 @@ type DeepLink = { open: "session"; session_id: string } | { open: "new"; profile
 
 interface Launch {
   notices: string[];
+  /** This window's label (drafts are kept per window). */
+  window?: string;
 }
 
 /** How often the window asks for an app update (the shell checks the
@@ -51,7 +53,8 @@ export async function boot(restart = false): Promise<void> {
   if (outcome.status === "confirm_restart") return confirmRestart(outcome);
   if (outcome.status === "no_local") return noLocal();
   if (outcome.notice) say(outcome.notice, "warn");
-  window_(outcome.profiles);
+  const launch = await shell<Launch>("launch_options").catch((): Launch => ({ notices: [] }));
+  window_(outcome.profiles, launch.window ?? "main");
 }
 
 function failed(error: string, log?: string): void {
@@ -76,7 +79,7 @@ function confirmRestart(outcome: { running_turns: number; daemon: string; bundle
   const restart = h("button", { type: "button", name: "restart" }, "Restart now");
   restart.addEventListener("click", () => void boot(true));
   const later = h("button", { type: "button", name: "later" }, "Not now");
-  later.addEventListener("click", () => window_([]));
+  later.addEventListener("click", () => window_([], "main"));
   root().replaceChildren(
     h(
       "section",
@@ -96,18 +99,19 @@ interface Opener {
   dialogs: HTMLElement;
 }
 
-function window_(profiles: string[]): void {
+function window_(profiles: string[], label: string): void {
   const served = profiles.length > 0 ? profiles : ["default"];
   // The default profile first, as the CLI does without `-p`.
   const client = new DesktopClient(served.includes("default") ? "default" : (served[0] ?? "default"));
-  const chat = new ChatView(client);
+  const dialogs = h("div", { class: "dialogs" });
+  const chat = new ChatView({ client, window: label, dialogs });
+  const settings = new SettingsPanel(client, served);
   const attention = new Attention();
   const panels = new PanelHost(client);
   const prefs = new Prefs(client);
   const status = h("span", { class: "connection", role: "status" }, "Connecting…");
   const list = h("ul", { class: "sessions", "aria-label": "Sessions" });
   const picker = h("select", { name: "profile", "aria-label": "Profile" }, ...served.map((p) => h("option", { value: p, selected: p === "default" }, p)));
-  const dialogs = h("div", { class: "dialogs" });
   const desktopSection = h("section", { class: "desktop-settings", "aria-label": "Desktop settings" });
 
   const refresh = async () => {
@@ -137,8 +141,7 @@ function window_(profiles: string[]): void {
   for (const event of ["request.resolved", "request.cancel"]) client.on(event, (envelope) => attention.settled((envelope.data as { id: string }).id));
   client.on("turn.finished", (envelope) => {
     attention.turn(envelope.session_id ?? "", false, "");
-    // A turn the window joined midway (after a relaunch) renders whole.
-    if (envelope.session_id && envelope.session_id === chat.sessionId) void chat.reload();
+    if (envelope.session_id) void chat.turnFinished(envelope.session_id);
   });
   chat.onSubmitted = (sessionId) => attention.turn(sessionId, true, chat.title() ?? sessionId);
   client.onTruncated = (sessionId) => {
@@ -149,10 +152,12 @@ function window_(profiles: string[]): void {
     status.dataset.state = state;
     if (state !== "connected") return;
     void refresh();
+    void settings.reset();
     void prefs.start({}).catch((err: unknown) => console.warn("UI preferences unavailable:", err));
     void panels.load(client.profile);
     void desktopSettings(client, desktopSection).catch((err: unknown) => console.warn("desktop settings:", err));
   };
+  client.onReattached = () => void chat.reattached();
   picker.addEventListener("change", () => void switchTo(picker.value));
 
   const newChat = h("button", { type: "button", name: "new-chat" }, "New chat");
@@ -178,14 +183,32 @@ function window_(profiles: string[]): void {
       { class: "layout" },
       h("nav", { class: "side" }, newChat, botChat, list),
       chat.el,
-      h("aside", { class: "aside" }, settingsPanel(client), desktopSection, panels.el),
+      h("aside", { class: "aside" }, settings.el, desktopSection, panels.el),
     ),
     dialogs,
     notices,
   );
   remember(client.profile);
+  shortcuts(chat);
+  chat.draft();
   client.start();
   void afterReady(opener);
+}
+
+/** The window's keyboard shortcuts. */
+function shortcuts(chat: ChatView): void {
+  document.addEventListener("keydown", (event) => {
+    const mod = event.metaKey || event.ctrlKey;
+    if (!mod) return;
+    const key = event.key.toLowerCase();
+    if (key === "f" && !event.shiftKey) {
+      event.preventDefault();
+      chat.find.open();
+    } else if (key === "s" && event.shiftKey) {
+      event.preventDefault();
+      chat.status.toggle();
+    }
+  });
 }
 
 /** The shell's events: deep links, focus requests after a notification

@@ -276,6 +276,12 @@ pub fn playwright(home: &Path, spec: &str, extra: &[(&str, &str)]) {
         .env("PMT_USER_HOME", super::user_home(home))
         .env("PMT_PW_OUT", home.join("playwright"))
         .envs(extra.iter().copied())
+        // `PMT_PW_GREP=<title>` runs only the matching tests of the spec.
+        .args(
+            std::env::var("PMT_PW_GREP")
+                .map(|g| vec!["--grep".to_owned(), g])
+                .unwrap_or_default(),
+        )
         .output()
         .unwrap();
     assert!(

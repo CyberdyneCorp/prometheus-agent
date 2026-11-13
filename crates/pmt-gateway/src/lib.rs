@@ -37,6 +37,7 @@ pub mod methods;
 pub mod moa;
 pub mod observability;
 mod observer;
+pub mod queue;
 pub mod remote;
 pub mod router;
 pub mod server;
@@ -45,6 +46,7 @@ pub mod tickets;
 pub mod ui_prefs;
 pub mod upkeep;
 pub mod vault;
+pub mod workspace;
 pub mod worktree;
 
 pub use daemon::{Exit, run};

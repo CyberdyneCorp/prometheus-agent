@@ -2313,6 +2313,17 @@
           "description": "Publish `subagent.*` progress events on the root session's stream.",
           "type": "boolean"
         },
+        "reasoning_effort": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReasoningLevel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The reasoning effort children request (clamped to their model's\nmost); unset: the parent profile's `agent.reasoning_effort`."
+        },
         "request_overrides": {
           "additionalProperties": true,
           "description": "Request parameters set on every child model call, winning over the\nroute's own; the `extra_body` table is merged one level deep into\nthe request body.",

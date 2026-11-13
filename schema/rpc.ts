@@ -452,10 +452,20 @@ export interface ConfigValue {
   value: unknown;
 }
 
+/** One category of `session.context_usage`. */
+export interface ContextCategory {
+  /** `system_prompt`, `tool_definitions`, `skills`, `memory`, `rules`, `mcp`, `subagent_definitions` or `conversation`. */
+  category: string;
+  /** Its estimated tokens. */
+  tokens: number;
+}
+
 /** `session.context_usage` result. */
 export interface ContextUsage {
   /** The current route's `billing_source` (`subscription:<provider>/<label>`, `api_key:<provider>[/<label>]`, `local`...), when the session is loaded. */
   billing_source?: string | null;
+  /** `tokens` by category; they sum to `tokens` (empty when the session is not loaded). */
+  categories?: Array<ContextCategory>;
   /** The model's context window, when known. */
   context_window?: number | null;
   /** The session's cost so far in the usage ledger's currency (USD), priced calls only. */
@@ -630,6 +640,64 @@ export interface FrozenPrompt {
   sha256: string;
   /** The prompt text, its tiers joined in request order. */
   text: string;
+}
+
+/** One listed entry. */
+export interface FsEntry {
+  /** A directory (expanded lazily with another `fs.list`). */
+  dir: boolean;
+  /** Ignored by a `.gitignore` (listed only with `show_ignored`). */
+  ignored?: boolean;
+  /** The file name. */
+  name: string;
+  /** Its path as the session names it (relative to the workspace when inside it). */
+  path: string;
+  /** Its size in bytes, for a file. */
+  size?: number | null;
+}
+
+/** `fs.read` result. */
+export interface FsFile {
+  /** The bytes read, base64. */
+  data: string;
+  /** `text`, `image` or `binary`. */
+  kind: string;
+  /** The media type of an image (`image/png`...). */
+  mime?: string | null;
+  /** The file as the session names it. */
+  path: string;
+  /** Its whole size in bytes. */
+  size: number;
+  /** Only the first `max_bytes` are in `data`. */
+  truncated: boolean;
+}
+
+/** `fs.list` params. */
+export interface FsListParams {
+  /** A directory, relative to the session's workspace (`.` its root). */
+  path?: string;
+  /** The session (attached). */
+  session_id: string;
+  /** Also list entries `.gitignore` files ignore. */
+  show_ignored?: boolean;
+}
+
+/** `fs.list` result. */
+export interface FsListing {
+  /** Directories first, then files, by name. */
+  entries: Array<FsEntry>;
+  /** The listed directory. */
+  path: string;
+}
+
+/** `fs.read` params. */
+export interface FsReadParams {
+  /** Read at most this many bytes from the start (default and cap 8 MiB); the pane previews the first 2 MiB. */
+  max_bytes?: number | null;
+  /** The file, relative to the session's workspace or absolute. */
+  path: string;
+  /** The session (attached). */
+  session_id: string;
 }
 
 /** `health.changed` payload. */
@@ -922,8 +990,12 @@ export interface ModelOption {
   context_window?: number | null;
   /** `<provider>/<model>`. */
   id: string;
+  /** The most reasoning the model takes (`none` when it does not reason); a higher requested level is clamped to it. */
+  max_reasoning?: string | null;
   /** The provider. */
   provider: string;
+  /** Why switching the session to it is risky (the conversation does not fit its window, it cannot call tools...); clients confirm. */
+  risky?: string | null;
 }
 
 /** `model.options` result. */
@@ -932,6 +1004,14 @@ export interface ModelOptions {
   current?: string | null;
   /** The models a `/model` switch may pick, current first. */
   models: Array<ModelOption>;
+}
+
+/** `model.options` params: a session's options, or a profile's before any session exists (the composer's picker of a new chat). */
+export interface ModelOptionsParams {
+  /** The profile, when no session is named. */
+  profile?: string | null;
+  /** The session (it must be attached). */
+  session_id?: string | null;
 }
 
 /** A server-to-client request still waiting for an answer. */
@@ -986,6 +1066,44 @@ export type PromptImage = {
 } | {
   blob: string;
 };
+
+/** `queue.edit` params. */
+export interface QueueEditParams {
+  /** The queued input. */
+  id: string;
+  /** The session. */
+  session_id: string;
+  /** Its new text. */
+  text: string;
+}
+
+/** One input waiting in a session's queue. */
+export interface QueueEntry {
+  /** The input's turn id. */
+  id: string;
+  /** A turn whose outcome was lost when the daemon stopped during it: it blocks the queue until it is deleted (Discard), and is never sent again. */
+  lost?: boolean;
+  /** The prompt text. */
+  text: string;
+}
+
+/** `queue.delete` params. */
+export interface QueueItemParams {
+  /** The queued input (or the lost turn, to discard it). */
+  id: string;
+  /** The session. */
+  session_id: string;
+}
+
+/** A session's queue. */
+export interface QueueState {
+  /** In run order; a lost turn comes first. */
+  entries: Array<QueueEntry>;
+  /** Paused: no queued input starts until `queue.resume`. */
+  paused: boolean;
+  /** The session. */
+  session_id: string;
+}
 
 /** A subscription's plan and quota windows. */
 export interface QuotaStatus {
@@ -1611,6 +1729,8 @@ export interface Methods {
   "egress.set": { params: EgressSetParams; result: EgressState };
   "files.rollback": { params: FilesRollbackParams; result: FilesRolledBack };
   "files.undo": { params: FilesUndoParams; result: FilesUndone };
+  "fs.list": { params: FsListParams; result: FsListing };
+  "fs.read": { params: FsReadParams; result: FsFile };
   "journey.list": { params: JourneyListParams; result: JourneyList };
   "local.add": { params: LocalParams; result: LocalReply };
   "local.catalog": { params: LocalParams; result: LocalReply };
@@ -1631,9 +1751,14 @@ export interface Methods {
   "moa.presets.delete": { params: MoaPresetsDeleteParams; result: MoaPresetList };
   "moa.presets.list": { params: MoaPresetsListParams; result: MoaPresetList };
   "moa.presets.put": { params: MoaPresetsPutParams; result: MoaPresetList };
-  "model.options": { params: SessionRef; result: ModelOptions };
+  "model.options": { params: ModelOptionsParams; result: ModelOptions };
   "pairing.approve": { params: PairingApproveParams; result: PairingApproved };
   "prompt.submit": { params: SubmitParams; result: Submitted };
+  "queue.delete": { params: QueueItemParams; result: QueueState };
+  "queue.edit": { params: QueueEditParams; result: QueueState };
+  "queue.list": { params: SessionRef; result: QueueState };
+  "queue.pause": { params: SessionRef; result: QueueState };
+  "queue.resume": { params: SessionRef; result: QueueState };
   "rpc.hello": { params: HelloParams; result: HelloResult };
   "rpc.ping": { params: Empty; result: Ack };
   "session.attach": { params: AttachParams; result: Attached };
@@ -1678,6 +1803,7 @@ export interface Events {
   "adapter.state": AdapterStatePayload;
   "automation.state": AutomationStatePayload;
   "health.changed": HealthChanged;
+  "queue.changed": QueueState;
   "request.cancel": RequestCancel;
   "request.resolved": RequestResolved;
   "session.event": unknown;

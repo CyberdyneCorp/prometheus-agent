@@ -5,11 +5,10 @@
 //! configuration value. All of them read: none rebuilds the session's
 //! system prompt, swaps its toolset or reloads its memory snapshot.
 
-use pmt_config::schema::ModelAlias;
 use pmt_core::error::Error;
 use pmt_rpc::contracts::{
     BannerInfo, ClientKind, CommandCatalog, CommandEntry, CommandSource, Completion, Completions,
-    ConfigValue, Disposition, FrozenPrompt, ModelOption, ModelOptions, SubcommandEntry,
+    ConfigValue, Disposition, FrozenPrompt, SubcommandEntry,
 };
 use pmt_tools::environments::Environments;
 use pmt_tools::files::backend::Kind;
@@ -175,56 +174,6 @@ impl DaemonHost {
             })
             .collect();
         Completions { items }
-    }
-
-    pub(super) async fn models_of(
-        &self,
-        profile: &Profile,
-        session: &str,
-    ) -> Result<ModelOptions, Error> {
-        let id = session_id(session)?;
-        let loaded = profile.loaded.lock().await.get(&id).cloned();
-        let current = loaded.map(|s| {
-            let target = s.live.model.target();
-            ModelOption {
-                id: format!("{}/{}", target.provider, target.model.unwrap_or_default()),
-                provider: target.provider,
-                context_window: None,
-            }
-        });
-        let scope = profile.scope();
-        let mut models: Vec<ModelOption> = current.iter().cloned().collect();
-        for alias in scope.config().model.aliases.values() {
-            let (provider, model) = match alias {
-                ModelAlias::Ref(reference) => match reference.split_once('/') {
-                    Some((provider, model)) => (provider.to_owned(), model.to_owned()),
-                    None => continue,
-                },
-                ModelAlias::Route(route) => (route.provider.clone(), route.model.clone()),
-            };
-            let id = format!("{provider}/{model}");
-            if !models.iter().any(|m| m.id == id) {
-                models.push(ModelOption {
-                    id,
-                    provider,
-                    context_window: None,
-                });
-            }
-        }
-        // The Mixture of Agents provider's models are its presets.
-        for id in crate::model_cmd::picker::preset_ids(scope.config()) {
-            if !models.iter().any(|m| m.id == id) {
-                models.push(ModelOption {
-                    id,
-                    provider: pmt_providers::moa::PROVIDER_ID.to_owned(),
-                    context_window: None,
-                });
-            }
-        }
-        Ok(ModelOptions {
-            current: current.map(|c| c.id),
-            models,
-        })
     }
 
     /// What the TUI's banner lists: the loaded session's tools and

@@ -4169,6 +4169,31 @@ capabilities = [
 [desktop-app."Machine-wide UI preferences"]
 "Theme changed in the webapp" = { tests = ["crates/prometheus/tests/desktop_background.rs::launch_links_install_dialog_shared_preferences_and_platform_support", "crates/pmt-gateway/src/ui_prefs.rs::only_display_preferences_are_stored", "crates/pmt-gateway/src/ui_prefs.rs::a_corrupt_file_is_set_aside_and_the_store_starts_empty"], note = "desktop-launch.spec.ts: dark mode chosen on the dashboard's /themes page repaints the desktop window within 2 s through ui.prefs.changed" }
 
+# Group 63.1 (desktop chat). desktop_chat.rs drives desktop-chat.spec.ts
+# in the desktop browser harness against the real daemon and a scripted
+# mock model.
+[desktop-app."Chat transcript rendering"]
+"Jump from the timeline" = { tests = ["crates/prometheus/tests/desktop_chat.rs::desktop_chat_composer_queue_status_bar_and_model_picker"], note = "30 prompts; reopened, the window renders the last 10 with a 30-marker rail; marker 5 renders from prompt 5 and scrolls it into view, Show earlier loads prompts 1-4" }
+"Remote image" = { tests = ["crates/prometheus/tests/desktop_chat.rs::desktop_chat_composer_queue_status_bar_and_model_picker", "crates/prometheus/src/daemon_cmd/host/workspace_fs.rs::paths_are_workspace_relative"], note = "the tool row's image is read with fs.read over the session's own connection (a data URL) and no open_path reaches the shell; the connection here is the local one: remote connections are 64.1 and use the same call" }
+
+[desktop-app."Drafts are durable and never sent for the user"]
+"Session deleted elsewhere" = { tests = ["crates/prometheus/tests/desktop_chat.rs::desktop_chat_composer_queue_status_bar_and_model_picker"], note = "the session is deleted with `sessions delete` while the daemon holds it loaded (the daemon now answers not found for it); the draft moves into the fresh draft with the restore strip and Undo, and no prompt.submit is sent" }
+
+[desktop-app."Composer history and queue editing"]
+"Edit a queued prompt" = { tests = ["crates/prometheus/tests/desktop_chat.rs::desktop_chat_composer_queue_status_bar_and_model_picker"], note = "queue.edit in window one reaches window two through queue.changed; Stop interrupts and pauses the queue in both" }
+"Lost turn blocks the queue" = { tests = ["crates/prometheus/tests/desktop_chat.rs::desktop_chat_composer_queue_status_bar_and_model_picker", "crates/prometheus/src/daemon_cmd/host/queue.rs::an_empty_queue_leaves_no_file_and_a_paused_one_is_kept"], note = "`daemon restart` during a 60 s mock turn with a prompt queued; after re-attaching, the lost turn shows only Discard and the queued prompt does not start until it is discarded" }
+
+[desktop-app."Desktop status bar"]
+"Inspecting context use" = { tests = ["crates/prometheus/tests/desktop_chat.rs::desktop_chat_composer_queue_status_bar_and_model_picker", "crates/pmt-agent/src/turn/breakdown.rs::mcp_and_delegation_tools_have_their_own_categories"] }
+"Bypass is session-scoped" = { tests = ["crates/prometheus/tests/desktop_chat.rs::desktop_chat_composer_queue_status_bar_and_model_picker"], note = "bypass confirmed in session A makes /approvals report YOLO there; session B shows it off and /approvals reports the profile's mode" }
+
+[desktop-app."Composer model picker"]
+"Picker does not change the default" = { tests = ["crates/prometheus/tests/desktop_chat.rs::desktop_chat_composer_queue_status_bar_and_model_picker"] }
+"Favourite for a disconnected provider" = { tests = ["crates/prometheus/tests/desktop_chat.rs::desktop_chat_composer_queue_status_bar_and_model_picker"], note = "deepseek is connected by its secret; `secrets rm` drops its model from Favourites and `secrets set` brings it back between the other two starred models" }
+
+[desktop-app."Subagent route settings are drafts until applied"]
+"Leaving without applying" = { tests = ["crates/prometheus/tests/desktop_chat.rs::desktop_chat_composer_queue_status_bar_and_model_picker"], note = "a provider change without a model is refused at Apply; leaving for the General page discards the draft, no config.patch is sent and config.toml is unchanged" }
+
 [distribution-and-update."Desktop packages and signing"]
 "Store install refuses self-update" = ["crates/prometheus/tests/update_channels.rs::desktop_packages_stamp_their_owner_and_the_cli_is_the_bundled_binary"]
 "CLI and desktop cannot skew" = ["crates/prometheus/tests/update_channels.rs::desktop_packages_stamp_their_owner_and_the_cli_is_the_bundled_binary"]

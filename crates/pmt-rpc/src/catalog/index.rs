@@ -133,6 +133,13 @@ pub const INDEX: &[IndexEntry] = &[
     method("ui.prefs.patch", "desktop-app"),
     method("config.patch", "desktop-app"),
     method("config.reload", "desktop-app"),
+    method("queue.list", "desktop-app"),
+    method("queue.edit", "desktop-app"),
+    method("queue.delete", "desktop-app"),
+    method("queue.pause", "desktop-app"),
+    method("queue.resume", "desktop-app"),
+    long("fs.list", "desktop-app"),
+    long("fs.read", "desktop-app"),
     // messaging-gateway
     method("pairing.approve", "messaging-gateway"),
     // security-boundaries
@@ -229,6 +236,7 @@ pub const INDEX: &[IndexEntry] = &[
     event("automation.state", "session-automation"),
     event("message.reaction", "desktop-app"),
     event("ui.prefs.changed", "desktop-app"),
+    event("queue.changed", "desktop-app"),
     event("achievement.unlocked", "pets"),
     event("wake.detected", "voice-mode"),
     event("local_model.context_grown", "local-models"),
