@@ -584,8 +584,8 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 64. M3 Desktop remote connections
 
-- [ ] 64.1 Implement the connection registry (duplicate URLs refused, listed to plugins), remote connections that are authenticated and encrypted (plain HTTP to LAN hosts refused, certificate changes stop the connection) and SSH connections reusing the local ticket model (host key changes, missing remote binary); verify with a remote daemon fixture (spec: desktop-app)
-- [ ] 64.2 Implement gateway switching and scoping (approvals from background connections, failed switches not remembered), updating every connected instance (unreachable instances reported) and agents across connections (same profile names disambiguated, mentions never cross machines); verify with two daemon fixtures (spec: desktop-app)
+- [x] 64.1 Implement the connection registry (duplicate URLs refused, listed to plugins), remote connections that are authenticated and encrypted (plain HTTP to LAN hosts refused, certificate changes stop the connection) and SSH connections reusing the local ticket model (host key changes, missing remote binary); verify with a remote daemon fixture (spec: desktop-app)
+- [x] 64.2 Implement gateway switching and scoping (approvals from background connections, failed switches not remembered), updating every connected instance (unreachable instances reported) and agents across connections (same profile names disambiguated, mentions never cross machines); verify with two daemon fixtures (spec: desktop-app)
 
 ## 65. M3 Desktop UI toolset
 

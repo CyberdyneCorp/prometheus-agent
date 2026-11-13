@@ -20490,6 +20490,7 @@ Commands:
   stop               Stop the daemon after its running turns finish
   restart            Replace the daemon (after a binary update): drain running turns, stop it and start this binary's daemon
   status             Print the daemon's process state
+  ticket             Print a one-use 30-second dial ticket for the running daemon's client protocol listener, for the selected profile (`--json`: one object). A desktop's `ssh` connection runs it over SSH, so the remote host needs no network-exposed listener
   install-service    Install a per-user supervisor unit that starts the daemon at login (no administrator rights); `--system --run-as-user` installs a boot-time unit instead (root only)
   uninstall-service  Stop and remove the unit `install-service` installed
   pair-device        Pair a remote device: print its token (shown once) for the remote attachment listener (`daemon.remote`) and the dashboard listener
@@ -20765,6 +20766,45 @@ Options:
           Print help
 ```
 
+## `prometheus daemon ticket`
+
+```text
+Print a one-use 30-second dial ticket for the running daemon's client protocol listener, for the selected profile (`--json`: one object). A desktop's `ssh` connection runs it over SSH, so the remote host needs no network-exposed listener
+
+Usage: prometheus daemon ticket [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus daemon install-service`
 
 ```text
@@ -20877,7 +20917,7 @@ Options:
           Profile to use (default: the home's active_profile, else default)
 
       --role <ROLE>
-          `driver` (default) or `observer`
+          `driver` (default), `observer` or `admin` (a driver that may also update the daemon with `daemon.update`)
 
           [default: driver]
 
@@ -20963,6 +21003,7 @@ Commands:
   stop               Stop the daemon after its running turns finish
   restart            Replace the daemon (after a binary update): drain running turns, stop it and start this binary's daemon
   status             Print the daemon's process state
+  ticket             Print a one-use 30-second dial ticket for the running daemon's client protocol listener, for the selected profile (`--json`: one object). A desktop's `ssh` connection runs it over SSH, so the remote host needs no network-exposed listener
   install-service    Install a per-user supervisor unit that starts the daemon at login (no administrator rights); `--system --run-as-user` installs a boot-time unit instead (root only)
   uninstall-service  Stop and remove the unit `install-service` installed
   pair-device        Pair a remote device: print its token (shown once) for the remote attachment listener (`daemon.remote`) and the dashboard listener
@@ -21016,6 +21057,14 @@ Usage: prometheus daemon help restart
 Print the daemon's process state
 
 Usage: prometheus daemon help status
+```
+
+## `prometheus daemon help ticket`
+
+```text
+Print a one-use 30-second dial ticket for the running daemon's client protocol listener, for the selected profile (`--json`: one object). A desktop's `ssh` connection runs it over SSH, so the remote host needs no network-exposed listener
+
+Usage: prometheus daemon help ticket
 ```
 
 ## `prometheus daemon help install-service`
@@ -21189,7 +21238,7 @@ Options:
           Profile to use (default: the home's active_profile, else default)
 
       --role <ROLE>
-          `driver` (default) or `observer`
+          `driver` (default), `observer` or `admin` (a driver that may also update the daemon with `daemon.update`)
 
           [default: driver]
 
@@ -30716,6 +30765,7 @@ Commands:
   stop               Stop the daemon after its running turns finish
   restart            Replace the daemon (after a binary update): drain running turns, stop it and start this binary's daemon
   status             Print the daemon's process state
+  ticket             Print a one-use 30-second dial ticket for the running daemon's client protocol listener, for the selected profile (`--json`: one object). A desktop's `ssh` connection runs it over SSH, so the remote host needs no network-exposed listener
   install-service    Install a per-user supervisor unit that starts the daemon at login (no administrator rights); `--system --run-as-user` installs a boot-time unit instead (root only)
   uninstall-service  Stop and remove the unit `install-service` installed
   pair-device        Pair a remote device: print its token (shown once) for the remote attachment listener (`daemon.remote`) and the dashboard listener
@@ -30768,6 +30818,14 @@ Usage: prometheus help daemon restart
 Print the daemon's process state
 
 Usage: prometheus help daemon status
+```
+
+## `prometheus help daemon ticket`
+
+```text
+Print a one-use 30-second dial ticket for the running daemon's client protocol listener, for the selected profile (`--json`: one object). A desktop's `ssh` connection runs it over SSH, so the remote host needs no network-exposed listener
+
+Usage: prometheus help daemon ticket
 ```
 
 ## `prometheus help daemon install-service`

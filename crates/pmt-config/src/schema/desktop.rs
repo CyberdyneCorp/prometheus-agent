@@ -39,6 +39,9 @@ pub struct DesktopConfig {
     pub terminal_font_family: String,
     /// HUD mode: the chrome-free floating chat bar.
     pub hud: HudConfig,
+    /// The `ssh` client of `ssh` connections (Windows: the bundled or an
+    /// installed OpenSSH); empty runs `ssh` from the `PATH`.
+    pub ssh_path: String,
 }
 
 impl Default for DesktopConfig {
@@ -54,6 +57,7 @@ impl Default for DesktopConfig {
             font_family: String::new(),
             terminal_font_family: String::new(),
             hud: HudConfig::default(),
+            ssh_path: String::new(),
         }
     }
 }

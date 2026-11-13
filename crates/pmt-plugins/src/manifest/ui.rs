@@ -25,7 +25,7 @@ use pmt_core::error::Error;
 /// The default `entry`.
 pub const DEFAULT_ENTRY: &str = "ui/index.html";
 /// The capabilities the plugin UI SDK offers a panel.
-pub const SDK_CAPABILITIES: &[&str] = &["sessions.read"];
+pub const SDK_CAPABILITIES: &[&str] = &["sessions.read", "connections.read", "agents.open"];
 
 const FIELDS: &[&str] = &["label", "entry", "sdk"];
 

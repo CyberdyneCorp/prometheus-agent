@@ -4173,6 +4173,7 @@ capabilities = [
 
 [desktop-app."Machine-wide UI preferences"]
 "Theme changed in the webapp" = { tests = ["crates/prometheus/tests/desktop_background.rs::launch_links_install_dialog_shared_preferences_and_platform_support", "crates/pmt-gateway/src/ui_prefs.rs::only_display_preferences_are_stored", "crates/pmt-gateway/src/ui_prefs.rs::a_corrupt_file_is_set_aside_and_the_store_starts_empty"], note = "desktop-launch.spec.ts: dark mode chosen on the dashboard's /themes page repaints the desktop window within 2 s through ui.prefs.changed" }
+"Remote connection keeps local preferences" = { tests = ["crates/prometheus/tests/desktop_switching.rs::switching_connections_keeps_sessions_preferences_and_launch_choice_right"], note = "desktop-connections.spec.ts: with Homelab shown, the accent colour is patched through a connection of the local daemon; the test then finds it in the Laptop home's ui-prefs.json and not in Homelab's" }
 
 # Group 63.1 (desktop chat). desktop_chat.rs drives desktop-chat.spec.ts
 # in the desktop browser harness against the real daemon and a scripted
@@ -4255,6 +4256,35 @@ capabilities = [
 [desktop-app."Fonts, shortcuts, palette and profile files"]
 "Conflicting shortcut" = { tests = ["crates/prometheus/tests/desktop_manage.rs::desktop_management_messaging_projects_shortcuts_and_profile_files"], note = "New session bound to CommandOrControl+G flags both it and the review pane until it changes; the binding is kept machine-wide (ui.prefs keybindings)" }
 "Exported profile has no keys" = { tests = ["crates/prometheus/tests/desktop_manage.rs::desktop_management_messaging_projects_shortcuts_and_profile_files"], note = "the palette's Export profile work writes the archive through `profile export` with the appearance overlay; no member holds the secret value set in `work`" }
+
+# Group 64 (desktop remote connections). desktop_connections.rs and
+# desktop_instances.rs drive the shell core (pmt-desktop) against real
+# daemons (a pinned self-signed dashboard listener, a stand-in `ssh` that
+# runs the remote commands on this machine, a self-installed release
+# fixture); desktop_switching.rs drives desktop-connections.spec.ts in the
+# desktop browser harness with two daemons.
+[desktop-app."Connection registry"]
+"Duplicate URL" = { tests = ["crates/pmt-desktop/src/connections/tests.rs::a_second_connection_to_the_same_normalized_url_is_refused", "crates/prometheus/tests/desktop_connections.rs::a_remote_connection_is_pinned_paired_and_dialed_through_the_shell"] }
+"Plugin lists connections" = { tests = ["crates/pmt-desktop/src/connections/tests.rs::plugins_see_names_kinds_and_the_primary_only"], note = "the plugin UI SDK's host.connections() (capability connections.read) answers with the shell's plugin_connections view: ids, names, kinds and the primary id; URLs, hosts and credentials are never in it" }
+
+[desktop-app."Remote connections are authenticated and encrypted"]
+"Plain HTTP to a LAN host" = ["crates/pmt-desktop/src/connections/tests.rs::plain_http_is_refused_except_to_loopback"]
+"Certificate changed" = { tests = ["crates/prometheus/tests/desktop_connections.rs::a_changed_certificate_stops_the_dials_until_it_is_pinned_again"], note = "a TLS server pinned by Test + Trust comes back with another key: Test latches both fingerprints, dials and Tests are refused without contacting the server (its accept count stays), and Re-pin (connection_trust with the presented key) dials again" }
+
+[desktop-app."SSH connections reuse the local ticket model"]
+"Host key changed" = { tests = ["crates/prometheus/tests/desktop_connections.rs::an_ssh_connection_confirms_its_host_key_and_latches_a_changed_one"], note = "a stand-in ssh with strict host-key checking against the app's known_hosts; after the confirmed key the dial works through ssh -W with a ticket from `daemon ticket` over SSH; a new host key gives `The host key has changed since you last connected` with its fingerprint and no further ssh run" }
+"Remote binary missing" = ["crates/prometheus/tests/desktop_connections.rs::test_reports_a_host_without_prometheus"]
+
+[desktop-app."Gateway switching and scoping"]
+"Approval from a background connection" = { tests = ["crates/prometheus/tests/desktop_switching.rs::switching_connections_keeps_sessions_preferences_and_launch_choice_right"], note = "desktop-connections.spec.ts: a Homelab turn asks for approval after the window went back to Laptop; the card under Other connections answers with approval.respond on the background connection that attached the Homelab session (never on a Laptop socket), and the command ran in Homelab's workspace only" }
+"Failed switch is not remembered" = { tests = ["crates/prometheus/tests/desktop_switching.rs::switching_connections_keeps_sessions_preferences_and_launch_choice_right", "crates/pmt-desktop/src/connections/tests.rs::launch_opens_the_last_connection_that_succeeded"], note = "Open on launch: last used; Homelab connects, the switch to the offline VPS fails, and the reloaded window opens on Homelab" }
+
+[desktop-app."Update every connected instance"]
+"One instance is unreachable" = { tests = ["crates/prometheus/tests/desktop_instances.rs::update_all_updates_the_reachable_instances_and_marks_the_offline_one", "crates/prometheus/tests/desktop_instances.rs::an_owned_instance_reports_its_owner_and_drivers_may_not_update"], note = "Homelab is a self-installed release fixture paired with an admin device: daemon.update starts its updater and its receipt reaches success; the app's signed updater stages its update last; the offline VPS row is unreachable. A Homebrew-owned instance reports the owner's refusal on its row and a driver device is refused (rpc.admin_required)" }
+
+[desktop-app."Agents across connections"]
+"Same profile name on two machines" = ["crates/prometheus/tests/desktop_instances.rs::agents_of_two_machines_share_a_roster_but_mentions_stay_local", "crates/pmt-desktop/src/connections/roster.rs::a_profile_on_two_machines_gets_connection_handles"]
+"Mention does not cross machines" = { tests = ["crates/prometheus/tests/desktop_instances.rs::agents_of_two_machines_share_a_roster_but_mentions_stay_local"], note = "`@research-homelab` submitted on the Laptop connection runs its turn on the Laptop and no session or turn appears on Homelab" }
 
 [distribution-and-update."Desktop packages and signing"]
 "Store install refuses self-update" = ["crates/prometheus/tests/update_channels.rs::desktop_packages_stamp_their_owner_and_the_cli_is_the_bundled_binary"]

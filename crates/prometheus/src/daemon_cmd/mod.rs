@@ -27,6 +27,7 @@ mod systemd;
 mod test_adapter;
 mod turn;
 mod update_chat;
+mod update_rpc;
 mod watchdog;
 mod whatsapp_cmd;
 
@@ -65,6 +66,11 @@ pub enum DaemonCommand {
     Restart,
     /// Print the daemon's process state.
     Status,
+    /// Print a one-use 30-second dial ticket for the running daemon's
+    /// client protocol listener, for the selected profile (`--json`: one
+    /// object). A desktop's `ssh` connection runs it over SSH, so the
+    /// remote host needs no network-exposed listener.
+    Ticket,
     /// Install a per-user supervisor unit that starts the daemon at login
     /// (no administrator rights); `--system --run-as-user` installs a
     /// boot-time unit instead (root only).
@@ -133,11 +139,49 @@ pub fn run(command: &DaemonCommand, ctx: &Context<'_>) -> Result<u8, Error> {
         DaemonCommand::Stop => stop(&root, ctx.json),
         DaemonCommand::Restart => restart(&root, ctx),
         DaemonCommand::Status => status(&root, ctx.json),
+        DaemonCommand::Ticket => ticket(&root, ctx),
         DaemonCommand::InstallService(args) => service::install(args, ctx),
         DaemonCommand::UninstallService(args) => service::uninstall(args, ctx),
         DaemonCommand::PairDevice(args) => devices_cmd::pair_device(&root, args, ctx.json),
         DaemonCommand::RevokeDevice { name } => devices_cmd::revoke(&root, name, ctx.json),
     }
+}
+
+/// What `ticket --json` prints.
+#[derive(Debug, Serialize)]
+struct TicketOutput<'a> {
+    ticket: &'a str,
+    /// Seconds the ticket stays valid.
+    expires_in_secs: u64,
+    /// The client protocol endpoint the ticket opens.
+    rpc_url: &'a str,
+}
+
+/// A one-use ticket of the running daemon for the selected profile; the
+/// daemon is not started (`ensure` does that).
+fn ticket(home: &Path, ctx: &Context<'_>) -> Result<u8, Error> {
+    let Ok(Discovery::Running(record)) = discover(home) else {
+        return Err(Error::new(
+            &codes::DAEMON_NOT_RUNNING,
+            "the gateway daemon is not running",
+        )
+        .with_hint("start it with: prometheus daemon ensure"));
+    };
+    let profile = ctx.home()?.select_profile(ctx.profile)?;
+    let request = ControlRequest::Ticket {
+        purpose: control::Purpose::Interactive,
+        profiles: vec![profile.to_string()],
+        pid: None,
+    };
+    let issued = control_call(&record, &request).and_then(control::ticket_of)?;
+    if ctx.json {
+        return crate::output::json(&TicketOutput {
+            ticket: &issued.ticket,
+            expires_in_secs: issued.expires_in_secs,
+            rpc_url: &record.endpoint.rpc_url,
+        });
+    }
+    crate::output::print(&issued.ticket)
 }
 
 /// What `ensure --json` prints.

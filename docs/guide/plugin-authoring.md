@@ -402,7 +402,15 @@ request. It talks to the app only through the `sdk` object (also
 `prometheus`) the app adds to it: `sdk.register()`, `sdk.context()`
 (plugin, profile, theme) and `sdk.sessions.list()` (with `sessions.read`;
 without it the call rejects with
-`capability sessions.read not granted to plugin <id>`). Native commands
+`capability sessions.read not granted to plugin <id>`). With
+`connections.read`, `sdk.host.connections()` lists the desktop's
+connections (ids, names, kinds and the primary id, never a URL, host or
+credential) and `sdk.host.agents()` the agents of every connection (handles
+such as `@research-homelab` when a profile name exists on several
+connections); with `agents.open`, `sdk.host.ensureAgent(connection_id,
+profile)` opens the agent's chat on its own daemon and
+`sdk.host.warmAgent(connection_id, profile)` readies its connection (an SSH
+tunnel). Native commands
 are never available to a panel. A panel loads only when the plugin's
 package signature was verified at install, or it was installed with
 `--allow-unsigned`.

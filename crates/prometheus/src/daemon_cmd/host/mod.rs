@@ -1111,6 +1111,19 @@ impl Host for DaemonHost {
         Some(self)
     }
 
+    fn daemon_update(&self, check: bool) -> HostFuture<'_, pmt_rpc::contracts::DaemonUpdated> {
+        Box::pin(async move {
+            let home = self
+                .profile(&self.launch_profile)?
+                .scope()
+                .home()
+                .to_path_buf();
+            pmt_core::spawn::blocking(move || super::update_rpc::run(&home, check))
+                .await
+                .map_err(|e| Error::new(&pmt_core::error::codes::RPC_INTERNAL, e.to_string()))?
+        })
+    }
+
     fn bot_chat<'a>(&'a self, profile: &'a str) -> HostFuture<'a, (String, bool)> {
         Box::pin(async move { self.ensure_bot_chat(&self.profile(profile)?).await })
     }

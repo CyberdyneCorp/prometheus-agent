@@ -7,6 +7,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use pmt_desktop::connections::service::ConnectionsConfig;
+use pmt_desktop::connections::ssh::SshPrograms;
 use pmt_desktop::{Request, Shell, ShellConfig, deeplink, ensure, navigation};
 use serde_json::Value;
 use tauri::webview::NewWindowResponse;
@@ -51,7 +53,8 @@ pub(crate) fn run(launch: Launch) {
             let native = TauriNative::new(app.handle().clone(), launch.update_target());
             let mut shell = Shell::new(shell_config(&launch), Arc::new(native))
                 .with_options(launch.options.clone())
-                .with_updater(launch.updater(&version));
+                .with_updater(launch.updater(&version))
+                .with_connections(connections_config(app.handle(), &launch)?);
             if launch.ignore_existing {
                 shell = shell.without_local_daemon();
             }
@@ -75,6 +78,26 @@ pub(crate) fn run(launch: Launch) {
             crate::native::install_staged(handle);
         }
     });
+}
+
+/// The connection registry in the app's data directory, credentials in
+/// the OS keychain.
+fn connections_config<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    launch: &Launch,
+) -> tauri::Result<ConnectionsConfig> {
+    use tauri::Manager as _;
+    let ssh = launch
+        .options
+        .options
+        .ssh_path
+        .as_deref()
+        .map_or_else(SshPrograms::default, SshPrograms::at);
+    Ok(ConnectionsConfig {
+        dir: app.path().app_data_dir()?.join("connections"),
+        keychain: Arc::new(pmt_config::secrets::keychain::OsKeychain),
+        ssh,
+    })
 }
 
 /// `builder` with the OS plugins.

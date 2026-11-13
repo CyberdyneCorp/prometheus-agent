@@ -72,7 +72,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `config.reload` | `desktop-app` | 1.0 | [`ProfileParams`](#profileparams) | [`ConfigReloaded`](#configreloaded) |
 | `cron.blueprints.fill` | `scheduled-jobs` | 1.0 | [`BlueprintFillParams`](#blueprintfillparams) | [`BlueprintFilled`](#blueprintfilled) |
 | `cron.blueprints.list` | `scheduled-jobs` | 1.0 | [`BlueprintsListParams`](#blueprintslistparams) | [`BlueprintList`](#blueprintlist) |
-| `daemon.update` | `workspace-architecture` | 1.0 | not served yet | |
+| `daemon.update` | `workspace-architecture` | 1.0 | [`DaemonUpdateParams`](#daemonupdateparams) | [`DaemonUpdated`](#daemonupdated) |
 | `egress.set` | `security-boundaries` | 1.0 | [`EgressSetParams`](#egresssetparams) | [`EgressState`](#egressstate) |
 | `evolve.cancel` | `harness-evolution` | 1.0 | not served yet | |
 | `evolve.choose` | `harness-evolution` | 1.0 | not served yet | |
@@ -799,6 +799,23 @@ One category of `session.context_usage`.
 | `cost_usd` | number or null | no | The session's cost so far in the usage ledger's currency (USD), priced calls only. |
 | `subscription` | [`SubscriptionStatus`](#subscriptionstatus) or null | no | The subscription the current route bills, when it is one. |
 | `tokens` | integer | yes | Estimated tokens of the active context. |
+
+### `DaemonUpdateParams`
+
+`daemon.update` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `check` | boolean | no | Only look for an update (`prometheus update --check`). |
+
+### `DaemonUpdated`
+
+`daemon.update` result. A refusal (another owner such as a package manager or the container image, the update lock held) is an error with the updater's own code and message.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `message` | string | yes | What the check printed, or where the updater writes its log. |
+| `status` | string | yes | `started` (the updater runs detached and hands the daemon over when it finishes) or `checked`. |
 
 ### `Decision`
 

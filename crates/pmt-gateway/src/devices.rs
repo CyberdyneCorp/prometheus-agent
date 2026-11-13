@@ -38,15 +38,18 @@ pub enum DeviceRole {
     Driver,
     /// Watches only.
     Observer,
+    /// A driver that may also administer the daemon (`daemon.update`).
+    Admin,
 }
 
 impl DeviceRole {
-    /// Parses `driver` or `observer`.
+    /// Parses `driver`, `observer` or `admin`.
     #[must_use]
     pub fn parse(text: &str) -> Option<Self> {
         match text {
             "driver" => Some(Self::Driver),
             "observer" => Some(Self::Observer),
+            "admin" => Some(Self::Admin),
             _ => None,
         }
     }
@@ -57,6 +60,7 @@ impl DeviceRole {
         match self {
             Self::Driver => "driver",
             Self::Observer => "observer",
+            Self::Admin => "admin",
         }
     }
 }

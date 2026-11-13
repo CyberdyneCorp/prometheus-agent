@@ -120,6 +120,8 @@ pub(crate) fn answer(
                 purpose,
                 pid,
                 observer_only: false,
+                // Only the daemon's own OS user reaches the control channel.
+                admin: true,
             };
             match server.tickets.issue(grant, &server.profiles()) {
                 Ok(ticket) => ControlResponse {

@@ -609,6 +609,20 @@ export interface ContextUsage {
   tokens: number;
 }
 
+/** `daemon.update` params. */
+export interface DaemonUpdateParams {
+  /** Only look for an update (`prometheus update --check`). */
+  check?: boolean;
+}
+
+/** `daemon.update` result. A refusal (another owner such as a package manager or the container image, the update lock held) is an error with the updater's own code and message. */
+export interface DaemonUpdated {
+  /** What the check printed, or where the updater writes its log. */
+  message: string;
+  /** `started` (the updater runs detached and hands the daemon over when it finishes) or `checked`. */
+  status: string;
+}
+
 /** An approval answer. */
 export type Decision = "once" | "session" | "always" | "deny" | "explain";
 
@@ -2129,6 +2143,7 @@ export interface Methods {
   "config.reload": { params: ProfileParams; result: ConfigReloaded };
   "cron.blueprints.fill": { params: BlueprintFillParams; result: BlueprintFilled };
   "cron.blueprints.list": { params: BlueprintsListParams; result: BlueprintList };
+  "daemon.update": { params: DaemonUpdateParams; result: DaemonUpdated };
   "egress.set": { params: EgressSetParams; result: EgressState };
   "files.rollback": { params: FilesRollbackParams; result: FilesRolledBack };
   "files.undo": { params: FilesUndoParams; result: FilesUndone };
@@ -2244,7 +2259,6 @@ export const UNDECLARED = [
   "bot.relay.deliver",
   "bot.relay.drain",
   "bot.roster.list",
-  "daemon.update",
   "evolve.cancel",
   "evolve.choose",
   "evolve.list",

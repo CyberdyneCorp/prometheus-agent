@@ -98,7 +98,7 @@ impl Auth {
         };
         if let Some(device) = self.devices.verify(bearer) {
             let role = match device.role {
-                DeviceRole::Driver => Role::Driver,
+                DeviceRole::Driver | DeviceRole::Admin => Role::Driver,
                 DeviceRole::Observer => Role::Observer,
             };
             let signed = Signed {
@@ -107,6 +107,7 @@ impl Auth {
                 csrf: String::new(),
                 via: Via::Device,
                 profiles: (!device.profiles.is_empty()).then_some(device.profiles),
+                admin: device.role == DeviceRole::Admin,
                 ended: device.revoked,
             };
             return Some((None, signed));
@@ -119,6 +120,7 @@ impl Auth {
                 csrf: String::new(),
                 via: Via::Deployment,
                 profiles: None,
+                admin: false,
                 ended: self.deployment_ended.clone(),
             };
             (None, signed)

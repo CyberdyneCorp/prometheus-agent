@@ -9,6 +9,8 @@ repository.workspace = true
 
 [dependencies]
 pmt-core.workspace = true
+# Device credentials of remote connections live in the OS keychain.
+pmt-config.workspace = true
 # Update downloads go through the shared outbound HTTP client.
 pmt-net.workspace = true
 reqwest.workspace = true
@@ -25,10 +27,20 @@ serde.workspace = true
 # The `[desktop]` section of the profile's config.toml.
 toml.workspace = true
 serde_json.workspace = true
-tokio = { workspace = true, features = ["process", "io-util"] }
+tokio = { workspace = true, features = ["process", "io-util", "net"] }
 tracing.workspace = true
 # Endpoint, external link and deep link parsing.
 url.workspace = true
+# Remote connections: TLS with certificate pins, the shell's own client
+# protocol calls, SSH host-key fingerprints and forwarder tickets.
+rustls.workspace = true
+tokio-rustls.workspace = true
+webpki.workspace = true
+sha2.workspace = true
+base64.workspace = true
+getrandom.workspace = true
+futures-util.workspace = true
+tokio-tungstenite.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

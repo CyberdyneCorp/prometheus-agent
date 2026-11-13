@@ -37,6 +37,9 @@ pub enum Request {
     },
     /// A one-use ticket for one WebSocket dial of this window.
     PrepareDial {
+        /// The connection (`local` when absent).
+        #[serde(default)]
+        connection: Option<String>,
         /// The window's profile.
         profile: String,
         /// The target path.
@@ -216,6 +219,68 @@ pub enum Request {
     /// Imports a profile archive the user picks; its appearance overlay
     /// comes back for the page to apply.
     ProfileImport,
+    /// The connection registry, with latched errors and which remote
+    /// connections are paired (never a credential).
+    ConnectionsList,
+    /// Adds or changes a connection.
+    ConnectionSave(crate::connections::Draft),
+    /// Removes a connection (and forgets its credential and pin).
+    ConnectionRemove {
+        /// The connection.
+        id: String,
+    },
+    /// Makes a connection primary.
+    ConnectionPrimary {
+        /// The connection.
+        id: String,
+    },
+    /// What opens at launch: the primary or the last used connection.
+    ConnectionOnLaunch {
+        /// `primary` or `last_used`.
+        mode: crate::connections::OnLaunch,
+    },
+    /// A switch to a connection succeeded (failed ones are never
+    /// remembered).
+    ConnectionConnected {
+        /// The connection.
+        id: String,
+    },
+    /// Test: the health endpoint and a WebSocket handshake.
+    ConnectionTest {
+        /// The connection.
+        id: String,
+    },
+    /// The user confirmed a certificate pin or an SSH host key (also the
+    /// Re-pin action of a latched change).
+    ConnectionTrust {
+        /// The connection.
+        id: String,
+        /// The fingerprint the user compared.
+        fingerprint: String,
+    },
+    /// Pairs a remote connection: a pairing code exchanged on the server,
+    /// or the server's deployment token.
+    ConnectionPair {
+        /// The connection.
+        id: String,
+        /// A code from `prometheus dashboard pair`.
+        #[serde(default)]
+        code: Option<String>,
+        /// A deployment token (`dashboard.auth.mode = "token"`).
+        #[serde(default)]
+        token: Option<String>,
+    },
+    /// Makes a connection ready to open an agent on (an SSH tunnel).
+    ConnectionWarm {
+        /// The connection.
+        id: String,
+    },
+    /// The agents of every connection.
+    AgentsRoster,
+    /// What a plugin may see of the registry (`host.connections()`).
+    PluginConnections,
+    /// Update all instances.
+    UpdateAll,
 }
 
 /// The machine integration behind the allowlist.

@@ -158,6 +158,7 @@ impl Serving {
                     purpose: Purpose::Interactive,
                     pid: None,
                     observer_only: verified.role == DeviceRole::Observer,
+                    admin: verified.role == DeviceRole::Admin,
                 };
                 let ends = Ends {
                     stop: self.stop.clone(),

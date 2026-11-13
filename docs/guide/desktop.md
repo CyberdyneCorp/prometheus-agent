@@ -437,6 +437,67 @@ JetBrains Mono, SIL Open Font License 1.1). Exporting a profile runs `profile ex
 secrets and adds the appearance (theme, mode, shortcuts, zoom) as an
 overlay that an import applies again.
 
+## Remote and SSH connections
+
+Settings → Connections lists the daemons the app reaches. `This computer`
+(the `local` connection) is the daemon the app manages and cannot be
+removed; you may rename it. Add a **remote** connection with the URL of
+another daemon's dashboard listener, or an **ssh** connection with a user,
+host, port, the remote profile and, when `prometheus` is not on the remote
+non-interactive `PATH`, the remote binary path. Names are unique ignoring
+case (at most 64 characters); a second connection to the same URL
+(compared trimmed, without trailing slashes, lowercased) or to the same
+`user@host:port` and remote profile is refused naming the first one. One
+connection is primary; removing it makes `This computer` primary again.
+The registry file in the app's data directory holds names, kinds, URLs and
+hosts only.
+
+A remote connection needs `https` (plain `http` only to a loopback
+address). **Test** probes the server's `/api/health` and a client protocol
+handshake. A server whose certificate the system does not trust shows its
+public-key fingerprint: compare it with what `prometheus dashboard
+--fingerprint` prints on the server, then **Trust** pins it. When a pinned
+server later presents another key, the app stops dialing it and shows both
+fingerprints with **Re-pin**. Pair the app with a code from
+`prometheus dashboard pair` on the server (or the server's deployment token
+in token mode): the credential goes to the OS keychain and never reaches
+the page or plugins. The app attaches with the role the server grants that
+device; a device paired with `--role admin` may also update the server
+(below).
+
+An ssh connection runs the system `ssh` (`desktop.ssh_path` names another
+client, such as an OpenSSH on Windows) with strict host-key checking
+against the app's own `known_hosts`. The first Test shows the host key's
+`SHA256:` fingerprint to confirm; a key that changes later stops the
+connection with `The host key has changed since you last connected` until
+you trust the new one. The app runs `prometheus daemon ensure` on the host,
+gets one-use dial tickets with `prometheus daemon ticket` over SSH and
+carries each dial with `ssh -W` to the daemon's loopback endpoint there, so
+the host needs no listener on the network. A host without `prometheus`
+reports `Prometheus is not installed on the remote host` and suggests the
+remote binary path. Tunnels open when an agent on the connection is opened,
+never while listing.
+
+The header's connection picker and the sidebar's groups switch the window
+to a connection, then a profile; the groups can be renamed and reordered,
+which only changes this window's display. A session left open on another
+connection keeps streaming on a connection of its own: its approvals show
+under **Other connections** and are answered on the daemon that owns the
+session. Display preferences stay on this machine whatever connection is
+shown. **Open on launch** opens the primary connection or the last one that
+connected (a switch that failed is never remembered).
+
+With more than one connection, **Update all instances** asks every other
+reachable connection to update itself (`daemon.update`, allowed to admin
+devices and the daemon's own user), in parallel, then updates the app last.
+Each row shows its outcome: `started`, `refused` with the owner's message
+for an install a package manager or image updates, or `unreachable`.
+
+Plugins with the `connections.read` SDK capability see the connections
+(names, kinds, the primary) and the agents of every connection; a profile
+name that exists on several connections gets handles such as
+`@research-homelab`. A mention never sends anything to another machine.
+
 ## Building and testing
 
 The shell's logic lives in `crates/pmt-desktop` (built and tested on

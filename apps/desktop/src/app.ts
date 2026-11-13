@@ -13,6 +13,7 @@ import { applyFonts, restore, snapshot, Zoom } from "./appearance";
 import { Attention, focusCard } from "./attention";
 import { ChatView } from "./chat";
 import { DesktopClient } from "./client";
+import { Background, ConnectionsPanel, Groups, LOCAL, type Listing, listConnections } from "./connections";
 import { CommandPalette, type Entry } from "./command-palette";
 import { desktopSettings } from "./desktop-settings";
 import { MemoryGraph } from "./graph";
@@ -22,9 +23,11 @@ import { ManagePane } from "./manage";
 import { PanelHost } from "./panels";
 import { ProfileClients } from "./profiles";
 import { ProjectsSidebar } from "./projects";
+import { localPrefsChannel } from "./remote-prefs";
 import { LAST_PROFILE } from "./quickask";
 import { SettingsPanel } from "./settings";
 import { type Attach, onShellEvent, shell } from "./shell";
+import { Switcher } from "./switcher";
 import { NOT_FOUND } from "./verdict";
 import { type Workspace, workspace } from "./workspace";
 
@@ -62,7 +65,8 @@ export async function boot(restart = false): Promise<void> {
   if (outcome.status === "no_local") return noLocal();
   if (outcome.notice) say(outcome.notice, "warn");
   const launch = await shell<Launch>("launch_options").catch((): Launch => ({ notices: [] }));
-  window_(outcome.profiles, launch.window ?? "main");
+  const listing = await listConnections().catch(() => null);
+  window_(outcome.profiles, launch.window ?? "main", listing);
 }
 
 function failed(error: string, log?: string): void {
@@ -87,7 +91,7 @@ function confirmRestart(outcome: { running_turns: number; daemon: string; bundle
   const restart = h("button", { type: "button", name: "restart" }, "Restart now");
   restart.addEventListener("click", () => void boot(true));
   const later = h("button", { type: "button", name: "later" }, "Not now");
-  later.addEventListener("click", () => window_([], "main"));
+  later.addEventListener("click", () => window_([], "main", null));
   root().replaceChildren(
     h(
       "section",
@@ -107,21 +111,28 @@ interface Opener {
   dialogs: HTMLElement;
 }
 
-function window_(profiles: string[], label: string): void {
+function window_(profiles: string[], label: string, listing: Listing | null): void {
   const served = profiles.length > 0 ? profiles : ["default"];
   // The default profile first, as the CLI does without `-p`.
-  const client = new DesktopClient(served.includes("default") ? "default" : (served[0] ?? "default"));
+  const localProfile = served.includes("default") ? "default" : (served[0] ?? "default");
+  // The primary connection, or the last one that connected.
+  const opening = listing?.launch ?? LOCAL;
+  const client = new DesktopClient(opening === LOCAL ? localProfile : lastProfile(opening), opening);
   const dialogs = h("div", { class: "dialogs" });
   const chat = new ChatView({ client, window: label, dialogs });
   const pool = new ProfileClients(client);
   const settings = new SettingsPanel(client, served, pool);
   const attention = new Attention();
   const panels = new PanelHost(client);
-  const prefs = new Prefs(client);
+  // Display preferences are this machine's, whatever connection shows.
+  const prefs = new Prefs(localPrefsChannel(client, localProfile));
   const status = h("span", { class: "connection", role: "status" }, "Connecting…");
   const list = h("ul", { class: "sessions", "aria-label": "Sessions" });
   const picker = h("select", { name: "profile", "aria-label": "Profile" }, ...served.map((p) => h("option", { value: p, selected: p === "default" }, p)));
   const desktopSection = h("section", { class: "desktop-settings", "aria-label": "Desktop settings" });
+  const connections = new ConnectionsPanel();
+  const background = new Background((id, params, title) => attention.approval(id, params, title));
+  const switcher = new Switcher(new Groups(), (connection, profile) => void switchConnection(connection, profile));
 
   const refresh = async () => {
     const listed = await client.call<{ sessions: SessionSummary[] }>("session.list", { profile: client.profile }).catch(() => ({ sessions: [] }));
@@ -141,6 +152,38 @@ function window_(profiles: string[], label: string): void {
     remember(profile);
     await client.switchProfile(profile);
   };
+  // Another connection: a session left open keeps streaming on its own
+  // background connection; the switch is remembered only once it connects
+  // (the shell records each successful connect).
+  const switchConnection = async (connection: string, profile: string | null) => {
+    const target = profile ?? (connection === LOCAL ? localProfile : lastProfile(connection));
+    if (connection === client.connection) return void switchTo(target);
+    const leaving = { connection: client.connection, profile: client.profile, session: chat.sessionId };
+    chat.draft();
+    list.replaceChildren();
+    background.release(connection, target);
+    try {
+      await client.switchTo(connection, target);
+    } catch (err) {
+      say(`Could not connect to ${connections.name(connection)}: ${String(err)}`, "error");
+    } finally {
+      if (leaving.session) background.keep(leaving.connection, connections.name(leaving.connection), leaving.profile, leaving.session);
+      showSwitch();
+    }
+  };
+  const showSwitch = () => {
+    const granted = client.connection === LOCAL ? served : (client.hello?.profiles ?? [client.profile]);
+    picker.replaceChildren(...granted.map((p) => h("option", { value: p, selected: p === client.profile }, switcher.profileLabel(client.connection, p))));
+    switcher.update(null, client.connection, granted, client.profile);
+  };
+  connections.onChange = (registry) => switcher.update(registry, client.connection, client.connection === LOCAL ? served : (client.hello?.profiles ?? [client.profile]), client.profile);
+  connections.onRetried = (id) => {
+    if (id === client.connection && client.state === "latched") client.retry();
+  };
+  client.onLatched = (latch) => {
+    status.textContent = `Stopped · ${connections.name(client.connection)}`;
+    say(latch.message, "error");
+  };
 
   client.onEvent = (envelope) => chat.apply(envelope);
   client.onRequest = (request) => {
@@ -157,9 +200,14 @@ function window_(profiles: string[], label: string): void {
     if (sessionId === chat.sessionId) void chat.reload();
   };
   client.onState = (state) => {
-    status.textContent = state === "connected" ? `Connected · ${client.profile}` : state === "reconnecting" ? "Reconnecting…" : "Connecting…";
     status.dataset.state = state;
+    if (state === "latched") return;
+    const where = client.connection === LOCAL ? "" : ` on ${connections.name(client.connection)}`;
+    status.textContent = state === "connected" ? `Connected · ${client.profile}${where}` : state === "reconnecting" ? "Reconnecting…" : "Connecting…";
     if (state !== "connected") return;
+    void shell("connection_connected", { id: client.connection }).catch(() => {});
+    rememberProfile(client.connection, client.profile);
+    showSwitch();
     void refresh();
     void settings.reset();
     manage.reset();
@@ -201,7 +249,7 @@ function window_(profiles: string[], label: string): void {
     exportProfile: files.exportProfile,
     importProfile: files.importProfile,
   });
-  const work = workspace(client, chat, h("div", {}, settings.el, desktopSection), dialogs, [{ name: "manage", label: "Manage", el: manage.el, shown: () => manage.reset() }]);
+  const work = workspace(client, chat, h("div", {}, settings.el, desktopSection, accentControl(prefs), connections.el), dialogs, [{ name: "manage", label: "Manage", el: manage.el, shown: () => manage.reset() }]);
   const keys = work.shortcuts;
   manage.setShortcuts(keys.panel);
   keys.onSave = (overrides) => void prefs.set("keybindings", overrides).catch(() => {});
@@ -210,11 +258,11 @@ function window_(profiles: string[], label: string): void {
   const palette = new CommandPalette(() => paletteEntries(opener, work, { graph, files, zoom }));
   windowActions(keys, opener, { palette, graph, zoom });
   work.aside.append(panels.el);
-  const side = h("nav", { class: "side" }, newChat, botChat, list, projects.el);
+  const side = h("nav", { class: "side" }, switcher.el, newChat, botChat, list, projects.el);
   listenToShell(opener);
   onShellEvent("hud-summon", () => void toggleHud(client.profile, chat.sessionId));
   root().replaceChildren(
-    h("header", { class: "top" }, h("span", { class: "brand" }, "Prometheus"), picker, work.layout.el, status),
+    h("header", { class: "top" }, h("span", { class: "brand" }, "Prometheus"), switcher.picker, picker, work.layout.el, status),
     h(
       "div",
       { class: "layout" },
@@ -224,10 +272,12 @@ function window_(profiles: string[], label: string): void {
     ),
     dialogs,
     notices,
+    background.el,
     graph.el,
     palette.el,
   );
   remember(client.profile);
+  void connections.render().catch((err: unknown) => console.warn("connections:", err));
   work.start(side);
   chat.draft();
   void poppedOut(opener, side, work.center);
@@ -277,6 +327,41 @@ async function afterReady(o: Opener): Promise<void> {
   };
   void checkUpdates();
   window.setInterval(() => void checkUpdates(), UPDATE_CHECK_MS);
+}
+
+/** The profile last shown on each connection (per device). */
+const PROFILES_KEY = "prometheus.connection-profiles";
+
+function lastProfile(connection: string): string {
+  try {
+    const known = JSON.parse(localStorage.getItem(PROFILES_KEY) ?? "{}") as Record<string, string>;
+    return known[connection] ?? "default";
+  } catch {
+    return "default";
+  }
+}
+
+function rememberProfile(connection: string, profile: string): void {
+  try {
+    const known = JSON.parse(localStorage.getItem(PROFILES_KEY) ?? "{}") as Record<string, string>;
+    known[connection] = profile;
+    localStorage.setItem(PROFILES_KEY, JSON.stringify(known));
+  } catch {
+    // The connection's default profile then opens.
+  }
+}
+
+/** The accent colour, a machine-wide display preference. */
+function accentControl(prefs: Prefs): HTMLElement {
+  const input = h("input", { type: "color", name: "accent", "aria-label": "Accent colour", value: "#d9480f" });
+  const apply = (value: unknown) => {
+    if (typeof value !== "string") return;
+    input.value = value;
+    document.documentElement.style.setProperty("--accent", value);
+  };
+  prefs.onChange((values) => apply(values.accent));
+  input.addEventListener("change", () => void prefs.set("accent", input.value).catch((err: unknown) => console.warn("accent:", err)));
+  return h("label", { class: "accent" }, "Accent colour ", input);
 }
 
 function remember(profile: string): void {

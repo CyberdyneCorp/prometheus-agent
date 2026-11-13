@@ -238,7 +238,7 @@ impl Dashboard {
         let role = DeviceRole::parse(role).ok_or_else(|| {
             Error::new(
                 &codes::CLI_USAGE,
-                format!("role '{role}' is not driver or observer"),
+                format!("role '{role}' is not driver, observer or admin"),
             )
         })?;
         let code = self.devices.mint_code(name, role)?;

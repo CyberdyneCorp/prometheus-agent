@@ -22,10 +22,12 @@ pub const MAX_DOCUMENT: u64 = 1024 * 1024;
 pub const POLICY: &str = "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'";
 
 /// The plugin UI SDK, injected at the top of every panel document:
-/// `window.prometheus` (also `window.sdk`) with `register()`, `context()`
-/// and `sessions.list()`; each call is a message to the window, which
-/// answers it or rejects it.
-pub const SDK: &str = r#"<script>(()=>{const p=new Map();let n=1;addEventListener("message",e=>{if(e.source!==parent)return;const m=e.data;if(!m||m.prometheus!==1||!p.has(m.id))return;const r=p.get(m.id);p.delete(m.id);m.error?r[1](new Error(m.error)):r[0](m.result)});const c=(method,params)=>new Promise((ok,no)=>{const id=n++;p.set(id,[ok,no]);parent.postMessage({prometheus:1,id,method,params:params||{}},"*")});const sdk=Object.freeze({register:()=>c("register"),context:()=>c("context"),sessions:Object.freeze({list:()=>c("sessions.list")})});Object.defineProperty(window,"prometheus",{value:sdk});Object.defineProperty(window,"sdk",{value:sdk})})();</script>"#;
+/// `window.prometheus` (also `window.sdk`) with `register()`, `context()`,
+/// `sessions.list()` and `host.{connections, agents, ensureAgent,
+/// warmAgent}()` (the connection registry and the agents across
+/// connections); each call is a message to the window, which answers it
+/// or rejects it.
+pub const SDK: &str = r#"<script>(()=>{const p=new Map();let n=1;addEventListener("message",e=>{if(e.source!==parent)return;const m=e.data;if(!m||m.prometheus!==1||!p.has(m.id))return;const r=p.get(m.id);p.delete(m.id);m.error?r[1](new Error(m.error)):r[0](m.result)});const c=(method,params)=>new Promise((ok,no)=>{const id=n++;p.set(id,[ok,no]);parent.postMessage({prometheus:1,id,method,params:params||{}},"*")});const sdk=Object.freeze({register:()=>c("register"),context:()=>c("context"),sessions:Object.freeze({list:()=>c("sessions.list")}),host:Object.freeze({connections:()=>c("host.connections"),agents:()=>c("host.agents"),ensureAgent:(connection_id,profile)=>c("host.ensureAgent",{connection_id,profile}),warmAgent:(connection_id,profile)=>c("host.warmAgent",{connection_id,profile})})});Object.defineProperty(window,"prometheus",{value:sdk});Object.defineProperty(window,"sdk",{value:sdk})})();</script>"#;
 
 /// One panel, as `plugins panels` lists it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

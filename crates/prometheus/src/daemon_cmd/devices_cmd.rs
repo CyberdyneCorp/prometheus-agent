@@ -27,7 +27,8 @@ pub struct PairDeviceArgs {
     /// served profile).
     #[arg(long = "profile-binding", value_name = "PROFILE")]
     pub profiles: Vec<String>,
-    /// `driver` (default) or `observer`.
+    /// `driver` (default), `observer` or `admin` (a driver that may also
+    /// update the daemon with `daemon.update`).
     #[arg(long, default_value = "driver")]
     pub role: String,
 }
@@ -36,7 +37,7 @@ fn role(text: &str) -> Result<DeviceRole, Error> {
     DeviceRole::parse(text).ok_or_else(|| {
         Error::new(
             &codes::CLI_USAGE,
-            format!("--role '{text}' is not driver or observer"),
+            format!("--role '{text}' is not driver, observer or admin"),
         )
     })
 }

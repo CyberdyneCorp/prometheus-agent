@@ -203,6 +203,7 @@ async fn rpc<S: Transport>(shared: &Arc<Shared>, socket: WebSocketStream<S>, sig
         purpose: Purpose::Http,
         pid: None,
         observer_only: signed.role == SessionRole::Observer,
+        admin: signed.admin,
     };
     let ends = pmt_gateway::connection::Ends {
         stop: shared.stop.clone(),

@@ -52,6 +52,8 @@ pub struct Setup {
     pub save_to: Option<PathBuf>,
     /// The environment of the daemon the shell starts (stand-in services).
     pub env: Vec<(String, String)>,
+    /// The connection registry (none: the local connection only).
+    pub connections: Option<pmt_desktop::connections::service::ConnectionsConfig>,
 }
 
 impl Default for Setup {
@@ -66,6 +68,7 @@ impl Default for Setup {
             below: None,
             save_to: None,
             env: Vec::new(),
+            connections: None,
         }
     }
 }
@@ -173,6 +176,10 @@ pub fn start_with(home: &Path, setup: Setup) -> Harness {
         Arc::clone(&recorder) as Arc<dyn Native>,
     )
     .with_options(options::read(&home.join("profiles/default/config.toml")));
+    let shell = match setup.connections {
+        Some(config) => shell.with_connections(config),
+        None => shell,
+    };
     for link in setup.links.iter().filter_map(|l| deeplink::parse(l)) {
         shell.arrived(link);
     }

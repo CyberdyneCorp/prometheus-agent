@@ -21,7 +21,8 @@ pub struct PairArgs {
     /// The device's name.
     #[arg(long, default_value = "desktop")]
     pub name: String,
-    /// `driver` (default) or `observer`.
+    /// `driver` (default), `observer` or `admin` (a driver that may also
+    /// update the daemon with `daemon.update`).
     #[arg(long, default_value = "driver")]
     pub role: String,
 }

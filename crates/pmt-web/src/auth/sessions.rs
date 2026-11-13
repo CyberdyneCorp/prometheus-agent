@@ -59,6 +59,8 @@ pub(crate) struct Signed {
     pub via: Via,
     /// The profiles it may use (`None`: every served profile).
     pub profiles: Option<Vec<String>>,
+    /// A device paired with the `admin` role (`daemon.update`).
+    pub admin: bool,
     /// Cancelled when the credential ends (sign-out, revocation): its
     /// sockets close with 4401.
     pub ended: CancellationToken,
@@ -95,6 +97,7 @@ impl Sessions {
             csrf: random_hex(24),
             via: Via::Cookie,
             profiles: None,
+            admin: false,
             ended: CancellationToken::new(),
         };
         let now = Instant::now();

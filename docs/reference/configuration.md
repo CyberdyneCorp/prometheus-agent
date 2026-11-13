@@ -262,6 +262,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `desktop.quick_ask.hotkey` | string | `"CommandOrControl+Shift+Space"` | any | `restart` | The global chord that opens the quick-ask panel; empty disables it. |
 | `desktop.quick_ask.profile` | string | `""` | any | `restart` | The profile asked; empty is the last used profile. |
 | `desktop.quick_ask.reuse_secs` | integer | `900` | ≥ 0 | `restart` | A quick-ask session active within this many seconds is asked again instead of starting a new one. |
+| `desktop.ssh_path` | string | `""` | any | `restart` | The `ssh` client of `ssh` connections (Windows: the bundled or an installed OpenSSH); empty runs `ssh` from the `PATH`. |
 | `desktop.terminal_font_family` | string | `""` | any | `restart` | The terminal pane's font; empty uses the bundled monospace font. |
 | `display.bell_on_complete` | boolean | `false` | any | `live` | Ring the terminal bell when a turn completes. |
 | `display.bell_on_prompt` | boolean | `false` | any | `live` | Ring the terminal bell when an approval or clarify prompt opens. |

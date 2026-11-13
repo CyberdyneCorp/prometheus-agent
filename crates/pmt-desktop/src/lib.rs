@@ -8,6 +8,7 @@
 
 pub mod attention;
 pub mod catalog;
+pub mod connections;
 pub mod deeplink;
 pub mod dial;
 pub mod endpoint;

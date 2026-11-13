@@ -2451,6 +2451,11 @@
           },
           "description": "The global quick-ask hotkey."
         },
+        "ssh_path": {
+          "default": "",
+          "description": "The `ssh` client of `ssh` connections (Windows: the bundled or an\ninstalled OpenSSH); empty runs `ssh` from the `PATH`.",
+          "type": "string"
+        },
         "terminal_font_family": {
           "default": "",
           "description": "The terminal pane's font; empty uses the bundled monospace font.",
@@ -11347,6 +11352,7 @@
           "profile": "",
           "reuse_secs": 900
         },
+        "ssh_path": "",
         "terminal_font_family": ""
       },
       "description": "The desktop app: tray, quick-ask hotkey and launch options."

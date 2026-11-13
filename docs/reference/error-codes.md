@@ -368,6 +368,7 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `rpc.contract_violation` | `internal` | 70 | The daemon produced a result or event payload that does not match its contract (a bug; it is logged and counted in `prometheus.rpc.contract_violations`). |
 | `rpc.request_closed` | `not_found` | 66 | The answered server-to-client request is not open any more (answered elsewhere, timed out or cancelled); the answer was dropped. |
 | `rpc.retiring` | `unavailable` | 69 | The daemon is restarting and refuses new work; reconnect to continue. |
+| `rpc.admin_required` | `permission_denied` | 77 | The method administers the daemon (`daemon.update`) and the connection's principal is not an admin: only the daemon's own OS user (a control-channel ticket) and devices paired with `--role admin` are. |
 | `rpc.session_denied` | `permission_denied` | 77 | The session is not one of the connection's profile, or a mutating method was called without attaching to it; the error does not say whether the session exists elsewhere. |
 | `rpc.connection` | `unavailable` | 69 | The connection to the daemon could not be opened or was closed (the WebSocket close code is in the message). |
 | `rpc.ticket` | `auth` | 78 | The control channel refused the ticket request (unknown profile or purpose, several profiles for a purpose other than `profile-admin`). |

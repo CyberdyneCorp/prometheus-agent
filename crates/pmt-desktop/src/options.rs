@@ -114,6 +114,8 @@ pub struct DesktopOptions {
     pub manage_launcher_entry: bool,
     /// HUD mode.
     pub hud: Hud,
+    /// The `ssh` client of `ssh` connections (`None`: `ssh` on the `PATH`).
+    pub ssh_path: Option<std::path::PathBuf>,
 }
 
 impl Default for DesktopOptions {
@@ -127,6 +129,7 @@ impl Default for DesktopOptions {
             accessibility_tree: true,
             manage_launcher_entry: true,
             hud: Hud::default(),
+            ssh_path: None,
         }
     }
 }
@@ -201,6 +204,15 @@ pub fn parse(text: &str) -> Read {
     }
     if let Some(Value::Table(hud)) = desktop.get("hud") {
         o.hud = hud_options(hud, notices);
+    }
+    match desktop.get("ssh_path") {
+        None => {}
+        Some(Value::String(path)) => {
+            o.ssh_path = Some(path.trim())
+                .filter(|p| !p.is_empty())
+                .map(std::path::PathBuf::from);
+        }
+        Some(_) => notices.push("desktop.ssh_path: expected the path of an ssh client".to_owned()),
     }
     read
 }

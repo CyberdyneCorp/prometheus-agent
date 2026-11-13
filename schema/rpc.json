@@ -1702,6 +1702,37 @@
       ],
       "type": "object"
     },
+    "DaemonUpdateParams": {
+      "additionalProperties": false,
+      "description": "`daemon.update` params.",
+      "properties": {
+        "check": {
+          "default": false,
+          "description": "Only look for an update (`prometheus update --check`).",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "DaemonUpdated": {
+      "additionalProperties": false,
+      "description": "`daemon.update` result. A refusal (another owner such as a package\nmanager or the container image, the update lock held) is an error\nwith the updater's own code and message.",
+      "properties": {
+        "message": {
+          "description": "What the check printed, or where the updater writes its log.",
+          "type": "string"
+        },
+        "status": {
+          "description": "`started` (the updater runs detached and hands the daemon over\nwhen it finishes) or `checked`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "message"
+      ],
+      "type": "object"
+    },
     "Decision": {
       "description": "An approval answer.",
       "oneOf": [
@@ -6355,9 +6386,14 @@
       "since": "1.0"
     },
     "daemon.update": {
-      "declared": false,
       "long": true,
       "owner": "workspace-architecture",
+      "params": {
+        "$ref": "#/$defs/DaemonUpdateParams"
+      },
+      "result": {
+        "$ref": "#/$defs/DaemonUpdated"
+      },
       "since": "1.0"
     },
     "egress.set": {

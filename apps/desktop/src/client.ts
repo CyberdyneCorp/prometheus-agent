@@ -30,14 +30,24 @@ interface Watermark {
 /** `-32006`: the daemon is unavailable (retiring for a restart). */
 const RETIRING = -32006;
 
-export type Connection = "connecting" | "connected" | "reconnecting";
+export type Connection = "connecting" | "connected" | "reconnecting" | "latched";
+
+/** A connection error the shell keeps until the user acts (a changed
+ *  certificate or SSH host key): the client stops redialling. */
+export interface Latch {
+  kind: "certificate" | "host_key";
+  message: string;
+  pinned?: string;
+  presented?: string;
+  fingerprint?: string;
+}
 
 export class DesktopClient {
   readonly backoff = new Backoff();
   state: Connection = "connecting";
   switchingProfile = false;
   private rpc: Rpc | null = null;
-  private retry: number | undefined;
+  private redial: number | undefined;
   private leaving = false;
   private readonly open = new Map<string, Watermark>();
   onEvent: (envelope: Envelope) => void = () => {};
@@ -49,7 +59,15 @@ export class DesktopClient {
   onTruncated: (sessionId: string) => void = () => {};
   private readonly listeners = new Map<string, Set<(envelope: Envelope) => void>>();
 
-  constructor(public profile: string) {}
+  /** Why dialing stopped, while latched. */
+  latch: Latch | null = null;
+  onLatched: (latch: Latch) => void = () => {};
+
+  /** `connection` is a registry id (`local`: the app's own daemon). */
+  constructor(
+    public profile: string,
+    public connection = "local",
+  ) {}
 
   /** The daemon's `rpc.hello` answer on the current connection. */
   get hello(): HelloResult | null {
@@ -62,12 +80,34 @@ export class DesktopClient {
 
   /** Dials; a failed first dial keeps retrying with backoff. */
   start(): void {
-    this.connect().catch((err: unknown) => {
-      console.warn("gateway dial failed:", err);
-      this.backoff.failed();
-      this.setState("reconnecting");
-      this.schedule();
-    });
+    this.connect().catch((err: unknown) => void this.failed(err));
+  }
+
+  /** A failed dial: redial with backoff, unless the shell latched an
+   *  error for the connection (then only the user's action redials). */
+  private async failed(err: unknown): Promise<void> {
+    console.warn("gateway dial failed:", err);
+    this.backoff.failed();
+    if (this.connection !== "local") {
+      const listing = await shell<{ latched: Record<string, Latch> }>("connections_list").catch(() => ({ latched: {} as Record<string, Latch> }));
+      const latch = listing.latched[this.connection];
+      if (latch) {
+        this.latch = latch;
+        this.setState("latched");
+        this.onLatched(latch);
+        return;
+      }
+    }
+    this.setState("reconnecting");
+    this.schedule();
+  }
+
+  /** Dials again after the user acted on a latched error. */
+  retry(): void {
+    this.latch = null;
+    window.clearTimeout(this.redial);
+    this.setState("connecting");
+    this.start();
   }
 
   private waiting: (() => void)[] = [];
@@ -85,7 +125,7 @@ export class DesktopClient {
   }
 
   private async connect(): Promise<void> {
-    const dial = await shell<Dial>("prepare_dial", { profile: this.profile });
+    const dial = await shell<Dial>("prepare_dial", { connection: this.connection, profile: this.profile });
     const rpc = new Rpc(DESKTOP);
     rpc.onEvent = (envelope) => this.received(envelope);
     rpc.onRequest = (request) => this.onRequest(request);
@@ -112,13 +152,9 @@ export class DesktopClient {
   }
 
   private schedule(): void {
-    window.clearTimeout(this.retry);
-    this.retry = window.setTimeout(() => {
-      this.connect().catch((err: unknown) => {
-        console.warn("gateway dial failed:", err);
-        this.backoff.failed();
-        this.schedule();
-      });
+    window.clearTimeout(this.redial);
+    this.redial = window.setTimeout(() => {
+      this.connect().catch((err: unknown) => void this.failed(err));
     }, this.backoff.delay());
   }
 
@@ -198,7 +234,22 @@ export class DesktopClient {
 
   /** Detaches the window's sessions, then dials again for `profile`; the
    *  window never holds data of two profiles at once. */
-  async switchProfile(profile: string): Promise<void> {
+  switchProfile(profile: string): Promise<void> {
+    return this.switchTo(this.connection, profile);
+  }
+
+  /** Closes the connection for good (a background connection that is no
+   *  longer needed). */
+  close(): void {
+    this.leaving = true;
+    window.clearTimeout(this.redial);
+    this.rpc?.close();
+    this.rpc = null;
+  }
+
+  /** Like {@link switchProfile}, to `profile` on another connection; the
+   *  dial may fail, and the caller remembers only a switch that connected. */
+  async switchTo(connection: string, profile: string): Promise<void> {
     this.switchingProfile = true;
     try {
       for (const sessionId of this.open.keys()) {
@@ -209,9 +260,19 @@ export class DesktopClient {
       this.rpc?.close();
       this.rpc = null;
       this.leaving = false;
+      window.clearTimeout(this.redial);
+      this.latch = null;
       this.profile = profile;
+      this.connection = connection;
       this.setState("connecting");
-      await this.connect();
+      try {
+        await this.connect();
+      } catch (err) {
+        // Keep trying (or latch) like any failed dial; the caller learns
+        // the switch did not connect.
+        void this.failed(err);
+        throw err;
+      }
     } finally {
       this.switchingProfile = false;
     }

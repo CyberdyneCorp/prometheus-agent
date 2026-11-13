@@ -150,6 +150,7 @@ pub fn declare_builtin(d: &mut Declarations) {
         .method::<c::LspStatusCall>()
         .method::<c::MemorySummaryCall>()
         .method::<c::AutopruneOfferCall>()
+        .method::<c::DaemonUpdate>()
         .method::<c::JourneyListCall>()
         .method::<c::BlueprintsListCall>()
         .method::<c::BlueprintsFillCall>()

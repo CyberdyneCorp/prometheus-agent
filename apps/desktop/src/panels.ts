@@ -7,7 +7,7 @@
 // SDK call checks the capabilities granted to that plugin.
 
 import { h, notice } from "../../../web/src/lib/dom";
-import type { DesktopClient } from "./client";
+import { DesktopClient } from "./client";
 import { shell } from "./shell";
 
 interface Panel {
@@ -34,6 +34,13 @@ export function panelOrigin(id: string): string {
   return location.protocol === "http:" || location.protocol === "https:" ? `${location.protocol}//plugin-${id}.localhost` : `plugin-${id}://localhost`;
 }
 
+function agentParams(call: Call): { connection_id: string; profile: string } {
+  const connection = call.params?.connection_id;
+  const profile = call.params?.profile;
+  if (typeof connection !== "string" || typeof profile !== "string") throw new Error("expected (connection_id, profile)");
+  return { connection_id: connection, profile };
+}
+
 function require(panel: Panel, capability: string): void {
   if (!panel.sdk.includes(capability)) throw new Error(`capability ${capability} not granted to plugin ${panel.id}`);
 }
@@ -51,6 +58,21 @@ export class PanelHost {
   private readonly frames = new Map<string, { panel: Panel; frame: HTMLIFrameElement }>();
   /** A panel contributed a bindable shortcut; pressing it tells the panel. */
   onShortcut: (shortcut: PluginShortcut) => void = () => {};
+
+  private readonly agents = new Map<string, DesktopClient>();
+
+  /** An agent runs on its own daemon: its own connection, dialed once. */
+  private async agent(connection: string, profile: string): Promise<DesktopClient> {
+    const key = `${connection}/${profile}`;
+    let client = this.agents.get(key);
+    if (!client) {
+      client = new DesktopClient(profile, connection);
+      client.start();
+      this.agents.set(key, client);
+    }
+    await client.ready();
+    return client;
+  }
 
   constructor(private readonly client: DesktopClient) {
     window.addEventListener("message", (event) => void this.message(event));
@@ -116,6 +138,26 @@ export class PanelHost {
         return { ok: true };
       case "context":
         return { plugin: panel.id, profile: panel.profile, theme: document.documentElement.dataset.theme ?? "default" };
+      case "host.connections":
+        require(panel, "connections.read");
+        return shell("plugin_connections");
+      case "host.agents": {
+        require(panel, "connections.read");
+        const roster = await shell<{ agents: unknown[]; connections: { id: string; name: string; reachable: boolean; error?: string }[] }>("agents_roster");
+        return { agents: roster.agents, connections: roster.connections };
+      }
+      case "host.ensureAgent": {
+        require(panel, "agents.open");
+        const { connection_id, profile } = agentParams(call);
+        const chat = await (await this.agent(connection_id, profile)).call<{ session_id: string }>("bot.chat.ensure", { profile });
+        return { connection_id, profile, session_id: chat.session_id };
+      }
+      case "host.warmAgent": {
+        require(panel, "agents.open");
+        const { connection_id } = agentParams(call);
+        await shell("connection_warm", { id: connection_id });
+        return { ok: true };
+      }
       case "sessions.list": {
         require(panel, "sessions.read");
         const listed = await this.client.call<{ sessions: { session_id: string; title?: string | null }[] }>("session.list", { profile: panel.profile });

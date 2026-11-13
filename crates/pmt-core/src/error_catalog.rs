@@ -947,7 +947,10 @@ error_codes! {
     /// The daemon is restarting and accepts no new work.
     RPC_RETIRING = ("rpc.retiring", Unavailable,
         "The daemon is restarting and refuses new work; reconnect to continue.");
-    /// A session is not visible to, or not attached by, the connection.
+    /// The method needs an admin principal.
+    RPC_ADMIN_REQUIRED = ("rpc.admin_required", PermissionDenied,
+        "The method administers the daemon (`daemon.update`) and the connection's principal is not an admin: only the daemon's own OS user (a control-channel ticket) and devices paired with `--role admin` are.");
+    /// The session is not available to the connection.
     RPC_SESSION_DENIED = ("rpc.session_denied", PermissionDenied,
         "The session is not one of the connection's profile, or a mutating method was called without attaching to it; the error does not say whether the session exists elsewhere.");
     /// The connection to the daemon failed or closed.

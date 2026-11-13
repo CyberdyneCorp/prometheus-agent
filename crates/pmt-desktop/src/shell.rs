@@ -87,7 +87,7 @@ impl Attach {
 pub struct Shell {
     pub(crate) config: ShellConfig,
     pub(crate) native: Arc<dyn Native>,
-    dials: Dials,
+    pub(crate) dials: Dials,
     endpoint: Mutex<Option<LocalEndpoint>>,
     bundled: OnceCell<BinaryIdentity>,
     pub(crate) updater: Updater,
@@ -99,6 +99,7 @@ pub struct Shell {
     pub(crate) hotkey: Mutex<Option<crate::features::Hotkey>>,
     /// The HUD snap chord's registration.
     pub(crate) hud_snap: Mutex<Option<crate::features::Hotkey>>,
+    pub(crate) connections: crate::connections::service::Connections,
     local: bool,
 }
 
@@ -127,6 +128,7 @@ impl Shell {
             links: Mutex::new(Links::default()),
             hotkey: Mutex::new(None),
             hud_snap: Mutex::new(None),
+            connections: crate::connections::service::Connections::default(),
             local: true,
         }
     }
@@ -203,9 +205,23 @@ impl Shell {
                 to_json(&self.attach(profile.as_deref(), true).await)
             }
             Request::PrepareDial {
+                connection,
                 profile,
                 path,
                 purpose,
+            } if !Self::is_local(connection.as_deref()) => {
+                let id = connection.unwrap_or_default();
+                to_json(
+                    &self
+                        .dial_connection(window, &id, &profile, &path, purpose)
+                        .await?,
+                )
+            }
+            Request::PrepareDial {
+                profile,
+                path,
+                purpose,
+                ..
             } => to_json(&self.prepare_dial(window, &profile, &path, purpose).await?),
             Request::SettleDial { dial } => {
                 self.dials
@@ -226,6 +242,9 @@ impl Shell {
             Request::PickDirectory { title } => self.pick(true, title).await,
             other if crate::features::owns(&other) => self.feature(window, other).await,
             other if crate::profile_files::owns(&other) => self.profile_file(other).await,
+            other if crate::connections::service::owns(&other) => {
+                self.connection_request(other).await
+            }
             other => self.handle_simple(window, other),
         }
     }
@@ -418,13 +437,13 @@ impl Shell {
         }
     }
 
-    fn current(&self) -> Option<LocalEndpoint> {
+    pub(crate) fn current(&self) -> Option<LocalEndpoint> {
         self.endpoint.lock().expect("endpoint poisoned").clone()
     }
 
     /// The home's running daemon from its discovery file, validated as an
     /// ensure result is; it becomes the shell's endpoint.
-    fn rediscover(&self) -> Option<LocalEndpoint> {
+    pub(crate) fn rediscover(&self) -> Option<LocalEndpoint> {
         let Ok(Discovery::Running(record)) = discovery::discover(&self.config.home) else {
             return None;
         };
@@ -513,7 +532,7 @@ async fn ticket_for(
         .map_err(|e| e.message().to_owned())
 }
 
-async fn daemon_status(control: &str) -> Option<control::DaemonStatus> {
+pub(crate) async fn daemon_status(control: &str) -> Option<control::DaemonStatus> {
     control::call(control, &ControlRequest::Status)
         .await
         .ok()

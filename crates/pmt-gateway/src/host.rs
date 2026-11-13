@@ -550,6 +550,13 @@ pub trait Host: Send + Sync + 'static {
         None
     }
 
+    /// Updates this daemon's install (`daemon.update`): `check` only
+    /// looks; otherwise the updater starts detached and hands the daemon
+    /// over when it finishes.
+    fn daemon_update(&self, _check: bool) -> HostFuture<'_, pmt_rpc::contracts::DaemonUpdated> {
+        Box::pin(async { Err(not_served("this host does not update itself")) })
+    }
+
     /// `profile`'s canonical Bot Chat, created when it has none
     /// (`bot.chat.ensure`); `true` when created now.
     fn bot_chat<'a>(&'a self, _profile: &'a str) -> HostFuture<'a, (String, bool)> {
