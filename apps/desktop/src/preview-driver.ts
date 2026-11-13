@@ -11,6 +11,7 @@
 // driver answers it from the next `preview.ready`.
 
 import type { PreviewRail } from "./preview";
+import { isWebapp } from "./shell";
 
 type Args = Record<string, unknown>;
 type Result = Record<string, unknown>;
@@ -102,6 +103,8 @@ export class PreviewDriver {
   }
 
   private async ask(op: string, args: Args): Promise<Result> {
+    // Only the desktop app puts its agent into every frame of the page.
+    if (isWebapp()) return { success: false, error: "reading and driving the preview is not available in the webapp: it needs the Prometheus desktop app" };
     // A tab still loading its first document has no agent to ask yet.
     if (this.documents === 0) await Promise.race([this.navigation(0), delay(NAVIGATION_MS)]);
     const frame = this.rail.current?.contentWindow;

@@ -94,8 +94,12 @@ export class PreviewRail {
       return null;
     }
     this.address.value = url;
-    // Its own origin; no popups, no downloads, no top navigation.
-    return h("iframe", { src: url, sandbox: "allow-scripts allow-forms allow-same-origin", referrerpolicy: "no-referrer", title: "Preview" });
+    // Its own origin; no popups, no downloads, no top navigation. A page
+    // of the app's own origin (the webapp's dashboard listener) gets an
+    // opaque one: it must never reach the workspace's session.
+    const own = new URL(url).origin === location.origin;
+    const sandbox = own ? "allow-scripts allow-forms" : "allow-scripts allow-forms allow-same-origin";
+    return h("iframe", { src: url, sandbox, referrerpolicy: "no-referrer", title: "Preview" });
   }
 
   private async file(sessionId: string, path: string): Promise<HTMLIFrameElement | null> {

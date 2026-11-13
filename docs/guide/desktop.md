@@ -354,7 +354,10 @@ Terminals are shells the daemon starts in the session's workspace
 `pty.list`; output arrives as `pty.output`). Only drivers type; a daemon
 keeps at most 16, a shell outlives its last attached window by 15 minutes,
 reattaching replays up to 1 MiB of output, and closing the tab ends the
-shell. *Add to chat* puts the selected output in the composer.
+shell. One window (or webapp tab) holds a terminal at a time: another one
+that attaches takes it over, the first gets `pty.detached` and shows
+**Take back**, and its typing is refused (`terminal.taken`) until it
+attaches again. *Add to chat* puts the selected output in the composer.
 
 While the session has running subagents, a frame above the composer shows
 them; a selected child can be steered (`subagent.steer`, queued for its

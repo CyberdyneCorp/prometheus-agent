@@ -995,6 +995,9 @@ error_codes! {
     /// A terminal that does not exist (it ended or another session owns it).
     TERMINAL_NOT_FOUND = ("terminal.not_found", NotFound,
         "No such terminal in this session: its shell ended or it belongs to another session (`pty.list`).");
+    /// Another window or tab holds the terminal.
+    TERMINAL_TAKEN = ("terminal.taken", Conflict,
+        "Another window or tab took this terminal over; attach to it again (`pty.attach`) to take it back.");
     /// The PTY or the shell could not start or be used.
     TERMINAL_PTY = ("terminal.pty", Unavailable,
         "The daemon could not open a pseudo-terminal or start the user's shell (`SHELL`, else /bin/sh; `COMSPEC` on Windows).");

@@ -14,10 +14,11 @@ use crate::http::{Reply, Req};
 /// `Content-Security-Policy` of every answer that sets none of its own.
 /// Images may also be `data:` URIs (pairing QR codes the daemon draws).
 pub(crate) const CSP: &str = "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'";
-/// The SPA shell's policy when the webapp is on: the workspace previews
-/// any http(s) page, always in a sandboxed frame (no popups, no
-/// top-level navigation, an opaque origin).
-pub(crate) const CSP_WEBAPP: &str = "default-src 'self'; img-src 'self' data:; frame-src 'self' http: https:; frame-ancestors 'none'";
+/// The webapp's policy (the desktop's page under `/app`), as the desktop
+/// app's own: previews of any http(s) page and of workspace files (blob
+/// URLs), always in sandboxed frames (no popups, no top-level navigation);
+/// the client protocol on this origin only.
+pub(crate) const CSP_WEBAPP: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-src http: https: blob:; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'";
 
 /// The listener's view of who may address it and how.
 #[derive(Debug, Clone)]

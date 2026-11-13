@@ -388,6 +388,7 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `desktop.not_installed` | `unavailable` | 69 | No Prometheus Desktop app bundle was found where the packages install it; `prometheus desktop --install` downloads the one matching this binary. |
 | `terminal.limit` | `conflict` | 75 | A daemon keeps at most 16 terminals (`pty.open`); close one first. |
 | `terminal.not_found` | `not_found` | 66 | No such terminal in this session: its shell ended or it belongs to another session (`pty.list`). |
+| `terminal.taken` | `conflict` | 75 | Another window or tab took this terminal over; attach to it again (`pty.attach`) to take it back. |
 | `terminal.pty` | `unavailable` | 69 | The daemon could not open a pseudo-terminal or start the user's shell (`SHELL`, else /bin/sh; `COMSPEC` on Windows). |
 | `process.not_found` | `not_found` | 66 | No such live background process in this session: it was never started there or its record expired (`process.list`). |
 | `queue.entry_not_found` | `not_found` | 66 | The queued input already started or was deleted; `queue.list` shows what is still queued. |

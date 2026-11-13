@@ -68,9 +68,85 @@ pub(crate) fn shell(base: &str) -> String {
         .replace("%BASE%", base)
 }
 
+/// The desktop app's page (`apps/desktop/dist`, built by `web/build.mjs`
+/// and checked in), served as the webapp under `/app` (spec:
+/// web-dashboard, Desktop workspace in the browser): the workspace is
+/// rendered by the desktop's own components.
+const DESKTOP_SHELL: &str = include_str!("../../../apps/desktop/dist/index.html");
+
+/// The desktop page's files, by their path below `/app/`.
+const DESKTOP_FILES: &[(&str, &[u8], &str)] = &[
+    (
+        "app.js",
+        include_bytes!("../../../apps/desktop/dist/app.js"),
+        "text/javascript; charset=utf-8",
+    ),
+    (
+        "app.css",
+        include_bytes!("../../../apps/desktop/dist/app.css"),
+        "text/css; charset=utf-8",
+    ),
+    (
+        "annotate.js",
+        include_bytes!("../../../apps/desktop/dist/annotate.js"),
+        "text/javascript; charset=utf-8",
+    ),
+    (
+        "fonts/jetbrains-mono-latin-400-normal.woff2",
+        include_bytes!("../../../apps/desktop/dist/fonts/jetbrains-mono-latin-400-normal.woff2"),
+        "font/woff2",
+    ),
+    (
+        "fonts/jetbrains-mono-latin-ext-400-normal.woff2",
+        include_bytes!(
+            "../../../apps/desktop/dist/fonts/jetbrains-mono-latin-ext-400-normal.woff2"
+        ),
+        "font/woff2",
+    ),
+    (
+        "fonts/JetBrainsMono-OFL.txt",
+        include_bytes!("../../../apps/desktop/dist/fonts/JetBrainsMono-OFL.txt"),
+        "text/plain; charset=utf-8",
+    ),
+];
+
+/// A file of the desktop page (`/app/<name>`): its bytes and type.
+pub(crate) fn desktop_file(name: &str) -> Option<(&'static [u8], &'static str)> {
+    DESKTOP_FILES
+        .iter()
+        .find(|(path, _, _)| *path == name)
+        .map(|(_, bytes, content_type)| (*bytes, *content_type))
+}
+
+/// The desktop page for a dashboard under `base`: its relative URLs
+/// resolve below `<base>/app/`, and the page knows it runs as the webapp
+/// and where the dashboard's API is.
+pub(crate) fn desktop_shell(base: &str) -> String {
+    DESKTOP_SHELL.replacen(
+        "<head>",
+        &format!(
+            "<head>\n<base href=\"{base}/app/\">\n<meta name=\"prometheus-base\" content=\"{base}\">\n<meta name=\"prometheus-webapp\" content=\"1\">"
+        ),
+        1,
+    )
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{asset, shell};
+    use super::{asset, desktop_file, desktop_shell, shell};
+
+    /// The webapp page names only files it serves, below the base path.
+    #[test]
+    fn the_desktop_page_resolves_its_files_below_app() {
+        let page = desktop_shell("/prometheus");
+        assert!(page.contains("<base href=\"/prometheus/app/\">"), "{page}");
+        assert!(page.contains("name=\"prometheus-webapp\""), "{page}");
+        for name in ["app.js", "app.css"] {
+            assert!(page.contains(&format!("\"{name}\"")), "{page}");
+            assert!(desktop_file(name).is_some(), "{name}");
+        }
+        assert!(desktop_file("../web/dist/app.js").is_none());
+    }
 
     /// Scenario: Behind a proxy at /prometheus (asset URLs).
     #[test]

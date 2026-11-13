@@ -105,11 +105,13 @@ method!(/// `pty.open`: a shell the daemon spawns as the user in the session's
     /// workspace (drivers only; at most 16 per daemon).
     PtyOpen = "pty.open" (PtyOpenParams) -> PtyOpened);
 method!(/// `pty.attach`: a terminal's recent output, to show before its live
-    /// `pty.output`.
+    /// `pty.output`; a driver attaching takes the terminal over from the
+    /// connection that held it (which gets `pty.detached`).
     PtyAttach = "pty.attach" (PtyRef) -> PtyAttached);
 method!(/// `pty.list`: the session's terminals.
     PtyListCall = "pty.list" (super::SessionRef) -> PtyList);
-method!(/// `pty.input`: types into a terminal (drivers only).
+method!(/// `pty.input`: types into a terminal (drivers only; refused with
+    /// `terminal.taken` while another connection holds it).
     PtyInput = "pty.input" (PtyInputParams) -> super::Ack);
 method!(/// `pty.resize`: a terminal's size (drivers only).
     PtyResize = "pty.resize" (PtyResizeParams) -> super::Ack);
@@ -119,6 +121,10 @@ event!(/// `pty.output`: a terminal printed.
     PtyOutputEvent = "pty.output" (PtyOutput));
 event!(/// `pty.exited`: a terminal's shell ended.
     PtyExited = "pty.exited" (PtyOutput));
+event!(/// `pty.detached`: another window or tab of the session took the
+    /// terminal over; this connection may type into it again only after
+    /// attaching to it again.
+    PtyDetached = "pty.detached" (PtyRef));
 
 /// `subagent.steer` params.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

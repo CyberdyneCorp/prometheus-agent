@@ -9,7 +9,8 @@
 import type { Envelope, FsEntry, FsFile, FsListing } from "../../../schema/rpc";
 import { h, notice } from "../../../web/src/lib/dom";
 import type { DesktopClient } from "./client";
-import { type Opened, shell } from "./shell";
+import { isWebapp, type Opened, shell } from "./shell";
+import { downloadHostFile } from "./web-shell";
 
 /** The most a preview shows. */
 export const PREVIEW_BYTES = 2 * 1024 * 1024;
@@ -112,8 +113,9 @@ export class FileBrowser {
       this.preview.replaceChildren(h("h4", {}, path), notice((err as Error).message, "warn"));
       return;
     }
-    const external = h("button", { type: "button", name: "open-externally" }, "Open externally");
-    external.addEventListener("click", () => void this.external(file));
+    // The webapp downloads it through the session's file-access rules.
+    const external = isWebapp() ? h("button", { type: "button", name: "download" }, "Download") : h("button", { type: "button", name: "open-externally" }, "Open externally");
+    external.addEventListener("click", () => void (isWebapp() ? this.download(file) : this.external(file)));
     const body =
       file.kind === "image" && file.mime
         ? h("img", { src: `data:${file.mime};base64,${file.data}`, alt: path })
@@ -122,6 +124,15 @@ export class FileBrowser {
           : notice("No preview for this kind of file.", "info");
     const cut = file.truncated ? notice(`Showing the first ${mib(PREVIEW_BYTES)} of ${mib(file.size)}.`, "info") : null;
     this.preview.replaceChildren(h("h4", { "data-path": path }, path), ...(cut ? [cut] : []), body, external);
+  }
+
+  private async download(file: FsFile): Promise<void> {
+    if (!this.sessionId) return;
+    try {
+      await downloadHostFile(this.client.profile, this.sessionId, file.path);
+    } catch (err) {
+      this.preview.append(notice(`Not downloaded: ${(err as Error).message}`, "warn"));
+    }
   }
 
   private async external(file: FsFile): Promise<void> {

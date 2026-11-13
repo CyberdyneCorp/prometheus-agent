@@ -179,7 +179,13 @@ fn the_webapp_link_lands_on_app_once() {
         .to_owned();
     let app = get(port, "/app", &cookie);
     assert_eq!(app.status, 200);
-    assert!(app.body.contains("<div id=\"app\""), "{}", app.body);
+    // The desktop app's own page, told it runs as the webapp.
+    assert!(app.body.contains("<main id=\"app\">"), "{}", app.body);
+    assert!(
+        app.body.contains("name=\"prometheus-webapp\""),
+        "{}",
+        app.body
+    );
     assert_eq!(
         Request::new("GET", &path_of(login)).send(port).status,
         401,

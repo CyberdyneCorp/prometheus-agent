@@ -128,3 +128,70 @@ async fn terminals_are_driver_written_replayed_and_capped_at_sixteen() {
         .await
         .unwrap();
 }
+
+/// Waits for a `pty.detached` event naming `pty`.
+async fn detached(inbox: &mut Inbox, pty: &str) {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+    loop {
+        let event = tokio::time::timeout_at(deadline, inbox.events.recv())
+            .await
+            .expect("pty.detached in time")
+            .expect("open connection");
+        if event.event == "pty.detached" && event.data["pty_id"] == pty {
+            return;
+        }
+    }
+}
+
+/// Scenario support (web-dashboard, Webapp file staging and terminals):
+/// one attachment per terminal; a second tab attaching takes it over, the
+/// first is told and may type again only after attaching again.
+#[tokio::test]
+async fn a_second_driver_attaching_takes_the_terminal_over() {
+    let daemon = Daemon::start().await;
+    let (first, mut first_inbox) = daemon.client("default", false).await;
+    let session = create(&first).await;
+    let attach = json!({"session_id": session});
+    first.call("session.attach", attach.clone()).await.unwrap();
+    let opened = first
+        .call("pty.open", json!({"session_id": session}))
+        .await
+        .unwrap();
+    let pty = opened["pty_id"].as_str().unwrap().to_owned();
+    let input = |data: &str| json!({"session_id": session, "pty_id": pty, "data": data});
+    first
+        .call("pty.input", input("echo one-$((0+1))\n"))
+        .await
+        .unwrap();
+    output_until(&mut first_inbox, "one-1").await;
+
+    let (second, mut second_inbox) = daemon.client("default", false).await;
+    second.call("session.attach", attach).await.unwrap();
+    let pty_ref = json!({"session_id": session, "pty_id": pty});
+    second.call("pty.attach", pty_ref.clone()).await.unwrap();
+    detached(&mut first_inbox, &pty).await;
+    let refused = first.call("pty.input", input("x")).await.unwrap_err();
+    assert!(
+        refused.message.contains("took this terminal over"),
+        "{refused:?}"
+    );
+    second
+        .call("pty.input", input("echo two-$((1+1))\n"))
+        .await
+        .unwrap();
+    output_until(&mut second_inbox, "two-2").await;
+
+    // Attaching again takes it back.
+    first.call("pty.attach", pty_ref).await.unwrap();
+    detached(&mut second_inbox, &pty).await;
+    first
+        .call("pty.input", input("echo three-$((1+2))\n"))
+        .await
+        .unwrap();
+    output_until(&mut first_inbox, "three-3").await;
+    let refused = second.call("pty.input", input("x")).await.unwrap_err();
+    assert!(
+        refused.message.contains("took this terminal over"),
+        "{refused:?}"
+    );
+}

@@ -26,12 +26,14 @@ import { ProjectsSidebar } from "./projects";
 import { localPrefsChannel } from "./remote-prefs";
 import { LAST_PROFILE } from "./quickask";
 import { SettingsPanel } from "./settings";
-import { type Attach, onShellEvent, shell } from "./shell";
+import { type Attach, isWebapp, onShellEvent, shell } from "./shell";
 import { Switcher } from "./switcher";
+import type { TerminalPane } from "./terminal";
 import { Onboarding } from "./onboarding";
 import { Guide } from "./tour";
 import { toolPrefsControls, UiTools } from "./ui-tools";
 import { NOT_FOUND } from "./verdict";
+import { showProfile, stageFile } from "./web-shell";
 import { type Workspace, workspace } from "./workspace";
 
 interface SessionSummary {
@@ -220,13 +222,13 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
       .start({})
       .then(async () => {
         // The first launch of the app's main window opens onboarding.
-        if (label === "main" && !location.hash && client.connection === LOCAL) await onboarding.firstRun();
+        if (label === "main" && !location.hash && client.connection === LOCAL && !isWebapp()) await onboarding.firstRun();
       })
       .catch((err: unknown) => console.warn("UI preferences or onboarding unavailable:", err));
     void panels.load(client.profile);
     void projects.load();
     void applyFonts(client);
-    void desktopSettings(client, desktopSection).catch((err: unknown) => console.warn("desktop settings:", err));
+    if (!isWebapp()) void desktopSettings(client, desktopSection).catch((err: unknown) => console.warn("desktop settings:", err));
   };
   client.onReattached = () => void chat.reattached();
   picker.addEventListener("change", () => void switchTo(picker.value));
@@ -265,6 +267,7 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
     importProfile: files.importProfile,
   });
   const work = workspace(client, chat, h("div", {}, settings.el, desktopSection, accentControl(prefs), toolPrefsControls(prefs), connections.el), dialogs, [{ name: "manage", label: "Manage", el: manage.el, shown: () => manage.reset() }]);
+  if (isWebapp()) webappParts(client, chat, work.terminal, [desktopSection, connections.el]);
   const guide = new Guide();
   const onboarding = new Onboarding(client, chat, prefs, dialogs);
   const ui = new UiTools(client, { chat, terminal: work.terminal, preview: work.preview, driver: work.driver, layout: work.layout, prefs, guide, onboarding, dialogs });
@@ -384,7 +387,20 @@ function accentControl(prefs: Prefs): HTMLElement {
   return h("label", { class: "accent" }, "Accent colour ", input);
 }
 
+/** The webapp's version of the window (spec: web-dashboard, Desktop
+ *  workspace in the browser; Webapp file staging and terminals): files
+ *  dropped or pasted on the composer or a terminal are staged under the
+ *  profile, and the desktop-only settings (the updater, launch options,
+ *  remote connections) are not shown. */
+function webappParts(client: DesktopClient, chat: ChatView, terminal: TerminalPane, nativeOnly: HTMLElement[]): void {
+  const stage = (file: File) => stageFile(client.profile, file);
+  chat.composer.stager = stage;
+  terminal.onDrop = stage;
+  for (const el of nativeOnly) el.hidden = true;
+}
+
 function remember(profile: string): void {
+  showProfile(profile);
   try {
     localStorage.setItem(LAST_PROFILE, profile);
   } catch {

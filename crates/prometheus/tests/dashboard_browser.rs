@@ -16,6 +16,29 @@ fn webapp_home() -> tempfile::TempDir {
         "[dashboard]\nport = 0\n[webapp]\nenabled = true\n",
     )
     .unwrap();
+    // The agent asks the window for what is below it: a native-only tool
+    // the webapp answers is unavailable there.
+    std::fs::write(
+        home.path().join("profiles/default/mock.toml"),
+        r#"
+[[rule]]
+user = "what is below"
+[[rule.tool_calls]]
+name = "read_window_below"
+arguments = {}
+
+[[rule]]
+user = "what is below"
+tool_result = "not available in the webapp"
+text = "The webapp cannot read other windows"
+
+[[rule]]
+repeat = true
+text = "ok"
+"#,
+    )
+    .unwrap();
+    append_config(home.path(), "\n[providers.mock]\nscript = \"mock.toml\"\n");
     home
 }
 

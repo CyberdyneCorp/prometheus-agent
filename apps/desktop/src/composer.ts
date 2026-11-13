@@ -22,6 +22,9 @@ export class Composer {
   private chat = NEW_CHAT;
   private palette: PaletteEntry[] = [];
   onSend: (text: string, images: StagedImage[]) => void = () => {};
+  /** The webapp's staging of a dropped or pasted file (its daemon-side
+   *  path); `null` in the desktop app, whose picker gives local paths. */
+  stager: ((file: File) => Promise<string>) | null = null;
   onStop: () => void = () => {};
 
   constructor(
@@ -44,6 +47,28 @@ export class Composer {
       this.showSuggestions();
     });
     this.input.addEventListener("keydown", (event) => this.key(event));
+    this.el.addEventListener("dragover", (event) => event.preventDefault());
+    this.el.addEventListener("drop", (event) => {
+      if (!this.stager) return;
+      event.preventDefault();
+      for (const file of event.dataTransfer?.files ?? []) void this.stageDropped(file);
+    });
+    this.input.addEventListener("paste", (event) => {
+      for (const file of event.clipboardData?.files ?? []) void this.stageDropped(file);
+    });
+  }
+
+  /** Stages a dropped or pasted file and attaches it (the webapp). */
+  private async stageDropped(file: File): Promise<void> {
+    if (!this.stager) return;
+    try {
+      const path = await this.stager(file);
+      this.images.push({ name: file.name, path });
+      this.renderStaged();
+      this.save();
+    } catch (err) {
+      this.staged.append(h("li", { class: "refused", role: "alert" }, `${file.name}: ${(err as Error).message}`));
+    }
   }
 
   /** The session's command registry; what was typed is matched again. */

@@ -52,7 +52,7 @@ export class ChatView {
   private readonly problems = h("div", { class: "problems" });
   private readonly queue: QueueView;
   private readonly picker: ModelPicker;
-  private readonly composer: Composer;
+  readonly composer: Composer;
   private readonly drafts: Drafts;
   private readonly client: DesktopClient;
   /** Each session's distance from the bottom when the window left it. */

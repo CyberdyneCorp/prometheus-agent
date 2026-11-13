@@ -37,7 +37,6 @@ import { secretsPage } from "./pages/secrets";
 import { sessionsPage } from "./pages/sessions";
 import { statusPage } from "./pages/status";
 import { usagePage } from "./pages/usage";
-import { workspacePage } from "./pages/workspace";
 
 const NAV: [string, string][] = [
   ["/chat", "Chat"],
@@ -93,7 +92,6 @@ function routes(): void {
   route("/profiles", profilesPage);
   route("/config", configPage);
   route("/secrets", secretsPage);
-  route("/app", workspacePage);
   route("/webhooks", webhooksPage);
   route("/files", filesPage);
   route("/docs", docsPage);

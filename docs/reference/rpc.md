@@ -222,6 +222,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `local_model.context_grown` | `local-models` | 1.0 | not served yet |
 | `message.delivery` | `messaging-gateway` | 1.0 | not served yet |
 | `message.reaction` | `desktop-app` | 1.0 | [`MessageReaction`](#messagereaction) |
+| `pty.detached` | `desktop-app` | 1.0 | [`PtyRef`](#ptyref) |
 | `pty.exited` | `desktop-app` | 1.0 | [`PtyOutput`](#ptyoutput) |
 | `pty.output` | `desktop-app` | 1.0 | [`PtyOutput`](#ptyoutput) |
 | `queue.changed` | `desktop-app` | 1.0 | [`QueueState`](#queuestate) |

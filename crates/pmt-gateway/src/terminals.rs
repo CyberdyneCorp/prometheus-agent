@@ -5,6 +5,12 @@
 //! to the session's attached clients as `pty.output` and the last
 //! [`REPLAY`] bytes are kept for a client that attaches later; a shell
 //! nobody attached to the session for [`DETACHED_TTL`] is ended.
+//!
+//! One driver connection holds a terminal at a time (spec: web-dashboard,
+//! Webapp file staging and terminals): the one that opened it or last
+//! attached to it. A second window or tab attaching takes it over; the
+//! one it took it from is told so and may type again only after it
+//! attaches again.
 
 use std::collections::{HashMap, VecDeque};
 use std::io::{Read as _, Write as _};
@@ -16,7 +22,7 @@ use base64::Engine as _;
 use pmt_core::error::{Error, codes};
 use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
 
-use crate::hub::Hub;
+use crate::hub::{ConnId, Hub};
 
 /// The most PTYs a daemon keeps.
 pub const MAX: usize = 16;
@@ -34,6 +40,8 @@ struct Terminal {
     replay: Arc<Mutex<VecDeque<u8>>>,
     /// When the session last had no attached client (`None`: it has one).
     alone_since: Option<Instant>,
+    /// The driver connection that holds it.
+    holder: Option<ConnId>,
 }
 
 /// Every terminal of the daemon, by id.
@@ -136,6 +144,7 @@ impl Terminals {
                 child,
                 replay,
                 alone_since: None,
+                holder: None,
             },
         );
         Ok(id)
@@ -202,6 +211,27 @@ impl Terminals {
             let (a, b) = kept.as_slices();
             Ok(base64::engine::general_purpose::STANDARD.encode([a, b].concat()))
         })
+    }
+
+    /// Makes `conn` the terminal's holder; the connection that held it
+    /// before, when another one.
+    ///
+    /// # Errors
+    ///
+    /// `terminal.not_found` (another session's or an ended terminal).
+    pub fn hold(&self, session_id: &str, id: &str, conn: ConnId) -> Result<Option<ConnId>, Error> {
+        self.with(session_id, id, |t| {
+            Ok(t.holder.replace(conn).filter(|before| *before != conn))
+        })
+    }
+
+    /// The connection that holds the terminal.
+    ///
+    /// # Errors
+    ///
+    /// `terminal.not_found` (another session's or an ended terminal).
+    pub fn holder(&self, session_id: &str, id: &str) -> Result<Option<ConnId>, Error> {
+        self.with(session_id, id, |t| Ok(t.holder))
     }
 
     /// Types `data` into the shell.

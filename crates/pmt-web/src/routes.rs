@@ -63,9 +63,7 @@ async fn route(shared: &Arc<Shared>, request: Request<Incoming>, peer: SocketAdd
         (_, path) if path == "/api" || path.starts_with("/api/") => {
             api::route(shared, &req, body).await
         }
-        (_, path) if !shared.webapp.enabled && (path == "/app" || path.starts_with("/app/")) => {
-            crate::http::not_found()
-        }
+        (_, path) if path == "/app" || path.starts_with("/app/") => webapp(shared, &req),
         (&Method::GET | &Method::HEAD, _) => shell(shared),
         _ => error(
             405,
@@ -91,20 +89,51 @@ fn asset(req: &Req) -> Reply {
     }
 }
 
-/// The SPA shell: every client-side route reloads into it.
-fn shell(shared: &Shared) -> Reply {
-    let mut reply = bytes(200, "text/html; charset=utf-8", assets::shell(&shared.base));
-    let headers = reply.headers_mut();
-    headers.insert(
-        hyper::header::CACHE_CONTROL,
-        hyper::header::HeaderValue::from_static("no-store"),
-    );
-    if shared.webapp.enabled {
+/// `/app`: the desktop workspace in the browser when `webapp.enabled`
+/// (the desktop's page and its files), else a 404.
+fn webapp(shared: &Shared, req: &Req) -> Reply {
+    if !shared.webapp.enabled || !matches!(req.method, Method::GET | Method::HEAD) {
+        return crate::http::not_found();
+    }
+    let name = req.path.strip_prefix("/app").unwrap_or_default();
+    let name = name.strip_prefix('/').unwrap_or(name);
+    if name.is_empty() {
+        let mut reply = bytes(
+            200,
+            "text/html; charset=utf-8",
+            assets::desktop_shell(&shared.base),
+        );
+        let headers = reply.headers_mut();
+        headers.insert(
+            hyper::header::CACHE_CONTROL,
+            hyper::header::HeaderValue::from_static("no-store"),
+        );
         headers.insert(
             hyper::header::CONTENT_SECURITY_POLICY,
             hyper::header::HeaderValue::from_static(guard::CSP_WEBAPP),
         );
+        return reply;
     }
+    match assets::desktop_file(name) {
+        Some((body, content_type)) => {
+            let mut reply = bytes(200, content_type, body);
+            reply.headers_mut().insert(
+                hyper::header::CACHE_CONTROL,
+                hyper::header::HeaderValue::from_static("no-cache"),
+            );
+            reply
+        }
+        None => empty(404),
+    }
+}
+
+/// The SPA shell: every client-side route reloads into it.
+fn shell(shared: &Shared) -> Reply {
+    let mut reply = bytes(200, "text/html; charset=utf-8", assets::shell(&shared.base));
+    reply.headers_mut().insert(
+        hyper::header::CACHE_CONTROL,
+        hyper::header::HeaderValue::from_static("no-store"),
+    );
     reply
 }
 

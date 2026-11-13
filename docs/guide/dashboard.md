@@ -239,17 +239,23 @@ browsers and native clients on that listener until stopped.
 ## The webapp
 
 With `webapp.enabled = true` in `daemon.toml` (default false), the
-dashboard listener also serves the desktop workspace under `/app`:
-sessions, chat, scheduled jobs and file staging (every file a user
-selects, pastes or drops is staged under the profile, at most 16 MiB each;
-larger ones get `413` before anything is written). Host files of a
-session download only through that session's file-access rules: the path
-is resolved against the session's working directory, protected files
-(`.env` files, process memory) are refused, and so is anything the
-session's capabilities do not let it read (`403`). URL previews load in a
-sandboxed frame that may run scripts but cannot open popups, navigate the
-workspace or reach its origin. Webapp terminals (the desktop's
-daemon-owned PTYs) are not in this build yet. `webapp.public_url`
+dashboard listener also serves the desktop workspace under `/app`, drawn
+by the desktop app's own page: sessions, chat, profiles, capabilities,
+messaging, artifacts, scheduled jobs, the file tree, Git review, previews
+and terminals, all over the listener's `/api/rpc` with the browser's
+sign-in. Every file a user selects, pastes or drops (on the composer or on
+a terminal) is staged under the profile, at most 16 MiB each; a larger one
+gets `413` before anything is written. A file dropped on a terminal has
+its staged path typed into the shell. Host files of a session download
+only through that session's file-access rules: the path is resolved
+against the session's working directory, protected files (`.env` files,
+process memory) are refused, and so is anything the session's
+capabilities do not let it read (`403`). URL previews load in a sandboxed
+frame that may run scripts but cannot open popups or navigate the
+workspace; a page of the listener's own origin gets an opaque origin.
+Terminals are the daemon's PTYs, the same ones the desktop app shows: one
+window or tab holds a terminal at a time, so a second tab that opens it
+takes it over and the first one shows **Take back**. `webapp.public_url`
 (default empty) is the address opened and accepted as `Host`.
 
 ```text
@@ -263,9 +269,12 @@ $ prometheus webapp --sign-out # end every browser sign-in (devices stay)
 sockets with 4401; every open tab shows the sign-in instructions. When the
 address a browser would open is plain HTTP on a non-loopback host, the
 command warns that microphone, clipboard reading, notifications and
-screen viewing are unavailable there. Desktop-only features (global
-shortcuts, always-on-top windows, window reading, the updater) are absent
-in the webapp.
+screen viewing are unavailable there (the page says so too). Desktop-only
+features (global shortcuts, always-on-top and HUD windows, window reading,
+the updater, remote connections, opening files in other apps) are absent
+in the webapp, and the agent's `desktop_ui` tools that need them, such as
+[`read_window_below`](../reference/tools.md#read_window_below) or driving the preview, answer that they need the
+desktop app.
 
 ## API
 

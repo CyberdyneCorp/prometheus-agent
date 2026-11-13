@@ -2344,6 +2344,7 @@ export interface Events {
   "automation.state": AutomationStatePayload;
   "health.changed": HealthChanged;
   "message.reaction": MessageReaction;
+  "pty.detached": PtyRef;
   "pty.exited": PtyOutput;
   "pty.output": PtyOutput;
   "queue.changed": QueueState;

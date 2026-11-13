@@ -237,7 +237,8 @@ fn declare_desktop(d: &mut Declarations) {
         .event::<c::UiPrefsChanged>()
         .event::<c::QueueChanged>()
         .event::<c::PtyOutputEvent>()
-        .event::<c::PtyExited>();
+        .event::<c::PtyExited>()
+        .event::<c::PtyDetached>();
 }
 
 impl Catalog {

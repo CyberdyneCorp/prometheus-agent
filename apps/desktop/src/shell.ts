@@ -4,6 +4,8 @@
 // storage: a dial ticket lives only in the protocols array handed to the
 // WebSocket constructor.
 
+import { webShell } from "./web-shell";
+
 interface TauriGlobal {
   core: { invoke(command: string, args: Record<string, unknown>): Promise<unknown> };
   event: { listen(name: string, handler: (event: { payload: unknown }) => void): Promise<() => void> };
@@ -21,14 +23,24 @@ function tauri(): TauriGlobal {
   return bridge;
 }
 
+/** The workspace runs in a browser, served by the dashboard listener
+ *  under `/app` (spec: web-dashboard, Desktop workspace in the browser):
+ *  the browser answers the shell commands it can (web-shell.ts). */
+export function isWebapp(): boolean {
+  return !window.__TAURI__ && document.querySelector('meta[name="prometheus-webapp"]') !== null;
+}
+
 /** Runs one allowlisted shell command. */
 export function shell<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  if (isWebapp()) return webShell<T>(command, args);
   const request = args === undefined ? { command } : { command, args };
   return tauri().core.invoke("shell", { request }) as Promise<T>;
 }
 
-/** Calls `handler` with each payload of shell event `name`. */
+/** Calls `handler` with each payload of shell event `name` (none reach
+ *  the webapp: deep links, the tray and global shortcuts are native). */
 export function onShellEvent(name: string, handler: (payload: unknown) => void): void {
+  if (isWebapp()) return;
   void tauri().event.listen(name, (event) => handler(event.payload));
 }
 

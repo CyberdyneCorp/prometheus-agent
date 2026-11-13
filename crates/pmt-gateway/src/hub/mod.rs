@@ -565,6 +565,25 @@ impl Hub {
         self.tapped(profile, None, event, &envelope.data);
     }
 
+    /// Sends a daemon-level event (no session, not logged) to `conn`
+    /// while it is attached to `session_id`; `false` when it is not.
+    pub fn notify_attached(
+        &self,
+        conn: ConnId,
+        session_id: &str,
+        event: &str,
+        data: Value,
+    ) -> bool {
+        let peer = self
+            .state()
+            .sessions
+            .get(session_id)
+            .and_then(|log| log.attached.get(&conn).cloned());
+        let Some(peer) = peer else { return false };
+        self.notify(&[peer], event, data);
+        true
+    }
+
     /// Sends a daemon-level event (no session, not logged) to `peers`.
     pub fn notify(&self, peers: &[Peer], event: &str, data: Value) {
         if let Err(violation) = self.catalog.check_outbound(event, &data, false) {

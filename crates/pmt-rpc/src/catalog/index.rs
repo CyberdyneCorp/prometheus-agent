@@ -283,6 +283,7 @@ pub const INDEX: &[IndexEntry] = &[
     event("queue.changed", "desktop-app"),
     event("pty.output", "desktop-app"),
     event("pty.exited", "desktop-app"),
+    event("pty.detached", "desktop-app"),
     event("achievement.unlocked", "pets"),
     event("wake.detected", "voice-mode"),
     event("local_model.context_grown", "local-models"),

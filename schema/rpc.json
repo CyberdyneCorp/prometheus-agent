@@ -6307,6 +6307,13 @@
       },
       "since": "1.0"
     },
+    "pty.detached": {
+      "owner": "desktop-app",
+      "payload": {
+        "$ref": "#/$defs/PtyRef"
+      },
+      "since": "1.0"
+    },
     "pty.exited": {
       "owner": "desktop-app",
       "payload": {

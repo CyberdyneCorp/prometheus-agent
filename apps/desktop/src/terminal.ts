@@ -7,6 +7,10 @@
 // process of the session shows in a read-only tab that mirrors its output
 // (spec: desktop-app, Terminal pane tools); closing that tab never stops
 // the process, and `read_terminal` reads whichever tab is focused.
+// One window or tab holds a terminal at a time: another one attaching
+// takes it over (`pty.detached` here) until Take back attaches again. In
+// the webapp a file dropped on a terminal is staged under the profile and
+// its path typed into the shell.
 
 import type { Envelope, ProcessList, ProcessLog, PtyAttached, PtyList, PtyOpened } from "../../../schema/rpc";
 import { h, notice } from "../../../web/src/lib/dom";
@@ -63,7 +67,14 @@ export class TerminalPane {
     this.el.append(h("div", { class: "terminal-bar" }, open, add), this.tabs, this.screens, this.status);
     client.on("pty.output", (envelope) => this.output(envelope));
     client.on("pty.exited", (envelope) => this.exited(envelope));
+    client.on("pty.detached", (envelope) => {
+      const data = envelope.data as { session_id: string; pty_id: string };
+      if (data.session_id === this.sessionId) this.detach(data.pty_id);
+    });
   }
+
+  /** Stages a file dropped on a terminal (the webapp), typing its path. */
+  onDrop: ((file: File) => Promise<string>) | null = null;
 
   /** Whether the keyboard is in a terminal (`CommandOrControl+W` then
    *  goes to the shell, not to the tabs). */
@@ -166,7 +177,12 @@ export class TerminalPane {
       const data = keyInput(event);
       if (data === null) return;
       event.preventDefault();
-      void this.client.call("pty.input", { session_id: this.sessionId, pty_id: id, data }).catch((err: unknown) => this.status.replaceChildren(notice((err as Error).message, "warn")));
+      this.type(id, data);
+    });
+    screen.addEventListener("dragover", (event) => event.preventDefault());
+    screen.addEventListener("drop", (event) => {
+      event.preventDefault();
+      for (const file of event.dataTransfer?.files ?? []) void this.dropped(id, file);
     });
     this.shown.set(id, screen);
     const tab = h("button", { type: "button", name: "terminal-tab", "data-pty": id }, id);
@@ -176,6 +192,49 @@ export class TerminalPane {
     this.tabs.append(h("span", { class: "terminal-tab", "data-pty": id }, tab, close));
     this.screens.append(screen);
     this.select(id);
+  }
+
+  private type(id: string, data: string): void {
+    void this.client.call("pty.input", { session_id: this.sessionId, pty_id: id, data }).catch((err: unknown) => {
+      const message = (err as Error).message;
+      if (message.includes("took this terminal over")) this.detach(id);
+      else this.status.replaceChildren(notice(message, "warn"));
+    });
+  }
+
+  /** Another window or tab took terminal `id` over. */
+  private detach(id: string): void {
+    const screen = this.shown.get(id);
+    if (!screen) return;
+    screen.dataset.detached = "true";
+    const back = h("button", { type: "button", name: "take-back", "data-pty": id }, "Take back");
+    back.addEventListener("click", () => void this.takeBack(id));
+    this.status.replaceChildren(notice(`${id} is open in another window or tab; Take back to type here.`, "info"), back);
+  }
+
+  private async takeBack(id: string): Promise<void> {
+    const screen = this.shown.get(id);
+    if (!screen) return;
+    try {
+      const attached = await this.client.call<PtyAttached>("pty.attach", { session_id: this.sessionId, pty_id: id });
+      screen.textContent = decode(attached.replay).replace(ANSI, "");
+      delete screen.dataset.detached;
+      this.status.replaceChildren();
+      screen.focus();
+    } catch (err) {
+      this.status.replaceChildren(notice((err as Error).message, "warn"));
+    }
+  }
+
+  private async dropped(id: string, file: File): Promise<void> {
+    if (!this.onDrop) return;
+    try {
+      const path = await this.onDrop(file);
+      this.status.replaceChildren(notice(`Staged ${file.name}`, "info"));
+      this.type(id, path);
+    } catch (err) {
+      this.status.replaceChildren(notice(`${file.name}: ${(err as Error).message}`, "warn"));
+    }
   }
 
   private select(id: string): void {
