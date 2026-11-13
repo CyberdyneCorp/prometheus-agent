@@ -23,6 +23,7 @@ use pmt_gateway::tickets::Grant;
 use pmt_rpc::codes::CloseCode;
 use pmt_rpc::control::Purpose;
 use serde_json::json;
+use tokio::sync::broadcast;
 use tokio_tungstenite::WebSocketStream;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::handshake::derive_accept_key;
@@ -30,6 +31,7 @@ use tokio_tungstenite::tungstenite::protocol::{CloseFrame, Role, WebSocketConfig
 
 use crate::Shared;
 use crate::auth::sessions::{Role as SessionRole, Signed, Via, csrf_ok};
+use crate::events::{Event, Replay};
 use crate::http::{Reply, Req, empty, error};
 
 /// The event stream's subprotocol.
@@ -151,6 +153,12 @@ pub(crate) fn upgrade(
     if let Some(value) = echoed.and_then(|p| HeaderValue::from_str(&p).ok()) {
         headers.insert("sec-websocket-protocol", value);
     }
+    // An event stream subscribes before its `101` is sent: whatever
+    // happens once the client sees the socket open reaches it.
+    let followed = match &admission {
+        Ok(Endpoint::Events { since, .. }) => Some(shared.feed.follow(*since)),
+        _ => None,
+    };
     let shared = Arc::clone(shared);
     pmt_core::spawn::spawn(async move {
         let Ok(upgraded) = hyper::upgrade::on(request).await else {
@@ -167,11 +175,11 @@ pub(crate) fn upgrade(
             Err(code) => refuse(socket, code).await,
             Ok(Endpoint::Rpc(signed)) => rpc(&shared, socket, &signed).await,
             Ok(Endpoint::Events {
-                profiles,
-                since,
-                signed,
+                profiles, signed, ..
             }) => {
-                events(&shared, socket, &profiles, since, &signed).await;
+                if let Some(followed) = followed {
+                    events(&shared, socket, &profiles, followed, &signed).await;
+                }
             }
         }
     });
@@ -217,10 +225,9 @@ async fn events<S: Transport>(
     shared: &Arc<Shared>,
     mut socket: WebSocketStream<S>,
     profiles: &[String],
-    since: Option<u64>,
+    (replay, mut live): (Replay, broadcast::Receiver<Event>),
     signed: &Signed,
 ) {
-    let (replay, mut live) = shared.feed.follow(since);
     let mine = |profile: &str| profiles.iter().any(|p| p == profile);
     if replay.truncated {
         let _ = socket

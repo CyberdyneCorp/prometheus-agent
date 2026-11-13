@@ -43,7 +43,16 @@ fn create_session(
             &frame(1, "session.create", &json!({"profile": profile})),
         )
         .await;
-        created["result"]["session_id"].as_str().unwrap().to_owned()
+        let id = created["result"]["session_id"].as_str().unwrap().to_owned();
+        // Detached before the socket drops: the session is no client's
+        // once this returns (a dropped socket is let go asynchronously).
+        let detached = request_on(
+            &mut ws,
+            &frame(2, "session.detach", &json!({"session_id": id})),
+        )
+        .await;
+        assert!(detached.get("result").is_some(), "{detached}");
+        id
     })
 }
 

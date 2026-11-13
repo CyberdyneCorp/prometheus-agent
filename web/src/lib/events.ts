@@ -21,6 +21,8 @@ const endings = new Set<() => void>();
 let socket: WebSocket | null = null;
 let lastSeq: number | null = null;
 let retry = 1000;
+/** Resolved once the current socket is open. */
+let opened: Promise<void> = Promise.resolve();
 
 function open(): void {
   const scheme = location.protocol === "https:" ? "wss" : "ws";
@@ -29,8 +31,11 @@ function open(): void {
     "prometheus-events",
     `csrf.${csrfToken()}`,
   ]);
+  let resolveOpened: () => void = () => {};
+  opened = new Promise((resolve) => (resolveOpened = resolve));
   socket.onopen = () => {
     retry = 1000;
+    resolveOpened();
   };
   socket.onmessage = (message) => {
     const frame = JSON.parse(String(message.data));
@@ -39,6 +44,8 @@ function open(): void {
   };
   socket.onclose = (closed) => {
     socket = null;
+    // Nobody waits forever on a socket that will not open.
+    resolveOpened();
     if (closed.code === 4401) {
       for (const ended of endings) ended();
       return;
@@ -47,6 +54,13 @@ function open(): void {
     window.setTimeout(open, retry);
     retry = Math.min(retry * 2, 30000);
   };
+}
+
+/** Resolves once the stream is connected: what happens after it is
+ *  delivered (a step answered faster than the socket opened is not). */
+export function connected(): Promise<void> {
+  if (!socket) open();
+  return opened;
 }
 
 /** Follows the stream until the returned function is called. */

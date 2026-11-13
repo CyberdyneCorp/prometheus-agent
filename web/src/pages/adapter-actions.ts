@@ -7,7 +7,7 @@
 
 import { api, ApiError, profilePath } from "../lib/api";
 import { h, notice } from "../lib/dom";
-import { follow } from "../lib/events";
+import { connected, follow } from "../lib/events";
 import { canDrive } from "../lib/state";
 
 export interface ActionTarget {
@@ -101,9 +101,12 @@ export function pairingPanel(profile: string, adapter: ActionTarget): HTMLElemen
       const step = event.data as unknown as PairingStep;
       if (step.platform === adapter.platform && showStep(step, image, link, status)) finish();
     });
+    // Shown before the request: the flow's first steps may arrive on the
+    // event stream before its answer and must not be overwritten.
+    showStep({ state: "starting" }, image, link, status);
     try {
+      await connected();
       await api.post(adapterPath(profile, adapter.platform, "/pairing"));
-      showStep({ state: "starting" }, image, link, status);
     } catch (err) {
       status.textContent = errorText(err);
       finish();

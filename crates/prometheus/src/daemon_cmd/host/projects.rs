@@ -144,8 +144,9 @@ fn denied_below(
     denied
 }
 
-/// Scans in the background and caches what it found.
-fn start_scan(profile: &str, store: Arc<Store>, scope: &ProfileScope, home: &Path) {
+/// Scans in the background and caches what it found; true when a scan
+/// started.
+fn start_scan(profile: &str, store: Arc<Store>, scope: &ProfileScope, home: &Path) -> bool {
     let config = &scope.config().projects;
     let fingerprint = settings(config);
     {
@@ -154,7 +155,7 @@ fn start_scan(profile: &str, store: Arc<Store>, scope: &ProfileScope, home: &Pat
             *keys == fingerprint && at.elapsed().as_secs() < REFRESH_AFTER_SECS.unsigned_abs()
         });
         if recent || !scanning().insert(profile.to_owned()) {
-            return;
+            return false;
         }
         scanned.insert(profile.to_owned(), (fingerprint.clone(), Instant::now()));
     }
@@ -169,7 +170,7 @@ fn start_scan(profile: &str, store: Arc<Store>, scope: &ProfileScope, home: &Pat
         Err(err) => {
             tracing::warn!(profile, "the repository scan did not start: {err}");
             scanning().remove(profile);
-            return;
+            return false;
         }
     };
     let profile = profile.to_owned();
@@ -187,10 +188,13 @@ fn start_scan(profile: &str, store: Arc<Store>, scope: &ProfileScope, home: &Pat
         }
         scanning().remove(&profile);
     }));
+    true
 }
 
 /// The discovered rows for the profile's scan keys, starting a scan when
-/// `scans` and the cache is due; the cache is cleared when scanning is
+/// `scans` and the cache is due, and whether a scan was started by this
+/// call (it may already have finished: the rows were read before it, so
+/// the client must look again); the cache is cleared when scanning is
 /// turned off.
 fn discovered(
     profile: &str,
@@ -198,27 +202,25 @@ fn discovered(
     scope: &ProfileScope,
     scans: bool,
     home: Option<PathBuf>,
-) -> Result<Vec<RepoRow>, Error> {
+) -> Result<(Vec<RepoRow>, bool), Error> {
     let config = &scope.config().projects;
     if config.repo_scan_enabled == Some(false) {
         store.clear_discovered_repos()?;
-        return Ok(Vec::new());
+        return Ok((Vec::new(), false));
     }
     let cached = store.discovered_repos(&settings(config))?;
     let stale =
         cached.iter().map(|r| r.last_seen).min().is_none_or(|seen| {
             Timestamp::now().as_second() - seen.as_second() > REFRESH_AFTER_SECS
         });
-    if scans
+    let started = scans
         && stale
-        && let Some(home) = home
-    {
-        start_scan(profile, Arc::clone(store), scope, &home);
-    }
-    Ok(cached
+        && home.is_some_and(|home| start_scan(profile, Arc::clone(store), scope, &home));
+    let rows = cached
         .iter()
         .map(|r| repo_row(Path::new(&r.path), Some(r.last_seen)))
-        .collect())
+        .collect();
+    Ok((rows, started))
 }
 
 /// The sidebar's rows of `profile`; `desktop`: the asking client scans
@@ -243,7 +245,8 @@ pub(super) fn list(
         .filter(|p| !owned(p))
         .map(|p| repo_row(p, None))
         .collect();
-    let discovered = discovered(name, store, &scope, scans, home)?
+    let (discovered, started) = discovered(name, store, &scope, scans, home)?;
+    let discovered = discovered
         .into_iter()
         .filter(|r| !owned(Path::new(&r.path)) && !inferred.iter().any(|i| i.path == r.path))
         .collect();
@@ -251,7 +254,7 @@ pub(super) fn list(
         projects: projects.iter().map(row).collect(),
         inferred,
         discovered,
-        scanning: scanning().contains(name),
+        scanning: started || scanning().contains(name),
     })
 }
 

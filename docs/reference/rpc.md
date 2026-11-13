@@ -1596,7 +1596,7 @@ One explicit project.
 | `discovered` | array of [`RepoRow`](#reporow) | yes | Repositories the background scan found that are no project's. |
 | `inferred` | array of [`RepoRow`](#reporow) | yes | Repositories of the profile's sessions that are no project's. |
 | `projects` | array of [`ProjectRow`](#projectrow) | yes | Projects created explicitly. |
-| `scanning` | boolean | yes | A scan is running; the list refreshes when it ends. |
+| `scanning` | boolean | yes | A scan is running or this listing started one: list again for its rows. |
 
 ### `ProjectsListParams`
 

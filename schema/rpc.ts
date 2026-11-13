@@ -1403,7 +1403,7 @@ export interface ProjectsList {
   inferred: Array<RepoRow>;
   /** Projects created explicitly. */
   projects: Array<ProjectRow>;
-  /** A scan is running; the list refreshes when it ends. */
+  /** A scan is running or this listing started one: list again for its rows. */
   scanning: boolean;
 }
 

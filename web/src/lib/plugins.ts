@@ -115,5 +115,9 @@ export async function loadPlugins(rebuildNav: (plugins: Contribution[]) => void)
   rebuildNav(found.plugins);
   fillShell(found.plugins);
   document.addEventListener("routed", () => fillPage(found.plugins));
-  await render();
+  // Only a route a plugin now claims is rendered again: re-rendering any
+  // other page would throw away what the user already typed into it.
+  const here = current();
+  if (found.plugins.some((p) => p.tab && (p.tab.path === here || p.tab.override === here))) await render();
+  else fillPage(found.plugins);
 }

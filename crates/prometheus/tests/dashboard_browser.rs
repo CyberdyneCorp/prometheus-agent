@@ -119,17 +119,24 @@ fn the_channel_forms_test_restart_and_pair_in_the_browser() {
     use std::os::unix::fs::PermissionsExt as _;
     let home = mock_home();
     let bridge = home.path().join("fake-bridge.sh");
+    // The stand-in rotates its code and links only when the spec says so
+    // (it creates `bridge-next` and `bridge-link` in the home), so the
+    // page is checked at each step however slow the machine is.
+    let gate = |name: &str| {
+        format!(
+            "while [ ! -e '{}' ]; do sleep 0.1; done\n",
+            home.path().join(name).display()
+        )
+    };
     std::fs::write(
         &bridge,
-        "#!/bin/sh
-echo '{\"event\":\"qr\",\"qr\":\"2@first,abc\"}'
-sleep 1.5
-\
-         echo '{\"event\":\"qr\",\"qr\":\"2@second,def\"}'
-sleep 1.5
-\
-         echo '{\"event\":\"connected\",\"user\":{\"name\":\"Ana\"}}'
-",
+        format!(
+            "#!/bin/sh\necho '{{\"event\":\"qr\",\"qr\":\"2@first,abc\"}}'\n{}\
+             echo '{{\"event\":\"qr\",\"qr\":\"2@second,def\"}}'\n{}\
+             echo '{{\"event\":\"connected\",\"user\":{{\"name\":\"Ana\"}}}}'\n",
+            gate("bridge-next"),
+            gate("bridge-link"),
+        ),
     )
     .unwrap();
     std::fs::set_permissions(&bridge, std::fs::Permissions::from_mode(0o755)).unwrap();

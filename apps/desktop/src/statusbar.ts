@@ -5,7 +5,7 @@
 // output speed readouts (off by default). Items are chosen from the bar's
 // context menu; `CommandOrControl+Shift+S` hides or shows the bar.
 
-import type { ContextUsage, Envelope } from "../../../schema/rpc";
+import type { ContextUsage, Dispatched, Envelope } from "../../../schema/rpc";
 import { h } from "../../../web/src/lib/dom";
 import type { DesktopClient } from "./client";
 import { confirmIn } from "./confirm";
@@ -55,6 +55,8 @@ function store(key: string, value: unknown): void {
 export class StatusBar {
   readonly el = h("footer", { class: "status-bar", "aria-label": "Status bar" });
   private readonly bypass = h("input", { type: "checkbox", name: "bypass", "aria-label": "Approval bypass" });
+  /** Why the last switch did not apply (a turn was running). */
+  private readonly bypassNote = h("span", { class: "bypass-note", role: "status" });
   private readonly meter = h("button", { type: "button", name: "context-meter", class: "context-meter" }, "Context —");
   private readonly popover = h("div", { class: "context-popover", role: "dialog", "aria-label": "Context use", hidden: true });
   private readonly cache = h("span", { class: "readout", "data-item": "cache" }, "Cache —");
@@ -72,7 +74,7 @@ export class StatusBar {
     private readonly client: DesktopClient,
     private readonly dialogs: HTMLElement,
   ) {
-    const bypassLabel = h("label", { "data-item": "bypass" }, this.bypass, " Bypass approvals");
+    const bypassLabel = h("label", { "data-item": "bypass" }, this.bypass, " Bypass approvals", this.bypassNote);
     const context = h("span", { class: "context", "data-item": "context" }, this.meter, this.popover);
     this.el.append(bypassLabel, context, this.cache, this.speed, this.menu);
     this.el.hidden = stored(HIDDEN_KEY, false);
@@ -106,6 +108,8 @@ export class StatusBar {
     this.popover.hidden = true;
     this.bypass.checked = sessionId !== null && this.bypassed.has(sessionId);
     this.bypass.disabled = sessionId === null;
+    this.bypass.dataset.applied = String(this.bypass.checked);
+    this.bypassNote.textContent = "";
     this.showReadouts();
     await this.refresh();
   }
@@ -118,13 +122,26 @@ export class StatusBar {
       this.bypass.checked = false;
       return;
     }
+    // Busy until the daemon answers: the switch says what the session
+    // does only once the bypass is applied (`data-applied`).
+    this.bypass.disabled = true;
+    delete this.bypass.dataset.applied;
+    this.bypassNote.textContent = "";
     try {
-      await this.client.call("command.dispatch", { session_id: sessionId, name: "yolo", args: on ? "on" : "off" });
-      if (on) this.bypassed.add(sessionId);
+      // `/yolo` is refused while a turn runs: the switch then goes back.
+      const done = await this.client.call<Dispatched>("command.dispatch", { session_id: sessionId, name: "yolo", args: on ? "on" : "off" });
+      if (done.type === "refused") {
+        this.bypass.checked = !on;
+        this.bypassNote.textContent = ` ${done.reason}`;
+      } else if (on) this.bypassed.add(sessionId);
       else this.bypassed.delete(sessionId);
     } catch (err) {
       this.bypass.checked = !on;
       console.warn("approval bypass:", err);
+    }
+    if (this.sessionId === sessionId) {
+      this.bypass.disabled = false;
+      this.bypass.dataset.applied = String(this.bypass.checked);
     }
   }
 

@@ -3949,7 +3949,7 @@
           "type": "array"
         },
         "scanning": {
-          "description": "A scan is running; the list refreshes when it ends.",
+          "description": "A scan is running or this listing started one: list again for\nits rows.",
           "type": "boolean"
         }
       },

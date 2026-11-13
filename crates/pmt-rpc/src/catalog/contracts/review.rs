@@ -185,7 +185,8 @@ pub struct ProjectsList {
     pub inferred: Vec<RepoRow>,
     /// Repositories the background scan found that are no project's.
     pub discovered: Vec<RepoRow>,
-    /// A scan is running; the list refreshes when it ends.
+    /// A scan is running or this listing started one: list again for
+    /// its rows.
     pub scanning: bool,
 }
 

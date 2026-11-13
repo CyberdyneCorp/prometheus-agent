@@ -146,9 +146,12 @@ test("the context meter's categories sum to its count", async ({ page }) => {
 test("approval bypass lasts for its session only", async ({ page }) => {
   await openDesktop(page);
   await say(page, "in session a");
+  // `/yolo` waits for no turn: the switch is used once the answer is in.
+  await expect(answers(page)).toHaveCount(1);
   await page.check("input[name=bypass]");
   await page.click(".confirm button[name=confirm]");
   await expect(page.locator("input[name=bypass]")).toBeChecked();
+  await expect(page.locator("input[name=bypass]")).toHaveAttribute("data-applied", "true");
   await type(page, "/approvals");
   await expect(page.locator(".problems")).toContainText("YOLO");
   await page.click("button[name=new-chat]");
@@ -157,6 +160,18 @@ test("approval bypass lasts for its session only", async ({ page }) => {
   await type(page, "/approvals");
   await expect(page.locator(".problems")).not.toContainText("YOLO");
   await expect(page.locator(".problems")).toContainText("approvals");
+});
+
+test("a bypass switched on while a turn runs is refused and the switch goes back", async ({ page }) => {
+  await openDesktop(page);
+  await say(page, "slow");
+  await page.check("input[name=bypass]");
+  await page.click(".confirm button[name=confirm]");
+  const bypass = page.locator("input[name=bypass]");
+  await expect(bypass).toHaveAttribute("data-applied", "false");
+  await expect(bypass).not.toBeChecked();
+  await expect(page.locator(".bypass-note")).toContainText("/yolo is unavailable while the agent is working");
+  await page.click("button[name=stop]");
 });
 
 test("a model picked for new chats leaves the profile's default alone", async ({ page }) => {
