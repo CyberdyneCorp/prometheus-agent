@@ -59,6 +59,8 @@ export class SettingsPanel {
   private readonly status = h("p", { class: "muted", role: "status" });
   private readonly body = h("div", { class: "settings-page" });
   private page: Page = "subagents";
+  /** Each render's number: a slower, older render never replaces a newer one. */
+  private renders = 0;
   private appliesTo: string;
 
   constructor(
@@ -88,9 +90,14 @@ export class SettingsPanel {
 
   /** Shows `page`; whatever the previous page had not applied is gone. */
   async show(page: Page): Promise<void> {
+    const render = ++this.renders;
     this.page = page;
+    delete this.body.dataset.ready;
+    const content = page === "subagents" ? await this.subagents() : h("p", { class: "muted" }, `Profile ${this.client.profile}`);
+    if (render !== this.renders) return;
     this.body.dataset.page = page;
-    this.body.replaceChildren(page === "subagents" ? await this.subagents() : h("p", { class: "muted" }, `Profile ${this.client.profile}`));
+    this.body.replaceChildren(content);
+    this.body.dataset.ready = "true";
   }
 
   private async reload(): Promise<void> {

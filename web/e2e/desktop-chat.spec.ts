@@ -194,12 +194,16 @@ test("an unapplied subagent route is discarded when the page is left", async ({ 
   const sockets = await openDesktop(page);
   const before = config();
   const patches = sent(sockets, "config.patch").length;
+  const ready = (name: string) => expect(page.locator(`.settings-page[data-page="${name}"][data-ready="true"]`)).toHaveCount(1);
   await page.click('button[name=settings-page][data-page="subagents"]');
+  await ready("subagents");
   await page.selectOption("select[name=provider]", "mock");
   await page.click("form.settings-route button[type=submit]");
   await expect(page.locator("form.settings-route .field-error")).toHaveText("Choose a model for this provider, or Use parent model.");
   await page.click('button[name=settings-page][data-page="general"]');
+  await ready("general");
   await page.click('button[name=settings-page][data-page="subagents"]');
+  await ready("subagents");
   await expect(page.locator("select[name=provider]")).toHaveValue("");
   expect(sent(sockets, "config.patch")).toHaveLength(patches);
   expect(config()).toBe(before);

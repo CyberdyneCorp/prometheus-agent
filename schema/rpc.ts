@@ -113,6 +113,46 @@ export interface ApprovalRespondParams {
   replacement?: string | null;
 }
 
+/** One image, file or link a session produced. */
+export interface Artifact {
+  /** The tool call that wrote or produced it. */
+  call_id?: string | null;
+  /** When (RFC 3339). */
+  created_at: string;
+  /** Stable id (`<message id>:<n>`). */
+  id: string;
+  /** `image`, `file` or `link`. */
+  kind: string;
+  /** The session that produced it. */
+  session_id: string;
+  /** Its title (empty when untitled). */
+  session_title: string;
+  /** That call's tool. */
+  tool?: string | null;
+  /** The path (as the session names it) or the URL. */
+  value: string;
+}
+
+/** `artifacts.list` result. */
+export interface ArtifactList {
+  /** Newest first. */
+  artifacts: Array<Artifact>;
+  /** The next page's cursor, while there is one. */
+  next_cursor?: string | null;
+}
+
+/** `artifacts.list` params. */
+export interface ArtifactsListParams {
+  /** Where the previous page ended. */
+  cursor?: string | null;
+  /** The profile (required when the connection is granted several). */
+  profile?: string | null;
+  /** Only artifacts whose value or session title contains this text. */
+  query?: string | null;
+  /** Only this session's artifacts (the composer's suggestions). */
+  session_id?: string | null;
+}
+
 /** `session.attach` params. */
 export interface AttachParams {
   /** The daemon epoch `last_seen_seq` belongs to; another epoch than the daemon's answers `truncated: true` and replays nothing. */
@@ -658,6 +698,8 @@ export interface FsEntry {
 
 /** `fs.read` result. */
 export interface FsFile {
+  /** Where the file is on this machine, when the session's backend is the host's filesystem (the guarded opener may open it). */
+  absolute?: string | null;
   /** The bytes read, base64. */
   data: string;
   /** `text`, `image` or `binary`. */
@@ -670,6 +712,8 @@ export interface FsFile {
   size: number;
   /** Only the first `max_bytes` are in `data`. */
   truncated: boolean;
+  /** The session's workspace on this machine, with `absolute`. */
+  workspace?: string | null;
 }
 
 /** `fs.list` params. */
@@ -1065,6 +1109,8 @@ export type PromptImage = {
   path: string;
 } | {
   blob: string;
+} | {
+  data: string;
 };
 
 /** `queue.edit` params. */
@@ -1715,6 +1761,7 @@ export interface WorktreeStatus {
 
 export interface Methods {
   "approval.respond": { params: ApprovalRespondParams; result: Ack };
+  "artifacts.list": { params: ArtifactsListParams; result: ArtifactList };
   "autoprune.offer": { params: AutopruneOfferParams; result: AutopruneOffer };
   "bot.chat.ensure": { params: ProfileParams; result: BotChat };
   "command.dispatch": { params: DispatchParams; result: Dispatched };

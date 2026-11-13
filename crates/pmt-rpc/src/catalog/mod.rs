@@ -171,6 +171,7 @@ pub fn declare_builtin(d: &mut Declarations) {
         .method::<c::QueueResume>()
         .method::<c::FsList>()
         .method::<c::FsRead>()
+        .method::<c::ArtifactsListCall>()
         .server_request::<c::ApprovalAsk>()
         .server_request::<c::ClarifyAsk>()
         .server_request::<c::SecretAsk>()

@@ -13,7 +13,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const check = process.argv.includes("--check");
 
 /** Bundles `entry` and returns the files of its dist, by name. */
-async function bundle(entry, dist, styles, html) {
+async function bundle(entry, dist, styles, html, scripts = {}) {
   const result = await build({
     entryPoints: { app: entry },
     bundle: true,
@@ -29,6 +29,12 @@ async function bundle(entry, dist, styles, html) {
   const outputs = new Map(result.outputFiles.map((f) => [f.path.split(/[\\/]/).pop(), f.contents]));
   outputs.set("app.css", Buffer.concat(styles.map((s) => readFileSync(s))));
   outputs.set("index.html", readFileSync(html));
+  // Scripts injected into other documents: one classic script each, its
+  // names kept out of the page's globals.
+  for (const [name, path] of Object.entries(scripts)) {
+    const script = await build({ entryPoints: [path], bundle: true, format: "iife", target: "es2022", minify: true, legalComments: "none", charset: "utf8", write: false, logLevel: "warning" });
+    outputs.set(`${name}.js`, script.outputFiles[0].contents);
+  }
   return outputs;
 }
 
@@ -67,6 +73,8 @@ const app = emit(
     join(desktop, "dist"),
     [join(here, "src/styles.css"), join(desktop, "src/desktop.css")],
     join(desktop, "src/index.html"),
+    // Installed by the shell in every frame (the preview's annotate agent).
+    { annotate: join(desktop, "src/annotate-agent.ts") },
   ),
   "apps/desktop/dist",
 );

@@ -140,6 +140,7 @@ pub const INDEX: &[IndexEntry] = &[
     method("queue.resume", "desktop-app"),
     long("fs.list", "desktop-app"),
     long("fs.read", "desktop-app"),
+    long("artifacts.list", "desktop-app"),
     // messaging-gateway
     method("pairing.approve", "messaging-gateway"),
     // security-boundaries

@@ -5,10 +5,12 @@
 // here submits, navigates or focuses.
 
 /** An image staged in the composer: a file the daemon reads when the
- *  message is sent (picked with the OS file picker). */
+ *  message is sent (picked with the OS file picker), or a snapshot the
+ *  window made (a `data:` URL, an annotation's). */
 export interface StagedImage {
   name: string;
-  path: string;
+  path?: string;
+  data?: string;
 }
 
 export interface Draft {

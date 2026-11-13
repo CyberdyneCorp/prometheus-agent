@@ -3,6 +3,7 @@
 // `window.__TAURI__` whose `shell` command goes to the real shell core and
 // whose events a spec emits as the shell would.
 import { expect, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { env } from "./helpers";
 
@@ -18,7 +19,11 @@ export async function openDesktop(page: Page, label = "main", hash = ""): Promis
   // The page's origin is not loopback in Chromium's eyes; the webview's
   // own origin may dial the loopback daemon, as the native app does.
   await page.context().grantPermissions(["local-network-access"], { origin: ORIGIN });
+  // The shell installs the annotate agent in every frame of the webview.
+  await page.addInitScript({ content: readFileSync(`${DIST}annotate.js`, "utf8") });
   await page.addInitScript((windowLabel: string) => {
+    // The shell's bridge exists in the app's own document only.
+    if (window.top !== window) return;
     const listeners = new Map<string, ((event: { payload: unknown }) => void)[]>();
     const w = window as unknown as Record<string, unknown>;
     w.__TAURI__ = {

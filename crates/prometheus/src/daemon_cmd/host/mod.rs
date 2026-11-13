@@ -34,6 +34,7 @@ use super::turn::{SecretsToClients, SudoToClients, ToClients, approvals, clarify
 mod adapter_pairing;
 mod api;
 mod api_profile;
+mod artifacts;
 mod automation;
 mod commands;
 mod crash;
@@ -1042,6 +1043,14 @@ impl Host for DaemonHost {
             self.fs_read_of(&self.profile(profile)?, params, &link)
                 .await
         })
+    }
+
+    fn artifacts<'a>(
+        &'a self,
+        profile: &'a str,
+        params: pmt_rpc::contracts::ArtifactsListParams,
+    ) -> HostFuture<'a, pmt_rpc::contracts::ArtifactList> {
+        Box::pin(async move { artifacts::list(&*self.profile(profile)?, &params) })
     }
 
     fn bot_chat<'a>(&'a self, profile: &'a str) -> HostFuture<'a, (String, bool)> {

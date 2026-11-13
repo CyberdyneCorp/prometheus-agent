@@ -246,6 +246,125 @@
       ],
       "type": "object"
     },
+    "Artifact": {
+      "additionalProperties": false,
+      "description": "One image, file or link a session produced.",
+      "properties": {
+        "call_id": {
+          "default": null,
+          "description": "The tool call that wrote or produced it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "created_at": {
+          "description": "When (RFC 3339).",
+          "type": "string"
+        },
+        "id": {
+          "description": "Stable id (`<message id>:<n>`).",
+          "type": "string"
+        },
+        "kind": {
+          "description": "`image`, `file` or `link`.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session that produced it.",
+          "type": "string"
+        },
+        "session_title": {
+          "description": "Its title (empty when untitled).",
+          "type": "string"
+        },
+        "tool": {
+          "default": null,
+          "description": "That call's tool.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value": {
+          "description": "The path (as the session names it) or the URL.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "value",
+        "session_id",
+        "session_title",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "ArtifactList": {
+      "additionalProperties": false,
+      "description": "`artifacts.list` result.",
+      "properties": {
+        "artifacts": {
+          "description": "Newest first.",
+          "items": {
+            "$ref": "#/$defs/Artifact"
+          },
+          "type": "array"
+        },
+        "next_cursor": {
+          "default": null,
+          "description": "The next page's cursor, while there is one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "artifacts"
+      ],
+      "type": "object"
+    },
+    "ArtifactsListParams": {
+      "additionalProperties": false,
+      "description": "`artifacts.list` params.",
+      "properties": {
+        "cursor": {
+          "default": null,
+          "description": "Where the previous page ended.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile (required when the connection is granted several).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "query": {
+          "default": null,
+          "description": "Only artifacts whose value or session title contains this text.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_id": {
+          "default": null,
+          "description": "Only this session's artifacts (the composer's suggestions).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "AttachParams": {
       "additionalProperties": false,
       "description": "`session.attach` params.",
@@ -1894,6 +2013,14 @@
       "additionalProperties": false,
       "description": "`fs.read` result.",
       "properties": {
+        "absolute": {
+          "default": null,
+          "description": "Where the file is on this machine, when the session's backend is\nthe host's filesystem (the guarded opener may open it).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "data": {
           "description": "The bytes read, base64.",
           "type": "string"
@@ -1923,6 +2050,14 @@
         "truncated": {
           "description": "Only the first `max_bytes` are in `data`.",
           "type": "boolean"
+        },
+        "workspace": {
+          "default": null,
+          "description": "The session's workspace on this machine, with `absolute`.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -3048,6 +3183,19 @@
           },
           "required": [
             "blob"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The image itself, as a `data:<mime>;base64,` URL (a snapshot the\ndesktop made, such as an annotation's).",
+          "properties": {
+            "data": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "data"
           ],
           "type": "object"
         }
@@ -5030,6 +5178,17 @@
       },
       "result": {
         "$ref": "#/$defs/Ack"
+      },
+      "since": "1.0"
+    },
+    "artifacts.list": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/ArtifactsListParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ArtifactList"
       },
       "since": "1.0"
     },

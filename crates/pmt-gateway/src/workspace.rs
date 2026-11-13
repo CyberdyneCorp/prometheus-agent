@@ -18,7 +18,8 @@ use crate::server::Call;
 pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
     router
         .register::<c::FsList, _, _>(catalog, list)?
-        .register::<c::FsRead, _, _>(catalog, read)?;
+        .register::<c::FsRead, _, _>(catalog, read)?
+        .register::<c::ArtifactsListCall, _, _>(catalog, artifacts)?;
     Ok(())
 }
 
@@ -38,6 +39,21 @@ async fn read(call: Call, params: c::FsReadParams) -> Result<c::FsFile, RpcError
     call.server
         .host()
         .fs_read(&profile, params, link)
+        .await
+        .map_err(|e| rpc(&e))
+}
+
+async fn artifacts(
+    call: Call,
+    params: c::ArtifactsListParams,
+) -> Result<c::ArtifactList, RpcError> {
+    let profile = crate::methods::profile_for(&call, params.profile.as_deref())?;
+    if let Some(session_id) = &params.session_id {
+        attached_profile(&call, session_id, Need::Attached)?;
+    }
+    call.server
+        .host()
+        .artifacts(&profile, params)
         .await
         .map_err(|e| rpc(&e))
 }

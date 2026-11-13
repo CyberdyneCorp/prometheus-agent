@@ -79,6 +79,8 @@ export class ModelPicker {
   /** Lists the catalog for `sessionId` (null: the next new chat). */
   async load(sessionId: string | null): Promise<void> {
     this.sessionId = sessionId;
+    // Before the first connection: the reconnect lists them.
+    if (this.client.reconnecting) return;
     const params = sessionId ? { session_id: sessionId } : { profile: this.client.profile };
     try {
       this.options = await this.client.call<ModelOptions>("model.options", params);

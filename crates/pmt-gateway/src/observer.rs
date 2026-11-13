@@ -46,6 +46,7 @@ const READS: &[&str] = &[
     "queue.list",
     "fs.list",
     "fs.read",
+    "artifacts.list",
 ];
 
 /// `-32002 session.observer` when an observer-only connection calls a

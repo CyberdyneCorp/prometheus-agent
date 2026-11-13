@@ -47,6 +47,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | Name | Owner | Since | Params | Result |
 |---|---|---|---|---|
 | `approval.respond` | `tool-system` | 1.0 | [`ApprovalRespondParams`](#approvalrespondparams) | [`Ack`](#ack) |
+| `artifacts.list` | `desktop-app` | 1.0 | [`ArtifactsListParams`](#artifactslistparams) | [`ArtifactList`](#artifactlist) |
 | `autoprune.offer` | `session-storage` | 1.0 | [`AutopruneOfferParams`](#autopruneofferparams) | [`AutopruneOffer`](#autopruneoffer) |
 | `bot.chat.ensure` | `bot-mode` | 1.0 | [`ProfileParams`](#profileparams) | [`BotChat`](#botchat) |
 | `bot.create` | `bot-mode` | 1.0 | not served yet | |
@@ -269,6 +270,41 @@ Why a call needs approval.
 | `decision` | [`Decision`](#decision) | yes | The decision. |
 | `id` | string | yes | The `approval.request` id (`srq-<12 hex>`). |
 | `replacement` | string or null | no | An edited command to run instead. |
+
+### `Artifact`
+
+One image, file or link a session produced.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `call_id` | string or null | no | The tool call that wrote or produced it. |
+| `created_at` | string | yes | When (RFC 3339). |
+| `id` | string | yes | Stable id (`<message id>:<n>`). |
+| `kind` | string | yes | `image`, `file` or `link`. |
+| `session_id` | string | yes | The session that produced it. |
+| `session_title` | string | yes | Its title (empty when untitled). |
+| `tool` | string or null | no | That call's tool. |
+| `value` | string | yes | The path (as the session names it) or the URL. |
+
+### `ArtifactList`
+
+`artifacts.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `artifacts` | array of [`Artifact`](#artifact) | yes | Newest first. |
+| `next_cursor` | string or null | no | The next page's cursor, while there is one. |
+
+### `ArtifactsListParams`
+
+`artifacts.list` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `cursor` | string or null | no | Where the previous page ended. |
+| `profile` | string or null | no | The profile (required when the connection is granted several). |
+| `query` | string or null | no | Only artifacts whose value or session title contains this text. |
+| `session_id` | string or null | no | Only this session's artifacts (the composer's suggestions). |
 
 ### `AttachParams`
 
@@ -835,12 +871,14 @@ One listed entry.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `absolute` | string or null | no | Where the file is on this machine, when the session's backend is the host's filesystem (the guarded opener may open it). |
 | `data` | string | yes | The bytes read, base64. |
 | `kind` | string | yes | `text`, `image` or `binary`. |
 | `mime` | string or null | no | The media type of an image (`image/png`...). |
 | `path` | string | yes | The file as the session names it. |
 | `size` | integer | yes | Its whole size in bytes. |
 | `truncated` | boolean | yes | Only the first `max_bytes` are in `data`. |
+| `workspace` | string or null | no | The session's workspace on this machine, with `absolute`. |
 
 ### `FsListParams`
 
@@ -1224,6 +1262,7 @@ An image attached to a prompt: a file the daemon reads (checked like `chat --ima
 |---|---|
 | `` | An absolute path on the daemon's machine. |
 | `` | A blob reference (`blob:sha256:<hex>`) of one of the session's earlier user messages. |
+| `` | The image itself, as a `data:<mime>;base64,` URL (a snapshot the desktop made, such as an annotation's). |
 
 ### `QueueEditParams`
 

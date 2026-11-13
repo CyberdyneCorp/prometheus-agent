@@ -738,6 +738,9 @@ pub enum PromptImage {
     /// A blob reference (`blob:sha256:<hex>`) of one of the session's
     /// earlier user messages.
     Blob(String),
+    /// The image itself, as a `data:<mime>;base64,` URL (a snapshot the
+    /// desktop made, such as an annotation's).
+    Data(String),
 }
 
 /// The `session.event` type of a notice a command posts after it answered

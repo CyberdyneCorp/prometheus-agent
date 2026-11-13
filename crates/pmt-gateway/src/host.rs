@@ -513,6 +513,16 @@ pub trait Host: Send + Sync + 'static {
         Box::pin(async { Err(not_served("this host has no session workspaces")) })
     }
 
+    /// The images, files and links `profile`'s sessions produced
+    /// (`artifacts.list`).
+    fn artifacts<'a>(
+        &'a self,
+        _profile: &'a str,
+        _params: pmt_rpc::contracts::ArtifactsListParams,
+    ) -> HostFuture<'a, pmt_rpc::contracts::ArtifactList> {
+        Box::pin(async { Err(not_served("this host keeps no transcripts")) })
+    }
+
     /// `profile`'s canonical Bot Chat, created when it has none
     /// (`bot.chat.ensure`); `true` when created now.
     fn bot_chat<'a>(&'a self, _profile: &'a str) -> HostFuture<'a, (String, bool)> {

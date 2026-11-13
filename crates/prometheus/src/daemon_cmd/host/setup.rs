@@ -189,9 +189,15 @@ pub(super) async fn input(
 ) -> Result<TurnInput, Error> {
     let mut files = Vec::new();
     let mut held = Vec::new();
-    for image in &params.images {
+    for (n, image) in params.images.iter().enumerate() {
         match image {
             PromptImage::Path(path) => files.push(attach::load(Path::new(path))?),
+            PromptImage::Data(url) => {
+                files.push(attach::from_data_url(
+                    url,
+                    &format!("snapshot-{}.png", n + 1),
+                )?);
+            }
             PromptImage::Blob(blob) => held.push(held_image(factory, live.id, blob)?),
         }
     }

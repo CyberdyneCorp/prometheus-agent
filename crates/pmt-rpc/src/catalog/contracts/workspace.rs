@@ -87,6 +87,13 @@ pub struct FsFile {
     pub mime: Option<String>,
     /// The bytes read, base64.
     pub data: String,
+    /// Where the file is on this machine, when the session's backend is
+    /// the host's filesystem (the guarded opener may open it).
+    #[serde(default)]
+    pub absolute: Option<String>,
+    /// The session's workspace on this machine, with `absolute`.
+    #[serde(default)]
+    pub workspace: Option<String>,
 }
 
 method!(/// `fs.list`: one directory of the session's workspace, listed
@@ -96,3 +103,60 @@ method!(/// `fs.read`: the start of one file of the session, read through the
     /// session's own terminal backend (images the session's tools made,
     /// previews).
     FsRead = "fs.read" (FsReadParams) -> FsFile);
+
+/// `artifacts.list` params.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ArtifactsListParams {
+    /// The profile (required when the connection is granted several).
+    #[serde(default)]
+    pub profile: Option<String>,
+    /// Only artifacts whose value or session title contains this text.
+    #[serde(default)]
+    pub query: Option<String>,
+    /// Only this session's artifacts (the composer's suggestions).
+    #[serde(default)]
+    pub session_id: Option<String>,
+    /// Where the previous page ended.
+    #[serde(default)]
+    pub cursor: Option<String>,
+}
+
+/// One image, file or link a session produced.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Artifact {
+    /// Stable id (`<message id>:<n>`).
+    pub id: String,
+    /// `image`, `file` or `link`.
+    pub kind: String,
+    /// The path (as the session names it) or the URL.
+    pub value: String,
+    /// The session that produced it.
+    pub session_id: String,
+    /// Its title (empty when untitled).
+    pub session_title: String,
+    /// When (RFC 3339).
+    pub created_at: String,
+    /// The tool call that wrote or produced it.
+    #[serde(default)]
+    pub call_id: Option<String>,
+    /// That call's tool.
+    #[serde(default)]
+    pub tool: Option<String>,
+}
+
+/// `artifacts.list` result.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ArtifactList {
+    /// Newest first.
+    pub artifacts: Vec<Artifact>,
+    /// The next page's cursor, while there is one.
+    #[serde(default)]
+    pub next_cursor: Option<String>,
+}
+
+method!(/// `artifacts.list`: the images, files and links the profile's
+    /// successful tool calls and replies produced, newest first.
+    ArtifactsListCall = "artifacts.list" (ArtifactsListParams) -> ArtifactList);

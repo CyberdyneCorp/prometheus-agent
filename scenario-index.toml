@@ -4194,6 +4194,22 @@ capabilities = [
 [desktop-app."Subagent route settings are drafts until applied"]
 "Leaving without applying" = { tests = ["crates/prometheus/tests/desktop_chat.rs::desktop_chat_composer_queue_status_bar_and_model_picker"], note = "a provider change without a model is refused at Apply; leaving for the General page discards the draft, no config.patch is sent and config.toml is unchanged" }
 
+# Group 63.2 (desktop panes). desktop_panes.rs drives desktop-panes.spec.ts.
+[desktop-app."File browser pane"]
+"Container session" = { tests = ["crates/prometheus/src/daemon_cmd/host/workspace_fs.rs::a_container_sessions_entries_come_from_the_container"], note = "fs.list/fs.read go through the session's own FileSession; the test gives it a container filesystem (a fake backend that is not the host's) and the entries of src/ come from it, its .gitignore applies and no host path is offered to the opener. A real container is not run here (no Docker on CI)" }
+"Large file preview" = { tests = ["crates/prometheus/tests/desktop_panes.rs::desktop_files_artifacts_preview_and_annotations"], note = "a 40 MiB big.log in the session workspace shows exactly its first 2 MiB with the notice; Open externally reaches the shell's guarded opener (open_path)" }
+
+[desktop-app."Artifacts gallery and suggestions"]
+"Dismissed suggestion stays dismissed" = { tests = ["crates/prometheus/tests/desktop_panes.rs::desktop_files_artifacts_preview_and_annotations"], note = "artifacts.list (session) drives the suggestions; after a reload the dismissed report.html stays hidden, the file is still on disk, the Artifacts view lists it with a jump to its session, and a later write brings the suggestion back" }
+
+[desktop-app."Preview rail and in-app browser"]
+"Hidden page keeps its form state" = { tests = ["crates/prometheus/tests/desktop_panes.rs::desktop_files_artifacts_preview_and_annotations"], note = "the preview is a sandboxed frame of the page's own origin in the window (no popups, downloads or top navigation); Hide keeps it mounted and inert, the frame does not load again" }
+"Page calls a native command" = { tests = ["crates/prometheus/tests/desktop_panes.rs::desktop_files_artifacts_preview_and_annotations"], note = "the shell bridge exists only in the app's own document (the Tauri capability grants `shell` to the app origin only); the page's reveal_in_folder fails and nothing reaches the shell" }
+
+[desktop-app."Annotate mode in the in-app browser"]
+"Password field redaction" = { tests = ["crates/prometheus/tests/desktop_panes.rs::desktop_files_artifacts_preview_and_annotations"], note = "the agent (dist/annotate.js, installed in every frame) redacts in the page: the password and hidden values and a token-like attribute become [redacted]; the attached markup keeps the password field; the snapshot is a rasterized image of the redacted element" }
+"Pins do not send" = { tests = ["crates/prometheus/tests/desktop_panes.rs::desktop_files_artifacts_preview_and_annotations"], note = "three pins saved (one deleted keeps the others' numbers) and Add 1 comment only fill the composer; no prompt.submit is sent" }
+
 [distribution-and-update."Desktop packages and signing"]
 "Store install refuses self-update" = ["crates/prometheus/tests/update_channels.rs::desktop_packages_stamp_their_owner_and_the_cli_is_the_bundled_binary"]
 "CLI and desktop cannot skew" = ["crates/prometheus/tests/update_channels.rs::desktop_packages_stamp_their_owner_and_the_cli_is_the_bundled_binary"]

@@ -300,6 +300,37 @@ stay a draft until Apply, which writes one `config.patch`; Cancel, another
 page or another `Applies to` discards them, and a provider without a
 model is refused unless `Use parent model` is checked.
 
+## Workspace panes
+
+The right sidebar holds Settings, Files, Artifacts and Preview.
+
+**Files** lists the session's workspace through the session's own
+terminal backend (`fs.list {session_id, path, show_ignored}`), so a
+container session shows the container's files; `.gitignore`d entries
+show only with *Show ignored files*. Text files up to 2 MiB and images
+preview inline (`fs.read`); a larger file shows its first 2 MiB with
+*Open externally*, which goes through the guarded file opener (local
+sessions only). Expanded folders refresh after each tool call that
+writes, and a tool row that names a file offers *Reveal in file tree*.
+
+**Artifacts** lists the images, files and links successful tool calls and
+answers produced (`artifacts.list {profile, query, cursor}`), each with
+its session and Preview, Download, Open in browser and Copy. Files written
+in the current session are suggested above the composer; a dismissed
+suggestion stays dismissed (per device) until the file is written again.
+
+**Preview** shows web pages (`http`, `https`) and workspace files in a
+sandboxed frame of its own origin: it cannot reach the app's native
+commands, storage or connection, and popups and downloads are refused.
+*Hide* keeps the page and its state; *Close* releases it. In *Annotate*
+mode a click or a drag picks an element; the agent the shell installs in
+every frame redacts password and hidden values and key- or token-like
+attributes in the page before describing the pick. Each saved pin keeps
+its number; *Add N comments* puts each pin's snapshot (a PNG
+`data:` image), selector, markup and layout styles into the composer,
+grouped by top-level element beyond 5 pins, and sends nothing. Switching
+chats clears the pins.
+
 ## Building and testing
 
 The shell's logic lives in `crates/pmt-desktop` (built and tested on

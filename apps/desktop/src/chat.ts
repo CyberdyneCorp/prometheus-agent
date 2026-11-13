@@ -61,6 +61,8 @@ export class ChatView {
   sessionId: string | null = null;
   /** A prompt of `sessionId` was submitted (a turn runs). */
   onSubmitted: (sessionId: string) => void = () => {};
+  /** The window shows another chat (`null`: a draft); the panes follow. */
+  onFollow: (sessionId: string | null) => void = () => {};
   private cwd: string | null = null;
   /** The open session's live output reached this window since the last
    *  turn ended. */
@@ -116,6 +118,7 @@ export class ChatView {
     this.composer.show(NEW_CHAT);
     void this.queue.follow(null);
     void this.status.follow(null);
+    this.onFollow(null);
     void this.picker.load(null);
   }
 
@@ -127,17 +130,22 @@ export class ChatView {
     this.el.dataset.session = sessionId;
     this.problems.replaceChildren();
     this.composer.show(sessionId);
+    // Another chat opened meanwhile (a deep link, a click): this one stops.
+    const current = () => this.sessionId === sessionId;
     try {
       const attached = await this.client.call<Attached>("session.resume", { session_id: sessionId });
+      if (!current()) return;
       this.client.watch(sessionId, attached.latest_seq, attached.epoch);
       await this.reload();
+      if (!current()) return;
       const saved = this.scroll.get(sessionId);
       if (saved !== undefined) this.transcript.restore(saved);
       const unsent = this.drafts.takeUnacknowledged(sessionId);
       if (unsent) this.composer.offerImageDraft(unsent);
       await Promise.all([this.queue.follow(sessionId), this.status.follow(sessionId), this.picker.load(sessionId)]);
+      if (current()) this.onFollow(sessionId);
     } catch (err) {
-      this.resumeFailed(sessionId, err);
+      if (current()) this.resumeFailed(sessionId, err);
     }
   }
 
@@ -161,10 +169,23 @@ export class ChatView {
 
   /** Reloads the stored transcript and the command catalog. */
   async reload(): Promise<void> {
-    if (!this.sessionId) return;
-    this.transcript.load(await this.stored());
-    const catalog = await this.client.call<{ commands: PaletteEntry[] }>("commands.catalog", { session_id: this.sessionId });
+    const sessionId = this.sessionId;
+    if (!sessionId) return;
+    const messages = await this.stored();
+    const catalog = await this.client.call<{ commands: PaletteEntry[] }>("commands.catalog", { session_id: sessionId });
+    if (this.sessionId !== sessionId) return;
+    this.transcript.load(messages);
     this.composer.setCatalog(catalog.commands);
+  }
+
+  /** Annotation comments for the composer (never sent by themselves). */
+  attachComments(text: string, snapshots: string[]): void {
+    this.composer.attachComments(text, snapshots);
+  }
+
+  /** Puts `el` (the preview suggestions) above the composer. */
+  aboveComposer(el: HTMLElement): void {
+    this.queue.el.before(el);
   }
 
   /** Re-reads what a reconnect may have changed (the daemon-held queue). */
@@ -232,7 +253,7 @@ export class ChatView {
       const sessionId = this.sessionId ?? "";
       this.drafts.sending(sessionId, { text, images });
       this.transcript.message("user", text);
-      await this.client.call("prompt.submit", { session_id: sessionId, text, files: [], images: images.map((i) => ({ path: i.path })) });
+      await this.client.call("prompt.submit", { session_id: sessionId, text, files: [], images: images.map((i) => (i.data ? { data: i.data } : { path: i.path ?? "" })) });
       // The chat is a session once its first prompt was admitted.
       this.el.dataset.session = sessionId;
       this.drafts.acknowledged(sessionId);
@@ -265,6 +286,7 @@ export class ChatView {
     void this.queue.follow(created.session_id);
     void this.status.follow(created.session_id);
     void this.picker.load(created.session_id);
+    this.onFollow(created.session_id);
   }
 
   /** Runs a slash command; false when `text` is no command (a prompt). */

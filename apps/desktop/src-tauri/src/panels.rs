@@ -58,7 +58,12 @@ fn ids(panels: &[(String, Listing)]) -> Vec<String> {
     ids
 }
 
-/// Lets the windows frame exactly the panels' origins.
+/// What `tauri.conf.json` lets the window frame: the preview rail's web
+/// pages and workspace files (spec: desktop-app, Preview rail and in-app
+/// browser).
+pub(crate) const PREVIEW_FRAMES: &str = "frame-src http: https: blob:";
+
+/// Lets the windows frame the panels' origins too.
 pub(crate) fn allow_frames<R: Runtime>(
     context: &mut tauri::Context<R>,
     panels: &[(String, Listing)],
@@ -75,8 +80,8 @@ pub(crate) fn allow_frames<R: Runtime>(
     }
     if let Some(Csp::Policy(policy)) = &mut context.config_mut().app.security.csp {
         *policy = policy.replace(
-            "frame-src 'none'",
-            &format!("frame-src {}", origins.join(" ")),
+            PREVIEW_FRAMES,
+            &format!("{PREVIEW_FRAMES} {}", origins.join(" ")),
         );
     }
 }

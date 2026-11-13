@@ -69,6 +69,7 @@ test("two windows opening the same bot during a restart share one bot chat", asy
 
 test("inherit from main agent clears the subagent route in one patch", async ({ page }) => {
   const sockets = await openDesktop(page);
+  await expect(page.locator('.settings-page[data-ready="true"]')).toHaveCount(1);
   await page.selectOption("select[name=route]", "inherit");
   await page.click("form.settings-route button[type=submit]");
   await expect(page.locator("section.settings")).toContainText("Saved");

@@ -107,6 +107,15 @@ export class Composer {
     this.strip.replaceChildren(h("p", { class: "notice info", role: "status" }, restore));
   }
 
+  /** Annotation comments join the draft (text and snapshots); nothing
+   *  is sent until the user presses Send. */
+  attachComments(text: string, snapshots: string[]): void {
+    this.input.value = this.input.value ? `${this.input.value}\n\n${text}` : text;
+    this.images.push(...snapshots.map((data, i) => ({ name: `snapshot-${i + 1}.png`, data })));
+    this.renderStaged();
+    this.save();
+  }
+
   /** A message that was not sent comes back, unless the user already
    *  typed something new. */
   putBack(draft: Draft): void {

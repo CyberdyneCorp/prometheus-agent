@@ -6,7 +6,7 @@
 // (read through the session's own connection, never from a local path),
 // and following new output only while the view is at the bottom.
 
-import type { TranscriptMessage } from "../../../schema/rpc";
+import type { Envelope, TranscriptMessage } from "../../../schema/rpc";
 import { Transcript } from "../../../web/src/components/transcript";
 import { h } from "../../../web/src/lib/dom";
 
@@ -46,6 +46,10 @@ export class DesktopTranscript extends Transcript {
   readonly frame: HTMLElement;
   /** Reads an image of the session through its connection (a data URL). */
   fetchImage: (path: string) => Promise<string> = () => Promise.reject(new Error("no session"));
+  /** Reveal in file tree, for a file a tool call named. */
+  onReveal: ((path: string) => void) | null = null;
+  /** The file each running tool call names. */
+  private readonly callPaths = new Map<string, string>();
   /** The session's stored transcript, fresh (a jump re-reads it). */
   source: () => Promise<TranscriptMessage[]> = () => Promise.resolve([]);
   private messages: TranscriptMessage[] = [];
@@ -126,9 +130,26 @@ export class DesktopTranscript extends Transcript {
     if (first) this.el.querySelector(`[data-prompt="${first}"]`)?.scrollIntoView({ block: "start" });
   }
 
+  override apply(envelope: Envelope): void {
+    const data = envelope.data as { type?: string; payload?: { call_id?: string; arguments?: unknown } };
+    if (envelope.event === "session.event" && data.type === "tool.call") {
+      const args = typeof data.payload?.arguments === "string" ? safeJson(data.payload.arguments) : data.payload?.arguments;
+      const path = (args as { path?: unknown } | undefined)?.path;
+      if (typeof path === "string") this.callPaths.set(String(data.payload?.call_id), path);
+    }
+    super.apply(envelope);
+  }
+
   protected override toolResult(p: Record<string, unknown>): void {
     super.toolResult(p);
     const row = this.tools.get(String(p.call_id));
+    const named = this.callPaths.get(String(p.call_id));
+    if (row && named && this.onReveal) {
+      const reveal = h("button", { type: "button", name: "reveal", "data-path": named }, "Reveal in file tree");
+      const open = this.onReveal;
+      reveal.addEventListener("click", () => open(named));
+      row.append(reveal);
+    }
     const paths = p.ok ? imagePaths(String(p.output ?? "")) : [];
     if (!row || paths.length === 0) return;
     const images = h("div", { class: "tool-images" });
@@ -181,6 +202,14 @@ export class DesktopTranscript extends Transcript {
         return marker;
       }),
     );
+  }
+}
+
+function safeJson(text: string): unknown {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return undefined;
   }
 }
 

@@ -57,20 +57,49 @@ pub fn load(path: &Path) -> Result<Image, Error> {
         return Err(fail("larger than 20 MiB".to_owned()));
     }
     let bytes = std::fs::read(path).map_err(|e| fail(e.to_string()))?;
-    let not_accepted = || fail("not a PNG, JPEG, GIF or WebP image".to_owned());
-    let data = ImageData::sniff(bytes).map_err(|_| not_accepted())?;
-    if !ACCEPTED.contains(&data.mime.as_str()) {
-        return Err(not_accepted());
-    }
     let name = path.file_name().map_or_else(
         || path.display().to_string(),
         |n| n.to_string_lossy().into_owned(),
     );
-    Ok(Image {
-        path: path.to_owned(),
-        name,
-        data,
-    })
+    checked(path.to_owned(), name, bytes)
+}
+
+/// An image sent inline as a `data:<mime>;base64,` URL (the desktop's
+/// annotation snapshots), checked like a file; `name` is shown in notes.
+///
+/// # Errors
+///
+/// `chat.image` for a malformed URL, more than 20 MiB or an image that is
+/// not PNG, JPEG, GIF or WebP.
+pub fn from_data_url(url: &str, name: &str) -> Result<Image, Error> {
+    use base64::Engine as _;
+    let fail = |why: &str| Error::new(&codes::CHAT_IMAGE, format!("cannot attach {name}: {why}"));
+    let encoded = url
+        .strip_prefix("data:")
+        .and_then(|rest| rest.split_once(";base64,"))
+        .map(|(_, data)| data)
+        .ok_or_else(|| fail("not a base64 data URL"))?;
+    if encoded.len() as u64 > MAX_BYTES / 3 * 4 + 4 {
+        return Err(fail("larger than 20 MiB"));
+    }
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(encoded)
+        .map_err(|_| fail("not valid base64"))?;
+    checked(PathBuf::from(name), name.to_owned(), bytes)
+}
+
+fn checked(path: PathBuf, name: String, bytes: Vec<u8>) -> Result<Image, Error> {
+    let not_accepted = || {
+        Error::new(
+            &codes::CHAT_IMAGE,
+            format!("cannot attach {name}: not a PNG, JPEG, GIF or WebP image"),
+        )
+    };
+    let data = ImageData::sniff(bytes).map_err(|_| not_accepted())?;
+    if !ACCEPTED.contains(&data.mime.as_str()) {
+        return Err(not_accepted());
+    }
+    Ok(Image { path, name, data })
 }
 
 /// Where `attachments.storage = "workspace"` copies a session's

@@ -136,10 +136,16 @@ fn open_main<R: Runtime>(app: &AppHandle<R>, shell: &Arc<Shell>) -> tauri::Resul
         .inner_size(1100.0, 760.0)
         .on_navigation(|url| navigation::allow_navigation(url) || navigation::is_panel(url))
         .on_new_window(|url, _| new_window(&url))
+        .initialization_script_for_all_frames(ANNOTATE_AGENT)
         .build()?;
     crate::tray::watch_main(&window, Arc::clone(shell));
     Ok(())
 }
+
+/// The preview's annotate agent (spec: desktop-app, Annotate mode in the
+/// in-app browser): in every frame, inert until the app page starts it in
+/// the preview frame, so it reaches pages of any origin.
+const ANNOTATE_AGENT: &str = include_str!("../../dist/annotate.js");
 
 fn open_quick_ask<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     WebviewWindowBuilder::new(
