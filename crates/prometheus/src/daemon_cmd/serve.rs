@@ -182,15 +182,15 @@ fn server_options(
 /// The network surfaces kept alive while the daemon runs.
 #[derive(Default)]
 struct Listeners {
-    #[cfg(feature = "dashboard")]
-    _remote: Option<pmt_web::remote::RemoteListener>,
+    _remote: Option<pmt_gateway::remote::RemoteListener>,
 }
 
 /// The HTTP surfaces: the API server, the dashboard's controller (its
 /// listener opens when `prometheus dashboard` asks, or at once for
 /// `prometheus serve`) and the remote attachment listener when
-/// `daemon.remote.enabled`.
-#[cfg_attr(not(feature = "dashboard"), allow(clippy::unused_async))]
+/// `daemon.remote.enabled` (spec: messaging-gateway, Remote client
+/// attachment), which is the gateway's own and runs on builds without the
+/// dashboard too.
 async fn start_listeners(
     home: &Path,
     config: &DaemonConfig,
@@ -199,43 +199,65 @@ async fn start_listeners(
     serve: Option<&ServeDashboard>,
 ) -> Result<Listeners, Error> {
     start_api(config, server, host).await;
-    #[cfg(feature = "dashboard")]
-    {
-        let devices = Arc::new(pmt_gateway::devices::Devices::open(home));
-        let dashboard = pmt_web::Dashboard::install(
-            server,
-            Arc::clone(host) as Arc<dyn pmt_web::DashboardHost>,
-            config.dashboard.clone(),
-            config.webapp.clone(),
-            Arc::clone(&devices),
+    let devices = server
+        .devices()
+        .cloned()
+        .unwrap_or_else(|| Arc::new(pmt_gateway::devices::Devices::open(home)));
+    start_dashboard(config, server, host, serve, &devices).await?;
+    let remote =
+        match pmt_gateway::remote::start(server, devices, &config.daemon.remote, home).await {
+            Ok(remote) => remote,
+            Err(err) => {
+                tracing::error!("remote attachment listener not started: {err}");
+                None
+            }
+        };
+    if let Some(remote) = &remote {
+        eprintln!(
+            "Remote clients: wss://{} (certificate {})",
+            remote.addr, remote.fingerprint
         );
-        if let Some(serve) = serve {
-            let state = dashboard
-                .open(serve.host.as_deref(), serve.port, None)
-                .await?;
-            eprintln!("Dashboard: {}", state.url);
-        }
-        let remote =
-            match pmt_web::remote::start(server, devices, &config.daemon.remote, home).await {
-                Ok(remote) => remote,
-                Err(err) => {
-                    tracing::error!("remote attachment listener not started: {err}");
-                    None
-                }
-            };
-        if let Some(remote) = &remote {
-            eprintln!(
-                "Remote clients: wss://{} (certificate {})",
-                remote.addr, remote.fingerprint
-            );
-        }
-        Ok(Listeners { _remote: remote })
     }
-    #[cfg(not(feature = "dashboard"))]
-    {
-        let _ = (home, serve);
-        Ok(Listeners::default())
+    Ok(Listeners { _remote: remote })
+}
+
+/// Installs the dashboard's controller, opening its listener at once for
+/// `prometheus serve`.
+#[cfg(feature = "dashboard")]
+async fn start_dashboard(
+    config: &DaemonConfig,
+    server: &Arc<Server>,
+    host: &Arc<DaemonHost>,
+    serve: Option<&ServeDashboard>,
+    devices: &Arc<pmt_gateway::devices::Devices>,
+) -> Result<(), Error> {
+    let dashboard = pmt_web::Dashboard::install(
+        server,
+        Arc::clone(host) as Arc<dyn pmt_web::DashboardHost>,
+        config.dashboard.clone(),
+        config.webapp.clone(),
+        Arc::clone(devices),
+    );
+    if let Some(serve) = serve {
+        let state = dashboard
+            .open(serve.host.as_deref(), serve.port, None)
+            .await?;
+        eprintln!("Dashboard: {}", state.url);
     }
+    Ok(())
+}
+
+/// A build without the dashboard has no controller to install.
+#[cfg(not(feature = "dashboard"))]
+#[allow(clippy::unused_async)]
+async fn start_dashboard(
+    _config: &DaemonConfig,
+    _server: &Arc<Server>,
+    _host: &Arc<DaemonHost>,
+    _serve: Option<&ServeDashboard>,
+    _devices: &Arc<pmt_gateway::devices::Devices>,
+) -> Result<(), Error> {
+    Ok(())
 }
 
 /// Starts the API server when a served profile enables it; a listener

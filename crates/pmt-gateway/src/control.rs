@@ -147,6 +147,7 @@ pub(crate) fn answer(
             server.request_stop(restart);
             ControlResponse::default()
         }
+        ControlRequest::RevokeDevice { name } => revoke_device(server, &name),
         // Answered by `handle`, which can wait for the adapter.
         ControlRequest::GatewaySend { .. }
         | ControlRequest::GatewayHandoff { .. }
@@ -281,6 +282,21 @@ fn failure(err: &Error) -> ControlResponse {
             message: err.message().to_owned(),
         }),
         ..ControlResponse::default()
+    }
+}
+
+/// `prometheus daemon revoke-device`: removes the device from the home's
+/// registry and ends its sockets, whatever surfaces this build has.
+fn revoke_device(server: &Server, name: &str) -> ControlResponse {
+    let Some(devices) = server.devices() else {
+        return failure(&Error::new(
+            &codes::DEVICE_NOT_FOUND,
+            format!("no paired device '{name}' (this daemon has no home)"),
+        ));
+    };
+    match devices.revoke(name) {
+        Ok(()) => ControlResponse::default(),
+        Err(err) => failure(&err),
     }
 }
 

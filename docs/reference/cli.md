@@ -25603,6 +25603,49 @@ Options:
           Print help
 ```
 
+## `prometheus plugins panel-call`
+
+```text
+Serve one dashboard backend request of a plugin (the daemon's plugin host process: the request JSON on stdin, the answer on stdout)
+
+Usage: prometheus plugins panel-call [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The plugin id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus plugins test-adapter`
 
 ```text
@@ -25921,6 +25964,14 @@ Usage: prometheus plugins help doctor
 Replace the profile's plugin instances (in the running daemon when there is one): hooks, slash commands and event subscribers change at once, tools and system-prompt sections in sessions started afterwards (`/plugins reload --now` applies them to a session)
 
 Usage: prometheus plugins help reload
+```
+
+## `prometheus plugins help panel-call`
+
+```text
+Serve one dashboard backend request of a plugin (the daemon's plugin host process: the request JSON on stdin, the answer on stdout)
+
+Usage: prometheus plugins help panel-call
 ```
 
 ## `prometheus plugins help test-adapter`
@@ -31335,6 +31386,14 @@ Usage: prometheus help plugins doctor
 Replace the profile's plugin instances (in the running daemon when there is one): hooks, slash commands and event subscribers change at once, tools and system-prompt sections in sessions started afterwards (`/plugins reload --now` applies them to a session)
 
 Usage: prometheus help plugins reload
+```
+
+## `prometheus help plugins panel-call`
+
+```text
+Serve one dashboard backend request of a plugin (the daemon's plugin host process: the request JSON on stdin, the answer on stdout)
+
+Usage: prometheus help plugins panel-call
 ```
 
 ## `prometheus help plugins test-adapter`

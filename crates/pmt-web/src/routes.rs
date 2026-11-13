@@ -94,10 +94,17 @@ fn asset(req: &Req) -> Reply {
 /// The SPA shell: every client-side route reloads into it.
 fn shell(shared: &Shared) -> Reply {
     let mut reply = bytes(200, "text/html; charset=utf-8", assets::shell(&shared.base));
-    reply.headers_mut().insert(
+    let headers = reply.headers_mut();
+    headers.insert(
         hyper::header::CACHE_CONTROL,
         hyper::header::HeaderValue::from_static("no-store"),
     );
+    if shared.webapp.enabled {
+        headers.insert(
+            hyper::header::CONTENT_SECURITY_POLICY,
+            hyper::header::HeaderValue::from_static(guard::CSP_WEBAPP),
+        );
+    }
     reply
 }
 

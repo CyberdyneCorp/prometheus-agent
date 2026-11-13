@@ -81,18 +81,29 @@ fn classify(tapped: &Tapped<'_>) -> Option<(&'static str, Value)> {
 impl Feed {
     /// Records an event the hub sent when the dashboard shows it.
     pub(crate) fn tap(&self, tapped: &Tapped<'_>) {
-        let Some((event, mut frame)) = classify(tapped) else {
-            return;
-        };
+        if let Some((event, frame)) = classify(tapped) {
+            self.record(tapped.profile, event, frame);
+        }
+    }
+
+    /// Records a dashboard event of its own (an adapter pairing step):
+    /// `data` goes out as the frame's `data`.
+    pub(crate) fn publish(&self, profile: &str, event: &'static str, data: Value) {
+        let mut frame = json!({"session_id": null});
+        frame["data"] = data;
+        self.record(profile, event, frame);
+    }
+
+    fn record(&self, profile: &str, event: &'static str, mut frame: Value) {
         let mut log = self.log.lock().expect("feed poisoned");
         log.next += 1;
         let seq = log.next;
         frame["seq"] = seq.into();
         frame["event"] = event.into();
-        frame["profile"] = tapped.profile.into();
+        frame["profile"] = profile.into();
         let event = Event {
             seq,
-            profile: tapped.profile.to_owned(),
+            profile: profile.to_owned(),
             frame,
         };
         if log.kept.len() == RETAINED {

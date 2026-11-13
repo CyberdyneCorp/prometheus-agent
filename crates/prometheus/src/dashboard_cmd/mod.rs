@@ -194,7 +194,7 @@ fn fingerprint(home: &std::path::Path, as_json: bool) -> Result<u8, Error> {
             "dashboard.tls.cert is not set: the dashboard has no certificate to pin",
         )
     })?;
-    let fingerprint = pmt_web::cert::fingerprint(&cert, "dashboard.tls")?;
+    let fingerprint = pmt_gateway::cert::fingerprint(&cert, "dashboard.tls")?;
     if as_json {
         return document(
             "dashboard",

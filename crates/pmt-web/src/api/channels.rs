@@ -71,6 +71,7 @@ pub(crate) fn list(shared: &Shared, at: &Profile<'_>) -> Reply {
                 "message": status.and_then(|s| s.message.clone()),
                 "options": configured.map(|c| serde_json::to_value(&c.options).unwrap_or_default()),
                 "schema": platforms::options_schema(name),
+                "pairing": platforms::first_party(name).and_then(|p| p.pairing).map(platforms::PairingFlow::as_str),
                 "secrets": secret_rows,
             })
         })

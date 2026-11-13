@@ -18,8 +18,8 @@ use tracing::Instrument as _;
 
 use super::Shared;
 use super::adapter::{
-    Adapter, AdapterError, AdapterFuture, AdapterLink, AdapterSetup, AdapterState, AdapterStatus,
-    Admission, Descriptor, Inbound, Outgoing, SendError, Sent,
+    Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup, AdapterState,
+    AdapterStatus, Admission, Descriptor, Inbound, Outgoing, SendError, Sent,
 };
 use super::locks::{self, CredentialLock, Holder};
 use super::relay::{Relay, RelayDescriptor, RelayView};
@@ -325,45 +325,62 @@ pub(crate) fn start_profile(shared: &Arc<Shared>, profile: &str) {
             );
             continue;
         }
-        if table.allow_all {
-            tracing::warn!(
-                profile,
-                platform,
-                "gateway.platforms.{platform}.allow_all admits every sender"
-            );
-        }
-        let key = (profile.to_owned(), platform.clone());
-        let factory = shared.options.factories.get(platform).or_else(|| {
-            shared
-                .options
-                .plugin_factory
-                .as_ref()
-                .filter(|_| pmt_config::platforms::plugin_platforms().contains(platform))
-        });
-        let Some(factory) = factory else {
+        start_platform(shared, &scope, platform, table);
+    }
+}
+
+/// The factory that builds `platform`'s adapter: a first-party one, else
+/// the adapter plugins' for a platform an enabled plugin declares.
+pub(crate) fn factory_of<'a>(shared: &'a Shared, platform: &str) -> Option<&'a AdapterFactory> {
+    shared.options.factories.get(platform).or_else(|| {
+        shared
+            .options
+            .plugin_factory
+            .as_ref()
+            .filter(|_| pmt_config::platforms::plugin_platforms().contains(&platform.to_owned()))
+    })
+}
+
+/// Builds and launches `platform` of the profile `scope` serves, as its
+/// `table` configures it.
+pub(crate) fn start_platform(
+    shared: &Arc<Shared>,
+    scope: &pmt_config::ProfileScope,
+    platform: &str,
+    table: &pmt_config::schema::PlatformConfig,
+) {
+    let profile = scope.name().as_str();
+    if table.allow_all {
+        tracing::warn!(
+            profile,
+            platform,
+            "gateway.platforms.{platform}.allow_all admits every sender"
+        );
+    }
+    let key = (profile.to_owned(), platform.to_owned());
+    let Some(factory) = factory_of(shared, platform) else {
+        let error = AdapterError {
+            retryable: false,
+            code: "unknown_platform".to_owned(),
+            message: format!("this build has no adapter for platform '{platform}'"),
+        };
+        record_failure(shared, key, &error);
+        return;
+    };
+    let setup = AdapterSetup {
+        scope: scope.clone(),
+        platform: platform.to_owned(),
+        config: table.clone(),
+    };
+    match factory(&setup) {
+        Ok(adapter) => launch(shared, key, adapter),
+        Err(err) => {
             let error = AdapterError {
                 retryable: false,
-                code: "unknown_platform".to_owned(),
-                message: format!("this build has no adapter for platform '{platform}'"),
+                code: err.code().code.to_owned(),
+                message: err.message().to_owned(),
             };
             record_failure(shared, key, &error);
-            continue;
-        };
-        let setup = AdapterSetup {
-            scope: scope.clone(),
-            platform: platform.clone(),
-            config: table.clone(),
-        };
-        match factory(&setup) {
-            Ok(adapter) => launch(shared, key, adapter),
-            Err(err) => {
-                let error = AdapterError {
-                    retryable: false,
-                    code: err.code().code.to_owned(),
-                    message: err.message().to_owned(),
-                };
-                record_failure(shared, key, &error);
-            }
         }
     }
 }

@@ -23,6 +23,7 @@
 //! an empty `worlds` list has none (a no-code language pack).
 
 mod capabilities;
+pub mod dashboard;
 mod locales;
 mod router;
 
@@ -65,6 +66,7 @@ const FIELDS: &[&str] = &[
     "automation_blueprints",
     "delegation_router",
     "provides_locales",
+    "dashboard",
     "build",
     "mcp",
     "python",
@@ -127,6 +129,8 @@ pub struct Manifest {
     /// `[[provides_locales]]`: the UI languages a language pack ships in
     /// `locales/`.
     pub provides_locales: Vec<LocaleDeclaration>,
+    /// `[dashboard]`: its web dashboard page and slots.
+    pub dashboard: Option<dashboard::DashboardDeclaration>,
     /// The dev loop's build command.
     pub build: Option<String>,
     /// `[mcp]` or `[python]`: how the server or bridge starts it.
@@ -226,6 +230,7 @@ impl Manifest {
             automation_blueprints: tables(&table, "automation_blueprints")?,
             delegation_router: router::parse(table.get("delegation_router"))?,
             provides_locales: locales::parse(table.get("provides_locales"))?,
+            dashboard: dashboard::parse(table.get("dashboard"))?,
             build: optional_string(&table, "build")?,
             launch,
             id,

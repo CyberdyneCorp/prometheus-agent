@@ -11,8 +11,13 @@ use pmt_config::daemon_dashboard::{DashboardConfig, WebappConfig};
 
 use crate::http::{Reply, Req};
 
-/// `Content-Security-Policy` of every answer.
-pub(crate) const CSP: &str = "default-src 'self'; frame-ancestors 'none'";
+/// `Content-Security-Policy` of every answer that sets none of its own.
+/// Images may also be `data:` URIs (pairing QR codes the daemon draws).
+pub(crate) const CSP: &str = "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'";
+/// The SPA shell's policy when the webapp is on: the workspace previews
+/// any http(s) page, always in a sandboxed frame (no popups, no
+/// top-level navigation, an opaque origin).
+pub(crate) const CSP_WEBAPP: &str = "default-src 'self'; img-src 'self' data:; frame-src 'self' http: https:; frame-ancestors 'none'";
 
 /// The listener's view of who may address it and how.
 #[derive(Debug, Clone)]
@@ -184,7 +189,8 @@ impl Guard {
     }
 }
 
-/// Sets the security headers on `reply`.
+/// Sets the security headers on `reply`; a reply that set its own policy
+/// or framing rule (plugin frames, the webapp shell) keeps it.
 pub(crate) fn finish(mut reply: Reply) -> Reply {
     let headers = reply.headers_mut();
     for (name, value) in [
@@ -193,7 +199,9 @@ pub(crate) fn finish(mut reply: Reply) -> Reply {
         ("referrer-policy", "no-referrer"),
         ("x-frame-options", "DENY"),
     ] {
-        headers.insert(name, HeaderValue::from_static(value));
+        headers
+            .entry(name)
+            .or_insert_with(|| HeaderValue::from_static(value));
     }
     reply
 }

@@ -4,7 +4,7 @@
 
 import { base } from "./api";
 
-type Render = (params: URLSearchParams) => HTMLElement | Promise<HTMLElement>;
+export type Render = (params: URLSearchParams) => HTMLElement | Promise<HTMLElement>;
 
 const routes = new Map<string, Render>();
 let mount: HTMLElement | null = null;
@@ -12,6 +12,11 @@ let fallback: Render = () => document.createElement("div");
 
 export function route(path: string, render: Render): void {
   routes.set(path, render);
+}
+
+/** The page registered at `path`. */
+export function routeOf(path: string): Render | undefined {
+  return routes.get(path);
 }
 
 export function notFound(render: Render): void {
@@ -33,11 +38,16 @@ export function go(path: string): void {
   void render();
 }
 
+/** Renders started; a render that a newer one overtook is dropped. */
+let renders = 0;
+
 export async function render(): Promise<void> {
   if (!mount) return;
+  const mine = ++renders;
   const path = current();
   const page = routes.get(path) ?? (path === "/" ? routes.get("/sessions") : undefined) ?? fallback;
   const el = await page(new URLSearchParams(location.search));
+  if (mine !== renders) return;
   mount.replaceChildren(el);
   document.dispatchEvent(new CustomEvent("routed", { detail: path }));
 }

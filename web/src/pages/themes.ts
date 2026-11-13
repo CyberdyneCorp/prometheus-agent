@@ -13,14 +13,18 @@ interface ThemeRow {
   valid: boolean;
   error?: string;
   description?: string;
+  layout_variant?: string;
 }
 
 const KEY = "prometheus.theme";
+const LAYOUT_KEY = "prometheus.layout";
 
-/** Applies `name`'s style sheet (none for `default`). */
-export function applyTheme(name: string): void {
+/** Applies `name`'s style sheet (none for `default`) and its layout
+ *  variant (`standard`, `cockpit`, `tiled`). */
+export function applyTheme(name: string, layout = "standard"): void {
   document.getElementById("theme-sheet")?.remove();
   document.documentElement.dataset.theme = name;
+  document.documentElement.dataset.layout = layout;
   if (name === "default") return;
   const link = document.createElement("link");
   link.id = "theme-sheet";
@@ -37,15 +41,25 @@ export function currentTheme(): string {
   }
 }
 
+export function currentLayout(): string {
+  try {
+    return localStorage.getItem(LAYOUT_KEY) ?? "standard";
+  } catch {
+    return "standard";
+  }
+}
+
 export async function themesPage(): Promise<HTMLElement> {
   const data = await api.get<{ themes: ThemeRow[]; directory: string | null }>("/api/themes");
   const status = h("div", {});
   const rows = data.themes.map((theme) => {
     const use = h("button", { type: "button", disabled: !theme.valid }, "Use");
     use.addEventListener("click", () => {
-      applyTheme(theme.name);
+      const layout = theme.layout_variant ?? "standard";
+      applyTheme(theme.name, layout);
       try {
         localStorage.setItem(KEY, theme.name);
+        localStorage.setItem(LAYOUT_KEY, layout);
       } catch {
         // A browser without storage keeps the theme for this page only.
       }

@@ -221,6 +221,10 @@ pub struct Server {
     messaging: OnceLock<crate::messaging::Gateway>,
     /// The web dashboard's controller, when the daemon has one.
     dashboard: OnceLock<Arc<dyn crate::dashboard::DashboardControl>>,
+    /// The paired remote devices of the home (`<home>/run/devices.toml`):
+    /// the remote attachment listener and the dashboard verify against
+    /// it, and the control channel revokes from it, on any build.
+    devices: Option<Arc<crate::devices::Devices>>,
     /// Every messaging adapter failed for good and the policy is to exit.
     adapters_down: AtomicBool,
 }
@@ -293,6 +297,10 @@ impl Server {
             crash_reporter: options.crash_reporter,
             only_pid: options.only_pid,
             health_url: options.health_url,
+            devices: options
+                .home
+                .as_deref()
+                .map(|home| Arc::new(crate::devices::Devices::open(home))),
             home: options.home,
             platform_features: options.platform_features,
             created: tokio::sync::Mutex::default(),
@@ -475,6 +483,12 @@ impl Server {
     #[must_use]
     pub fn dashboard(&self) -> Option<&Arc<dyn crate::dashboard::DashboardControl>> {
         self.dashboard.get()
+    }
+
+    /// The paired remote devices (`None` for a server without a home).
+    #[must_use]
+    pub fn devices(&self) -> Option<&Arc<crate::devices::Devices>> {
+        self.devices.as_ref()
     }
 
     /// Cancelled once draining is over and connections close with 1001;

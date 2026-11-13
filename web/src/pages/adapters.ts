@@ -3,11 +3,13 @@
 // rendered from the adapter's options schema. Secret fields are
 // write-only (blank keeps the stored value); a save is one validated
 // config patch plus the secret writes, refused as a whole naming the bad
-// field. Running adapters can be paused and resumed.
+// field. Running adapters can be paused and resumed, tested and
+// restarted, and an adapter's pairing flow runs here (adapter-actions.ts).
 
 import { api, ApiError, profilePath } from "../lib/api";
 import { h, notice, page } from "../lib/dom";
 import { canDrive, profileOf } from "../lib/state";
+import { actionButtons, pairingPanel } from "./adapter-actions";
 
 interface Schema {
   type?: string | string[];
@@ -26,6 +28,7 @@ interface Adapter {
   options: Record<string, unknown> | null;
   schema: Schema | null;
   secrets: { name: string; set: boolean }[];
+  pairing: string | null;
 }
 
 function kind(schema: Schema): string {
@@ -111,6 +114,8 @@ export async function adaptersPage(params: URLSearchParams): Promise<HTMLElement
         { class: "adapter", "data-platform": a.platform },
         h("summary", {}, `${a.display}: `, h("span", { "data-state": a.state }, a.paused ? "paused" : a.state), a.message ? ` (${a.message})` : ""),
         pauseButton(profile, a),
+        actionButtons(profile, a),
+        pairingPanel(profile, a),
         form(profile, a),
       ),
     );

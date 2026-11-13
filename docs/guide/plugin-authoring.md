@@ -327,6 +327,58 @@ and queues every call; see the Memory guide. A `context-engine` plugin
 exports `initialize`, `compact`, `select`, `tool-schemas` and
 `handle-tool-call`.
 
+### Dashboard pages and slots
+
+A plugin adds to the web dashboard with a `[dashboard]` table (no world
+is needed for a page alone):
+
+```toml
+[dashboard]
+label = "Weather"
+icon = "cloud"                    # optional
+entry = "dashboard/index.html"    # the default
+slots = ["header-right", "sessions:top"]
+
+[dashboard.tab]
+path = "/weather"
+position = "after:sessions"       # end (default), after:<page> or before:<page>
+override = "/sessions"            # optional: replace one built-in page
+hidden = false                    # true: routable, no navigation entry
+```
+
+The slots are `header-left`, `header-right`, `header-banner`, `sidebar`
+(shown only with a `cockpit` theme), `pre-main`, `post-main`,
+`footer-left`, `footer-right`, `overlay`, and `<page>:top` or
+`<page>:bottom` for each built-in page. Each tab and slot shows the
+`entry` HTML file in a frame with `sandbox="allow-scripts"`: the frame has
+an opaque origin, so it never sees the dashboard's cookies or storage, and
+its policy allows no network request at all. Put the scripts and styles
+inline. The frame talks to the dashboard through the `prometheus` object
+the dashboard adds to it:
+
+- `prometheus.register()` says the frame is ready. A frame that has not
+  registered within 2 seconds is reported on `/plugins`, and an override
+  falls back to the built-in page.
+- `prometheus.context()` gives the profile, route, slot and theme.
+- `prometheus.api(method, path, body)` calls the plugin's own backend
+  routes (below).
+- `prometheus.navigate(path)` opens a dashboard page.
+
+When two plugins override the same page, the first one in load order
+(dependencies first, then by id) renders it, and `/plugins` reports the
+other. `POST /api/plugins/rescan` (the Rescan button on `/plugins`) picks
+up plugins installed since the dashboard opened.
+
+Backend routes need the `ui-panel` world. A request to
+`/api/plugins/<id>/<path>` reaches `on-action` as JSON with `kind`
+(`"http"`), `method`, `path`, `query`, `profile`, `role` and `body`.
+Answer `{"status": 200, "body": ...}`, or any other JSON for a 200 with
+that body; an `Err` answers 400 with its text. The daemon never runs the
+plugin itself: each request starts the plugin host
+(`prometheus plugins panel-call <id>`), which loads the plugin under its
+grants and answers within 30 seconds or is stopped. Observers can only
+`GET`.
+
 ## Limits worth designing for
 
 - Each call has `plugins.wasm.call_timeout_ms` (default 30 s) of CPU time;

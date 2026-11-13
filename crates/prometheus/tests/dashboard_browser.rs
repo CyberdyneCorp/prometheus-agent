@@ -27,10 +27,84 @@ fn the_webapp_opens_from_the_cli_and_signs_out_every_tab() {
     playwright(home.path(), "webapp.spec.ts", &[]);
 }
 
+/// Scenario: Override conflict. Scenario: Plugin frame reads the session
+/// cookie.
+#[test]
+fn dashboard_plugins_render_in_sandboxed_frames() {
+    let home = mock_home();
+    common::dashboard_plugins::install(home.path());
+    let _daemon = daemon::start(home.path(), &[]);
+    playwright(home.path(), "plugins.spec.ts", &[]);
+}
+
 /// Scenario: Secret shown once. Scenario: Offline docs.
 #[test]
 fn the_webhooks_and_docs_pages_work_in_the_browser() {
     let home = mock_home();
     let _daemon = daemon::start(home.path(), &[]);
     playwright(home.path(), "m3pages.spec.ts", &[]);
+}
+
+/// A foreground daemon, killed when dropped.
+#[cfg(unix)]
+struct Foreground(std::process::Child);
+
+#[cfg(unix)]
+impl Drop for Foreground {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+/// A foreground daemon of `home` with `env` (the CLI's `daemon start`
+/// does not pass test variables on).
+#[cfg(unix)]
+fn daemon_with(home: &std::path::Path, env: &[(&str, &str)]) -> Foreground {
+    let child = common::command(home)
+        .args(["daemon", "run"])
+        .envs(env.iter().copied())
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while !common::run(home, &["daemon", "status"]).status.success() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the daemon did not start"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    Foreground(child)
+}
+
+/// Channel setup forms: Test and Restart adapter, and `WhatsApp` QR
+/// pairing against a stand-in bridge.
+#[cfg(unix)]
+#[test]
+fn the_channel_forms_test_restart_and_pair_in_the_browser() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let home = mock_home();
+    let bridge = home.path().join("fake-bridge.sh");
+    std::fs::write(
+        &bridge,
+        "#!/bin/sh
+echo '{\"event\":\"qr\",\"qr\":\"2@first,abc\"}'
+sleep 1.5
+\
+         echo '{\"event\":\"qr\",\"qr\":\"2@second,def\"}'
+sleep 1.5
+\
+         echo '{\"event\":\"connected\",\"user\":{\"name\":\"Ana\"}}'
+",
+    )
+    .unwrap();
+    std::fs::set_permissions(&bridge, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let _daemon = daemon_with(
+        home.path(),
+        &[("PMT_TEST_WHATSAPP_BRIDGE", bridge.to_str().unwrap())],
+    );
+    playwright(home.path(), "adapters.spec.ts", &[]);
 }

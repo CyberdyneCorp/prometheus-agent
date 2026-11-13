@@ -14,7 +14,8 @@ use serde_json::{Value, json};
 use tokio_tungstenite::tungstenite::Message;
 
 use common::api::Request;
-use common::dashboard::{self, Signed, call, get, request_on, sign_in};
+use common::dashboard::{self, Signed, call, get, sign_in};
+use common::ws::request_on;
 use common::{daemon, mock_home, ok, run};
 
 fn runtime() -> tokio::runtime::Runtime {

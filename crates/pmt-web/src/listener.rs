@@ -60,7 +60,7 @@ pub(crate) fn tls(config: &DashboardConfig) -> Result<Option<TlsAcceptor>, Error
     let (Some(cert), Some(key)) = (&config.tls.cert, &config.tls.key) else {
         return Ok(None);
     };
-    crate::cert::acceptor(cert, key, "dashboard.tls").map(Some)
+    pmt_gateway::cert::acceptor(cert, key, "dashboard.tls").map(Some)
 }
 
 /// Binds the listener: a port another process holds exits 78 naming it.

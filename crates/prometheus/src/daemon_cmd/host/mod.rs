@@ -30,6 +30,8 @@ use tracing::Instrument as _;
 
 use super::turn::{SecretsToClients, SudoToClients, ToClients, approvals, clarify};
 
+#[cfg(feature = "dashboard")]
+mod adapter_pairing;
 mod api;
 mod api_profile;
 mod automation;
@@ -53,6 +55,8 @@ mod notify;
 mod profile_create;
 mod reload;
 mod send_tool;
+#[cfg(feature = "dashboard")]
+mod session_file;
 mod setup;
 mod speech;
 mod turns;

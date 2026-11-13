@@ -23,6 +23,31 @@ pub struct FirstParty {
     pub display: &'static str,
     /// The longest message the platform accepts, in its own unit.
     pub max_message_length: u32,
+    /// The interactive pairing flow its setup form hosts, if any.
+    pub pairing: Option<PairingFlow>,
+}
+
+/// An interactive pairing flow an adapter declares for its setup form
+/// (spec: web-dashboard, Channel setup forms).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PairingFlow {
+    /// Link as a `WhatsApp` linked device: refreshed QR codes until the
+    /// phone links, at most 120 seconds.
+    WhatsappQr,
+    /// Create a Telegram bot by scanning a QR code with the onboarding
+    /// service (`options.setup_service_url`), at most 180 seconds.
+    TelegramCreate,
+}
+
+impl PairingFlow {
+    /// The name the dashboard uses.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::WhatsappQr => "whatsapp_qr",
+            Self::TelegramCreate => "telegram_create",
+        }
+    }
 }
 
 /// The first-party adapters and their limits.
@@ -31,41 +56,49 @@ pub const FIRST_PARTY: &[FirstParty] = &[
         name: "telegram",
         display: "Telegram",
         max_message_length: 4096,
+        pairing: Some(PairingFlow::TelegramCreate),
     },
     FirstParty {
         name: "discord",
         display: "Discord",
         max_message_length: 2000,
+        pairing: None,
     },
     FirstParty {
         name: "slack",
         display: "Slack",
         max_message_length: 39_000,
+        pairing: None,
     },
     FirstParty {
         name: "email",
         display: "Email",
         max_message_length: 50_000,
+        pairing: None,
     },
     FirstParty {
         name: "matrix",
         display: "Matrix",
         max_message_length: 32_000,
+        pairing: None,
     },
     FirstParty {
         name: "signal",
         display: "Signal",
         max_message_length: 8000,
+        pairing: None,
     },
     FirstParty {
         name: "whatsapp",
         display: "WhatsApp",
         max_message_length: 4096,
+        pairing: Some(PairingFlow::WhatsappQr),
     },
     FirstParty {
         name: "webhook",
         display: "Webhook",
         max_message_length: 65_536,
+        pairing: None,
     },
 ];
 

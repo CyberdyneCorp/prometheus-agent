@@ -15,13 +15,13 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::Server;
+use crate::connection::Ends;
+use crate::devices::{DeviceRole, Devices, Verified};
+use crate::tickets::Grant;
 use futures_util::SinkExt as _;
 use pmt_config::daemon_remote::RemoteConfig;
 use pmt_core::error::{Error, codes};
-use pmt_gateway::Server;
-use pmt_gateway::connection::Ends;
-use pmt_gateway::devices::{DeviceRole, Devices, Verified};
-use pmt_gateway::tickets::Grant;
 use pmt_rpc::codes::CloseCode;
 use pmt_rpc::control::Purpose;
 use tokio::net::TcpListener;
@@ -136,7 +136,9 @@ impl Serving {
         }
     }
 
-    async fn connection<S: pmt_gateway::connection::Transport>(&self, stream: S) {
+    // tungstenite's handshake callback returns its own `ErrorResponse`.
+    #[allow(clippy::result_large_err)]
+    async fn connection<S: crate::connection::Transport>(&self, stream: S) {
         let mut admission = None;
         let callback = |request: &Request, response: Response| {
             Ok::<_, ErrorResponse>(self.handshake(request, response, &mut admission))
@@ -161,13 +163,8 @@ impl Serving {
                     stop: self.stop.clone(),
                     revoked: verified.revoked,
                 };
-                pmt_gateway::connection::serve_upgraded(
-                    Arc::clone(&self.server),
-                    socket,
-                    grant,
-                    ends,
-                )
-                .await;
+                crate::connection::serve_upgraded(Arc::clone(&self.server), socket, grant, ends)
+                    .await;
             }
             Err(code) => {
                 let close = Message::Close(Some(CloseFrame {

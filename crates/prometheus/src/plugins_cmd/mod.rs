@@ -172,6 +172,14 @@ pub enum PluginsCommand {
         /// The plugin to report on (every plugin reloads).
         id: Option<String>,
     },
+    /// Serve one dashboard backend request of a plugin (the daemon's
+    /// plugin host process: the request JSON on stdin, the answer on
+    /// stdout).
+    #[command(name = "panel-call", hide = true)]
+    PanelCall {
+        /// The plugin id.
+        id: String,
+    },
     /// Run the adapter conformance kit against a mock of the platform:
     /// a first-party platform name (`telegram`, `discord`, `slack`,
     /// `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the
@@ -328,5 +336,6 @@ fn dispatch(command: &PluginsCommand, ctx: &Context<'_>) -> Result<u8, Error> {
         PluginsCommand::Doctor => inspect::doctor(ctx),
         PluginsCommand::Reload { id } => reload::reload(ctx, id.as_deref()),
         PluginsCommand::TestAdapter { path } => adapter::test_adapter(path),
+        PluginsCommand::PanelCall { id } => crate::plugins_host::dashboard::serve_call(ctx, id),
     }
 }

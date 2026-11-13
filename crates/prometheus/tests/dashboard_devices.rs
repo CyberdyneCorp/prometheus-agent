@@ -9,14 +9,12 @@
 mod common;
 
 use std::path::Path;
-use std::sync::Arc;
 
 use serde_json::{Value, json};
-use tokio_tungstenite::tungstenite::client::IntoClientRequest as _;
-use tokio_tungstenite::tungstenite::http::HeaderValue;
 
 use common::api::Request;
-use common::dashboard::{self, Signed, close_code, get, path_of, request_on, sign_in};
+use common::dashboard::{self, Signed, get, path_of, sign_in};
+use common::ws::{close_code, request_on};
 use common::{daemon, mock_home, ok, run, stderr, stdout};
 
 fn runtime() -> tokio::runtime::Runtime {
@@ -327,102 +325,74 @@ fn serve_runs_the_daemon_with_the_dashboard_listener_open() {
     assert!(status.success(), "{status:?}");
 }
 
-/// A TLS WebSocket to the remote listener at `port`, trusting its
-/// self-signed certificate, with `token`.
-async fn remote(
-    home: &Path,
-    port: u16,
-    query: &str,
-    token: &str,
-) -> tokio_tungstenite::WebSocketStream<tokio_rustls::client::TlsStream<tokio::net::TcpStream>> {
-    use rustls::pki_types::pem::PemObject as _;
-    let cert =
-        rustls::pki_types::CertificateDer::from_pem_file(home.join("run/remote-cert.pem")).unwrap();
-    let mut roots = rustls::RootCertStore::empty();
-    roots.add(cert).unwrap();
-    let config = rustls::ClientConfig::builder_with_provider(Arc::new(
-        rustls::crypto::ring::default_provider(),
-    ))
-    .with_safe_default_protocol_versions()
-    .unwrap()
-    .with_root_certificates(roots)
-    .with_no_client_auth();
-    let tcp = tokio::net::TcpStream::connect(("127.0.0.1", port))
-        .await
+/// Host files download only through the session's file-access rules
+/// (spec: web-dashboard, Webapp file staging and terminals): a file in the
+/// session's working directory downloads, a protected dotenv file and a
+/// file outside what the session may read are refused, and so is a
+/// device-namespace path.
+#[test]
+fn host_files_download_only_through_the_sessions_file_access_rules() {
+    let home = mock_home();
+    let project = home.path().join("project");
+    std::fs::create_dir_all(&project).unwrap();
+    std::fs::write(project.join("notes.txt"), "project notes").unwrap();
+    std::fs::write(project.join(".env"), "API_KEY=hunter2").unwrap();
+    std::fs::write(home.path().join("outside.txt"), "not the session's").unwrap();
+    let out = common::command(home.path())
+        .args(["chat", "-z", "hello"])
+        .current_dir(&project)
+        .stdin(std::process::Stdio::null())
+        .output()
         .unwrap();
-    let name = rustls::pki_types::ServerName::try_from("localhost").unwrap();
-    let tls = tokio_rustls::TlsConnector::from(Arc::new(config))
-        .connect(name, tcp)
-        .await
-        .unwrap();
-    let mut request = format!("wss://localhost:{port}/{query}")
-        .into_client_request()
-        .unwrap();
-    let headers = request.headers_mut();
-    headers.insert(
-        "Authorization",
-        HeaderValue::from_str(&format!("Bearer {token}")).unwrap(),
+    ok(&out);
+    let session = common::newest_session(home.path());
+    let _daemon = daemon::start(home.path(), &[]);
+    let opened = dashboard::open(home.path(), &[]);
+    let signed = sign_in(&opened);
+    let file = |path: &str| {
+        let query: String = url_encode(path);
+        get(
+            opened.port,
+            &format!("/api/profiles/default/sessions/{session}/file?path={query}"),
+            &signed.cookie,
+        )
+    };
+    let notes = file("notes.txt");
+    assert_eq!((notes.status, notes.body.as_str()), (200, "project notes"));
+    assert!(
+        notes
+            .header("content-disposition")
+            .is_some_and(|d| d.contains("notes.txt")),
+        "{notes:?}"
     );
-    headers.insert(
-        "Sec-WebSocket-Protocol",
-        HeaderValue::from_static("prometheus-rpc.v1"),
+    let outside = home.path().join("outside.txt");
+    for refused in [
+        ".env",
+        "../outside.txt",
+        outside.to_str().unwrap(),
+        r"\\.\pipe\x",
+    ] {
+        let answer = file(refused);
+        assert_eq!(answer.status, 403, "{refused}: {answer:?}");
+        assert!(!answer.body.contains("hunter2") && !answer.body.contains("not the session's"));
+    }
+    assert_eq!(file("missing.txt").status, 404);
+    let unknown = get(
+        opened.port,
+        "/api/profiles/default/sessions/ses_01HZZZZZZZZZZZZZZZZZZZZZZZ/file?path=notes.txt",
+        &signed.cookie,
     );
-    tokio_tungstenite::client_async(request, tls)
-        .await
-        .unwrap()
-        .0
+    assert_eq!(unknown.status, 404, "{unknown:?}");
 }
 
-/// Scenario: Disabled by default (messaging-gateway, Remote client
-/// attachment).
-#[test]
-fn no_remote_listener_is_bound_by_default() {
-    let home = mock_home();
-    let _daemon = daemon::start(home.path(), &[]);
-    let status = ok(&run(home.path(), &["--json", "daemon", "status"]));
-    assert!(!status.contains("listener:remote"), "{status}");
-}
-
-/// Scenario: Revoked device (messaging-gateway, Remote client attachment):
-/// a bound device speaks the client protocol, a profile outside its
-/// binding closes 4403, and revocation closes 4401 now and on reconnect.
-#[test]
-fn the_remote_listener_admits_paired_devices_only() {
-    let home = mock_home();
-    std::fs::write(
-        home.path().join("daemon.toml"),
-        "[daemon.remote]\nenabled = true\nlisten = \"127.0.0.1:0\"\n",
-    )
-    .unwrap();
-    let paired = ok(&run(
-        home.path(),
-        &[
-            "--json",
-            "daemon",
-            "pair-device",
-            "laptop",
-            "--profile-binding",
-            "default",
-        ],
-    ));
-    let token = serde_json::from_str::<Value>(&paired).unwrap()["token"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let _daemon = daemon::start(home.path(), &[]);
-    let port = daemon::bound_port(home.path(), "listener:remote");
-    let rt = runtime();
-    rt.block_on(async {
-        let mut outside = remote(home.path(), port, "?profiles=work", &token).await;
-        assert_eq!(close_code(&mut outside).await, Some(4403));
-        let mut bad = remote(home.path(), port, "", "pmtd_nope").await;
-        assert_eq!(close_code(&mut bad).await, Some(4401));
-        let mut ws = remote(home.path(), port, "", &token).await;
-        let answer = request_on(&mut ws, &hello()).await;
-        assert!(answer.get("result").is_some(), "{answer}");
-        ok(&run(home.path(), &["daemon", "revoke-device", "laptop"]));
-        assert_eq!(close_code(&mut ws).await, Some(4401));
-        let mut again = remote(home.path(), port, "", &token).await;
-        assert_eq!(close_code(&mut again).await, Some(4401));
-    });
+fn url_encode(text: &str) -> String {
+    text.bytes()
+        .map(|b| {
+            if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) {
+                (b as char).to_string()
+            } else {
+                format!("%{b:02X}")
+            }
+        })
+        .collect()
 }

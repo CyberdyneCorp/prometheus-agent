@@ -2,15 +2,17 @@
 //! client attachment; web-dashboard, Paired device credentials for remote
 //! clients): `daemon pair-device` issues a device token directly (the
 //! registry is a file of hashes, so no daemon is needed), and revoking
-//! goes through the running daemon, which also closes the device's open
-//! sockets with 4401, or edits the registry when no daemon runs.
+//! goes through the running daemon's control channel (answered by the
+//! gateway itself, so a daemon without the dashboard revokes too), which
+//! also closes the device's open sockets with 4401, or edits the registry
+//! when no daemon runs.
 
 use std::path::Path;
 use std::time::Duration;
 
 use pmt_core::error::{Error, codes};
 use pmt_gateway::devices::{DeviceRole, Devices};
-use pmt_rpc::control::{ControlRequest, DashboardAction};
+use pmt_rpc::control::ControlRequest;
 use serde_json::json;
 
 use super::{control_call, send_cmd::control_error, wait_running};
@@ -67,10 +69,8 @@ pub(crate) fn pair_device(home: &Path, args: &PairDeviceArgs, as_json: bool) -> 
 pub(crate) fn revoke(home: &Path, name: &str, as_json: bool) -> Result<u8, Error> {
     match wait_running(home, Duration::from_secs(1))? {
         Some(record) => {
-            let request = ControlRequest::Dashboard {
-                action: DashboardAction::Revoke {
-                    name: name.to_owned(),
-                },
+            let request = ControlRequest::RevokeDevice {
+                name: name.to_owned(),
             };
             let response = control_call(&record, &request)?;
             if let Some(error) = &response.error {

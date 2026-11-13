@@ -12,8 +12,9 @@ use serde_json::{Value, json};
 
 use common::api::Request;
 use common::dashboard::{
-    self, Opened, call, certificate, close_code, get, https, path_of, set_cookie, sign_in,
+    self, Opened, call, certificate, get, https, path_of, set_cookie, sign_in,
 };
+use common::ws::close_code;
 use common::{daemon, mock_home, ok, run, stderr, stdout};
 
 fn runtime() -> tokio::runtime::Runtime {
@@ -371,7 +372,7 @@ fn only_the_dashboards_own_origin_is_served() {
     let mut own = rt.block_on(dashboard::rpc(opened.port, &signed));
     let ping = json!({"jsonrpc": "2.0", "id": 1, "method": "rpc.ping", "params": {}});
     assert_eq!(
-        rt.block_on(dashboard::request_on(&mut own, &ping))["result"]["ok"],
+        rt.block_on(common::ws::request_on(&mut own, &ping))["result"]["ok"],
         true
     );
     for path in ["/", "/api/health", "/api/profiles", "/assets/missing.js"] {
@@ -381,7 +382,7 @@ fn only_the_dashboards_own_origin_is_served() {
             .send(opened.port);
         assert_eq!(
             header(&answer, "content-security-policy"),
-            Some("default-src 'self'; frame-ancestors 'none'"),
+            Some("default-src 'self'; img-src 'self' data:; frame-ancestors 'none'"),
             "{path}"
         );
         assert_eq!(header(&answer, "x-content-type-options"), Some("nosniff"));

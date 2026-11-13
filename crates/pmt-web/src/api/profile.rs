@@ -14,7 +14,8 @@ use hyper::body::Incoming;
 use serde_json::json;
 
 use super::{
-    Caller, channels, config, files, maintenance, messaging, secrets, sessions, uploads, usage,
+    Caller, adapter_actions, channels, config, files, maintenance, messaging, secrets, sessions,
+    uploads, usage,
 };
 use crate::Shared;
 use crate::auth::sessions::Role;
@@ -52,6 +53,9 @@ pub(crate) async fn route(
     match (&req.method, rest) {
         (&Method::GET, ["sessions"]) => sessions::list(&at, req),
         (&Method::GET, ["sessions", id, "messages"]) => sessions::messages(&at, id),
+        (&Method::GET, ["sessions", id, "file"]) => {
+            sessions::host_file(shared, profile, id, req).await
+        }
         (&Method::DELETE, ["sessions", id]) => sessions::delete(shared, &at, id),
         (&Method::GET, ["config"]) => config::get(&at),
         (&Method::PATCH, ["config"]) => config::patch(&at, body).await,
@@ -79,6 +83,21 @@ pub(crate) async fn route(
         (&Method::POST, ["files", "upload"]) => files::upload(shared, &at, req, body).await,
         (&Method::POST, ["files", "rename"]) => files::rename(&at, req, body).await,
         (&Method::DELETE, ["files"]) => files::delete(&at, req),
+        (&Method::POST, ["adapters", name, "test"]) => {
+            adapter_actions::test(shared, profile, name).await
+        }
+        (&Method::POST, ["adapters", name, "restart"]) => {
+            adapter_actions::restart(shared, profile, name).await
+        }
+        (&Method::POST, ["adapters", name, "pairing"]) => {
+            adapter_actions::start(shared, profile, name)
+        }
+        (&Method::GET, ["adapters", name, "pairing"]) => {
+            adapter_actions::state(shared, profile, name)
+        }
+        (&Method::DELETE, ["adapters", name, "pairing"]) => {
+            adapter_actions::cancel(shared, profile, name)
+        }
         (&Method::POST, ["adapters", name, verb]) => {
             messaging::pause_or_resume(shared, profile, name, verb).await
         }

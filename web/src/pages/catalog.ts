@@ -31,8 +31,6 @@ async function catalog(title: string, profile: string, path: string, columns: st
 export const skillsPage = (params: URLSearchParams) => catalog("Skills", profileOf(params), "/skills", ["name", "category", "description"]);
 export const toolsetsPage = (params: URLSearchParams) => catalog("Toolsets", profileOf(params), "/toolsets", ["name", "enabled", "description"]);
 export const modelsPage = (params: URLSearchParams) => catalog("Models", profileOf(params), "/models", ["provider", "model", "source"]);
-export const pluginsPage = (params: URLSearchParams) =>
-  catalog("Plugins", profileOf(params), "/plugins", ["id", "version", "kind", "source", "state", "problem"]);
 export const mcpPage = (params: URLSearchParams) => catalog("MCP", profileOf(params), "/mcp", ["name", "transport", "target", "trust", "enabled"]);
 export const cronPage = (params: URLSearchParams) =>
   catalog("Cron", profileOf(params), "/cron", ["name", "schedule", "state", "next_run_at", "last_status"]);

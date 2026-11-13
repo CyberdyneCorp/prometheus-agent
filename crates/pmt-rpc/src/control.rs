@@ -119,6 +119,13 @@ pub enum ControlRequest {
     /// `<home>/logs/task-dump-<UTC>.txt` without stopping (`prometheus
     /// debug dump-tasks`); answers its path.
     DumpTasks,
+    /// Revokes a paired remote device (`prometheus daemon revoke-device`),
+    /// closing its open sockets with 4401; answered by the gateway itself,
+    /// so it works on a daemon built without the dashboard.
+    RevokeDevice {
+        /// The device's name.
+        name: String,
+    },
     /// Opens, reports or stops the web dashboard's listener (`prometheus
     /// dashboard`).
     Dashboard {
@@ -165,11 +172,6 @@ pub enum DashboardAction {
     },
     /// The paired devices.
     Devices,
-    /// Revokes a paired device, closing its sockets with 4401.
-    Revoke {
-        /// The device's name.
-        name: String,
-    },
     /// Signs every browser out (`prometheus webapp --sign-out`); paired
     /// devices stay signed in.
     SignOut,

@@ -62,6 +62,86 @@ impl pmt_web::DashboardHost for DaemonHost {
         })
     }
 
+    fn session_file<'a>(
+        &'a self,
+        profile: &'a str,
+        session: &'a str,
+        path: &'a str,
+    ) -> HostFuture<'a, pmt_web::SessionFile> {
+        Box::pin(async move {
+            let served = self.profile(profile)?;
+            let file = super::session_file::read(
+                &served.scope(),
+                &served.store,
+                session,
+                path,
+                self.launch.user_home().map(std::path::PathBuf::as_path),
+            )?;
+            Ok(pmt_web::SessionFile {
+                name: file.name,
+                bytes: file.bytes,
+            })
+        })
+    }
+
+    fn pair_adapter<'a>(
+        &'a self,
+        profile: &'a str,
+        flow: pmt_config::platforms::PairingFlow,
+        sink: pmt_web::PairingSink,
+    ) -> HostFuture<'a, Value> {
+        Box::pin(async move {
+            let served = self.profile(profile)?;
+            super::adapter_pairing::run(served.scope(), self.gateway.get().cloned(), flow, sink)
+                .await
+        })
+    }
+
+    fn dashboard_plugins<'a>(&'a self, profile: &'a str) -> HostFuture<'a, Value> {
+        Box::pin(async move {
+            let scope = self.profile(profile)?.scope();
+            let found = pmt_core::spawn::blocking(move || {
+                crate::plugins_host::dashboard::contributions(&scope)
+            })
+            .await
+            .map_err(|e| Error::new(&pmt_core::error::codes::PLUGINS_LOAD, e.to_string()))?;
+            Ok(serde_json::to_value(found).unwrap_or_default())
+        })
+    }
+
+    fn rescan_plugins<'a>(&'a self, profile: &'a str) -> HostFuture<'a, ()> {
+        Box::pin(async move {
+            let scope = self.profile(profile)?.scope();
+            pmt_core::spawn::blocking(move || {
+                let _ = crate::plugins_host::reload(&scope, scope.dir());
+            })
+            .await
+            .map_err(|e| Error::new(&pmt_core::error::codes::PLUGINS_LOAD, e.to_string()))
+        })
+    }
+
+    fn plugin_frame<'a>(&'a self, profile: &'a str, id: &'a str) -> HostFuture<'a, String> {
+        Box::pin(async move {
+            let scope = self.profile(profile)?.scope();
+            let id = id.to_owned();
+            pmt_core::spawn::blocking(move || crate::plugins_host::dashboard::frame(&scope, &id))
+                .await
+                .map_err(|e| Error::new(&pmt_core::error::codes::PLUGINS_LOAD, e.to_string()))?
+        })
+    }
+
+    fn plugin_request<'a>(
+        &'a self,
+        profile: &'a str,
+        id: &'a str,
+        request: Value,
+    ) -> HostFuture<'a, Value> {
+        Box::pin(async move {
+            let scope = self.profile(profile)?.scope();
+            crate::plugins_host::dashboard::call(&scope, id, &request).await
+        })
+    }
+
     fn change<'a>(
         &'a self,
         profile: &'a str,

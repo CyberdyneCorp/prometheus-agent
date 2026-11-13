@@ -147,3 +147,37 @@ pub(crate) fn delete(shared: &Shared, at: &Profile<'_>, id: &str) -> Reply {
         Err(err) => from_error(&err),
     }
 }
+
+/// `GET sessions/{id}/file?path=`: a host file of the session, downloaded
+/// only through the session's file-access rules (spec: web-dashboard,
+/// Webapp file staging and terminals); the daemon applies them.
+pub(crate) async fn host_file(shared: &Shared, profile: &str, id: &str, req: &Req) -> Reply {
+    let Some(path) = req.param("path").filter(|p| !p.is_empty()) else {
+        return error(400, "invalid_query", "path= is required");
+    };
+    match shared.host.session_file(profile, id, &path).await {
+        Ok(file) => {
+            let mut reply = crate::http::bytes(200, "application/octet-stream", file.bytes);
+            let name: String = file
+                .name
+                .chars()
+                .map(|c| {
+                    if c.is_ascii_graphic() && c != '"' && c != '\\' {
+                        c
+                    } else {
+                        '_'
+                    }
+                })
+                .collect();
+            if let Ok(value) =
+                hyper::header::HeaderValue::from_str(&format!("attachment; filename=\"{name}\""))
+            {
+                reply
+                    .headers_mut()
+                    .insert(hyper::header::CONTENT_DISPOSITION, value);
+            }
+            reply
+        }
+        Err(err) => from_error(&err),
+    }
+}

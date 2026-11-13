@@ -80,6 +80,7 @@ capabilities = [
 [milestones.M3]
 partial = true
 capabilities = [
+    "desktop-app",
     "messaging-gateway",
     "web-dashboard",
 ]
@@ -1437,8 +1438,8 @@ capabilities = [
 "Ping during compaction" = ["crates/pmt-gateway/tests/sessions.rs::ping_is_answered_during_a_long_compaction"]
 
 [messaging-gateway."Remote client attachment"]
-"Disabled by default" = ["crates/prometheus/tests/dashboard_devices.rs::no_remote_listener_is_bound_by_default", "crates/pmt-config/src/daemon_remote.rs::the_remote_listener_is_off_by_default_on_port_9121"]
-"Revoked device" = ["crates/prometheus/tests/dashboard_devices.rs::the_remote_listener_admits_paired_devices_only"]
+"Disabled by default" = ["crates/prometheus/tests/remote_attach.rs::no_remote_listener_is_bound_by_default", "crates/pmt-config/src/daemon_remote.rs::the_remote_listener_is_off_by_default_on_port_9121"]
+"Revoked device" = { tests = ["crates/prometheus/tests/remote_attach.rs::the_remote_listener_admits_paired_devices_only"], note = "the listener and revoke-device belong to the gateway: CI also runs remote_attach.rs on a build without the dashboard" }
 
 [messaging-gateway."One gateway daemon per home"]
 "Second foreground daemon refused" = ["crates/prometheus/tests/daemon_cli.rs::a_second_daemon_exits_75_without_opening_any_store"]
@@ -4000,13 +4001,20 @@ capabilities = [
 "Sign out every tab" = ["crates/prometheus/tests/dashboard_devices.rs::signing_out_ends_every_browser_session_but_not_devices", "crates/prometheus/tests/dashboard_browser.rs::the_webapp_opens_from_the_cli_and_signs_out_every_tab", "crates/pmt-web/src/auth/sessions.rs::signing_everyone_out_ends_every_session_and_its_sockets"]
 
 [web-dashboard."Webapp file staging and terminals"]
-"Oversized drop" = { tests = ["crates/prometheus/tests/dashboard_devices.rs::a_staged_file_over_16_mib_is_refused_with_413"], note = "the staging endpoint every webapp drop goes through; the daemon-owned PTY terminal pane itself needs the desktop PTYs (group 63)" }
+"Oversized drop" = { tests = ["crates/prometheus/tests/dashboard_devices.rs::a_staged_file_over_16_mib_is_refused_with_413"], note = "the staging endpoint every webapp drop goes through; the daemon-owned PTY terminal pane itself needs the desktop PTYs (group 63). Host-file downloads through the session's file-access rules: dashboard_devices.rs::host_files_download_only_through_the_sessions_file_access_rules; sandboxed previews: dashboard_browser.rs::the_webapp_opens_from_the_cli_and_signs_out_every_tab (webapp.spec.ts)" }
 
 [web-dashboard."Webhooks page"]
 "Secret shown once" = ["crates/prometheus/tests/dashboard_pages.rs::a_webhook_secret_is_answered_once", "crates/prometheus/tests/dashboard_browser.rs::the_webhooks_and_docs_pages_work_in_the_browser"]
 
 [web-dashboard."Channel setup forms"]
 "Required field missing" = ["crates/prometheus/tests/dashboard_pages.rs::an_adapter_form_without_a_required_field_writes_nothing"]
+
+[web-dashboard."Dashboard plugin contributions"]
+"Override conflict" = ["crates/pmt-plugins/src/dashboard.rs::the_first_override_in_load_order_wins_and_the_other_is_reported", "crates/prometheus/tests/dashboard_plugins.rs::contributions_frames_backends_and_rescan", "crates/prometheus/tests/dashboard_browser.rs::dashboard_plugins_render_in_sandboxed_frames"]
+"Plugin frame reads the session cookie" = { tests = ["crates/prometheus/tests/dashboard_browser.rs::dashboard_plugins_render_in_sandboxed_frames", "crates/prometheus/tests/dashboard_plugins.rs::contributions_frames_backends_and_rescan"], note = "plugins.spec.ts: the frame (sandbox allow-scripts, an opaque origin) reads document.cookie and never sees prometheus_session; the frame document's own policy is sandbox allow-scripts without allow-same-origin and default-src 'none'" }
+
+[desktop-app."Telegram quick setup by QR"]
+"Cancelled setup" = { tests = ["crates/prometheus/tests/dashboard_channels.rs::a_cancelled_telegram_setup_writes_nothing"], note = "the daemon flow the dashboard Channels page hosts (the desktop Messaging pane reuses it, 62.x): a result arriving after DELETE adapters/telegram/pairing is discarded and no secret is written" }
 
 [web-dashboard."Files page"]
 "Symlink escape" = { tests = ["crates/prometheus/tests/dashboard_pages.rs::files_outside_the_workspace_root_are_refused_and_never_listed"], note = "cfg(unix): the fixture is a symbolic link to /etc" }

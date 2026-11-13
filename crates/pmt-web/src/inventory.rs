@@ -117,6 +117,46 @@ pub const ENDPOINTS: &[Endpoint] = &[
         "/api/profiles",
         "Create a profile (the profile builder)",
     ),
+    signed(
+        "GET",
+        "/api/plugins",
+        "The plugins' dashboard pages and slots in load order, with ignored overrides (profile=)",
+    ),
+    signed(
+        "POST",
+        "/api/plugins/rescan",
+        "Reload plugin discovery (profile=)",
+    ),
+    signed(
+        "GET",
+        "/api/plugin-frames/{id}",
+        "A plugin's sandboxed frame document with the plugin UI SDK (profile=)",
+    ),
+    signed(
+        "GET",
+        "/api/plugins/{id}/{*path}",
+        "A plugin backend route, served by the plugin host (profile=)",
+    ),
+    signed(
+        "POST",
+        "/api/plugins/{id}/{*path}",
+        "A plugin backend route, served by the plugin host (profile=)",
+    ),
+    signed(
+        "PUT",
+        "/api/plugins/{id}/{*path}",
+        "A plugin backend route, served by the plugin host (profile=)",
+    ),
+    signed(
+        "PATCH",
+        "/api/plugins/{id}/{*path}",
+        "A plugin backend route, served by the plugin host (profile=)",
+    ),
+    signed(
+        "DELETE",
+        "/api/plugins/{id}/{*path}",
+        "A plugin backend route, served by the plugin host (profile=)",
+    ),
     profile!("GET", "/config", "The effective configuration"),
     profile!("PATCH", "/config", "One validated configuration patch"),
     profile!(
@@ -139,6 +179,11 @@ pub const ENDPOINTS: &[Endpoint] = &[
         "Sessions, paged, with full-text search (q)"
     ),
     profile!("GET", "/sessions/{id}/messages", "A session's transcript"),
+    profile!(
+        "GET",
+        "/sessions/{id}/file",
+        "Download a host file through the session's file-access rules (path=)"
+    ),
     profile!("DELETE", "/sessions/{id}", "Delete a session"),
     profile!("GET", "/usage", "Cost and token usage"),
     profile!("GET", "/usage.csv", "Cost and token usage as CSV"),
@@ -198,6 +243,31 @@ pub const ENDPOINTS: &[Endpoint] = &[
         "/adapters/{name}/resume",
         "Resume a messaging adapter"
     ),
+    profile!(
+        "POST",
+        "/adapters/{name}/test",
+        "Test an adapter's saved configuration (its endpoints answer)"
+    ),
+    profile!(
+        "POST",
+        "/adapters/{name}/restart",
+        "Restart one adapter from its saved configuration"
+    ),
+    profile!(
+        "POST",
+        "/adapters/{name}/pairing",
+        "Start the adapter's interactive pairing flow (WhatsApp QR, Telegram Create with QR)"
+    ),
+    profile!(
+        "GET",
+        "/adapters/{name}/pairing",
+        "The pairing flow's current step (a QR image) or outcome"
+    ),
+    profile!(
+        "DELETE",
+        "/adapters/{name}/pairing",
+        "Cancel the pairing flow; nothing is saved"
+    ),
     profile!("GET", "/pairing", "Pending and approved messaging pairings"),
     profile!("POST", "/pairing/{code}", "Approve a pending pairing code"),
     profile!(
@@ -231,13 +301,15 @@ pub const ENDPOINTS: &[Endpoint] = &[
     profile!("GET", "/blobs/{sha}", "Download a stored attachment"),
 ];
 
-/// Whether `path` matches `pattern` segment by segment.
+/// Whether `path` matches `pattern` segment by segment; a last `{*name}`
+/// segment matches whatever remains (nothing included).
 fn matches(pattern: &str, path: &str) -> bool {
     let mut want = pattern.trim_matches('/').split('/');
     let mut got = path.trim_matches('/').split('/');
     loop {
         match (want.next(), got.next()) {
             (None, None) => return true,
+            (Some(w), _) if w.starts_with("{*") => return true,
             (Some(w), Some(g)) if w.starts_with('{') && !g.is_empty() => {}
             (Some(w), Some(g)) if w == g => {}
             _ => return false,
@@ -260,6 +332,7 @@ pub(crate) fn find(method: &Method, path: &str) -> Option<&'static Endpoint> {
 fn parameters(path: &str) -> Vec<Value> {
     path.split('/')
         .filter_map(|s| s.strip_prefix('{').and_then(|s| s.strip_suffix('}')))
+        .map(|name| name.trim_start_matches('*'))
         .map(|name| json!({"name": name, "in": "path", "required": true, "schema": {"type": "string"}}))
         .collect()
 }
@@ -292,13 +365,19 @@ fn operation(endpoint: &Endpoint) -> Value {
     op
 }
 
+/// `path` as an `OpenAPI` path template (`{*path}` becomes `{path}`; its
+/// value may span segments).
+fn template(path: &str) -> String {
+    path.replace("{*", "{")
+}
+
 /// The `OpenAPI` 3.1 document of [`ENDPOINTS`] for build `version`.
 #[must_use]
 pub fn openapi(version: &str) -> Value {
     let mut paths = Map::new();
     for endpoint in ENDPOINTS {
         let item = paths
-            .entry(endpoint.path)
+            .entry(template(endpoint.path))
             .or_insert_with(|| Value::Object(Map::new()));
         item[endpoint.method.to_ascii_lowercase()] = operation(endpoint);
     }
@@ -331,7 +410,7 @@ pub fn openapi(version: &str) -> Value {
 mod tests {
     use hyper::Method;
 
-    use super::{ENDPOINTS, find, openapi};
+    use super::{ENDPOINTS, find, openapi, template};
 
     #[test]
     fn only_listed_endpoints_are_found() {
@@ -345,13 +424,26 @@ mod tests {
         assert!(find(&Method::HEAD, "/api/status").is_some());
         assert!(find(&Method::GET, "/api/profiles//config").is_none());
         assert!(find(&Method::GET, "/api/nothing").is_none());
+        let backend = |method: &Method, path: &str| find(method, path).map(|e| e.path);
+        assert_eq!(
+            backend(&Method::POST, "/api/plugins/rescan"),
+            Some("/api/plugins/rescan")
+        );
+        for path in ["/api/plugins/weather/", "/api/plugins/weather/a/b"] {
+            assert_eq!(
+                backend(&Method::DELETE, path),
+                Some("/api/plugins/{id}/{*path}"),
+                "{path}"
+            );
+        }
+        assert_eq!(backend(&Method::GET, "/api/plugins"), Some("/api/plugins"));
     }
 
     #[test]
     fn every_endpoint_is_in_the_openapi_document_once() {
         let doc = openapi("0.0.0");
         for endpoint in ENDPOINTS {
-            let op = &doc["paths"][endpoint.path][endpoint.method.to_ascii_lowercase()];
+            let op = &doc["paths"][template(endpoint.path)][endpoint.method.to_ascii_lowercase()];
             assert_eq!(
                 op["summary"], endpoint.summary,
                 "{} {}",

@@ -92,7 +92,7 @@ fn bulk_maintenance_needs_confirmation_and_a_driver() {
     rt.block_on(async {
         let mut ws = dashboard::rpc(opened.port, &signed).await;
         let frame = json!({"jsonrpc": "2.0", "id": 1, "method": "session.create", "params": {"profile": "default"}});
-        dashboard::request_on(&mut ws, &frame).await;
+        common::ws::request_on(&mut ws, &frame).await;
     });
     assert_eq!(session_count(opened.port, &signed), 1);
     let path = "/api/profiles/default/maintenance/prune-sessions";

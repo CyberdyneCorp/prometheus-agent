@@ -7,19 +7,21 @@ import { onSignedOut } from "./lib/events";
 import { h } from "./lib/dom";
 import { href, notFound, route, start } from "./lib/router";
 import { state } from "./lib/state";
+import { loadPlugins, placeTabs } from "./lib/plugins";
+import type { Contribution } from "./lib/plugin-frames";
 import { chatPage } from "./pages/chat";
 import { adaptersPage } from "./pages/adapters";
 import { docsPage } from "./pages/docs";
 import { filesPage } from "./pages/files";
 import { profileBuilderPage } from "./pages/profile-builder";
-import { applyTheme, currentTheme, themesPage } from "./pages/themes";
+import { applyTheme, currentLayout, currentTheme, themesPage } from "./pages/themes";
+import { pluginsPage } from "./pages/plugins";
 import { webhooksPage } from "./pages/webhooks";
 import {
   cronPage,
   mcpPage,
   memoryPage,
   modelsPage,
-  pluginsPage,
   profilesPage,
   skillsPage,
   toolsetsPage,
@@ -115,15 +117,26 @@ function header(): HTMLElement {
   return h(
     "header",
     { class: "top" },
+    slot("header-left"),
     h("a", { class: "brand", href: href("/sessions") }, "Prometheus"),
     select,
     h("span", { class: "role", "data-role": state.session?.role ?? "" }, state.session?.role ?? ""),
     signOut,
+    slot("header-right"),
   );
 }
 
+/** A shell slot plugins may fill. */
+function slot(name: string): HTMLElement {
+  return h("div", { class: `shell-slot slot-${name}`, "data-shell-slot": name });
+}
+
+function navList(plugins: Contribution[]): HTMLElement {
+  return h("ul", {}, ...placeTabs(NAV, plugins).map(([path, label]) => h("li", {}, h("a", { href: href(path) }, label))));
+}
+
 function nav(): HTMLElement {
-  return h("nav", { "aria-label": "Pages" }, h("ul", {}, ...NAV.map(([path, label]) => h("li", {}, h("a", { href: href(path) }, label)))));
+  return h("nav", { "aria-label": "Pages" }, navList([]));
 }
 
 function signedOut(app: HTMLElement): void {
@@ -138,7 +151,7 @@ function signedOut(app: HTMLElement): void {
 }
 
 async function boot(): Promise<void> {
-  applyTheme(currentTheme());
+  applyTheme(currentTheme(), currentLayout());
   const app = document.getElementById("app") as HTMLElement;
   const session = await signIn();
   if (!session) {
@@ -153,9 +166,18 @@ async function boot(): Promise<void> {
   const asked = new URLSearchParams(location.search).get("profile");
   state.profile = asked && state.profiles.includes(asked) ? asked : (state.profiles[0] ?? "");
   const main = h("main", { id: "main" });
-  app.replaceChildren(header(), h("div", { class: "layout" }, nav(), main));
+  const pages = nav();
+  app.replaceChildren(
+    header(),
+    slot("header-banner"),
+    h("div", { class: "layout" }, pages, h("div", { class: "main-column" }, slot("pre-main"), main, slot("post-main")), slot("sidebar")),
+    h("footer", { class: "bottom" }, slot("footer-left"), slot("footer-right")),
+    slot("overlay"),
+  );
   routes();
   start(main);
+  // Plugins load after the first render and never hold it up.
+  void loadPlugins((plugins) => pages.replaceChildren(navList(plugins)));
 }
 
 void boot();

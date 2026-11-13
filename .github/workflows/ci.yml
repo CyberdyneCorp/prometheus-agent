@@ -158,10 +158,12 @@ jobs:
 
       # A build without an optional surface still answers to its name with
       # exit 69 (spec: workspace-architecture, Version and build
-      # identity); only the prometheus crate rebuilds.
+      # identity), and the gateway's remote client attachment and device
+      # revocation work without the dashboard (spec: messaging-gateway,
+      # Remote client attachment); only the prometheus crate rebuilds.
       - name: Minimal build without the dashboard
         if: matrix.target == 'x86_64-unknown-linux-gnu'
-        run: cargo test --locked -p prometheus --no-default-features --features tui,gateway,acp,mcp,evolve,eval --test surface_cli
+        run: cargo test --locked -p prometheus --no-default-features --features tui,gateway,acp,mcp,evolve,eval --test surface_cli --test remote_attach
 
       # The offline demo end to end, then the smoke suite, with networking
       # disabled (spec: replay-and-evaluation, Offline smoke demo; Built-in

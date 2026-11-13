@@ -11,6 +11,7 @@
 //! everything that reads or writes profile data lives under
 //! `/api/profiles/{profile}/` and never falls back to a default profile.
 
+pub(crate) mod adapter_actions;
 mod channels;
 mod config;
 pub(crate) mod devices;
@@ -18,6 +19,7 @@ mod files;
 mod logs;
 mod maintenance;
 mod messaging;
+pub(crate) mod plugins;
 mod profile;
 mod secrets;
 mod sessions;
@@ -93,6 +95,12 @@ pub(crate) async fn route(shared: &Arc<Shared>, req: &Req, body: Incoming) -> Re
         (&Method::GET, ["themes"]) => crate::themes::index(shared.server.home()),
         (&Method::GET, ["themes", name, "css"]) => crate::themes::css(shared.server.home(), name),
         (&Method::POST, ["profiles"]) => system::create_profile(shared, &caller, body).await,
+        (&Method::GET, ["plugins"]) => plugins::list(shared, &caller, req).await,
+        (&Method::POST, ["plugins", "rescan"]) => plugins::rescan(shared, &caller, req).await,
+        (&Method::GET, ["plugin-frames", id]) => plugins::frame(shared, &caller, req, id).await,
+        (_, ["plugins", id, rest @ ..]) => {
+            plugins::backend(shared, &caller, req, id, rest, body).await
+        }
         (&Method::GET, ["logs"]) => logs::tail(shared, req),
         (&Method::GET, ["events" | "rpc"]) => {
             crate::http::error(426, "upgrade_required", "this endpoint is a WebSocket")

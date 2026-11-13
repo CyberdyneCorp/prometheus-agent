@@ -21,7 +21,6 @@
 mod api;
 mod assets;
 mod auth;
-pub mod cert;
 mod docs;
 mod events;
 mod guard;
@@ -30,7 +29,6 @@ mod http;
 pub mod inventory;
 mod listener;
 mod login;
-pub mod remote;
 mod routes;
 mod themes;
 mod ws;
@@ -45,7 +43,7 @@ use pmt_gateway::{HostFuture, Server};
 use pmt_rpc::control::{DashboardAction, DashboardState, DeviceEntry};
 use tokio_util::sync::CancellationToken;
 
-pub use host::{Catalog, Change, DashboardHost};
+pub use host::{Catalog, Change, DashboardHost, PairingSink, SessionFile};
 
 /// What every request handler of a running listener shares.
 pub(crate) struct Shared {
@@ -56,6 +54,10 @@ pub(crate) struct Shared {
     guard: guard::Guard,
     auth: auth::Auth,
     feed: Arc<events::Feed>,
+    /// The adapters' interactive pairing flows.
+    pairings: api::adapter_actions::Flows,
+    /// The plugins' dashboard contributions, per profile.
+    plugins: api::plugins::Scanned,
     /// Cancelled when the listener stops.
     stop: CancellationToken,
     /// The base path without a trailing slash (`""` or `/prometheus`).
@@ -190,6 +192,8 @@ impl Dashboard {
             server: Arc::clone(&self.server),
             host: Arc::clone(&self.host),
             feed: Arc::clone(&self.feed),
+            pairings: api::adapter_actions::Flows::default(),
+            plugins: api::plugins::Scanned::default(),
             stop: CancellationToken::new(),
             base: base.clone(),
             config,
@@ -297,10 +301,6 @@ impl DashboardControl for Dashboard {
                 DashboardAction::Stop => self.stop().await,
                 DashboardAction::Pair { name, role } => self.pair(&name, &role).await,
                 DashboardAction::Devices => self.devices(),
-                DashboardAction::Revoke { name } => {
-                    self.devices.revoke(&name)?;
-                    Ok(DashboardState::at(String::new()))
-                }
                 DashboardAction::SignOut => Ok(self.sign_out().await),
             }
         })

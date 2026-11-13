@@ -148,13 +148,14 @@ configuration, secrets, sessions or the vault. A change over the API gets
 | `/secrets` | Secret names, where each one comes from, and when it changed. You can set or delete a secret, but values are write-only: no page or API returns one. |
 | `/logs` | The last records (at most 5000) of a log from the daemon's list, redacted. |
 | `/models`, `/skills`, `/profiles` | The profile's catalogs and the daemon's profiles. |
-| `/adapters` | Every adapter available to the profile with its messaging state, pause and resume, and a configure form built from the adapter's options schema. Secret fields are write-only (blank keeps the stored value). A save is one validated config patch plus the secret writes: a missing required field (such as Matrix's `homeserver`) is refused naming it, and nothing is written. |
+| `/adapters` | Every adapter available to the profile with its messaging state, pause and resume, and a configure form built from the adapter's options schema. Secret fields are write-only (blank keeps the stored value). A save is one validated config patch plus the secret writes: a missing required field (such as Matrix's `homeserver`) is refused naming it, and nothing is written. **Test** checks that the endpoints the saved configuration points at answer, without connecting; **Restart adapter** restarts that one adapter from its saved configuration. WhatsApp offers **Link with QR**: the QR code refreshes until the phone links (at most 120 seconds), then the adapter restarts. Telegram offers **Create with QR**: scan the code (or open the link) and confirm in Telegram within 180 seconds; the bot's token is stored as `TELEGRAM_BOT_TOKEN`, your Telegram account becomes the only allowed user, and only the Telegram adapter restarts. Cancel saves nothing, and so does a setup that times out. The onboarding service is `gateway.platforms.telegram.options.setup_service_url`. |
 | `/webhooks` | The profile's webhook subscriptions (URL, events, delivery, enabled). Creating one shows its URL and HMAC secret once; no API returns the secret again. Enable or disable (a disabled route answers 403, no restart), delete, or send a signed test event. When the webhook adapter is off, the page says so. |
 | `/files` | The profile's workspace (`<profile>/workspace`) and its recent sessions' working directories: list, preview (text up to 2 MiB, images), download, upload (`dashboard.max_upload_bytes`), rename and confirmed delete. Paths that leave the root, links included, get 403 and are never listed. |
 | `/docs` | This documentation, embedded in the binary and searchable offline. Searching a configuration key shows its reference entry; "applies next session" notes and config errors link to the key's entry. |
 | `/profile-builder` | Creates a profile in steps (name and description, model and provider, `SOUL.md`, toolsets, skills, adapters) with `profile create` and one validated config patch; nothing is created when a step is refused. Cloning copies another profile's configuration without its secrets, sessions or memories. |
 | `/themes` | The built-in themes (`default`, `default-large`, `midnight`, `ember`, `mono`, `cyberpunk`, `rose`) and user themes from `<home>/themes/dashboard/<name>.toml` (palette, typography from local fonts only, layout, `layout_variant`, component colours and at most 32 KiB of `custom_css`). A theme with `@import` or a `url()` to another origin, or too much CSS, is listed with the reason and never applied. The choice is kept by the browser. |
-| `/plugins`, `/mcp`, `/cron`, `/memory` | The profile's plugins (with their load state and any problem), MCP servers, cron jobs (with their state and next run) and memory entries. These pages are read-only for now: change them with `prometheus plugins`, `mcp`, `cron` and `memory`. |
+| `/plugins` | The profile's plugins (with their load state and any problem) and their dashboard contributions: each plugin's tab and slots, overrides that lost to an earlier plugin, and plugins whose frames did not register in time. **Rescan** reloads plugin discovery. See [Dashboard pages and slots](plugin-authoring.md#dashboard-pages-and-slots). |
+| `/mcp`, `/cron`, `/memory` | The profile's MCP servers, cron jobs (with their state and next run) and memory entries. These pages are read-only for now: change them with `prometheus mcp`, `cron` and `memory`. |
 
 These pages are listed in the navigation, but this build does not
 implement them yet, so each one says so: `/pairing`, `/kanban` and
@@ -199,7 +200,8 @@ sends as `Authorization: Bearer <credential>` and rotates with
 credentials, in `<home>/run/devices.toml`. `prometheus dashboard devices`
 lists the devices; `prometheus dashboard devices revoke laptop` (or
 `prometheus daemon revoke-device laptop`) rejects its credential and closes
-its open sockets with 4401 within a second. Pairing works in every
+its open sockets with 4401 within a second. Revoking goes through the
+gateway itself, so it also works on a daemon built without the dashboard. Pairing works in every
 `dashboard.auth.mode`; a non-loopback listener always has TLS, and
 `prometheus dashboard --fingerprint` prints the SHA-256 public-key
 fingerprint of `dashboard.tls.cert` for clients to pin.
@@ -217,7 +219,9 @@ listen = "0.0.0.0:9121"   # the default address
 # tls.cert / tls.key: unset uses a self-signed certificate in <home>/run/
 ```
 
-Clients connect over TLS with the bearer token and speak the same
+The remote attachment listener belongs to the gateway, not the
+dashboard: it runs on builds without the dashboard too. Clients connect
+over TLS with the bearer token and speak the same
 `rpc.hello` protocol as local clients (`?profiles=a,b` narrows the grant).
 A bad or revoked token closes with 4401, a profile outside the device's
 binding with 4403. The daemon logs the certificate's fingerprint at start.
@@ -237,7 +241,14 @@ With `webapp.enabled = true` in `daemon.toml` (default false), the
 dashboard listener also serves the desktop workspace under `/app`:
 sessions, chat, scheduled jobs and file staging (every file a user
 selects, pastes or drops is staged under the profile, at most 16 MiB each;
-larger ones get `413` before anything is written). `webapp.public_url`
+larger ones get `413` before anything is written). Host files of a
+session download only through that session's file-access rules: the path
+is resolved against the session's working directory, protected files
+(`.env` files, process memory) are refused, and so is anything the
+session's capabilities do not let it read (`403`). URL previews load in a
+sandboxed frame that may run scripts but cannot open popups, navigate the
+workspace or reach its origin. Webapp terminals (the desktop's
+daemon-owned PTYs) are not in this build yet. `webapp.public_url`
 (default empty) is the address opened and accepted as `Host`.
 
 ```text
@@ -278,15 +289,25 @@ from the same table the router serves; any endpoint not in it answers
   `GET config/defaults`, `GET secrets`, `PUT|DELETE secrets/<NAME>`,
   `GET usage` and `usage.csv`,
   `GET skills|toolsets|models|plugins|mcp|cron|memory`,
-  `POST uploads` (the file as the body), and `GET blobs/<sha256>` (only
-  blobs that a session of the profile references).
+  `POST uploads` (the file as the body), `GET blobs/<sha256>` (only
+  blobs that a session of the profile references), and
+  `GET sessions/<id>/file?path=<path>` (a host file, through the
+  session's file-access rules).
 - Changes per profile: `PATCH skills/<name>` and `PATCH toolsets/<name>`
   (`{"enabled": true|false}`), `POST cron`, `PATCH|DELETE cron/<id>`,
   `POST cron/<id>/run`, `PATCH memory` (`{"add": "<text>"}` or
   `{"remove": "<id>"}`), `GET adapters`,
-  `POST adapters/<name>/pause|resume`, `GET pairing`,
+  `POST adapters/<name>/pause|resume|test|restart`,
+  `POST|GET|DELETE adapters/<name>/pairing` (start, read and cancel an
+  adapter's pairing flow; each step also arrives on `/api/events` as
+  `adapter.pairing`), `GET pairing`,
   `POST pairing/<code>` (`{"platform": "telegram"}`), `GET secrets/<NAME>`
   (whether it is set, never the value), and webhooks (below).
+- Plugins (for `?profile=`, default the daemon's launch profile):
+  `GET /api/plugins` (the contributions in load order and the ignored
+  overrides), `POST /api/plugins/rescan`, `GET /api/plugin-frames/<id>`
+  (a plugin's sandboxed frame document) and `/api/plugins/<id>/<path>`
+  (its backend routes, answered by the plugin host).
 - Bulk maintenance: `POST maintenance/<action>` with `prune-sessions`
   (`days`, default `sessions.retention_secs` or 90 days), `vacuum`,
   `rebuild-fts` or `prune-snapshots`. It needs `{"confirm": true}` in the

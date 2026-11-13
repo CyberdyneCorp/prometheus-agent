@@ -49,6 +49,7 @@ mod inbound;
 pub mod key;
 mod lane;
 pub use lane::LOGIN_IN_DM;
+pub mod actions;
 mod limits;
 mod locks;
 pub mod markup;
