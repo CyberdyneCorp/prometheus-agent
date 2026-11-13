@@ -26,6 +26,8 @@ pmt-net.workspace = true
 pmt-obs.workspace = true
 pmt-rpc.workspace = true
 pmt-store.workspace = true
+# The remote attachment listener's self-signed certificate.
+rcgen.workspace = true
 # OIDC discovery, token exchange and JWKS, through the shared outbound client.
 reqwest.workspace = true
 # OIDC ID-token signatures (ES256, RS256).
@@ -35,15 +37,18 @@ serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 tokio = { workspace = true, features = ["net", "io-util"] }
+# Dashboard theme files.
+toml.workspace = true
 # TLS served by the listener itself (`dashboard.tls`).
 tokio-rustls.workspace = true
 tokio-tungstenite.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
 url.workspace = true
+# Public-key fingerprints of the listeners' certificates.
+webpki.workspace = true
 
 [dev-dependencies]
-rcgen.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["net", "io-util", "test-util"] }
 

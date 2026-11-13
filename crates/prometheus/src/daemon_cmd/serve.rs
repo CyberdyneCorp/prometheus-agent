@@ -37,6 +37,31 @@ use crate::context::Context;
 /// `home.locked` (75) when a daemon or chat holds the home, `config.*`
 /// (78) for `daemon.toml` or when no profile loads, listener errors.
 pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result<u8, Error> {
+    run_with(home, ctx, replace_locks, None)
+}
+
+/// Where `prometheus serve` opens the dashboard listener at start.
+#[derive(Debug, Clone, Default)]
+pub struct ServeDashboard {
+    /// `--host`.
+    pub host: Option<String>,
+    /// `--port`.
+    pub port: Option<u16>,
+}
+
+/// Runs the daemon in the foreground, opening the dashboard listener at
+/// start when `dashboard` is set (`prometheus serve`): a listener that
+/// may not bind fails the daemon (78) instead of running without it.
+///
+/// # Errors
+///
+/// As [`run`]; `dashboard.bind_refused` and `dashboard.port_in_use` (78).
+pub(crate) fn run_with(
+    home: &Path,
+    ctx: &Context<'_>,
+    replace_locks: bool,
+    dashboard: Option<&ServeDashboard>,
+) -> Result<u8, Error> {
     let span = tracing::info_span!("daemon", component = "gateway");
     let _daemon = span.enter();
     let layout = ctx.home()?;
@@ -108,7 +133,7 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result
                 ctx.launch,
                 enabled_adapters(&scopes_of(&server, &host)),
             );
-            start_listeners(&config, &server, &host).await;
+            let _listeners = start_listeners(home, &config, &server, &host, dashboard).await?;
             if let Some(systemd) = &systemd {
                 systemd.notify("READY=1");
             }
@@ -154,16 +179,63 @@ fn server_options(
     options
 }
 
-/// The HTTP surfaces: the API server, and the dashboard's controller
-/// (its listener opens when `prometheus dashboard` asks).
-async fn start_listeners(config: &DaemonConfig, server: &Arc<Server>, host: &Arc<DaemonHost>) {
+/// The network surfaces kept alive while the daemon runs.
+#[derive(Default)]
+struct Listeners {
+    #[cfg(feature = "dashboard")]
+    _remote: Option<pmt_web::remote::RemoteListener>,
+}
+
+/// The HTTP surfaces: the API server, the dashboard's controller (its
+/// listener opens when `prometheus dashboard` asks, or at once for
+/// `prometheus serve`) and the remote attachment listener when
+/// `daemon.remote.enabled`.
+#[cfg_attr(not(feature = "dashboard"), allow(clippy::unused_async))]
+async fn start_listeners(
+    home: &Path,
+    config: &DaemonConfig,
+    server: &Arc<Server>,
+    host: &Arc<DaemonHost>,
+    serve: Option<&ServeDashboard>,
+) -> Result<Listeners, Error> {
     start_api(config, server, host).await;
     #[cfg(feature = "dashboard")]
-    pmt_web::Dashboard::install(
-        server,
-        Arc::clone(host) as Arc<dyn pmt_web::DashboardHost>,
-        config.dashboard.clone(),
-    );
+    {
+        let devices = Arc::new(pmt_gateway::devices::Devices::open(home));
+        let dashboard = pmt_web::Dashboard::install(
+            server,
+            Arc::clone(host) as Arc<dyn pmt_web::DashboardHost>,
+            config.dashboard.clone(),
+            config.webapp.clone(),
+            Arc::clone(&devices),
+        );
+        if let Some(serve) = serve {
+            let state = dashboard
+                .open(serve.host.as_deref(), serve.port, None)
+                .await?;
+            eprintln!("Dashboard: {}", state.url);
+        }
+        let remote =
+            match pmt_web::remote::start(server, devices, &config.daemon.remote, home).await {
+                Ok(remote) => remote,
+                Err(err) => {
+                    tracing::error!("remote attachment listener not started: {err}");
+                    None
+                }
+            };
+        if let Some(remote) = &remote {
+            eprintln!(
+                "Remote clients: wss://{} (certificate {})",
+                remote.addr, remote.fingerprint
+            );
+        }
+        Ok(Listeners { _remote: remote })
+    }
+    #[cfg(not(feature = "dashboard"))]
+    {
+        let _ = (home, serve);
+        Ok(Listeners::default())
+    }
 }
 
 /// Starts the API server when a served profile enables it; a listener

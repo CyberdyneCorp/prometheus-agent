@@ -56,12 +56,15 @@ async fn route(shared: &Arc<Shared>, request: Request<Incoming>, peer: SocketAdd
     let ip = shared.guard.client_ip(&req, peer);
     match (&req.method, req.path.as_str()) {
         (&Method::GET, "/api/health") => api::system::health(shared),
-        (&Method::GET, "/login") => login::get(shared, &req).await,
+        (&Method::GET, "/login") => login::get(shared, &req, peer).await,
         (&Method::POST, "/login") => login::post(shared, body, ip).await,
         (&Method::GET, "/auth/callback") => login::callback(shared, &req).await,
         (_, path) if path.starts_with("/assets/") => asset(&req),
         (_, path) if path == "/api" || path.starts_with("/api/") => {
             api::route(shared, &req, body).await
+        }
+        (_, path) if !shared.webapp.enabled && (path == "/app" || path.starts_with("/app/")) => {
+            crate::http::not_found()
         }
         (&Method::GET | &Method::HEAD, _) => shell(shared),
         _ => error(

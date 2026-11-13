@@ -240,10 +240,9 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Tui(_)) => prometheus::surface::require("tui").map(|()| 0),
         #[cfg(not(feature = "gateway"))]
         Some(Command::Gateway(_)) => prometheus::surface::require("gateway").map(|()| 0),
-        #[cfg(feature = "dashboard")]
-        Some(Command::Dashboard(args)) => prometheus::dashboard_cmd::run(args, &ctx),
-        #[cfg(not(feature = "dashboard"))]
-        Some(Command::Dashboard(_)) => prometheus::surface::require("dashboard").map(|()| 0),
+        Some(command @ (Command::Dashboard(_) | Command::Serve(_) | Command::Webapp(_))) => {
+            web(command, &ctx)
+        }
         #[cfg(not(feature = "acp"))]
         Some(Command::Acp(_)) => prometheus::surface::require("acp").map(|()| 0),
         #[cfg(not(feature = "mcp"))]
@@ -260,6 +259,30 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         print_error(&err, cli.json);
         err.exit_code()
     })
+}
+
+/// The web surfaces: the dashboard, `serve` and the webapp (kept out of
+/// [`run`] to bound its length).
+fn web(command: &Command, ctx: &Context<'_>) -> Result<u8, Error> {
+    match command {
+        #[cfg(feature = "dashboard")]
+        Command::Dashboard(args) => prometheus::dashboard_cmd::run(args, ctx),
+        #[cfg(feature = "dashboard")]
+        Command::Serve(args) => prometheus::daemon_cmd::serve_foreground(
+            ctx,
+            &prometheus::daemon_cmd::ServeDashboard {
+                host: args.host.clone(),
+                port: args.port,
+            },
+        ),
+        #[cfg(feature = "dashboard")]
+        Command::Webapp(args) => prometheus::webapp_cmd::run(args, ctx),
+        #[cfg(not(feature = "dashboard"))]
+        Command::Dashboard(_) | Command::Serve(_) | Command::Webapp(_) => {
+            prometheus::surface::require("dashboard").map(|()| 0)
+        }
+        _ => unreachable!("run() dispatches every other command itself"),
+    }
 }
 
 /// The subcommand groups over the profile's records and workspaces

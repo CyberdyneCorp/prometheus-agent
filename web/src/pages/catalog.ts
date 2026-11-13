@@ -49,8 +49,3 @@ export async function profilesPage(): Promise<HTMLElement> {
     ),
   );
 }
-
-export async function adaptersPage(): Promise<HTMLElement> {
-  const status = await api.get<{ adapters: Item[] }>("/api/status");
-  return page("Adapters", rows(status.adapters, ["profile", "platform", "state", "message"]));
-}

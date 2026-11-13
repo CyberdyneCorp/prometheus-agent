@@ -3838,6 +3838,7 @@ dependencies = [
  "reqwest",
  "ring",
  "rustls",
+ "rustls-webpki",
  "serde",
  "serde_json",
  "sha2 0.11.1",
@@ -3846,6 +3847,7 @@ dependencies = [
  "tokio-rustls",
  "tokio-tungstenite",
  "tokio-util",
+ "toml",
  "tracing",
  "url",
 ]
@@ -6644,6 +6646,7 @@ dependencies = [
  "pmt-store",
  "pmt-tools",
  "pmt-update",
+ "pmt-web",
  "proc-macro2",
  "prometheus",
  "regex",

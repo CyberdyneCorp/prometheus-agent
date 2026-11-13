@@ -6,6 +6,7 @@
 //! prints its endpoint, `stop` drains and stops it, `restart` drains and
 //! replaces it, `status` prints its process state.
 
+pub(crate) mod devices_cmd;
 mod enroll_cmd;
 mod gateway_cmd;
 mod health;
@@ -16,7 +17,7 @@ mod platform_cmd;
 mod record;
 pub(crate) mod self_guard;
 pub(crate) mod send_cmd;
-mod serve;
+pub(crate) mod serve;
 pub mod service;
 mod slack_manifest_cmd;
 pub(crate) mod standalone;
@@ -70,9 +71,31 @@ pub enum DaemonCommand {
     InstallService(service::InstallArgs),
     /// Stop and remove the unit `install-service` installed.
     UninstallService(service::UninstallArgs),
+    /// Pair a remote device: print its token (shown once) for the remote
+    /// attachment listener (`daemon.remote`) and the dashboard listener.
+    PairDevice(devices_cmd::PairDeviceArgs),
+    /// Revoke a paired device: its token stops working and its open
+    /// sockets close with 4401.
+    RevokeDevice {
+        /// The device's name.
+        name: String,
+    },
 }
 
 pub use gateway_cmd::{GatewayCommand, OutboxCommand, PairingCommand};
+pub use serve::ServeDashboard;
+
+/// Runs `prometheus serve`: the daemon in the foreground with the
+/// dashboard listener open from the start.
+///
+/// # Errors
+///
+/// As `daemon run`; `dashboard.bind_refused` and `dashboard.port_in_use`
+/// (78) when the listener may not bind.
+pub fn serve_foreground(ctx: &Context<'_>, dashboard: &ServeDashboard) -> Result<u8, Error> {
+    let home = ctx.home()?;
+    serve::run_with(home.root(), ctx, false, Some(dashboard))
+}
 
 /// Runs `prometheus gateway <command>`.
 ///
@@ -112,6 +135,8 @@ pub fn run(command: &DaemonCommand, ctx: &Context<'_>) -> Result<u8, Error> {
         DaemonCommand::Status => status(&root, ctx.json),
         DaemonCommand::InstallService(args) => service::install(args, ctx),
         DaemonCommand::UninstallService(args) => service::uninstall(args, ctx),
+        DaemonCommand::PairDevice(args) => devices_cmd::pair_device(&root, args, ctx.json),
+        DaemonCommand::RevokeDevice { name } => devices_cmd::revoke(&root, name, ctx.json),
     }
 }
 

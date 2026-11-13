@@ -3,6 +3,12 @@
 //! for a public client (`client_id`, no client secret). The ID token's
 //! signature (ES256 or RS256, from the issuer's JWKS), issuer, audience,
 //! expiry and nonce are checked, and only `allowed_subjects` may sign in.
+//!
+//! The account portal (`dashboard.auth.portal`) is the same flow against
+//! the portal's issuer with the dashboard's registered client: instead of
+//! a subject list, the portal must confirm that the signed-in account owns
+//! that client (`GET <issuer>/api/oauth/clients/<client_id>` with the
+//! account's access token answers 200 with `owner` equal to the subject).
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -10,7 +16,7 @@ use std::time::Duration;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use pmt_config::daemon_dashboard::OidcConfig;
+use pmt_config::daemon_dashboard::{OidcConfig, PortalConfig};
 use pmt_core::error::{Error, codes};
 use serde_json::Value;
 use sha2::{Digest as _, Sha256};
@@ -48,6 +54,9 @@ pub(crate) struct Oidc {
     issuer: String,
     client_id: String,
     allowed: Vec<String>,
+    /// The portal: the account must own `client_id` instead of being
+    /// listed in `allowed`.
+    owner_check: bool,
     http: reqwest::Client,
     pending: Mutex<HashMap<String, Pending>>,
 }
@@ -59,18 +68,49 @@ fn failed(message: impl Into<String>) -> Error {
 impl Oidc {
     /// The sign-in for `config`; `None` when it is incomplete.
     pub(crate) fn new(config: &OidcConfig) -> Option<Self> {
-        let http = pmt_net::http::client_builder(&pmt_net::http::OutboundPolicy::default())
-            .ok()?
-            .timeout(Duration::from_secs(15))
-            .build()
-            .ok()?;
         Some(Self {
             issuer: config.issuer.clone()?.trim_end_matches('/').to_owned(),
             client_id: config.client_id.clone()?,
             allowed: config.allowed_subjects.clone(),
-            http,
+            owner_check: false,
+            http: client()?,
             pending: Mutex::default(),
         })
+    }
+
+    /// The account portal's sign-in; `None` without a registered client.
+    pub(crate) fn portal(config: &PortalConfig) -> Option<Self> {
+        Some(Self {
+            issuer: config.issuer_url().to_owned(),
+            client_id: config.client_id.clone()?,
+            allowed: Vec::new(),
+            owner_check: true,
+            http: client()?,
+            pending: Mutex::default(),
+        })
+    }
+
+    /// Whether the portal confirms that `subject` owns the client.
+    async fn owns_client(&self, subject: &str, access_token: &str) -> Result<(), Error> {
+        let url = format!("{}/api/oauth/clients/{}", self.issuer, self.client_id);
+        let response = self
+            .http
+            .get(&url)
+            .bearer_auth(access_token)
+            .send()
+            .await
+            .map_err(|e| failed(format!("the account portal is unreachable: {e}")))?;
+        let status = response.status();
+        let body: Value =
+            serde_json::from_slice(&response.bytes().await.unwrap_or_default()).unwrap_or_default();
+        if status.is_success() && body["owner"].as_str() == Some(subject) {
+            Ok(())
+        } else {
+            Err(failed(format!(
+                "the portal account '{subject}' does not own the dashboard's client {}",
+                self.client_id
+            )))
+        }
     }
 
     async fn get_json(&self, url: &str) -> Result<Value, Error> {
@@ -175,7 +215,14 @@ impl Oidc {
             .ok_or_else(|| failed("the OIDC token response has no id_token"))?;
         let jwks = self.get_json(&discovery.jwks).await?;
         let claims = verify_jwt(id_token, &jwks)?;
-        self.check_claims(&claims, &pending.nonce)
+        let subject = self.check_claims(&claims, &pending.nonce)?;
+        if self.owner_check {
+            let access = tokens["access_token"]
+                .as_str()
+                .ok_or_else(|| failed("the portal token response has no access_token"))?;
+            self.owns_client(&subject, access).await?;
+        }
+        Ok(subject)
     }
 
     fn check_claims(&self, claims: &Value, nonce: &str) -> Result<String, Error> {
@@ -203,7 +250,7 @@ impl Oidc {
         let subject = claims["sub"]
             .as_str()
             .ok_or_else(|| failed("the ID token has no subject"))?;
-        if !self.allowed.iter().any(|s| s == subject) {
+        if !self.owner_check && !self.allowed.iter().any(|s| s == subject) {
             return Err(Error::new(
                 &codes::DASHBOARD_SIGNIN_FAILED,
                 format!("subject '{subject}' is not in dashboard.auth.oidc.allowed_subjects"),
@@ -211,6 +258,14 @@ impl Oidc {
         }
         Ok(subject.to_owned())
     }
+}
+
+fn client() -> Option<reqwest::Client> {
+    pmt_net::http::client_builder(&pmt_net::http::OutboundPolicy::default())
+        .ok()?
+        .timeout(Duration::from_secs(15))
+        .build()
+        .ok()
 }
 
 fn decode(part: &str) -> Result<Vec<u8>, Error> {

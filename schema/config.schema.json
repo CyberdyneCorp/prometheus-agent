@@ -10551,6 +10551,15 @@
           "description": "Run no model: the rendered prompt is sent verbatim to `deliver`.",
           "type": "boolean"
         },
+        "description": {
+          "description": "What the route is for (shown by the dashboard's `/webhooks`).",
+          "type": "string"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Serve the route; a disabled route answers 403 (no restart needed\nfor a subscription: the adapter re-reads them when they change).",
+          "type": "boolean"
+        },
         "events": {
           "default": [],
           "description": "Event types admitted (`X-GitHub-Event`, `X-GitLab-Event` or the\npayload's `event_type`); empty admits every event.",

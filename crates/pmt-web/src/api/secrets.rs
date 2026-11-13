@@ -41,6 +41,20 @@ pub(crate) fn list(at: &Profile<'_>) -> Reply {
     json_reply(200, &json!({"secrets": listed}))
 }
 
+/// `GET secrets/{name}`: whether it is set and where from, never a value.
+pub(crate) fn show(at: &Profile<'_>, name: &str) -> Reply {
+    match at.scope.secrets().list() {
+        Ok(rows) => match rows.iter().find(|row| row.name == name) {
+            Some(row) => json_reply(
+                200,
+                &json!({"name": row.name, "set": true, "source": row.source, "shadowed": row.shadowed}),
+            ),
+            None => json_reply(200, &json!({"name": name, "set": false})),
+        },
+        Err(err) => from_error(&err),
+    }
+}
+
 /// `PUT secrets/{name} {"value": "..."}`.
 pub(crate) async fn put(at: &Profile<'_>, name: &str, body: Incoming) -> Reply {
     let body = match read_json(body).await {

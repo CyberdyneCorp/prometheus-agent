@@ -12,7 +12,6 @@ mod common;
 use std::fmt::Write as _;
 
 use std::path::Path;
-use std::process::Command;
 use std::sync::Arc;
 
 use jiff::Timestamp;
@@ -20,41 +19,8 @@ use pmt_config::{Home, Launch, Overrides, ProfileName, ProfileScope};
 use pmt_obs::usage::{Call, ConfigPrices, UsageRecorder};
 use pmt_store::{LineageKind, NewSession, Source, Store, Tokens};
 
-use common::{BIN, append_config, daemon, mock_home, ok, run};
-
-const WEB: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../web");
-
-/// Runs `web/e2e/<spec>` against `home`'s running daemon.
-fn playwright(home: &Path, spec: &str, extra: &[(&str, &str)]) {
-    let web = Path::new(WEB);
-    let cli = web.join("node_modules/@playwright/test/cli.js");
-    assert!(
-        cli.is_file(),
-        "the dashboard's browser tests need `npm ci` in web/ (scripts/check runs it)"
-    );
-    let out = Command::new("node")
-        .current_dir(web)
-        .arg(&cli)
-        .args([
-            "test",
-            &format!("e2e/{spec}"),
-            "--config",
-            "playwright.config.ts",
-        ])
-        .env("PMT_BIN", BIN)
-        .env("PMT_HOME", home)
-        .env("PMT_USER_HOME", common::user_home(home))
-        .env("PMT_PW_OUT", home.join("playwright"))
-        .envs(extra.iter().copied())
-        .output()
-        .unwrap();
-    assert!(
-        out.status.success(),
-        "{spec} failed\n{}\n{}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-}
+use common::dashboard::playwright;
+use common::{append_config, daemon, mock_home, ok, run};
 
 /// The mock answers "clean ..." with a terminal call that needs approval
 /// and a refused call with "refused".
@@ -215,7 +181,7 @@ fn the_plugin_mcp_cron_and_memory_pages_show_the_profiles_data() {
     let plugin = home.path().join("profiles/default/plugins/weather");
     pmt_plugins::testkit::install("example-weather", &plugin);
     std::fs::copy(
-        Path::new(WEB).join("../plugins/examples/weather/plugin.toml"),
+        Path::new(common::dashboard::WEB).join("../plugins/examples/weather/plugin.toml"),
         plugin.join("plugin.toml"),
     )
     .unwrap();

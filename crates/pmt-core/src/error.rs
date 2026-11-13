@@ -1128,26 +1128,27 @@ error_codes! {
     WEBHOOK_TEST_FAILED = ("webhook.test_failed", Unavailable,
         "The test delivery did not reach the route: the payload file is unreadable, the daemon's listener is not running, or it refused the delivery (the status is in the message).");
     /// No daemon runs for the home.
-    DAEMON_NOT_RUNNING = ("daemon.not_running", Unavailable,
-        "No gateway daemon runs for this home; start it with `prometheus daemon start`.");
+    DAEMON_NOT_RUNNING = ("daemon.not_running", Unavailable, "No gateway daemon runs for this home; start it with `prometheus daemon start`.");
     /// The daemon did not become ready.
-    DAEMON_START_FAILED = ("daemon.start_failed", Unavailable,
-        "`prometheus daemon start` launched the daemon but it exited or did not publish its endpoint in time; see `prometheus logs daemon` and the exit status in the message.");
+    DAEMON_START_FAILED = ("daemon.start_failed", Unavailable, "`prometheus daemon start` launched the daemon but it exited or did not publish its endpoint in time; see `prometheus logs daemon` and the exit status in the message.");
     /// No profile of the home can be served.
-    DAEMON_NO_PROFILE = ("daemon.no_profile", Config,
-        "Every profile of the home failed to load (each error is logged), so the daemon has nothing to serve.");
+    DAEMON_NO_PROFILE = ("daemon.no_profile", Config, "Every profile of the home failed to load (each error is logged), so the daemon has nothing to serve.");
     /// No dashboard listener runs in the daemon.
-    DASHBOARD_NOT_RUNNING = ("dashboard.not_running", Unavailable,
-        "The gateway daemon has no dashboard listener running; start one with `prometheus dashboard`.");
+    DASHBOARD_NOT_RUNNING = ("dashboard.not_running", Unavailable, "The gateway daemon has no dashboard listener running; start one with `prometheus dashboard`.");
     /// The dashboard port is held by another process.
-    DASHBOARD_PORT_IN_USE = ("dashboard.port_in_use", Config,
-        "Another process holds the dashboard port; set `dashboard.port` in `daemon.toml` or pass `--port`.");
+    DASHBOARD_PORT_IN_USE = ("dashboard.port_in_use", Config, "Another process holds the dashboard port; set `dashboard.port` in `daemon.toml` or pass `--port`.");
     /// A remote dashboard sign-in was refused.
-    DASHBOARD_SIGNIN_FAILED = ("dashboard.signin_failed", Auth,
-        "A dashboard sign-in through `dashboard.auth.mode` failed: the identity provider was unreachable or answered badly, the ID token did not verify (signature, issuer, audience, expiry, nonce), or the subject is not allowed.");
+    DASHBOARD_SIGNIN_FAILED = ("dashboard.signin_failed", Auth, "A dashboard sign-in through `dashboard.auth.mode` failed: the identity provider was unreachable or answered badly, the ID token did not verify (signature, issuer, audience, expiry, nonce), or the subject is not allowed.");
     /// A non-loopback dashboard bind lacks authentication or TLS.
-    DASHBOARD_BIND_REFUSED = ("dashboard.bind_refused", Config,
-        "A dashboard bound to a non-loopback address needs `dashboard.auth.mode` (with its provider configured and its secret set) and TLS (`dashboard.tls.cert`/`key` or `dashboard.trust_proxy_tls`); the message names the missing item.");
+    DASHBOARD_BIND_REFUSED = ("dashboard.bind_refused", Config, "A dashboard bound to a non-loopback address needs `dashboard.auth.mode` (with its provider configured and its secret set) and TLS (`dashboard.tls.cert`/`key` or `dashboard.trust_proxy_tls`); the message names the missing item.");
+    /// `prometheus dashboard register` needs a portal sign-in.
+    DASHBOARD_PORTAL_SIGNIN = ("dashboard.portal_signin_required", Config, "Registering a dashboard with the account portal uses the profile's portal sign-in; sign in first with `prometheus auth login portal`.");
+    /// The account portal refused or failed a dashboard registration.
+    DASHBOARD_REGISTER_FAILED = ("dashboard.register_failed", Unavailable, "The account portal did not register the dashboard's OAuth client: it was unreachable or refused the request (the status is in the message).");
+    /// No paired device of that name.
+    DEVICE_NOT_FOUND = ("device.not_found", NotFound, "No paired device has that name; `prometheus dashboard devices` lists them.");
+    /// The webapp is not enabled.
+    WEBAPP_DISABLED = ("webapp.disabled", Unavailable, "The desktop workspace in the browser is off; set `webapp.enabled = true` in `daemon.toml`.");
     /// A turn is already running in the session.
     SESSION_BUSY = ("session.busy", Conflict,
         "The session is running a turn; submit again when it finishes.");

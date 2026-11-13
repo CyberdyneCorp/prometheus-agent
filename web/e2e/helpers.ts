@@ -25,6 +25,13 @@ export function dashboard(): Opened {
   return JSON.parse(execFileSync(env("PMT_BIN"), args, { encoding: "utf8", env: child })) as Opened;
 }
 
+/** Runs the CLI on the harness's home with its isolated user home. */
+export function cli(...args: string[]): string {
+  const home = env("PMT_USER_HOME");
+  const child = { ...process.env, HOME: home, USERPROFILE: home };
+  return execFileSync(env("PMT_BIN"), ["--home", env("PMT_HOME"), ...args], { encoding: "utf8", env: child });
+}
+
 /** Signs `page` in with a new login link; the dashboard's URL. */
 export async function signIn(page: Page): Promise<string> {
   const opened = dashboard();

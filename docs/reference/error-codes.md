@@ -380,6 +380,10 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `dashboard.port_in_use` | `config` | 78 | Another process holds the dashboard port; set `dashboard.port` in `daemon.toml` or pass `--port`. |
 | `dashboard.signin_failed` | `auth` | 78 | A dashboard sign-in through `dashboard.auth.mode` failed: the identity provider was unreachable or answered badly, the ID token did not verify (signature, issuer, audience, expiry, nonce), or the subject is not allowed. |
 | `dashboard.bind_refused` | `config` | 78 | A dashboard bound to a non-loopback address needs `dashboard.auth.mode` (with its provider configured and its secret set) and TLS (`dashboard.tls.cert`/`key` or `dashboard.trust_proxy_tls`); the message names the missing item. |
+| `dashboard.portal_signin_required` | `config` | 78 | Registering a dashboard with the account portal uses the profile's portal sign-in; sign in first with `prometheus auth login portal`. |
+| `dashboard.register_failed` | `unavailable` | 69 | The account portal did not register the dashboard's OAuth client: it was unreachable or refused the request (the status is in the message). |
+| `device.not_found` | `not_found` | 66 | No paired device has that name; `prometheus dashboard devices` lists them. |
+| `webapp.disabled` | `unavailable` | 69 | The desktop workspace in the browser is off; set `webapp.enabled = true` in `daemon.toml`. |
 | `session.busy` | `conflict` | 75 | The session is running a turn; submit again when it finishes. |
 | `session.not_attached` | `permission_denied` | 77 | Every session-addressed method needs the connection to attach to the session first (`session.attach`); the error does not say whether the session exists. |
 | `profile.not_granted` | `permission_denied` | 77 | The request names a profile the connection's ticket does not grant; get a ticket for that profile. |

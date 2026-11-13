@@ -339,14 +339,21 @@ fn secrets_are_listed_by_name_and_never_returned() {
         .unwrap();
     assert_eq!(row["source"], "file");
     assert!(row["modified"].is_string(), "{row}");
-    for path in [
+    let shown = get(
+        opened.port,
         "/api/profiles/default/secrets/SERVICE_TOKEN",
+        &signed.cookie,
+    );
+    assert_eq!(shown.status, 200, "{shown:?}");
+    assert_eq!(shown.json()["set"], true);
+    assert!(!shown.body.contains(value), "write-only: {}", shown.body);
+    let reveal = get(
+        opened.port,
         "/api/profiles/default/secrets/SERVICE_TOKEN/reveal",
-    ] {
-        let answer = get(opened.port, path, &signed.cookie);
-        assert_eq!(answer.status, 404, "{path}");
-        assert!(!answer.body.contains(value));
-    }
+        &signed.cookie,
+    );
+    assert_eq!(reveal.status, 404, "there is no reveal endpoint");
+    assert!(!reveal.body.contains(value));
     let removed = call(
         opened.port,
         "DELETE",

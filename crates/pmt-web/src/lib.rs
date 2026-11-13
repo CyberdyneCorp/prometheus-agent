@@ -21,31 +21,38 @@
 mod api;
 mod assets;
 mod auth;
+pub mod cert;
+mod docs;
 mod events;
 mod guard;
 mod host;
 mod http;
+pub mod inventory;
 mod listener;
 mod login;
+pub mod remote;
 mod routes;
+mod themes;
 mod ws;
 
 use std::sync::Arc;
 
-use pmt_config::daemon_dashboard::DashboardConfig;
+use pmt_config::daemon_dashboard::{DashboardConfig, WebappConfig};
 use pmt_core::error::{Error, codes};
 use pmt_gateway::dashboard::DashboardControl;
+use pmt_gateway::devices::{DeviceRole, Devices};
 use pmt_gateway::{HostFuture, Server};
-use pmt_rpc::control::{DashboardAction, DashboardState};
+use pmt_rpc::control::{DashboardAction, DashboardState, DeviceEntry};
 use tokio_util::sync::CancellationToken;
 
-pub use host::{Catalog, DashboardHost};
+pub use host::{Catalog, Change, DashboardHost};
 
 /// What every request handler of a running listener shares.
 pub(crate) struct Shared {
     server: Arc<Server>,
     host: Arc<dyn DashboardHost>,
     config: DashboardConfig,
+    webapp: WebappConfig,
     guard: guard::Guard,
     auth: auth::Auth,
     feed: Arc<events::Feed>,
@@ -67,6 +74,8 @@ pub struct Dashboard {
     server: Arc<Server>,
     host: Arc<dyn DashboardHost>,
     config: DashboardConfig,
+    webapp: WebappConfig,
+    devices: Arc<Devices>,
     feed: Arc<events::Feed>,
     running: tokio::sync::Mutex<Option<Running>>,
 }
@@ -79,12 +88,15 @@ impl std::fmt::Debug for Dashboard {
 
 impl Dashboard {
     /// Installs the controller in `server` (its control channel's
-    /// `dashboard` requests reach it) with `daemon.toml [dashboard]`. The
-    /// listener stops with the daemon.
+    /// `dashboard` requests reach it) with `daemon.toml [dashboard]` and
+    /// `[webapp]`; paired devices come from `devices`. The listener stops
+    /// with the daemon.
     pub fn install(
         server: &Arc<Server>,
         host: Arc<dyn DashboardHost>,
         config: DashboardConfig,
+        webapp: WebappConfig,
+        devices: Arc<Devices>,
     ) -> Arc<Self> {
         let feed = Arc::new(events::Feed::default());
         let tapped = Arc::clone(&feed);
@@ -97,6 +109,8 @@ impl Dashboard {
             server: Arc::clone(server),
             host,
             config,
+            webapp,
+            devices,
             feed,
             running: tokio::sync::Mutex::new(None),
         });
@@ -122,6 +136,7 @@ impl Dashboard {
         &self,
         host: Option<&str>,
         port: Option<u16>,
+        next: Option<&str>,
     ) -> Result<DashboardState, Error> {
         let mut running = self.running.lock().await;
         let started = running.is_none();
@@ -130,11 +145,18 @@ impl Dashboard {
             None => self.start(host, port).await?,
         };
         let ticket = current.shared.auth.tickets.mint();
-        let state = DashboardState {
-            url: current.url.clone(),
-            login_url: Some(format!("{}login?ticket={ticket}", current.url)),
-            started,
-        };
+        let next = next
+            .filter(|n| n.starts_with('/') && !n.starts_with("//"))
+            .map(|n| {
+                format!(
+                    "&next={}",
+                    url::form_urlencoded::byte_serialize(n.as_bytes()).collect::<String>()
+                )
+            })
+            .unwrap_or_default();
+        let mut state = DashboardState::at(current.url.clone());
+        state.login_url = Some(format!("{}login?ticket={ticket}{next}", current.url));
+        state.started = started;
         *running = Some(current);
         Ok(state)
     }
@@ -162,8 +184,9 @@ impl Dashboard {
             None => format!("{}:{bound}", config.host),
         };
         let shared = Arc::new(Shared {
-            guard: guard::Guard::new(&config, bound),
-            auth: auth::Auth::new(&config),
+            guard: guard::Guard::new(&config, &self.webapp, bound),
+            auth: auth::Auth::new(&config, Arc::clone(&self.devices)),
+            webapp: self.webapp.clone(),
             server: Arc::clone(&self.server),
             host: Arc::clone(&self.host),
             feed: Arc::clone(&self.feed),
@@ -185,11 +208,7 @@ impl Dashboard {
     pub async fn status(&self) -> Result<DashboardState, Error> {
         let running = self.running.lock().await;
         let current = running.as_ref().ok_or_else(not_running)?;
-        Ok(DashboardState {
-            url: current.url.clone(),
-            login_url: None,
-            started: false,
-        })
+        Ok(DashboardState::at(current.url.clone()))
     }
 
     /// Stops the listener, closing its sockets with 1001; the daemon keeps
@@ -201,11 +220,61 @@ impl Dashboard {
     pub async fn stop(&self) -> Result<DashboardState, Error> {
         let current = self.running.lock().await.take().ok_or_else(not_running)?;
         current.shared.stop.cancel();
-        Ok(DashboardState {
-            url: current.url,
-            login_url: None,
-            started: false,
-        })
+        Ok(DashboardState::at(current.url))
+    }
+
+    /// Mints a pairing code for device `name`, opening the listener the
+    /// device exchanges it on.
+    ///
+    /// # Errors
+    ///
+    /// `cli.usage` for a bad name or role; those of [`Self::open`].
+    pub async fn pair(&self, name: &str, role: &str) -> Result<DashboardState, Error> {
+        let role = DeviceRole::parse(role).ok_or_else(|| {
+            Error::new(
+                &codes::CLI_USAGE,
+                format!("role '{role}' is not driver or observer"),
+            )
+        })?;
+        let code = self.devices.mint_code(name, role)?;
+        let mut state = self.open(None, None, None).await?;
+        state.login_url = None;
+        state.pairing_code = Some(code);
+        Ok(state)
+    }
+
+    /// The paired devices.
+    ///
+    /// # Errors
+    ///
+    /// `home.io`.
+    pub fn devices(&self) -> Result<DashboardState, Error> {
+        let mut state = DashboardState::at(String::new());
+        state.devices = self
+            .devices
+            .list()?
+            .into_iter()
+            .map(|d| DeviceEntry {
+                name: d.name,
+                role: d.role.as_str().to_owned(),
+                profiles: d.profiles,
+                paired_at: d.paired_at,
+                rotated_at: d.rotated_at,
+            })
+            .collect();
+        Ok(state)
+    }
+
+    /// Signs every browser of the running listener out.
+    async fn sign_out(&self) -> DashboardState {
+        let running = self.running.lock().await;
+        let mut state =
+            DashboardState::at(running.as_ref().map(|r| r.url.clone()).unwrap_or_default());
+        let ended = running
+            .as_ref()
+            .map_or(0, |r| r.shared.auth.sessions.sign_out_all());
+        state.signed_out = Some(ended as u64);
+        state
     }
 }
 
@@ -221,9 +290,18 @@ impl DashboardControl for Dashboard {
     fn control(&self, action: DashboardAction) -> HostFuture<'_, DashboardState> {
         Box::pin(async move {
             match action {
-                DashboardAction::Open { host, port } => self.open(host.as_deref(), port).await,
+                DashboardAction::Open { host, port, next } => {
+                    self.open(host.as_deref(), port, next.as_deref()).await
+                }
                 DashboardAction::Status => self.status().await,
                 DashboardAction::Stop => self.stop().await,
+                DashboardAction::Pair { name, role } => self.pair(&name, &role).await,
+                DashboardAction::Devices => self.devices(),
+                DashboardAction::Revoke { name } => {
+                    self.devices.revoke(&name)?;
+                    Ok(DashboardState::at(String::new()))
+                }
+                DashboardAction::SignOut => Ok(self.sign_out().await),
             }
         })
     }

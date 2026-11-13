@@ -377,6 +377,14 @@ pub enum Command {
     /// sign the browser in with a one-time login link.
     #[cfg(feature = "dashboard")]
     Dashboard(crate::dashboard_cmd::DashboardArgs),
+    /// Run the gateway daemon in the foreground with the dashboard listener
+    /// open and no browser (for service managers); remote clients attach
+    /// through the dashboard listener.
+    #[cfg(feature = "dashboard")]
+    Serve(ServeArgs),
+    /// Open the desktop workspace in the browser (`webapp.enabled`).
+    #[cfg(feature = "dashboard")]
+    Webapp(crate::webapp_cmd::WebappArgs),
     /// Messaging adapters of the running daemon and the profile's delivery
     /// outbox.
     #[cfg(feature = "gateway")]
@@ -508,6 +516,14 @@ pub enum Command {
     #[cfg(not(feature = "dashboard"))]
     #[command(hide = true)]
     Dashboard(crate::surface::MissingArgs),
+    /// `serve` (the dashboard surface), left out of this build (exit 69).
+    #[cfg(not(feature = "dashboard"))]
+    #[command(hide = true)]
+    Serve(crate::surface::MissingArgs),
+    /// `webapp` (the dashboard surface), left out of this build (exit 69).
+    #[cfg(not(feature = "dashboard"))]
+    #[command(hide = true)]
+    Webapp(crate::surface::MissingArgs),
     /// `acp`, left out of this build (exit 69).
     #[cfg(not(feature = "acp"))]
     #[command(hide = true)]
@@ -524,6 +540,19 @@ pub enum Command {
     #[cfg(not(feature = "eval"))]
     #[command(hide = true)]
     Eval(crate::surface::MissingArgs),
+}
+
+/// `prometheus serve` arguments.
+#[derive(Debug, Clone, Args)]
+pub struct ServeArgs {
+    /// Bind the dashboard listener to this address instead of
+    /// `dashboard.host` (a non-loopback address needs authentication and
+    /// TLS).
+    #[arg(long)]
+    pub host: Option<String>,
+    /// Bind this port instead of `dashboard.port`.
+    #[arg(long)]
+    pub port: Option<u16>,
 }
 
 /// `prometheus demo` flags.

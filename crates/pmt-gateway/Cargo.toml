@@ -42,13 +42,14 @@ sysinfo.workspace = true
 # The conformance kit writes the files it sends into a scratch directory.
 tempfile.workspace = true
 tokio = { workspace = true, features = ["net", "io-util"] }
+# The paired device registry (`run/devices.toml`).
+toml.workspace = true
 tokio-tungstenite.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["net", "io-util", "test-util"] }
-toml.workspace = true
 tracing-subscriber.workspace = true
 
 [lints]

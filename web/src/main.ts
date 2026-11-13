@@ -3,12 +3,18 @@
 // Built-in pages).
 
 import { api, signIn } from "./lib/api";
+import { onSignedOut } from "./lib/events";
 import { h } from "./lib/dom";
 import { href, notFound, route, start } from "./lib/router";
 import { state } from "./lib/state";
 import { chatPage } from "./pages/chat";
+import { adaptersPage } from "./pages/adapters";
+import { docsPage } from "./pages/docs";
+import { filesPage } from "./pages/files";
+import { profileBuilderPage } from "./pages/profile-builder";
+import { applyTheme, currentTheme, themesPage } from "./pages/themes";
+import { webhooksPage } from "./pages/webhooks";
 import {
-  adaptersPage,
   cronPage,
   mcpPage,
   memoryPage,
@@ -26,6 +32,7 @@ import { secretsPage } from "./pages/secrets";
 import { sessionsPage } from "./pages/sessions";
 import { statusPage } from "./pages/status";
 import { usagePage } from "./pages/usage";
+import { workspacePage } from "./pages/workspace";
 
 const NAV: [string, string][] = [
   ["/chat", "Chat"],
@@ -58,12 +65,7 @@ const NAV: [string, string][] = [
 /** Pages whose backends arrive with later capabilities. */
 const PENDING: [string, string, string][] = [
   ["/pairing", "Pairing", "Pairing approval in the dashboard"],
-  ["/webhooks", "Webhooks", "The webhooks page"],
   ["/kanban", "Kanban", "The kanban board"],
-  ["/files", "Files", "The files page"],
-  ["/docs", "Docs", "The embedded documentation"],
-  ["/profile-builder", "Profile builder", "The profile builder"],
-  ["/themes", "Themes", "Dashboard themes"],
   ["/achievements", "Achievements", "Achievements"],
 ];
 
@@ -84,6 +86,12 @@ function routes(): void {
   route("/profiles", profilesPage);
   route("/config", configPage);
   route("/secrets", secretsPage);
+  route("/app", workspacePage);
+  route("/webhooks", webhooksPage);
+  route("/files", filesPage);
+  route("/docs", docsPage);
+  route("/profile-builder", profileBuilderPage);
+  route("/themes", themesPage);
   route("/evolution", evolutionPage);
   route("/experience", experiencePage);
   for (const [path, title, what] of PENDING) route(path, pendingPage(title, what));
@@ -124,12 +132,13 @@ function signedOut(app: HTMLElement): void {
       "main",
       { class: "signed-out" },
       h("h1", {}, "Sign in to Prometheus"),
-      h("p", {}, "Run prometheus dashboard on this machine to get a one-time login link."),
+      h("p", {}, "Run prometheus dashboard (or prometheus webapp) on this machine to get a one-time login link."),
     ),
   );
 }
 
 async function boot(): Promise<void> {
+  applyTheme(currentTheme());
   const app = document.getElementById("app") as HTMLElement;
   const session = await signIn();
   if (!session) {
@@ -137,6 +146,9 @@ async function boot(): Promise<void> {
     return;
   }
   state.session = session;
+  const ended = () => signedOut(app);
+  onSignedOut(ended);
+  document.addEventListener("signed-out", ended);
   state.profiles = (await api.get<{ profiles: { name: string }[] }>("/api/profiles")).profiles.map((p) => p.name);
   const asked = new URLSearchParams(location.search).get("profile");
   state.profile = asked && state.profiles.includes(asked) ? asked : (state.profiles[0] ?? "");

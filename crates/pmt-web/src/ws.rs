@@ -29,7 +29,7 @@ use tokio_tungstenite::tungstenite::handshake::derive_accept_key;
 use tokio_tungstenite::tungstenite::protocol::{CloseFrame, Role, WebSocketConfig};
 
 use crate::Shared;
-use crate::auth::sessions::{Role as SessionRole, Signed, csrf_ok};
+use crate::auth::sessions::{Role as SessionRole, Signed, Via, csrf_ok};
 use crate::http::{Reply, Req, empty, error};
 
 /// The event stream's subprotocol.
@@ -61,6 +61,7 @@ enum Endpoint {
     Events {
         profiles: Vec<String>,
         since: Option<u64>,
+        signed: Signed,
     },
 }
 
@@ -84,17 +85,23 @@ fn admit(
         tracing::warn!(origin, "refused a dashboard WebSocket from another origin");
         return Err(CloseCode::NotAllowed);
     }
-    let Some((_, signed)) = shared.auth.signed(req) else {
+    let Some(caller) = crate::api::caller(shared, req) else {
         return Err(CloseCode::BadCredential);
     };
+    let signed = caller.signed;
     let csrf = offered.iter().find_map(|p| p.strip_prefix("csrf."));
-    if !csrf_ok(&signed, csrf) {
+    if signed.via == Via::Cookie && !csrf_ok(&signed, csrf) {
         return Err(CloseCode::NotAllowed);
     }
     if path == "/api/rpc" {
         return Ok(Endpoint::Rpc(signed));
     }
-    let served = shared.server.profiles();
+    let served: Vec<String> = shared
+        .server
+        .profiles()
+        .into_iter()
+        .filter(|p| signed.may_use(p))
+        .collect();
     let profiles: Vec<String> = match req.param("profiles") {
         Some(list) => list.split(',').map(str::to_owned).collect(),
         None => served.clone(),
@@ -103,7 +110,11 @@ fn admit(
         return Err(CloseCode::NotAllowed);
     }
     let since = req.param("since").and_then(|s| s.parse().ok());
-    Ok(Endpoint::Events { profiles, since })
+    Ok(Endpoint::Events {
+        profiles,
+        since,
+        signed,
+    })
 }
 
 /// Answers an upgrade request: `101` and a task that serves (or closes)
@@ -155,8 +166,12 @@ pub(crate) fn upgrade(
         match admission {
             Err(code) => refuse(socket, code).await,
             Ok(Endpoint::Rpc(signed)) => rpc(&shared, socket, &signed).await,
-            Ok(Endpoint::Events { profiles, since }) => {
-                events(&shared, socket, &profiles, since).await;
+            Ok(Endpoint::Events {
+                profiles,
+                since,
+                signed,
+            }) => {
+                events(&shared, socket, &profiles, since, &signed).await;
             }
         }
     });
@@ -179,18 +194,21 @@ async fn refuse<S: Transport>(mut socket: WebSocketStream<S>, code: CloseCode) {
 /// The client protocol, as the gateway serves any client.
 async fn rpc<S: Transport>(shared: &Arc<Shared>, socket: WebSocketStream<S>, signed: &Signed) {
     let grant = Grant {
-        profiles: shared.server.profiles(),
+        profiles: shared
+            .server
+            .profiles()
+            .into_iter()
+            .filter(|p| signed.may_use(p))
+            .collect(),
         purpose: Purpose::Http,
         pid: None,
         observer_only: signed.role == SessionRole::Observer,
     };
-    pmt_gateway::connection::serve_upgraded(
-        Arc::clone(&shared.server),
-        socket,
-        grant,
-        shared.stop.clone(),
-    )
-    .await;
+    let ends = pmt_gateway::connection::Ends {
+        stop: shared.stop.clone(),
+        revoked: signed.ended.clone(),
+    };
+    pmt_gateway::connection::serve_upgraded(Arc::clone(&shared.server), socket, grant, ends).await;
 }
 
 /// The daemon event stream for `profiles`.
@@ -199,6 +217,7 @@ async fn events<S: Transport>(
     mut socket: WebSocketStream<S>,
     profiles: &[String],
     since: Option<u64>,
+    signed: &Signed,
 ) {
     let (replay, mut live) = shared.feed.follow(since);
     let mine = |profile: &str| profiles.iter().any(|p| p == profile);
@@ -221,6 +240,7 @@ async fn events<S: Transport>(
         let outgoing = tokio::select! {
             () = shared.stop.cancelled() => Some(close_message(CloseCode::ShuttingDown)),
             () = closing.cancelled() => Some(close_message(CloseCode::ShuttingDown)),
+            () = signed.ended.cancelled() => Some(close_message(CloseCode::BadCredential)),
             incoming = socket.next() => match incoming {
                 Some(Ok(Message::Close(_)) | Err(_)) | None => return,
                 Some(Ok(_)) => None,

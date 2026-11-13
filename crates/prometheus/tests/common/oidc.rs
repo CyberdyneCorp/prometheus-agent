@@ -1,8 +1,10 @@
 //! A fake OpenID Connect provider for the dashboard's remote sign-in
 //! tests: discovery, an authorization endpoint that signs `subject` in at
 //! once (redirecting back with a code), a token endpoint answering an
-//! ES256 ID token for the code's nonce, and its JWKS. Plain HTTP on
-//! loopback, served by a thread until the process ends.
+//! ES256 ID token for the code's nonce, and its JWKS. As the account
+//! portal it also answers who owns an OAuth client
+//! (`/api/oauth/clients/<id>`: `subject` owns [`OWNED_CLIENT`] only).
+//! Plain HTTP on loopback, served by a thread until the process ends.
 
 use std::collections::HashMap;
 use std::io::{BufRead as _, BufReader, Read as _, Write as _};
@@ -17,6 +19,8 @@ use serde_json::{Value, json};
 
 /// The client id the fake provider issues tokens for.
 pub const CLIENT_ID: &str = "prometheus-dashboard";
+/// The one portal client the signed-in account owns.
+pub const OWNED_CLIENT: &str = "cl_owned";
 
 struct Provider {
     issuer: String,
@@ -62,16 +66,22 @@ fn serve(provider: &Provider, stream: TcpStream) {
     reader.read_line(&mut line).unwrap();
     let target = line.split_whitespace().nth(1).unwrap_or("/").to_owned();
     let mut length = 0;
+    let mut bearer = String::new();
     loop {
         let mut header = String::new();
         reader.read_line(&mut header).unwrap();
         if header.trim().is_empty() {
             break;
         }
-        if let Some((name, value)) = header.split_once(':')
-            && name.eq_ignore_ascii_case("content-length")
-        {
-            length = value.trim().parse().unwrap_or(0);
+        if let Some((name, value)) = header.split_once(':') {
+            if name.eq_ignore_ascii_case("content-length") {
+                length = value.trim().parse().unwrap_or(0);
+            } else if name.eq_ignore_ascii_case("authorization") {
+                value
+                    .trim()
+                    .trim_start_matches("Bearer ")
+                    .clone_into(&mut bearer);
+            }
         }
     }
     let mut body = vec![0; length];
@@ -87,6 +97,15 @@ fn serve(provider: &Provider, stream: TcpStream) {
         "/authorize" => authorize(provider, &query(&target)),
         "/token" => token(provider, &body),
         "/jwks" => ok(&jwks(&provider.key)),
+        p if p.starts_with("/api/oauth/clients/") => {
+            let owned = p.ends_with(OWNED_CLIENT) && bearer == access_token(&provider.subject);
+            if owned {
+                ok(&json!({"client_id": OWNED_CLIENT, "owner": provider.subject}))
+            } else {
+                "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    .to_owned()
+            }
+        }
         _ => "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_owned(),
     };
     let mut stream = stream;
@@ -126,12 +145,19 @@ fn token(provider: &Provider, body: &[u8]) -> String {
     };
     let claims = json!({
         "iss": provider.issuer,
-        "aud": CLIENT_ID,
+        "aud": form.get("client_id").map_or(CLIENT_ID, String::as_str),
         "sub": provider.subject,
         "exp": jiff::Timestamp::now().as_second() + 300,
         "nonce": nonce,
     });
-    ok(&json!({"id_token": sign(&provider.key, &claims), "token_type": "Bearer"}))
+    ok(
+        &json!({"id_token": sign(&provider.key, &claims), "token_type": "Bearer",
+               "access_token": access_token(&provider.subject)}),
+    )
+}
+
+fn access_token(subject: &str) -> String {
+    format!("at-{subject}")
 }
 
 fn jwks(key: &EcdsaKeyPair) -> Value {
@@ -154,5 +180,13 @@ fn sign(key: &EcdsaKeyPair, claims: &Value) -> String {
 pub fn daemon_toml(issuer: &str, subjects: &[&str], drivers: &[&str]) -> String {
     format!(
         "[dashboard.auth]\nmode = \"oidc\"\ndrivers = {drivers:?}\n[dashboard.auth.oidc]\nissuer = {issuer:?}\nclient_id = {CLIENT_ID:?}\nallowed_subjects = {subjects:?}\n"
+    )
+}
+
+/// `daemon.toml` of a dashboard signing users in through the account
+/// portal at `issuer` with the registered client `client_id`.
+pub fn portal_toml(issuer: &str, client_id: &str) -> String {
+    format!(
+        "[dashboard.auth]\nmode = \"portal\"\n[dashboard.auth.portal]\nissuer = {issuer:?}\nclient_id = {client_id:?}\n"
     )
 }

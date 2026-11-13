@@ -80,6 +80,7 @@ capabilities = [
 [milestones.M3]
 partial = true
 capabilities = [
+    "messaging-gateway",
     "web-dashboard",
 ]
 
@@ -1434,6 +1435,10 @@ capabilities = [
 
 [workspace-architecture."Connection liveness and backpressure"]
 "Ping during compaction" = ["crates/pmt-gateway/tests/sessions.rs::ping_is_answered_during_a_long_compaction"]
+
+[messaging-gateway."Remote client attachment"]
+"Disabled by default" = ["crates/prometheus/tests/dashboard_devices.rs::no_remote_listener_is_bound_by_default", "crates/pmt-config/src/daemon_remote.rs::the_remote_listener_is_off_by_default_on_port_9121"]
+"Revoked device" = ["crates/prometheus/tests/dashboard_devices.rs::the_remote_listener_admits_paired_devices_only"]
 
 [messaging-gateway."One gateway daemon per home"]
 "Second foreground daemon refused" = ["crates/prometheus/tests/daemon_cli.rs::a_second_daemon_exits_75_without_opening_any_store"]
@@ -3968,6 +3973,53 @@ capabilities = [
 [web-dashboard."Profile-addressed routes"]
 "Deleting a session" = ["crates/prometheus/tests/dashboard_api.rs::profile_routes_touch_only_the_named_profile"]
 "Typo in profile" = ["crates/prometheus/tests/dashboard_api.rs::profile_routes_touch_only_the_named_profile"]
+
+[web-dashboard."REST endpoint inventory"]
+"Config schema served from the typed config" = { tests = ["crates/prometheus/tests/dashboard_inventory.rs::the_inventory_is_served_and_nothing_else", "crates/pmt-web/src/inventory.rs::only_listed_endpoints_are_found", "crates/pmt-web/src/inventory.rs::every_endpoint_is_in_the_openapi_document_once"], note = "the schema endpoint answers the checked-in schema/config.schema.json (generated from the typed config); every endpoint of schema/dashboard-api.json (generated from pmt_web::inventory) is served and others answer 404" }
+"Bulk maintenance needs confirmation" = ["crates/prometheus/tests/dashboard_inventory.rs::bulk_maintenance_needs_confirmation_and_a_driver"]
+
+[web-dashboard."Additional dashboard sign-in providers"]
+"Token deployment" = ["crates/prometheus/tests/dashboard_inventory.rs::the_deployment_token_opens_the_api_over_tls_and_nothing_else_does"]
+"Token mode without the secret" = ["crates/prometheus/tests/dashboard_inventory.rs::token_mode_without_its_secret_exits_78_naming_it", "crates/pmt-web/src/listener.rs::token_mode_without_its_secret_is_refused_naming_it"]
+
+[web-dashboard."Registering a dashboard with the account portal"]
+"Register with a public callback" = { tests = ["crates/prometheus/tests/dashboard_inventory.rs::register_saves_the_portal_client_id"], note = "against a fake account portal (wiremock) with a stored portal sign-in" }
+
+[web-dashboard."Paired device credentials for remote clients"]
+"Revoking a lost laptop" = ["crates/prometheus/tests/dashboard_devices.rs::a_revoked_device_is_closed_with_4401_and_refused_afterwards", "crates/pmt-gateway/src/devices.rs::a_revoked_device_is_rejected_and_its_sockets_end"]
+"Expired pairing code" = { tests = ["crates/pmt-gateway/src/devices.rs::a_pairing_code_expires_after_ten_minutes_and_works_once", "crates/prometheus/tests/dashboard_devices.rs::a_bad_pairing_code_gets_401_and_issues_no_credential"], note = "the 11-minute-old code is presented on a paused clock; the HTTP exchange of a code that does not redeem answers 401 and issues nothing" }
+
+[web-dashboard."Remote desktop clients attach through the dashboard listener"]
+"Headless VPS" = ["crates/prometheus/tests/dashboard_devices.rs::serve_runs_the_daemon_with_the_dashboard_listener_open"]
+
+[web-dashboard."Desktop workspace in the browser"]
+"Opening from the CLI" = ["crates/prometheus/tests/dashboard_devices.rs::the_webapp_link_lands_on_app_once", "crates/prometheus/tests/dashboard_browser.rs::the_webapp_opens_from_the_cli_and_signs_out_every_tab"]
+"Webapp disabled" = ["crates/prometheus/tests/dashboard_devices.rs::the_webapp_is_off_by_default"]
+
+[web-dashboard."Webapp sign-out and insecure-context notice"]
+"Sign out every tab" = ["crates/prometheus/tests/dashboard_devices.rs::signing_out_ends_every_browser_session_but_not_devices", "crates/prometheus/tests/dashboard_browser.rs::the_webapp_opens_from_the_cli_and_signs_out_every_tab", "crates/pmt-web/src/auth/sessions.rs::signing_everyone_out_ends_every_session_and_its_sockets"]
+
+[web-dashboard."Webapp file staging and terminals"]
+"Oversized drop" = { tests = ["crates/prometheus/tests/dashboard_devices.rs::a_staged_file_over_16_mib_is_refused_with_413"], note = "the staging endpoint every webapp drop goes through; the daemon-owned PTY terminal pane itself needs the desktop PTYs (group 63)" }
+
+[web-dashboard."Webhooks page"]
+"Secret shown once" = ["crates/prometheus/tests/dashboard_pages.rs::a_webhook_secret_is_answered_once", "crates/prometheus/tests/dashboard_browser.rs::the_webhooks_and_docs_pages_work_in_the_browser"]
+
+[web-dashboard."Channel setup forms"]
+"Required field missing" = ["crates/prometheus/tests/dashboard_pages.rs::an_adapter_form_without_a_required_field_writes_nothing"]
+
+[web-dashboard."Files page"]
+"Symlink escape" = { tests = ["crates/prometheus/tests/dashboard_pages.rs::files_outside_the_workspace_root_are_refused_and_never_listed"], note = "cfg(unix): the fixture is a symbolic link to /etc" }
+
+[web-dashboard."Embedded documentation"]
+"Offline docs" = ["crates/prometheus/tests/dashboard_pages.rs::the_embedded_docs_find_a_config_keys_reference_entry", "crates/pmt-web/src/docs.rs::the_configuration_reference_is_embedded_with_its_key_rows", "crates/prometheus/tests/dashboard_browser.rs::the_webhooks_and_docs_pages_work_in_the_browser"]
+
+[web-dashboard."Profile builder"]
+"Clone without secrets" = ["crates/prometheus/tests/dashboard_pages.rs::the_profile_builder_clones_configuration_only"]
+
+[web-dashboard."Dashboard themes"]
+"Theme imports remote CSS" = ["crates/pmt-web/src/themes.rs::remote_css_is_rejected_with_the_reason", "crates/prometheus/tests/dashboard_pages.rs::rejected_themes_are_listed_with_their_reason_and_never_served"]
+"Oversized custom CSS" = ["crates/pmt-web/src/themes.rs::custom_css_over_32_kib_is_rejected_naming_the_limit", "crates/prometheus/tests/dashboard_pages.rs::rejected_themes_are_listed_with_their_reason_and_never_served"]
 
 [web-dashboard."Reverse-proxy base path from config"]
 "Behind a proxy at /prometheus" = ["crates/prometheus/tests/dashboard_http.rs::a_base_path_prefixes_every_asset_url", "crates/pmt-web/src/assets.rs::every_asset_url_of_the_shell_is_under_the_base_path"]

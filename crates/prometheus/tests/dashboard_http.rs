@@ -8,12 +8,12 @@
 
 mod common;
 
-use std::sync::Arc;
-
 use serde_json::{Value, json};
 
 use common::api::Request;
-use common::dashboard::{self, Opened, call, close_code, get, path_of, set_cookie, sign_in};
+use common::dashboard::{
+    self, Opened, call, certificate, close_code, get, https, path_of, set_cookie, sign_in,
+};
 use common::{daemon, mock_home, ok, run, stderr, stdout};
 
 fn runtime() -> tokio::runtime::Runtime {
@@ -250,7 +250,7 @@ fn state_changes_need_the_sessions_csrf_token() {
     let _daemon = daemon::start(home.path(), &[]);
     let opened = dashboard::open(home.path(), &[]);
     let signed = sign_in(&opened);
-    let path = "/api/profiles/default/sessions/1/delete";
+    let path = "/api/profiles/default/maintenance/vacuum";
     let forged = Request::new("POST", path)
         .header("Cookie", &signed.cookie)
         .header("Content-Type", "application/x-www-form-urlencoded")
@@ -430,50 +430,6 @@ fn the_health_probe_is_public_and_reads_no_profile_data() {
 }
 
 // ---- password sign-in over TLS ------------------------------------------
-
-/// A self-signed certificate for 127.0.0.1 written as PEM files.
-fn certificate(dir: &std::path::Path) -> rustls::pki_types::CertificateDer<'static> {
-    let key = rcgen::KeyPair::generate().unwrap();
-    let params = rcgen::CertificateParams::new(vec!["127.0.0.1".to_owned()]).unwrap();
-    let cert = params.self_signed(&key).unwrap();
-    std::fs::write(dir.join("cert.pem"), cert.pem()).unwrap();
-    std::fs::write(dir.join("key.pem"), key.serialize_pem()).unwrap();
-    cert.der().clone()
-}
-
-/// One HTTPS request; the status line's code and the raw answer.
-async fn https(
-    port: u16,
-    root: &rustls::pki_types::CertificateDer<'static>,
-    request: &str,
-) -> (u16, String) {
-    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
-    let mut roots = rustls::RootCertStore::empty();
-    roots.add(root.clone()).unwrap();
-    let config = rustls::ClientConfig::builder_with_provider(Arc::new(
-        rustls::crypto::ring::default_provider(),
-    ))
-    .with_safe_default_protocol_versions()
-    .unwrap()
-    .with_root_certificates(roots)
-    .with_no_client_auth();
-    let connector = tokio_rustls::TlsConnector::from(Arc::new(config));
-    let tcp = tokio::net::TcpStream::connect(("127.0.0.1", port))
-        .await
-        .unwrap();
-    let name = rustls::pki_types::ServerName::IpAddress(std::net::Ipv4Addr::LOCALHOST.into());
-    let mut tls = connector.connect(name, tcp).await.unwrap();
-    tls.write_all(request.as_bytes()).await.unwrap();
-    let mut raw = Vec::new();
-    let _ = tls.read_to_end(&mut raw).await;
-    let text = String::from_utf8_lossy(&raw).into_owned();
-    let code = text
-        .split_whitespace()
-        .nth(1)
-        .and_then(|c| c.parse().ok())
-        .unwrap_or(0);
-    (code, text)
-}
 
 fn login_post(port: u16, password: &str) -> String {
     let body = format!("password={password}");

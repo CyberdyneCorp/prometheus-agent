@@ -381,6 +381,8 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.platforms.<name>.routes.<name>.deliver` | string | unset | any | `next_session` | Where the answer goes: `origin` (the HTTP caller's response), `log` (recorded under `<profile>/logs/webhook/<route>.jsonl`), `github_comment` (a comment on the payload's pull request or issue) or a send target `platform[:chat_id[:thread_id]]`. Unset: `origin`. |
 | `gateway.platforms.<name>.routes.<name>.deliver_extra` | array of string | unset | any | `next_session` | More send targets that receive a copy. |
 | `gateway.platforms.<name>.routes.<name>.deliver_only` | boolean | `false` | any | `next_session` | Run no model: the rendered prompt is sent verbatim to `deliver`. |
+| `gateway.platforms.<name>.routes.<name>.description` | string | unset | any | `next_session` | What the route is for (shown by the dashboard's `/webhooks`). |
+| `gateway.platforms.<name>.routes.<name>.enabled` | boolean | `true` | any | `next_session` | Serve the route; a disabled route answers 403 (no restart needed for a subscription: the adapter re-reads them when they change). |
 | `gateway.platforms.<name>.routes.<name>.events` | array of string | `[]` | any | `next_session` | Event types admitted (`X-GitHub-Event`, `X-GitLab-Event` or the payload's `event_type`); empty admits every event. |
 | `gateway.platforms.<name>.routes.<name>.filters` | any or array of any | unset | any | `next_session` | Conditions a payload must meet; a request that fails them is answered `ignored` with reason `filter`. |
 | `gateway.platforms.<name>.routes.<name>.github_token_secret` | string | unset | a secret name | `next_session` | The secret holding the GitHub token `github_comment` posts with. |

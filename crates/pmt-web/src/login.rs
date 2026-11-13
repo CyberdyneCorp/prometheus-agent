@@ -5,7 +5,7 @@
 //! password; `GET /auth/callback` completes an OIDC sign-in. The pages are
 //! plain HTML without scripts and carry no credential.
 
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
 use hyper::body::Incoming;
@@ -34,11 +34,15 @@ fn page(code: u16, title: &str, body: &str) -> Reply {
     bytes(code, "text/html; charset=utf-8", html)
 }
 
-/// Signs `subject` in: the cookie and a redirect to the dashboard.
-fn sign_in(shared: &Shared, subject: &str) -> Reply {
+/// Signs `subject` in: the cookie and a redirect to the dashboard (or to
+/// `next`, a path below the base path such as `/app`).
+fn sign_in(shared: &Shared, subject: &str, next: Option<&str>) -> Reply {
     let role = shared.auth.role_for(subject);
     let (token, _) = shared.auth.sessions.create(subject, role);
-    let mut reply = redirect(&format!("{}/", shared.base));
+    let next = next
+        .filter(|n| n.starts_with('/') && !n.starts_with("//") && !n.contains('\\'))
+        .unwrap_or("/");
+    let mut reply = redirect(&format!("{}{next}", shared.base));
     let cookie = sessions::set_cookie(&token, shared.guard.secure_cookies());
     if let Ok(value) = HeaderValue::from_str(&cookie) {
         reply.headers_mut().insert(SET_COOKIE, value);
@@ -47,17 +51,17 @@ fn sign_in(shared: &Shared, subject: &str) -> Reply {
 }
 
 /// `GET /login`.
-pub(crate) async fn get(shared: &Arc<Shared>, req: &Req) -> Reply {
+pub(crate) async fn get(shared: &Arc<Shared>, req: &Req, peer: SocketAddr) -> Reply {
     if let Some(ticket) = req.param("ticket") {
         if shared.auth.tickets.redeem(&ticket) {
-            return sign_in(shared, LOCAL);
+            return sign_in(shared, LOCAL, req.param("next").as_deref());
         }
         return unauthorized();
     }
     match shared.auth.mode {
         AuthMode::Password => password_form(shared, None),
-        AuthMode::Oidc => oidc_begin(shared, req).await,
-        AuthMode::None | AuthMode::Portal | AuthMode::Token => page(
+        AuthMode::Oidc | AuthMode::Portal => oidc_begin(shared, req, peer).await,
+        AuthMode::None | AuthMode::Token => page(
             401,
             "Sign in to Prometheus",
             "<p>Run <code>prometheus dashboard</code> on this machine to get a login link.</p>",
@@ -107,23 +111,26 @@ pub(crate) async fn post(shared: &Arc<Shared>, body: Incoming, ip: IpAddr) -> Re
     let verified = hash.is_some_and(|hash| password::verify(&password, hash.expose()));
     if verified {
         shared.auth.limiter.succeed(ip);
-        return sign_in(shared, "password");
+        return sign_in(shared, "password", None);
     }
     shared.auth.limiter.fail(ip);
     password_form(shared, Some("Wrong password."))
 }
 
-fn redirect_uri(shared: &Shared, req: &Req) -> Option<String> {
-    let host = shared.guard.host_of(req)?;
-    Some(format!(
-        "{}{}/auth/callback",
-        shared.guard.origin(host),
-        shared.base
-    ))
+/// The OAuth callback URL (spec: web-dashboard, Additional dashboard
+/// sign-in providers): `<dashboard.public_url>/auth/callback` when set,
+/// else the origin the browser used (from a trusted proxy's
+/// `X-Forwarded-Proto`/`X-Forwarded-Host`, or the validated `Host`).
+pub(crate) fn redirect_uri(shared: &Shared, req: &Req, peer: SocketAddr) -> Option<String> {
+    if let Some(public) = &shared.config.public_url {
+        return Some(format!("{}/auth/callback", public.trim_end_matches('/')));
+    }
+    let origin = shared.guard.browser_origin(req, peer)?;
+    Some(format!("{origin}{}/auth/callback", shared.base))
 }
 
-async fn oidc_begin(shared: &Shared, req: &Req) -> Reply {
-    let (Some(oidc), Some(callback)) = (&shared.auth.oidc, redirect_uri(shared, req)) else {
+async fn oidc_begin(shared: &Shared, req: &Req, peer: SocketAddr) -> Reply {
+    let (Some(oidc), Some(callback)) = (&shared.auth.oidc, redirect_uri(shared, req, peer)) else {
         return page(503, "Sign-in unavailable", "<p>OIDC is not configured.</p>");
     };
     match oidc.begin(&callback).await {
@@ -147,7 +154,7 @@ pub(crate) async fn callback(shared: &Arc<Shared>, req: &Req) -> Reply {
         return unauthorized();
     };
     match oidc.complete(&code, &state).await {
-        Ok(subject) => sign_in(shared, &subject),
+        Ok(subject) => sign_in(shared, &subject, None),
         Err(err) => {
             tracing::warn!("dashboard OIDC sign-in refused: {err}");
             page(
@@ -160,8 +167,10 @@ pub(crate) async fn callback(shared: &Arc<Shared>, req: &Req) -> Reply {
 }
 
 /// `POST /api/logout`.
-pub(crate) fn logout(shared: &Shared, token: &str) -> Reply {
-    shared.auth.sessions.remove(token);
+pub(crate) fn logout(shared: &Shared, token: Option<&str>) -> Reply {
+    if let Some(token) = token {
+        shared.auth.sessions.remove(token);
+    }
     let mut reply = json_reply(200, &json!({"ok": true}));
     if let Ok(value) = HeaderValue::from_str(&sessions::clear_cookie()) {
         reply.headers_mut().insert(SET_COOKIE, value);

@@ -27,6 +27,38 @@ pub enum Catalog {
     Cron,
     /// Its memory entries.
     Memory,
+    /// Its webhook subscriptions (never their secrets).
+    Webhooks,
+}
+
+/// A change of a profile's state the dashboard asks the daemon for; the
+/// target (`name`/`id`) and JSON body come with it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Change {
+    /// `PATCH skills/{name} {"enabled": bool}`.
+    Skill,
+    /// `PATCH toolsets/{name} {"enabled": bool}`.
+    Toolset,
+    /// `POST cron` (the `cron create` fields).
+    CronCreate,
+    /// `PATCH cron/{id}` (the `cron edit` fields, `enabled`).
+    CronUpdate,
+    /// `DELETE cron/{id}`.
+    CronDelete,
+    /// `POST cron/{id}/run`.
+    CronRun,
+    /// `PATCH memory {"add"|"replace"|"remove": ...}`.
+    Memory,
+    /// `POST webhooks`: the answer carries the HMAC secret, once.
+    WebhookCreate,
+    /// `PATCH webhooks/{name} {"enabled": bool}`.
+    WebhookUpdate,
+    /// `DELETE webhooks/{name}`.
+    WebhookDelete,
+    /// `POST webhooks/{name}/test`.
+    WebhookTest,
+    /// `POST maintenance/{action}`, confirmed.
+    Maintenance,
 }
 
 /// The daemon side of the dashboard.
@@ -47,4 +79,19 @@ pub trait DashboardHost: Send + Sync {
 
     /// A catalog of the profile.
     fn catalog<'a>(&'a self, profile: &'a str, what: Catalog) -> HostFuture<'a, Value>;
+
+    /// Creates a profile as the profile builder describes it (`name`,
+    /// `description`, `clone_from`, `provider`, `model`, `soul`,
+    /// `toolsets`, `skills_disabled`, `adapters`); nothing is left behind
+    /// when a step fails. The daemon serves it afterwards.
+    fn create_profile(&self, body: Value) -> HostFuture<'_, Value>;
+
+    /// Applies a change to the profile; its JSON answer.
+    fn change<'a>(
+        &'a self,
+        profile: &'a str,
+        change: Change,
+        target: Option<&'a str>,
+        body: Value,
+    ) -> HostFuture<'a, Value>;
 }

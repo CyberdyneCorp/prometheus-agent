@@ -92,7 +92,7 @@ key = "/etc/prometheus/dash-key.pem"
 # or: trust_proxy_tls = true, with trust_proxy = true and trusted_proxies = ["10.0.0.2"]
 
 [dashboard.auth]
-mode = "password"            # or "oidc"
+mode = "password"            # or "oidc", "portal", "token"
 drivers = ["password"]       # subjects that may send messages
 ```
 
@@ -106,6 +106,27 @@ drivers = ["password"]       # subjects that may send messages
   `client_id`, `allowed_subjects`). It uses the authorization code flow
   with PKCE, checks the ID token's signature (ES256 or RS256) and the
   claims, and uses `<origin>/auth/callback` as the redirect URI.
+- `portal` signs users in through the hosted account portal with the
+  dashboard's registered client `[dashboard.auth.portal] client_id`; only
+  an account that owns that client signs in. Register the dashboard once
+  with your portal sign-in (`prometheus auth login portal` first):
+
+  ```text
+  $ prometheus dashboard register --name "home lab" --redirect-uri https://dash.example.com/auth/callback
+  ```
+
+  It saves the client id to `dashboard.auth.portal.client_id` in
+  `daemon.toml`. Without a portal sign-in it exits 78; a redirect URI that
+  is not `https` (loopback aside) exits 2.
+- `token` has no browser sign-in: clients send the launch profile's secret
+  `DASHBOARD_SESSION_TOKEN` as `Authorization: Bearer <token>` on API
+  calls and on the WebSocket upgrade (compared in constant time). A
+  non-loopback bind without the secret exits 78 naming it.
+
+OAuth callbacks are `<dashboard.public_url>/auth/callback` when
+`dashboard.public_url` is set, else derived from the request (a trusted
+proxy's `X-Forwarded-Proto` and `X-Forwarded-Host` included).
+`GET /api/health` lists the active providers in `auth_providers`.
 
 Remote users are **observers**, unless their subject is in
 `dashboard.auth.drivers`. Observers have read-only access: they can follow
@@ -126,12 +147,17 @@ configuration, secrets, sessions or the vault. A change over the API gets
 | `/config` | Forms built from the configuration schema of the running build. A save is one validated write. Keys that only apply to new sessions are marked "applies next session". |
 | `/secrets` | Secret names, where each one comes from, and when it changed. You can set or delete a secret, but values are write-only: no page or API returns one. |
 | `/logs` | The last records (at most 5000) of a log from the daemon's list, redacted. |
-| `/models`, `/skills`, `/profiles`, `/adapters` | The profile's catalogs and the daemon's profiles and adapters. |
+| `/models`, `/skills`, `/profiles` | The profile's catalogs and the daemon's profiles. |
+| `/adapters` | Every adapter available to the profile with its messaging state, pause and resume, and a configure form built from the adapter's options schema. Secret fields are write-only (blank keeps the stored value). A save is one validated config patch plus the secret writes: a missing required field (such as Matrix's `homeserver`) is refused naming it, and nothing is written. |
+| `/webhooks` | The profile's webhook subscriptions (URL, events, delivery, enabled). Creating one shows its URL and HMAC secret once; no API returns the secret again. Enable or disable (a disabled route answers 403, no restart), delete, or send a signed test event. When the webhook adapter is off, the page says so. |
+| `/files` | The profile's workspace (`<profile>/workspace`) and its recent sessions' working directories: list, preview (text up to 2 MiB, images), download, upload (`dashboard.max_upload_bytes`), rename and confirmed delete. Paths that leave the root, links included, get 403 and are never listed. |
+| `/docs` | This documentation, embedded in the binary and searchable offline. Searching a configuration key shows its reference entry; "applies next session" notes and config errors link to the key's entry. |
+| `/profile-builder` | Creates a profile in steps (name and description, model and provider, `SOUL.md`, toolsets, skills, adapters) with `profile create` and one validated config patch; nothing is created when a step is refused. Cloning copies another profile's configuration without its secrets, sessions or memories. |
+| `/themes` | The built-in themes (`default`, `default-large`, `midnight`, `ember`, `mono`, `cyberpunk`, `rose`) and user themes from `<home>/themes/dashboard/<name>.toml` (palette, typography from local fonts only, layout, `layout_variant`, component colours and at most 32 KiB of `custom_css`). A theme with `@import` or a `url()` to another origin, or too much CSS, is listed with the reason and never applied. The choice is kept by the browser. |
 | `/plugins`, `/mcp`, `/cron`, `/memory` | The profile's plugins (with their load state and any problem), MCP servers, cron jobs (with their state and next run) and memory entries. These pages are read-only for now: change them with `prometheus plugins`, `mcp`, `cron` and `memory`. |
 
 These pages are listed in the navigation, but this build does not
-implement them yet, so each one says so: `/pairing`, `/webhooks`,
-`/kanban`, `/files`, `/docs`, `/profile-builder`, `/themes` and
+implement them yet, so each one says so: `/pairing`, `/kanban` and
 `/achievements`. The `/evolution` and
 `/experience` pages read the harness-evolution and experience-library
 methods of the client protocol, and they report when the daemon does not
@@ -155,10 +181,87 @@ missing: the operating system (no Landlock in this kernel) or a dependency
 host's sandbox (Landlock and seccomp, Seatbelt, or an `AppContainer` on
 Windows) gives the baseline policy, without starting a sandbox.
 
+## Remote clients and paired devices
+
+A desktop app on another machine attaches through the dashboard listener's
+`/api/rpc` under the same Host, Origin, TLS and sign-in rules as browsers,
+so no second listener is needed. Pair it once:
+
+```text
+$ prometheus dashboard pair --name laptop        # --role observer for read-only
+Pairing code for 'laptop' (driver): 7F3A9C21B0
+```
+
+The app exchanges the code (one use, 10 minutes) with
+`POST /api/devices/pair {"code": "..."}` for a device credential, which it
+sends as `Authorization: Bearer <credential>` and rotates with
+`POST /api/devices/refresh`. The daemon keeps only SHA-256 hashes of
+credentials, in `<home>/run/devices.toml`. `prometheus dashboard devices`
+lists the devices; `prometheus dashboard devices revoke laptop` (or
+`prometheus daemon revoke-device laptop`) rejects its credential and closes
+its open sockets with 4401 within a second. Pairing works in every
+`dashboard.auth.mode`; a non-loopback listener always has TLS, and
+`prometheus dashboard --fingerprint` prints the SHA-256 public-key
+fingerprint of `dashboard.tls.cert` for clients to pin.
+
+`prometheus daemon pair-device <name> [--profile-binding <profile>...]
+[--role driver|observer]` issues a device token directly (shown once),
+bound to the listed profiles (default: all). Besides the dashboard
+listener, such tokens open the remote attachment listener, which is off
+until `daemon.toml` enables it:
+
+```toml
+[daemon.remote]
+enabled = true            # default false
+listen = "0.0.0.0:9121"   # the default address
+# tls.cert / tls.key: unset uses a self-signed certificate in <home>/run/
+```
+
+Clients connect over TLS with the bearer token and speak the same
+`rpc.hello` protocol as local clients (`?profiles=a,b` narrows the grant).
+A bad or revoked token closes with 4401, a profile outside the device's
+binding with 4403. The daemon logs the certificate's fingerprint at start.
+SSH tunnels to the loopback endpoint keep working without it.
+
+## Running headless
+
+`prometheus serve [--host <h>] [--port <p>]` runs the gateway daemon in the
+foreground with the dashboard listener open and no browser, for service
+managers. A non-loopback `--host` follows the fail-closed rules above, so
+a VPS needs TLS and a sign-in provider (for example `portal`). It serves
+browsers and native clients on that listener until stopped.
+
+## The webapp
+
+With `webapp.enabled = true` in `daemon.toml` (default false), the
+dashboard listener also serves the desktop workspace under `/app`:
+sessions, chat, scheduled jobs and file staging (every file a user
+selects, pastes or drops is staged under the profile, at most 16 MiB each;
+larger ones get `413` before anything is written). `webapp.public_url`
+(default empty) is the address opened and accepted as `Host`.
+
+```text
+$ prometheus webapp            # ensure the daemon, open a one-use link to /app
+$ prometheus webapp --no-open  # print the link instead (60 s, single use)
+$ prometheus webapp --status   # where it is served; exit 69 when not
+$ prometheus webapp --sign-out # end every browser sign-in (devices stay)
+```
+
+`--sign-out` ends every browser session and its CSRF token and closes its
+sockets with 4401; every open tab shows the sign-in instructions. When the
+address a browser would open is plain HTTP on a non-loopback host, the
+command warns that microphone, clipboard reading, notifications and
+screen viewing are unavailable there. Desktop-only features (global
+shortcuts, always-on-top windows, window reading, the updater) are absent
+in the webapp.
+
 ## API
 
-The SPA uses these JSON endpoints, and so can scripts that hold a
-session cookie:
+The SPA uses these JSON endpoints, and so can scripts that hold a session
+cookie, the deployment token or a paired device's credential. The full
+inventory is the OpenAPI document `schema/dashboard-api.json`, generated
+from the same table the router serves; any endpoint not in it answers
+`404`.
 
 - Machine-wide: `GET /api/health` (public), `GET /api/session` (the
   signed-in user, role and CSRF token), `POST /api/logout`,
@@ -177,3 +280,15 @@ session cookie:
   `GET skills|toolsets|models|plugins|mcp|cron|memory`,
   `POST uploads` (the file as the body), and `GET blobs/<sha256>` (only
   blobs that a session of the profile references).
+- Changes per profile: `PATCH skills/<name>` and `PATCH toolsets/<name>`
+  (`{"enabled": true|false}`), `POST cron`, `PATCH|DELETE cron/<id>`,
+  `POST cron/<id>/run`, `PATCH memory` (`{"add": "<text>"}` or
+  `{"remove": "<id>"}`), `GET adapters`,
+  `POST adapters/<name>/pause|resume`, `GET pairing`,
+  `POST pairing/<code>` (`{"platform": "telegram"}`), `GET secrets/<NAME>`
+  (whether it is set, never the value), and webhooks (below).
+- Bulk maintenance: `POST maintenance/<action>` with `prune-sessions`
+  (`days`, default `sessions.retention_secs` or 90 days), `vacuum`,
+  `rebuild-fts` or `prune-snapshots`. It needs `{"confirm": true}` in the
+  body (`409` and nothing touched otherwise) and a driver (`403` for
+  observers).

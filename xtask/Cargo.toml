@@ -24,6 +24,8 @@ pmt-obs.workspace = true
 pmt-rpc.workspace = true
 pmt-store.workspace = true
 prometheus.workspace = true
+# The dashboard's OpenAPI document (schema/dashboard-api.json).
+pmt-web.workspace = true
 pmt-tools.workspace = true
 pmt-update.workspace = true
 # Release signing (`cargo xtask release sign|keygen`).

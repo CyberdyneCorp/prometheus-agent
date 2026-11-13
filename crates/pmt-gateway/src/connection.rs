@@ -94,7 +94,7 @@ pub async fn serve(server: Arc<Server>, stream: TcpStream) {
     };
     match admission {
         Some(Admission::Accepted(grant)) => {
-            run(server, socket, grant, CancellationToken::new()).await;
+            run(server, socket, grant, Ends::default()).await;
         }
         Some(Admission::Refused(code)) => refuse(socket, code).await,
         None => {}
@@ -206,22 +206,32 @@ async fn refuse(mut socket: Socket, code: CloseCode) {
 /// upgraded (the dashboard's `/api/rpc`, which authenticates with its own
 /// session cookie instead of a ticket): from `rpc.hello` on, it is any
 /// other connection.
-/// `end` closes it with 1001 (the dashboard listener stopping while the
-/// daemon keeps running).
+/// `ends` closes it from outside.
 pub async fn serve_upgraded<S: Transport>(
     server: Arc<Server>,
     socket: WebSocketStream<S>,
     grant: Grant,
-    end: CancellationToken,
+    ends: Ends,
 ) {
-    run(server, socket, grant, end).await;
+    run(server, socket, grant, ends).await;
+}
+
+/// What ends a connection another listener admitted, besides the daemon
+/// stopping.
+#[derive(Debug, Clone, Default)]
+pub struct Ends {
+    /// The listener stops: closed with 1001 while the daemon keeps running.
+    pub stop: CancellationToken,
+    /// The credential it was admitted with is gone (a revoked device, a
+    /// signed-out browser): closed with 4401.
+    pub revoked: CancellationToken,
 }
 
 async fn run<S: Transport>(
     server: Arc<Server>,
     socket: WebSocketStream<S>,
     grant: Grant,
-    end: CancellationToken,
+    ends: Ends,
 ) {
     let (sink, stream) = socket.split();
     let (tx, rx) = mpsc::unbounded_channel();
@@ -237,7 +247,7 @@ async fn run<S: Transport>(
     server.connections.fetch_add(1, Ordering::Relaxed);
     let writer = pmt_core::spawn::spawn(write_loop(sink, rx, dead.clone()).in_current_span());
     let in_order = pmt_core::spawn::spawn(ordered_loop(queue).in_current_span());
-    read_loop(&server, &conn, stream, &dead, &end).await;
+    read_loop(&server, &conn, stream, &dead, &ends).await;
     in_order.abort();
     server.hub().detach_all(conn.id);
     server.connections.fetch_sub(1, Ordering::Relaxed);
@@ -265,7 +275,7 @@ async fn read_loop<S: Transport>(
     conn: &Arc<Conn>,
     mut stream: SplitStream<WebSocketStream<S>>,
     dead: &CancellationToken,
-    end: &CancellationToken,
+    ends: &Ends,
 ) {
     loop {
         let next = tokio::select! {
@@ -274,8 +284,12 @@ async fn read_loop<S: Transport>(
                 let _ = conn.tx.send(close_message(CloseCode::ShuttingDown));
                 return;
             }
-            () = end.cancelled() => {
+            () = ends.stop.cancelled() => {
                 let _ = conn.tx.send(close_message(CloseCode::ShuttingDown));
+                return;
+            }
+            () = ends.revoked.cancelled() => {
+                let _ = conn.tx.send(close_message(CloseCode::BadCredential));
                 return;
             }
             next = tokio::time::timeout(IDLE_TIMEOUT, stream.next()) => next,

@@ -10,7 +10,9 @@ use std::time::Duration;
 
 use hyper::service::service_fn;
 use hyper_util::rt::{TokioIo, TokioTimer};
-use pmt_config::daemon_dashboard::{AuthMode, DashboardConfig, PASSWORD_HASH_SECRET};
+use pmt_config::daemon_dashboard::{
+    AuthMode, DashboardConfig, PASSWORD_HASH_SECRET, SESSION_TOKEN_SECRET,
+};
 use pmt_core::error::{Error, codes};
 use pmt_gateway::connection::Transport;
 use tokio::net::TcpListener;
@@ -34,11 +36,15 @@ pub(crate) fn check_remote(
     config: &DashboardConfig,
     secret_set: impl Fn(&str) -> bool,
 ) -> Result<(), Error> {
+    let secret = match config.auth.mode {
+        AuthMode::Password => Some(PASSWORD_HASH_SECRET),
+        AuthMode::Token => Some(SESSION_TOKEN_SECRET),
+        _ => None,
+    };
     let missing = config.missing_for_remote().or_else(|| {
-        (!config.loopback()
-            && config.auth.mode == AuthMode::Password
-            && !secret_set(PASSWORD_HASH_SECRET))
-        .then(|| format!("the {PASSWORD_HASH_SECRET} secret"))
+        secret
+            .filter(|name| !config.loopback() && !secret_set(name))
+            .map(|name| format!("the {name} secret"))
     });
     match missing {
         Some(missing) => Err(Error::new(
@@ -51,27 +57,10 @@ pub(crate) fn check_remote(
 
 /// The TLS acceptor of `dashboard.tls`, when configured.
 pub(crate) fn tls(config: &DashboardConfig) -> Result<Option<TlsAcceptor>, Error> {
-    use rustls::pki_types::pem::PemObject as _;
-    use rustls::pki_types::{CertificateDer, PrivateKeyDer};
     let (Some(cert), Some(key)) = (&config.tls.cert, &config.tls.key) else {
         return Ok(None);
     };
-    let bad = |what: &str, path: &std::path::Path, e: &dyn std::fmt::Display| {
-        Error::new(
-            &codes::CONFIG_INVALID,
-            format!("dashboard.tls.{what}: cannot load {}: {e}", path.display()),
-        )
-    };
-    let chain = CertificateDer::pem_file_iter(cert)
-        .and_then(Iterator::collect::<Result<Vec<_>, _>>)
-        .map_err(|e| bad("cert", cert, &e))?;
-    let key_der = PrivateKeyDer::from_pem_file(key).map_err(|e| bad("key", key, &e))?;
-    let provider = Arc::new(rustls::crypto::ring::default_provider());
-    let server = rustls::ServerConfig::builder_with_provider(provider)
-        .with_safe_default_protocol_versions()
-        .and_then(|b| b.with_no_client_auth().with_single_cert(chain, key_der))
-        .map_err(|e| bad("cert", cert, &e))?;
-    Ok(Some(TlsAcceptor::from(Arc::new(server))))
+    crate::cert::acceptor(cert, key, "dashboard.tls").map(Some)
 }
 
 /// Binds the listener: a port another process holds exits 78 naming it.
@@ -225,5 +214,20 @@ mod tests {
         );
         assert!(check_remote(&password, |_| true).is_ok());
         assert!(check_remote(&DashboardConfig::default(), |_| false).is_ok());
+    }
+
+    #[test]
+    fn token_mode_without_its_secret_is_refused_naming_it() {
+        let mut token = DashboardConfig::default().with_overrides(Some("0.0.0.0"), None);
+        token.auth.mode = AuthMode::Token;
+        token.trust_proxy_tls = true;
+        let err = check_remote(&token, |name| name != "DASHBOARD_SESSION_TOKEN").unwrap_err();
+        assert_eq!(err.exit_code(), 78);
+        assert!(
+            err.message().contains("DASHBOARD_SESSION_TOKEN"),
+            "{}",
+            err.message()
+        );
+        assert!(check_remote(&token, |_| true).is_ok());
     }
 }

@@ -40,6 +40,7 @@ async function call(method: string, path: string, body?: unknown, raw?: Blob | F
   const text = await response.text();
   let parsed: unknown = text;
   if ((response.headers.get("content-type") ?? "").includes("json")) parsed = text ? JSON.parse(text) : {};
+  if (response.status === 401 && path !== "/api/session") document.dispatchEvent(new CustomEvent("signed-out"));
   if (!response.ok) {
     throw new ApiError(response.status, typeof parsed === "object" && parsed ? (parsed as Record<string, unknown>) : { message: text });
   }

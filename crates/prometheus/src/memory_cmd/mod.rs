@@ -278,7 +278,13 @@ fn commit(
     write::write(&env.store, &ctx, ops, &[])
 }
 
-fn add(env: &Env, content: &str, t: TargetArg, k: KindArg, r: TierArg) -> Result<u8, Error> {
+fn add_entry(
+    env: &Env,
+    content: &str,
+    t: TargetArg,
+    k: KindArg,
+    r: TierArg,
+) -> Result<write::Written, Error> {
     let redactor = env.scope.secrets().redactor()?;
     let content = content.trim();
     if content.is_empty() {
@@ -290,7 +296,53 @@ fn add(env: &Env, content: &str, t: TargetArg, k: KindArg, r: TierArg) -> Result
     op.content = Some(content.to_owned());
     op.kind = Some(kind(k));
     op.tier = Some(tier(r));
-    let written = commit(env, target(t), &[op])?;
+    commit(env, target(t), &[op])
+}
+
+/// The dashboard's `PATCH memory`: `{"add": "<text>"}` (a core fact of
+/// `MEMORY.md`, as `memory add` defaults) or `{"remove": "<id>"}`, written
+/// as the user and applied from the next session.
+///
+/// # Errors
+///
+/// `memory.invalid` for another body, `memory.blocked`,
+/// `memory.not_found`, store errors.
+pub(crate) fn dashboard_patch(
+    scope: &ProfileScope,
+    store: &Arc<Store>,
+    body: &serde_json::Value,
+) -> Result<serde_json::Value, Error> {
+    let env = Env {
+        scope: scope.clone(),
+        store: Arc::clone(store),
+        json: true,
+    };
+    if let Some(content) = body["add"].as_str() {
+        let written = add_entry(
+            &env,
+            content,
+            TargetArg::Memory,
+            KindArg::Fact,
+            TierArg::Core,
+        )?;
+        let result = &written.results[0];
+        return Ok(json!({"id": result.id, "duplicate": result.duplicate}));
+    }
+    if let Some(id) = body["remove"].as_str() {
+        let entry = find(&env, id)?;
+        let mut op = pmt_memory::ops::Op::new(pmt_memory::ops::Action::Remove);
+        op.id = Some(entry.id.clone());
+        commit(&env, entry.target, &[op])?;
+        return Ok(json!({"id": entry.id, "removed": true}));
+    }
+    Err(Error::new(
+        &codes::MEMORY_INVALID,
+        "expected {\"add\": \"<text>\"} or {\"remove\": \"<id>\"}",
+    ))
+}
+
+fn add(env: &Env, content: &str, t: TargetArg, k: KindArg, r: TierArg) -> Result<u8, Error> {
+    let written = add_entry(env, content, t, k, r)?;
     let result = &written.results[0];
     if env.json {
         return json(

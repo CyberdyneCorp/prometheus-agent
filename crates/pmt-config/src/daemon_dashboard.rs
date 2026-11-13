@@ -18,6 +18,11 @@ pub const DEFAULT_MAX_UPLOAD_BYTES: u64 = 25 * 1024 * 1024;
 /// The secret (launch profile's store) holding the argon2id PHC hash of
 /// the dashboard password (`dashboard.auth.mode = "password"`).
 pub const PASSWORD_HASH_SECRET: &str = "DASHBOARD_PASSWORD_HASH";
+/// The secret (launch profile's store) holding the deployment credential
+/// of `dashboard.auth.mode = "token"`.
+pub const SESSION_TOKEN_SECRET: &str = "DASHBOARD_SESSION_TOKEN";
+/// The hosted account portal `dashboard.auth.portal.issuer` defaults to.
+pub const DEFAULT_PORTAL_ISSUER: &str = "https://portal.nousresearch.com";
 
 /// `daemon.toml [dashboard]`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -34,6 +39,11 @@ pub struct DashboardConfig {
     /// A host name accepted in the `Host` header besides the bound names.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub public_host: Option<String>,
+    /// The address browsers reach the dashboard at (`https://dash.example.com`);
+    /// OAuth callbacks are `<public_url>/auth/callback` when set, else derived
+    /// from the request (trusted proxy headers included).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub public_url: Option<String>,
     /// Honour `X-Forwarded-*` headers from `trusted_proxies`.
     pub trust_proxy: bool,
     /// Proxy addresses whose `X-Forwarded-*` headers are honoured.
@@ -55,6 +65,7 @@ impl Default for DashboardConfig {
             port: DEFAULT_PORT,
             base_path: "/".to_owned(),
             public_host: None,
+            public_url: None,
             trust_proxy: false,
             trusted_proxies: Vec::new(),
             trust_proxy_tls: false,
@@ -152,9 +163,65 @@ pub struct OidcConfig {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct PortalConfig {
-    /// The dashboard's registered OAuth client at the account portal.
+    /// The dashboard's registered OAuth client at the account portal
+    /// (`prometheus dashboard register` writes it).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_id: Option<String>,
+    /// The portal's OpenID issuer URL (default: the hosted account portal).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub issuer: Option<String>,
+}
+
+impl PortalConfig {
+    /// The issuer URL, without a trailing slash.
+    #[must_use]
+    pub fn issuer_url(&self) -> &str {
+        self.issuer
+            .as_deref()
+            .unwrap_or(DEFAULT_PORTAL_ISSUER)
+            .trim_end_matches('/')
+    }
+}
+
+/// `daemon.toml [webapp]` (spec: web-dashboard, Desktop workspace in the
+/// browser): the desktop workspace served by the dashboard listener under
+/// `/app`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct WebappConfig {
+    /// Serve the workspace under `/app`.
+    pub enabled: bool,
+    /// The address `prometheus webapp` opens, also accepted as `Host`
+    /// (empty: the dashboard's own address).
+    pub public_url: String,
+}
+
+/// An `http(s)` URL with no path beyond `/`: the origin a public address
+/// names. Plain `http` is accepted only for loopback hosts.
+///
+/// # Errors
+///
+/// What is wrong with `url`, prefixed with `key`.
+pub fn check_public_url(key: &str, url: &str) -> Result<(), String> {
+    let bad = |why: &str| Err(format!("{key}: '{url}' {why}"));
+    let Some((scheme, rest)) = url.split_once("://") else {
+        return bad("is not an http(s) URL");
+    };
+    let host = rest.split('/').next().unwrap_or_default();
+    let name = host.rsplit_once(':').map_or(host, |(name, port)| {
+        if port.chars().all(|c| c.is_ascii_digit()) {
+            name
+        } else {
+            host
+        }
+    });
+    match scheme {
+        _ if host.is_empty() => bad("has no host"),
+        "https" => Ok(()),
+        "http" if is_loopback_host(name) => Ok(()),
+        "http" => bad("must use https on a non-loopback host"),
+        _ => bad("is not an http(s) URL"),
+    }
 }
 
 /// Whether `host` is a loopback address: `localhost` or an IP in
@@ -272,6 +339,12 @@ impl DashboardConfig {
         }
         if self.tls.cert.is_some() != self.tls.key.is_some() {
             return Err("dashboard.tls: set both cert and key".to_owned());
+        }
+        if let Some(url) = &self.public_url {
+            check_public_url("dashboard.public_url", url)?;
+        }
+        if let Some(issuer) = &self.auth.portal.issuer {
+            check_public_url("dashboard.auth.portal.issuer", issuer)?;
         }
         Ok(())
     }

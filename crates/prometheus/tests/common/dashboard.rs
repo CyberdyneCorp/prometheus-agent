@@ -201,6 +201,22 @@ where
 /// Follows a remote sign-in from `GET /login` through the identity
 /// provider back to the dashboard; the signed-in client.
 pub fn sign_in_remote(opened: &Opened) -> Signed {
+    let done = remote_callback(opened);
+    assert_eq!(done.status, 303, "{done:?}");
+    let cookie = set_cookie(&done)
+        .and_then(|c| c.split(';').next())
+        .unwrap()
+        .to_owned();
+    let session = get(opened.port, "/api/session", &cookie);
+    Signed {
+        csrf: session.json()["csrf"].as_str().unwrap().to_owned(),
+        cookie,
+    }
+}
+
+/// Goes through the remote sign-in up to the dashboard's callback; its
+/// answer.
+pub fn remote_callback(opened: &Opened) -> Answer {
     let start = Request::new("GET", "/login").send(opened.port);
     assert_eq!(start.status, 303, "{start:?}");
     let to_provider = location(&start);
@@ -217,17 +233,7 @@ pub fn sign_in_remote(opened: &Opened) -> Signed {
         .send(provider.port().unwrap());
     assert_eq!(answer.status, 302, "{answer:?}");
     let back = location(&answer);
-    let done = Request::new("GET", &path_of(&back)).send(opened.port);
-    assert_eq!(done.status, 303, "{done:?}");
-    let cookie = set_cookie(&done)
-        .and_then(|c| c.split(';').next())
-        .unwrap()
-        .to_owned();
-    let session = get(opened.port, "/api/session", &cookie);
-    Signed {
-        csrf: session.json()["csrf"].as_str().unwrap().to_owned(),
-        cookie,
-    }
+    Request::new("GET", &path_of(&back)).send(opened.port)
 }
 
 fn location(answer: &Answer) -> String {
@@ -237,4 +243,85 @@ fn location(answer: &Answer) -> String {
         .find(|(n, _)| n.eq_ignore_ascii_case("location"))
         .map(|(_, v)| v.clone())
         .unwrap()
+}
+
+/// A self-signed certificate for 127.0.0.1 written as `cert.pem` and
+/// `key.pem` in `dir`.
+pub fn certificate(dir: &Path) -> rustls::pki_types::CertificateDer<'static> {
+    let key = rcgen::KeyPair::generate().unwrap();
+    let params = rcgen::CertificateParams::new(vec!["127.0.0.1".to_owned()]).unwrap();
+    let cert = params.self_signed(&key).unwrap();
+    std::fs::write(dir.join("cert.pem"), cert.pem()).unwrap();
+    std::fs::write(dir.join("key.pem"), key.serialize_pem()).unwrap();
+    cert.der().clone()
+}
+
+/// One raw HTTPS request to 127.0.0.1:`port` trusting `root`; the status
+/// line's code and the raw answer.
+pub async fn https(
+    port: u16,
+    root: &rustls::pki_types::CertificateDer<'static>,
+    request: &str,
+) -> (u16, String) {
+    use std::sync::Arc;
+    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+    let mut roots = rustls::RootCertStore::empty();
+    roots.add(root.clone()).unwrap();
+    let config = rustls::ClientConfig::builder_with_provider(Arc::new(
+        rustls::crypto::ring::default_provider(),
+    ))
+    .with_safe_default_protocol_versions()
+    .unwrap()
+    .with_root_certificates(roots)
+    .with_no_client_auth();
+    let connector = tokio_rustls::TlsConnector::from(Arc::new(config));
+    let tcp = tokio::net::TcpStream::connect(("127.0.0.1", port))
+        .await
+        .unwrap();
+    let name = rustls::pki_types::ServerName::IpAddress(std::net::Ipv4Addr::LOCALHOST.into());
+    let mut tls = connector.connect(name, tcp).await.unwrap();
+    tls.write_all(request.as_bytes()).await.unwrap();
+    let mut raw = Vec::new();
+    let _ = tls.read_to_end(&mut raw).await;
+    let text = String::from_utf8_lossy(&raw).into_owned();
+    let code = text
+        .split_whitespace()
+        .nth(1)
+        .and_then(|c| c.parse().ok())
+        .unwrap_or(0);
+    (code, text)
+}
+
+pub const WEB: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../web");
+
+/// Runs `web/e2e/<spec>` against `home`'s running daemon.
+pub fn playwright(home: &Path, spec: &str, extra: &[(&str, &str)]) {
+    let web = std::path::Path::new(WEB);
+    let cli = web.join("node_modules/@playwright/test/cli.js");
+    assert!(
+        cli.is_file(),
+        "the dashboard's browser tests need `npm ci` in web/ (scripts/check runs it)"
+    );
+    let out = std::process::Command::new("node")
+        .current_dir(web)
+        .arg(&cli)
+        .args([
+            "test",
+            &format!("e2e/{spec}"),
+            "--config",
+            "playwright.config.ts",
+        ])
+        .env("PMT_BIN", super::BIN)
+        .env("PMT_HOME", home)
+        .env("PMT_USER_HOME", super::user_home(home))
+        .env("PMT_PW_OUT", home.join("playwright"))
+        .envs(extra.iter().copied())
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{spec} failed\n{}\n{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
 }

@@ -63,6 +63,8 @@ Commands:
   portal       The Nous Portal subscription and its tool gateway routing
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
   dashboard    Open the web dashboard: start the daemon's dashboard listener and sign the browser in with a one-time login link
+  serve        Run the gateway daemon in the foreground with the dashboard listener open and no browser (for service managers); remote clients attach through the dashboard listener
+  webapp       Open the desktop workspace in the browser (`webapp.enabled`)
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
   connectors   Hosted app connectors (Gmail, Notion, Linear...) on the Nous connector gateway: list them, list and rename accounts, connect and disconnect accounts
@@ -20486,6 +20488,8 @@ Commands:
   status             Print the daemon's process state
   install-service    Install a per-user supervisor unit that starts the daemon at login (no administrator rights); `--system --run-as-user` installs a boot-time unit instead (root only)
   uninstall-service  Stop and remove the unit `install-service` installed
+  pair-device        Pair a remote device: print its token (shown once) for the remote attachment listener (`daemon.remote`) and the dashboard listener
+  revoke-device      Revoke a paired device: its token stops working and its open sockets close with 4401
   help               Print this message or the help of the given subcommand(s)
 
 Options:
@@ -20847,6 +20851,100 @@ Options:
           Print help
 ```
 
+## `prometheus daemon pair-device`
+
+```text
+Pair a remote device: print its token (shown once) for the remote attachment listener (`daemon.remote`) and the dashboard listener
+
+Usage: prometheus daemon pair-device [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The device's name (letters, digits, `-`, `_`, `.`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --profile-binding <PROFILE>
+          A profile the device may attach to (repeatable; default: every served profile)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --role <ROLE>
+          `driver` (default) or `observer`
+
+          [default: driver]
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus daemon revoke-device`
+
+```text
+Revoke a paired device: its token stops working and its open sockets close with 4401
+
+Usage: prometheus daemon revoke-device [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The device's name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus daemon help`
 
 ```text
@@ -20863,6 +20961,8 @@ Commands:
   status             Print the daemon's process state
   install-service    Install a per-user supervisor unit that starts the daemon at login (no administrator rights); `--system --run-as-user` installs a boot-time unit instead (root only)
   uninstall-service  Stop and remove the unit `install-service` installed
+  pair-device        Pair a remote device: print its token (shown once) for the remote attachment listener (`daemon.remote`) and the dashboard listener
+  revoke-device      Revoke a paired device: its token stops working and its open sockets close with 4401
   help               Print this message or the help of the given subcommand(s)
 ```
 
@@ -20930,6 +21030,22 @@ Stop and remove the unit `install-service` installed
 Usage: prometheus daemon help uninstall-service
 ```
 
+## `prometheus daemon help pair-device`
+
+```text
+Pair a remote device: print its token (shown once) for the remote attachment listener (`daemon.remote`) and the dashboard listener
+
+Usage: prometheus daemon help pair-device
+```
+
+## `prometheus daemon help revoke-device`
+
+```text
+Revoke a paired device: its token stops working and its open sockets close with 4401
+
+Usage: prometheus daemon help revoke-device
+```
+
 ## `prometheus daemon help help`
 
 ```text
@@ -20944,22 +21060,85 @@ Usage: prometheus daemon help help
 Open the web dashboard: start the daemon's dashboard listener and sign the browser in with a one-time login link
 
 Usage: prometheus dashboard [OPTIONS]
+       prometheus dashboard <COMMAND>
+
+Commands:
+  register  Register this dashboard as an OAuth client of the account portal (needs `prometheus auth login portal`); saves `dashboard.auth.portal.client_id`
+  pair      Print a one-use pairing code (10 minutes) a desktop app exchanges for a device credential
+  devices   List paired devices, or revoke one
+  help      Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
       --host <HOST>
           Bind this address instead of `dashboard.host` (until the daemon stops). A non-loopback address needs authentication and TLS
 
-  -p, --profile <NAME>
-          Profile to use (default: the home's active_profile, else default)
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
 
       --port <PORT>
           Bind this port instead of `dashboard.port` (`0`: any free port)
 
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
       --no-open
           Print the login link instead of opening a browser
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --status
+          Print the running dashboard's URL (exit 69 when none runs)
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --stop
+          Stop the dashboard listener; the daemon keeps running
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+      --fingerprint
+          Print the SHA-256 public-key fingerprint of `dashboard.tls.cert` for clients to pin
+
+  -h, --help
+          Print help
+```
+
+## `prometheus dashboard register`
+
+```text
+Register this dashboard as an OAuth client of the account portal (needs `prometheus auth login portal`); saves `dashboard.auth.portal.client_id`
+
+Usage: prometheus dashboard register [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --name <NAME>
+          The label the portal shows for this dashboard
+
+          [default: "Prometheus dashboard"]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --redirect-uri <URL>
+          The OAuth callback (`https://dash.example.com/auth/callback`); default: `<dashboard.public_url>/auth/callback`
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -20967,11 +21146,318 @@ Options:
       --json
           Print one JSON document on stdout; errors go to stderr as JSON
 
-      --status
-          Print the running dashboard's URL (exit 69 when none runs)
+  -v, --verbose...
+          More detail; repeatable
 
-      --stop
-          Stop the dashboard listener; the daemon keeps running
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus dashboard pair`
+
+```text
+Print a one-use pairing code (10 minutes) a desktop app exchanges for a device credential
+
+Usage: prometheus dashboard pair [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --name <NAME>
+          The device's name
+
+          [default: desktop]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --role <ROLE>
+          `driver` (default) or `observer`
+
+          [default: driver]
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus dashboard devices`
+
+```text
+List paired devices, or revoke one
+
+Usage: prometheus dashboard devices [OPTIONS] [COMMAND]
+
+Commands:
+  revoke  Revoke a device: its credential stops working and its sockets close with 4401
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus dashboard devices revoke`
+
+```text
+Revoke a device: its credential stops working and its sockets close with 4401
+
+Usage: prometheus dashboard devices revoke [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The device's name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus dashboard devices help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus dashboard devices help [COMMAND]
+
+Commands:
+  revoke  Revoke a device: its credential stops working and its sockets close with 4401
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus dashboard devices help revoke`
+
+```text
+Revoke a device: its credential stops working and its sockets close with 4401
+
+Usage: prometheus dashboard devices help revoke
+```
+
+## `prometheus dashboard devices help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus dashboard devices help help
+```
+
+## `prometheus dashboard help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus dashboard help [COMMAND]
+
+Commands:
+  register  Register this dashboard as an OAuth client of the account portal (needs `prometheus auth login portal`); saves `dashboard.auth.portal.client_id`
+  pair      Print a one-use pairing code (10 minutes) a desktop app exchanges for a device credential
+  devices   List paired devices, or revoke one
+  help      Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus dashboard help register`
+
+```text
+Register this dashboard as an OAuth client of the account portal (needs `prometheus auth login portal`); saves `dashboard.auth.portal.client_id`
+
+Usage: prometheus dashboard help register
+```
+
+## `prometheus dashboard help pair`
+
+```text
+Print a one-use pairing code (10 minutes) a desktop app exchanges for a device credential
+
+Usage: prometheus dashboard help pair
+```
+
+## `prometheus dashboard help devices`
+
+```text
+List paired devices, or revoke one
+
+Usage: prometheus dashboard help devices [COMMAND]
+
+Commands:
+  revoke  Revoke a device: its credential stops working and its sockets close with 4401
+```
+
+## `prometheus dashboard help devices revoke`
+
+```text
+Revoke a device: its credential stops working and its sockets close with 4401
+
+Usage: prometheus dashboard help devices revoke
+```
+
+## `prometheus dashboard help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus dashboard help help
+```
+
+## `prometheus serve`
+
+```text
+Run the gateway daemon in the foreground with the dashboard listener open and no browser (for service managers); remote clients attach through the dashboard listener
+
+Usage: prometheus serve [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --host <HOST>
+          Bind the dashboard listener to this address instead of `dashboard.host` (a non-loopback address needs authentication and TLS)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --port <PORT>
+          Bind this port instead of `dashboard.port`
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus webapp`
+
+```text
+Open the desktop workspace in the browser (`webapp.enabled`)
+
+Usage: prometheus webapp [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --no-open
+          Print the sign-in link instead of opening a browser
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --status
+          Print whether and where the webapp is served (exit 69 when not)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --sign-out
+          Sign every browser out of this listener (cookies, CSRF tokens, open sockets); paired desktop devices stay signed in
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
 
   -v, --verbose...
           More detail; repeatable
@@ -26810,6 +27296,8 @@ Commands:
   portal       The Nous Portal subscription and its tool gateway routing
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
   dashboard    Open the web dashboard: start the daemon's dashboard listener and sign the browser in with a one-time login link
+  serve        Run the gateway daemon in the foreground with the dashboard listener open and no browser (for service managers); remote clients attach through the dashboard listener
+  webapp       Open the desktop workspace in the browser (`webapp.enabled`)
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
   connectors   Hosted app connectors (Gmail, Notion, Linear...) on the Nous connector gateway: list them, list and rename accounts, connect and disconnect accounts
@@ -30002,6 +30490,8 @@ Commands:
   status             Print the daemon's process state
   install-service    Install a per-user supervisor unit that starts the daemon at login (no administrator rights); `--system --run-as-user` installs a boot-time unit instead (root only)
   uninstall-service  Stop and remove the unit `install-service` installed
+  pair-device        Pair a remote device: print its token (shown once) for the remote attachment listener (`daemon.remote`) and the dashboard listener
+  revoke-device      Revoke a paired device: its token stops working and its open sockets close with 4401
 ```
 
 ## `prometheus help daemon run`
@@ -30068,12 +30558,84 @@ Stop and remove the unit `install-service` installed
 Usage: prometheus help daemon uninstall-service
 ```
 
+## `prometheus help daemon pair-device`
+
+```text
+Pair a remote device: print its token (shown once) for the remote attachment listener (`daemon.remote`) and the dashboard listener
+
+Usage: prometheus help daemon pair-device
+```
+
+## `prometheus help daemon revoke-device`
+
+```text
+Revoke a paired device: its token stops working and its open sockets close with 4401
+
+Usage: prometheus help daemon revoke-device
+```
+
 ## `prometheus help dashboard`
 
 ```text
 Open the web dashboard: start the daemon's dashboard listener and sign the browser in with a one-time login link
 
-Usage: prometheus help dashboard
+Usage: prometheus help dashboard [COMMAND]
+
+Commands:
+  register  Register this dashboard as an OAuth client of the account portal (needs `prometheus auth login portal`); saves `dashboard.auth.portal.client_id`
+  pair      Print a one-use pairing code (10 minutes) a desktop app exchanges for a device credential
+  devices   List paired devices, or revoke one
+```
+
+## `prometheus help dashboard register`
+
+```text
+Register this dashboard as an OAuth client of the account portal (needs `prometheus auth login portal`); saves `dashboard.auth.portal.client_id`
+
+Usage: prometheus help dashboard register
+```
+
+## `prometheus help dashboard pair`
+
+```text
+Print a one-use pairing code (10 minutes) a desktop app exchanges for a device credential
+
+Usage: prometheus help dashboard pair
+```
+
+## `prometheus help dashboard devices`
+
+```text
+List paired devices, or revoke one
+
+Usage: prometheus help dashboard devices [COMMAND]
+
+Commands:
+  revoke  Revoke a device: its credential stops working and its sockets close with 4401
+```
+
+## `prometheus help dashboard devices revoke`
+
+```text
+Revoke a device: its credential stops working and its sockets close with 4401
+
+Usage: prometheus help dashboard devices revoke
+```
+
+## `prometheus help serve`
+
+```text
+Run the gateway daemon in the foreground with the dashboard listener open and no browser (for service managers); remote clients attach through the dashboard listener
+
+Usage: prometheus help serve
+```
+
+## `prometheus help webapp`
+
+```text
+Open the desktop workspace in the browser (`webapp.enabled`)
+
+Usage: prometheus help webapp
 ```
 
 ## `prometheus help gateway`
@@ -31102,6 +31664,12 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.worktrees_restore.v1` | `prometheus worktrees restore` |
 | `prometheus.daemon_status.v1` | `prometheus daemon status` |
 | `prometheus.dashboard.v1` | `prometheus dashboard` |
+| `prometheus.dashboard_register.v1` | `prometheus dashboard register` |
+| `prometheus.dashboard_pair.v1` | `prometheus dashboard pair` |
+| `prometheus.dashboard_devices.v1` | `prometheus dashboard devices` |
+| `prometheus.device_paired.v1` | `prometheus daemon pair-device` |
+| `prometheus.device_revoked.v1` | `prometheus devices revoke` |
+| `prometheus.webapp.v1` | `prometheus webapp` |
 | `prometheus.gateway_status.v1` | `prometheus gateway status` |
 | `prometheus.gateway_platforms.v1` | `prometheus gateway platforms` |
 | `prometheus.gateway_outbox.v1` | `prometheus gateway outbox list` |

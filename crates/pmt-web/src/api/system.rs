@@ -7,7 +7,8 @@ use serde_json::{Value, json};
 
 use super::Caller;
 use crate::Shared;
-use crate::http::{Reply, json_reply};
+use crate::auth::sessions::Role;
+use crate::http::{Reply, error, from_error, json_reply, read_json};
 
 /// `GET /api/health`: public, reads no profile data.
 pub(crate) fn health(shared: &Arc<Shared>) -> Reply {
@@ -86,4 +87,28 @@ pub(crate) fn profiles(shared: &Shared) -> Reply {
 /// `GET /api/system/platform`.
 pub(crate) fn platform(shared: &Shared) -> Reply {
     json_reply(200, &json!(shared.server.platform_support()))
+}
+
+/// `POST /api/profiles`: the profile builder (drivers only).
+pub(crate) async fn create_profile(
+    shared: &Shared,
+    caller: &Caller,
+    body: hyper::body::Incoming,
+) -> Reply {
+    if caller.signed.role == Role::Observer {
+        return error(403, "observer", "observers have read-only access");
+    }
+    let body = match read_json(body).await {
+        Ok(body) => body,
+        Err(reply) => return reply,
+    };
+    match shared.host.create_profile(body).await {
+        Ok(created) => {
+            if let Some(gateway) = shared.server.messaging() {
+                gateway.reload();
+            }
+            json_reply(201, &created)
+        }
+        Err(err) => from_error(&err),
+    }
 }

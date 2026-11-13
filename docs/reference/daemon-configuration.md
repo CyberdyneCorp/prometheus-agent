@@ -14,6 +14,10 @@ Every key `<PROMETHEUS_HOME>/daemon.toml` accepts: machine-wide settings shared 
 | `api_server.public_host` | string | unset | any | `restart` | A host name accepted in the `Host` header besides the loopback names (a reverse proxy's name for a loopback listener). |
 | `daemon.autostart` | boolean | `true` | any | `restart` | Interactive clients (`prometheus tui`, the ACP adapter) start the daemon detached when it is not running; `false` makes them exit 69 instead. |
 | `daemon.idle_session_close_secs` | integer | `3600` | ≥ 1 | `restart` | A session with no attached client, no running turn, no open request and no queued input is closed after this many seconds. |
+| `daemon.remote.enabled` | boolean | `false` | any | `restart` | Bind the remote attachment listener. |
+| `daemon.remote.listen` | string | `"0.0.0.0:9121"` | any | `restart` | Its address. |
+| `daemon.remote.tls.cert` | string | unset | any | `restart` | The certificate chain. |
+| `daemon.remote.tls.key` | string | unset | any | `restart` | The private key. |
 | `daemon.restart_drain_secs` | integer | `120` | ≥ 0 | `restart` | Seconds `prometheus daemon restart` waits for running turns to reach a turn boundary before it replaces the daemon anyway. |
 | `daemon.rpc.bind` | string | `"127.0.0.1:0"` | any | `restart` | Listen address. Loopback only (`127.0.0.1`, `::1`); port `0` picks a free port, recorded as `rpc_url` in `run/gateway.json`. Remote access goes through the gateway relay, never this listener. |
 | `daemon.rpc.max_frame_bytes` | integer | `16777216` | ≥ 1024 | `restart` | Largest accepted frame; a larger one closes the connection with 4413. |
@@ -28,12 +32,14 @@ Every key `<PROMETHEUS_HOME>/daemon.toml` accepts: machine-wide settings shared 
 | `dashboard.auth.oidc.allowed_subjects` | array of string | `[]` | any | `restart` | Subjects (`sub` claims) allowed to sign in. |
 | `dashboard.auth.oidc.client_id` | string | unset | any | `restart` | The client id registered at the issuer. |
 | `dashboard.auth.oidc.issuer` | string | unset | any | `restart` | The issuer URL (its `/.well-known/openid-configuration` is read). |
-| `dashboard.auth.portal.client_id` | string | unset | any | `restart` | The dashboard's registered OAuth client at the account portal. |
+| `dashboard.auth.portal.client_id` | string | unset | any | `restart` | The dashboard's registered OAuth client at the account portal (`prometheus dashboard register` writes it). |
+| `dashboard.auth.portal.issuer` | string | unset | any | `restart` | The portal's OpenID issuer URL (default: the hosted account portal). |
 | `dashboard.base_path` | string | `"/"` | any | `restart` | The path prefix the dashboard is served under (a reverse proxy's mount point, such as `/prometheus`). |
 | `dashboard.host` | string | `"127.0.0.1"` | any | `restart` | The address the listener binds. Anything but a loopback address needs `auth.mode` and TLS. |
 | `dashboard.max_upload_bytes` | integer | `26214400` | ≥ 0 | `restart` | The largest chat attachment upload. |
 | `dashboard.port` | integer | `9120` | 0 to 65535 | `restart` | The port (`0`: chosen by the OS). |
 | `dashboard.public_host` | string | unset | any | `restart` | A host name accepted in the `Host` header besides the bound names. |
+| `dashboard.public_url` | string | unset | any | `restart` | The address browsers reach the dashboard at (`https://dash.example.com`); OAuth callbacks are `<public_url>/auth/callback` when set, else derived from the request (trusted proxy headers included). |
 | `dashboard.tls.cert` | string | unset | any | `restart` | The certificate chain. |
 | `dashboard.tls.key` | string | unset | any | `restart` | The private key. |
 | `dashboard.trust_proxy` | boolean | `false` | any | `restart` | Honour `X-Forwarded-*` headers from `trusted_proxies`. |
@@ -70,3 +76,5 @@ Every key `<PROMETHEUS_HOME>/daemon.toml` accepts: machine-wide settings shared 
 | `update.pre_update_backup` | one of "state", "full", "off" | `"state"` | `"state"`, `"full"`, `"off"` | `restart` | What to save before the binary is swapped. |
 | `update.require_transparency_log` | boolean | `false` | any | `restart` | Also require a keyless transparency-log signature on every release file, as a second check after the embedded-key signature. |
 | `update.snapshot_keep` | integer | `3` | 1 to 100 | `restart` | How many `pre-update` snapshots each profile keeps. |
+| `webapp.enabled` | boolean | `false` | any | `restart` | Serve the workspace under `/app`. |
+| `webapp.public_url` | string | `""` | any | `restart` | The address `prometheus webapp` opens, also accepted as `Host` (empty: the dashboard's own address). |

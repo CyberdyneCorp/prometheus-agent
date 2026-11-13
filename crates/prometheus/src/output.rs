@@ -392,6 +392,30 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "dashboard",
     },
     JsonShape {
+        schema: "prometheus.dashboard_register.v1",
+        command: "dashboard register",
+    },
+    JsonShape {
+        schema: "prometheus.dashboard_pair.v1",
+        command: "dashboard pair",
+    },
+    JsonShape {
+        schema: "prometheus.dashboard_devices.v1",
+        command: "dashboard devices",
+    },
+    JsonShape {
+        schema: "prometheus.device_paired.v1",
+        command: "daemon pair-device",
+    },
+    JsonShape {
+        schema: "prometheus.device_revoked.v1",
+        command: "devices revoke",
+    },
+    JsonShape {
+        schema: "prometheus.webapp.v1",
+        command: "webapp",
+    },
+    JsonShape {
         schema: "prometheus.gateway_status.v1",
         command: "gateway status",
     },

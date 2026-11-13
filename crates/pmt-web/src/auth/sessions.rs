@@ -9,6 +9,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use tokio::time::Instant;
+use tokio_util::sync::CancellationToken;
 
 use super::secret::{hash, random_hex, same};
 
@@ -35,14 +36,41 @@ impl Role {
     }
 }
 
-/// A signed-in browser.
+/// How a caller authenticated.
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Via {
+    /// A browser's session cookie (an ambient credential: CSRF applies).
+    Cookie,
+    /// The token mode's deployment credential.
+    Deployment,
+    /// A paired device's token.
+    Device,
+}
+
+/// A signed-in caller.
+#[derive(Debug, Clone)]
 pub(crate) struct Signed {
-    /// Who: `local` for a login link, `password`, or an OIDC subject.
+    /// Who: `local` for a login link, `password`, an OIDC or portal
+    /// subject, `token`, or `device:<name>`.
     pub subject: String,
     pub role: Role,
-    /// The CSRF token every state-changing request must echo.
+    /// The CSRF token every state-changing cookie request must echo.
     pub csrf: String,
+    pub via: Via,
+    /// The profiles it may use (`None`: every served profile).
+    pub profiles: Option<Vec<String>>,
+    /// Cancelled when the credential ends (sign-out, revocation): its
+    /// sockets close with 4401.
+    pub ended: CancellationToken,
+}
+
+impl Signed {
+    /// Whether `profile` is one this caller may use.
+    pub(crate) fn may_use(&self, profile: &str) -> bool {
+        self.profiles
+            .as_ref()
+            .is_none_or(|list| list.iter().any(|p| p == profile))
+    }
 }
 
 #[derive(Debug)]
@@ -65,10 +93,19 @@ impl Sessions {
             subject: subject.to_owned(),
             role,
             csrf: random_hex(24),
+            via: Via::Cookie,
+            profiles: None,
+            ended: CancellationToken::new(),
         };
         let now = Instant::now();
         let mut live = self.live.lock().expect("sessions poisoned");
-        live.retain(|_, e| now.duration_since(e.last_seen) < IDLE);
+        live.retain(|_, e| {
+            let fresh = now.duration_since(e.last_seen) < IDLE;
+            if !fresh {
+                e.signed.ended.cancel();
+            }
+            fresh
+        });
         live.insert(
             hash(&token),
             Entry {
@@ -85,6 +122,7 @@ impl Sessions {
         let key = hash(token);
         let entry = live.get_mut(&key)?;
         if entry.last_seen.elapsed() >= IDLE {
+            entry.signed.ended.cancel();
             live.remove(&key);
             return None;
         }
@@ -92,12 +130,32 @@ impl Sessions {
         Some(entry.signed.clone())
     }
 
-    /// Signs the browser of `token` out.
+    /// Signs the browser of `token` out, ending its sockets.
     pub(crate) fn remove(&self, token: &str) {
-        self.live
+        let removed = self
+            .live
             .lock()
             .expect("sessions poisoned")
             .remove(&hash(token));
+        if let Some(entry) = removed {
+            entry.signed.ended.cancel();
+        }
+    }
+
+    /// Signs every browser out (`prometheus webapp --sign-out`), ending
+    /// their sockets; returns how many sessions ended.
+    pub(crate) fn sign_out_all(&self) -> usize {
+        let ended: Vec<Entry> = self
+            .live
+            .lock()
+            .expect("sessions poisoned")
+            .drain()
+            .map(|(_, e)| e)
+            .collect();
+        for entry in &ended {
+            entry.signed.ended.cancel();
+        }
+        ended.len()
     }
 }
 
@@ -137,14 +195,28 @@ mod tests {
         let sessions = Sessions::default();
         let (token, signed) = sessions.create("local", Role::Driver);
         tokio::time::advance(IDLE / 2).await;
-        assert_eq!(sessions.get(&token), Some(signed));
+        assert_eq!(sessions.get(&token).map(|s| s.csrf), Some(signed.csrf));
         tokio::time::advance(IDLE / 2).await;
         assert!(
             sessions.get(&token).is_some(),
             "the last request reset the timer"
         );
         tokio::time::advance(IDLE).await;
-        assert_eq!(sessions.get(&token), None);
+        assert!(sessions.get(&token).is_none());
+        assert!(signed.ended.is_cancelled(), "its sockets end with it");
+    }
+
+    #[test]
+    fn signing_everyone_out_ends_every_session_and_its_sockets() {
+        let sessions = Sessions::default();
+        let tabs: Vec<_> = (0..3)
+            .map(|_| sessions.create("local", Role::Driver))
+            .collect();
+        assert_eq!(sessions.sign_out_all(), 3);
+        for (token, signed) in &tabs {
+            assert!(sessions.get(token).is_none());
+            assert!(signed.ended.is_cancelled());
+        }
     }
 
     #[test]

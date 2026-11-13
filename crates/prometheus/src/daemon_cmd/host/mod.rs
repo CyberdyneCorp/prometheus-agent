@@ -42,11 +42,15 @@ mod cron_fire;
 mod cron_send;
 #[cfg(feature = "dashboard")]
 mod dashboard;
+#[cfg(feature = "dashboard")]
+mod dashboard_change;
 mod delegations;
 mod discovery;
 mod gateway;
 mod health_sample;
 mod notify;
+#[cfg(feature = "dashboard")]
+mod profile_create;
 mod reload;
 mod send_tool;
 mod setup;

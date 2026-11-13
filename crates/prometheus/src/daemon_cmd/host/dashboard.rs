@@ -48,8 +48,38 @@ impl pmt_web::DashboardHost for DaemonHost {
                 pmt_web::Catalog::Mcp => return Ok(crate::mcp_cmd::servers_json(&profile.scope())),
                 pmt_web::Catalog::Cron => return cron(&profile.store),
                 pmt_web::Catalog::Memory => return memory(&profile.store),
+                pmt_web::Catalog::Webhooks => return crate::webhooks_cmd::rows(&profile.scope()),
             };
             super::api_profile::catalog(self, &profile, what)
+        })
+    }
+
+    fn create_profile(&self, body: Value) -> HostFuture<'_, Value> {
+        Box::pin(async move {
+            let launch = self.profile(&self.launch_profile)?.scope();
+            let home = pmt_config::Home::open(launch.home())?;
+            super::profile_create::create(&home, &body)
+        })
+    }
+
+    fn change<'a>(
+        &'a self,
+        profile: &'a str,
+        change: pmt_web::Change,
+        target: Option<&'a str>,
+        body: Value,
+    ) -> HostFuture<'a, Value> {
+        Box::pin(async move {
+            let served = self.profile(profile)?;
+            let target = super::dashboard_change::Target {
+                launch: &self.launch,
+                scope: served.scope(),
+                store: Arc::clone(&served.store),
+                profile: served,
+                key: target,
+                body,
+            };
+            super::dashboard_change::apply(change, target).await
         })
     }
 }

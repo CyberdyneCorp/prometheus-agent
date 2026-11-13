@@ -99,6 +99,8 @@ pub mod usage_cmd;
 pub mod vault_cmd;
 pub mod verify_cmd;
 pub mod version;
+#[cfg(feature = "dashboard")]
+pub mod webapp_cmd;
 pub mod webhooks_cmd;
 pub mod worktrees_cmd;
 

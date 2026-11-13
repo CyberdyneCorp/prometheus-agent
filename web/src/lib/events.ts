@@ -17,6 +17,7 @@ export interface DashboardEvent {
 type Listener = (event: DashboardEvent | { truncated: true }) => void;
 
 const listeners = new Set<Listener>();
+const endings = new Set<() => void>();
 let socket: WebSocket | null = null;
 let lastSeq: number | null = null;
 let retry = 1000;
@@ -38,7 +39,11 @@ function open(): void {
   };
   socket.onclose = (closed) => {
     socket = null;
-    if (closed.code === 4401 || closed.code === 4403) return;
+    if (closed.code === 4401) {
+      for (const ended of endings) ended();
+      return;
+    }
+    if (closed.code === 4403) return;
     window.setTimeout(open, retry);
     retry = Math.min(retry * 2, 30000);
   };
@@ -49,4 +54,11 @@ export function follow(listener: Listener): () => void {
   listeners.add(listener);
   if (!socket) open();
   return () => listeners.delete(listener);
+}
+
+/** Calls `ended` when the daemon ends this browser's sign-in (sign-out
+ *  from another tab or `prometheus webapp --sign-out`: close 4401). */
+export function onSignedOut(ended: () => void): void {
+  endings.add(ended);
+  if (!socket) open();
 }

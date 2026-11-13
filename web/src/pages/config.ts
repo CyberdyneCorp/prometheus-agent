@@ -3,7 +3,8 @@
 // is schema-driven). Keys that apply from the next session say so; a
 // refused save shows the validator's message and changes nothing.
 
-import { api, profilePath } from "../lib/api";
+import { api, ApiError, profilePath } from "../lib/api";
+import { docLink } from "./docs";
 import { h, notice, page } from "../lib/dom";
 import { profileOf } from "../lib/state";
 
@@ -67,8 +68,8 @@ function field(key: string, s: Schema, value: unknown, apply: string, fields: Fi
     h("label", {}, h("code", {}, key), input),
     list ? h("datalist", { id: list }, ...options.map((o) => h("option", { value: o }))) : null,
     s.description ? h("small", {}, s.description) : null,
-    apply === "next_session" ? h("span", { class: "applies" }, "applies next session") : null,
-    apply === "restart" ? h("span", { class: "applies" }, "applies after a daemon restart") : null,
+    apply === "next_session" ? h("span", { class: "applies" }, "applies next session (", docLink(key), ")") : null,
+    apply === "restart" ? h("span", { class: "applies" }, "applies after a daemon restart (", docLink(key), ")") : null,
   );
 }
 
@@ -120,11 +121,13 @@ export async function configPage(params: URLSearchParams): Promise<HTMLElement> 
     }
     try {
       const saved = await api.patch<{ applies: Record<string, string> }>(profilePath(profile, "/config"), { set });
-      const later = Object.entries(saved.applies).filter(([, a]) => a !== "live").map(([k, a]) => `${k} (${a === "next_session" ? "applies next session" : "after a restart"})`);
-      result.replaceChildren(notice(later.length ? `Saved. ${later.join(", ")}.` : "Saved."));
+      const later = Object.entries(saved.applies).filter(([, a]) => a !== "live");
+      const saidLater = later.flatMap(([k, a]) => [docLink(k), ` (${a === "next_session" ? "applies next session" : "after a restart"}) `]);
+      result.replaceChildren(h("p", { class: "notice info", role: "status" }, "Saved. ", ...saidLater));
       for (const f of fields) f.original = f.kind === "boolean" ? String(f.input.checked) : f.input.value;
     } catch (err) {
-      result.replaceChildren(notice(`Not saved: ${(err as Error).message}`, "error"));
+      const key = err instanceof ApiError ? String(err.body.message ?? "").match(/^([a-z0-9_.]+):/)?.[1] : undefined;
+      result.replaceChildren(h("p", { class: "notice error", role: "alert" }, `Not saved: ${(err as Error).message} `, key ? docLink(key) : null));
     }
   });
   return page("Configuration", h("p", { class: "muted" }, `Profile ${profile}. Lists and tables are edited with prometheus config.`), result, form);

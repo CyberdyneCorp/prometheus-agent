@@ -94,3 +94,7 @@ form.config .field small { grid-column: 1 / -1; color: var(--muted); }
   nav { border-right: 0; border-bottom: 1px solid var(--line); }
   nav ul { display: flex; flex-wrap: wrap; }
 }
+.workspace .panes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 16px; }
+.workspace .pane { min-width: 0; }
+.dropzone { border: 1px dashed var(--line); padding: 16px; border-radius: 6px; }
+@media (max-width: 800px) { .workspace .panes { grid-template-columns: 1fr; } }

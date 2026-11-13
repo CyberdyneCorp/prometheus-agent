@@ -130,6 +130,15 @@
           "minimum": 1,
           "type": "integer"
         },
+        "remote": {
+          "$ref": "#/$defs/RemoteConfig",
+          "default": {
+            "enabled": false,
+            "listen": "0.0.0.0:9121",
+            "tls": {}
+          },
+          "description": "Remote client attachment with paired device tokens (spec:\nmessaging-gateway, Remote client attachment)."
+        },
         "restart_drain_secs": {
           "default": 120,
           "description": "Seconds `prometheus daemon restart` waits for running turns to reach\na turn boundary before it replaces the daemon anyway.",
@@ -241,6 +250,13 @@
         },
         "public_host": {
           "description": "A host name accepted in the `Host` header besides the bound names.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "public_url": {
+          "description": "The address browsers reach the dashboard at (`https://dash.example.com`);\nOAuth callbacks are `<public_url>/auth/callback` when set, else derived\nfrom the request (trusted proxy headers included).",
           "type": [
             "string",
             "null"
@@ -451,7 +467,14 @@
       "description": "`[dashboard.auth.portal]`.",
       "properties": {
         "client_id": {
-          "description": "The dashboard's registered OAuth client at the account portal.",
+          "description": "The dashboard's registered OAuth client at the account portal\n(`prometheus dashboard register` writes it).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "issuer": {
+          "description": "The portal's OpenID issuer URL (default: the hosted account portal).",
           "type": [
             "string",
             "null"
@@ -531,6 +554,28 @@
             "string",
             "null"
           ]
+        }
+      },
+      "type": "object"
+    },
+    "RemoteConfig": {
+      "additionalProperties": false,
+      "description": "`[daemon.remote]`.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Bind the remote attachment listener.",
+          "type": "boolean"
+        },
+        "listen": {
+          "default": "0.0.0.0:9121",
+          "description": "Its address.",
+          "type": "string"
+        },
+        "tls": {
+          "$ref": "#/$defs/DashboardTls",
+          "default": {},
+          "description": "Its certificate (unset: a self-signed one under `<home>/run/`)."
         }
       },
       "type": "object"
@@ -725,6 +770,23 @@
         }
       },
       "type": "object"
+    },
+    "WebappConfig": {
+      "additionalProperties": false,
+      "description": "`daemon.toml [webapp]` (spec: web-dashboard, Desktop workspace in the\nbrowser): the desktop workspace served by the dashboard listener under\n`/app`.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Serve the workspace under `/app`.",
+          "type": "boolean"
+        },
+        "public_url": {
+          "default": "",
+          "description": "The address `prometheus webapp` opens, also accepted as `Host`\n(empty: the dashboard's own address).",
+          "type": "string"
+        }
+      },
+      "type": "object"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -746,6 +808,11 @@
       "default": {
         "autostart": true,
         "idle_session_close_secs": 3600,
+        "remote": {
+          "enabled": false,
+          "listen": "0.0.0.0:9121",
+          "tls": {}
+        },
         "restart_drain_secs": 120,
         "rpc": {
           "bind": "127.0.0.1:0",
@@ -849,6 +916,14 @@
         "snapshot_keep": 3
       },
       "description": "Self-update of this install (`prometheus update`)."
+    },
+    "webapp": {
+      "$ref": "#/$defs/WebappConfig",
+      "default": {
+        "enabled": false,
+        "public_url": ""
+      },
+      "description": "The desktop workspace in the browser, on the dashboard listener\n(spec: web-dashboard, Desktop workspace in the browser)."
     }
   },
   "title": "Prometheus daemon.toml",
