@@ -342,7 +342,9 @@ and streams the same output. Each window has session tabs
 sidebars with `CommandOrControl+B` and `CommandOrControl+J`.
 
 The header chooses the interface mode, `advanced` or `simple` (chat
-first: the status bar, terminal and file browser rest out of sight), and a
+first: the status bar, terminal, file browser, review pane, technical tool
+rows and inline diffs rest out of sight, and the model's thinking starts
+collapsed), and a
 layout: `default`, `basic`, `focus`, `terminal-deck` and `quad` in
 advanced mode, `sidebar-left` and `sidebar-right` in simple mode, or one
 you saved. Each mode remembers its own arrangement.
@@ -357,6 +359,83 @@ shell. *Add to chat* puts the selected output in the composer.
 While the session has running subagents, a frame above the composer shows
 them; a selected child can be steered (`subagent.steer`, queued for its
 next checkpoint) or stopped (`subagent.stop`).
+
+## Review, memory graph and HUD
+
+`CommandOrControl+G` toggles the review pane of the chat's repository:
+its branch, how far it is ahead of and behind upstream, and the changed
+files with their diffs in one of three scopes. `uncommitted` compares
+`HEAD` with the working tree and is the only scope that can stage,
+unstage, revert (after an in-window confirmation) and commit;
+`branch` shows the branch's commits since its base and `last-turn`
+everything that changed since the most recent turn in the repository
+began, commits made during it included. Each turn start snapshots the
+working tree as a tree object (nothing else in the repository changes).
+*Commit & Push*, branch create/switch and *Create PR* (offered only when
+`gh` is installed) run through the session's terminal backend; *Generate
+commit message* asks the `commit_message` auxiliary route. The pane needs
+the workspace on this machine (a container or SSH session's repository is
+not reviewed). Hooks do not run for the pane's own git commands.
+
+`/journey` (also `/learning`, `/memory-graph`, the palette or
+`CommandOrControl+Shift+M`) opens the memory graph: learned skills and
+memories over time, with a playback scrubber and the `all`, `used` and
+`learned` filters. Editing a memory or deleting a node goes through
+`manage.change` like every surface (a deleted skill is archived); open
+chats keep their snapshot. *Share* gives a code of node ids and positions
+only.
+
+`CommandOrControl+Shift+H` detaches the chat into the HUD: a chrome-free,
+always-on-top bar with the live transcript and a composer. Press and hold
+the handle to move it, drag its edges to resize it, *Reset size* puts it
+back. `desktop.hud.snap_hotkey` (default `CommandOrControl+Shift+G`)
+snaps it to the pointer and `desktop.hud.tap_to_summon = true` lets a tap
+(a left click) on the tray icon summon it. A prompt sent from the HUD
+carries the application, title and bounds of the window underneath it,
+never pixels (macOS needs the Screen Recording permission for titles). On
+native Wayland snapping and the window underneath are unavailable, and
+HUD settings say why.
+
+## Management panes, projects and shortcuts
+
+The *Manage* pane has Skills (enable toggles and the official optional
+catalog), Scheduled jobs (with an `All profiles` view), Profiles (switch,
+export, import), Messaging, Agents (each profile's bot chat) and the
+Command Center (running sessions, pending approvals and active subagents
+of every profile). Every request names its profile: the `Applies to`
+choice (shown with two or more profiles; it follows the window's
+profile), or a job's owning profile in the all-profiles view. A profile
+other than the window's is reached over a connection of its own (a
+ticket grants one profile).
+
+Messaging shows each adapter in one state: `not_configured`, `saved`
+(credentials stored, disabled), `pending_restart`, `connecting`,
+`connected`, `error` with the reason, or `daemon_stopped`. After a
+credential save, clear or enable toggle a *Restart adapter* banner stays
+until the adapter restarted (with *Retry* when that failed). Telegram's
+*Create with QR* runs the daemon's onboarding flow: scan the code (or open
+the link), and the token is stored, your Telegram id becomes the only
+allowed user and only the Telegram adapter restarts; closing the dialog
+cancels it and saves nothing.
+
+The Projects sidebar lists explicit projects, repositories of the
+profile's sessions and repositories the background scan found
+(`projects.repo_scan_*`; on by default in the desktop), each with one
+click to create a project. *Discover repositories* sets
+`projects.repo_scan_enabled`; off, discovered rows disappear at once.
+
+`CommandOrControl+K` or `CommandOrControl+P` opens the command palette
+(pages, settings, sessions by title or id, actions such as *Export
+profile*). Manage → Shortcuts rebinds every shortcut, plugin panels'
+included (`register {shortcuts: [{id, label, chord}]}` in the panel SDK);
+two actions on one chord are both flagged and neither runs until one
+changes. Bindings are a machine-wide display preference; the zoom
+(`CommandOrControl+=`, `-`, `0`, half a step each) belongs to the window.
+`desktop.font_family` goes in front of the theme's fonts and
+`desktop.terminal_font_family` sets the terminal's (empty: the default
+monospace fonts). Exporting a profile runs `profile export` without
+secrets and adds the appearance (theme, mode, shortcuts, zoom) as an
+overlay that an import applies again.
 
 ## Building and testing
 

@@ -544,6 +544,12 @@ pub trait Host: Send + Sync + 'static {
         Box::pin(async { Err(not_served("this host delegates to no subagents")) })
     }
 
+    /// The desktop's panes (`git.*`, `projects.*`, `manage.*`, pairing,
+    /// `center.list`); `None` answers them `rpc.not_served`.
+    fn panes(&self) -> Option<&dyn crate::panes::PanesHost> {
+        None
+    }
+
     /// `profile`'s canonical Bot Chat, created when it has none
     /// (`bot.chat.ensure`); `true` when created now.
     fn bot_chat<'a>(&'a self, _profile: &'a str) -> HostFuture<'a, (String, bool)> {

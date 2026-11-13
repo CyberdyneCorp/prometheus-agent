@@ -1146,6 +1146,10 @@ pub enum ProfileCommand {
         /// hidden prompt (or from stdin).
         #[arg(long)]
         with_secrets: bool,
+        /// Also include the desktop appearance (a JSON file the desktop
+        /// app wrote), applied by the desktop after an import.
+        #[arg(long, value_name = "FILE")]
+        appearance: Option<std::path::PathBuf>,
     },
     /// Create a profile from an archive `profile export` wrote.
     Import {

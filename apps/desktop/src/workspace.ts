@@ -12,7 +12,9 @@ import type { DesktopClient } from "./client";
 import { FileBrowser } from "./files";
 import { type Arrangement, Layout, type Mode } from "./layout";
 import { PreviewRail } from "./preview";
+import { ReviewPane } from "./review";
 import { shell } from "./shell";
+import { Shortcuts } from "./shortcuts";
 import { SubagentsFrame } from "./subagents";
 import { Tabs } from "./tabs";
 import { TerminalPane } from "./terminal";
@@ -43,15 +45,30 @@ export interface Workspace {
   center: HTMLElement;
   aside: HTMLElement;
   layout: Layout;
+  /** Every bindable action of the window. */
+  shortcuts: Shortcuts;
+  /** Shows a pane of the right sidebar. */
+  showPane(name: string): void;
+  /** The pane names, for the palette. */
+  paneNames: string[];
   /** Lays the window out once it is in the document. */
   start(side: HTMLElement): void;
 }
 
-export function workspace(client: DesktopClient, chat: ChatView, settings: HTMLElement): Workspace {
+/** A pane the window adds (management panes). */
+export interface ExtraPane {
+  name: string;
+  label: string;
+  el: HTMLElement;
+  shown?: () => void;
+}
+
+export function workspace(client: DesktopClient, chat: ChatView, settings: HTMLElement, dialogs: HTMLElement, extra: ExtraPane[]): Workspace {
   const files = new FileBrowser(client);
   const preview = new PreviewRail(client, (comments) => chat.attachComments(comments.text, comments.images));
   const terminal = new TerminalPane(client, (text) => chat.attachComments(text, []));
   const subagents = new SubagentsFrame(client);
+  const review = new ReviewPane(client, dialogs);
   const panes = new Panes();
   const tabs = new Tabs((sessionId) => (sessionId ? void chat.open(sessionId) : chat.draft()));
   let side: HTMLElement | null = null;
@@ -88,6 +105,7 @@ export function workspace(client: DesktopClient, chat: ChatView, settings: HTMLE
     void files.follow(sessionId);
     void suggestions.follow(sessionId);
     void terminal.follow(sessionId);
+    void review.follow(sessionId);
   };
   const popOut = h("button", { type: "button", name: "pop-out" }, "Pop out");
   popOut.addEventListener("click", () => {
@@ -99,14 +117,19 @@ export function workspace(client: DesktopClient, chat: ChatView, settings: HTMLE
     panes.add("files", "Files", files.el),
     panes.add("artifacts", "Artifacts", artifacts.el, () => void artifacts.load()),
     panes.add("preview", "Preview", preview.el, () => preview.show()),
+    panes.add("review", "Review", review.el, () => void review.load()),
+    ...extra.map((p) => panes.add(p.name, p.label, p.el, p.shown)),
   );
   const center = h("div", { class: "center" }, h("div", { class: "center-bar" }, tabs.el, popOut), chat.el, terminal.el);
   const keys = shortcuts(chat, { tabs, terminal, layout });
-  document.addEventListener("keydown", keys);
+  document.addEventListener("keydown", (event) => keys.handle(event));
   return {
     center,
     aside,
     layout,
+    shortcuts: keys,
+    showPane: (name) => layout.change({ pane: name, right: true }),
+    paneNames: ["settings", "files", "artifacts", "preview", "review", ...extra.map((p) => p.name)],
     start: (sideEl) => {
       side = sideEl;
       layout.start();
@@ -120,31 +143,29 @@ interface Parts {
   layout: Layout;
 }
 
-/** The window's keyboard shortcuts (they work in every mode). */
-function shortcuts(chat: ChatView, p: Parts): (event: KeyboardEvent) => void {
-  const table: Record<string, () => void> = {
-    f: () => chat.find.open(),
-    "shift+s": () => chat.status.toggle(),
-    "shift+n": () => void shell("new_window"),
-    t: () => p.tabs.open(),
-    "shift+t": () => p.tabs.reopen(),
-    w: () => p.tabs.close(),
-    b: () => p.layout.change({ left: !p.layout.arrangement.left }),
-    j: () => p.layout.change({ right: !p.layout.arrangement.right }),
+/** The window's bindable actions (they work in every mode). */
+function shortcuts(chat: ChatView, p: Parts): Shortcuts {
+  const keys = new Shortcuts();
+  const toggleReview = () => {
+    const shown = p.layout.arrangement.right && p.layout.arrangement.pane === "review";
+    p.layout.change(shown ? { right: false } : { pane: "review", right: true });
   };
-  return (event) => {
-    if (event.ctrlKey && event.key === "Tab") {
-      event.preventDefault();
-      p.tabs.cycle(event.shiftKey);
-      return;
-    }
-    if (!(event.metaKey || event.ctrlKey)) return;
-    const key = `${event.shiftKey ? "shift+" : ""}${event.key.toLowerCase()}`;
-    // Over an interactive terminal, the shell gets CommandOrControl+W.
-    if (key === "w" && p.terminal.focused) return;
-    const run = table[key];
-    if (!run) return;
-    event.preventDefault();
-    run();
-  };
+  const actions: [string, string, string, () => void][] = [
+    ["find", "Find in chat", "CommandOrControl+F", () => chat.find.open()],
+    ["status-bar", "Status bar details", "CommandOrControl+Shift+S", () => chat.status.toggle()],
+    ["new-window", "New window", "CommandOrControl+Shift+N", () => void shell("new_window")],
+    ["new-session", "New session", "CommandOrControl+N", () => chat.draft()],
+    ["new-tab", "New tab", "CommandOrControl+T", () => p.tabs.open()],
+    ["reopen-tab", "Reopen closed tab", "CommandOrControl+Shift+T", () => p.tabs.reopen()],
+    ["close-tab", "Close tab", "CommandOrControl+W", () => p.tabs.close()],
+    ["next-tab", "Next tab", "Ctrl+Tab", () => p.tabs.cycle(false)],
+    ["previous-tab", "Previous tab", "Ctrl+Shift+Tab", () => p.tabs.cycle(true)],
+    ["left-sidebar", "Toggle left sidebar", "CommandOrControl+B", () => p.layout.change({ left: !p.layout.arrangement.left })],
+    ["right-sidebar", "Toggle right sidebar", "CommandOrControl+J", () => p.layout.change({ right: !p.layout.arrangement.right })],
+    ["review", "Toggle the review pane", "CommandOrControl+G", toggleReview],
+  ];
+  for (const [id, label, chord, run] of actions) keys.add({ id, label, chord, run });
+  // Over an interactive terminal, the shell gets CommandOrControl+W.
+  keys.skip = (id) => id === "close-tab" && p.terminal.focused;
+  return keys;
 }

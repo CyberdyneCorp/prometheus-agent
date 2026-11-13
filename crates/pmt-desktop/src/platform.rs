@@ -12,6 +12,14 @@ pub const GLOBAL_SHORTCUT: &str = "desktop.global_shortcut";
 pub const TRAY: &str = "desktop.tray";
 /// The dock or taskbar badge.
 pub const BADGE: &str = "desktop.badge";
+/// HUD placement: snapping the bar to the pointer.
+pub const HUD_SNAP: &str = "desktop.hud.snap";
+/// HUD context: the window underneath the bar.
+pub const HUD_BELOW: &str = "desktop.hud.window_below";
+/// Why HUD placement is off on native Wayland.
+pub const WAYLAND_PLACEMENT: &str = "the compositor controls window placement";
+/// Why the window underneath is unknown on native Wayland.
+pub const WAYLAND_WINDOWS: &str = "the compositor does not tell applications about other windows";
 /// The reason a Wayland session gives for the hotkey.
 pub const WAYLAND_SHORTCUTS: &str = "global shortcuts are not available in this Wayland session";
 /// The reason a desktop without a `StatusNotifierItem` host gives.
@@ -117,7 +125,22 @@ pub fn probe(facts: &Facts) -> Vec<Feature> {
     } else {
         row(BADGE, "supported", "the dock or taskbar shows badges")
     };
-    vec![shortcut, tray, badge]
+    let (snap, below) = if facts.wayland {
+        (
+            row(HUD_SNAP, "unsupported", WAYLAND_PLACEMENT),
+            row(HUD_BELOW, "unsupported", WAYLAND_WINDOWS),
+        )
+    } else {
+        (
+            row(HUD_SNAP, "supported", "the HUD moves to the pointer"),
+            row(
+                HUD_BELOW,
+                "supported",
+                "window titles and bounds are readable",
+            ),
+        )
+    };
+    vec![shortcut, tray, badge, snap, below]
 }
 
 #[cfg(test)]
@@ -139,6 +162,20 @@ mod tests {
             rows.iter()
                 .any(|r| r.feature == "desktop.tray" && r.state == "unsupported")
         );
+    }
+
+    /// Scenario: Snap on native Wayland.
+    #[test]
+    fn native_wayland_disables_hud_placement_with_the_reason() {
+        let facts = Facts {
+            os: "linux".into(),
+            wayland: true,
+            sni_host: Some(true),
+        };
+        let rows = probe(&facts);
+        let snap = rows.iter().find(|r| r.feature == super::HUD_SNAP).unwrap();
+        assert_eq!(snap.state, "unsupported");
+        assert_eq!(snap.reason, "the compositor controls window placement");
     }
 
     #[test]

@@ -63,6 +63,10 @@ export class ChatView {
   onSubmitted: (sessionId: string) => void = () => {};
   /** The window shows another chat (`null`: a draft); the panes follow. */
   onFollow: (sessionId: string | null) => void = () => {};
+  /** Adds context to a prompt before it is sent (the HUD's window below). */
+  decorate: ((text: string) => Promise<string>) | null = null;
+  /** `/journey` (`/learning`, `/memory-graph`): the window opens the graph. */
+  onJourney: () => void = () => {};
   private cwd: string | null = null;
   /** The open session's live output reached this window since the last
    *  turn ended. */
@@ -254,8 +258,9 @@ export class ChatView {
       await this.ensureSession();
       const sessionId = this.sessionId ?? "";
       this.drafts.sending(sessionId, { text, images });
-      this.transcript.message("user", text);
-      await this.client.call("prompt.submit", { session_id: sessionId, text, files: [], images: images.map((i) => (i.data ? { data: i.data } : { path: i.path ?? "" })) });
+      const sent = this.decorate ? await this.decorate(text) : text;
+      this.transcript.message("user", sent);
+      await this.client.call("prompt.submit", { session_id: sessionId, text: sent, files: [], images: images.map((i) => (i.data ? { data: i.data } : { path: i.path ?? "" })) });
       // The chat is a session once its first prompt was admitted.
       this.el.dataset.session = sessionId;
       this.drafts.acknowledged(sessionId);
@@ -295,6 +300,11 @@ export class ChatView {
   private async command(text: string): Promise<boolean> {
     const catalog = this.composer.catalog;
     const [head = ""] = text.slice(1).split(/\s+/);
+    // The memory graph is the window's own view of `/journey`.
+    if (["journey", "learning", "memory-graph"].includes(head)) {
+      this.onJourney();
+      return true;
+    }
     if (!catalog.some((e) => e.name === head || (e.aliases ?? []).includes(head))) return false;
     const refused = refusal(catalog, text);
     if (refused) {

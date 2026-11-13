@@ -53,7 +53,16 @@ pub const TOKEN_SECRET: &str = "TELEGRAM_BOT_TOKEN";
 /// The factory the daemon registers for `telegram`.
 #[must_use]
 pub fn factory() -> AdapterFactory {
-    Arc::new(|setup| Ok(Arc::new(Telegram::new(setup, Endpoints::default())?) as Arc<dyn Adapter>))
+    factory_at(Endpoints::default())
+}
+
+/// A factory reaching the Bot API at `endpoints` (a stand-in API in
+/// tests).
+#[must_use]
+pub fn factory_at(endpoints: Endpoints) -> AdapterFactory {
+    Arc::new(
+        move |setup| Ok(Arc::new(Telegram::new(setup, endpoints.clone())?) as Arc<dyn Adapter>),
+    )
 }
 
 /// A Telegram bot of one profile.

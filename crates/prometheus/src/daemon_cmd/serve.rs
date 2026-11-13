@@ -99,6 +99,7 @@ pub(crate) fn run_with(
                 )?
                 .with_turn_cap(config.gateway.limits.max_concurrent_sessions),
             );
+            DaemonHost::adopt(&host);
             let options = server_options(home, ctx, &config, host.names(), health_url);
             let watcher = pmt_core::spawn::spawn(super::host::watch(Arc::clone(&host)));
             let sweeper = pmt_core::spawn::spawn(super::host::sweep_worktrees(Arc::clone(&host)));

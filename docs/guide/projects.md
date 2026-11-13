@@ -102,6 +102,22 @@ $ prometheus projects restore api
 restored project 'api'
 ```
 
+## Repository discovery
+
+With `projects.repo_scan_enabled` on (unset: on for the desktop app, off
+for every other surface), the daemon scans `projects.repo_scan_roots`
+(default: your home directory) down to `projects.repo_scan_max_depth`
+(default 4) levels for git repositories, in the background and without
+following symlinks. It skips `projects.repo_scan_exclude_paths` subtrees
+(`~` is your home), hidden folders, dependency folders (`node_modules`,
+`target`, `.venv`, `vendor`) and folders it cannot read, and does not
+look inside a repository for more. What it found is cached per profile in
+`state.db` with when it was last seen; changing a scan key invalidates
+only that profile's cache, and turning scanning off clears it.
+Discovered repositories are only offered (the desktop's Projects sidebar
+creates a project in one click, `projects.create`); no project is ever
+created automatically.
+
 ## Backups and exports
 
 Projects and the active pointer live in `state.db`, so whole-home backups

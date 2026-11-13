@@ -147,6 +147,32 @@ impl<R: Runtime> Native for TauriNative<R> {
         self.app.restart();
     }
 
+    fn toggle_hud(&self, fragment: &str) -> Result<bool, String> {
+        crate::hud::toggle(&self.app, fragment).map_err(text)
+    }
+
+    fn reset_hud(&self) -> Result<(), String> {
+        crate::hud::reset(&self.app).map_err(text)
+    }
+
+    fn drag_hud(&self) -> Result<(), String> {
+        crate::hud::drag(&self.app).map_err(text)
+    }
+
+    fn window_below(&self) -> Option<pmt_desktop::hud::WindowBelow> {
+        let bar = crate::hud::bounds(&self.app)?;
+        pmt_desktop::hud::below(&self.facts(), &bar)
+    }
+
+    fn save_path(&self, name: &str) -> Option<PathBuf> {
+        self.app
+            .dialog()
+            .file()
+            .set_file_name(name)
+            .blocking_save_file()
+            .and_then(|p| p.into_path().ok())
+    }
+
     fn facts(&self) -> pmt_desktop::platform::Facts {
         let x11 = std::env::var("GDK_BACKEND").is_ok_and(|b| b == "x11");
         pmt_desktop::platform::Facts::detect(x11)

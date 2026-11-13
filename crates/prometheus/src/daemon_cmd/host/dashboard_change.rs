@@ -49,6 +49,7 @@ type Handler = fn(&Target<'_>) -> Result<Value, Error>;
 /// The synchronous handlers; webhook tests are sent asynchronously.
 const HANDLERS: &[(Change, Handler)] = &[
     (Change::Skill, skill),
+    (Change::SkillArchive, skill_archive),
     (Change::Toolset, toolset),
     (Change::CronCreate, cron_create),
     (Change::CronUpdate, cron_update),
@@ -87,6 +88,14 @@ fn skill(t: &Target<'_>) -> Result<Value, Error> {
     )?;
     crate::plugins_host::skill_changed(&t.scope, name, if enabled { "enable" } else { "disable" });
     Ok(json!({"name": name, "enabled": enabled, "applies": "next_session"}))
+}
+
+fn skill_archive(t: &Target<'_>) -> Result<Value, Error> {
+    let name = t.key()?;
+    let curator = crate::curator_cmd::ops::Curator::open(t.scope.clone(), t.launch.clone())?;
+    let said = curator.archive(name)?;
+    crate::plugins_host::skill_changed(&t.scope, name, "archive");
+    Ok(json!({"name": name, "archived": true, "message": said, "applies": "next_session"}))
 }
 
 fn toolset(t: &Target<'_>) -> Result<Value, Error> {

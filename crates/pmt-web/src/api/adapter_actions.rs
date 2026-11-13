@@ -10,60 +10,15 @@
 //! `adapter.pairing`; `DELETE adapters/{name}/pairing` cancels it, after
 //! which a late result is discarded and nothing is saved.
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::Arc;
 
 use pmt_config::platforms::{self, PairingFlow};
-use pmt_core::cancel::CancelToken;
 use pmt_gateway::messaging::actions::Tested;
 use serde_json::{Value, json};
 
 use crate::Shared;
 use crate::host::PairingSink;
 use crate::http::{Reply, error, from_error, json_reply};
-
-/// The pairing flows of one listener, by (profile, platform).
-#[derive(Debug, Default)]
-pub(crate) struct Flows {
-    flows: Mutex<HashMap<(String, String), Flow>>,
-}
-
-#[derive(Debug)]
-struct Flow {
-    /// The newest step, or the outcome once it ended.
-    state: Value,
-    cancel: CancelToken,
-    running: bool,
-}
-
-impl Flows {
-    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<(String, String), Flow>> {
-        self.flows.lock().unwrap_or_else(PoisonError::into_inner)
-    }
-
-    /// Records a step of a running flow (ignored once it ended).
-    fn step(&self, key: &(String, String), state: &Value) -> bool {
-        match self.lock().get_mut(key) {
-            Some(flow) if flow.running && !flow.cancel.is_cancelled() => {
-                flow.state = state.clone();
-                true
-            }
-            _ => false,
-        }
-    }
-
-    /// Records how a flow ended, unless it was cancelled first.
-    fn end(&self, key: &(String, String), state: Value) -> Option<Value> {
-        let mut flows = self.lock();
-        let flow = flows.get_mut(key)?;
-        flow.running = false;
-        if flow.cancel.is_cancelled() {
-            return None;
-        }
-        flow.state = state.clone();
-        Some(state)
-    }
-}
 
 fn gateway(shared: &Shared) -> Result<&pmt_gateway::messaging::Gateway, Reply> {
     shared
@@ -130,25 +85,13 @@ pub(crate) fn start(shared: &Arc<Shared>, profile: &str, name: &str) -> Reply {
         Err(reply) => return reply,
     };
     let key = (profile.to_owned(), name.to_owned());
-    let cancel = CancelToken::new();
-    {
-        let mut flows = shared.pairings.lock();
-        if flows.get(&key).is_some_and(|f| f.running) {
-            return error(
-                409,
-                "pairing_running",
-                "a pairing is already running for this adapter",
-            );
-        }
-        flows.insert(
-            key.clone(),
-            Flow {
-                state: json!({"state": "starting"}),
-                cancel: cancel.clone(),
-                running: true,
-            },
+    let Some(cancel) = shared.pairings.begin(key.clone()) else {
+        return error(
+            409,
+            "pairing_running",
+            "a pairing is already running for this adapter",
         );
-    }
+    };
     let stepped = Arc::clone(shared);
     let step_key = key.clone();
     let emit = Arc::new(move |state: Value| {
@@ -164,13 +107,7 @@ pub(crate) fn start(shared: &Arc<Shared>, profile: &str, name: &str) -> Reply {
     let running = Arc::clone(shared);
     pmt_core::spawn::spawn(async move {
         let outcome = running.host.pair_adapter(&key.0, flow, sink).await;
-        let state = match outcome {
-            Ok(done) => done,
-            Err(err) => json!({
-                "state": if err.code().code == pmt_core::error::codes::GATEWAY_PAIRING_TIMEOUT.code { "expired" } else { "failed" },
-                "message": err.message(),
-            }),
-        };
+        let state = outcome.unwrap_or_else(|err| crate::pairing::failed(&err));
         if let Some(state) = running.pairings.end(&key, state) {
             running
                 .feed
@@ -194,11 +131,7 @@ pub(crate) fn state(shared: &Shared, profile: &str, name: &str) -> Reply {
         return reply;
     }
     let key = (profile.to_owned(), name.to_owned());
-    let state = shared
-        .pairings
-        .lock()
-        .get(&key)
-        .map_or_else(|| json!({"state": "idle"}), |f| f.state.clone());
+    let state = shared.pairings.state(&key);
     json_reply(200, &with_platform(name, state))
 }
 
@@ -208,13 +141,9 @@ pub(crate) fn cancel(shared: &Shared, profile: &str, name: &str) -> Reply {
         return reply;
     }
     let key = (profile.to_owned(), name.to_owned());
-    let mut flows = shared.pairings.lock();
-    let Some(flow) = flows.get_mut(&key).filter(|f| f.running) else {
+    if !shared.pairings.cancel(&key) {
         return error(404, "not_found", "no pairing is running for this adapter");
-    };
-    flow.cancel.cancel();
-    flow.state = json!({"state": "cancelled"});
-    drop(flows);
+    }
     shared.feed.publish(
         profile,
         "adapter.pairing",

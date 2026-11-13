@@ -83,6 +83,7 @@ capabilities = [
     "desktop-app",
     "distribution-and-update",
     "messaging-gateway",
+    "projects",
     "web-dashboard",
 ]
 
@@ -3792,6 +3793,9 @@ capabilities = [
 [projects."Archive and restore"]
 "Archived active project cleared" = ["crates/prometheus/tests/projects_cli.rs::archiving_the_active_project_clears_it_and_hides_it"]
 
+[projects."Repository discovery"]
+"Excluded path skipped" = { tests = ["crates/pmt-worktrees/src/discover.rs::excluded_hidden_dependency_and_deep_folders_are_skipped"], note = "~/scratch excluded: ~/scratch/tmp is not listed (hidden, dependency, nested and too-deep repositories are skipped too); the daemon's cache and the desktop's rows are in crates/prometheus/tests/desktop_manage.rs" }
+
 [projects."Projects in backups and exports"]
 "Missing folder flagged" = ["crates/prometheus/tests/projects_backup.rs::an_imported_profile_keeps_folders_missing_on_this_machine"]
 
@@ -4015,6 +4019,7 @@ capabilities = [
 "Plugin frame reads the session cookie" = { tests = ["crates/prometheus/tests/dashboard_browser.rs::dashboard_plugins_render_in_sandboxed_frames", "crates/prometheus/tests/dashboard_plugins.rs::contributions_frames_backends_and_rescan"], note = "plugins.spec.ts: the frame (sandbox allow-scripts, an opaque origin) reads document.cookie and never sees prometheus_session; the frame document's own policy is sandbox allow-scripts without allow-same-origin and default-src 'none'" }
 
 [desktop-app."Telegram quick setup by QR"]
+"Successful QR setup" = { tests = ["crates/prometheus/tests/desktop_manage.rs::desktop_management_messaging_projects_shortcuts_and_profile_files", "crates/prometheus/tests/dashboard_channels.rs::telegram_create_with_qr_saves_the_token_and_allowlists_the_owner"], note = "a stand-in onboarding service and Bot API (PMT_TEST_TELEGRAM_API, debug builds): the desktop dialog shows the QR and deep link, the token is stored as TELEGRAM_BOT_TOKEN, 4242 is the only allowlisted user and the Telegram row reaches `connected`" }
 "Cancelled setup" = { tests = ["crates/prometheus/tests/dashboard_channels.rs::a_cancelled_telegram_setup_writes_nothing"], note = "the daemon flow the dashboard Channels page hosts (the desktop Messaging pane reuses it, 62.x): a result arriving after DELETE adapters/telegram/pairing is discarded and no secret is written" }
 
 [web-dashboard."Files page"]
@@ -4223,6 +4228,33 @@ capabilities = [
 
 [desktop-app."Live subagents frame"]
 "Steering is acknowledged as queued" = { tests = ["crates/prometheus/tests/desktop_workspace.rs::desktop_windows_tabs_modes_terminals_and_subagents"], note = "a background child (30 s mock call) shows in the frame; subagent.steer answers `queued` and the frame says `guidance queued for next checkpoint`; Stop requests the interrupt" }
+
+# Group 63.4 (review pane, memory graph, HUD, management panes, messaging, projects, shortcuts).
+[desktop-app."Git review pane"]
+"Last-turn scope" = { tests = ["crates/prometheus/tests/desktop_review.rs::desktop_review_pane_memory_graph_and_hud", "crates/pmt-worktrees/tests/review.rs::last_turn_shows_edits_and_commits_made_during_the_turn_read_only"], note = "a mock turn writes one.txt and two.txt and commits one.txt through the terminal; last-turn (tree snapshot taken when the turn began vs the working tree now) lists both read-only with no stage/revert/commit controls" }
+"Revert needs confirmation" = { tests = ["crates/prometheus/tests/desktop_review.rs::desktop_review_pane_memory_graph_and_hud"], note = "Revert opens the in-window confirmation naming the file; Cancel keeps it, Revert discards it (the new file is gone from disk)" }
+
+[desktop-app."Memory graph"]
+"Share code is content-free" = { tests = ["crates/prometheus/tests/desktop_review.rs::desktop_review_pane_memory_graph_and_hud"], note = "the decoded `pmg1.` code holds objects with exactly id, x and y; the memory text appears nowhere in it" }
+"Deleting a memory mid-session" = { tests = ["crates/prometheus/tests/desktop_review.rs::desktop_review_pane_memory_graph_and_hud"], note = "the node is deleted through manage.change memory {remove}; the open chat's stored system prompt still holds the memory after another turn, a new session's does not" }
+
+[desktop-app."HUD mode"]
+"Asking about the app underneath" = { tests = ["crates/prometheus/tests/desktop_review.rs::desktop_review_pane_memory_graph_and_hud", "crates/pmt-desktop/src/hud.rs::the_topmost_other_window_under_the_bar_is_picked"], note = "CommandOrControl+Shift+H asks the shell for the HUD window (#hud=<profile>/<id>); the harness's Native reports Firefox / Invoice 42 underneath and the HUD's prompt.submit carries that metadata and no images. The per-OS probes (CoreGraphics via JXA, EnumWindows via PowerShell, xprop/xwininfo) are parsed by unit tests; the real windows are not driven" }
+"Snap on native Wayland" = { tests = ["crates/prometheus/tests/desktop_review.rs::desktop_review_pane_memory_graph_and_hud", "crates/pmt-desktop/src/platform.rs::native_wayland_disables_hud_placement_with_the_reason"] }
+
+[desktop-app."Management panes"]
+"Pausing another profile's job" = { tests = ["crates/prometheus/tests/desktop_manage.rs::desktop_management_messaging_projects_shortcuts_and_profile_files"], note = "with `work` active and All profiles on, Pause on home's job sends manage.change cron_update with profile `home` (over a connection granted to `home`) and the job shows paused" }
+
+[desktop-app."Messaging pane shows saved versus running state"]
+"Saved but not started" = { tests = ["crates/prometheus/tests/desktop_manage.rs::desktop_management_messaging_projects_shortcuts_and_profile_files", "crates/pmt-gateway/src/messaging/pane.rs::each_adapter_has_exactly_one_state"], note = "SLACK_BOT_TOKEN stored while Slack is disabled shows `saved`; enabling it shows `pending_restart` with the Restart adapter banner" }
+
+
+[desktop-app."Repository discovery for the Projects sidebar"]
+"Scanning disabled" = { tests = ["crates/prometheus/tests/desktop_manage.rs::desktop_management_messaging_projects_shortcuts_and_profile_files"], note = "alpha and beta are discovered under projects.repo_scan_roots; unchecking Discover repositories (projects.repo_scan_enabled = false) removes them while the explicit project gamma stays" }
+
+[desktop-app."Fonts, shortcuts, palette and profile files"]
+"Conflicting shortcut" = { tests = ["crates/prometheus/tests/desktop_manage.rs::desktop_management_messaging_projects_shortcuts_and_profile_files"], note = "New session bound to CommandOrControl+G flags both it and the review pane until it changes; the binding is kept machine-wide (ui.prefs keybindings)" }
+"Exported profile has no keys" = { tests = ["crates/prometheus/tests/desktop_manage.rs::desktop_management_messaging_projects_shortcuts_and_profile_files"], note = "the palette's Export profile work writes the archive through `profile export` with the appearance overlay; no member holds the secret value set in `work`" }
 
 [distribution-and-update."Desktop packages and signing"]
 "Store install refuses self-update" = ["crates/prometheus/tests/update_channels.rs::desktop_packages_stamp_their_owner_and_the_cli_is_the_bundled_binary"]

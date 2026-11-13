@@ -57,6 +57,12 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `auxiliary.approval.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.approval.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.approval.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.commit_message.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
+| `auxiliary.commit_message.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.commit_message.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
+| `auxiliary.commit_message.model` | string | unset | any | `next_session` | Model id. |
+| `auxiliary.commit_message.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.commit_message.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.compression.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.compression.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
 | `auxiliary.compression.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
@@ -246,6 +252,9 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `delegation.worktree_isolation` | boolean | `false` | any | `next_session` | Run each child in its own git worktree and branch when the parent uses the local terminal backend inside a git repository. |
 | `desktop.accessibility_tree` | boolean | `true` | any | `restart` | Expose the webview's accessibility tree to assistive technology. |
 | `desktop.disable_gpu` | string | `"auto"` | any | `restart` | `auto` (disable GPU acceleration only on remote displays), `on` or `off`. |
+| `desktop.font_family` | string | `""` | any | `restart` | The chat and interface font, in front of the theme's stack; empty uses the theme's font. |
+| `desktop.hud.snap_hotkey` | string | `"CommandOrControl+Shift+G"` | any | `restart` | The global chord that snaps the HUD to the pointer; empty disables it. |
+| `desktop.hud.tap_to_summon` | boolean | `false` | any | `restart` | Summon the HUD with a tap (a left click) on the tray icon. |
 | `desktop.keep_in_tray` | boolean | `true` | any | `restart` | Keep the app in the tray (macOS menu bar, Windows notification area, Linux `StatusNotifierItem`) after its last window closes. |
 | `desktop.linux_secret_store` | string | `"auto"` | any | `restart` | `auto`, `secret-service` or `kwallet`. |
 | `desktop.linux_window_backend` | string | `"auto"` | any | `restart` | `auto`, `wayland` or `x11` (X11 runs through `XWayland` on a Wayland session). |
@@ -253,6 +262,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `desktop.quick_ask.hotkey` | string | `"CommandOrControl+Shift+Space"` | any | `restart` | The global chord that opens the quick-ask panel; empty disables it. |
 | `desktop.quick_ask.profile` | string | `""` | any | `restart` | The profile asked; empty is the last used profile. |
 | `desktop.quick_ask.reuse_secs` | integer | `900` | ≥ 0 | `restart` | A quick-ask session active within this many seconds is asked again instead of starting a new one. |
+| `desktop.terminal_font_family` | string | `""` | any | `restart` | The terminal pane's font; empty uses the bundled monospace font. |
 | `display.bell_on_complete` | boolean | `false` | any | `live` | Ring the terminal bell when a turn completes. |
 | `display.bell_on_prompt` | boolean | `false` | any | `live` | Ring the terminal bell when an approval or clarify prompt opens. |
 | `display.compact` | boolean | `false` | any | `live` | Compact layout. |
@@ -610,6 +620,10 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `plugins.wasm.max_memory_bytes` | integer | `268435456` | ≥ 65536 | `next_session` | Linear memory cap of one plugin instance. |
 | `privacy.owner_emails` | array of string | `[]` | any | `next_session` | The profile owner's email addresses, which `redact_pii` keeps. |
 | `privacy.redact_pii` | boolean | `false` | any | `next_session` | Replace phone numbers, other people's email addresses and messaging user ids (with a stable `user_<hash>`) in what reaches model providers, logs, trajectories and telemetry. |
+| `projects.repo_scan_enabled` | boolean | unset | any | `live` | Scan for git repositories; unset is on for the desktop app and off for every other surface. |
+| `projects.repo_scan_exclude_paths` | array of string | `[]` | any | `live` | Subtrees never scanned (`~` is the user's home). |
+| `projects.repo_scan_max_depth` | integer | `4` | 1 to 16 | `live` | How many directory levels below a root are scanned. |
+| `projects.repo_scan_roots` | array of string | `[]` | any | `live` | The folders scanned (`~` is the user's home); empty scans the home. |
 | `prompt.context_file_max_chars` | integer | `0` | ≥ 0 | `next_session` | Character cap per context file; `0` derives it from the model's context window. |
 | `prompt.context_file_read_timeout_secs` | integer | `5` | ≥ 0 | `next_session` | Time allowed to read each context file. |
 | `prompt.include_session_id` | boolean | `false` | any | `next_session` | Add `Session ID: ses_<ULID>` to the session tier. |

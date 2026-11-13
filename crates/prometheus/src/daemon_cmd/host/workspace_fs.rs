@@ -30,7 +30,7 @@ fn refused(message: String) -> Error {
 }
 
 impl DaemonHost {
-    async fn session_files(
+    pub(super) async fn session_files(
         &self,
         profile: &Arc<Profile>,
         session: &str,

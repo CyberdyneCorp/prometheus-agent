@@ -97,6 +97,8 @@ pub struct Shell {
     pub(crate) panels: Panels,
     pub(crate) links: Mutex<Links>,
     pub(crate) hotkey: Mutex<Option<crate::features::Hotkey>>,
+    /// The HUD snap chord's registration.
+    pub(crate) hud_snap: Mutex<Option<crate::features::Hotkey>>,
     local: bool,
 }
 
@@ -124,6 +126,7 @@ impl Shell {
             panels: Panels::default(),
             links: Mutex::new(Links::default()),
             hotkey: Mutex::new(None),
+            hud_snap: Mutex::new(None),
             local: true,
         }
     }
@@ -222,6 +225,7 @@ impl Shell {
             Request::PickFile { title } => self.pick(false, title).await,
             Request::PickDirectory { title } => self.pick(true, title).await,
             other if crate::features::owns(&other) => self.feature(window, other).await,
+            other if crate::profile_files::owns(&other) => self.profile_file(other).await,
             other => self.handle_simple(window, other),
         }
     }

@@ -95,7 +95,15 @@ pub fn run(command: &ProfileCommand, ctx: &Context<'_>) -> Result<u8, Error> {
             output,
             with_sessions,
             with_secrets,
-        } => archive::export(&home, name, output, *with_sessions, *with_secrets, ctx.json),
+            appearance,
+        } => archive::export(
+            &home,
+            name,
+            output,
+            (*with_sessions, *with_secrets),
+            appearance.as_deref(),
+            ctx.json,
+        ),
         ProfileCommand::Import { file, name } => {
             archive::import(&home, file, name.as_deref(), ctx.json)
         }

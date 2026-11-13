@@ -42,6 +42,52 @@ export interface Ack {
   ok: boolean;
 }
 
+/** `adapters.list` result. */
+export interface AdapterList {
+  /** Every adapter available to the profile. */
+  adapters: Array<AdapterRow>;
+}
+
+/** An adapter of a profile. */
+export interface AdapterRef {
+  /** The platform. */
+  platform: string;
+  /** The profile. */
+  profile: string;
+}
+
+/** One messaging adapter of a profile. */
+export interface AdapterRow {
+  /** Its display name. */
+  display: string;
+  /** Enabled in the configuration. */
+  enabled: boolean;
+  /** Its interactive pairing flow (`telegram_qr`, `whatsapp_qr`). */
+  pairing?: string | null;
+  /** The platform. */
+  platform: string;
+  /** Why, for `error`. */
+  reason?: string | null;
+  /** Its secrets and whether each is set (never values). */
+  secrets: Record<string, boolean>;
+  /** `not_configured`, `saved` (credentials stored, disabled), `pending_restart` (configuration changed since it started), `connecting`, `connected`, `error` or `daemon_stopped`. */
+  state: string;
+}
+
+/** `adapters.save` params: credentials and the enable switch, written together; nothing restarts. */
+export interface AdapterSaveParams {
+  /** Secrets to delete. */
+  clear?: Array<string>;
+  /** The new enable switch. */
+  enabled?: boolean | null;
+  /** The platform. */
+  platform: string;
+  /** The profile. */
+  profile: string;
+  /** Secrets to store (write-only). */
+  secrets?: Record<string, string>;
+}
+
 /** `adapter.state` payload: one messaging adapter changed state (spec: platform-adapters, Adapter state reporting and reconnect). */
 export interface AdapterStatePayload {
   /** Outside `connected` longer than `gateway.reconnect_attention_secs` (set once per outage, cleared on reconnect). */
@@ -324,6 +370,53 @@ export interface BudgetStanding {
   spent: number;
   /** `usd` or `tokens`. */
   unit: string;
+}
+
+/** A pending approval. */
+export interface CenterApproval {
+  /** Its session's profile. */
+  profile: string;
+  /** The request. */
+  request_id: string;
+  /** The session. */
+  session_id: string;
+  /** What is asked (the command or the tool). */
+  summary: string;
+}
+
+/** `center.list` result. */
+export interface CenterList {
+  /** Pending approvals. */
+  approvals: Array<CenterApproval>;
+  /** Running sessions across the connection's profiles. */
+  sessions: Array<CenterSession>;
+  /** Active subagents. */
+  subagents: Array<CenterSubagent>;
+}
+
+/** `center.list` params. */
+export type CenterParams = Record<string, unknown>;
+
+/** A session with a running turn. */
+export interface CenterSession {
+  /** Its profile. */
+  profile: string;
+  /** The session. */
+  session_id: string;
+  /** Its title. */
+  title?: string | null;
+}
+
+/** An active subagent. */
+export interface CenterSubagent {
+  /** Its task. */
+  goal: string;
+  /** Its parent's profile. */
+  profile: string;
+  /** The parent session. */
+  session_id: string;
+  /** The child. */
+  subagent_id: string;
 }
 
 /** `clarify.request` result. */
@@ -744,6 +837,90 @@ export interface FsReadParams {
   session_id: string;
 }
 
+/** `git.branch` params. */
+export interface GitBranchParams {
+  /** Create it (`git switch -c`) instead of switching to it. */
+  create?: boolean;
+  /** The branch. */
+  name: string;
+  /** The session. */
+  session_id: string;
+}
+
+/** `git.commit` params. */
+export interface GitCommitParams {
+  /** The commit message. */
+  message: string;
+  /** Commit & Push: commit and push through the session's terminal backend. */
+  push?: boolean;
+  /** The session. */
+  session_id: string;
+}
+
+/** One changed file. */
+export interface GitFile {
+  /** The unified diff (cut at 256 KiB). */
+  patch: string;
+  /** Its path in the repository. */
+  path: string;
+  /** Part of the change is staged (`uncommitted` only). */
+  staged: boolean;
+  /** `added`, `modified`, `deleted` or `type-changed`. */
+  status: string;
+}
+
+/** `git.message` result. */
+export interface GitMessage {
+  /** The suggested commit message (empty when no auxiliary route answers). */
+  message: string;
+}
+
+/** `git.stage`, `git.unstage` and `git.revert` params. */
+export interface GitPaths {
+  /** Paths in the repository. */
+  paths: Array<string>;
+  /** The session. */
+  session_id: string;
+}
+
+/** What a command run through the session's terminal backend printed. */
+export interface GitRan {
+  /** The commit made (`git.commit`). */
+  commit?: string | null;
+  /** Whether it succeeded. */
+  ok: boolean;
+  /** Its output. */
+  output: string;
+}
+
+/** `git.review` result. */
+export interface GitReview {
+  /** Commits ahead of upstream. */
+  ahead: number;
+  /** Commits behind upstream. */
+  behind: number;
+  /** The checked-out branch (`None`: detached). */
+  branch?: string | null;
+  /** The changed files. */
+  files: Array<GitFile>;
+  /** The `gh` executable is available (Create PR is offered). */
+  gh: boolean;
+  /** Nothing in this scope may be staged, reverted or committed. */
+  read_only: boolean;
+  /** The working tree's top folder. */
+  root: string;
+  /** The scope shown. */
+  scope: string;
+}
+
+/** `git.review` params. */
+export interface GitReviewParams {
+  /** `uncommitted` (default), `branch` or `last-turn`. */
+  scope?: string;
+  /** The session whose workspace is reviewed. */
+  session_id: string;
+}
+
 /** `health.changed` payload. */
 export interface HealthChanged {
   /** The component. */
@@ -822,6 +999,8 @@ export interface JourneyNode {
   title: string;
   /** When it last changed (RFC 3339). */
   updated_at: string;
+  /** How often it was used: a skill's loads, an entry's recalls (the memory graph's `used` filter). */
+  uses?: number;
 }
 
 /** `session.tree` / `session.siblings` result. */
@@ -894,6 +1073,28 @@ export interface LspStatus {
 export interface LspStatusParams {
   /** The profile (the connection's only one when omitted). */
   profile?: string | null;
+}
+
+/** `manage.catalog` params. */
+export interface ManageCatalogParams {
+  /** `skills`, `optional_skills`, `toolsets`, `models`, `plugins`, `mcp`, `cron`, `cron_runs` (of the job `target` names) or `memory`. */
+  catalog: string;
+  /** The profile the pane targets. */
+  profile: string;
+  /** The job whose runs `cron_runs` lists. */
+  target?: string | null;
+}
+
+/** `manage.change` params. */
+export interface ManageChangeParams {
+  /** The change's fields. */
+  body?: unknown;
+  /** `skill` (`{"enabled"}`), `skill_archive`, `toolset`, `cron_update` (`{"enabled"}` pauses or resumes), `cron_delete`, `cron_run` or `memory` (`{"replace"|"remove": ...}`). */
+  change: string;
+  /** The profile that owns what changes (a job's owning profile in the all-profiles view). */
+  profile: string;
+  /** The skill, toolset or job. */
+  target?: string | null;
 }
 
 /** One MCP server of a session. */
@@ -1104,6 +1305,46 @@ export interface ProfileParams {
   profile: string;
 }
 
+/** One explicit project. */
+export interface ProjectRow {
+  /** `prj_...`. */
+  id: string;
+  /** Its display name. */
+  name: string;
+  /** Its primary folder. */
+  path?: string | null;
+  /** Its slug. */
+  slug: string;
+}
+
+/** `projects.create` params. */
+export interface ProjectsCreateParams {
+  /** The display name (the folder name when omitted). */
+  name?: string | null;
+  /** The repository folder. */
+  path: string;
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+}
+
+/** `projects.list` result. */
+export interface ProjectsList {
+  /** Repositories the background scan found that are no project's. */
+  discovered: Array<RepoRow>;
+  /** Repositories of the profile's sessions that are no project's. */
+  inferred: Array<RepoRow>;
+  /** Projects created explicitly. */
+  projects: Array<ProjectRow>;
+  /** A scan is running; the list refreshes when it ends. */
+  scanning: boolean;
+}
+
+/** `projects.list` params. */
+export interface ProjectsListParams {
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+}
+
 /** An image attached to a prompt: a file the daemon reads (checked like `chat --image`), or an image the session already holds (as `command.dispatch` returns them for `/retry`). */
 export type PromptImage = {
   path: string;
@@ -1239,6 +1480,16 @@ export interface QuotaWindow {
   resets_at?: string | null;
   /** Used share, 0-100. */
   used_percent: number;
+}
+
+/** A repository offered for project creation. */
+export interface RepoRow {
+  /** When a scan last saw it (discovered rows; RFC 3339). */
+  last_seen?: string | null;
+  /** Its folder name. */
+  name: string;
+  /** Its folder. */
+  path: string;
 }
 
 /** `request.cancel` payload: a server request timed out or was cancelled. */
@@ -1858,10 +2109,17 @@ export interface WorktreeStatus {
 }
 
 export interface Methods {
+  "adapters.list": { params: ProfileParams; result: AdapterList };
+  "adapters.pairing.cancel": { params: AdapterRef; result: Ack };
+  "adapters.pairing.start": { params: AdapterRef; result: unknown };
+  "adapters.pairing.state": { params: AdapterRef; result: unknown };
+  "adapters.restart": { params: AdapterRef; result: AdapterRow };
+  "adapters.save": { params: AdapterSaveParams; result: AdapterRow };
   "approval.respond": { params: ApprovalRespondParams; result: Ack };
   "artifacts.list": { params: ArtifactsListParams; result: ArtifactList };
   "autoprune.offer": { params: AutopruneOfferParams; result: AutopruneOffer };
   "bot.chat.ensure": { params: ProfileParams; result: BotChat };
+  "center.list": { params: CenterParams; result: CenterList };
   "command.dispatch": { params: DispatchParams; result: Dispatched };
   "commands.catalog": { params: SessionRef; result: CommandCatalog };
   "complete.path": { params: CompleteParams; result: Completions };
@@ -1876,6 +2134,14 @@ export interface Methods {
   "files.undo": { params: FilesUndoParams; result: FilesUndone };
   "fs.list": { params: FsListParams; result: FsListing };
   "fs.read": { params: FsReadParams; result: FsFile };
+  "git.branch": { params: GitBranchParams; result: GitRan };
+  "git.commit": { params: GitCommitParams; result: GitRan };
+  "git.message": { params: SessionRef; result: GitMessage };
+  "git.pr": { params: SessionRef; result: GitRan };
+  "git.revert": { params: GitPaths; result: Ack };
+  "git.review": { params: GitReviewParams; result: GitReview };
+  "git.stage": { params: GitPaths; result: Ack };
+  "git.unstage": { params: GitPaths; result: Ack };
   "journey.list": { params: JourneyListParams; result: JourneyList };
   "local.add": { params: LocalParams; result: LocalReply };
   "local.catalog": { params: LocalParams; result: LocalReply };
@@ -1892,12 +2158,16 @@ export interface Methods {
   "local.update": { params: LocalParams; result: LocalReply };
   "local.use": { params: LocalParams; result: LocalReply };
   "lsp.status": { params: LspStatusParams; result: LspStatus };
+  "manage.catalog": { params: ManageCatalogParams; result: unknown };
+  "manage.change": { params: ManageChangeParams; result: unknown };
   "memory.summary": { params: SessionRef; result: MemorySummary };
   "moa.presets.delete": { params: MoaPresetsDeleteParams; result: MoaPresetList };
   "moa.presets.list": { params: MoaPresetsListParams; result: MoaPresetList };
   "moa.presets.put": { params: MoaPresetsPutParams; result: MoaPresetList };
   "model.options": { params: ModelOptionsParams; result: ModelOptions };
   "pairing.approve": { params: PairingApproveParams; result: PairingApproved };
+  "projects.create": { params: ProjectsCreateParams; result: ProjectRow };
+  "projects.list": { params: ProjectsListParams; result: ProjectsList };
   "prompt.submit": { params: SubmitParams; result: Submitted };
   "pty.attach": { params: PtyRef; result: PtyAttached };
   "pty.close": { params: PtyRef; result: Ack };

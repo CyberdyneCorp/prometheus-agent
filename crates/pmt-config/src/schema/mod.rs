@@ -39,6 +39,7 @@ mod moa;
 mod models;
 mod operations;
 mod plugins;
+mod projects;
 mod provider_routing;
 mod python_bridge;
 mod replay;
@@ -68,7 +69,7 @@ pub use delegation::{
     BackgroundMode, CODE_EXECUTION_TOOLS, ChildApproval, CodeExecutionConfig, CodeExecutionMode,
     DelegationConfig, GatewayDelegationMode, ReviewConfig,
 };
-pub use desktop::{DesktopConfig, QuickAskConfig};
+pub use desktop::{DesktopConfig, HudConfig, QuickAskConfig};
 pub use gateway::{
     AgentCacheConfig, AllowBots, BackgroundNotifications, Batching, ChatPolicy, ChatToolProgress,
     DedupConfig, DeliveryConfig, EffectiveBots, EffectiveBusy, EffectiveDisplay, EffectiveGroups,
@@ -121,6 +122,7 @@ pub use plugins::{
     DEFAULT_CATALOG_URL, GuidanceMode, PluginsConfig, PluginsWasmConfig, SecurityGuidanceConfig,
     SignaturePolicy, TransportFallback,
 };
+pub use projects::ProjectsConfig;
 pub use provider_routing::{
     DEFAULT_MIN_CODING_SCORE, DataCollection, FastMode, OpenRouterConfig, ProviderRoutingConfig,
     RoutingPrefs, RoutingSort,
@@ -236,6 +238,8 @@ pub struct Config {
     pub network: NetworkConfig,
     /// Trajectories.
     pub observability: ObservabilityConfig,
+    /// Repository discovery for project creation.
+    pub projects: ProjectsConfig,
     /// OpenRouter-only request settings.
     pub openrouter: OpenRouterConfig,
     /// Plugin enablement, hook bounds and WASM limits.
@@ -330,6 +334,7 @@ impl Default for Config {
             curator: CuratorConfig::default(),
             delegation: DelegationConfig::default(),
             desktop: DesktopConfig::default(),
+            projects: ProjectsConfig::default(),
             debug: DebugConfig::default(),
             display: DisplayConfig::default(),
             fallback: FallbackConfig::default(),

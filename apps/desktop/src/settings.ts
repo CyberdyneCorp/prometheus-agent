@@ -10,6 +10,7 @@
 import type { ModelOptions } from "../../../schema/rpc";
 import { h } from "../../../web/src/lib/dom";
 import type { DesktopClient } from "./client";
+import type { ProfileClients } from "./profiles";
 
 /** The subagent route: the model plus a direct endpoint's keys. */
 export const ROUTE_KEYS = ["delegation.model", "delegation.base_url", "delegation.api_key_secret", "delegation.wire_format"];
@@ -66,6 +67,7 @@ export class SettingsPanel {
   constructor(
     private readonly client: DesktopClient,
     private readonly profiles: string[],
+    private readonly pool: ProfileClients,
   ) {
     this.appliesTo = client.profile;
     const nav = h(
@@ -111,7 +113,7 @@ export class SettingsPanel {
 
   private async value(key: string): Promise<unknown> {
     try {
-      return (await this.client.call<{ value: unknown }>("config.get", { profile: this.appliesTo, key })).value;
+      return (await this.pool.call<{ value: unknown }>(this.appliesTo, "config.get", { profile: this.appliesTo, key })).value;
     } catch {
       return null;
     }
@@ -127,7 +129,7 @@ export class SettingsPanel {
 
   private async subagents(): Promise<HTMLElement> {
     const loaded = await this.current();
-    const options = await this.client.call<ModelOptions>("model.options", { profile: this.appliesTo }).catch((): ModelOptions => ({ current: null, models: [] }));
+    const options = await this.pool.call<ModelOptions>(this.appliesTo, "model.options", { profile: this.appliesTo }).catch((): ModelOptions => ({ current: null, models: [] }));
     const [loadedProvider = "", ...rest] = (loaded.model ?? "").split("/");
     const providers = [...new Set([...options.models.map((m) => m.provider), ...(loadedProvider ? [loadedProvider] : [])])];
     const applies = h("select", { name: "applies-to", "aria-label": "Applies to" }, ...this.profiles.map((p) => h("option", { value: p, selected: p === this.appliesTo }, p)));
@@ -179,7 +181,7 @@ export class SettingsPanel {
       }
       if (changes.length === 0) return;
       try {
-        await this.client.call("config.patch", { profile: this.appliesTo, changes });
+        await this.pool.call(this.appliesTo, "config.patch", { profile: this.appliesTo, changes });
         this.status.textContent = "Saved";
       } catch (err) {
         fieldError.textContent = (err as Error).message;

@@ -49,6 +49,12 @@ const READS: &[&str] = &[
     "artifacts.list",
     "pty.attach",
     "pty.list",
+    "git.review",
+    "projects.list",
+    "manage.catalog",
+    "adapters.list",
+    "adapters.pairing.state",
+    "center.list",
 ];
 
 /// `-32002 session.observer` when an observer-only connection calls a

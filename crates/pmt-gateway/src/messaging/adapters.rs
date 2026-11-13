@@ -181,6 +181,10 @@ pub(crate) struct Adapters {
     /// platform: (profile, platform) to the owning profile (shared-
     /// credential profile routes).
     lent: RwLock<BTreeMap<(String, String), String>>,
+    /// The fingerprint of the configuration each adapter was last
+    /// started from (`pane::fingerprint`): a different one now means its
+    /// configuration changed since it started.
+    started: RwLock<BTreeMap<(String, String), u64>>,
 }
 
 impl Adapters {
@@ -358,6 +362,12 @@ pub(crate) fn start_platform(
         );
     }
     let key = (profile.to_owned(), platform.to_owned());
+    shared
+        .adapters
+        .started
+        .write()
+        .expect("adapters poisoned")
+        .insert(key.clone(), super::pane::fingerprint(scope, platform));
     let Some(factory) = factory_of(shared, platform) else {
         let error = AdapterError {
             retryable: false,
@@ -392,6 +402,12 @@ pub(crate) async fn forget(shared: &Shared, profile: &str, platform: &str) {
     let key = (profile.to_owned(), platform.to_owned());
     shared
         .adapters
+        .started
+        .write()
+        .expect("adapters poisoned")
+        .remove(&key);
+    shared
+        .adapters
         .failed
         .write()
         .expect("adapters poisoned")
@@ -407,6 +423,18 @@ pub(crate) async fn forget(shared: &Shared, profile: &str, platform: &str) {
         slot.adapter.disconnect().await;
         release(&slot);
     }
+}
+
+/// The fingerprint of the configuration `platform` of `profile` was last
+/// started from (`None`: it was not started).
+pub(crate) fn started(shared: &Shared, profile: &str, platform: &str) -> Option<u64> {
+    shared
+        .adapters
+        .started
+        .read()
+        .expect("adapters poisoned")
+        .get(&(profile.to_owned(), platform.to_owned()))
+        .copied()
 }
 
 /// The running slot of `platform`, if any.

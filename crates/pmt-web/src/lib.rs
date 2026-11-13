@@ -29,6 +29,7 @@ mod http;
 pub mod inventory;
 mod listener;
 mod login;
+pub mod pairing;
 mod routes;
 mod themes;
 mod ws;
@@ -55,7 +56,7 @@ pub(crate) struct Shared {
     auth: auth::Auth,
     feed: Arc<events::Feed>,
     /// The adapters' interactive pairing flows.
-    pairings: api::adapter_actions::Flows,
+    pairings: pairing::PairingFlows,
     /// The plugins' dashboard contributions, per profile.
     plugins: api::plugins::Scanned,
     /// Cancelled when the listener stops.
@@ -192,7 +193,7 @@ impl Dashboard {
             server: Arc::clone(&self.server),
             host: Arc::clone(&self.host),
             feed: Arc::clone(&self.feed),
-            pairings: api::adapter_actions::Flows::default(),
+            pairings: pairing::PairingFlows::default(),
             plugins: api::plugins::Scanned::default(),
             stop: CancellationToken::new(),
             base: base.clone(),

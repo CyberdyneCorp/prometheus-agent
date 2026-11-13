@@ -15,7 +15,7 @@ export type Sockets = string[][];
 
 /** Opens the desktop page as window `label`; resolves once connected (the
  *  quick-ask panel, `#quick-ask`, once its question box shows). */
-export async function openDesktop(page: Page, label = "main", hash = ""): Promise<Sockets> {
+export async function openDesktop(page: Page, label = "main", hash = "", harness = env("PMT_DESKTOP_HARNESS")): Promise<Sockets> {
   // The page's origin is not loopback in Chromium's eyes; the webview's
   // own origin may dial the loopback daemon, as the native app does.
   await page.context().grantPermissions(["local-network-access"], { origin: ORIGIN });
@@ -49,7 +49,7 @@ export async function openDesktop(page: Page, label = "main", hash = ""): Promis
   await page.route(`${ORIGIN}/**`, async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === "/__shell") {
-      const res = await fetch(`${env("PMT_DESKTOP_HARNESS")}/shell${url.search}`, { method: "POST", body: route.request().postData() ?? "" });
+      const res = await fetch(`${harness}/shell${url.search}`, { method: "POST", body: route.request().postData() ?? "" });
       return route.fulfill({ status: 200, contentType: "application/json", body: await res.text() });
     }
     const file = url.pathname === "/" ? "index.html" : url.pathname.slice(1);

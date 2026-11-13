@@ -520,6 +520,17 @@
           ],
           "description": "Smart approvals."
         },
+        "commit_message": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuxiliaryTask"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Commit messages of the desktop's review pane (defaults to the main\nmodel)."
+        },
         "compression": {
           "anyOf": [
             {
@@ -2398,6 +2409,19 @@
           "description": "`auto` (disable GPU acceleration only on remote displays), `on` or\n`off`.",
           "type": "string"
         },
+        "font_family": {
+          "default": "",
+          "description": "The chat and interface font, in front of the theme's stack; empty\nuses the theme's font.",
+          "type": "string"
+        },
+        "hud": {
+          "$ref": "#/$defs/HudConfig",
+          "default": {
+            "snap_hotkey": "CommandOrControl+Shift+G",
+            "tap_to_summon": false
+          },
+          "description": "HUD mode: the chrome-free floating chat bar."
+        },
         "keep_in_tray": {
           "default": true,
           "description": "Keep the app in the tray (macOS menu bar, Windows notification\narea, Linux `StatusNotifierItem`) after its last window closes.",
@@ -2426,6 +2450,11 @@
             "reuse_secs": 900
           },
           "description": "The global quick-ask hotkey."
+        },
+        "terminal_font_family": {
+          "default": "",
+          "description": "The terminal pane's font; empty uses the bundled monospace font.",
+          "type": "string"
         }
       },
       "type": "object",
@@ -3820,6 +3849,24 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "HudConfig": {
+      "additionalProperties": false,
+      "description": "The `[desktop.hud]` section (spec: desktop-app, HUD mode).",
+      "properties": {
+        "snap_hotkey": {
+          "default": "CommandOrControl+Shift+G",
+          "description": "The global chord that snaps the HUD to the pointer; empty disables\nit.",
+          "type": "string"
+        },
+        "tap_to_summon": {
+          "default": false,
+          "description": "Summon the HUD with a tap (a left click) on the tray icon.",
+          "type": "boolean"
+        }
+      },
+      "type": "object",
+      "x-apply": "restart"
     },
     "ImageGenConfig": {
       "additionalProperties": false,
@@ -6904,6 +6951,45 @@
         "profile"
       ],
       "type": "object"
+    },
+    "ProjectsConfig": {
+      "additionalProperties": false,
+      "description": "The `[projects]` section.",
+      "properties": {
+        "repo_scan_enabled": {
+          "description": "Scan for git repositories; unset is on for the desktop app and off\nfor every other surface.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "repo_scan_exclude_paths": {
+          "default": [],
+          "description": "Subtrees never scanned (`~` is the user's home).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "repo_scan_max_depth": {
+          "default": 4,
+          "description": "How many directory levels below a root are scanned.",
+          "format": "uint32",
+          "maximum": 16,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "repo_scan_roots": {
+          "default": [],
+          "description": "The folders scanned (`~` is the user's home); empty scans the home.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
     },
     "PromptCacheConfig": {
       "additionalProperties": false,
@@ -11247,6 +11333,11 @@
       "default": {
         "accessibility_tree": true,
         "disable_gpu": "auto",
+        "font_family": "",
+        "hud": {
+          "snap_hotkey": "CommandOrControl+Shift+G",
+          "tap_to_summon": false
+        },
         "keep_in_tray": true,
         "linux_secret_store": "auto",
         "linux_window_backend": "auto",
@@ -11255,7 +11346,8 @@
           "hotkey": "CommandOrControl+Shift+Space",
           "profile": "",
           "reuse_secs": 900
-        }
+        },
+        "terminal_font_family": ""
       },
       "description": "The desktop app: tray, quick-ask hotkey and launch options."
     },
@@ -11631,6 +11723,15 @@
         "redact_pii": false
       },
       "description": "PII redaction."
+    },
+    "projects": {
+      "$ref": "#/$defs/ProjectsConfig",
+      "default": {
+        "repo_scan_exclude_paths": [],
+        "repo_scan_max_depth": 4,
+        "repo_scan_roots": []
+      },
+      "description": "Repository discovery for project creation."
     },
     "prompt": {
       "$ref": "#/$defs/PromptConfig",

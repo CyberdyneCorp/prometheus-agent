@@ -90,11 +90,7 @@ impl pmt_web::DashboardHost for DaemonHost {
         flow: pmt_config::platforms::PairingFlow,
         sink: pmt_web::PairingSink,
     ) -> HostFuture<'a, Value> {
-        Box::pin(async move {
-            let served = self.profile(profile)?;
-            super::adapter_pairing::run(served.scope(), self.gateway.get().cloned(), flow, sink)
-                .await
-        })
+        Box::pin(self.pair(profile, flow, sink))
     }
 
     fn dashboard_plugins<'a>(&'a self, profile: &'a str) -> HostFuture<'a, Value> {

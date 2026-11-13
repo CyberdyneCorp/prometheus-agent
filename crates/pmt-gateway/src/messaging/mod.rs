@@ -62,6 +62,7 @@ pub mod mock_server;
 pub mod multipart;
 pub mod operate;
 mod outbox;
+pub mod pane;
 mod peer;
 pub mod plugin_ops;
 pub mod policy;

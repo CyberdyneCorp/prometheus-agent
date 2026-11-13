@@ -166,6 +166,7 @@ fn launch_links_install_dialog_shared_preferences_and_platform_support() {
                 sni_host: Some(true),
             },
             links: vec![link],
+            ..Setup::default()
         },
     );
     let cwd_text = cwd.to_string_lossy().into_owned();

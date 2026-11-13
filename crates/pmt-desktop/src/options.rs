@@ -73,6 +73,28 @@ impl Default for QuickAsk {
     }
 }
 
+/// `[desktop.hud]` (spec: desktop-app, HUD mode).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Hud {
+    /// The global chord that snaps the HUD to the pointer; empty disables
+    /// it.
+    pub snap_hotkey: String,
+    /// A tap (left click) on the tray icon summons the HUD.
+    pub tap_to_summon: bool,
+}
+
+/// The default snap chord.
+pub const DEFAULT_SNAP_HOTKEY: &str = "CommandOrControl+Shift+G";
+
+impl Default for Hud {
+    fn default() -> Self {
+        Self {
+            snap_hotkey: DEFAULT_SNAP_HOTKEY.to_owned(),
+            tap_to_summon: false,
+        }
+    }
+}
+
 /// The desktop options.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DesktopOptions {
@@ -90,6 +112,8 @@ pub struct DesktopOptions {
     pub accessibility_tree: bool,
     /// Keep the Linux XDG launcher entry current.
     pub manage_launcher_entry: bool,
+    /// HUD mode.
+    pub hud: Hud,
 }
 
 impl Default for DesktopOptions {
@@ -102,6 +126,7 @@ impl Default for DesktopOptions {
             linux_secret_store: SecretStore::Auto,
             accessibility_tree: true,
             manage_launcher_entry: true,
+            hud: Hud::default(),
         }
     }
 }
@@ -174,7 +199,25 @@ pub fn parse(text: &str) -> Read {
     if let Some(Value::Table(quick)) = desktop.get("quick_ask") {
         o.quick_ask = quick_ask(quick, notices);
     }
+    if let Some(Value::Table(hud)) = desktop.get("hud") {
+        o.hud = hud_options(hud, notices);
+    }
     read
+}
+
+fn hud_options(table: &Table, notices: &mut Vec<String>) -> Hud {
+    let mut h = Hud::default();
+    match table.get("snap_hotkey") {
+        None => {}
+        Some(Value::String(chord)) => chord.trim().clone_into(&mut h.snap_hotkey),
+        Some(_) => notices.push("desktop.hud.snap_hotkey: expected a chord such as \"CommandOrControl+Shift+G\" or \"\"".to_owned()),
+    }
+    match table.get("tap_to_summon") {
+        None => {}
+        Some(Value::Boolean(b)) => h.tap_to_summon = *b,
+        Some(_) => notices.push("desktop.hud.tap_to_summon: expected true or false".to_owned()),
+    }
+    h
 }
 
 fn quick_ask(table: &Table, notices: &mut Vec<String>) -> QuickAsk {

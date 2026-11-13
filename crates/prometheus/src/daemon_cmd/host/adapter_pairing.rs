@@ -21,7 +21,6 @@ use pmt_config::ProfileScope;
 use pmt_config::platforms::PairingFlow;
 use pmt_core::error::{Error, codes};
 use pmt_core::secret::SecretString;
-use pmt_gateway::messaging::Gateway;
 use serde_json::{Value, json};
 
 use crate::daemon_cmd::whatsapp_cmd::{self, Shown};
@@ -60,29 +59,72 @@ fn cancelled() -> Error {
     )
 }
 
-/// Runs `flow` for `scope`'s `platform`.
-pub(super) async fn run(
-    scope: ProfileScope,
-    gateway: Option<Gateway>,
-    flow: PairingFlow,
-    sink: pmt_web::PairingSink,
-) -> Result<Value, Error> {
-    let done = match flow {
-        PairingFlow::WhatsappQr => whatsapp(&scope, &sink).await?,
-        PairingFlow::TelegramCreate => telegram(&scope, &sink).await?,
-    };
-    let platform = match flow {
+impl super::DaemonHost {
+    /// Runs `flow` for `profile`, then has the daemon read the saved
+    /// configuration and restarts that adapter alone from it.
+    pub(super) async fn pair(
+        &self,
+        profile: &str,
+        flow: PairingFlow,
+        sink: pmt_web::PairingSink,
+    ) -> Result<Value, Error> {
+        let scope = self.profile(profile)?.scope();
+        let mut done = match flow {
+            PairingFlow::WhatsappQr => whatsapp(&scope, &sink).await?,
+            PairingFlow::TelegramCreate => telegram(&scope, &sink).await?,
+        };
+        let platform = flow_platform(flow);
+        // The restart must start from what the flow saved, not from the
+        // configuration the daemon read before.
+        self.reload_config(profile).await?;
+        if let Some(gateway) = self.gateway.get().cloned() {
+            let status = gateway.restart_platform(profile, platform).await?;
+            done["adapter_state"] = serde_json::to_value(status.state).unwrap_or_default();
+        }
+        Ok(done)
+    }
+
+    /// Starts `flow` in the background, tracked by `flows`.
+    pub(super) fn start_pairing(
+        &self,
+        flows: Arc<pmt_web::pairing::PairingFlows>,
+        profile: &str,
+        flow: PairingFlow,
+    ) -> Result<(), Error> {
+        let host = self
+            .arc()
+            .ok_or_else(|| Error::new(&codes::RPC_NOT_SERVED, "the daemon is stopping"))?;
+        let key = (profile.to_owned(), flow_platform(flow).to_owned());
+        let cancel = flows.begin(key.clone()).ok_or_else(|| {
+            Error::new(
+                &codes::CLI_USAGE,
+                "a pairing is already running for this adapter",
+            )
+        })?;
+        let (stepped, step_key) = (Arc::clone(&flows), key.clone());
+        let sink = pmt_web::PairingSink::new(
+            Arc::new(move |step: Value| {
+                stepped.step(&step_key, &step);
+            }),
+            cancel,
+        );
+        pmt_core::spawn::spawn(async move {
+            let outcome = host.pair(&key.0, flow, sink).await;
+            flows.end(
+                &key,
+                outcome.unwrap_or_else(|e| pmt_web::pairing::failed(&e)),
+            );
+        });
+        Ok(())
+    }
+}
+
+/// The adapter a flow pairs.
+fn flow_platform(flow: PairingFlow) -> &'static str {
+    match flow {
         PairingFlow::WhatsappQr => "whatsapp",
         PairingFlow::TelegramCreate => "telegram",
-    };
-    let mut done = done;
-    if let Some(gateway) = gateway {
-        let status = gateway
-            .restart_platform(scope.name().as_str(), platform)
-            .await?;
-        done["adapter_state"] = serde_json::to_value(status.state).unwrap_or_default();
     }
-    Ok(done)
 }
 
 async fn whatsapp(scope: &ProfileScope, sink: &pmt_web::PairingSink) -> Result<Value, Error> {

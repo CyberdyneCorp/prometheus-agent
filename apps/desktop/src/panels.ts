@@ -38,9 +38,19 @@ function require(panel: Panel, capability: string): void {
   if (!panel.sdk.includes(capability)) throw new Error(`capability ${capability} not granted to plugin ${panel.id}`);
 }
 
+/** A shortcut a plugin panel contributes (`register {shortcuts}`). */
+export interface PluginShortcut {
+  id: string;
+  label: string;
+  chord: string;
+  run: () => void;
+}
+
 export class PanelHost {
   readonly el = h("section", { class: "panels", "aria-label": "Plugin panels" });
   private readonly frames = new Map<string, { panel: Panel; frame: HTMLIFrameElement }>();
+  /** A panel contributed a bindable shortcut; pressing it tells the panel. */
+  onShortcut: (shortcut: PluginShortcut) => void = () => {};
 
   constructor(private readonly client: DesktopClient) {
     window.addEventListener("message", (event) => void this.message(event));
@@ -83,9 +93,26 @@ export class PanelHost {
     }
   }
 
+  /** Each `{id, label, chord}` becomes a shortcut of the window that
+   *  posts `{prometheus: 1, event: "shortcut", id}` to the panel. */
+  private register(panel: Panel, shortcuts: unknown): void {
+    if (!Array.isArray(shortcuts)) return;
+    for (const s of shortcuts as { id?: unknown; label?: unknown; chord?: unknown }[]) {
+      if (typeof s.id !== "string" || typeof s.chord !== "string") continue;
+      const id = s.id;
+      this.onShortcut({
+        id: `plugin:${panel.id}:${id}`,
+        label: `${panel.label}: ${typeof s.label === "string" ? s.label : id}`,
+        chord: s.chord,
+        run: () => this.frames.get(panel.id)?.frame.contentWindow?.postMessage({ prometheus: 1, event: "shortcut", id }, panelOrigin(panel.id)),
+      });
+    }
+  }
+
   private async answer(panel: Panel, call: Call): Promise<unknown> {
     switch (call.method) {
       case "register":
+        this.register(panel, call.params?.shortcuts);
         return { ok: true };
       case "context":
         return { plugin: panel.id, profile: panel.profile, theme: document.documentElement.dataset.theme ?? "default" };

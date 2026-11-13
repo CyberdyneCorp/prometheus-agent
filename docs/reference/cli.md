@@ -13432,6 +13432,9 @@ Options:
       --with-secrets
           Also include the secrets, encrypted with a passphrase read at a hidden prompt (or from stdin)
 
+      --appearance <FILE>
+          Also include the desktop appearance (a JSON file the desktop app wrote), applied by the desktop after an import
+
       --json
           Print one JSON document on stdout; errors go to stderr as JSON
 

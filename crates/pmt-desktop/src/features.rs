@@ -64,6 +64,10 @@ pub(crate) fn owns(request: &Request) -> bool {
             | Request::PluginPanels { .. }
             | Request::CatalogEntry { .. }
             | Request::CatalogInstall { .. }
+            | Request::HudToggle { .. }
+            | Request::HudReset
+            | Request::HudDrag
+            | Request::WindowBelow
     )
 }
 
@@ -100,6 +104,49 @@ impl Shell {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(state.clone());
         state
+    }
+
+    /// Registers the HUD's snap-to-pointer chord (spec: desktop-app, HUD
+    /// mode); on native Wayland placement is the compositor's, so the
+    /// chord stays unregistered with that reason.
+    pub fn register_hud_snap(&self) -> Hotkey {
+        let chord = self.options.options.hud.snap_hotkey.clone();
+        let rows = crate::platform::probe(&self.native.facts());
+        let unsupported = rows
+            .iter()
+            .find(|r| r.feature == crate::platform::HUD_SNAP && r.state == "unsupported");
+        let state = if chord.is_empty() {
+            Hotkey::Disabled
+        } else if let Some(row) = unsupported {
+            Hotkey::Unsupported {
+                reason: row.reason.clone(),
+            }
+        } else if let Err(why) = self.native.register_hotkey(&chord) {
+            tracing::warn!(
+                chord = chord.as_str(),
+                "the HUD snap hotkey is taken: {why}"
+            );
+            Hotkey::Taken { chord }
+        } else {
+            Hotkey::Registered { chord }
+        };
+        *self
+            .hud_snap
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(state.clone());
+        state
+    }
+
+    /// The window underneath the HUD, unless the platform cannot say.
+    fn window_below(&self) -> Option<crate::hud::WindowBelow> {
+        let rows = crate::platform::probe(&self.native.facts());
+        let unsupported = rows
+            .iter()
+            .any(|r| r.feature == crate::platform::HUD_BELOW && r.state == "unsupported");
+        if unsupported {
+            return None;
+        }
+        self.native.window_below()
     }
 
     /// Whether closing the last window keeps the app in the tray.
@@ -143,6 +190,16 @@ impl Shell {
                 Ok(ok())
             }
             Request::SetTray(state) => self.native.set_tray(&state.menu()).map(|()| ok()),
+            Request::HudToggle {
+                profile,
+                session_id,
+            } => self
+                .native
+                .toggle_hud(&format!("#hud={profile}/{session_id}"))
+                .map(|shown| json!({"shown": shown})),
+            Request::HudReset => self.native.reset_hud().map(|()| ok()),
+            Request::HudDrag => self.native.drag_hud().map(|()| ok()),
+            Request::WindowBelow => to_json(&self.window_below()),
             request => self.quick_ask(window, request),
         }
     }
@@ -199,6 +256,11 @@ impl Shell {
                 "profile": o.quick_ask.profile,
                 "reuse_secs": o.quick_ask.reuse_secs,
             },
+            "hud": {
+                "snap_hotkey": o.hud.snap_hotkey,
+                "tap_to_summon": o.hud.tap_to_summon,
+                "snap": self.hud_snap.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone(),
+            },
         })
     }
 
@@ -214,14 +276,22 @@ impl Shell {
 
     /// Runs the bundled binary with `args` (after `--json`) and parses the
     /// JSON it prints; an error document becomes its message.
-    async fn bundled_json(&self, args: &[&str], bound: Duration) -> Result<Value, String> {
+    pub(crate) async fn bundled_json(
+        &self,
+        args: &[&str],
+        bound: Duration,
+    ) -> Result<Value, String> {
         let stdout = self.run_bundled(args, bound).await?;
         serde_json::from_slice(&stdout)
             .map_err(|e| format!("the bundled prometheus binary printed no JSON: {e}"))
     }
 
     /// Runs the bundled binary with `--json` and `args`; its stdout.
-    async fn run_bundled(&self, args: &[&str], bound: Duration) -> Result<Vec<u8>, String> {
+    pub(crate) async fn run_bundled(
+        &self,
+        args: &[&str],
+        bound: Duration,
+    ) -> Result<Vec<u8>, String> {
         let run = tokio::process::Command::new(&self.config.binary)
             .arg("--json")
             .args(args)

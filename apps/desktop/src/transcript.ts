@@ -131,7 +131,11 @@ export class DesktopTranscript extends Transcript {
   }
 
   override apply(envelope: Envelope): void {
-    const data = envelope.data as { type?: string; payload?: { call_id?: string; arguments?: unknown } };
+    const data = envelope.data as { type?: string; payload?: { call_id?: string; arguments?: unknown; text?: unknown } };
+    if (envelope.event === "session.event" && data.type === "assistant.reasoning") {
+      this.thinking(String(data.payload?.text ?? ""));
+      return;
+    }
     if (envelope.event === "session.event" && data.type === "tool.call") {
       const args = typeof data.payload?.arguments === "string" ? safeJson(data.payload.arguments) : data.payload?.arguments;
       const path = (args as { path?: unknown } | undefined)?.path;
@@ -140,9 +144,18 @@ export class DesktopTranscript extends Transcript {
     super.apply(envelope);
   }
 
+  /** The model's reasoning: open in advanced mode, collapsed in simple. */
+  private thinking(text: string): void {
+    if (!text) return;
+    const simple = document.documentElement.dataset.uiMode === "simple";
+    this.add(h("details", { class: "thinking", open: !simple }, h("summary", {}, "Thinking"), h("div", { class: "text" }, text)));
+  }
+
   protected override toolResult(p: Record<string, unknown>): void {
     super.toolResult(p);
     const row = this.tools.get(String(p.call_id));
+    const diff = p.ok ? diffOf(String(p.output ?? "")) : null;
+    if (row && diff) row.append(h("pre", { class: "inline-diff" }, diff));
     const named = this.callPaths.get(String(p.call_id));
     if (row && named && this.onReveal) {
       const reveal = h("button", { type: "button", name: "reveal", "data-path": named }, "Reveal in file tree");
@@ -203,6 +216,15 @@ export class DesktopTranscript extends Transcript {
       }),
     );
   }
+}
+
+/** The diff a file tool's output carries (`write_file`, `patch`). */
+export function diffOf(output: string): string | null {
+  const parsed = safeJson(output) as { diff?: unknown } | undefined;
+  const diff = parsed?.diff;
+  if (typeof diff === "string") return diff || null;
+  if (Array.isArray(diff)) return diff.map((d) => (typeof d === "string" ? d : JSON.stringify(d))).join("\n") || null;
+  return null;
 }
 
 function safeJson(text: string): unknown {

@@ -37,6 +37,9 @@ pub enum Catalog {
 pub enum Change {
     /// `PATCH skills/{name} {"enabled": bool}`.
     Skill,
+    /// Archives a skill of the profile (the desktop's memory graph
+    /// deletes a skill node this way; `curator archive`).
+    SkillArchive,
     /// `PATCH toolsets/{name} {"enabled": bool}`.
     Toolset,
     /// `POST cron` (the `cron create` fields).

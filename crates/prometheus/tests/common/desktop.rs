@@ -6,12 +6,14 @@
 //! does (denied windows, pinned navigation, the IPC allowlist) is covered
 //! by the Tauri tests of `apps/desktop/src-tauri`.
 
+use std::fmt::Write as _;
 use std::io::{BufRead as _, BufReader, Write as _};
 use std::net::{TcpListener, TcpStream};
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use pmt_desktop::hud::WindowBelow;
 use pmt_desktop::platform::Facts;
 use pmt_desktop::{Native, Request, Shell, ShellConfig, deeplink, ensure, options};
 use serde_json::{Value, json};
@@ -22,6 +24,8 @@ use serde_json::{Value, json};
 pub struct Recorder {
     calls: Mutex<Vec<String>>,
     facts: Facts,
+    below: Option<WindowBelow>,
+    save_to: Option<PathBuf>,
 }
 
 impl Recorder {
@@ -42,6 +46,12 @@ pub struct Setup {
     /// `prometheus://` links that arrive before the window is ready (as
     /// `prometheus desktop` passes them).
     pub links: Vec<String>,
+    /// The window underneath the HUD bar.
+    pub below: Option<WindowBelow>,
+    /// What a save dialog answers.
+    pub save_to: Option<PathBuf>,
+    /// The environment of the daemon the shell starts (stand-in services).
+    pub env: Vec<(String, String)>,
 }
 
 impl Default for Setup {
@@ -53,6 +63,9 @@ impl Default for Setup {
                 sni_host: Some(true),
             },
             links: Vec::new(),
+            below: None,
+            save_to: None,
+            env: Vec::new(),
         }
     }
 }
@@ -98,6 +111,16 @@ impl Native for Recorder {
     fn facts(&self) -> Facts {
         self.facts.clone()
     }
+    fn toggle_hud(&self, fragment: &str) -> Result<bool, String> {
+        self.record(format!("hud {fragment}")).map(|()| true)
+    }
+    fn window_below(&self) -> Option<WindowBelow> {
+        self.below.clone()
+    }
+    fn save_path(&self, name: &str) -> Option<PathBuf> {
+        let _ = self.record(format!("save {name}"));
+        self.save_to.clone()
+    }
 }
 
 /// The running harness; its URL goes to the specs as
@@ -108,11 +131,15 @@ pub struct Harness {
 
 /// The "bundled" binary: the test binary on `home` with its isolated user
 /// home, as a script the shell runs like the app runs its sidecar.
-fn bundled(home: &Path) -> PathBuf {
+fn bundled(home: &Path, env: &[(String, String)]) -> PathBuf {
     let user_home = super::user_home(home);
     let path = home.join("bundled-prometheus");
+    let exports = env.iter().fold(String::new(), |mut out, (k, v)| {
+        let _ = writeln!(out, "export {k}='{v}'");
+        out
+    });
     let script = format!(
-        "#!/bin/sh\nHOME='{}' exec '{}' --home '{}' \"$@\"\n",
+        "#!/bin/sh\n{exports}HOME='{}' exec '{}' --home '{}' \"$@\"\n",
         user_home.display(),
         super::BIN,
         home.display()
@@ -133,10 +160,12 @@ pub fn start_with(home: &Path, setup: Setup) -> Harness {
     let recorder = Arc::new(Recorder {
         calls: Mutex::default(),
         facts: setup.facts,
+        below: setup.below,
+        save_to: setup.save_to,
     });
     let shell = Shell::new(
         ShellConfig {
-            binary: bundled(home),
+            binary: bundled(home, &setup.env),
             home: home.to_path_buf(),
             user_home: super::user_home(home),
             ensure_bound: ensure::DEADLINE + ensure::GRACE,

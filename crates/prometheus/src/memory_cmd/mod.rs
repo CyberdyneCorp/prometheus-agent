@@ -335,9 +335,20 @@ pub(crate) fn dashboard_patch(
         commit(&env, entry.target, &[op])?;
         return Ok(json!({"id": entry.id, "removed": true}));
     }
+    if let (Some(id), Some(text)) = (
+        body["replace"]["id"].as_str(),
+        body["replace"]["text"].as_str(),
+    ) {
+        let entry = find(&env, id)?;
+        let mut op = pmt_memory::ops::Op::new(pmt_memory::ops::Action::Patch);
+        op.id = Some(entry.id.clone());
+        op.content = Some(text.to_owned());
+        commit(&env, entry.target, &[op])?;
+        return Ok(json!({"id": entry.id, "replaced": true}));
+    }
     Err(Error::new(
         &codes::MEMORY_INVALID,
-        "expected {\"add\": \"<text>\"} or {\"remove\": \"<id>\"}",
+        "expected {\"add\": \"<text>\"}, {\"remove\": \"<id>\"} or {\"replace\": {\"id\", \"text\"}}",
     ))
 }
 

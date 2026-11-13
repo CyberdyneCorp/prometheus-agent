@@ -877,6 +877,26 @@ impl Hub {
             .map(|(_, value, by)| (value.clone(), by.clone()))
     }
 
+    /// Every open request: its id, session, method and params.
+    #[must_use]
+    pub fn open_requests(&self) -> Vec<(String, String, String, Value)> {
+        let mut open: Vec<_> = self
+            .state()
+            .requests
+            .iter()
+            .map(|(id, p)| {
+                (
+                    id.clone(),
+                    p.session_id.clone(),
+                    p.method.clone(),
+                    p.params.clone(),
+                )
+            })
+            .collect();
+        open.sort_by(|a, b| a.0.cmp(&b.0));
+        open
+    }
+
     /// The session of an open request.
     #[must_use]
     pub fn request_session(&self, id: &str) -> Option<String> {

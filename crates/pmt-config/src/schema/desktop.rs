@@ -32,6 +32,13 @@ pub struct DesktopConfig {
     /// Linux: keep the XDG `.desktop` launcher entry current; `false`
     /// preserves an existing entry and still creates a missing one.
     pub manage_launcher_entry: bool,
+    /// The chat and interface font, in front of the theme's stack; empty
+    /// uses the theme's font.
+    pub font_family: String,
+    /// The terminal pane's font; empty uses the bundled monospace font.
+    pub terminal_font_family: String,
+    /// HUD mode: the chrome-free floating chat bar.
+    pub hud: HudConfig,
 }
 
 impl Default for DesktopConfig {
@@ -44,6 +51,9 @@ impl Default for DesktopConfig {
             linux_secret_store: "auto".to_owned(),
             accessibility_tree: true,
             manage_launcher_entry: true,
+            font_family: String::new(),
+            terminal_font_family: String::new(),
+            hud: HudConfig::default(),
         }
     }
 }
@@ -68,6 +78,27 @@ impl Default for QuickAskConfig {
             hotkey: "CommandOrControl+Shift+Space".to_owned(),
             profile: String::new(),
             reuse_secs: 900,
+        }
+    }
+}
+
+/// The `[desktop.hud]` section (spec: desktop-app, HUD mode).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+#[schemars(extend("x-apply" = "restart"))]
+pub struct HudConfig {
+    /// The global chord that snaps the HUD to the pointer; empty disables
+    /// it.
+    pub snap_hotkey: String,
+    /// Summon the HUD with a tap (a left click) on the tray icon.
+    pub tap_to_summon: bool,
+}
+
+impl Default for HudConfig {
+    fn default() -> Self {
+        Self {
+            snap_hotkey: "CommandOrControl+Shift+G".to_owned(),
+            tap_to_summon: false,
         }
     }
 }

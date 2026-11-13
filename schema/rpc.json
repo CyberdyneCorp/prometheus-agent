@@ -14,6 +14,138 @@
       ],
       "type": "object"
     },
+    "AdapterList": {
+      "additionalProperties": false,
+      "description": "`adapters.list` result.",
+      "properties": {
+        "adapters": {
+          "description": "Every adapter available to the profile.",
+          "items": {
+            "$ref": "#/$defs/AdapterRow"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "adapters"
+      ],
+      "type": "object"
+    },
+    "AdapterRef": {
+      "additionalProperties": false,
+      "description": "An adapter of a profile.",
+      "properties": {
+        "platform": {
+          "description": "The platform.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The profile.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "platform"
+      ],
+      "type": "object"
+    },
+    "AdapterRow": {
+      "additionalProperties": false,
+      "description": "One messaging adapter of a profile.",
+      "properties": {
+        "display": {
+          "description": "Its display name.",
+          "type": "string"
+        },
+        "enabled": {
+          "description": "Enabled in the configuration.",
+          "type": "boolean"
+        },
+        "pairing": {
+          "default": null,
+          "description": "Its interactive pairing flow (`telegram_qr`, `whatsapp_qr`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "platform": {
+          "description": "The platform.",
+          "type": "string"
+        },
+        "reason": {
+          "default": null,
+          "description": "Why, for `error`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "secrets": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "description": "Its secrets and whether each is set (never values).",
+          "type": "object"
+        },
+        "state": {
+          "description": "`not_configured`, `saved` (credentials stored, disabled),\n`pending_restart` (configuration changed since it started),\n`connecting`, `connected`, `error` or `daemon_stopped`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "platform",
+        "display",
+        "state",
+        "enabled",
+        "secrets"
+      ],
+      "type": "object"
+    },
+    "AdapterSaveParams": {
+      "additionalProperties": false,
+      "description": "`adapters.save` params: credentials and the enable switch, written\ntogether; nothing restarts.",
+      "properties": {
+        "clear": {
+          "default": [],
+          "description": "Secrets to delete.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "enabled": {
+          "default": null,
+          "description": "The new enable switch.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "platform": {
+          "description": "The platform.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The profile.",
+          "type": "string"
+        },
+        "secrets": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Secrets to store (write-only).",
+          "type": "object"
+        }
+      },
+      "required": [
+        "profile",
+        "platform"
+      ],
+      "type": "object"
+    },
     "AdapterStatePayload": {
       "additionalProperties": false,
       "description": "`adapter.state` payload: one messaging adapter changed state (spec:\nplatform-adapters, Adapter state reporting and reconnect).",
@@ -867,6 +999,129 @@
         "limit",
         "spent",
         "remaining"
+      ],
+      "type": "object"
+    },
+    "CenterApproval": {
+      "additionalProperties": false,
+      "description": "A pending approval.",
+      "properties": {
+        "profile": {
+          "description": "Its session's profile.",
+          "type": "string"
+        },
+        "request_id": {
+          "description": "The request.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        },
+        "summary": {
+          "description": "What is asked (the command or the tool).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "session_id",
+        "request_id",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "CenterList": {
+      "additionalProperties": false,
+      "description": "`center.list` result.",
+      "properties": {
+        "approvals": {
+          "description": "Pending approvals.",
+          "items": {
+            "$ref": "#/$defs/CenterApproval"
+          },
+          "type": "array"
+        },
+        "sessions": {
+          "description": "Running sessions across the connection's profiles.",
+          "items": {
+            "$ref": "#/$defs/CenterSession"
+          },
+          "type": "array"
+        },
+        "subagents": {
+          "description": "Active subagents.",
+          "items": {
+            "$ref": "#/$defs/CenterSubagent"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "sessions",
+        "approvals",
+        "subagents"
+      ],
+      "type": "object"
+    },
+    "CenterParams": {
+      "additionalProperties": false,
+      "description": "`center.list` params.",
+      "type": "object"
+    },
+    "CenterSession": {
+      "additionalProperties": false,
+      "description": "A session with a running turn.",
+      "properties": {
+        "profile": {
+          "description": "Its profile.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        },
+        "title": {
+          "default": null,
+          "description": "Its title.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "profile",
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "CenterSubagent": {
+      "additionalProperties": false,
+      "description": "An active subagent.",
+      "properties": {
+        "goal": {
+          "description": "Its task.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "Its parent's profile.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The parent session.",
+          "type": "string"
+        },
+        "subagent_id": {
+          "description": "The child.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "session_id",
+        "subagent_id",
+        "goal"
       ],
       "type": "object"
     },
@@ -2144,6 +2399,223 @@
       ],
       "type": "object"
     },
+    "GitBranchParams": {
+      "additionalProperties": false,
+      "description": "`git.branch` params.",
+      "properties": {
+        "create": {
+          "default": false,
+          "description": "Create it (`git switch -c`) instead of switching to it.",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "The branch.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "name"
+      ],
+      "type": "object"
+    },
+    "GitCommitParams": {
+      "additionalProperties": false,
+      "description": "`git.commit` params.",
+      "properties": {
+        "message": {
+          "description": "The commit message.",
+          "type": "string"
+        },
+        "push": {
+          "default": false,
+          "description": "Commit & Push: commit and push through the session's terminal\nbackend.",
+          "type": "boolean"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "message"
+      ],
+      "type": "object"
+    },
+    "GitFile": {
+      "additionalProperties": false,
+      "description": "One changed file.",
+      "properties": {
+        "patch": {
+          "description": "The unified diff (cut at 256 KiB).",
+          "type": "string"
+        },
+        "path": {
+          "description": "Its path in the repository.",
+          "type": "string"
+        },
+        "staged": {
+          "description": "Part of the change is staged (`uncommitted` only).",
+          "type": "boolean"
+        },
+        "status": {
+          "description": "`added`, `modified`, `deleted` or `type-changed`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "status",
+        "staged",
+        "patch"
+      ],
+      "type": "object"
+    },
+    "GitMessage": {
+      "additionalProperties": false,
+      "description": "`git.message` result.",
+      "properties": {
+        "message": {
+          "description": "The suggested commit message (empty when no auxiliary route\nanswers).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "type": "object"
+    },
+    "GitPaths": {
+      "additionalProperties": false,
+      "description": "`git.stage`, `git.unstage` and `git.revert` params.",
+      "properties": {
+        "paths": {
+          "description": "Paths in the repository.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "paths"
+      ],
+      "type": "object"
+    },
+    "GitRan": {
+      "additionalProperties": false,
+      "description": "What a command run through the session's terminal backend printed.",
+      "properties": {
+        "commit": {
+          "default": null,
+          "description": "The commit made (`git.commit`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ok": {
+          "description": "Whether it succeeded.",
+          "type": "boolean"
+        },
+        "output": {
+          "description": "Its output.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "output",
+        "ok"
+      ],
+      "type": "object"
+    },
+    "GitReview": {
+      "additionalProperties": false,
+      "description": "`git.review` result.",
+      "properties": {
+        "ahead": {
+          "description": "Commits ahead of upstream.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "behind": {
+          "description": "Commits behind upstream.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "branch": {
+          "description": "The checked-out branch (`None`: detached).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "files": {
+          "description": "The changed files.",
+          "items": {
+            "$ref": "#/$defs/GitFile"
+          },
+          "type": "array"
+        },
+        "gh": {
+          "description": "The `gh` executable is available (Create PR is offered).",
+          "type": "boolean"
+        },
+        "read_only": {
+          "description": "Nothing in this scope may be staged, reverted or committed.",
+          "type": "boolean"
+        },
+        "root": {
+          "description": "The working tree's top folder.",
+          "type": "string"
+        },
+        "scope": {
+          "description": "The scope shown.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "root",
+        "ahead",
+        "behind",
+        "scope",
+        "files",
+        "read_only",
+        "gh"
+      ],
+      "type": "object"
+    },
+    "GitReviewParams": {
+      "additionalProperties": false,
+      "description": "`git.review` params.",
+      "properties": {
+        "scope": {
+          "default": "uncommitted",
+          "description": "`uncommitted` (default), `branch` or `last-turn`.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session whose workspace is reviewed.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    },
     "HealthChanged": {
       "additionalProperties": false,
       "description": "`health.changed` payload.",
@@ -2345,6 +2817,13 @@
         "updated_at": {
           "description": "When it last changed (RFC 3339).",
           "type": "string"
+        },
+        "uses": {
+          "default": 0,
+          "description": "How often it was used: a skill's loads, an entry's recalls (the\nmemory graph's `used` filter).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
         }
       },
       "required": [
@@ -2556,6 +3035,64 @@
           ]
         }
       },
+      "type": "object"
+    },
+    "ManageCatalogParams": {
+      "additionalProperties": false,
+      "description": "`manage.catalog` params.",
+      "properties": {
+        "catalog": {
+          "description": "`skills`, `optional_skills`, `toolsets`, `models`, `plugins`,\n`mcp`, `cron`, `cron_runs` (of the job `target` names) or `memory`.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The profile the pane targets.",
+          "type": "string"
+        },
+        "target": {
+          "default": null,
+          "description": "The job whose runs `cron_runs` lists.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "profile",
+        "catalog"
+      ],
+      "type": "object"
+    },
+    "ManageChangeParams": {
+      "additionalProperties": false,
+      "description": "`manage.change` params.",
+      "properties": {
+        "body": {
+          "default": null,
+          "description": "The change's fields."
+        },
+        "change": {
+          "description": "`skill` (`{\"enabled\"}`), `skill_archive`, `toolset`, `cron_update`\n(`{\"enabled\"}` pauses or resumes), `cron_delete`, `cron_run` or\n`memory` (`{\"replace\"|\"remove\": ...}`).",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The profile that owns what changes (a job's owning profile in the\nall-profiles view).",
+          "type": "string"
+        },
+        "target": {
+          "default": null,
+          "description": "The skill, toolset or job.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "profile",
+        "change"
+      ],
       "type": "object"
     },
     "McpServerState": {
@@ -3157,6 +3694,120 @@
       ],
       "type": "object"
     },
+    "ProjectRow": {
+      "additionalProperties": false,
+      "description": "One explicit project.",
+      "properties": {
+        "id": {
+          "description": "`prj_...`.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Its display name.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Its primary folder.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "slug": {
+          "description": "Its slug.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "slug"
+      ],
+      "type": "object"
+    },
+    "ProjectsCreateParams": {
+      "additionalProperties": false,
+      "description": "`projects.create` params.",
+      "properties": {
+        "name": {
+          "default": null,
+          "description": "The display name (the folder name when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "The repository folder.",
+          "type": "string"
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "ProjectsList": {
+      "additionalProperties": false,
+      "description": "`projects.list` result.",
+      "properties": {
+        "discovered": {
+          "description": "Repositories the background scan found that are no project's.",
+          "items": {
+            "$ref": "#/$defs/RepoRow"
+          },
+          "type": "array"
+        },
+        "inferred": {
+          "description": "Repositories of the profile's sessions that are no project's.",
+          "items": {
+            "$ref": "#/$defs/RepoRow"
+          },
+          "type": "array"
+        },
+        "projects": {
+          "description": "Projects created explicitly.",
+          "items": {
+            "$ref": "#/$defs/ProjectRow"
+          },
+          "type": "array"
+        },
+        "scanning": {
+          "description": "A scan is running; the list refreshes when it ends.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "projects",
+        "inferred",
+        "discovered",
+        "scanning"
+      ],
+      "type": "object"
+    },
+    "ProjectsListParams": {
+      "additionalProperties": false,
+      "description": "`projects.list` params.",
+      "properties": {
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "PromptImage": {
       "description": "An image attached to a prompt: a file the daemon reads (checked like\n`chat --image`), or an image the session already holds (as\n`command.dispatch` returns them for `/retry`).",
       "oneOf": [
@@ -3532,6 +4183,33 @@
       "required": [
         "name",
         "used_percent"
+      ],
+      "type": "object"
+    },
+    "RepoRow": {
+      "additionalProperties": false,
+      "description": "A repository offered for project creation.",
+      "properties": {
+        "last_seen": {
+          "default": null,
+          "description": "When a scan last saw it (discovered rows; RFC 3339).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "Its folder name.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Its folder.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "name"
       ],
       "type": "object"
     },
@@ -5442,6 +6120,66 @@
     }
   },
   "methods": {
+    "adapters.list": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/ProfileParams"
+      },
+      "result": {
+        "$ref": "#/$defs/AdapterList"
+      },
+      "since": "1.0"
+    },
+    "adapters.pairing.cancel": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/AdapterRef"
+      },
+      "result": {
+        "$ref": "#/$defs/Ack"
+      },
+      "since": "1.0"
+    },
+    "adapters.pairing.start": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/AdapterRef"
+      },
+      "result": true,
+      "since": "1.0"
+    },
+    "adapters.pairing.state": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/AdapterRef"
+      },
+      "result": true,
+      "since": "1.0"
+    },
+    "adapters.restart": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/AdapterRef"
+      },
+      "result": {
+        "$ref": "#/$defs/AdapterRow"
+      },
+      "since": "1.0"
+    },
+    "adapters.save": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/AdapterSaveParams"
+      },
+      "result": {
+        "$ref": "#/$defs/AdapterRow"
+      },
+      "since": "1.0"
+    },
     "approval.respond": {
       "owner": "tool-system",
       "params": {
@@ -5511,6 +6249,17 @@
     "bot.roster.list": {
       "declared": false,
       "owner": "bot-mode",
+      "since": "1.0"
+    },
+    "center.list": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/CenterParams"
+      },
+      "result": {
+        "$ref": "#/$defs/CenterList"
+      },
       "since": "1.0"
     },
     "command.dispatch": {
@@ -5733,6 +6482,94 @@
       },
       "since": "1.0"
     },
+    "git.branch": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/GitBranchParams"
+      },
+      "result": {
+        "$ref": "#/$defs/GitRan"
+      },
+      "since": "1.0"
+    },
+    "git.commit": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/GitCommitParams"
+      },
+      "result": {
+        "$ref": "#/$defs/GitRan"
+      },
+      "since": "1.0"
+    },
+    "git.message": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/GitMessage"
+      },
+      "since": "1.0"
+    },
+    "git.pr": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/GitRan"
+      },
+      "since": "1.0"
+    },
+    "git.revert": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/GitPaths"
+      },
+      "result": {
+        "$ref": "#/$defs/Ack"
+      },
+      "since": "1.0"
+    },
+    "git.review": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/GitReviewParams"
+      },
+      "result": {
+        "$ref": "#/$defs/GitReview"
+      },
+      "since": "1.0"
+    },
+    "git.stage": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/GitPaths"
+      },
+      "result": {
+        "$ref": "#/$defs/Ack"
+      },
+      "since": "1.0"
+    },
+    "git.unstage": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/GitPaths"
+      },
+      "result": {
+        "$ref": "#/$defs/Ack"
+      },
+      "since": "1.0"
+    },
     "grants.list": {
       "declared": false,
       "owner": "security-boundaries",
@@ -5938,6 +6775,24 @@
       },
       "since": "1.0"
     },
+    "manage.catalog": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/ManageCatalogParams"
+      },
+      "result": true,
+      "since": "1.0"
+    },
+    "manage.change": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/ManageChangeParams"
+      },
+      "result": true,
+      "since": "1.0"
+    },
     "memory.summary": {
       "owner": "memory",
       "params": {
@@ -5996,6 +6851,28 @@
       },
       "result": {
         "$ref": "#/$defs/PairingApproved"
+      },
+      "since": "1.0"
+    },
+    "projects.create": {
+      "long": true,
+      "owner": "projects",
+      "params": {
+        "$ref": "#/$defs/ProjectsCreateParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ProjectRow"
+      },
+      "since": "1.0"
+    },
+    "projects.list": {
+      "long": true,
+      "owner": "projects",
+      "params": {
+        "$ref": "#/$defs/ProjectsListParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ProjectsList"
       },
       "since": "1.0"
     },

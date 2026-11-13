@@ -494,14 +494,15 @@ async fn run_one(
         tracing::warn!(session = %id, error = %err, "gateway session hygiene failed");
     }
     let applied = job.api.as_ref().map(|api| api.begin(session));
-    let outcome = match job.resume {
-        Some((unfinished, choice)) => {
-            let resume = super::crash::decide(&job.link, &unfinished, choice).await;
-            agent
-                .resume_turn(Some(&scope), unfinished, resume, options)
-                .await
-        }
-        None => agent.run_turn(Some(&scope), id, job.input, options).await,
+    let outcome = if let Some((unfinished, choice)) = job.resume {
+        let resume = super::crash::decide(&job.link, &unfinished, choice).await;
+        agent
+            .resume_turn(Some(&scope), unfinished, resume, options)
+            .await
+    } else {
+        // The review pane's `last-turn` scope starts here.
+        super::review::turn_started(&id.to_string()).await;
+        agent.run_turn(Some(&scope), id, job.input, options).await
     };
     session.interrupt.lock().expect("interrupt poisoned").take();
     if let Some(applied) = applied {

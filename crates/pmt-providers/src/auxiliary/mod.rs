@@ -71,6 +71,7 @@ tasks! {
     GoalJudge = "goal_judge", None;
     SideQuestion = "side_question", None;
     VoiceChat = "voice_chat", None;
+    CommitMessage = "commit_message", Some(Duration::from_mins(1));
 }
 
 impl AuxTask {
@@ -102,6 +103,7 @@ impl AuxTask {
             Self::GoalJudge => config.goal_judge.as_ref(),
             Self::SideQuestion => config.side_question.as_ref(),
             Self::VoiceChat => config.voice_chat.as_ref(),
+            Self::CommitMessage => config.commit_message.as_ref(),
         }
     }
 }

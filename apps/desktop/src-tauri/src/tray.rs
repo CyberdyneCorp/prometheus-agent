@@ -10,7 +10,7 @@ use std::sync::Arc;
 use pmt_desktop::Shell;
 use pmt_desktop::attention::{MenuEntry, TrayState};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
-use tauri::tray::TrayIconBuilder;
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter as _, Manager as _, Runtime, WebviewWindow, WindowEvent};
 
 use crate::app::{MAIN, QUICK_ASK, focus_main};
@@ -52,12 +52,28 @@ fn menu<R: Runtime>(app: &AppHandle<R>, entries: &[MenuEntry]) -> tauri::Result<
     Ok(menu)
 }
 
-/// Starts the tray icon.
-pub(crate) fn start<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+/// Starts the tray icon; with `tap_to_summon` a left click (a tap)
+/// summons the HUD instead of opening the menu.
+pub(crate) fn start<R: Runtime>(app: &AppHandle<R>, tap_to_summon: bool) -> tauri::Result<()> {
     let mut tray = TrayIconBuilder::with_id(TRAY)
         .tooltip("Prometheus")
         .menu(&menu(app, &TrayState::default().menu())?)
+        .show_menu_on_left_click(!tap_to_summon)
         .on_menu_event(|app, event| menu_event(app, event.id().as_ref()));
+    if tap_to_summon {
+        tray = tray.on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                let _ = tray
+                    .app_handle()
+                    .emit_to(MAIN, crate::hud::SUMMON_EVENT, ());
+            }
+        });
+    }
     if let Some(icon) = app.default_window_icon() {
         tray = tray.icon(icon.clone());
     }
@@ -118,9 +134,16 @@ pub(crate) fn watch_main<R: Runtime>(window: &WebviewWindow<R>, shell: Arc<Shell
 
 /// Registers the quick-ask hotkey (a taken chord is reported by the
 /// shell with a notification; the app keeps running without it).
-pub(crate) fn register_hotkey<R: Runtime>(_app: &AppHandle<R>, shell: &Arc<Shell>) {
+pub(crate) fn register_hotkey<R: Runtime>(app: &AppHandle<R>, shell: &Arc<Shell>) {
     let state = shell.register_quick_ask();
     tracing::info!(?state, "quick-ask hotkey");
+    // The HUD's snap chord goes through the same plugin; the handler
+    // tells the two apart by the registered chord.
+    if let pmt_desktop::features::Hotkey::Registered { chord } = shell.register_hud_snap()
+        && let Ok(shortcut) = chord.parse::<tauri_plugin_global_shortcut::Shortcut>()
+    {
+        app.manage(crate::hud::SnapChord(shortcut));
+    }
 }
 
 /// Shows the quick-ask panel, or hides it when it has focus.

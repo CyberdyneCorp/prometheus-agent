@@ -54,10 +54,13 @@ mod gateway;
 mod health_sample;
 mod model_picker;
 mod notify;
+mod panes;
 #[cfg(feature = "dashboard")]
 mod profile_create;
+mod projects;
 mod queue;
 mod reload;
+mod review;
 mod send_tool;
 #[cfg(feature = "dashboard")]
 mod session_file;
@@ -174,6 +177,9 @@ pub(super) struct DaemonHost {
     api_keys: api::KeyCache,
     /// The API server, once started (it is told when the daemon drains).
     api: std::sync::OnceLock<pmt_api::ApiServer>,
+    /// The host itself, for work that outlives the request that started it
+    /// (a desktop pairing flow).
+    me: std::sync::OnceLock<std::sync::Weak<DaemonHost>>,
 }
 
 fn session_id(text: &str) -> Result<SessionId, Error> {
@@ -259,7 +265,18 @@ impl DaemonHost {
             gateway: Arc::default(),
             api_keys: api::KeyCache::default(),
             api: std::sync::OnceLock::new(),
+            me: std::sync::OnceLock::new(),
         })
+    }
+
+    /// Remembers the `Arc` the host lives in (once, after it was made).
+    pub(super) fn adopt(host: &Arc<Self>) {
+        let _ = host.me.set(Arc::downgrade(host));
+    }
+
+    /// The host as an `Arc`, for a task that outlives a request.
+    fn arc(&self) -> Option<Arc<Self>> {
+        self.me.get().and_then(std::sync::Weak::upgrade)
     }
 
     /// Bounds the turns running at once (`gateway.limits.max_concurrent_sessions`).
@@ -1088,6 +1105,10 @@ impl Host for DaemonHost {
             self.control_subagent(&*self.profile(profile)?, session_id, subagent_id, steer)
                 .await
         })
+    }
+
+    fn panes(&self) -> Option<&dyn pmt_gateway::panes::PanesHost> {
+        Some(self)
     }
 
     fn bot_chat<'a>(&'a self, profile: &'a str) -> HostFuture<'a, (String, bool)> {

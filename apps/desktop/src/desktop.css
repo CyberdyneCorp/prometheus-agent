@@ -80,3 +80,45 @@ section.subagents-frame ul { list-style: none; margin: 0; padding: 0; }
 :root[data-ui-mode="simple"] .pane[data-pane="files"],
 :root[data-ui-mode="simple"] .review { display: none; }
 :root[data-window="pop-out"] .layout { grid-template-columns: 1fr auto; }
+/* 63.4: review pane, management panes, memory graph, HUD, palette, projects, shortcuts. */
+.review-files { list-style: none; margin: 0; padding: 0; }
+.review-files li { border-bottom: 1px solid var(--line); padding: 4px 0; }
+.review-files pre.patch, pre.inline-diff, .review-output { max-height: 320px; overflow: auto; background: var(--panel); padding: 6px; }
+.review-commit, .review-branch-form, .review-bar { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.review-commit textarea { width: 100%; }
+.manage-nav { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.adapter { border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 8px; margin: 6px 0; }
+.adapter-state[data-state="connected"] { color: var(--ok); }
+.adapter-state[data-state="error"] { color: var(--bad); }
+.adapter-state[data-state="pending_restart"], .adapter-state[data-state="saved"] { color: var(--warn); }
+.restart-banner { margin-top: 6px; padding: 4px 8px; border: 1px solid var(--warn); border-radius: var(--radius); }
+.qr-dialog, .command-palette, .memory-graph { position: fixed; z-index: 20; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 8px 30px rgb(0 0 0 / 25%); padding: 16px; }
+.qr-dialog { inset: 12% 30% auto; }
+.qr-dialog img.qr { width: 240px; height: 240px; }
+.command-palette { inset: 10% 25% auto; display: flex; flex-direction: column; gap: 6px; }
+.command-palette .palette-results { list-style: none; margin: 0; padding: 0; max-height: 50vh; overflow: auto; }
+.command-palette li { cursor: pointer; padding: 2px 6px; }
+.command-palette li:hover { background: var(--line); }
+.command-palette .kind { color: var(--muted); font-size: 0.8em; text-transform: uppercase; }
+.memory-graph { inset: 6% 8%; display: flex; flex-direction: column; gap: 8px; overflow: auto; }
+.memory-graph header { display: flex; gap: 8px; align-items: center; }
+.memory-graph svg.graph { width: 100%; height: 280px; border: 1px solid var(--line); border-radius: var(--radius); }
+.memory-graph circle.node { cursor: pointer; fill: var(--accent); }
+.memory-graph circle.node.skill { fill: var(--ok); }
+.shortcuts ul { list-style: none; margin: 0; padding: 0; }
+.shortcuts li { display: flex; gap: 8px; align-items: center; margin: 2px 0; }
+.shortcuts li .label { flex: 1; }
+.shortcuts li[data-conflict="true"] input { outline: 2px solid var(--bad); }
+.shortcuts .conflict { color: var(--bad); font-size: 0.85em; }
+section.projects ul { list-style: none; margin: 0; padding: 0; }
+details.thinking { color: var(--muted); border-left: 2px solid var(--line); padding-left: 8px; margin: 4px 0; }
+body { font-family: var(--ui-font,) system-ui, -apple-system, "Segoe UI", sans-serif; }
+:root[data-window="hud"] header.top, :root[data-window="hud"] aside.aside, :root[data-window="hud"] .chat-title, :root[data-window="hud"] footer.status-bar { display: none; }
+:root[data-window="hud"] .layout { grid-template-columns: 1fr; }
+.hud-bar { display: flex; gap: 6px; align-items: center; }
+.hud-handle { cursor: grab; user-select: none; padding: 0 6px; }
+/* Simple mode keeps the review pane, the technical tool view and inline diffs out of sight. */
+:root[data-ui-mode="simple"] button[name=pane][data-pane="review"],
+:root[data-ui-mode="simple"] .pane[data-pane="review"],
+:root[data-ui-mode="simple"] .transcript .tool,
+:root[data-ui-mode="simple"] pre.inline-diff { display: none; }

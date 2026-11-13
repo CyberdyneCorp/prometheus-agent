@@ -9,31 +9,12 @@
 
 use hyper::body::Incoming;
 use pmt_config::platforms;
-use pmt_config::secrets::surface::BUILTIN;
-use pmt_core::secret::SecretString;
+use pmt_gateway::messaging::pane::{self, Save, SaveError, available, secret_names};
 use serde_json::{Map, Value, json};
 
 use super::profile::Profile;
 use crate::Shared;
 use crate::http::{Reply, error, from_error, json_reply, read_json};
-
-/// The secrets of built-in adapter `platform` (`MATRIX_ACCESS_TOKEN`...).
-fn secret_names(platform: &str) -> Vec<&'static str> {
-    let prefix = format!("{}_", platform.to_ascii_uppercase());
-    BUILTIN
-        .iter()
-        .copied()
-        .filter(|name| name.starts_with(&prefix))
-        .collect()
-}
-
-fn available() -> Vec<String> {
-    platforms::FIRST_PARTY
-        .iter()
-        .map(|p| p.name.to_owned())
-        .chain(platforms::plugin_platforms())
-        .collect()
-}
 
 /// `GET adapters`: every available adapter with its form.
 pub(crate) fn list(shared: &Shared, at: &Profile<'_>) -> Reply {
@@ -96,7 +77,6 @@ pub(crate) async fn save(at: &Profile<'_>, name: &str, body: Incoming) -> Reply 
         Ok(body) => body,
         Err(reply) => return reply,
     };
-    let allowed = secret_names(name);
     let empty = Map::new();
     let secrets: Vec<(&str, &str)> = body["secrets"]
         .as_object()
@@ -105,49 +85,35 @@ pub(crate) async fn save(at: &Profile<'_>, name: &str, body: Incoming) -> Reply 
         .filter_map(|(k, v)| Some((k.as_str(), v.as_str()?)))
         .filter(|(_, v)| !v.is_empty())
         .collect();
-    if let Some((bad, _)) = secrets.iter().find(|(k, _)| !allowed.contains(k)) {
-        return error(
-            400,
-            "invalid_secret",
-            &format!("{bad} is not a secret of the {name} adapter"),
-        );
-    }
-    if let Some(err) = secrets
-        .iter()
-        .find_map(|(k, _)| pmt_config::managed::check_secret_writable(k).err())
-    {
-        return from_error(&err);
-    }
-    let mut texts: Vec<(String, String)> = body["options"]
+    let options: Vec<(String, String)> = body["options"]
         .as_object()
         .unwrap_or(&empty)
         .iter()
         .filter(|(_, v)| !v.is_null() && v.as_str() != Some(""))
-        .map(|(k, v)| (format!("gateway.platforms.{name}.options.{k}"), raw(v)))
+        .map(|(k, v)| (k.clone(), raw(v)))
         .collect();
-    if let Some(enabled) = body["enabled"].as_bool() {
-        texts.push((
-            format!("gateway.platforms.{name}.enabled"),
-            enabled.to_string(),
-        ));
-    }
-    if !texts.is_empty() {
-        let pairs: Vec<(&str, &str)> = texts
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect();
-        if let Err(err) = at.scope.profile().config_file().set_all(&pairs) {
+    let save = Save {
+        enabled: body["enabled"].as_bool(),
+        options,
+        secrets,
+        clear: Vec::new(),
+    };
+    match pane::save(at.scope, name, &save) {
+        Ok(()) => {}
+        Err(SaveError::UnknownSecret(bad)) => {
+            return error(
+                400,
+                "invalid_secret",
+                &format!("{bad} is not a secret of the {name} adapter"),
+            );
+        }
+        Err(SaveError::Invalid(err)) => {
             return json_reply(
                 400,
                 &json!({"error": err.code().code, "message": err.message(), "hint": err.hint()}),
             );
         }
-    }
-    let store = at.scope.secrets().store();
-    for (key, value) in &secrets {
-        if let Err(err) = store.set(key, &SecretString::new(*value)) {
-            return from_error(&err);
-        }
+        Err(SaveError::Refused(err)) => return from_error(&err),
     }
     json_reply(
         200,

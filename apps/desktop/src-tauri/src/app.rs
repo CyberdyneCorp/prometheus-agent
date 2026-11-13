@@ -62,7 +62,7 @@ pub(crate) fn run(launch: Launch) {
             app.manage(Arc::clone(&shell));
             open_main(app.handle(), &shell)?;
             open_quick_ask(app.handle())?;
-            crate::tray::start(app.handle())?;
+            crate::tray::start(app.handle(), shell.options().hud.tap_to_summon)?;
             crate::tray::register_hotkey(app.handle(), &shell);
             forward_deep_links(app.handle(), &launch.links);
             Ok(())
@@ -94,8 +94,14 @@ fn plugins<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, _shortcut, event| {
-                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                .with_handler(|app, shortcut, event| {
+                    if event.state() != tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        return;
+                    }
+                    let snap = app.try_state::<crate::hud::SnapChord>();
+                    if snap.is_some_and(|chord| chord.0 == *shortcut) {
+                        crate::hud::snap(app);
+                    } else {
                         crate::tray::toggle_quick_ask(app);
                     }
                 })

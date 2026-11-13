@@ -13,6 +13,7 @@ import { shell } from "./shell";
 interface LaunchOptions {
   keep_in_tray: boolean;
   quick_ask: { hotkey: string };
+  hud?: { snap_hotkey: string; tap_to_summon: boolean };
 }
 
 interface UpdateOutcome {
@@ -56,8 +57,30 @@ export async function desktopSettings(client: DesktopClient, host: HTMLElement):
     h("label", {}, tray, " Keep running in the tray when the window closes"),
     ...reason(trayReason, "desktop.keep_in_tray"),
     status,
+    hudSettings(rows, options, (key, value) => save(key, value, status)),
     updates(),
     h("details", { class: "platform" }, h("summary", {}, "Platform support"), h("ul", {}, ...rows.map((r) => h("li", { "data-feature": r.feature, "data-state": r.state }, `${r.feature}: ${r.state} (${r.reason})`)))),
+  );
+}
+
+/** HUD settings: a placement feature the platform cannot offer (native
+ *  Wayland) is disabled with its reason. */
+function hudSettings(rows: FeatureSupport[], options: LaunchOptions, save: (key: string, value: unknown) => void): HTMLElement {
+  const hud = options.hud ?? { snap_hotkey: "CommandOrControl+Shift+G", tap_to_summon: false };
+  const snapReason = unavailable(rows, "desktop.hud.snap");
+  const snap = h("input", { name: "desktop.hud.snap_hotkey", value: hud.snap_hotkey, "aria-label": "Snap to pointer", disabled: snapReason !== null });
+  snap.addEventListener("change", () => save("desktop.hud.snap_hotkey", snap.value.trim()));
+  const tap = h("input", { type: "checkbox", name: "desktop.hud.tap_to_summon", checked: hud.tap_to_summon, "aria-label": "Summon with a tap on the tray icon" });
+  tap.addEventListener("change", () => save("desktop.hud.tap_to_summon", tap.checked));
+  const belowReason = unavailable(rows, "desktop.hud.window_below");
+  return h(
+    "section",
+    { class: "hud-settings", "aria-label": "HUD" },
+    h("h4", {}, "HUD"),
+    h("label", {}, "Snap to pointer ", snap),
+    snapReason ? h("p", { class: "reason", "data-for": "desktop.hud.snap_hotkey" }, snapReason) : "",
+    h("label", {}, tap, " Summon with a tap on the tray icon"),
+    belowReason ? h("p", { class: "reason", "data-for": "desktop.hud.window_below" }, `Window context: ${belowReason}`) : "",
   );
 }
 

@@ -191,6 +191,31 @@ pub enum Request {
         /// What it asked for.
         command: String,
     },
+    /// Detaches the session into the HUD bar, or closes the bar.
+    HudToggle {
+        /// The session's profile.
+        profile: String,
+        /// The session.
+        session_id: String,
+    },
+    /// Puts the HUD bar back to its default size and place.
+    HudReset,
+    /// The user pressed and held the HUD bar: it follows the pointer.
+    HudDrag,
+    /// The metadata of the window underneath the HUD bar (never pixels).
+    WindowBelow,
+    /// Exports a profile through `profile export` (secrets are never
+    /// included), with the desktop appearance as an optional overlay.
+    ProfileExport {
+        /// The profile.
+        profile: String,
+        /// The appearance overlay (theme, fonts, zoom, shortcuts).
+        #[serde(default)]
+        appearance: Option<serde_json::Value>,
+    },
+    /// Imports a profile archive the user picks; its appearance overlay
+    /// comes back for the page to apply.
+    ProfileImport,
 }
 
 /// The machine integration behind the allowlist.
@@ -288,6 +313,41 @@ pub trait Native: Send + Sync {
     /// What the platform probes look at.
     fn facts(&self) -> crate::platform::Facts {
         crate::platform::Facts::detect(false)
+    }
+    /// Shows the HUD bar on `fragment` of the page (`#hud=<profile>/<id>`)
+    /// or hides it when it shows; whether it now shows.
+    ///
+    /// # Errors
+    ///
+    /// The window system's failure (no HUD in this shell by default).
+    fn toggle_hud(&self, fragment: &str) -> Result<bool, String> {
+        let _ = fragment;
+        Err("this shell has no HUD".to_owned())
+    }
+    /// Puts the HUD bar back to its default size and place.
+    ///
+    /// # Errors
+    ///
+    /// The window system's failure.
+    fn reset_hud(&self) -> Result<(), String> {
+        Err("this shell has no HUD".to_owned())
+    }
+    /// Moves the HUD bar with the pointer while the button is held.
+    ///
+    /// # Errors
+    ///
+    /// The window system's failure.
+    fn drag_hud(&self) -> Result<(), String> {
+        Err("this shell has no HUD".to_owned())
+    }
+    /// The window underneath the HUD bar.
+    fn window_below(&self) -> Option<crate::hud::WindowBelow> {
+        None
+    }
+    /// Where to save a file (a save dialog suggesting `name`).
+    fn save_path(&self, name: &str) -> Option<PathBuf> {
+        let _ = name;
+        None
     }
 }
 

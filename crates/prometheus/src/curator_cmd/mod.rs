@@ -3,7 +3,7 @@
 //! ledger, single-edit rollback, purge and reports) and `/curator`.
 
 pub(crate) mod auto;
-mod ops;
+pub(crate) mod ops;
 mod review;
 pub(crate) mod slash;
 

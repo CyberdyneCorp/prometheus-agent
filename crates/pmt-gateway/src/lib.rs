@@ -37,6 +37,7 @@ pub mod methods;
 pub mod moa;
 pub mod observability;
 mod observer;
+pub mod panes;
 pub mod pty;
 pub mod queue;
 pub mod remote;

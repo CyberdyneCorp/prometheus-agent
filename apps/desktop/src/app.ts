@@ -9,17 +9,24 @@
 import type { ApprovalRequestParams } from "../../../schema/rpc";
 import { h, notice } from "../../../web/src/lib/dom";
 import { Prefs } from "../../../web/src/lib/prefs";
+import { applyFonts, restore, snapshot, Zoom } from "./appearance";
 import { Attention, focusCard } from "./attention";
 import { ChatView } from "./chat";
 import { DesktopClient } from "./client";
+import { CommandPalette, type Entry } from "./command-palette";
 import { desktopSettings } from "./desktop-settings";
+import { MemoryGraph } from "./graph";
+import { hudWindow, toggleHud } from "./hud";
 import { type InstallLink, installDialog } from "./install";
+import { ManagePane } from "./manage";
 import { PanelHost } from "./panels";
+import { ProfileClients } from "./profiles";
+import { ProjectsSidebar } from "./projects";
 import { LAST_PROFILE } from "./quickask";
 import { SettingsPanel } from "./settings";
 import { type Attach, onShellEvent, shell } from "./shell";
 import { NOT_FOUND } from "./verdict";
-import { workspace } from "./workspace";
+import { type Workspace, workspace } from "./workspace";
 
 interface SessionSummary {
   session_id: string;
@@ -106,7 +113,8 @@ function window_(profiles: string[], label: string): void {
   const client = new DesktopClient(served.includes("default") ? "default" : (served[0] ?? "default"));
   const dialogs = h("div", { class: "dialogs" });
   const chat = new ChatView({ client, window: label, dialogs });
-  const settings = new SettingsPanel(client, served);
+  const pool = new ProfileClients(client);
+  const settings = new SettingsPanel(client, served, pool);
   const attention = new Attention();
   const panels = new PanelHost(client);
   const prefs = new Prefs(client);
@@ -154,8 +162,11 @@ function window_(profiles: string[], label: string): void {
     if (state !== "connected") return;
     void refresh();
     void settings.reset();
+    manage.reset();
     void prefs.start({}).catch((err: unknown) => console.warn("UI preferences unavailable:", err));
     void panels.load(client.profile);
+    void projects.load();
+    void applyFonts(client);
     void desktopSettings(client, desktopSection).catch((err: unknown) => console.warn("desktop settings:", err));
   };
   client.onReattached = () => void chat.reattached();
@@ -175,11 +186,33 @@ function window_(profiles: string[], label: string): void {
     }
   });
 
-  const work = workspace(client, chat, h("div", {}, settings.el, desktopSection));
-  work.aside.append(panels.el);
-  const side = h("nav", { class: "side" }, newChat, botChat, list);
   const opener: Opener = { chat, client, switchTo, profiles: served, dialogs };
+  const graph = new MemoryGraph(client);
+  chat.onJourney = () => void graph.open();
+  const projects = new ProjectsSidebar(client, (path) => chat.draft(path));
+  const zoom = new Zoom();
+  const files = profileFiles(prefs, zoom, say);
+  const manage = new ManagePane(client, pool, served, dialogs, {
+    openSession: async (profile, sessionId) => {
+      if (served.includes(profile)) await switchTo(profile);
+      await openOwned(sessionId, opener);
+    },
+    switchProfile: switchTo,
+    exportProfile: files.exportProfile,
+    importProfile: files.importProfile,
+  });
+  const work = workspace(client, chat, h("div", {}, settings.el, desktopSection), dialogs, [{ name: "manage", label: "Manage", el: manage.el, shown: () => manage.reset() }]);
+  const keys = work.shortcuts;
+  manage.setShortcuts(keys.panel);
+  keys.onSave = (overrides) => void prefs.set("keybindings", overrides).catch(() => {});
+  prefs.onChange((values) => keys.load(values.keybindings));
+  panels.onShortcut = (shortcut) => keys.add(shortcut);
+  const palette = new CommandPalette(() => paletteEntries(opener, work, { graph, files, zoom }));
+  windowActions(keys, opener, { palette, graph, zoom });
+  work.aside.append(panels.el);
+  const side = h("nav", { class: "side" }, newChat, botChat, list, projects.el);
   listenToShell(opener);
+  onShellEvent("hud-summon", () => void toggleHud(client.profile, chat.sessionId));
   root().replaceChildren(
     h("header", { class: "top" }, h("span", { class: "brand" }, "Prometheus"), picker, work.layout.el, status),
     h(
@@ -191,6 +224,8 @@ function window_(profiles: string[], label: string): void {
     ),
     dialogs,
     notices,
+    graph.el,
+    palette.el,
   );
   remember(client.profile);
   work.start(side);
@@ -200,17 +235,20 @@ function window_(profiles: string[], label: string): void {
   void afterReady(opener);
 }
 
-/** A popped-out window (`#session=<profile>/<id>`): that session only,
- *  without the sidebar and tabs. */
+/** A popped-out window (`#session=<profile>/<id>`) or the HUD bar
+ *  (`#hud=<profile>/<id>`): that session only, without the sidebar and
+ *  tabs. */
 async function poppedOut(o: Opener, side: HTMLElement, center: HTMLElement): Promise<void> {
-  const match = /^#session=([^/]+)\/(.+)$/.exec(location.hash);
+  const match = /^#(session|hud)=([^/]+)\/(.+)$/.exec(location.hash);
   if (!match) return;
+  const [, kind = "", profile = "", sessionId = ""] = match;
   side.remove();
   center.querySelector(".center-bar")?.remove();
   document.documentElement.dataset.window = "pop-out";
+  if (kind === "hud") hudWindow(o.chat, center);
   await o.client.ready();
-  if (o.profiles.includes(match[1] ?? "")) await o.switchTo(match[1] ?? "");
-  await o.chat.open(match[2] ?? "");
+  if (o.profiles.includes(profile)) await o.switchTo(profile);
+  await o.chat.open(sessionId);
 }
 
 /** The shell's events: deep links, focus requests after a notification
@@ -289,4 +327,88 @@ async function deepLink(link: DeepLink, o: Opener): Promise<void> {
     default:
       await installDialog(link, o.client.profile, o.dialogs);
   }
+}
+
+interface Extras {
+  palette: CommandPalette;
+  graph: MemoryGraph;
+  zoom: Zoom;
+}
+
+/** The window's actions beyond the workspace's: the palette, the HUD,
+ *  the memory graph and zoom. */
+function windowActions(keys: Workspace["shortcuts"], o: Opener, x: Extras): void {
+  const actions: [string, string, string, () => void][] = [
+    ["palette", "Command palette", "CommandOrControl+K", () => void x.palette.open()],
+    ["palette-p", "Command palette (alternative)", "CommandOrControl+P", () => void x.palette.open()],
+    ["hud", "HUD mode", "CommandOrControl+Shift+H", () => void toggleHud(hudProfile(o), hudSession(o))],
+    ["memory-graph", "Memory graph", "CommandOrControl+Shift+M", () => void x.graph.open()],
+    ["zoom-in", "Zoom in", "CommandOrControl+=", () => x.zoom.step(1)],
+    ["zoom-out", "Zoom out", "CommandOrControl+-", () => x.zoom.step(-1)],
+    ["zoom-reset", "Actual size", "CommandOrControl+0", () => x.zoom.step(0)],
+  ];
+  for (const [id, label, chord, run] of actions) keys.add({ id, label, chord, run });
+}
+
+/** The HUD bar toggles its own session; the main window its chat's. */
+function hudProfile(o: Opener): string {
+  return /^#hud=([^/]+)\//.exec(location.hash)?.[1] ?? o.client.profile;
+}
+
+function hudSession(o: Opener): string | null {
+  return /^#hud=[^/]+\/(.+)$/.exec(location.hash)?.[1] ?? o.chat.sessionId;
+}
+
+interface ProfileFiles {
+  exportProfile: (profile: string) => Promise<void>;
+  importProfile: () => Promise<void>;
+}
+
+/** Export through `profile export` (never with secrets), with the
+ *  appearance as the overlay; an import applies the overlay it carries. */
+function profileFiles(prefs: Prefs, zoom: Zoom, tell: typeof say): ProfileFiles {
+  return {
+    exportProfile: async (profile) => {
+      try {
+        const done = await shell<{ path?: string; cancelled?: boolean }>("profile_export", { profile, appearance: snapshot(prefs) });
+        if (done.path) tell(`Exported profile ${profile} to ${done.path} (no secrets included).`);
+      } catch (err) {
+        tell(`Export failed: ${String(err)}`, "error");
+      }
+    },
+    importProfile: async () => {
+      try {
+        const done = await shell<{ profile?: string; appearance?: unknown; cancelled?: boolean }>("profile_import");
+        if (!done.profile) return;
+        await restore(prefs, zoom, done.appearance);
+        tell(`Imported profile ${done.profile}; restart the app to serve it.`);
+      } catch (err) {
+        tell(`Import failed: ${String(err)}`, "error");
+      }
+    },
+  };
+}
+
+interface PaletteParts {
+  graph: MemoryGraph;
+  files: ProfileFiles;
+  zoom: Zoom;
+}
+
+/** What the palette finds: pages, settings, sessions and actions. */
+async function paletteEntries(o: Opener, work: Workspace, p: PaletteParts): Promise<Entry[]> {
+  const pages: Entry[] = work.paneNames.map((name) => ({ kind: "page", label: name, run: () => work.showPane(name) }));
+  const settings: Entry[] = ["Model → Subagents", "General", "Keyboard shortcuts", "HUD"].map((label) => ({ kind: "setting", label, run: () => work.showPane(label === "Keyboard shortcuts" ? "manage" : "settings") }));
+  const listed = await o.client.call<{ sessions: SessionSummary[] }>("session.list", { profile: o.client.profile }).catch(() => ({ sessions: [] as SessionSummary[] }));
+  const sessions: Entry[] = listed.sessions.map((s) => ({ kind: "session", label: s.title ?? s.session_id, keywords: s.session_id, run: () => void o.chat.open(s.session_id) }));
+  const actions: Entry[] = [
+    { kind: "action", label: "New chat", run: () => o.chat.draft() },
+    { kind: "action", label: "Memory graph", run: () => void p.graph.open() },
+    { kind: "action", label: "HUD mode", run: () => void toggleHud(o.client.profile, o.chat.sessionId) },
+    { kind: "action", label: "Zoom in", run: () => p.zoom.step(1) },
+    { kind: "action", label: "Zoom out", run: () => p.zoom.step(-1) },
+    { kind: "action", label: "Import profile…", run: () => void p.files.importProfile() },
+    ...o.profiles.map((profile): Entry => ({ kind: "action", label: `Export profile ${profile}`, run: () => void p.files.exportProfile(profile) })),
+  ];
+  return [...pages, ...settings, ...sessions, ...actions];
 }
