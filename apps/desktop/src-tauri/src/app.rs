@@ -130,6 +130,25 @@ pub(crate) fn bundled_binary() -> PathBuf {
     }
 }
 
+/// Another app window on `fragment` of the page (spec: desktop-app,
+/// Windows, tabs and panes): the same guards as the main window.
+pub(crate) fn open_extra<R: Runtime>(app: &AppHandle<R>, fragment: &str) -> tauri::Result<()> {
+    static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    WebviewWindowBuilder::new(
+        app,
+        format!("window-{n}"),
+        WebviewUrl::App(format!("index.html{fragment}").into()),
+    )
+    .title("Prometheus")
+    .inner_size(900.0, 700.0)
+    .on_navigation(|url| navigation::allow_navigation(url) || navigation::is_panel(url))
+    .on_new_window(|url, _| new_window(&url))
+    .initialization_script_for_all_frames(ANNOTATE_AGENT)
+    .build()?;
+    Ok(())
+}
+
 fn open_main<R: Runtime>(app: &AppHandle<R>, shell: &Arc<Shell>) -> tauri::Result<()> {
     let window = WebviewWindowBuilder::new(app, MAIN, WebviewUrl::App("index.html".into()))
         .title("Prometheus")

@@ -115,13 +115,14 @@ test("a turn lost in a daemon restart blocks the queue until it is discarded", a
   await expect(lost.locator("button")).toHaveText(["Discard"]);
   const queued = page.locator("section.queue .queue-entry:not(.lost)");
   await expect(queued).toContainText("after the restart");
-  const before = await answers(page).count();
+  // Starting would take it off the queue: it stays while the lost turn
+  // blocks it.
   await page.waitForTimeout(3_000);
   await expect(queued).toHaveCount(1);
-  await expect(answers(page)).toHaveCount(before);
+  await expect(page.locator(".transcript .message.assistant .text").filter({ hasText: /^ok$/ })).toHaveCount(0);
   await lost.locator("button[name=discard]").click();
   await expect(page.locator("section.queue .queue-entry")).toHaveCount(0, { timeout: 30_000 });
-  await expect(answers(page)).toHaveCount(before + 1, { timeout: 30_000 });
+  await expect(page.locator(".transcript .message.assistant .text").filter({ hasText: /^ok$/ })).toHaveCount(1, { timeout: 30_000 });
 });
 
 test("the context meter's categories sum to its count", async ({ page }) => {

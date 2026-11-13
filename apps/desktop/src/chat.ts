@@ -205,6 +205,8 @@ export class ChatView {
   apply(envelope: Envelope): void {
     if (!envelope.session_id || envelope.session_id !== this.sessionId) return;
     if (envelope.event === "session.event") this.live = true;
+    // The last event this window received of the session.
+    this.el.dataset.lastSeq = String(envelope.seq);
     this.transcript.apply(envelope);
   }
 

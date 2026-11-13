@@ -523,6 +523,27 @@ pub trait Host: Send + Sync + 'static {
         Box::pin(async { Err(not_served("this host keeps no transcripts")) })
     }
 
+    /// Where a terminal of the session starts: its workspace.
+    fn terminal_cwd<'a>(
+        &'a self,
+        _profile: &'a str,
+        _session_id: &'a str,
+    ) -> HostFuture<'a, std::path::PathBuf> {
+        Box::pin(async { Err(not_served("this host opens no terminals")) })
+    }
+
+    /// Steers (`Some(text)`) or stops a running child of the session
+    /// (`subagent.steer`, `subagent.stop`); the status it reached.
+    fn subagent_control<'a>(
+        &'a self,
+        _profile: &'a str,
+        _session_id: &'a str,
+        _subagent_id: &'a str,
+        _steer: Option<&'a str>,
+    ) -> HostFuture<'a, String> {
+        Box::pin(async { Err(not_served("this host delegates to no subagents")) })
+    }
+
     /// `profile`'s canonical Bot Chat, created when it has none
     /// (`bot.chat.ensure`); `true` when created now.
     fn bot_chat<'a>(&'a self, _profile: &'a str) -> HostFuture<'a, (String, bool)> {

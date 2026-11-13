@@ -4210,6 +4210,20 @@ capabilities = [
 "Password field redaction" = { tests = ["crates/prometheus/tests/desktop_panes.rs::desktop_files_artifacts_preview_and_annotations"], note = "the agent (dist/annotate.js, installed in every frame) redacts in the page: the password and hidden values and a token-like attribute become [redacted]; the attached markup keeps the password field; the snapshot is a rasterized image of the redacted element" }
 "Pins do not send" = { tests = ["crates/prometheus/tests/desktop_panes.rs::desktop_files_artifacts_preview_and_annotations"], note = "three pins saved (one deleted keeps the others' numbers) and Add 1 comment only fill the composer; no prompt.submit is sent" }
 
+# Group 63.3 (desktop windows, modes, terminals, subagents).
+[desktop-app."Windows, tabs and panes"]
+"Popped-out session" = { tests = ["crates/prometheus/tests/desktop_workspace.rs::desktop_windows_tabs_modes_terminals_and_subagents"], note = "Pop out asks the shell for a window on #session=<profile>/<id> (recorded by the harness's Native; the Tauri app opens window-N with the same guards); the second page opened there attaches on its own and both end the turn on the same data-last-seq" }
+
+[desktop-app."Interface modes and layouts"]
+"Returning to advanced mode" = { tests = ["crates/prometheus/tests/desktop_workspace.rs::desktop_windows_tabs_modes_terminals_and_subagents"], note = "files pane + left sidebar hidden in advanced, simple mode (Ctrl+B still works there), back to advanced restores that arrangement; a preset opens what it places" }
+
+[desktop-app."Embedded terminals are daemon-owned PTYs"]
+"Seventeenth terminal" = { tests = ["crates/pmt-gateway/tests/terminals.rs::terminals_are_driver_written_replayed_and_capped_at_sixteen"] }
+"Observer cannot type" = { tests = ["crates/pmt-gateway/tests/terminals.rs::terminals_are_driver_written_replayed_and_capped_at_sixteen"], note = "a client attached as observer gets -32002 `observers cannot write to terminals` for pty.input and pty.open (observer-only connections such as webapp observers get the same message from the observer allowlist); the desktop E2E types into a real shell of the session's workspace" }
+
+[desktop-app."Live subagents frame"]
+"Steering is acknowledged as queued" = { tests = ["crates/prometheus/tests/desktop_workspace.rs::desktop_windows_tabs_modes_terminals_and_subagents"], note = "a background child (30 s mock call) shows in the frame; subagent.steer answers `queued` and the frame says `guidance queued for next checkpoint`; Stop requests the interrupt" }
+
 [distribution-and-update."Desktop packages and signing"]
 "Store install refuses self-update" = ["crates/prometheus/tests/update_channels.rs::desktop_packages_stamp_their_owner_and_the_cli_is_the_bundled_binary"]
 "CLI and desktop cannot skew" = ["crates/prometheus/tests/update_channels.rs::desktop_packages_stamp_their_owner_and_the_cli_is_the_bundled_binary"]

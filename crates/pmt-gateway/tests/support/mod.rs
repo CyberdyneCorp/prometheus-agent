@@ -130,6 +130,10 @@ async fn script(text: String, link: Link, turn: String, answers: Answers) {
 }
 
 impl Host for FakeHost {
+    fn terminal_cwd<'a>(&'a self, _: &'a str, _: &'a str) -> HostFuture<'a, PathBuf> {
+        Box::pin(async { Ok(PathBuf::from(env!("CARGO_MANIFEST_DIR"))) })
+    }
+
     fn owns<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, bool> {
         let owned = self
             .sessions

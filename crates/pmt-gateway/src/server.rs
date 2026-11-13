@@ -226,6 +226,7 @@ pub struct Server {
     /// it, and the control channel revokes from it, on any build.
     devices: Option<Arc<crate::devices::Devices>>,
     ui_prefs: crate::ui_prefs::UiPrefs,
+    terminals: Arc<crate::terminals::Terminals>,
     /// Every messaging adapter failed for good and the policy is to exit.
     adapters_down: AtomicBool,
 }
@@ -299,6 +300,7 @@ impl Server {
             only_pid: options.only_pid,
             health_url: options.health_url,
             ui_prefs: crate::ui_prefs::UiPrefs::default(),
+            terminals: Arc::default(),
             devices: options
                 .home
                 .as_deref()
@@ -491,6 +493,12 @@ impl Server {
     #[must_use]
     pub fn ui_prefs(&self) -> &crate::ui_prefs::UiPrefs {
         &self.ui_prefs
+    }
+
+    /// The daemon's terminals (`pty.*`).
+    #[must_use]
+    pub fn terminals(&self) -> &Arc<crate::terminals::Terminals> {
+        &self.terminals
     }
 
     /// The paired remote devices (`None` for a server without a home).

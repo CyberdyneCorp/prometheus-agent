@@ -152,6 +152,15 @@ pub enum Request {
     },
     /// Hide the calling panel window.
     HidePanel,
+    /// Another main window (`CommandOrControl+Shift+N`).
+    NewWindow,
+    /// A window showing one session without the sidebar.
+    PopOut {
+        /// The profile.
+        profile: String,
+        /// The session.
+        session_id: String,
+    },
     /// The profile's plugin panels.
     PluginPanels {
         /// The profile.
@@ -247,6 +256,16 @@ pub trait Native: Send + Sync {
     fn open_in_main(&self, profile: &str, session_id: &str) -> Result<(), String> {
         let _ = (profile, session_id);
         Err("no main window".to_owned())
+    }
+    /// Opens another app window on `fragment` of the page (`""` a full
+    /// window, `#session=<profile>/<id>` a popped-out session).
+    ///
+    /// # Errors
+    ///
+    /// The window could not be created.
+    fn open_window(&self, fragment: &str) -> Result<(), String> {
+        let _ = fragment;
+        Err("this shell opens no windows".to_owned())
     }
     /// Hides the panel window `window`.
     ///

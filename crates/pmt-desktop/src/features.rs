@@ -59,6 +59,8 @@ pub(crate) fn owns(request: &Request) -> bool {
             | Request::QuickAskUsed { .. }
             | Request::OpenInMain { .. }
             | Request::HidePanel
+            | Request::NewWindow
+            | Request::PopOut { .. }
             | Request::PluginPanels { .. }
             | Request::CatalogEntry { .. }
             | Request::CatalogInstall { .. }
@@ -167,6 +169,14 @@ impl Shell {
                 self.native.hide_window(window).map(|()| ok())
             }
             Request::HidePanel => self.native.hide_window(window).map(|()| ok()),
+            Request::NewWindow => self.native.open_window("").map(|()| ok()),
+            Request::PopOut {
+                profile,
+                session_id,
+            } => self
+                .native
+                .open_window(&format!("#session={profile}/{session_id}"))
+                .map(|()| ok()),
             _ => Err("not a request of this kind".to_owned()),
         }
     }

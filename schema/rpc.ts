@@ -1113,6 +1113,74 @@ export type PromptImage = {
   data: string;
 };
 
+/** `pty.attach` result. */
+export interface PtyAttached {
+  /** The terminal. */
+  pty_id: string;
+  /** Its recent output (at most 1 MiB), base64. */
+  replay: string;
+}
+
+/** `pty.input` params. */
+export interface PtyInputParams {
+  /** What is typed (UTF-8 text, control characters included). */
+  data: string;
+  /** The terminal. */
+  pty_id: string;
+  /** The session. */
+  session_id: string;
+}
+
+/** `pty.list` result. */
+export interface PtyList {
+  /** The session's terminals. */
+  terminals: Array<string>;
+}
+
+/** `pty.open` params. */
+export interface PtyOpenParams {
+  /** Columns. */
+  cols?: number;
+  /** Rows. */
+  rows?: number;
+  /** The session whose workspace the shell starts in (attached as a driver). */
+  session_id: string;
+}
+
+/** `pty.open` result. */
+export interface PtyOpened {
+  /** The new terminal. */
+  pty_id: string;
+}
+
+/** `pty.output` and `pty.exited` payload. */
+export interface PtyOutput {
+  /** The output, base64 (empty for `pty.exited`). */
+  data?: string;
+  /** The terminal. */
+  pty_id: string;
+}
+
+/** A terminal of a session. */
+export interface PtyRef {
+  /** The terminal. */
+  pty_id: string;
+  /** The session. */
+  session_id: string;
+}
+
+/** `pty.resize` params. */
+export interface PtyResizeParams {
+  /** Columns. */
+  cols: number;
+  /** The terminal. */
+  pty_id: string;
+  /** Rows. */
+  rows: number;
+  /** The session. */
+  session_id: string;
+}
+
 /** `queue.edit` params. */
 export interface QueueEditParams {
   /** The queued input. */
@@ -1337,14 +1405,44 @@ export interface SteerParams {
   text: string;
 }
 
+/** What a control call did. */
+export interface SubagentControlled {
+  /** `queued` (steer: delivered at the child's next checkpoint) or `interrupt_requested` (stop). */
+  status: string;
+  /** The child. */
+  subagent_id: string;
+}
+
 /** `subagent.list` result. */
 export interface SubagentList {
   /** The session's children, oldest first. */
   subagents: Array<SubagentSummary>;
 }
 
+/** `subagent.stop` params. */
+export interface SubagentRef {
+  /** The parent session. */
+  session_id: string;
+  /** The child. */
+  subagent_id: string;
+}
+
+/** `subagent.steer` params. */
+export interface SubagentSteerParams {
+  /** The parent session. */
+  session_id: string;
+  /** The child. */
+  subagent_id: string;
+  /** The guidance. */
+  text: string;
+}
+
 /** One delegated child of a session. */
 export interface SubagentSummary {
+  /** What it is doing now. */
+  activity?: string | null;
+  /** How long it has run, in milliseconds. */
+  elapsed_ms?: number | null;
   /** Its child session. */
   session_id: string;
   /** `running`, `completed`, `failed` or `stopped`. */
@@ -1801,6 +1899,12 @@ export interface Methods {
   "model.options": { params: ModelOptionsParams; result: ModelOptions };
   "pairing.approve": { params: PairingApproveParams; result: PairingApproved };
   "prompt.submit": { params: SubmitParams; result: Submitted };
+  "pty.attach": { params: PtyRef; result: PtyAttached };
+  "pty.close": { params: PtyRef; result: Ack };
+  "pty.input": { params: PtyInputParams; result: Ack };
+  "pty.list": { params: SessionRef; result: PtyList };
+  "pty.open": { params: PtyOpenParams; result: PtyOpened };
+  "pty.resize": { params: PtyResizeParams; result: Ack };
   "queue.delete": { params: QueueItemParams; result: QueueState };
   "queue.edit": { params: QueueEditParams; result: QueueState };
   "queue.list": { params: SessionRef; result: QueueState };
@@ -1825,6 +1929,8 @@ export interface Methods {
   "session.transcript": { params: SessionRef; result: Transcript };
   "session.tree": { params: SessionRef; result: Lineage };
   "subagent.list": { params: SessionRef; result: SubagentList };
+  "subagent.steer": { params: SubagentSteerParams; result: SubagentControlled };
+  "subagent.stop": { params: SubagentRef; result: SubagentControlled };
   "system.health": { params: SystemParams; result: SystemHealth };
   "system.metrics": { params: SystemParams; result: MetricsSnapshot };
   "ui.prefs.get": { params: UiPrefsGetParams; result: UiPrefs };
@@ -1850,6 +1956,8 @@ export interface Events {
   "adapter.state": AdapterStatePayload;
   "automation.state": AutomationStatePayload;
   "health.changed": HealthChanged;
+  "pty.exited": PtyOutput;
+  "pty.output": PtyOutput;
   "queue.changed": QueueState;
   "request.cancel": RequestCancel;
   "request.resolved": RequestResolved;

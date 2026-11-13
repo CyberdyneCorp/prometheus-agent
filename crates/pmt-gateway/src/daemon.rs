@@ -87,6 +87,7 @@ pub async fn run(
         messaging.shutdown().await;
     }
     server.host().drain(drain).await;
+    server.terminals().close_all();
     server.closing.cancel();
     let _ = accept_task.await;
     reap_task.abort();
@@ -134,6 +135,11 @@ async fn reap(server: Arc<Server>) {
                 .await;
         }
         evict_beyond_cap(&server).await;
+        let hub = server.hub();
+        server.terminals().reap(
+            |session| hub.has_clients(session),
+            std::time::Instant::now(),
+        );
     }
 }
 

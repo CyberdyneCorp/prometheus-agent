@@ -117,6 +117,12 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `model.options` | `tui` | 1.0 | [`ModelOptionsParams`](#modeloptionsparams) | [`ModelOptions`](#modeloptions) |
 | `pairing.approve` | `messaging-gateway` | 1.0 | [`PairingApproveParams`](#pairingapproveparams) | [`PairingApproved`](#pairingapproved) |
 | `prompt.submit` | `workspace-architecture` | 1.0 | [`SubmitParams`](#submitparams) | [`Submitted`](#submitted) |
+| `pty.attach` | `desktop-app` | 1.0 | [`PtyRef`](#ptyref) | [`PtyAttached`](#ptyattached) |
+| `pty.close` | `desktop-app` | 1.0 | [`PtyRef`](#ptyref) | [`Ack`](#ack) |
+| `pty.input` | `desktop-app` | 1.0 | [`PtyInputParams`](#ptyinputparams) | [`Ack`](#ack) |
+| `pty.list` | `desktop-app` | 1.0 | [`SessionRef`](#sessionref) | [`PtyList`](#ptylist) |
+| `pty.open` | `desktop-app` | 1.0 | [`PtyOpenParams`](#ptyopenparams) | [`PtyOpened`](#ptyopened) |
+| `pty.resize` | `desktop-app` | 1.0 | [`PtyResizeParams`](#ptyresizeparams) | [`Ack`](#ack) |
 | `queue.delete` | `desktop-app` | 1.0 | [`QueueItemParams`](#queueitemparams) | [`QueueState`](#queuestate) |
 | `queue.edit` | `desktop-app` | 1.0 | [`QueueEditParams`](#queueeditparams) | [`QueueState`](#queuestate) |
 | `queue.list` | `desktop-app` | 1.0 | [`SessionRef`](#sessionref) | [`QueueState`](#queuestate) |
@@ -143,6 +149,8 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `session.transcript` | `workspace-architecture` | 1.0 | [`SessionRef`](#sessionref) | [`Transcript`](#transcript) |
 | `session.tree` | `session-storage` | 1.0 | [`SessionRef`](#sessionref) | [`Lineage`](#lineage) |
 | `subagent.list` | `tui` | 1.0 | [`SessionRef`](#sessionref) | [`SubagentList`](#subagentlist) |
+| `subagent.steer` | `desktop-app` | 1.0 | [`SubagentSteerParams`](#subagentsteerparams) | [`SubagentControlled`](#subagentcontrolled) |
+| `subagent.stop` | `desktop-app` | 1.0 | [`SubagentRef`](#subagentref) | [`SubagentControlled`](#subagentcontrolled) |
 | `subagent.subscribe` | `tui` | 1.0 | not served yet | |
 | `system.health` | `observability` | 1.0 | [`SystemParams`](#systemparams) | [`SystemHealth`](#systemhealth) |
 | `system.metrics` | `observability` | 1.0 | [`SystemParams`](#systemparams) | [`MetricsSnapshot`](#metricssnapshot) |
@@ -181,6 +189,8 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `local_model.context_grown` | `local-models` | 1.0 | not served yet |
 | `message.delivery` | `messaging-gateway` | 1.0 | not served yet |
 | `message.reaction` | `desktop-app` | 1.0 | not served yet |
+| `pty.exited` | `desktop-app` | 1.0 | [`PtyOutput`](#ptyoutput) |
+| `pty.output` | `desktop-app` | 1.0 | [`PtyOutput`](#ptyoutput) |
 | `queue.changed` | `desktop-app` | 1.0 | [`QueueState`](#queuestate) |
 | `request.cancel` | `workspace-architecture` | 1.0 | [`RequestCancel`](#requestcancel) |
 | `request.resolved` | `workspace-architecture` | 1.0 | [`RequestResolved`](#requestresolved) |
@@ -1264,6 +1274,80 @@ An image attached to a prompt: a file the daemon reads (checked like `chat --ima
 | `` | A blob reference (`blob:sha256:<hex>`) of one of the session's earlier user messages. |
 | `` | The image itself, as a `data:<mime>;base64,` URL (a snapshot the desktop made, such as an annotation's). |
 
+### `PtyAttached`
+
+`pty.attach` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `pty_id` | string | yes | The terminal. |
+| `replay` | string | yes | Its recent output (at most 1 MiB), base64. |
+
+### `PtyInputParams`
+
+`pty.input` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `data` | string | yes | What is typed (UTF-8 text, control characters included). |
+| `pty_id` | string | yes | The terminal. |
+| `session_id` | string | yes | The session. |
+
+### `PtyList`
+
+`pty.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `terminals` | array of string | yes | The session's terminals. |
+
+### `PtyOpenParams`
+
+`pty.open` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `cols` | integer | no | Columns. |
+| `rows` | integer | no | Rows. |
+| `session_id` | string | yes | The session whose workspace the shell starts in (attached as a driver). |
+
+### `PtyOpened`
+
+`pty.open` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `pty_id` | string | yes | The new terminal. |
+
+### `PtyOutput`
+
+`pty.output` and `pty.exited` payload.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `data` | string | no | The output, base64 (empty for `pty.exited`). |
+| `pty_id` | string | yes | The terminal. |
+
+### `PtyRef`
+
+A terminal of a session.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `pty_id` | string | yes | The terminal. |
+| `session_id` | string | yes | The session. |
+
+### `PtyResizeParams`
+
+`pty.resize` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `cols` | integer | yes | Columns. |
+| `pty_id` | string | yes | The terminal. |
+| `rows` | integer | yes | Rows. |
+| `session_id` | string | yes | The session. |
+
 ### `QueueEditParams`
 
 `queue.edit` params.
@@ -1492,6 +1576,15 @@ How a steer is delivered.
 | `session_id` | string | yes | The session. |
 | `text` | string | yes | The steer; empty or whitespace-only text is refused (`empty steer`). |
 
+### `SubagentControlled`
+
+What a control call did.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `status` | string | yes | `queued` (steer: delivered at the child's next checkpoint) or `interrupt_requested` (stop). |
+| `subagent_id` | string | yes | The child. |
+
 ### `SubagentList`
 
 `subagent.list` result.
@@ -1500,12 +1593,33 @@ How a steer is delivered.
 |---|---|---|---|
 | `subagents` | array of [`SubagentSummary`](#subagentsummary) | yes | The session's children, oldest first. |
 
+### `SubagentRef`
+
+`subagent.stop` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `session_id` | string | yes | The parent session. |
+| `subagent_id` | string | yes | The child. |
+
+### `SubagentSteerParams`
+
+`subagent.steer` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `session_id` | string | yes | The parent session. |
+| `subagent_id` | string | yes | The child. |
+| `text` | string | yes | The guidance. |
+
 ### `SubagentSummary`
 
 One delegated child of a session.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `activity` | string or null | no | What it is doing now. |
+| `elapsed_ms` | integer or null | no | How long it has run, in milliseconds. |
 | `session_id` | string | yes | Its child session. |
 | `status` | string | yes | `running`, `completed`, `failed` or `stopped`. |
 | `subagent_id` | string | yes | The child's id. |

@@ -64,6 +64,7 @@ mod session_file;
 mod setup;
 mod speech;
 mod status_bar;
+mod subagents;
 mod turns;
 mod usage_events;
 mod workspace_fs;
@@ -1051,6 +1052,42 @@ impl Host for DaemonHost {
         params: pmt_rpc::contracts::ArtifactsListParams,
     ) -> HostFuture<'a, pmt_rpc::contracts::ArtifactList> {
         Box::pin(async move { artifacts::list(&*self.profile(profile)?, &params) })
+    }
+
+    fn terminal_cwd<'a>(
+        &'a self,
+        profile: &'a str,
+        session_id: &'a str,
+    ) -> HostFuture<'a, PathBuf> {
+        Box::pin(async move {
+            let profile = self.profile(profile)?;
+            let row = profile.store.session(self::session_id(session_id)?)?;
+            Ok(Self::cwd_of(&profile, row.cwd.as_deref()))
+        })
+    }
+
+    fn subagents<'a>(
+        &'a self,
+        profile: &'a str,
+        session_id: &'a str,
+    ) -> HostFuture<'a, pmt_rpc::contracts::SubagentList> {
+        Box::pin(async move {
+            self.subagents_of(&*self.profile(profile)?, session_id)
+                .await
+        })
+    }
+
+    fn subagent_control<'a>(
+        &'a self,
+        profile: &'a str,
+        session_id: &'a str,
+        subagent_id: &'a str,
+        steer: Option<&'a str>,
+    ) -> HostFuture<'a, String> {
+        Box::pin(async move {
+            self.control_subagent(&*self.profile(profile)?, session_id, subagent_id, steer)
+                .await
+        })
     }
 
     fn bot_chat<'a>(&'a self, profile: &'a str) -> HostFuture<'a, (String, bool)> {

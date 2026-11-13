@@ -331,6 +331,33 @@ its number; *Add N comments* puts each pin's snapshot (a PNG
 grouped by top-level element beyond 5 pins, and sends nothing. Switching
 chats clears the pins.
 
+## Windows, tabs, modes and terminals
+
+`CommandOrControl+Shift+N` opens another window and *Pop out* opens the
+chat's session alone in its own window; each window attaches on its own
+and streams the same output. Each window has session tabs
+(`CommandOrControl+T` new, `Ctrl+Tab`/`Ctrl+Shift+Tab` cycle,
+`CommandOrControl+W` close, except over a terminal, and
+`CommandOrControl+Shift+T` reopen) and toggles its left and right
+sidebars with `CommandOrControl+B` and `CommandOrControl+J`.
+
+The header chooses the interface mode, `advanced` or `simple` (chat
+first: the status bar, terminal and file browser rest out of sight), and a
+layout: `default`, `basic`, `focus`, `terminal-deck` and `quad` in
+advanced mode, `sidebar-left` and `sidebar-right` in simple mode, or one
+you saved. Each mode remembers its own arrangement.
+
+Terminals are shells the daemon starts in the session's workspace
+(`pty.open`, `pty.attach`, `pty.input`, `pty.resize`, `pty.close`,
+`pty.list`; output arrives as `pty.output`). Only drivers type; a daemon
+keeps at most 16, a shell outlives its last attached window by 15 minutes,
+reattaching replays up to 1 MiB of output, and closing the tab ends the
+shell. *Add to chat* puts the selected output in the composer.
+
+While the session has running subagents, a frame above the composer shows
+them; a selected child can be steered (`subagent.steer`, queued for its
+next checkpoint) or stopped (`subagent.stop`).
+
 ## Building and testing
 
 The shell's logic lives in `crates/pmt-desktop` (built and tested on

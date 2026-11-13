@@ -159,7 +159,25 @@ pub fn declare_builtin(d: &mut Declarations) {
         .method::<c::WorktreePrune>()
         .method::<c::SystemMetricsCall>()
         .method::<c::SystemHealthCall>()
-        .method::<c::ConfigPatch>()
+        .server_request::<c::ApprovalAsk>()
+        .server_request::<c::ClarifyAsk>()
+        .server_request::<c::SecretAsk>()
+        .server_request::<c::SudoAsk>()
+        .event::<c::AdapterStateChanged>()
+        .event::<c::AutomationStateChanged>()
+        .event::<c::RequestCancelled>()
+        .event::<c::RequestDone>()
+        .event::<c::SessionEvent>()
+        .event::<c::TurnEnded>()
+        .event::<c::UsageUpdatedEvent>()
+        .event::<c::HealthChangedEvent>();
+    declare_desktop(d);
+}
+
+/// The desktop app's names (spec: desktop-app).
+fn declare_desktop(d: &mut Declarations) {
+    use self::contracts as c;
+    d.method::<c::ConfigPatch>()
         .method::<c::ConfigReload>()
         .method::<c::BotChatEnsure>()
         .method::<c::UiPrefsGet>()
@@ -172,20 +190,18 @@ pub fn declare_builtin(d: &mut Declarations) {
         .method::<c::FsList>()
         .method::<c::FsRead>()
         .method::<c::ArtifactsListCall>()
-        .server_request::<c::ApprovalAsk>()
-        .server_request::<c::ClarifyAsk>()
-        .server_request::<c::SecretAsk>()
-        .server_request::<c::SudoAsk>()
-        .event::<c::AdapterStateChanged>()
-        .event::<c::AutomationStateChanged>()
-        .event::<c::RequestCancelled>()
-        .event::<c::RequestDone>()
-        .event::<c::SessionEvent>()
-        .event::<c::TurnEnded>()
-        .event::<c::UsageUpdatedEvent>()
-        .event::<c::HealthChangedEvent>()
+        .method::<c::PtyOpen>()
+        .method::<c::PtyAttach>()
+        .method::<c::PtyListCall>()
+        .method::<c::PtyInput>()
+        .method::<c::PtyResize>()
+        .method::<c::PtyClose>()
+        .method::<c::SubagentSteer>()
+        .method::<c::SubagentStop>()
         .event::<c::UiPrefsChanged>()
-        .event::<c::QueueChanged>();
+        .event::<c::QueueChanged>()
+        .event::<c::PtyOutputEvent>()
+        .event::<c::PtyExited>();
 }
 
 impl Catalog {

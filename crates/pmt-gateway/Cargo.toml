@@ -8,6 +8,8 @@ publish.workspace = true
 repository.workspace = true
 
 [dependencies]
+# Terminal output travels base64 in `pty.output`.
+base64.workspace = true
 bytes.workspace = true
 futures-util.workspace = true
 # Random instance ids, epochs, tickets and server-request ids.
@@ -28,6 +30,8 @@ pmt-rpc.workspace = true
 pmt-store.workspace = true
 # vault.* methods.
 pmt-vault.workspace = true
+# Daemon-owned terminals (`pty.*`).
+portable-pty.workspace = true
 # The remote attachment listener's self-signed certificate.
 rcgen.workspace = true
 # Group mention patterns (`gateway.groups.mention_patterns`).

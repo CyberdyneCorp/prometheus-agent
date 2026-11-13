@@ -70,6 +70,9 @@ impl Native for Recorder {
     fn pick(&self, _directory: bool, _title: Option<&str>) -> Option<PathBuf> {
         None
     }
+    fn open_window(&self, fragment: &str) -> Result<(), String> {
+        self.record(format!("window {fragment}"))
+    }
     fn notify(&self, title: &str, _body: &str) -> Result<(), String> {
         self.record(format!("notify {title}"))
     }

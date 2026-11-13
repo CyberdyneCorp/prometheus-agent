@@ -141,6 +141,14 @@ pub const INDEX: &[IndexEntry] = &[
     long("fs.list", "desktop-app"),
     long("fs.read", "desktop-app"),
     long("artifacts.list", "desktop-app"),
+    method("pty.open", "desktop-app"),
+    method("pty.attach", "desktop-app"),
+    method("pty.list", "desktop-app"),
+    method("pty.input", "desktop-app"),
+    method("pty.resize", "desktop-app"),
+    method("pty.close", "desktop-app"),
+    method("subagent.steer", "desktop-app"),
+    method("subagent.stop", "desktop-app"),
     // messaging-gateway
     method("pairing.approve", "messaging-gateway"),
     // security-boundaries
@@ -238,6 +246,8 @@ pub const INDEX: &[IndexEntry] = &[
     event("message.reaction", "desktop-app"),
     event("ui.prefs.changed", "desktop-app"),
     event("queue.changed", "desktop-app"),
+    event("pty.output", "desktop-app"),
+    event("pty.exited", "desktop-app"),
     event("achievement.unlocked", "pets"),
     event("wake.detected", "voice-mode"),
     event("local_model.context_grown", "local-models"),

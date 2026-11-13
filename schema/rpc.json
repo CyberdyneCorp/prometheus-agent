@@ -3201,6 +3201,183 @@
         }
       ]
     },
+    "PtyAttached": {
+      "additionalProperties": false,
+      "description": "`pty.attach` result.",
+      "properties": {
+        "pty_id": {
+          "description": "The terminal.",
+          "type": "string"
+        },
+        "replay": {
+          "description": "Its recent output (at most 1 MiB), base64.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pty_id",
+        "replay"
+      ],
+      "type": "object"
+    },
+    "PtyInputParams": {
+      "additionalProperties": false,
+      "description": "`pty.input` params.",
+      "properties": {
+        "data": {
+          "description": "What is typed (UTF-8 text, control characters included).",
+          "type": "string"
+        },
+        "pty_id": {
+          "description": "The terminal.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "pty_id",
+        "data"
+      ],
+      "type": "object"
+    },
+    "PtyList": {
+      "additionalProperties": false,
+      "description": "`pty.list` result.",
+      "properties": {
+        "terminals": {
+          "description": "The session's terminals.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "terminals"
+      ],
+      "type": "object"
+    },
+    "PtyOpenParams": {
+      "additionalProperties": false,
+      "description": "`pty.open` params.",
+      "properties": {
+        "cols": {
+          "default": 80,
+          "description": "Columns.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rows": {
+          "default": 24,
+          "description": "Rows.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "session_id": {
+          "description": "The session whose workspace the shell starts in (attached as a\ndriver).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "PtyOpened": {
+      "additionalProperties": false,
+      "description": "`pty.open` result.",
+      "properties": {
+        "pty_id": {
+          "description": "The new terminal.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pty_id"
+      ],
+      "type": "object"
+    },
+    "PtyOutput": {
+      "additionalProperties": false,
+      "description": "`pty.output` and `pty.exited` payload.",
+      "properties": {
+        "data": {
+          "default": "",
+          "description": "The output, base64 (empty for `pty.exited`).",
+          "type": "string"
+        },
+        "pty_id": {
+          "description": "The terminal.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pty_id"
+      ],
+      "type": "object"
+    },
+    "PtyRef": {
+      "additionalProperties": false,
+      "description": "A terminal of a session.",
+      "properties": {
+        "pty_id": {
+          "description": "The terminal.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "pty_id"
+      ],
+      "type": "object"
+    },
+    "PtyResizeParams": {
+      "additionalProperties": false,
+      "description": "`pty.resize` params.",
+      "properties": {
+        "cols": {
+          "description": "Columns.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "pty_id": {
+          "description": "The terminal.",
+          "type": "string"
+        },
+        "rows": {
+          "description": "Rows.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "pty_id",
+        "cols",
+        "rows"
+      ],
+      "type": "object"
+    },
     "QueueEditParams": {
       "additionalProperties": false,
       "description": "`queue.edit` params.",
@@ -3866,6 +4043,25 @@
       ],
       "type": "object"
     },
+    "SubagentControlled": {
+      "additionalProperties": false,
+      "description": "What a control call did.",
+      "properties": {
+        "status": {
+          "description": "`queued` (steer: delivered at the child's next checkpoint) or\n`interrupt_requested` (stop).",
+          "type": "string"
+        },
+        "subagent_id": {
+          "description": "The child.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "subagent_id",
+        "status"
+      ],
+      "type": "object"
+    },
     "SubagentList": {
       "additionalProperties": false,
       "description": "`subagent.list` result.",
@@ -3883,10 +4079,71 @@
       ],
       "type": "object"
     },
+    "SubagentRef": {
+      "additionalProperties": false,
+      "description": "`subagent.stop` params.",
+      "properties": {
+        "session_id": {
+          "description": "The parent session.",
+          "type": "string"
+        },
+        "subagent_id": {
+          "description": "The child.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "subagent_id"
+      ],
+      "type": "object"
+    },
+    "SubagentSteerParams": {
+      "additionalProperties": false,
+      "description": "`subagent.steer` params.",
+      "properties": {
+        "session_id": {
+          "description": "The parent session.",
+          "type": "string"
+        },
+        "subagent_id": {
+          "description": "The child.",
+          "type": "string"
+        },
+        "text": {
+          "description": "The guidance.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "subagent_id",
+        "text"
+      ],
+      "type": "object"
+    },
     "SubagentSummary": {
       "additionalProperties": false,
       "description": "One delegated child of a session.",
       "properties": {
+        "activity": {
+          "default": null,
+          "description": "What it is doing now.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "elapsed_ms": {
+          "default": null,
+          "description": "How long it has run, in milliseconds.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "session_id": {
           "description": "Its child session.",
           "type": "string"
@@ -5112,6 +5369,20 @@
       "owner": "desktop-app",
       "since": "1.0"
     },
+    "pty.exited": {
+      "owner": "desktop-app",
+      "payload": {
+        "$ref": "#/$defs/PtyOutput"
+      },
+      "since": "1.0"
+    },
+    "pty.output": {
+      "owner": "desktop-app",
+      "payload": {
+        "$ref": "#/$defs/PtyOutput"
+      },
+      "since": "1.0"
+    },
     "queue.changed": {
       "owner": "desktop-app",
       "payload": {
@@ -5738,6 +6009,66 @@
       },
       "since": "1.0"
     },
+    "pty.attach": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/PtyRef"
+      },
+      "result": {
+        "$ref": "#/$defs/PtyAttached"
+      },
+      "since": "1.0"
+    },
+    "pty.close": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/PtyRef"
+      },
+      "result": {
+        "$ref": "#/$defs/Ack"
+      },
+      "since": "1.0"
+    },
+    "pty.input": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/PtyInputParams"
+      },
+      "result": {
+        "$ref": "#/$defs/Ack"
+      },
+      "since": "1.0"
+    },
+    "pty.list": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/PtyList"
+      },
+      "since": "1.0"
+    },
+    "pty.open": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/PtyOpenParams"
+      },
+      "result": {
+        "$ref": "#/$defs/PtyOpened"
+      },
+      "since": "1.0"
+    },
+    "pty.resize": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/PtyResizeParams"
+      },
+      "result": {
+        "$ref": "#/$defs/Ack"
+      },
+      "since": "1.0"
+    },
     "queue.delete": {
       "owner": "desktop-app",
       "params": {
@@ -5993,6 +6324,26 @@
       },
       "result": {
         "$ref": "#/$defs/SubagentList"
+      },
+      "since": "1.0"
+    },
+    "subagent.steer": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/SubagentSteerParams"
+      },
+      "result": {
+        "$ref": "#/$defs/SubagentControlled"
+      },
+      "since": "1.0"
+    },
+    "subagent.stop": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/SubagentRef"
+      },
+      "result": {
+        "$ref": "#/$defs/SubagentControlled"
       },
       "since": "1.0"
     },

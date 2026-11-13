@@ -208,6 +208,12 @@ pub struct SubagentSummary {
     /// Its task's title.
     #[serde(default)]
     pub title: Option<String>,
+    /// How long it has run, in milliseconds.
+    #[serde(default)]
+    pub elapsed_ms: Option<u64>,
+    /// What it is doing now.
+    #[serde(default)]
+    pub activity: Option<String>,
 }
 
 /// `subagent.list` result.

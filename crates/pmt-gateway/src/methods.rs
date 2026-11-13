@@ -64,6 +64,7 @@ pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
     crate::desktop::register(router, catalog)?;
     crate::queue::register(router, catalog)?;
     crate::workspace::register(router, catalog)?;
+    crate::pty::register(router, catalog)?;
     crate::ui_prefs::register(router, catalog)?;
     crate::vault::register(router, catalog)?;
     crate::moa::register(router, catalog)?;

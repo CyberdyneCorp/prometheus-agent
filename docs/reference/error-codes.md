@@ -385,6 +385,9 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `device.not_found` | `not_found` | 66 | No paired device has that name; `prometheus dashboard devices` lists them. |
 | `webapp.disabled` | `unavailable` | 69 | The desktop workspace in the browser is off; set `webapp.enabled = true` in `daemon.toml`. |
 | `desktop.not_installed` | `unavailable` | 69 | No Prometheus Desktop app bundle was found where the packages install it; `prometheus desktop --install` downloads the one matching this binary. |
+| `terminal.limit` | `conflict` | 75 | A daemon keeps at most 16 terminals (`pty.open`); close one first. |
+| `terminal.not_found` | `not_found` | 66 | No such terminal in this session: its shell ended or it belongs to another session (`pty.list`). |
+| `terminal.pty` | `unavailable` | 69 | The daemon could not open a pseudo-terminal or start the user's shell (`SHELL`, else /bin/sh; `COMSPEC` on Windows). |
 | `queue.entry_not_found` | `not_found` | 66 | The queued input already started or was deleted; `queue.list` shows what is still queued. |
 | `session.busy` | `conflict` | 75 | The session is running a turn; submit again when it finishes. |
 | `session.not_attached` | `permission_denied` | 77 | Every session-addressed method needs the connection to attach to the session first (`session.attach`); the error does not say whether the session exists. |

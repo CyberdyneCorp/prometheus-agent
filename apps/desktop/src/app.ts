@@ -9,19 +9,17 @@
 import type { ApprovalRequestParams } from "../../../schema/rpc";
 import { h, notice } from "../../../web/src/lib/dom";
 import { Prefs } from "../../../web/src/lib/prefs";
-import { ArtifactsView, Suggestions } from "./artifacts";
 import { Attention, focusCard } from "./attention";
 import { ChatView } from "./chat";
 import { DesktopClient } from "./client";
 import { desktopSettings } from "./desktop-settings";
-import { FileBrowser } from "./files";
 import { type InstallLink, installDialog } from "./install";
 import { PanelHost } from "./panels";
-import { PreviewRail } from "./preview";
 import { LAST_PROFILE } from "./quickask";
 import { SettingsPanel } from "./settings";
 import { type Attach, onShellEvent, shell } from "./shell";
 import { NOT_FOUND } from "./verdict";
+import { workspace } from "./workspace";
 
 interface SessionSummary {
   session_id: string;
@@ -109,29 +107,6 @@ function window_(profiles: string[], label: string): void {
   const dialogs = h("div", { class: "dialogs" });
   const chat = new ChatView({ client, window: label, dialogs });
   const settings = new SettingsPanel(client, served);
-  const files = new FileBrowser(client);
-  const preview = new PreviewRail(client, (comments) => chat.attachComments(comments.text, comments.images));
-  const panes = new Panes();
-  const actions = {
-    openSession: (id: string) => void chat.open(id),
-    preview: (target: Parameters<PreviewRail["open"]>[0]) => {
-      panes.show("preview");
-      void preview.open(target);
-    },
-  };
-  const artifacts = new ArtifactsView(client, actions);
-  const suggestions = new Suggestions(client, actions);
-  chat.aboveComposer(suggestions.el);
-  chat.transcript.onReveal = (path) => {
-    panes.show("files");
-    void files.reveal(path);
-  };
-  chat.onFollow = (sessionId) => {
-    // Pins belong to the chat they were made in.
-    preview.annotate.clear();
-    void files.follow(sessionId);
-    void suggestions.follow(sessionId);
-  };
   const attention = new Attention();
   const panels = new PanelHost(client);
   const prefs = new Prefs(client);
@@ -200,61 +175,42 @@ function window_(profiles: string[], label: string): void {
     }
   });
 
+  const work = workspace(client, chat, h("div", {}, settings.el, desktopSection));
+  work.aside.append(panels.el);
+  const side = h("nav", { class: "side" }, newChat, botChat, list);
   const opener: Opener = { chat, client, switchTo, profiles: served, dialogs };
   listenToShell(opener);
   root().replaceChildren(
-    h("header", { class: "top" }, h("span", { class: "brand" }, "Prometheus"), picker, status),
+    h("header", { class: "top" }, h("span", { class: "brand" }, "Prometheus"), picker, work.layout.el, status),
     h(
       "div",
       { class: "layout" },
-      h("nav", { class: "side" }, newChat, botChat, list),
-      chat.el,
-      h("aside", { class: "aside" }, panes.tabs, panes.add("settings", "Settings", h("div", {}, settings.el, desktopSection)), panes.add("files", "Files", files.el), panes.add("artifacts", "Artifacts", artifacts.el, () => void artifacts.load()), panes.add("preview", "Preview", preview.el, () => preview.show()), panels.el),
+      side,
+      work.center,
+      work.aside,
     ),
     dialogs,
     notices,
   );
   remember(client.profile);
-  shortcuts(chat);
+  work.start(side);
   chat.draft();
+  void poppedOut(opener, side, work.center);
   client.start();
   void afterReady(opener);
 }
 
-/** The right sidebar's panes, one shown at a time. */
-class Panes {
-  readonly tabs = h("nav", { class: "pane-tabs", "aria-label": "Panes" });
-  private readonly panes = new Map<string, { el: HTMLElement; shown?: () => void }>();
-
-  add(name: string, label: string, el: HTMLElement, shown?: () => void): HTMLElement {
-    const host = h("div", { class: "pane", "data-pane": name, hidden: this.panes.size > 0 }, el);
-    this.panes.set(name, { el: host, shown });
-    const tab = h("button", { type: "button", name: "pane", "data-pane": name }, label);
-    tab.addEventListener("click", () => this.show(name));
-    this.tabs.append(tab);
-    return host;
-  }
-
-  show(name: string): void {
-    for (const [key, pane] of this.panes) pane.el.hidden = key !== name;
-    this.panes.get(name)?.shown?.();
-  }
-}
-
-/** The window's keyboard shortcuts. */
-function shortcuts(chat: ChatView): void {
-  document.addEventListener("keydown", (event) => {
-    const mod = event.metaKey || event.ctrlKey;
-    if (!mod) return;
-    const key = event.key.toLowerCase();
-    if (key === "f" && !event.shiftKey) {
-      event.preventDefault();
-      chat.find.open();
-    } else if (key === "s" && event.shiftKey) {
-      event.preventDefault();
-      chat.status.toggle();
-    }
-  });
+/** A popped-out window (`#session=<profile>/<id>`): that session only,
+ *  without the sidebar and tabs. */
+async function poppedOut(o: Opener, side: HTMLElement, center: HTMLElement): Promise<void> {
+  const match = /^#session=([^/]+)\/(.+)$/.exec(location.hash);
+  if (!match) return;
+  side.remove();
+  center.querySelector(".center-bar")?.remove();
+  document.documentElement.dataset.window = "pop-out";
+  await o.client.ready();
+  if (o.profiles.includes(match[1] ?? "")) await o.switchTo(match[1] ?? "");
+  await o.chat.open(match[2] ?? "");
 }
 
 /** The shell's events: deep links, focus requests after a notification

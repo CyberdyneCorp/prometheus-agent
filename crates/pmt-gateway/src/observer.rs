@@ -47,6 +47,8 @@ const READS: &[&str] = &[
     "fs.list",
     "fs.read",
     "artifacts.list",
+    "pty.attach",
+    "pty.list",
 ];
 
 /// `-32002 session.observer` when an observer-only connection calls a
@@ -54,6 +56,9 @@ const READS: &[&str] = &[
 pub(crate) fn check(observer_only: bool, method: &str) -> Result<(), RpcError> {
     if !observer_only || READS.contains(&method) {
         return Ok(());
+    }
+    if method.starts_with("pty.") {
+        return Err(crate::pty::observer_refusal());
     }
     Err(RpcError::from_error(&Error::new(
         &codes::SESSION_OBSERVER,

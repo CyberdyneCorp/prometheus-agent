@@ -128,6 +128,10 @@ impl<R: Runtime> Native for TauriNative<R> {
             .map_err(text)
     }
 
+    fn open_window(&self, fragment: &str) -> Result<(), String> {
+        crate::app::open_extra(&self.app, fragment).map_err(text)
+    }
+
     fn hide_window(&self, window: &str) -> Result<(), String> {
         let window = self
             .app

@@ -986,6 +986,15 @@ error_codes! {
     WEBAPP_DISABLED = ("webapp.disabled", Unavailable, "The desktop workspace in the browser is off; set `webapp.enabled = true` in `daemon.toml`.");
     /// No desktop app bundle was found.
     DESKTOP_NOT_INSTALLED = ("desktop.not_installed", Unavailable, "No Prometheus Desktop app bundle was found where the packages install it; `prometheus desktop --install` downloads the one matching this binary.");
+    /// The daemon's terminals are all in use.
+    TERMINAL_LIMIT = ("terminal.limit", Conflict,
+        "A daemon keeps at most 16 terminals (`pty.open`); close one first.");
+    /// A terminal that does not exist (it ended or another session owns it).
+    TERMINAL_NOT_FOUND = ("terminal.not_found", NotFound,
+        "No such terminal in this session: its shell ended or it belongs to another session (`pty.list`).");
+    /// The PTY or the shell could not start or be used.
+    TERMINAL_PTY = ("terminal.pty", Unavailable,
+        "The daemon could not open a pseudo-terminal or start the user's shell (`SHELL`, else /bin/sh; `COMSPEC` on Windows).");
     /// A queue entry that is no longer queued.
     QUEUE_ENTRY_NOT_FOUND = ("queue.entry_not_found", NotFound,
         "The queued input already started or was deleted; `queue.list` shows what is still queued.");
