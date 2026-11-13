@@ -3765,6 +3765,60 @@
       ],
       "type": "object"
     },
+    "UiPrefs": {
+      "additionalProperties": false,
+      "description": "The machine's display preferences.",
+      "properties": {
+        "prefs": {
+          "additionalProperties": true,
+          "description": "Every stored preference.",
+          "type": "object"
+        },
+        "revision": {
+          "description": "Grows with every change.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "prefs",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "UiPrefsGetParams": {
+      "additionalProperties": false,
+      "description": "`ui.prefs.get` params.",
+      "properties": {
+        "watch": {
+          "default": false,
+          "description": "Also send this connection `ui.prefs.changed` after every change.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "UiPrefsPatchParams": {
+      "additionalProperties": false,
+      "description": "`ui.prefs.patch` params.",
+      "properties": {
+        "only_missing": {
+          "default": false,
+          "description": "A client meeting the store for the first time: set only the keys\nthe store lacks, never overwrite.",
+          "type": "boolean"
+        },
+        "set": {
+          "additionalProperties": true,
+          "description": "Keys to set; `null` removes one.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "set"
+      ],
+      "type": "object"
+    },
     "UsageTotalsView": {
       "additionalProperties": false,
       "description": "Usage totals of a session or a lineage.",
@@ -4621,6 +4675,13 @@
       },
       "since": "1.0"
     },
+    "ui.prefs.changed": {
+      "owner": "desktop-app",
+      "payload": {
+        "$ref": "#/$defs/UiPrefs"
+      },
+      "since": "1.0"
+    },
     "usage.updated": {
       "owner": "observability",
       "payload": {
@@ -5413,13 +5474,23 @@
       "since": "1.0"
     },
     "ui.prefs.get": {
-      "declared": false,
       "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/UiPrefsGetParams"
+      },
+      "result": {
+        "$ref": "#/$defs/UiPrefs"
+      },
       "since": "1.0"
     },
     "ui.prefs.patch": {
-      "declared": false,
       "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/UiPrefsPatchParams"
+      },
+      "result": {
+        "$ref": "#/$defs/UiPrefs"
+      },
       "since": "1.0"
     },
     "vault.add": {

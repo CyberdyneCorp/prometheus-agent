@@ -13,17 +13,18 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use tokio::sync::OnceCell;
 
+use crate::attention::Notices;
+use crate::deeplink::DeepLink;
 use crate::dial::{Dial, DialPurpose, Dials};
 use crate::endpoint::{self, LocalEndpoint};
 use crate::ensure::{self, BinaryIdentity, EnsureReport, RunError};
 use crate::links::{self, Opened, Target};
+use crate::options;
+use crate::panels::Panels;
+use crate::quick_ask::QuickAsks;
 use crate::request::{Native, Request};
 use crate::skew::{self, Skew};
-
-/// What `check_update`/`apply_update` answer in a build without an
-/// embedded release key.
-pub const NO_UPDATES: &str =
-    "This build doesn't get updates. Install a release build to receive updates.";
+use crate::update::Updater;
 
 /// Where the shell finds things.
 #[derive(Debug, Clone)]
@@ -61,6 +62,8 @@ pub enum Attach {
         /// The bundled version.
         bundled: String,
     },
+    /// Started with `--ignore-existing`: no local daemon is ensured.
+    NoLocal,
     /// Not attached.
     Failed {
         /// What went wrong.
@@ -82,11 +85,26 @@ impl Attach {
 
 /// The desktop shell.
 pub struct Shell {
-    config: ShellConfig,
-    native: Arc<dyn Native>,
+    pub(crate) config: ShellConfig,
+    pub(crate) native: Arc<dyn Native>,
     dials: Dials,
     endpoint: Mutex<Option<LocalEndpoint>>,
     bundled: OnceCell<BinaryIdentity>,
+    pub(crate) updater: Updater,
+    pub(crate) options: options::Read,
+    pub(crate) notices: Notices,
+    pub(crate) quick_asks: QuickAsks,
+    pub(crate) panels: Panels,
+    pub(crate) links: Mutex<Links>,
+    pub(crate) hotkey: Mutex<Option<crate::features::Hotkey>>,
+    local: bool,
+}
+
+/// Deep links that arrived before the window asked for them.
+#[derive(Debug, Default)]
+pub(crate) struct Links {
+    pub(crate) ready: bool,
+    pub(crate) pending: Vec<DeepLink>,
 }
 
 impl Shell {
@@ -99,7 +117,75 @@ impl Shell {
             dials: Dials::default(),
             endpoint: Mutex::new(None),
             bundled: OnceCell::new(),
+            updater: Updater::disabled(),
+            options: options::Read::default(),
+            notices: Notices::default(),
+            quick_asks: QuickAsks::default(),
+            panels: Panels::default(),
+            links: Mutex::new(Links::default()),
+            hotkey: Mutex::new(None),
+            local: true,
         }
+    }
+
+    /// With the release build's updater.
+    #[must_use]
+    pub fn with_updater(mut self, updater: Updater) -> Self {
+        self.updater = updater;
+        self
+    }
+
+    /// With the `[desktop]` options read at launch.
+    #[must_use]
+    pub fn with_options(mut self, read: options::Read) -> Self {
+        self.options = read;
+        self
+    }
+
+    /// Started with `--ignore-existing`: attaching ensures no local daemon.
+    #[must_use]
+    pub fn without_local_daemon(mut self) -> Self {
+        self.local = false;
+        self
+    }
+
+    /// The updater.
+    #[must_use]
+    pub fn updater(&self) -> &Updater {
+        &self.updater
+    }
+
+    /// The options read at launch.
+    #[must_use]
+    pub fn options(&self) -> &options::DesktopOptions {
+        &self.options.options
+    }
+
+    /// The approval notifications.
+    #[must_use]
+    pub fn notices(&self) -> &Notices {
+        &self.notices
+    }
+
+    /// The plugin panels served.
+    #[must_use]
+    pub fn panels(&self) -> &Panels {
+        &self.panels
+    }
+
+    /// A deep link arrived: kept for the window until it is ready (then
+    /// `false`); `true` once it is, and the caller sends it as an event.
+    ///
+    /// # Panics
+    ///
+    /// When the links lock was poisoned by a panic elsewhere.
+    pub fn arrived(&self, link: DeepLink) -> bool {
+        let mut links = self.links.lock().expect("links poisoned");
+        if links.ready {
+            return true;
+        }
+        links.pending.push(link);
+        false
     }
 
     /// Handles one request of `window`.
@@ -135,6 +221,7 @@ impl Shell {
             }
             Request::PickFile { title } => self.pick(false, title).await,
             Request::PickDirectory { title } => self.pick(true, title).await,
+            other if crate::features::owns(&other) => self.feature(window, other).await,
             other => self.handle_simple(window, other),
         }
     }
@@ -149,11 +236,6 @@ impl Shell {
                 .native
                 .read_clipboard()
                 .map(|text| json!({"ok": true, "text": text})),
-            Request::CheckUpdate | Request::ApplyUpdate => Ok(json!({
-                "ok": false,
-                "mechanism": "none",
-                "message": NO_UPDATES,
-            })),
             Request::PluginRefused { plugin, command } => {
                 tracing::warn!(
                     plugin = plugin.as_str(),
@@ -173,6 +255,9 @@ impl Shell {
     ///
     /// When the endpoint lock was poisoned by a panic elsewhere.
     pub async fn attach(&self, profile: Option<&str>, confirmed: bool) -> Attach {
+        if !self.local {
+            return Attach::NoLocal;
+        }
         let first = match self.ensure_endpoint(profile).await {
             Ok(found) => found,
             Err(failed) => return failed,
@@ -388,7 +473,7 @@ impl Shell {
     }
 }
 
-fn ok() -> Value {
+pub(crate) fn ok() -> Value {
     json!({"ok": true})
 }
 
@@ -402,7 +487,7 @@ fn opened(result: Result<(), String>) -> Opened {
     }
 }
 
-fn to_json<T: Serialize>(value: &T) -> Result<Value, String> {
+pub(crate) fn to_json<T: Serialize>(value: &T) -> Result<Value, String> {
     serde_json::to_value(value).map_err(|e| e.to_string())
 }
 

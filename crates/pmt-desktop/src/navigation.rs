@@ -19,6 +19,20 @@ pub fn allow_navigation(url: &Url) -> bool {
     APP_ORIGINS.contains(&origin.as_str()) || APP_ORIGINS.contains(&custom.as_str())
 }
 
+/// Whether `url` is a plugin panel's document (`plugin-<id>://localhost`,
+/// or `http://plugin-<id>.localhost` on Windows): what the panel frames
+/// of the window load. Their frames are sandboxed without top
+/// navigation, so this never lets a panel replace the app.
+#[must_use]
+pub fn is_panel(url: &Url) -> bool {
+    let host = url.host_str().unwrap_or_default();
+    (url.scheme().starts_with("plugin-") && host == "localhost")
+        || (url.scheme() == "http"
+            && host
+                .strip_suffix(".localhost")
+                .is_some_and(|h| h.starts_with("plugin-")))
+}
+
 /// Whether page content may open a new window (`window.open`, a
 /// `target=_blank` link): never.
 #[must_use]

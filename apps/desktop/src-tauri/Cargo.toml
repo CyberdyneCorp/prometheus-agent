@@ -27,7 +27,7 @@ pmt-core = { path = "../../../crates/pmt-core" }
 pmt-config = { path = "../../../crates/pmt-config" }
 pmt-desktop = { path = "../../../crates/pmt-desktop" }
 serde_json = "1.0"
-tauri = { version = "2.12", features = [] }
+tauri = { version = "2.12", features = ["tray-icon"] }
 # Deep links (`prometheus://`) and forwarding them to the running instance.
 tauri-plugin-deep-link = "2.6"
 tauri-plugin-single-instance = { version = "2.5", features = ["deep-link"] }

@@ -58,6 +58,7 @@ Commands:
   dashboard    Open the web dashboard: start the daemon's dashboard listener and sign the browser in with a one-time login link
   serve        Run the gateway daemon in the foreground with the dashboard listener open and no browser (for service managers); remote clients attach through the dashboard listener
   webapp       Open the desktop workspace in the browser (`webapp.enabled`)
+  desktop      Launch the Prometheus Desktop app for the selected profile, or install it (`--install`) [alias: gui]
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
   connectors   Hosted app connectors (Gmail, Notion, Linear...) on the Nous connector gateway: list them, list and rename accounts, connect and disconnect accounts

@@ -180,6 +180,14 @@ pub enum PluginsCommand {
         /// The plugin id.
         id: String,
     },
+    /// The desktop app's plugin panels (`[ui]`) as JSON: the desktop
+    /// shell runs this through its bundled binary.
+    #[command(hide = true)]
+    Panels {
+        /// Every profile's panels, not only the selected profile's.
+        #[arg(long)]
+        all_profiles: bool,
+    },
     /// Run the adapter conformance kit against a mock of the platform:
     /// a first-party platform name (`telegram`, `discord`, `slack`,
     /// `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the
@@ -337,5 +345,8 @@ fn dispatch(command: &PluginsCommand, ctx: &Context<'_>) -> Result<u8, Error> {
         PluginsCommand::Reload { id } => reload::reload(ctx, id.as_deref()),
         PluginsCommand::TestAdapter { path } => adapter::test_adapter(path),
         PluginsCommand::PanelCall { id } => crate::plugins_host::dashboard::serve_call(ctx, id),
+        PluginsCommand::Panels { all_profiles } => {
+            crate::plugins_host::desktop::panels(ctx, *all_profiles)
+        }
     }
 }

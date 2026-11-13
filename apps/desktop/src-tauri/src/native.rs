@@ -5,21 +5,52 @@
 use std::path::{Path, PathBuf};
 
 use pmt_desktop::Native;
-use tauri::{AppHandle, Manager as _, Runtime};
+use pmt_desktop::attention::MenuEntry;
+use pmt_desktop::update_install::Target;
+use tauri::{AppHandle, Emitter as _, Manager as _, Runtime};
 use tauri_plugin_clipboard_manager::ClipboardExt as _;
 use tauri_plugin_dialog::DialogExt as _;
 use tauri_plugin_global_shortcut::GlobalShortcutExt as _;
 use tauri_plugin_notification::NotificationExt as _;
 use tauri_plugin_opener::OpenerExt as _;
 
+/// The event that opens a session in the main window.
+pub(crate) const OPEN_SESSION_EVENT: &str = "open-session";
+
 /// The app's [`Native`].
 pub(crate) struct TauriNative<R: Runtime> {
     app: AppHandle<R>,
+    update: Option<(Target, PathBuf)>,
 }
 
 impl<R: Runtime> TauriNative<R> {
-    pub(crate) fn new(app: AppHandle<R>) -> Self {
-        Self { app }
+    pub(crate) fn new(app: AppHandle<R>, update: Option<(Target, PathBuf)>) -> Self {
+        if let Some(update) = &update {
+            app.manage(StagedUpdate(update.clone()));
+        }
+        Self { app, update }
+    }
+}
+
+/// Where a staged update is installed on quit.
+struct StagedUpdate((Target, PathBuf));
+
+/// Installs the staged update, if any (the app is quitting).
+pub(crate) fn install_staged<R: Runtime>(app: &AppHandle<R>) {
+    let Some(state) = app.try_state::<StagedUpdate>() else {
+        return;
+    };
+    let (target, dir) = &state.0;
+    install_from(target, dir);
+}
+
+fn install_from(target: &Target, dir: &Path) {
+    let Some(staged) = pmt_desktop::update::staged_in(dir) else {
+        return;
+    };
+    match pmt_desktop::update_install::install(&staged, target, dir) {
+        Ok(()) => tracing::info!(version = staged.version, "installed the staged update"),
+        Err(e) => tracing::warn!("could not install the staged update: {e}"),
     }
 }
 
@@ -80,5 +111,40 @@ impl<R: Runtime> Native for TauriNative<R> {
 
     fn read_clipboard(&self) -> Result<String, String> {
         self.app.clipboard().read_text().map_err(text)
+    }
+
+    fn set_tray(&self, menu: &[MenuEntry]) -> Result<(), String> {
+        crate::tray::set_menu(&self.app, menu).map_err(text)
+    }
+
+    fn open_in_main(&self, profile: &str, session_id: &str) -> Result<(), String> {
+        crate::app::focus_main(&self.app);
+        self.app
+            .emit_to(
+                crate::app::MAIN,
+                OPEN_SESSION_EVENT,
+                serde_json::json!({"profile": profile, "session_id": session_id}),
+            )
+            .map_err(text)
+    }
+
+    fn hide_window(&self, window: &str) -> Result<(), String> {
+        let window = self
+            .app
+            .get_webview_window(window)
+            .ok_or_else(|| format!("no window {window}"))?;
+        window.hide().map_err(text)
+    }
+
+    fn restart(&self) -> Result<(), String> {
+        if let Some((target, dir)) = &self.update {
+            install_from(target, dir);
+        }
+        self.app.restart();
+    }
+
+    fn facts(&self) -> pmt_desktop::platform::Facts {
+        let x11 = std::env::var("GDK_BACKEND").is_ok_and(|b| b == "x11");
+        pmt_desktop::platform::Facts::detect(x11)
     }
 }

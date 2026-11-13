@@ -1,8 +1,9 @@
-// The desktop app's page: links and windows are guarded before anything
-// renders, then the window attaches to the local daemon.
+// The desktop app's pages: the main window, or the quick-ask panel
+// (`#quick-ask`). Links and windows are guarded before anything renders.
 
 import { boot } from "./app";
 import { guardLinks } from "./links";
+import { quickAsk } from "./quickask";
 
 guardLinks((href, reason) => {
   const line = document.createElement("p");
@@ -11,4 +12,5 @@ guardLinks((href, reason) => {
   line.textContent = `Not opened (${reason}): ${href}`;
   document.querySelector(".notices")?.append(line);
 });
-void boot();
+if (location.hash === "#quick-ask") void quickAsk(document.getElementById("app") as HTMLElement);
+else void boot();

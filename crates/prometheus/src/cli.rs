@@ -385,6 +385,10 @@ pub enum Command {
     /// Open the desktop workspace in the browser (`webapp.enabled`).
     #[cfg(feature = "dashboard")]
     Webapp(crate::webapp_cmd::WebappArgs),
+    /// Launch the Prometheus Desktop app for the selected profile, or
+    /// install it (`--install`).
+    #[command(visible_alias = "gui")]
+    Desktop(crate::desktop_cmd::DesktopArgs),
     /// Messaging adapters of the running daemon and the profile's delivery
     /// outbox.
     #[cfg(feature = "gateway")]

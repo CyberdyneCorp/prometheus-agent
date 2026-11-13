@@ -165,7 +165,7 @@ When a server request arrives for a session whose window is not focused, the des
 - **THEN** a notification SHALL appear and the approval SHALL stay pending until answered in a card or settled by its deadline
 
 ### Requirement: Plugin UI contributions are isolated
-Desktop UI contributions SHALL come only from installed, enabled plugins that declare a `ui` entry in their manifest; each SHALL load in a sandboxed frame on its own origin `plugin-<id>.localhost`, SHALL talk to the app only through the plugin UI SDK message channel (which exposes the capabilities granted to that plugin and nothing else), and SHALL get storage isolated by that origin; a contribution from a plugin whose package signature was not verified SHALL load only when that plugin was installed with `--allow-unsigned` (as recorded on its install record under the `plugin-system` signature policy).
+Desktop UI contributions SHALL come only from installed, enabled plugins that declare a `ui` entry in their manifest (a `[ui]` table with `label`, `entry` and the plugin UI SDK capabilities `sdk` it uses, such as `sessions.read`, which are granted with the plugin's `ui` capability); each SHALL load in a sandboxed frame on its own origin `plugin-<id>.localhost`, SHALL talk to the app only through the plugin UI SDK message channel (which exposes the capabilities granted to that plugin and nothing else), and SHALL get storage isolated by that origin; a contribution from a plugin whose package signature was not verified SHALL load only when that plugin was installed with `--allow-unsigned` (as recorded on its install record under the `plugin-system` signature policy).
 **Milestone:** M3
 
 #### Scenario: Plugin reads another plugin's storage
@@ -261,7 +261,7 @@ The shell SHALL read launch options from the `desktop` section of the active pro
 - **THEN** the app SHALL launch with `auto` and show `desktop.disable_gpu: expected one of "auto", "on", "off"`
 
 ### Requirement: Machine-wide UI preferences
-Display preferences (theme, light/dark mode, accent, density, status-bar items, keybindings, saved layouts, interface mode, model-picker favourites, dismissed tips and tours) SHALL be stored once per machine by the local daemon through `ui.prefs.get` and `ui.prefs.patch` and shared by every desktop window and webapp tab on that machine, propagating to open windows within 2 s; credentials, grants, drafts and per-window state (open tabs, pane sizes, scroll positions, zoom) SHALL never be written there, a corrupt file SHALL be kept as `.corrupt-<timestamp>` and rebuilt from the open windows' values, and a client meeting the store for the first time SHALL only add keys the store lacks, never overwrite existing ones.
+Display preferences (theme, light/dark mode, accent, density, status-bar items, keybindings, saved layouts, interface mode, model-picker favourites, dismissed tips and tours) SHALL be stored once per machine by the local daemon through `ui.prefs.get` and `ui.prefs.patch` and shared by every desktop window and webapp tab on that machine, propagating to open windows within 2 s (the daemon sends `ui.prefs.changed` to every connection that asked to watch); credentials, grants, drafts and per-window state (open tabs, pane sizes, scroll positions, zoom) SHALL never be written there, a corrupt file SHALL be kept as `.corrupt-<timestamp>` and rebuilt from the open windows' values, and a client meeting the store for the first time SHALL only add keys the store lacks, never overwrite existing ones.
 **Milestone:** M3
 
 #### Scenario: Theme changed in the webapp

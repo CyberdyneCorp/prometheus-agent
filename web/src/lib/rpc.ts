@@ -85,8 +85,16 @@ export class Rpc {
   onEvent: (event: Envelope) => void = () => {};
   onRequest: (request: ServerRequest) => void = () => {};
   onClose: (code: number) => void = () => {};
+  private readonly listeners = new Map<string, Set<(event: Envelope) => void>>();
 
   constructor(private readonly options: RpcOptions = DASHBOARD) {}
+
+  /** Also calls `handler` with every `event` (beside `onEvent`). */
+  on(event: string, handler: (envelope: Envelope) => void): void {
+    const set = this.listeners.get(event) ?? new Set();
+    set.add(handler);
+    this.listeners.set(event, set);
+  }
 
   /** Opens the socket and sends `rpc.hello` as its first frame. */
   async connect(dial: Dial = dashboardDial()): Promise<HelloResult> {
@@ -186,7 +194,9 @@ export class Rpc {
       return;
     }
     if (typeof frame.method === "string") {
-      this.onEvent(frame.params as Envelope);
+      const envelope = frame.params as Envelope;
+      this.onEvent(envelope);
+      for (const handler of this.listeners.get(frame.method) ?? []) handler(envelope);
       return;
     }
     const waiter = this.pending.get(Number(frame.id));

@@ -206,6 +206,7 @@ fn read_as(dir: &Path, id: String) -> Result<Manifest, Error> {
             dir,
         ),
         dashboard: None,
+        ui: None,
         build: None,
         launch: Some(launch),
         id,

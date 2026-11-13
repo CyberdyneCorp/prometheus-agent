@@ -28,6 +28,8 @@ prometheus.workspace = true
 pmt-web.workspace = true
 pmt-tools.workspace = true
 pmt-update.workspace = true
+# The desktop updater's feed (`cargo xtask release desktop-feed`).
+pmt-desktop.workspace = true
 # Release signing (`cargo xtask release sign|keygen`).
 minisign.workspace = true
 jiff.workspace = true

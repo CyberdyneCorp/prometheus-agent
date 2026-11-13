@@ -2373,6 +2373,53 @@
       },
       "type": "object"
     },
+    "DesktopConfig": {
+      "additionalProperties": false,
+      "description": "The `[desktop]` section.",
+      "properties": {
+        "accessibility_tree": {
+          "default": true,
+          "description": "Expose the webview's accessibility tree to assistive technology.",
+          "type": "boolean"
+        },
+        "disable_gpu": {
+          "default": "auto",
+          "description": "`auto` (disable GPU acceleration only on remote displays), `on` or\n`off`.",
+          "type": "string"
+        },
+        "keep_in_tray": {
+          "default": true,
+          "description": "Keep the app in the tray (macOS menu bar, Windows notification\narea, Linux `StatusNotifierItem`) after its last window closes.",
+          "type": "boolean"
+        },
+        "linux_secret_store": {
+          "default": "auto",
+          "description": "`auto`, `secret-service` or `kwallet`.",
+          "type": "string"
+        },
+        "linux_window_backend": {
+          "default": "auto",
+          "description": "`auto`, `wayland` or `x11` (X11 runs through `XWayland` on a Wayland\nsession).",
+          "type": "string"
+        },
+        "manage_launcher_entry": {
+          "default": true,
+          "description": "Linux: keep the XDG `.desktop` launcher entry current; `false`\npreserves an existing entry and still creates a missing one.",
+          "type": "boolean"
+        },
+        "quick_ask": {
+          "$ref": "#/$defs/QuickAskConfig",
+          "default": {
+            "hotkey": "CommandOrControl+Shift+Space",
+            "profile": "",
+            "reuse_secs": 900
+          },
+          "description": "The global quick-ask hotkey."
+        }
+      },
+      "type": "object",
+      "x-apply": "restart"
+    },
     "DialogPolicy": {
       "description": "Dialog policies.",
       "oneOf": [
@@ -7381,6 +7428,31 @@
         }
       ]
     },
+    "QuickAskConfig": {
+      "additionalProperties": false,
+      "description": "The `[desktop.quick_ask]` section.",
+      "properties": {
+        "hotkey": {
+          "default": "CommandOrControl+Shift+Space",
+          "description": "The global chord that opens the quick-ask panel; empty disables it.",
+          "type": "string"
+        },
+        "profile": {
+          "default": "",
+          "description": "The profile asked; empty is the last used profile.",
+          "type": "string"
+        },
+        "reuse_secs": {
+          "default": 900,
+          "description": "A quick-ask session active within this many seconds is asked again\ninstead of starting a new one.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "restart"
+    },
     "QuickCommand": {
       "additionalProperties": false,
       "description": "One `[quick_commands.<name>]` entry: a user slash command.",
@@ -11158,6 +11230,23 @@
         "worktree_isolation": false
       },
       "description": "Subagent delegation."
+    },
+    "desktop": {
+      "$ref": "#/$defs/DesktopConfig",
+      "default": {
+        "accessibility_tree": true,
+        "disable_gpu": "auto",
+        "keep_in_tray": true,
+        "linux_secret_store": "auto",
+        "linux_window_backend": "auto",
+        "manage_launcher_entry": true,
+        "quick_ask": {
+          "hotkey": "CommandOrControl+Shift+Space",
+          "profile": "",
+          "reuse_secs": 900
+        }
+      },
+      "description": "The desktop app: tray, quick-ask hotkey and launch options."
     },
     "display": {
       "$ref": "#/$defs/DisplayConfig",

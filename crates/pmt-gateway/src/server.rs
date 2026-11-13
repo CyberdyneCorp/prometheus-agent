@@ -225,6 +225,7 @@ pub struct Server {
     /// the remote attachment listener and the dashboard verify against
     /// it, and the control channel revokes from it, on any build.
     devices: Option<Arc<crate::devices::Devices>>,
+    ui_prefs: crate::ui_prefs::UiPrefs,
     /// Every messaging adapter failed for good and the policy is to exit.
     adapters_down: AtomicBool,
 }
@@ -297,6 +298,7 @@ impl Server {
             crash_reporter: options.crash_reporter,
             only_pid: options.only_pid,
             health_url: options.health_url,
+            ui_prefs: crate::ui_prefs::UiPrefs::default(),
             devices: options
                 .home
                 .as_deref()
@@ -483,6 +485,12 @@ impl Server {
     #[must_use]
     pub fn dashboard(&self) -> Option<&Arc<dyn crate::dashboard::DashboardControl>> {
         self.dashboard.get()
+    }
+
+    /// The machine's UI preferences store.
+    #[must_use]
+    pub fn ui_prefs(&self) -> &crate::ui_prefs::UiPrefs {
+        &self.ui_prefs
     }
 
     /// The paired remote devices (`None` for a server without a home).

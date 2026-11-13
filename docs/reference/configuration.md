@@ -243,6 +243,15 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `delegation.wire_format` | one of "chat_completions", "responses", "anthropic_messages" | unset | `"chat_completions"`, `"responses"`, `"anthropic_messages"` | `next_session` | Wire format of the direct endpoint (default: inferred from its URL, as for a custom provider). |
 | `delegation.worktree_branch_prefix` | string | `"prometheus"` | any | `next_session` | Prefix of a child's worktree branch (`<prefix>/subagent-<id>`). |
 | `delegation.worktree_isolation` | boolean | `false` | any | `next_session` | Run each child in its own git worktree and branch when the parent uses the local terminal backend inside a git repository. |
+| `desktop.accessibility_tree` | boolean | `true` | any | `restart` | Expose the webview's accessibility tree to assistive technology. |
+| `desktop.disable_gpu` | string | `"auto"` | any | `restart` | `auto` (disable GPU acceleration only on remote displays), `on` or `off`. |
+| `desktop.keep_in_tray` | boolean | `true` | any | `restart` | Keep the app in the tray (macOS menu bar, Windows notification area, Linux `StatusNotifierItem`) after its last window closes. |
+| `desktop.linux_secret_store` | string | `"auto"` | any | `restart` | `auto`, `secret-service` or `kwallet`. |
+| `desktop.linux_window_backend` | string | `"auto"` | any | `restart` | `auto`, `wayland` or `x11` (X11 runs through `XWayland` on a Wayland session). |
+| `desktop.manage_launcher_entry` | boolean | `true` | any | `restart` | Linux: keep the XDG `.desktop` launcher entry current; `false` preserves an existing entry and still creates a missing one. |
+| `desktop.quick_ask.hotkey` | string | `"CommandOrControl+Shift+Space"` | any | `restart` | The global chord that opens the quick-ask panel; empty disables it. |
+| `desktop.quick_ask.profile` | string | `""` | any | `restart` | The profile asked; empty is the last used profile. |
+| `desktop.quick_ask.reuse_secs` | integer | `900` | ≥ 0 | `restart` | A quick-ask session active within this many seconds is asked again instead of starting a new one. |
 | `display.bell_on_complete` | boolean | `false` | any | `live` | Ring the terminal bell when a turn completes. |
 | `display.bell_on_prompt` | boolean | `false` | any | `live` | Ring the terminal bell when an approval or clarify prompt opens. |
 | `display.compact` | boolean | `false` | any | `live` | Compact layout. |

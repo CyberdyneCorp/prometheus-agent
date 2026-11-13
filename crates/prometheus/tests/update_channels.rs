@@ -177,3 +177,60 @@ fn install_receipt_refuses_self_and_unknown_owners() {
     }
     assert!(!f.binary.with_file_name("install.json").exists());
 }
+
+/// Scenario: Store install refuses self-update. Scenario: CLI and
+/// desktop cannot skew (distribution-and-update, Desktop packages and
+/// signing): every desktop package stamps its bundled binary's receipt
+/// with its owner, `prometheus update` through it refuses with exit 69
+/// naming how that package is updated, and the CLI on `PATH` is the
+/// bundled binary, so it reports the package's version.
+#[test]
+fn desktop_packages_stamp_their_owner_and_the_cli_is_the_bundled_binary() {
+    let packages = [
+        (
+            "desktop",
+            "Prometheus.app/Contents/MacOS/prometheus",
+            "the desktop app's updater",
+        ),
+        (
+            "msix",
+            "WindowsApps/CyberdyneCorp.Prometheus_x64/prometheus",
+            "App Installer",
+        ),
+        (
+            "msstore",
+            "WindowsApps/CyberdyneCorp.PrometheusStore_x64/prometheus",
+            "Microsoft Store",
+        ),
+        (
+            "system-package",
+            "usr/lib/prometheus-desktop/prometheus",
+            "the system package manager",
+        ),
+    ];
+    for (owner, layout, update_with) in packages {
+        let f = Fixture::new(None);
+        f.publish(&next_patch(f.version), Channel::Stable, b"unused", None);
+        let binary = packaged(&f, &format!("{layout}{}", std::env::consts::EXE_SUFFIX));
+        let user_home = f.dir.path().join("build-home");
+        std::fs::create_dir_all(&user_home).unwrap();
+        common::ok(&package_step(
+            &binary,
+            &user_home,
+            &["install-receipt", "--owner", owner],
+        ));
+        assert_refused(&f, &binary, owner, update_with);
+        let version: serde_json::Value = serde_json::from_str(&common::ok(&run_installed(
+            &f,
+            &binary,
+            &["version", "--json"],
+        )))
+        .unwrap();
+        let receipt: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(binary.with_file_name("install.json")).unwrap())
+                .unwrap();
+        // `v1.6.0` in the receipt, `1.6.0` in `version --json`.
+        let stamped = receipt["version"].as_str().unwrap().trim_start_matches('v');
+        assert_eq!(version["version"], stamped, "{owner}");
+    }
+}

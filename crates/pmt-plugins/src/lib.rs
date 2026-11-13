@@ -6,6 +6,7 @@
 pub mod backend;
 pub mod catalog;
 pub mod dashboard;
+pub mod desktop_ui;
 pub mod digest;
 pub mod discovery;
 pub mod events;

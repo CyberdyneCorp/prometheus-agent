@@ -140,8 +140,8 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `system.metrics` | `observability` | 1.0 | [`SystemParams`](#systemparams) | [`MetricsSnapshot`](#metricssnapshot) |
 | `tools.call` | `tool-system` | 1.0 | not served yet | |
 | `tools.list` | `tool-system` | 1.0 | not served yet | |
-| `ui.prefs.get` | `desktop-app` | 1.0 | not served yet | |
-| `ui.prefs.patch` | `desktop-app` | 1.0 | not served yet | |
+| `ui.prefs.get` | `desktop-app` | 1.0 | [`UiPrefsGetParams`](#uiprefsgetparams) | [`UiPrefs`](#uiprefs) |
+| `ui.prefs.patch` | `desktop-app` | 1.0 | [`UiPrefsPatchParams`](#uiprefspatchparams) | [`UiPrefs`](#uiprefs) |
 | `vault.add` | `security-boundaries` | 1.0 | [`VaultAddParams`](#vaultaddparams) | [`VaultItem`](#vaultitem) |
 | `vault.list` | `security-boundaries` | 1.0 | [`VaultListParams`](#vaultlistparams) | [`VaultItems`](#vaultitems) |
 | `vault.remove` | `security-boundaries` | 1.0 | [`VaultRemoveParams`](#vaultremoveparams) | [`VaultItem`](#vaultitem) |
@@ -178,6 +178,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `session.event` | `workspace-architecture` | 1.0 | any |
 | `session.presence` | `messaging-gateway` | 1.0 | not served yet |
 | `turn.finished` | `workspace-architecture` | 1.0 | [`TurnFinished`](#turnfinished) |
+| `ui.prefs.changed` | `desktop-app` | 1.0 | [`UiPrefs`](#uiprefs) |
 | `usage.updated` | `observability` | 1.0 | [`UsageUpdated`](#usageupdated) |
 | `wake.detected` | `voice-mode` | 1.0 | not served yet |
 
@@ -1466,6 +1467,32 @@ Why a turn ended in error.
 | `report` | any | no | The turn's `--usage-file` report (session, lineage root, route, billing source, tokens, cost and cost status of its model calls). |
 | `turn_id` | string | yes | The turn. |
 | `usage` | any | no | The turn's token and cost totals, as the turn loop reports them. |
+
+### `UiPrefs`
+
+The machine's display preferences.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `prefs` | object | yes | Every stored preference. |
+| `revision` | integer | yes | Grows with every change. |
+
+### `UiPrefsGetParams`
+
+`ui.prefs.get` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `watch` | boolean | no | Also send this connection `ui.prefs.changed` after every change. |
+
+### `UiPrefsPatchParams`
+
+`ui.prefs.patch` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `only_missing` | boolean | no | A client meeting the store for the first time: set only the keys the store lacks, never overwrite. |
+| `set` | object | yes | Keys to set; `null` removes one. |
 
 ### `UsageTotalsView`
 

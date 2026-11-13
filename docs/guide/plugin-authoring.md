@@ -379,6 +379,34 @@ plugin itself: each request starts the plugin host
 grants and answers within 30 seconds or is stopped. Observers can only
 `GET`.
 
+### Desktop panels
+
+A plugin adds a panel to the desktop app with a `[ui]` table; it needs
+the `ui` capability, and approving that capability approves the SDK
+capabilities the table lists:
+
+```toml
+[capabilities]
+ui = true
+
+[ui]
+label = "Weather"
+entry = "ui/index.html"     # the default
+sdk = ["sessions.read"]     # what the panel may ask the app for
+```
+
+The panel's `entry` HTML loads in a frame on the plugin's own origin
+(`plugin-<id>://localhost`, `http://plugin-<id>.localhost` on Windows),
+so its `localStorage` is the plugin's alone; its policy allows no network
+request. It talks to the app only through the `sdk` object (also
+`prometheus`) the app adds to it: `sdk.register()`, `sdk.context()`
+(plugin, profile, theme) and `sdk.sessions.list()` (with `sessions.read`;
+without it the call rejects with
+`capability sessions.read not granted to plugin <id>`). Native commands
+are never available to a panel. A panel loads only when the plugin's
+package signature was verified at install, or it was installed with
+`--allow-unsigned`.
+
 ## Limits worth designing for
 
 - Each call has `plugins.wasm.call_timeout_ms` (default 30 s) of CPU time;

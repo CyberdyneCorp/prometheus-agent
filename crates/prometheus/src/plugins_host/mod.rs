@@ -17,6 +17,7 @@ pub mod approvals;
 pub mod bridge;
 pub mod catalog;
 pub mod dashboard;
+pub mod desktop;
 #[cfg(feature = "gateway")]
 pub mod gateway;
 pub mod llm;

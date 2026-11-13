@@ -81,6 +81,7 @@ capabilities = [
 partial = true
 capabilities = [
     "desktop-app",
+    "distribution-and-update",
     "messaging-gateway",
     "web-dashboard",
 ]
@@ -4123,3 +4124,51 @@ capabilities = [
 
 [desktop-app."Profile switching is explicit"]
 "Restart gateway under a profile" = ["crates/prometheus/tests/desktop_protocol.rs::a_config_reload_names_the_windows_profile", "crates/prometheus/tests/desktop_e2e.rs::desktop_settings_palette_bots_and_profiles"]
+
+# Group 62.5-62.8 (desktop app). desktop_background.rs drives
+# desktop-background.spec.ts and desktop-launch.spec.ts in the desktop
+# browser harness (the page in Chromium at the webview origin, its shell
+# command served by the real shell core); the shell-core and updater tests
+# run against a recording machine integration and an in-memory release
+# origin signed with the test key.
+[desktop-app."Closing windows does not stop the agent"]
+"Quit during a turn" = { tests = ["crates/prometheus/tests/desktop_background.rs::background_approvals_quitting_plugin_panels_and_quick_ask", "crates/pmt-desktop/src/attention.rs::the_tray_lists_approvals_and_running_sessions"], note = "desktop-background.spec.ts: the window closes while a slow mock turn runs (the tray lists it as running); a new window finds the turn finished in the daemon. The real tray icon and hide-on-close are Tauri code (apps/desktop/src-tauri/src/tray.rs), not driven end to end" }
+
+[desktop-app."Approval notifications never approve"]
+"Background approval" = { tests = ["crates/prometheus/tests/desktop_background.rs::background_approvals_quitting_plugin_panels_and_quick_ask", "crates/pmt-desktop/tests/background.rs::an_approval_notification_only_ever_focuses_its_card", "crates/pmt-desktop/src/attention.rs::activation_hands_over_the_latest_unanswered_approval_once", "apps/desktop/src-tauri/src/app_tests.rs::an_approval_notification_has_no_answer_and_names_the_session_and_tool"], note = "desktop-background.spec.ts: with the window unfocused the approval posts the notification naming the tool; the activation that follows a click focuses the card, sends no approval.respond and leaves its buttons enabled until the user answers in the card" }
+
+[desktop-app."Plugin UI contributions are isolated"]
+"Plugin reads another plugin's storage" = { tests = ["crates/prometheus/tests/desktop_background.rs::background_approvals_quitting_plugin_panels_and_quick_ask"], note = "plugins a and b, installed from unsigned packages with --allow-unsigned, each write a localStorage key in their panel on their own origin (http://plugin-<id>.localhost, the Windows form; plugin-<id>://localhost elsewhere) and see only their own; plugin c (adopted, unverified) does not load" }
+"Ungranted capability" = ["crates/prometheus/tests/desktop_background.rs::background_approvals_quitting_plugin_panels_and_quick_ask", "crates/pmt-plugins/src/manifest/ui.rs::unknown_capabilities_paths_and_ungranted_ui_are_refused", "apps/desktop/src-tauri/src/app_tests.rs::a_plugin_panel_origin_reaches_no_native_command"]
+
+[desktop-app."Global hotkey quick-ask (upgrade)"]
+"Hotkey already taken" = ["crates/pmt-desktop/tests/background.rs::a_taken_hotkey_is_named_in_a_notification_and_the_app_runs_on"]
+"Quick follow-up" = ["crates/pmt-desktop/src/quick_ask.rs::a_quick_follow_up_reuses_the_session", "crates/pmt-desktop/tests/background.rs::a_quick_follow_up_goes_to_the_same_session", "crates/prometheus/tests/desktop_background.rs::background_approvals_quitting_plugin_panels_and_quick_ask"]
+
+[desktop-app."Honest platform support in settings"]
+"Wayland without the portal" = { tests = ["crates/pmt-desktop/src/platform.rs::wayland_without_the_portal_disables_the_hotkey_with_the_reason", "crates/prometheus/tests/desktop_background.rs::launch_links_install_dialog_shared_preferences_and_platform_support"], note = "the harness reports a Wayland session: Settings disables the quick-ask hotkey control with the reason" }
+
+[desktop-app."Signed in-app updates"]
+"Bad signature" = ["crates/pmt-desktop/tests/update.rs::a_tampered_update_is_discarded_and_the_current_version_kept", "crates/pmt-desktop/tests/update.rs::a_second_apply_while_one_runs_is_refused", "crates/pmt-desktop/tests/update.rs::background_checks_ask_the_channel_at_most_every_six_hours"]
+
+[desktop-app."Development builds have no updater"]
+"Apply on a commit build" = ["crates/pmt-desktop/tests/update.rs::a_build_without_the_release_key_has_no_updater_and_asks_nothing", "crates/prometheus/tests/desktop_background.rs::launch_links_install_dialog_shared_preferences_and_platform_support"]
+
+[desktop-app."Install deep links open a consent flow"]
+"Website install button" = { tests = ["crates/prometheus/tests/desktop_background.rs::launch_links_install_dialog_shared_preferences_and_platform_support"], note = "a live catalog (signed with the test key) lists weather; the dialog shows publisher, version and capabilities; Cancel fetches nothing, Install installs it (the package is fetched exactly once)" }
+"Link pointing at an arbitrary URL" = ["crates/pmt-desktop/tests/background.rs::an_install_link_to_a_url_is_unknown_and_runs_nothing", "crates/pmt-desktop/src/catalog.rs::only_catalog_ids_pass", "crates/prometheus/tests/desktop_background.rs::launch_links_install_dialog_shared_preferences_and_platform_support"]
+
+[desktop-app."Launching the desktop from the CLI"]
+"Launch in a project directory" = ["crates/prometheus/tests/desktop_cli.rs::launching_in_a_project_directory_passes_the_new_chat_link", "crates/prometheus/tests/desktop_background.rs::launch_links_install_dialog_shared_preferences_and_platform_support"]
+"Tampered download" = ["crates/prometheus/tests/desktop_cli.rs::a_tampered_desktop_download_installs_nothing_and_exits_77"]
+
+[desktop-app."Desktop launch options"]
+"Compositor ignores always-on-top" = { tests = ["crates/pmt-desktop/src/options.rs::x11_on_a_wayland_session_opens_through_xwayland"], note = "the shell starts the webview with GDK_BACKEND=x11 (XWayland) before the first window; not exercised on a real Wayland compositor" }
+"Typo in a launch option" = ["crates/pmt-desktop/src/options.rs::a_typo_in_a_launch_option_launches_with_auto_and_a_notice", "crates/pmt-desktop/tests/background.rs::launch_options_carry_the_notice_of_an_invalid_value", "crates/prometheus/tests/desktop_background.rs::launch_links_install_dialog_shared_preferences_and_platform_support"]
+
+[desktop-app."Machine-wide UI preferences"]
+"Theme changed in the webapp" = { tests = ["crates/prometheus/tests/desktop_background.rs::launch_links_install_dialog_shared_preferences_and_platform_support", "crates/pmt-gateway/src/ui_prefs.rs::only_display_preferences_are_stored", "crates/pmt-gateway/src/ui_prefs.rs::a_corrupt_file_is_set_aside_and_the_store_starts_empty"], note = "desktop-launch.spec.ts: dark mode chosen on the dashboard's /themes page repaints the desktop window within 2 s through ui.prefs.changed" }
+
+[distribution-and-update."Desktop packages and signing"]
+"Store install refuses self-update" = ["crates/prometheus/tests/update_channels.rs::desktop_packages_stamp_their_owner_and_the_cli_is_the_bundled_binary"]
+"CLI and desktop cannot skew" = ["crates/prometheus/tests/update_channels.rs::desktop_packages_stamp_their_owner_and_the_cli_is_the_bundled_binary"]

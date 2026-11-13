@@ -43,6 +43,7 @@ export interface Dial {
 export type Attach =
   | { status: "attached"; version: string; profiles: string[]; notice?: string }
   | { status: "confirm_restart"; running_turns: number; daemon: string; bundled: string }
+  | { status: "no_local" }
   | { status: "failed"; error: string; log?: string };
 
 /** The external URL command's answer. */

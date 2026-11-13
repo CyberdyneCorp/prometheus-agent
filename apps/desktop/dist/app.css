@@ -1,5 +1,6 @@
 /* The dashboard's styles: system fonts only (no remote resources), light
-   and dark from the OS preference. */
+   and dark from the OS preference unless the machine's UI preferences
+   choose a mode. */
 :root {
   --bg: #f7f7f8;
   --panel: #ffffff;
@@ -14,7 +15,7 @@
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-mode="light"]) {
     --bg: #111215;
     --panel: #1a1b20;
     --fg: #e7e8eb;
@@ -23,6 +24,17 @@
     --accent: #fb923c;
   }
 }
+/* A mode chosen in the UI preferences overrides the OS preference. */
+:root[data-mode="dark"] {
+  --bg: #111215;
+  --panel: #1a1b20;
+  --fg: #e7e8eb;
+  --muted: #9aa0ab;
+  --line: #2c2e36;
+  --accent: #fb923c;
+  color-scheme: dark;
+}
+:root[data-mode="light"] { color-scheme: light; }
 * { box-sizing: border-box; }
 body {
   margin: 0;
@@ -127,3 +139,16 @@ ul.palette li:hover { background: var(--line); }
 .field-error { color: var(--bad); }
 .connection[data-state="reconnecting"] { color: var(--warn); }
 .boot, .boot-failed, .confirm-restart { padding: 24px; }
+aside.aside { border-left: 1px solid var(--line); padding: 12px; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
+aside.aside section.settings { border-left: 0; padding: 0; }
+.reason { color: var(--muted); font-size: 0.85em; margin: 2px 0 8px; }
+.panels figure { margin: 0; }
+.panels iframe { width: 100%; height: 180px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.dialogs:empty { display: none; }
+.install-dialog { position: fixed; inset: 15% 20% auto; padding: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 8px 30px rgb(0 0 0 / 25%); }
+.install-dialog dt { color: var(--muted); }
+.install-dialog dd { margin: 0 0 6px; }
+article.card[data-focused="true"] { outline: 2px solid var(--accent); }
+.quick-ask { padding: 10px; display: flex; flex-direction: column; gap: 6px; height: 100vh; }
+.quick-ask textarea { width: 100%; }
+.quick-ask .transcript { flex: 1; max-height: none; }

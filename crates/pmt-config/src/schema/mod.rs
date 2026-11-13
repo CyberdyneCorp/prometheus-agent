@@ -23,6 +23,7 @@ mod connectors;
 mod cron;
 mod curator;
 mod delegation;
+mod desktop;
 mod gateway;
 mod gateway_display;
 mod gateway_groups;
@@ -67,6 +68,7 @@ pub use delegation::{
     BackgroundMode, CODE_EXECUTION_TOOLS, ChildApproval, CodeExecutionConfig, CodeExecutionMode,
     DelegationConfig, GatewayDelegationMode, ReviewConfig,
 };
+pub use desktop::{DesktopConfig, QuickAskConfig};
 pub use gateway::{
     AgentCacheConfig, AllowBots, BackgroundNotifications, Batching, ChatPolicy, ChatToolProgress,
     DedupConfig, DeliveryConfig, EffectiveBots, EffectiveBusy, EffectiveDisplay, EffectiveGroups,
@@ -190,6 +192,8 @@ pub struct Config {
     pub curator: CuratorConfig,
     /// Subagent delegation.
     pub delegation: DelegationConfig,
+    /// The desktop app: tray, quick-ask hotkey and launch options.
+    pub desktop: DesktopConfig,
     /// Diagnostics: the debug share target.
     pub debug: DebugConfig,
     /// Display preferences of interactive surfaces.
@@ -325,6 +329,7 @@ impl Default for Config {
             cron: CronConfig::default(),
             curator: CuratorConfig::default(),
             delegation: DelegationConfig::default(),
+            desktop: DesktopConfig::default(),
             debug: DebugConfig::default(),
             display: DisplayConfig::default(),
             fallback: FallbackConfig::default(),

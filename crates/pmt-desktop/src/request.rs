@@ -107,10 +107,74 @@ pub enum Request {
     },
     /// The clipboard's text, on an explicit user action.
     ReadClipboard,
-    /// Look for an app update.
+    /// Look for an app update (the user asked).
     CheckUpdate,
-    /// Install a downloaded update.
+    /// The periodic update check (at most every 6 hours).
+    BackgroundCheck,
+    /// Download, verify and stage the offered update (the user accepted).
     ApplyUpdate,
+    /// Quit and start again now, installing a staged update first.
+    RestartApp,
+    /// The shell's platform support rows.
+    PlatformSupport,
+    /// The `[desktop]` options read at launch, with their notices.
+    LaunchOptions,
+    /// The deep links that arrived before the window was ready; later
+    /// ones come as `deep-link` events.
+    TakeLinks,
+    /// An approval for an unfocused window: post the OS notification.
+    NotifyApproval(crate::attention::Approval),
+    /// A request was answered or settled: its notification opens nothing.
+    RequestSettled {
+        /// The server request id.
+        request_id: String,
+    },
+    /// What the tray menu lists.
+    SetTray(crate::attention::TrayState),
+    /// The quick-ask session to reuse for `profile`, if any.
+    QuickAskTarget {
+        /// The profile asked.
+        profile: String,
+    },
+    /// A question went to this quick-ask session.
+    QuickAskUsed {
+        /// The profile.
+        profile: String,
+        /// The session.
+        session_id: String,
+    },
+    /// Open a session in the main window (from the quick-ask panel).
+    OpenInMain {
+        /// The profile.
+        profile: String,
+        /// The session.
+        session_id: String,
+    },
+    /// Hide the calling panel window.
+    HidePanel,
+    /// The profile's plugin panels.
+    PluginPanels {
+        /// The profile.
+        profile: String,
+    },
+    /// The install dialog's facts about a catalog entry.
+    CatalogEntry {
+        /// `plugin` or `skill`.
+        kind: crate::catalog::Kind,
+        /// The catalog id.
+        id: String,
+        /// The profile it would be installed into.
+        profile: String,
+    },
+    /// Install a catalog entry (after the user confirmed in the dialog).
+    CatalogInstall {
+        /// `plugin` or `skill`.
+        kind: crate::catalog::Kind,
+        /// The catalog id.
+        id: String,
+        /// The profile.
+        profile: String,
+    },
     /// A plugin frame asked for a native command: refused and logged.
     PluginRefused {
         /// The plugin id.
@@ -166,6 +230,46 @@ pub trait Native: Send + Sync {
     ///
     /// Why it could not be read.
     fn read_clipboard(&self) -> Result<String, String>;
+    /// Shows `menu` in the tray.
+    ///
+    /// # Errors
+    ///
+    /// Why the tray could not be updated.
+    fn set_tray(&self, menu: &[crate::attention::MenuEntry]) -> Result<(), String> {
+        let _ = menu;
+        Ok(())
+    }
+    /// Shows the main window with `session_id` of `profile` open.
+    ///
+    /// # Errors
+    ///
+    /// No main window.
+    fn open_in_main(&self, profile: &str, session_id: &str) -> Result<(), String> {
+        let _ = (profile, session_id);
+        Err("no main window".to_owned())
+    }
+    /// Hides the panel window `window`.
+    ///
+    /// # Errors
+    ///
+    /// No such window.
+    fn hide_window(&self, window: &str) -> Result<(), String> {
+        let _ = window;
+        Ok(())
+    }
+    /// Installs a staged update and starts the app again (the daemon is
+    /// not stopped: the new app restarts it when it finds it stale).
+    ///
+    /// # Errors
+    ///
+    /// When the app cannot restart itself.
+    fn restart(&self) -> Result<(), String> {
+        Err("this shell cannot restart itself".to_owned())
+    }
+    /// What the platform probes look at.
+    fn facts(&self) -> crate::platform::Facts {
+        crate::platform::Facts::detect(false)
+    }
 }
 
 #[cfg(test)]

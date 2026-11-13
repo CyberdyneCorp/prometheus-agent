@@ -3,9 +3,12 @@
 // the header); nothing falls back to a default on the server.
 
 import type { SessionInfo } from "./api";
+import type { Prefs } from "./prefs";
 
 export const state = {
   session: null as SessionInfo | null,
+  /** The machine's UI preferences, once the protocol connection is up. */
+  prefs: null as Prefs | null,
   profiles: [] as string[],
   profile: "",
 };
@@ -19,4 +22,14 @@ export function profileOf(params: URLSearchParams): string {
 
 export function canDrive(): boolean {
   return state.session?.role === "driver";
+}
+
+let prefsArrived: (prefs: Prefs) => void = () => {};
+/** Resolves once the machine's UI preferences are joined. */
+export const prefsReady: Promise<Prefs> = new Promise((resolve) => (prefsArrived = resolve));
+
+/** The UI preferences are joined. */
+export function prefsStarted(prefs: Prefs): void {
+  state.prefs = prefs;
+  prefsArrived(prefs);
 }

@@ -7,7 +7,7 @@
 // every session open in the window is re-attached with its last seen
 // sequence number.
 
-import type { Envelope } from "../../../schema/rpc";
+import type { Envelope, HelloResult } from "../../../schema/rpc";
 import { Rpc, RpcError, type RpcOptions, type ServerRequest } from "../../../web/src/lib/rpc";
 import { Backoff } from "./backoff";
 import { type Dial, shell } from "./shell";
@@ -45,8 +45,14 @@ export class DesktopClient {
   onState: (state: Connection) => void = () => {};
   /** A re-attached session whose missed events were evicted. */
   onTruncated: (sessionId: string) => void = () => {};
+  private readonly listeners = new Map<string, Set<(envelope: Envelope) => void>>();
 
   constructor(public profile: string) {}
+
+  /** The daemon's `rpc.hello` answer on the current connection. */
+  get hello(): HelloResult | null {
+    return this.rpc?.hello ?? null;
+  }
 
   get reconnecting(): boolean {
     return this.state !== "connected";
@@ -120,6 +126,14 @@ export class DesktopClient {
       mark.epoch = envelope.epoch;
     }
     this.onEvent(envelope);
+    for (const handler of this.listeners.get(envelope.event) ?? []) handler(envelope);
+  }
+
+  /** Also calls `handler` with every `event`, across reconnects. */
+  on(event: string, handler: (envelope: Envelope) => void): void {
+    const set = this.listeners.get(event) ?? new Set();
+    set.add(handler);
+    this.listeners.set(event, set);
   }
 
   private async reattach(): Promise<void> {

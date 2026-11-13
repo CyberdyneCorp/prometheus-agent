@@ -4,9 +4,11 @@
 
 import { api, signIn } from "./lib/api";
 import { onSignedOut } from "./lib/events";
+import { Prefs } from "./lib/prefs";
+import { rpc } from "./lib/rpc";
 import { h } from "./lib/dom";
 import { href, notFound, route, start } from "./lib/router";
-import { state } from "./lib/state";
+import { prefsStarted, state } from "./lib/state";
 import { loadPlugins, placeTabs } from "./lib/plugins";
 import type { Contribution } from "./lib/plugin-frames";
 import { chatPage } from "./pages/chat";
@@ -150,6 +152,26 @@ function signedOut(app: HTMLElement): void {
   );
 }
 
+/** Joins the machine's UI preferences: the theme, layout and mode follow
+ *  every change made in another tab or desktop window. */
+async function startPrefs(): Promise<void> {
+  try {
+    const client = await rpc();
+    const prefs = new Prefs(client);
+    await prefs.start({ theme: currentTheme(), layout_variant: currentLayout() });
+    prefsStarted(prefs);
+    prefs.onChange((values) => applyTheme(String(values.theme ?? "default"), String(values.layout_variant ?? "standard")));
+    const closed = client.onClose;
+    client.onClose = (code) => {
+      closed(code);
+      state.prefs = null;
+      if (code !== 4401) window.setTimeout(() => void startPrefs(), 2000);
+    };
+  } catch (err) {
+    console.warn("UI preferences unavailable:", err);
+  }
+}
+
 async function boot(): Promise<void> {
   applyTheme(currentTheme(), currentLayout());
   const app = document.getElementById("app") as HTMLElement;
@@ -176,6 +198,7 @@ async function boot(): Promise<void> {
   );
   routes();
   start(main);
+  void startPrefs();
   // Plugins load after the first render and never hold it up.
   void loadPlugins((plugins) => pages.replaceChildren(navList(plugins)));
 }

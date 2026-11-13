@@ -243,6 +243,7 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(command @ (Command::Dashboard(_) | Command::Serve(_) | Command::Webapp(_))) => {
             web(command, &ctx)
         }
+        Some(Command::Desktop(args)) => prometheus::desktop_cmd::run(args, &ctx),
         #[cfg(not(feature = "acp"))]
         Some(Command::Acp(_)) => prometheus::surface::require("acp").map(|()| 0),
         #[cfg(not(feature = "mcp"))]

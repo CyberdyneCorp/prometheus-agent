@@ -384,6 +384,7 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `dashboard.register_failed` | `unavailable` | 69 | The account portal did not register the dashboard's OAuth client: it was unreachable or refused the request (the status is in the message). |
 | `device.not_found` | `not_found` | 66 | No paired device has that name; `prometheus dashboard devices` lists them. |
 | `webapp.disabled` | `unavailable` | 69 | The desktop workspace in the browser is off; set `webapp.enabled = true` in `daemon.toml`. |
+| `desktop.not_installed` | `unavailable` | 69 | No Prometheus Desktop app bundle was found where the packages install it; `prometheus desktop --install` downloads the one matching this binary. |
 | `session.busy` | `conflict` | 75 | The session is running a turn; submit again when it finishes. |
 | `session.not_attached` | `permission_denied` | 77 | Every session-addressed method needs the connection to attach to the session first (`session.attach`); the error does not say whether the session exists. |
 | `profile.not_granted` | `permission_denied` | 77 | The request names a profile the connection's ticket does not grant; get a ticket for that profile. |

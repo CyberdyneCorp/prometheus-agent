@@ -1,5 +1,6 @@
 /* The dashboard's styles: system fonts only (no remote resources), light
-   and dark from the OS preference. */
+   and dark from the OS preference unless the machine's UI preferences
+   choose a mode. */
 :root {
   --bg: #f7f7f8;
   --panel: #ffffff;
@@ -14,7 +15,7 @@
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-mode="light"]) {
     --bg: #111215;
     --panel: #1a1b20;
     --fg: #e7e8eb;
@@ -23,6 +24,17 @@
     --accent: #fb923c;
   }
 }
+/* A mode chosen in the UI preferences overrides the OS preference. */
+:root[data-mode="dark"] {
+  --bg: #111215;
+  --panel: #1a1b20;
+  --fg: #e7e8eb;
+  --muted: #9aa0ab;
+  --line: #2c2e36;
+  --accent: #fb923c;
+  color-scheme: dark;
+}
+:root[data-mode="light"] { color-scheme: light; }
 * { box-sizing: border-box; }
 body {
   margin: 0;

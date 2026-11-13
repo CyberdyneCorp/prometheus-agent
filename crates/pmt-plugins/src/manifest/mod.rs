@@ -26,6 +26,7 @@ mod capabilities;
 pub mod dashboard;
 mod locales;
 mod router;
+pub mod ui;
 
 use std::path::Path;
 
@@ -67,6 +68,7 @@ const FIELDS: &[&str] = &[
     "delegation_router",
     "provides_locales",
     "dashboard",
+    "ui",
     "build",
     "mcp",
     "python",
@@ -131,6 +133,8 @@ pub struct Manifest {
     pub provides_locales: Vec<LocaleDeclaration>,
     /// `[dashboard]`: its web dashboard page and slots.
     pub dashboard: Option<dashboard::DashboardDeclaration>,
+    /// `[ui]`: its desktop app panel.
+    pub ui: Option<ui::UiDeclaration>,
     /// The dev loop's build command.
     pub build: Option<String>,
     /// `[mcp]` or `[python]`: how the server or bridge starts it.
@@ -215,6 +219,8 @@ impl Manifest {
             )));
         }
         let launch = launch_table(&table, kind)?;
+        let capabilities = Declared::parse(table.get("capabilities"))?;
+        let ui_capability = capabilities.ui;
         Ok(Self {
             manifest_version,
             version: Version::parse(&string(&table, "version")?)
@@ -224,13 +230,14 @@ impl Manifest {
             license: string(&table, "license")?,
             requires_prometheus,
             worlds: world_list(&table)?,
-            capabilities: Declared::parse(table.get("capabilities"))?,
+            capabilities,
             requires_plugins: strings(&table, "requires_plugins")?,
             kanban_lanes: tables(&table, "kanban_lanes")?,
             automation_blueprints: tables(&table, "automation_blueprints")?,
             delegation_router: router::parse(table.get("delegation_router"))?,
             provides_locales: locales::parse(table.get("provides_locales"))?,
             dashboard: dashboard::parse(table.get("dashboard"))?,
+            ui: ui::parse(table.get("ui"), ui_capability)?,
             build: optional_string(&table, "build")?,
             launch,
             id,

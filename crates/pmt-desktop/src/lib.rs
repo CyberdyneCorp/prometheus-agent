@@ -6,15 +6,25 @@
 //! is built and tested on every target; `apps/desktop/src-tauri` binds it
 //! to Tauri.
 
+pub mod attention;
+pub mod catalog;
 pub mod deeplink;
 pub mod dial;
 pub mod endpoint;
 pub mod ensure;
+pub mod features;
+pub mod launcher;
 pub mod links;
 pub mod navigation;
+pub mod options;
+pub mod panels;
+pub mod platform;
+pub mod quick_ask;
 pub mod request;
 pub mod shell;
 pub mod skew;
+pub mod update;
+pub mod update_install;
 
 pub use request::{Native, Request};
 pub use shell::{Attach, Shell, ShellConfig};

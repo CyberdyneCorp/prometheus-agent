@@ -7,7 +7,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::Method;
+use super::{Event, Method};
 
 /// One change of a `config.patch`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -82,3 +82,48 @@ method!(/// `config.reload`: re-reads the profile's `config.toml` now.
 method!(/// `bot.chat.ensure`: the profile's canonical Bot Chat, created in
     /// one get-or-create transaction when it has none.
     BotChatEnsure = "bot.chat.ensure" (ProfileParams) -> BotChat);
+
+/// Display preferences by key (spec: desktop-app, Machine-wide UI
+/// preferences).
+pub type PrefMap = serde_json::Map<String, Value>;
+
+/// `ui.prefs.get` params.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct UiPrefsGetParams {
+    /// Also send this connection `ui.prefs.changed` after every change.
+    #[serde(default)]
+    pub watch: bool,
+}
+
+/// `ui.prefs.patch` params.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct UiPrefsPatchParams {
+    /// Keys to set; `null` removes one.
+    pub set: PrefMap,
+    /// A client meeting the store for the first time: set only the keys
+    /// the store lacks, never overwrite.
+    #[serde(default)]
+    pub only_missing: bool,
+}
+
+/// The machine's display preferences.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct UiPrefs {
+    /// Every stored preference.
+    pub prefs: PrefMap,
+    /// Grows with every change.
+    pub revision: u64,
+}
+
+method!(/// `ui.prefs.get`: the machine's display preferences, kept once per
+    /// machine by the local daemon for every desktop window and webapp tab.
+    UiPrefsGet = "ui.prefs.get" (UiPrefsGetParams) -> UiPrefs);
+method!(/// `ui.prefs.patch`: changes display preferences (credentials, drafts
+    /// and per-window state are refused); every watcher gets
+    /// `ui.prefs.changed`.
+    UiPrefsPatch = "ui.prefs.patch" (UiPrefsPatchParams) -> UiPrefs);
+event!(/// `ui.prefs.changed`: the machine's display preferences changed.
+    UiPrefsChanged = "ui.prefs.changed" (UiPrefs));

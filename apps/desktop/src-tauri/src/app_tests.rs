@@ -202,7 +202,15 @@ fn an_artifact_script_opens_no_window() {
 #[test]
 fn a_deep_link_with_a_prompt_payload_opens_an_empty_draft() {
     let recorder = Arc::new(Recorder::default());
-    let (app, _window) = app(&recorder);
+    let (app, window) = app(&recorder);
+    // The page took the links held for it: later ones arrive as events.
+    let held = invoke(
+        &window,
+        "shell",
+        APP_URL,
+        json!({"request": {"command": "take_links"}}),
+    );
+    assert_eq!(held, Ok(json!([])));
     let (tx, rx) = std::sync::mpsc::channel();
     app.listen_any(DEEP_LINK_EVENT, move |event| {
         tx.send(event.payload().to_owned()).unwrap();
@@ -216,4 +224,46 @@ fn a_deep_link_with_a_prompt_payload_opens_an_empty_draft() {
     deliver(app.handle(), "prometheus://settings/reset");
     assert!(rx.try_recv().is_err());
     assert!(app.get_webview_window(MAIN).is_some());
+}
+
+#[test]
+fn an_approval_notification_has_no_answer_and_names_the_session_and_tool() {
+    let recorder = Arc::new(Recorder::default());
+    let (_app, window) = app(&recorder);
+    let approval = json!({"request_id": "srq-1", "session_id": "ses_1", "session_title": "Deploy", "tool": "terminal"});
+    let answer = invoke(
+        &window,
+        "shell",
+        APP_URL,
+        json!({"request": {"command": "notify_approval", "args": approval}}),
+    );
+    assert_eq!(answer, Ok(json!({"ok": true})));
+    assert_eq!(
+        recorder.calls(),
+        vec!["notify Approval needed: terminal".to_owned()]
+    );
+    // No request of the allowlist answers an approval.
+    let respond = invoke(
+        &window,
+        "shell",
+        APP_URL,
+        json!({"request": {"command": "approval_respond", "args": {"request_id": "srq-1"}}}),
+    );
+    assert!(respond.is_err());
+}
+
+#[test]
+fn a_plugin_panel_origin_reaches_no_native_command() {
+    let recorder = Arc::new(Recorder::default());
+    let (_app, window) = app(&recorder);
+    for origin in ["plugin-a://localhost", "http://plugin-a.localhost"] {
+        let answer = invoke(
+            &window,
+            "shell",
+            origin,
+            json!({"request": {"command": "read_clipboard"}}),
+        );
+        assert!(answer.is_err(), "{origin}: {answer:?}");
+    }
+    assert!(recorder.calls().is_empty());
 }

@@ -12,10 +12,14 @@
 //! - `sign`: a detached `.minisig` for each file
 //! - `channels`: the Homebrew formula, `WinGet` manifests, Termux recipe,
 //!   Nix release pins and container build context of a release
+//! - `desktop-feed`: the desktop app's update feed over the desktop
+//!   updater archives of a release
 //! - `verify`: every expected artifact present, matching the signed
-//!   manifest, checksummed, signed and with an SBOM
+//!   manifest, checksummed, signed and with an SBOM; desktop packages
+//!   complete per OS and signed
 
 mod channels;
+mod desktop;
 mod installers;
 mod manifest;
 mod notes;
@@ -109,6 +113,16 @@ pub(crate) enum Step {
         #[arg(long)]
         out: PathBuf,
     },
+    /// Write `desktop-<channel>.json`, the desktop app's update feed, for
+    /// the desktop updater archives in `--dir`.
+    DesktopFeed {
+        /// Release directory.
+        #[arg(long)]
+        dir: PathBuf,
+        /// Release tag.
+        #[arg(long)]
+        tag: String,
+    },
     /// Check a release directory: every target archive, its checksum,
     /// signature and SBOM, the signed manifest and channel index, and the
     /// signed installers.
@@ -147,6 +161,7 @@ pub(crate) fn run(step: Step) -> Result<(), String> {
         Step::ContainerContext { dir, out } => {
             channels::container_context(&crate::repo_root(), &dir, &out)
         }
+        Step::DesktopFeed { dir, tag } => desktop::write_feed(&dir, &tag),
         Step::Verify { dir, key } => manifest::verify(&dir, &key),
     }
 }

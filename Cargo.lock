@@ -3242,13 +3242,20 @@ dependencies = [
 name = "pmt-desktop"
 version = "0.1.0"
 dependencies = [
+ "flate2",
+ "minisign",
+ "minisign-verify",
  "pmt-core",
+ "pmt-net",
  "pmt-rpc",
+ "reqwest",
  "semver",
  "serde",
  "serde_json",
+ "tar",
  "tempfile",
  "tokio",
+ "toml",
  "tracing",
  "tracing-subscriber",
  "url",
@@ -6658,6 +6665,7 @@ dependencies = [
  "pmt-agent",
  "pmt-config",
  "pmt-core",
+ "pmt-desktop",
  "pmt-i18n",
  "pmt-net",
  "pmt-obs",

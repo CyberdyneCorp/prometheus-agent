@@ -70,3 +70,10 @@ allow-wildcard-paths = true
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+
+[[licenses.exceptions]]
+# Mozilla's root list as data, through the shared HTTP client (pmt-net)
+# the updater downloads with: a wasm32-only dependency of
+# rustls-platform-verifier, allowed in the root deny.toml too.
+crate = "webpki-root-certs"
+allow = ["CDLA-Permissive-2.0"]

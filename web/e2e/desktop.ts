@@ -12,8 +12,9 @@ const DIST = fileURLToPath(new URL("../../apps/desktop/dist/", import.meta.url))
 /** The frames each socket of the page sent, in order. */
 export type Sockets = string[][];
 
-/** Opens the desktop page as window `label`; resolves once connected. */
-export async function openDesktop(page: Page, label = "main"): Promise<Sockets> {
+/** Opens the desktop page as window `label`; resolves once connected (the
+ *  quick-ask panel, `#quick-ask`, once its question box shows). */
+export async function openDesktop(page: Page, label = "main", hash = ""): Promise<Sockets> {
   // The page's origin is not loopback in Chromium's eyes; the webview's
   // own origin may dial the loopback daemon, as the native app does.
   await page.context().grantPermissions(["local-network-access"], { origin: ORIGIN });
@@ -49,6 +50,17 @@ export async function openDesktop(page: Page, label = "main"): Promise<Sockets> 
     const file = url.pathname === "/" ? "index.html" : url.pathname.slice(1);
     return route.fulfill({ path: `${DIST}${file}` });
   });
+  // Plugin panels: each plugin's own origin, served by the shell core.
+  await page.route(/^http:\/\/plugin-[a-z0-9_-]+\.localhost\//, async (route) => {
+    const id = new URL(route.request().url()).hostname.replace(/^plugin-/, "").replace(/\.localhost$/, "");
+    const res = await fetch(`${env("PMT_DESKTOP_HARNESS")}/plugin-frame?id=${id}`, { method: "POST", body: "" });
+    const headers: Record<string, string> = {};
+    for (const name of ["content-type", "content-security-policy"]) {
+      const value = res.headers.get(name);
+      if (value) headers[name] = value;
+    }
+    return route.fulfill({ status: res.status, headers, body: await res.text() });
+  });
   page.on("console", (message) => {
     if (message.type() === "warning" || message.type() === "error") console.log(`[${label}] ${message.text()}`);
   });
@@ -58,8 +70,9 @@ export async function openDesktop(page: Page, label = "main"): Promise<Sockets> 
     sockets.push(frames);
     ws.on("framesent", (frame) => frames.push(String(frame.payload)));
   });
-  await page.goto(`${ORIGIN}/index.html`);
-  await expect(page.locator(".connection")).toHaveText(/Connected/, { timeout: 60_000 });
+  await page.goto(`${ORIGIN}/index.html${hash}`);
+  if (hash === "#quick-ask") await expect(page.getByLabel("Quick question")).toBeVisible({ timeout: 60_000 });
+  else await expect(page.locator(".connection")).toHaveText(/Connected/, { timeout: 60_000 });
   return sockets;
 }
 
@@ -95,4 +108,19 @@ export async function say(page: Page, text: string): Promise<string> {
   const chat = page.locator("section.chat");
   await expect(chat).toHaveAttribute("data-session", /^ses_/);
   return (await chat.getAttribute("data-session")) ?? "";
+}
+
+/** What reached the OS through the shell so far. */
+export async function nativeCalls(): Promise<string[]> {
+  const res = await fetch(`${env("PMT_DESKTOP_HARNESS")}/calls`, { method: "POST", body: "" });
+  return (await res.json()) as string[];
+}
+
+/** The app was activated (a notification click): what the shell hands
+ *  the window, as the Tauri app emits it with `focus-request`. */
+export async function activate(page: Page): Promise<void> {
+  const res = await fetch(`${env("PMT_DESKTOP_HARNESS")}/activate`, { method: "POST", body: "" });
+  const approval = (await res.json()) as unknown;
+  expect(approval).not.toBeNull();
+  await emit(page, "focus-request", approval);
 }

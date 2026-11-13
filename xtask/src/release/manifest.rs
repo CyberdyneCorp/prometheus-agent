@@ -131,6 +131,7 @@ pub(super) fn verify(dir: &Path, key: &Path) -> Result<(), String> {
             check_target(dir, manifest, target, &trust, &mut problems);
         }
         check_index(dir, manifest, &trust, &mut problems);
+        problems.extend(super::desktop::verify(dir, &manifest.version, &trust));
     }
     for installer in INSTALLERS {
         signed(dir, installer, &trust, &mut problems);

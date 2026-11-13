@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "The main window reaches the shell only through its one typed `shell` command (the native command allowlist) and listens to the shell's events; no plugin's JavaScript commands are granted.",
-  "windows": ["main"],
+  "description": "The main window and the quick-ask panel reach the shell only through its one typed `shell` command (the native command allowlist) and listens to the shell's events; no plugin's JavaScript commands are granted.",
+  "windows": ["main", "quick-ask"],
   "permissions": [
     "allow-shell",
     "core:event:allow-listen",

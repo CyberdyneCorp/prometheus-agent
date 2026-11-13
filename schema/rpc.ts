@@ -1307,6 +1307,28 @@ export interface TurnFinished {
   usage?: unknown;
 }
 
+/** The machine's display preferences. */
+export interface UiPrefs {
+  /** Every stored preference. */
+  prefs: Record<string, unknown>;
+  /** Grows with every change. */
+  revision: number;
+}
+
+/** `ui.prefs.get` params. */
+export interface UiPrefsGetParams {
+  /** Also send this connection `ui.prefs.changed` after every change. */
+  watch?: boolean;
+}
+
+/** `ui.prefs.patch` params. */
+export interface UiPrefsPatchParams {
+  /** A client meeting the store for the first time: set only the keys the store lacks, never overwrite. */
+  only_missing?: boolean;
+  /** Keys to set; `null` removes one. */
+  set: Record<string, unknown>;
+}
+
 /** Usage totals of a session or a lineage. */
 export interface UsageTotalsView {
   /** Cache-read tokens. */
@@ -1633,6 +1655,8 @@ export interface Methods {
   "subagent.list": { params: SessionRef; result: SubagentList };
   "system.health": { params: SystemParams; result: SystemHealth };
   "system.metrics": { params: SystemParams; result: MetricsSnapshot };
+  "ui.prefs.get": { params: UiPrefsGetParams; result: UiPrefs };
+  "ui.prefs.patch": { params: UiPrefsPatchParams; result: UiPrefs };
   "vault.add": { params: VaultAddParams; result: VaultItem };
   "vault.list": { params: VaultListParams; result: VaultItems };
   "vault.remove": { params: VaultRemoveParams; result: VaultItem };
@@ -1658,6 +1682,7 @@ export interface Events {
   "request.resolved": RequestResolved;
   "session.event": unknown;
   "turn.finished": TurnFinished;
+  "ui.prefs.changed": UiPrefs;
   "usage.updated": UsageUpdated;
 }
 
@@ -1697,8 +1722,6 @@ export const UNDECLARED = [
   "subagent.subscribe",
   "tools.call",
   "tools.list",
-  "ui.prefs.get",
-  "ui.prefs.patch",
   "voice.client_config",
   "wake.feed",
   "achievement.unlocked",

@@ -12,6 +12,7 @@ use pmt_rpc::RpcError;
 /// and read-only listings.
 const READS: &[&str] = &[
     "rpc.hello",
+    "ui.prefs.get",
     "rpc.ping",
     "session.attach",
     "session.detach",

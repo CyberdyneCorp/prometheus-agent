@@ -26,12 +26,14 @@ interface Dispatched {
 
 export class ChatView {
   readonly transcript = new Transcript();
-  private readonly title = h("h2", { class: "chat-title" }, "New chat");
+  private readonly titleEl = h("h2", { class: "chat-title" }, "New chat");
   private readonly problems = h("div", { class: "problems" });
   private readonly input = h("textarea", { name: "prompt", rows: 3, placeholder: "Message the agent", "aria-label": "Message" });
   private readonly suggestions = h("ul", { class: "palette", role: "listbox", "aria-label": "Commands" });
   readonly el: HTMLElement;
   sessionId: string | null = null;
+  /** A prompt of `sessionId` was submitted (a turn runs). */
+  onSubmitted: (sessionId: string) => void = () => {};
   private cwd: string | null = null;
   private catalog: PaletteEntry[] = [];
 
@@ -42,7 +44,12 @@ export class ChatView {
       void this.send();
     });
     this.input.addEventListener("input", () => this.showSuggestions());
-    this.el = h("section", { class: "chat", "aria-label": "Chat" }, this.title, this.transcript.el, this.problems, form);
+    this.el = h("section", { class: "chat", "aria-label": "Chat" }, this.titleEl, this.transcript.el, this.problems, form);
+  }
+
+  /** The open session's title, when it has one. */
+  title(): string | null {
+    return this.sessionId ? this.titleEl.textContent : null;
   }
 
   /** An empty draft (a deep link never fills it in). */
@@ -51,7 +58,7 @@ export class ChatView {
     this.sessionId = null;
     this.cwd = cwd;
     this.catalog = [];
-    this.title.textContent = cwd ? `New chat in ${cwd}` : "New chat";
+    this.titleEl.textContent = cwd ? `New chat in ${cwd}` : "New chat";
     this.el.dataset.session = "";
     this.transcript.load([]);
     this.problems.replaceChildren();
@@ -63,7 +70,7 @@ export class ChatView {
   async open(sessionId: string): Promise<void> {
     if (this.sessionId && this.sessionId !== sessionId) this.client.unwatch(this.sessionId);
     this.sessionId = sessionId;
-    this.title.textContent = `Session ${sessionId}`;
+    this.titleEl.textContent = `Session ${sessionId}`;
     this.el.dataset.session = sessionId;
     this.problems.replaceChildren();
     try {
@@ -142,6 +149,7 @@ export class ChatView {
       this.transcript.message("user", text);
       this.input.value = "";
       await this.client.call("prompt.submit", { session_id: this.sessionId, text, files: [] });
+      if (this.sessionId) this.onSubmitted(this.sessionId);
     } catch (err) {
       this.problems.replaceChildren(notice((err as Error).message, "error"));
     }
@@ -157,7 +165,7 @@ export class ChatView {
     });
     this.sessionId = created.session_id;
     this.el.dataset.session = created.session_id;
-    this.title.textContent = `Session ${created.session_id}`;
+    this.titleEl.textContent = `Session ${created.session_id}`;
     this.client.watch(created.session_id, null, null);
     await this.client.call("session.attach", { session_id: created.session_id });
     const catalog = await this.client.call<{ commands: PaletteEntry[] }>("commands.catalog", { session_id: created.session_id });

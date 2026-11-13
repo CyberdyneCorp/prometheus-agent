@@ -336,5 +336,6 @@ pub mod dashboard_plugins;
 pub mod desktop;
 #[cfg(feature = "dashboard")]
 pub mod oidc;
+pub mod plugin_catalog;
 #[cfg(feature = "gateway")]
 pub mod ws;

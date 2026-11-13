@@ -35,6 +35,7 @@ pub mod daemon_cmd;
 pub mod dashboard_cmd;
 pub mod debug_cmd;
 pub mod demo_cmd;
+pub mod desktop_cmd;
 pub mod doctor_cmd;
 pub mod egress;
 pub mod fallback_cmd;

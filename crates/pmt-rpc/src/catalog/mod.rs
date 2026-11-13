@@ -162,6 +162,8 @@ pub fn declare_builtin(d: &mut Declarations) {
         .method::<c::ConfigPatch>()
         .method::<c::ConfigReload>()
         .method::<c::BotChatEnsure>()
+        .method::<c::UiPrefsGet>()
+        .method::<c::UiPrefsPatch>()
         .server_request::<c::ApprovalAsk>()
         .server_request::<c::ClarifyAsk>()
         .server_request::<c::SecretAsk>()
@@ -173,7 +175,8 @@ pub fn declare_builtin(d: &mut Declarations) {
         .event::<c::SessionEvent>()
         .event::<c::TurnEnded>()
         .event::<c::UsageUpdatedEvent>()
-        .event::<c::HealthChangedEvent>();
+        .event::<c::HealthChangedEvent>()
+        .event::<c::UiPrefsChanged>();
 }
 
 impl Catalog {

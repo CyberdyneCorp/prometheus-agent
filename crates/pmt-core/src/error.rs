@@ -164,17 +164,13 @@ macro_rules! error_codes {
 // New codes go here; `cargo xtask gen` then regenerates the catalog page.
 error_codes! {
     /// An id string does not have the expected `<prefix>_<ULID>` shape.
-    ID_MALFORMED = ("id.malformed", InvalidInput,
-        "An id does not have the expected `<prefix>_<ULID>` shape.");
+    ID_MALFORMED = ("id.malformed", InvalidInput, "An id does not have the expected `<prefix>_<ULID>` shape.");
     /// A configured name is not in its closed registry.
-    REGISTRY_UNKNOWN_NAME = ("registry.unknown_name", Config,
-        "A configured name (provider, backend, toolset, engine, hook...) is not registered; the error lists the registered names.");
+    REGISTRY_UNKNOWN_NAME = ("registry.unknown_name", Config, "A configured name (provider, backend, toolset, engine, hook...) is not registered; the error lists the registered names.");
     /// Two entries were registered under one name.
-    REGISTRY_DUPLICATE_NAME = ("registry.duplicate_name", Config,
-        "Two entries (for example two plugins) register the same name in one registry.");
+    REGISTRY_DUPLICATE_NAME = ("registry.duplicate_name", Config, "Two entries (for example two plugins) register the same name in one registry.");
     /// A task panicked; its crash report is under `logs/crash/`.
-    TASK_PANICKED = ("task.panicked", Internal,
-        "A task panicked. It was isolated and a crash report was written under `logs/crash/`.");
+    TASK_PANICKED = ("task.panicked", Internal, "A task panicked. It was isolated and a crash report was written under `logs/crash/`.");
     /// A task stopped because it was cancelled.
     TASK_CANCELLED = ("task.cancelled", Cancelled,
         "The operation was cancelled (interrupt, `/stop` or shutdown).");
@@ -1149,6 +1145,8 @@ error_codes! {
     DEVICE_NOT_FOUND = ("device.not_found", NotFound, "No paired device has that name; `prometheus dashboard devices` lists them.");
     /// The webapp is not enabled.
     WEBAPP_DISABLED = ("webapp.disabled", Unavailable, "The desktop workspace in the browser is off; set `webapp.enabled = true` in `daemon.toml`.");
+    /// No desktop app bundle was found.
+    DESKTOP_NOT_INSTALLED = ("desktop.not_installed", Unavailable, "No Prometheus Desktop app bundle was found where the packages install it; `prometheus desktop --install` downloads the one matching this binary.");
     /// A turn is already running in the session.
     SESSION_BUSY = ("session.busy", Conflict,
         "The session is running a turn; submit again when it finishes.");

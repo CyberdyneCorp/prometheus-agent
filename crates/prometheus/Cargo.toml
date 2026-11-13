@@ -106,6 +106,9 @@ pmt-store.workspace = true
 pmt-tools.workspace = true
 pmt-tui = { workspace = true, optional = true }
 pmt-update.workspace = true
+# `prometheus desktop --install` installs the app bundle with the desktop
+# updater's own code; the desktop browser tests drive its shell core.
+pmt-desktop.workspace = true
 pmt-vault.workspace = true
 pulldown-cmark.workspace = true
 ratatui = { workspace = true, optional = true }
@@ -152,8 +155,6 @@ jiff.workspace = true
 sha2.workspace = true
 
 [dev-dependencies]
-# The desktop shell the desktop browser tests drive (desktop_e2e.rs).
-pmt-desktop.workspace = true
 # The OpenAI SDK client of the API server tests (and its streams).
 async-openai.workspace = true
 futures-util.workspace = true

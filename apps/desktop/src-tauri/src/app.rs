@@ -1,7 +1,8 @@
-//! The Tauri application: one window whose page reaches the shell through
-//! the single typed `shell` command, windows that never open themselves
-//! and navigation pinned to the app's origin, and `prometheus://` links
-//! handed to the page after parsing.
+//! The Tauri application: the main window and the quick-ask panel, whose
+//! pages reach the shell only through the single typed `shell` command;
+//! windows that never open themselves and navigation pinned to the app's
+//! origin; `prometheus://` links handed to the page after parsing; the
+//! tray, the quick-ask hotkey and plugin panels on their own origins.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -13,10 +14,13 @@ use tauri::{
     AppHandle, Emitter as _, Manager as _, Runtime, State, WebviewUrl, WebviewWindowBuilder,
 };
 
+use crate::launch::Launch;
 use crate::native::TauriNative;
 
 /// The main window's label (the capability file grants it the shell).
 pub(crate) const MAIN: &str = "main";
+/// The quick-ask panel's label.
+pub(crate) const QUICK_ASK: &str = "quick-ask";
 /// The event a parsed deep link reaches the page with.
 pub(crate) const DEEP_LINK_EVENT: &str = "deep-link";
 
@@ -36,25 +40,41 @@ pub(crate) async fn shell<R: Runtime>(
 }
 
 /// Runs the app.
-pub(crate) fn run() {
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .with_writer(std::io::stderr)
-        .init();
-    let context = tauri::generate_context!();
-    with_shell(plugins(tauri::Builder::default()))
-        .setup(|app| {
-            let shell = Shell::new(
-                shell_config()?,
-                Arc::new(TauriNative::new(app.handle().clone())),
-            );
-            app.manage(Arc::new(shell));
-            open_main(app.handle())?;
-            forward_deep_links(app.handle());
+pub(crate) fn run(launch: Launch) {
+    let mut context = tauri::generate_context!();
+    let panels = crate::panels::startup_listing(&launch.binary);
+    crate::panels::allow_frames(&mut context, &panels);
+    let builder = crate::panels::schemes(plugins(tauri::Builder::default()), &panels);
+    let app = with_shell(builder)
+        .setup(move |app| {
+            let version = app.package_info().version.to_string();
+            let native = TauriNative::new(app.handle().clone(), launch.update_target());
+            let mut shell = Shell::new(shell_config(&launch), Arc::new(native))
+                .with_options(launch.options.clone())
+                .with_updater(launch.updater(&version));
+            if launch.ignore_existing {
+                shell = shell.without_local_daemon();
+            }
+            for (profile, listing) in &panels {
+                shell.panels().set(profile, listing);
+            }
+            let shell = Arc::new(shell);
+            app.manage(Arc::clone(&shell));
+            open_main(app.handle(), &shell)?;
+            open_quick_ask(app.handle())?;
+            crate::tray::start(app.handle())?;
+            crate::tray::register_hotkey(app.handle(), &shell);
+            forward_deep_links(app.handle(), &launch.links);
             Ok(())
         })
-        .run(context)
+        .build(context)
         .expect("the desktop app failed to start");
+    app.run(|handle, event| {
+        if let tauri::RunEvent::Exit = event {
+            // Quitting never stops the daemon; a staged update goes in now.
+            crate::native::install_staged(handle);
+        }
+    });
 }
 
 /// `builder` with the OS plugins.
@@ -72,29 +92,34 @@ fn plugins<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        crate::tray::toggle_quick_ask(app);
+                    }
+                })
+                .build(),
+        )
 }
 
-/// `builder` with the `shell` command, the page's only one.
+/// `builder` with the `shell` command, the pages' only one.
 pub(crate) fn with_shell<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     builder.invoke_handler(tauri::generate_handler![shell])
 }
 
-fn shell_config() -> Result<ShellConfig, Box<dyn std::error::Error>> {
-    let env = pmt_core::env::LaunchEnv::from_process(&pmt_core::env::EnvPolicy::default())?;
-    let home = pmt_config::home::resolve(None, &env)?;
-    let user_home = env.user_home().cloned().unwrap_or_else(|| home.clone());
-    Ok(ShellConfig {
-        binary: bundled_binary(),
-        home,
-        user_home,
+fn shell_config(launch: &Launch) -> ShellConfig {
+    ShellConfig {
+        binary: launch.binary.clone(),
+        home: launch.home.clone(),
+        user_home: launch.user_home.clone(),
         ensure_bound: ensure::DEADLINE + ensure::GRACE,
-    })
+    }
 }
 
 /// The `prometheus` binary bundled next to the app's executable; a
 /// development build without one uses the one on `PATH`.
-fn bundled_binary() -> PathBuf {
+pub(crate) fn bundled_binary() -> PathBuf {
     let name = format!("prometheus{}", std::env::consts::EXE_SUFFIX);
     let sibling = std::env::current_exe()
         .ok()
@@ -105,19 +130,38 @@ fn bundled_binary() -> PathBuf {
     }
 }
 
-fn open_main<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
-    WebviewWindowBuilder::new(app, MAIN, WebviewUrl::App("index.html".into()))
+fn open_main<R: Runtime>(app: &AppHandle<R>, shell: &Arc<Shell>) -> tauri::Result<()> {
+    let window = WebviewWindowBuilder::new(app, MAIN, WebviewUrl::App("index.html".into()))
         .title("Prometheus")
         .inner_size(1100.0, 760.0)
-        .on_navigation(navigation::allow_navigation)
+        .on_navigation(|url| navigation::allow_navigation(url) || navigation::is_panel(url))
         .on_new_window(|url, _| new_window(&url))
         .build()?;
+    crate::tray::watch_main(&window, Arc::clone(shell));
+    Ok(())
+}
+
+fn open_quick_ask<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+    WebviewWindowBuilder::new(
+        app,
+        QUICK_ASK,
+        WebviewUrl::App("index.html#quick-ask".into()),
+    )
+    .title("Quick ask")
+    .inner_size(640.0, 220.0)
+    .always_on_top(true)
+    .decorations(false)
+    .skip_taskbar(true)
+    .visible(false)
+    .on_navigation(|url| navigation::allow_navigation(url) || navigation::is_panel(url))
+    .on_new_window(|url, _| new_window(&url))
+    .build()?;
     Ok(())
 }
 
 /// Page content never opens a window: `window.open` and new-window links
 /// are denied, and nothing launches an external browser for them.
-fn new_window<R: Runtime>(url: &tauri::Url) -> NewWindowResponse<R> {
+pub(crate) fn new_window<R: Runtime>(url: &tauri::Url) -> NewWindowResponse<R> {
     if navigation::allow_new_window(url) {
         NewWindowResponse::Allow
     } else {
@@ -126,14 +170,16 @@ fn new_window<R: Runtime>(url: &tauri::Url) -> NewWindowResponse<R> {
     }
 }
 
-fn focus_main<R: Runtime>(app: &AppHandle<R>) {
+/// Shows and focuses the main window.
+pub(crate) fn focus_main<R: Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window(MAIN) {
+        let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
     }
 }
 
-fn forward_deep_links<R: Runtime>(app: &AppHandle<R>) {
+fn forward_deep_links<R: Runtime>(app: &AppHandle<R>, from_argv: &[String]) {
     use tauri_plugin_deep_link::DeepLinkExt as _;
     let handle = app.clone();
     app.deep_link().on_open_url(move |event| {
@@ -146,12 +192,22 @@ fn forward_deep_links<R: Runtime>(app: &AppHandle<R>) {
             deliver(app, url.as_str());
         }
     }
+    // `prometheus desktop` starts the app with the link as an argument.
+    for link in from_argv {
+        deliver(app, link);
+    }
 }
 
-/// Parses a link and hands what it opens to the page; unknown links are
-/// logged and dropped by the parser.
+/// Parses a link and hands what it opens to the page (held until the page
+/// is ready); unknown links are logged and dropped by the parser.
 pub(crate) fn deliver<R: Runtime>(app: &AppHandle<R>, raw: &str) {
-    if let Some(link) = deeplink::parse(raw) {
+    let Some(link) = deeplink::parse(raw) else {
+        return;
+    };
+    let ready = app
+        .try_state::<Arc<Shell>>()
+        .is_none_or(|shell| shell.arrived(link.clone()));
+    if ready {
         let _ = app.emit_to(MAIN, DEEP_LINK_EVENT, link);
     }
 }

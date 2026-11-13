@@ -42,6 +42,7 @@ pub mod router;
 pub mod server;
 pub mod slots;
 pub mod tickets;
+pub mod ui_prefs;
 pub mod upkeep;
 pub mod vault;
 pub mod worktree;

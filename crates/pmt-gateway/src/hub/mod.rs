@@ -553,6 +553,24 @@ impl Hub {
         self.tapped(profile, None, event, &envelope.data);
     }
 
+    /// Sends a daemon-level event (no session, not logged) to `peers`.
+    pub fn notify(&self, peers: &[Peer], event: &str, data: Value) {
+        if let Err(violation) = self.catalog.check_outbound(event, &data, false) {
+            self.violations.report(event, &violation);
+            return;
+        }
+        let envelope = Envelope {
+            event: event.to_owned(),
+            session_id: None,
+            seq: self.daemon_seq.fetch_add(1, Ordering::Relaxed) + 1,
+            epoch: self.epoch.clone(),
+            data,
+        };
+        for peer in peers {
+            self.send_event(peer, &envelope);
+        }
+    }
+
     /// Appends an event to the session's log and sends it to every
     /// attached connection that may see it.
     pub fn publish(&self, session_id: &str, event: &str, data: Value) {

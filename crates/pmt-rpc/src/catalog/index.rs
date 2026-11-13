@@ -228,6 +228,7 @@ pub const INDEX: &[IndexEntry] = &[
     event("request.resolved", WA),
     event("automation.state", "session-automation"),
     event("message.reaction", "desktop-app"),
+    event("ui.prefs.changed", "desktop-app"),
     event("achievement.unlocked", "pets"),
     event("wake.detected", "voice-mode"),
     event("local_model.context_grown", "local-models"),

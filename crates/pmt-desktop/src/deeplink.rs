@@ -32,11 +32,17 @@ pub enum DeepLink {
     InstallPlugin {
         /// The catalog id as given (the install flow checks it).
         id: String,
+        /// The link carried other parameters: the flow refuses it.
+        #[serde(skip_serializing_if = "std::ops::Not::not")]
+        extra_params: bool,
     },
     /// `prometheus://skills/install?id=<catalog id>`: the install flow.
     InstallSkill {
         /// The catalog id as given.
         id: String,
+        /// The link carried other parameters: the flow refuses it.
+        #[serde(skip_serializing_if = "std::ops::Not::not")]
+        extra_params: bool,
     },
 }
 
@@ -75,10 +81,23 @@ fn shape(url: &Url) -> Option<DeepLink> {
             profile: query("profile"),
             cwd: query("cwd"),
         }),
-        ("plugins", "/install") => query("id").map(|id| DeepLink::InstallPlugin { id }),
-        ("skills", "/install") => query("id").map(|id| DeepLink::InstallSkill { id }),
+        ("plugins", "/install") => query("id").map(|id| DeepLink::InstallPlugin {
+            id,
+            extra_params: extra(url),
+        }),
+        ("skills", "/install") => query("id").map(|id| DeepLink::InstallSkill {
+            id,
+            extra_params: extra(url),
+        }),
         _ => None,
     }
+}
+
+/// An install link may carry only `id`, once.
+fn extra(url: &Url) -> bool {
+    url.query_pairs().filter(|(k, _)| k == "id").count() != 1
+        || url.query_pairs().any(|(k, _)| k != "id")
+        || url.fragment().is_some()
 }
 
 /// `ses_` and 26 Crockford base32 characters.
@@ -120,12 +139,24 @@ mod tests {
         assert_eq!(
             parse("prometheus://plugins/install?id=kanban-extras"),
             Some(DeepLink::InstallPlugin {
-                id: "kanban-extras".into()
+                id: "kanban-extras".into(),
+                extra_params: false
             })
         );
         assert_eq!(
             parse("prometheus://skills/install?id=x"),
-            Some(DeepLink::InstallSkill { id: "x".into() })
+            Some(DeepLink::InstallSkill {
+                id: "x".into(),
+                extra_params: false
+            })
+        );
+        assert_eq!(
+            parse("prometheus://plugins/install?id=a&url=https%3A%2F%2Fevil.example"),
+            Some(DeepLink::InstallPlugin {
+                id: "a".into(),
+                extra_params: true
+            }),
+            "the flow refuses it as an unknown entry"
         );
         for ignored in [
             "prometheus://session/../../etc",

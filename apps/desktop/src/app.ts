@@ -2,24 +2,38 @@
 // then renders sessions, chat and settings over the window's protocol
 // client. Every profile-data request names the window's profile, and a
 // profile switch detaches and redials before anything of the new profile
-// is shown.
+// is shown. Display preferences are the machine's (the local daemon's
+// `ui.prefs`), approvals for an unfocused window become notifications,
+// and plugin panels load on their own origins.
 
+import type { ApprovalRequestParams } from "../../../schema/rpc";
 import { h, notice } from "../../../web/src/lib/dom";
+import { Prefs } from "../../../web/src/lib/prefs";
+import { Attention, focusCard } from "./attention";
 import { ChatView } from "./chat";
 import { DesktopClient } from "./client";
-import { NOT_FOUND } from "./verdict";
+import { desktopSettings } from "./desktop-settings";
+import { type InstallLink, installDialog } from "./install";
+import { PanelHost } from "./panels";
+import { LAST_PROFILE } from "./quickask";
 import { settingsPanel } from "./settings";
 import { type Attach, onShellEvent, shell } from "./shell";
+import { NOT_FOUND } from "./verdict";
 
 interface SessionSummary {
   session_id: string;
   title?: string | null;
 }
 
-type DeepLink =
-  | { open: "session"; session_id: string }
-  | { open: "new"; profile?: string; cwd?: string }
-  | { open: "install_plugin" | "install_skill"; id: string };
+type DeepLink = { open: "session"; session_id: string } | { open: "new"; profile?: string; cwd?: string } | InstallLink;
+
+interface Launch {
+  notices: string[];
+}
+
+/** How often the window asks for an app update (the shell checks the
+ *  channel at most every 6 hours). */
+const UPDATE_CHECK_MS = 60 * 60 * 1000;
 
 const root = (): HTMLElement => document.getElementById("app") as HTMLElement;
 const notices = h("div", { class: "notices", "aria-live": "polite" });
@@ -32,11 +46,10 @@ function say(text: string, kind: "info" | "warn" | "error" = "info"): void {
  *  one) and opens the window, or shows why not with Retry. */
 export async function boot(restart = false): Promise<void> {
   root().replaceChildren(h("p", { class: "boot", role: "status" }, "Starting Prometheus…"));
-  const outcome = await shell<Attach>(restart ? "restart_daemon" : "attach", {}).catch(
-    (err: unknown): Attach => ({ status: "failed", error: String(err) }),
-  );
+  const outcome = await shell<Attach>(restart ? "restart_daemon" : "attach", {}).catch((err: unknown): Attach => ({ status: "failed", error: String(err) }));
   if (outcome.status === "failed") return failed(outcome.error, outcome.log);
   if (outcome.status === "confirm_restart") return confirmRestart(outcome);
+  if (outcome.status === "no_local") return noLocal();
   if (outcome.notice) say(outcome.notice, "warn");
   window_(outcome.profiles);
 }
@@ -46,6 +59,17 @@ function failed(error: string, log?: string): void {
   retry.addEventListener("click", () => void boot());
   const logLink = log ? h("p", {}, "See the daemon log: ", h("a", { href: log, class: "log-link" }, log)) : null;
   root().replaceChildren(h("section", { class: "boot-failed", role: "alert" }, h("h1", {}, "Prometheus could not start"), h("p", { class: "error" }, error), logLink, retry));
+}
+
+function noLocal(): void {
+  root().replaceChildren(
+    h(
+      "section",
+      { class: "boot-failed", role: "status" },
+      h("h1", {}, "No local daemon"),
+      h("p", {}, "The app was started with --ignore-existing, so it did not start a gateway daemon on this machine. Start it without the flag to use the local agent."),
+    ),
+  );
 }
 
 function confirmRestart(outcome: { running_turns: number; daemon: string; bundled: string }): void {
@@ -64,14 +88,27 @@ function confirmRestart(outcome: { running_turns: number; daemon: string; bundle
   );
 }
 
+interface Opener {
+  chat: ChatView;
+  client: DesktopClient;
+  switchTo: (profile: string) => Promise<void>;
+  profiles: string[];
+  dialogs: HTMLElement;
+}
+
 function window_(profiles: string[]): void {
   const served = profiles.length > 0 ? profiles : ["default"];
   // The default profile first, as the CLI does without `-p`.
   const client = new DesktopClient(served.includes("default") ? "default" : (served[0] ?? "default"));
   const chat = new ChatView(client);
+  const attention = new Attention();
+  const panels = new PanelHost(client);
+  const prefs = new Prefs(client);
   const status = h("span", { class: "connection", role: "status" }, "Connecting…");
   const list = h("ul", { class: "sessions", "aria-label": "Sessions" });
   const picker = h("select", { name: "profile", "aria-label": "Profile" }, ...served.map((p) => h("option", { value: p, selected: p === "default" }, p)));
+  const dialogs = h("div", { class: "dialogs" });
+  const desktopSection = h("section", { class: "desktop-settings", "aria-label": "Desktop settings" });
 
   const refresh = async () => {
     const listed = await client.call<{ sessions: SessionSummary[] }>("session.list", { profile: client.profile }).catch(() => ({ sessions: [] }));
@@ -88,18 +125,33 @@ function window_(profiles: string[]): void {
     chat.draft();
     list.replaceChildren();
     picker.value = profile;
+    remember(profile);
     await client.switchProfile(profile);
   };
 
   client.onEvent = (envelope) => chat.apply(envelope);
-  client.onRequest = (request) => chat.request(request);
+  client.onRequest = (request) => {
+    chat.request(request);
+    if (request.method === "approval.request") attention.approval(request.id, request.params as unknown as ApprovalRequestParams, chat.title());
+  };
+  for (const event of ["request.resolved", "request.cancel"]) client.on(event, (envelope) => attention.settled((envelope.data as { id: string }).id));
+  client.on("turn.finished", (envelope) => {
+    attention.turn(envelope.session_id ?? "", false, "");
+    // A turn the window joined midway (after a relaunch) renders whole.
+    if (envelope.session_id && envelope.session_id === chat.sessionId) void chat.reload();
+  });
+  chat.onSubmitted = (sessionId) => attention.turn(sessionId, true, chat.title() ?? sessionId);
   client.onTruncated = (sessionId) => {
     if (sessionId === chat.sessionId) void chat.reload();
   };
   client.onState = (state) => {
     status.textContent = state === "connected" ? `Connected · ${client.profile}` : state === "reconnecting" ? "Reconnecting…" : "Connecting…";
     status.dataset.state = state;
-    if (state === "connected") void refresh();
+    if (state !== "connected") return;
+    void refresh();
+    void prefs.start({}).catch((err: unknown) => console.warn("UI preferences unavailable:", err));
+    void panels.load(client.profile);
+    void desktopSettings(client, desktopSection).catch((err: unknown) => console.warn("desktop settings:", err));
   };
   picker.addEventListener("change", () => void switchTo(picker.value));
 
@@ -117,21 +169,66 @@ function window_(profiles: string[]): void {
     }
   });
 
-  const opener: Opener = { chat, client, switchTo, profiles: served };
-  onShellEvent("deep-link", (payload) => void deepLink(payload as DeepLink, opener));
+  const opener: Opener = { chat, client, switchTo, profiles: served, dialogs };
+  listenToShell(opener);
   root().replaceChildren(
     h("header", { class: "top" }, h("span", { class: "brand" }, "Prometheus"), picker, status),
-    h("div", { class: "layout" }, h("nav", { class: "side" }, newChat, botChat, list), chat.el, settingsPanel(client)),
+    h(
+      "div",
+      { class: "layout" },
+      h("nav", { class: "side" }, newChat, botChat, list),
+      chat.el,
+      h("aside", { class: "aside" }, settingsPanel(client), desktopSection, panels.el),
+    ),
+    dialogs,
     notices,
   );
+  remember(client.profile);
   client.start();
+  void afterReady(opener);
 }
 
-interface Opener {
-  chat: ChatView;
-  client: DesktopClient;
-  switchTo: (profile: string) => Promise<void>;
-  profiles: string[];
+/** The shell's events: deep links, focus requests after a notification
+ *  click, sessions opened from the tray or the quick-ask panel. */
+function listenToShell(o: Opener): void {
+  onShellEvent("deep-link", (payload) => void deepLink(payload as DeepLink, o));
+  onShellEvent("focus-request", (payload) => void focusRequest(payload as { request_id: string; session_id: string }, o));
+  onShellEvent("open-session", (payload) => {
+    const asked = payload as { profile?: string; session_id: string };
+    void (async () => {
+      if (asked.profile && o.profiles.includes(asked.profile)) await o.switchTo(asked.profile);
+      await openOwned(asked.session_id, o);
+    })();
+  });
+}
+
+/** What waits for the window: held deep links, launch notices, updates. */
+async function afterReady(o: Opener): Promise<void> {
+  const launch = await shell<Launch>("launch_options").catch((): Launch => ({ notices: [] }));
+  for (const line of launch.notices) say(line, "warn");
+  const held = await shell<DeepLink[]>("take_links").catch(() => []);
+  for (const link of held) await deepLink(link, o);
+  const checkUpdates = async () => {
+    const outcome = await shell<{ available?: { version: string } }>("background_check").catch(() => ({}) as { available?: { version: string } });
+    if (outcome.available) say(`Prometheus ${outcome.available.version} is available: Settings → Updates.`);
+  };
+  void checkUpdates();
+  window.setInterval(() => void checkUpdates(), UPDATE_CHECK_MS);
+}
+
+function remember(profile: string): void {
+  try {
+    localStorage.setItem(LAST_PROFILE, profile);
+  } catch {
+    // The quick-ask panel then asks the default profile.
+  }
+}
+
+/** A notification was clicked: show its session and focus its card. The
+ *  request stays pending until the user answers it in the card. */
+async function focusRequest(asked: { request_id: string; session_id: string }, o: Opener): Promise<void> {
+  if (o.chat.sessionId !== asked.session_id) await openOwned(asked.session_id, o);
+  if (!focusCard(asked.request_id)) say("That approval was already answered or settled.", "info");
 }
 
 /** Opens `sessionId` in the profile that owns it: the window's first,
@@ -153,7 +250,8 @@ async function openOwned(sessionId: string, o: Opener): Promise<void> {
   await o.chat.open(sessionId);
 }
 
-/** What a deep link opens; it never submits input or answers a request. */
+/** What a deep link opens; it never submits input or answers a request,
+ *  and an install link only opens the consent dialog. */
 async function deepLink(link: DeepLink, o: Opener): Promise<void> {
   switch (link.open) {
     case "new":
@@ -164,6 +262,6 @@ async function deepLink(link: DeepLink, o: Opener): Promise<void> {
       await openOwned(link.session_id, o);
       return;
     default:
-      say(`Installing ${link.id} from a link needs the catalog install dialog, which this build does not have yet.`, "warn");
+      await installDialog(link, o.client.profile, o.dialogs);
   }
 }

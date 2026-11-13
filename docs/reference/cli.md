@@ -65,6 +65,7 @@ Commands:
   dashboard    Open the web dashboard: start the daemon's dashboard listener and sign the browser in with a one-time login link
   serve        Run the gateway daemon in the foreground with the dashboard listener open and no browser (for service managers); remote clients attach through the dashboard listener
   webapp       Open the desktop workspace in the browser (`webapp.enabled`)
+  desktop      Launch the Prometheus Desktop app for the selected profile, or install it (`--install`) [alias: gui]
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
   connectors   Hosted app connectors (Gmail, Notion, Linear...) on the Nous connector gateway: list them, list and rename accounts, connect and disconnect accounts
@@ -21478,6 +21479,128 @@ Options:
           Print help
 ```
 
+## `prometheus desktop`
+
+```text
+Launch the Prometheus Desktop app for the selected profile, or install it (`--install`)
+
+Usage: prometheus desktop [OPTIONS]
+
+Options:
+      --cwd <PATH>
+          The initial workspace of new chats
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --install
+          Download and install the desktop app of this version and channel
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --ignore-existing
+          Start the app without ensuring a local daemon (to pick a remote connection)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus desktop catalog-entry`
+
+```text
+The install dialog's facts about a catalog entry, as JSON
+
+Usage: prometheus desktop catalog-entry [OPTIONS] <KIND> <ID>
+
+Arguments:
+  <KIND>
+          `plugin` or `skill`
+
+          Possible values:
+          - plugin: A plugin of the plugin catalog
+          - skill:  A skill of the official skill catalog
+
+  <ID>
+          The catalog id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus desktop help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus desktop help
+```
+
+## `prometheus desktop help catalog-entry`
+
+```text
+The install dialog's facts about a catalog entry, as JSON
+
+Usage: prometheus desktop help catalog-entry
+```
+
+## `prometheus desktop help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus desktop help help
+```
+
 ## `prometheus gateway`
 
 ```text
@@ -25646,6 +25769,48 @@ Options:
           Print help
 ```
 
+## `prometheus plugins panels`
+
+```text
+The desktop app's plugin panels (`[ui]`) as JSON: the desktop shell runs this through its bundled binary
+
+Usage: prometheus plugins panels [OPTIONS]
+
+Options:
+      --all-profiles
+          Every profile's panels, not only the selected profile's
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus plugins test-adapter`
 
 ```text
@@ -25972,6 +26137,14 @@ Usage: prometheus plugins help reload
 Serve one dashboard backend request of a plugin (the daemon's plugin host process: the request JSON on stdin, the answer on stdout)
 
 Usage: prometheus plugins help panel-call
+```
+
+## `prometheus plugins help panels`
+
+```text
+The desktop app's plugin panels (`[ui]`) as JSON: the desktop shell runs this through its bundled binary
+
+Usage: prometheus plugins help panels
 ```
 
 ## `prometheus plugins help test-adapter`
@@ -27349,6 +27522,7 @@ Commands:
   dashboard    Open the web dashboard: start the daemon's dashboard listener and sign the browser in with a one-time login link
   serve        Run the gateway daemon in the foreground with the dashboard listener open and no browser (for service managers); remote clients attach through the dashboard listener
   webapp       Open the desktop workspace in the browser (`webapp.enabled`)
+  desktop      Launch the Prometheus Desktop app for the selected profile, or install it (`--install`)
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
   connectors   Hosted app connectors (Gmail, Notion, Linear...) on the Nous connector gateway: list them, list and rename accounts, connect and disconnect accounts
@@ -30689,6 +30863,22 @@ Open the desktop workspace in the browser (`webapp.enabled`)
 Usage: prometheus help webapp
 ```
 
+## `prometheus help desktop`
+
+```text
+Launch the Prometheus Desktop app for the selected profile, or install it (`--install`)
+
+Usage: prometheus help desktop
+```
+
+## `prometheus help desktop catalog-entry`
+
+```text
+The install dialog's facts about a catalog entry, as JSON
+
+Usage: prometheus help desktop catalog-entry
+```
+
 ## `prometheus help gateway`
 
 ```text
@@ -31394,6 +31584,14 @@ Usage: prometheus help plugins reload
 Serve one dashboard backend request of a plugin (the daemon's plugin host process: the request JSON on stdin, the answer on stdout)
 
 Usage: prometheus help plugins panel-call
+```
+
+## `prometheus help plugins panels`
+
+```text
+The desktop app's plugin panels (`[ui]`) as JSON: the desktop shell runs this through its bundled binary
+
+Usage: prometheus help plugins panels
 ```
 
 ## `prometheus help plugins test-adapter`
