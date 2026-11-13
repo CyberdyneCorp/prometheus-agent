@@ -152,6 +152,8 @@ jiff.workspace = true
 sha2.workspace = true
 
 [dev-dependencies]
+# The desktop shell the desktop browser tests drive (desktop_e2e.rs).
+pmt-desktop.workspace = true
 # The OpenAI SDK client of the API server tests (and its streams).
 async-openai.workspace = true
 futures-util.workspace = true

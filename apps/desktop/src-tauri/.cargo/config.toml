@@ -1,0 +1,4 @@
+# Build into the repository's target directory, so `cargo clean` at the root
+# removes the desktop's artifacts too.
+[build]
+target-dir = "../../../target/desktop"

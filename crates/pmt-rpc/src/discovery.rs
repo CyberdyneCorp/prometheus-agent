@@ -29,7 +29,16 @@ pub struct Endpoint {
     /// `/readyz`, `/metrics`), when it runs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub health_url: Option<String>,
+    /// The protocol features the daemon serves ([`FEATURES`] for this
+    /// build).
+    #[serde(default)]
+    pub features: Vec<String>,
 }
+
+/// The protocol features of this build's daemon (spec: desktop-app, Local
+/// endpoint validation): the session-attachment semantics of the `tui`
+/// capability.
+pub const FEATURES: &[&str] = &["session-attach"];
 
 /// A running daemon's discovery record.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -90,6 +99,7 @@ mod tests {
             rpc_protocol: "1.0".into(),
             started_at: "2026-01-01T00:00:00Z".into(),
             health_url: None,
+            features: Vec::new(),
         }
     }
 

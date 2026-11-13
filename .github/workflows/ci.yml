@@ -92,6 +92,14 @@ jobs:
         if: endsWith(matrix.target, '-musl')
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends musl-tools
 
+      # The desktop app (scripts/check's desktop gate) builds against
+      # WebKitGTK on the glibc Linux targets.
+      - name: Install the desktop app's webview libraries
+        if: runner.os == 'Linux' && !endsWith(matrix.target, '-musl')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libsoup-3.0-dev librsvg2-dev libxdo-dev
+
       # The shell-completion tests load the scripts in bash and zsh.
       - name: Install zsh
         if: runner.os == 'Linux'
@@ -226,6 +234,13 @@ jobs:
       - name: Windows sandbox tests
         if: runner.os == 'Windows' && !cancelled()
         run: cargo test -p pmt-sandbox --test sandbox --locked --target "${{ matrix.target }}" -- "windows::"
+
+      # The desktop app on WebView2 (desktop-app, Native command allowlist;
+      # Windows never open themselves; Deep links): its Tauri IPC tests on
+      # the mock runtime with the app's capability file.
+      - name: Windows desktop app tests
+        if: runner.os == 'Windows' && !cancelled()
+        run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --target-dir target/desktop --locked --target "${{ matrix.target }}"
 
       # The dashboard's platform support matrix (web-dashboard, Honest
       # platform support matrix — Sandbox strength on Windows): the

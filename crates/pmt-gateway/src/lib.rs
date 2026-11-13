@@ -25,6 +25,7 @@ pub mod connection;
 pub mod control;
 pub mod daemon;
 pub mod dashboard;
+pub mod desktop;
 pub mod devices;
 pub mod discovery;
 pub mod health_http;

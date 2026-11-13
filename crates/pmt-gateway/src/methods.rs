@@ -61,6 +61,7 @@ pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
         .register::<c::CommandDispatch, _, _>(catalog, dispatch)?
         .register::<c::ApprovalRespond, _, _>(catalog, approval_respond)?;
     crate::discovery::register(router, catalog)?;
+    crate::desktop::register(router, catalog)?;
     crate::vault::register(router, catalog)?;
     crate::moa::register(router, catalog)?;
     crate::observability::register(router, catalog)?;
@@ -165,6 +166,16 @@ async fn owner(call: &Call, session_id: &str) -> Result<String, RpcError> {
             server.hub().register(session_id, profile);
             return Ok(profile.clone());
         }
+    }
+    // A connection granted every served profile has looked everywhere:
+    // "not found" then discloses nothing about other profiles (spec:
+    // desktop-app, Gone-session verdict).
+    let granted = &call.conn.grant.profiles;
+    if server.profiles().iter().all(|p| granted.contains(p)) {
+        return Err(rpc(&Error::new(
+            &codes::SESSION_NOT_FOUND,
+            format!("session {session_id} not found"),
+        )));
     }
     Err(denied(session_id))
 }

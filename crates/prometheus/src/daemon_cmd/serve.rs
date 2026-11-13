@@ -176,6 +176,10 @@ fn server_options(
     options.health_url = Some(health_url);
     options.home = Some(home.to_path_buf());
     options.platform_features = super::support_matrix::probe(home);
+    options.allowed_origins = pmt_rpc::origins::DESKTOP_ORIGINS
+        .iter()
+        .map(|o| (*o).to_owned())
+        .collect();
     options
 }
 

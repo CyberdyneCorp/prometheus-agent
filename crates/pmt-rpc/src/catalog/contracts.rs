@@ -78,6 +78,7 @@ macro_rules! event {
 
 mod automation;
 mod cron;
+mod desktop;
 mod files;
 mod journey;
 mod local;
@@ -92,6 +93,7 @@ mod upkeep;
 mod worktree;
 pub use automation::*;
 pub use cron::*;
+pub use desktop::*;
 pub use files::*;
 pub use journey::*;
 pub use local::*;
@@ -501,6 +503,10 @@ pub struct SessionListParams {
     /// At most this many, newest activity first (default 50).
     #[serde(default)]
     pub limit: Option<u32>,
+    /// Also hidden sessions: canonical Bot Chats, archived and hidden
+    /// ones.
+    #[serde(default)]
+    pub include_hidden: bool,
 }
 
 /// One listed session.

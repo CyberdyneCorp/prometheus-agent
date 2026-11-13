@@ -147,7 +147,12 @@ struct EnsureOutput<'a> {
     control: &'a str,
     instance_id: &'a str,
     build_id: &'a str,
+    /// The daemon's semantic version (the desktop compares it with its
+    /// bundled binary's before restarting a stale daemon).
+    version: &'a str,
     rpc_protocol: &'a str,
+    /// The protocol features the daemon serves.
+    features: &'a [String],
 }
 
 fn start(home: &Path, ctx: &Context<'_>) -> Result<u8, Error> {
@@ -185,7 +190,9 @@ fn ensure_output(record: &DaemonRecord) -> Result<u8, Error> {
         control: &e.control,
         instance_id: &e.instance_id,
         build_id: &e.build_id,
+        version: &record.process.version,
         rpc_protocol: &e.rpc_protocol,
+        features: &e.features,
     })
 }
 

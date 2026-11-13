@@ -695,6 +695,25 @@
       },
       "type": "object"
     },
+    "BotChat": {
+      "additionalProperties": false,
+      "description": "`bot.chat.ensure` result.",
+      "properties": {
+        "created": {
+          "description": "Whether this call created it.",
+          "type": "boolean"
+        },
+        "session_id": {
+          "description": "The profile's canonical Bot Chat.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "created"
+      ],
+      "type": "object"
+    },
     "BudgetStanding": {
       "additionalProperties": false,
       "description": "One budget's standing in `usage.updated`.",
@@ -897,6 +916,13 @@
         "source": {
           "$ref": "#/$defs/CommandSource",
           "description": "Built-in, quick command, skill or client-handled."
+        },
+        "subcommands": {
+          "description": "Subcommands with their own disposition on this surface (a palette\noffers a command when it or one of them runs here).",
+          "items": {
+            "$ref": "#/$defs/SubcommandEntry"
+          },
+          "type": "array"
         }
       },
       "required": [
@@ -1082,6 +1108,24 @@
       ],
       "type": "object"
     },
+    "ConfigChange": {
+      "additionalProperties": false,
+      "description": "One change of a `config.patch`.",
+      "properties": {
+        "key": {
+          "description": "A dotted key (`delegation.model`).",
+          "type": "string"
+        },
+        "value": {
+          "default": null,
+          "description": "The new value (typed by the key's schema); `null` or absent removes\nthe key so its default applies."
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "type": "object"
+    },
     "ConfigGetParams": {
       "additionalProperties": false,
       "description": "`config.get` params.",
@@ -1101,6 +1145,82 @@
       },
       "required": [
         "key"
+      ],
+      "type": "object"
+    },
+    "ConfigPatchParams": {
+      "additionalProperties": false,
+      "description": "`config.patch` params.",
+      "properties": {
+        "changes": {
+          "description": "Applied together, validated as a whole: all or none.",
+          "items": {
+            "$ref": "#/$defs/ConfigChange"
+          },
+          "type": "array"
+        },
+        "profile": {
+          "description": "The window's profile.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "changes"
+      ],
+      "type": "object"
+    },
+    "ConfigPatched": {
+      "additionalProperties": false,
+      "description": "`config.patch` result.",
+      "properties": {
+        "keys": {
+          "description": "The keys the patch named.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "keys"
+      ],
+      "type": "object"
+    },
+    "ConfigReloaded": {
+      "additionalProperties": false,
+      "description": "`config.reload` result: the profile's configuration state.",
+      "properties": {
+        "error": {
+          "default": null,
+          "description": "Why the file on disk is not in use, while it is invalid.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pending_restart": {
+          "default": [],
+          "description": "Keys that apply after a daemon restart.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "profile": {
+          "description": "The profile.",
+          "type": "string"
+        },
+        "reloads": {
+          "description": "Valid edits loaded since the daemon started.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "profile",
+        "reloads"
       ],
       "type": "object"
     },
@@ -2662,6 +2782,20 @@
       ],
       "type": "object"
     },
+    "ProfileParams": {
+      "additionalProperties": false,
+      "description": "A call that only names the window's profile.",
+      "properties": {
+        "profile": {
+          "description": "The window's profile.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "type": "object"
+    },
     "PromptImage": {
       "description": "An image attached to a prompt: a file the daemon reads (checked like\n`chat --image`), or an image the session already holds (as\n`command.dispatch` returns them for `/retry`).",
       "oneOf": [
@@ -3061,6 +3195,11 @@
       "additionalProperties": false,
       "description": "`session.list` params.",
       "properties": {
+        "include_hidden": {
+          "default": false,
+          "description": "Also hidden sessions: canonical Bot Chats, archived and hidden\nones.",
+          "type": "boolean"
+        },
         "limit": {
           "default": null,
           "description": "At most this many, newest activity first (default 50).",
@@ -3305,6 +3444,33 @@
         "subagent_id",
         "session_id",
         "status"
+      ],
+      "type": "object"
+    },
+    "SubcommandEntry": {
+      "additionalProperties": false,
+      "description": "One subcommand of a `commands.catalog` entry.",
+      "properties": {
+        "disposition": {
+          "$ref": "#/$defs/Disposition",
+          "description": "Whether it runs from the asking client's surface."
+        },
+        "name": {
+          "description": "The first word after the command.",
+          "type": "string"
+        },
+        "reason": {
+          "default": null,
+          "description": "Why it does not run there.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "disposition"
       ],
       "type": "object"
     },
@@ -4490,8 +4656,13 @@
       "since": "1.0"
     },
     "bot.chat.ensure": {
-      "declared": false,
       "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/ProfileParams"
+      },
+      "result": {
+        "$ref": "#/$defs/BotChat"
+      },
       "since": "1.0"
     },
     "bot.create": {
@@ -4573,6 +4744,26 @@
       },
       "result": {
         "$ref": "#/$defs/ConfigValue"
+      },
+      "since": "1.0"
+    },
+    "config.patch": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/ConfigPatchParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ConfigPatched"
+      },
+      "since": "1.0"
+    },
+    "config.reload": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/ProfileParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ConfigReloaded"
       },
       "since": "1.0"
     },

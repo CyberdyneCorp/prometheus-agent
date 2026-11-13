@@ -118,6 +118,30 @@ web_gate() {
     (cd web && step npx --no-install playwright install chromium --only-shell)
 }
 
+# The desktop app (apps/desktop/src-tauri): its own Cargo workspace, since
+# the webview toolkits (WebKitGTK, WKWebView, WebView2) do not build for
+# the musl and Android targets. Formatted, linted, tested (the Tauri IPC
+# tests on the mock runtime) and license/advisory-checked where a webview
+# toolkit exists; its lockfile is in the release-age gate.
+desktop_gate() {
+    local manifest=apps/desktop/src-tauri/Cargo.toml
+    # Next to the workspace's builds, so `cargo clean` removes it too.
+    local target=target/desktop
+    case "${CARGO_BUILD_TARGET:-}" in
+    *-musl | *-android*)
+        echo "check: no desktop app for ${CARGO_BUILD_TARGET} (no webview toolkit)"
+        return
+        ;;
+    esac
+    if [ "$(uname -s)" = Linux ] && ! pkg-config --exists webkit2gtk-4.1; then
+        die "the desktop app needs WebKitGTK 4.1 (install: libwebkit2gtk-4.1-dev libsoup-3.0-dev librsvg2-dev libxdo-dev)"
+    fi
+    step cargo fmt --manifest-path "$manifest" --check
+    step cargo clippy --manifest-path "$manifest" --target-dir "$target" --all-targets --locked -- -D warnings
+    step cargo test --manifest-path "$manifest" --target-dir "$target" --locked
+    step cargo deny --manifest-path "$manifest" check
+}
+
 run_gates() {
     local with_perf=$1
     check_tools
@@ -128,6 +152,7 @@ run_gates() {
     # nextest does not run doctests.
     step cargo test --workspace --all-features --locked --doc
     step cargo deny check
+    desktop_gate
     deps_age_gate
     step openspec validate --all --strict --no-interactive
     step cargo xtask gen --check

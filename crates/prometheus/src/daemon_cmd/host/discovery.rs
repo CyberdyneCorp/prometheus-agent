@@ -9,7 +9,7 @@ use pmt_config::schema::ModelAlias;
 use pmt_core::error::Error;
 use pmt_rpc::contracts::{
     BannerInfo, ClientKind, CommandCatalog, CommandEntry, CommandSource, Completion, Completions,
-    ConfigValue, Disposition, FrozenPrompt, ModelOption, ModelOptions,
+    ConfigValue, Disposition, FrozenPrompt, ModelOption, ModelOptions, SubcommandEntry,
 };
 use pmt_tools::environments::Environments;
 use pmt_tools::files::backend::Kind;
@@ -33,15 +33,39 @@ fn surface(client: ClientKind) -> Surface {
     }
 }
 
-fn disposition(runs: bool) -> (Disposition, Option<String>) {
-    if runs {
-        (Disposition::Exec, None)
-    } else {
-        (
-            Disposition::Unavailable,
-            Some("not available on this surface".to_owned()),
-        )
+/// Where `/name` (run on `surfaces`) stands on `surface`; the reason of
+/// an unavailable command is authored here once and shown verbatim by
+/// every client.
+fn disposition(
+    name: &str,
+    surfaces: &[Surface],
+    surface: Surface,
+) -> (Disposition, Option<String>) {
+    if surfaces.contains(&surface) {
+        return (Disposition::Exec, None);
     }
+    let terminal = |s: &Surface| matches!(s, Surface::Cli | Surface::Tui);
+    let reason = if surfaces.iter().any(terminal) && !terminal(&surface) {
+        format!("/{name} is only available in the terminal interface.")
+    } else {
+        "not available on this surface".to_owned()
+    };
+    (Disposition::Unavailable, Some(reason))
+}
+
+fn subcommand_entries(command: &str, surface: Surface) -> Vec<SubcommandEntry> {
+    crate::slash::subcommands(command)
+        .iter()
+        .map(|sub| {
+            let (disposition, reason) =
+                disposition(&format!("{command} {}", sub.name), sub.surfaces, surface);
+            SubcommandEntry {
+                name: sub.name.to_owned(),
+                disposition,
+                reason,
+            }
+        })
+        .collect()
 }
 
 /// Every command of `registry` with its disposition on `surface`.
@@ -54,7 +78,7 @@ pub(super) fn catalog(
         .builtins()
         .iter()
         .map(|command| {
-            let (disposition, reason) = disposition(command.on(surface));
+            let (disposition, reason) = disposition(command.name, command.surfaces, surface);
             let client = CLIENT_COMMANDS.contains(&command.name);
             CommandEntry {
                 name: command.name.to_owned(),
@@ -68,11 +92,12 @@ pub(super) fn catalog(
                 },
                 disposition,
                 reason,
+                subcommands: subcommand_entries(command.name, surface),
             }
         })
         .collect();
     commands.extend(registry.externals().map(|external| {
-        let (disposition, reason) = disposition(external.surfaces.contains(&surface));
+        let (disposition, reason) = disposition(&external.name, &external.surfaces, surface);
         CommandEntry {
             name: external.name.clone(),
             aliases: external.aliases.clone(),
@@ -84,6 +109,7 @@ pub(super) fn catalog(
             },
             disposition,
             reason,
+            subcommands: Vec::new(),
         }
     }));
     commands.sort_by(|a, b| a.name.cmp(&b.name));

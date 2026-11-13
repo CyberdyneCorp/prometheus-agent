@@ -3239,6 +3239,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "pmt-desktop"
+version = "0.1.0"
+dependencies = [
+ "pmt-core",
+ "pmt-rpc",
+ "semver",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+]
+
+[[package]]
 name = "pmt-eval"
 version = "0.1.0"
 dependencies = [
@@ -3995,6 +4011,7 @@ dependencies = [
  "pmt-core",
  "pmt-cron",
  "pmt-delegation",
+ "pmt-desktop",
  "pmt-eval",
  "pmt-gateway",
  "pmt-i18n",

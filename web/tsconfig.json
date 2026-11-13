@@ -21,6 +21,7 @@
   },
   "include": [
     "src/**/*.ts",
+    "../apps/desktop/src/**/*.ts",
     "../schema/rpc.ts"
   ]
 }

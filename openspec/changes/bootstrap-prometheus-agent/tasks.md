@@ -566,10 +566,10 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 62. M3 Desktop app
 
-- [ ] 62.1 Scaffold the Tauri 2 app in `apps/desktop` reusing the dashboard components, with daemon attachment through the bundled binary (`daemon ensure` bounded), local endpoint validation and version-skew restart; verify with a desktop E2E test (spec: desktop-app)
-- [ ] 62.2 Implement one-use dial tickets kept out of webview storage, shared client defaults and reconnect with full-jitter backoff; verify that tickets never appear in webview storage (spec: desktop-app)
-- [ ] 62.3 Implement the native command allowlist, windows that never open themselves, the external URL scheme allowlist and deep links; verify with Tauri tests (spec: desktop-app)
-- [ ] 62.4 Implement desktop-sourced sessions, the gone-session verdict, the slash palette from the registry, atomic bot chats, validated settings patches and explicit profile switching; verify with desktop E2E tests (spec: desktop-app)
+- [x] 62.1 Scaffold the Tauri 2 app in `apps/desktop` reusing the dashboard components, with daemon attachment through the bundled binary (`daemon ensure` bounded), local endpoint validation and version-skew restart; verify with a desktop E2E test (spec: desktop-app)
+- [x] 62.2 Implement one-use dial tickets kept out of webview storage, shared client defaults and reconnect with full-jitter backoff; verify that tickets never appear in webview storage (spec: desktop-app)
+- [x] 62.3 Implement the native command allowlist, windows that never open themselves, the external URL scheme allowlist and deep links; verify with Tauri tests (spec: desktop-app)
+- [x] 62.4 Implement desktop-sourced sessions, the gone-session verdict, the slash palette from the registry, atomic bot chats, validated settings patches and explicit profile switching; verify with desktop E2E tests (spec: desktop-app)
 - [ ] 62.5 Implement background running after windows close, approval notifications that never approve, isolated plugin UI panels and the global hotkey quick-ask; verify that a notification click opens the card without approving (spec: desktop-app)
 - [ ] 62.6 Implement install deep links that open a consent flow (arbitrary URLs refused), launching the desktop from the CLI (verified download, project directory), desktop launch options and machine-wide UI preferences shared with the webapp; verify with desktop E2E tests (spec: desktop-app)
 - [ ] 62.7 Ship desktop packages with signing per OS (store installs refuse self-update, CLI and desktop cannot skew); verify signed artifacts in the release dry run (spec: distribution-and-update, spec: desktop-app)

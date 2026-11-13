@@ -47,6 +47,7 @@
 - [The messaging gateway](guide/gateway.md)
 - [The OpenAI-compatible API server](guide/api-server.md)
 - [The web dashboard](guide/dashboard.md)
+- [The desktop app](guide/desktop.md)
 - [Migrating from Hermes and other agents](guide/migration.md)
 
 # Reference

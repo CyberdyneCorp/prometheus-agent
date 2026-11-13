@@ -264,6 +264,14 @@ export interface BlueprintsListParams {
   profile?: string | null;
 }
 
+/** `bot.chat.ensure` result. */
+export interface BotChat {
+  /** Whether this call created it. */
+  created: boolean;
+  /** The profile's canonical Bot Chat. */
+  session_id: string;
+}
+
 /** One budget's standing in `usage.updated`. */
 export interface BudgetStanding {
   /** The limit. */
@@ -329,6 +337,8 @@ export interface CommandEntry {
   reason?: string | null;
   /** Built-in, quick command, skill or client-handled. */
   source: CommandSource;
+  /** Subcommands with their own disposition on this surface (a palette offers a command when it or one of them runs here). */
+  subcommands?: Array<SubcommandEntry>;
 }
 
 /** Where a command comes from. */
@@ -390,12 +400,46 @@ export interface ComponentHealth {
   state: string;
 }
 
+/** One change of a `config.patch`. */
+export interface ConfigChange {
+  /** A dotted key (`delegation.model`). */
+  key: string;
+  /** The new value (typed by the key's schema); `null` or absent removes the key so its default applies. */
+  value?: unknown;
+}
+
 /** `config.get` params. */
 export interface ConfigGetParams {
   /** A dotted key (`model.default`). */
   key: string;
   /** The profile; required when the connection is granted several. */
   profile?: string | null;
+}
+
+/** `config.patch` params. */
+export interface ConfigPatchParams {
+  /** Applied together, validated as a whole: all or none. */
+  changes: Array<ConfigChange>;
+  /** The window's profile. */
+  profile: string;
+}
+
+/** `config.patch` result. */
+export interface ConfigPatched {
+  /** The keys the patch named. */
+  keys: Array<string>;
+}
+
+/** `config.reload` result: the profile's configuration state. */
+export interface ConfigReloaded {
+  /** Why the file on disk is not in use, while it is invalid. */
+  error?: string | null;
+  /** Keys that apply after a daemon restart. */
+  pending_restart?: Array<string>;
+  /** The profile. */
+  profile: string;
+  /** Valid edits loaded since the daemon started. */
+  reloads: number;
 }
 
 /** `config.get` result. */
@@ -930,6 +974,12 @@ export interface PlatformSupport {
   tier: string;
 }
 
+/** A call that only names the window's profile. */
+export interface ProfileParams {
+  /** The window's profile. */
+  profile: string;
+}
+
 /** An image attached to a prompt: a file the daemon reads (checked like `chat --image`), or an image the session already holds (as `command.dispatch` returns them for `/retry`). */
 export type PromptImage = {
   path: string;
@@ -1056,6 +1106,8 @@ export interface SessionList {
 
 /** `session.list` params. */
 export interface SessionListParams {
+  /** Also hidden sessions: canonical Bot Chats, archived and hidden ones. */
+  include_hidden?: boolean;
   /** At most this many, newest activity first (default 50). */
   limit?: number | null;
   /** The profile; required only when the ticket grants several. */
@@ -1137,6 +1189,16 @@ export interface SubagentSummary {
   subagent_id: string;
   /** Its task's title. */
   title?: string | null;
+}
+
+/** One subcommand of a `commands.catalog` entry. */
+export interface SubcommandEntry {
+  /** Whether it runs from the asking client's surface. */
+  disposition: Disposition;
+  /** The first word after the command. */
+  name: string;
+  /** Why it does not run there. */
+  reason?: string | null;
 }
 
 /** `prompt.submit` params. */
@@ -1514,11 +1576,14 @@ export interface WorktreeStatus {
 export interface Methods {
   "approval.respond": { params: ApprovalRespondParams; result: Ack };
   "autoprune.offer": { params: AutopruneOfferParams; result: AutopruneOffer };
+  "bot.chat.ensure": { params: ProfileParams; result: BotChat };
   "command.dispatch": { params: DispatchParams; result: Dispatched };
   "commands.catalog": { params: SessionRef; result: CommandCatalog };
   "complete.path": { params: CompleteParams; result: Completions };
   "complete.slash": { params: CompleteParams; result: Completions };
   "config.get": { params: ConfigGetParams; result: ConfigValue };
+  "config.patch": { params: ConfigPatchParams; result: ConfigPatched };
+  "config.reload": { params: ProfileParams; result: ConfigReloaded };
   "cron.blueprints.fill": { params: BlueprintFillParams; result: BlueprintFilled };
   "cron.blueprints.list": { params: BlueprintsListParams; result: BlueprintList };
   "egress.set": { params: EgressSetParams; result: EgressState };
@@ -1597,7 +1662,6 @@ export interface Events {
 }
 
 export const UNDECLARED = [
-  "bot.chat.ensure",
   "bot.create",
   "bot.meta.get",
   "bot.meta.update",

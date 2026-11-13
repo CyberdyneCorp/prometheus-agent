@@ -19,10 +19,10 @@ The ensure step SHALL be bounded by 60 s plus a 15 s grace, and an expired ensur
 
 #### Scenario: Cold start exceeds the deadline
 - **WHEN** the daemon is not ready after 75 s
-- **THEN** the desktop SHALL show the timeout diagnostic with a link to `<home>/logs/daemon.log` and SHALL NOT attach
+- **THEN** the desktop SHALL show the timeout diagnostic with a link to the daemon's log `<home>/logs/gateway.log` and SHALL NOT attach
 
 ### Requirement: Local endpoint validation
-For the app-managed `local` connection the desktop SHALL accept an ensure endpoint only when its origin is `http` on `127.0.0.1` or `[::1]` with an explicit port and no credentials, path, query or fragment, and it carries a non-empty `instance_id`, an `rpc_protocol` whose major the desktop speaks, and the `session-attach` feature; otherwise it SHALL refuse with `Invalid local gateway endpoint: <reason>`; non-loopback backends SHALL be reachable only as registered `remote` or `ssh` connections under the requirement Remote connections are authenticated and encrypted, never by an ensure result.
+For the app-managed `local` connection the desktop SHALL accept an ensure endpoint only when its `rpc_url` origin is plain `http` (the `ws` scheme) on `127.0.0.1` or `[::1]` with an explicit port and no credentials, query or fragment, its path is the protocol's `/rpc`, and it carries a non-empty `instance_id`, an `rpc_protocol` whose major the desktop speaks, and the `session-attach` feature; otherwise it SHALL refuse with `Invalid local gateway endpoint: <reason>`; non-loopback backends SHALL be reachable only as registered `remote` or `ssh` connections under the requirement Remote connections are authenticated and encrypted, never by an ensure result.
 **Milestone:** M3
 
 #### Scenario: Non-loopback endpoint
@@ -130,12 +130,12 @@ Each bot profile's persistent chat SHALL be obtained with `bot.chat.ensure {prof
 - **THEN** both SHALL receive the same `session_id` and exactly one bot chat SHALL exist
 
 ### Requirement: Settings write validated config patches
-Settings screens SHALL write configuration only through `config.patch {profile, changes}`, which validates the whole patch against the config schema and applies it atomically; coupled fields (for example `delegation.model` and `delegation.provider`) SHALL be written in one patch, and a schema violation SHALL leave the file unchanged and show the validator's message next to the field.
+Settings screens SHALL write configuration only through `config.patch {profile, changes}`, which validates the whole patch against the config schema and applies it atomically; coupled fields (for example the subagent route: `delegation.model` with the direct endpoint keys `delegation.base_url`, `delegation.api_key_secret` and `delegation.wire_format`) SHALL be written in one patch, and a schema violation SHALL leave the file unchanged and show the validator's message next to the field.
 **Milestone:** M3
 
 #### Scenario: Clearing the subagent route
 - **WHEN** the user selects "Inherit from main agent"
-- **THEN** one `config.patch` SHALL remove both `delegation.model` and `delegation.provider`
+- **THEN** one `config.patch` SHALL remove `delegation.model` together with the direct endpoint keys `delegation.base_url`, `delegation.api_key_secret` and `delegation.wire_format`
 
 ### Requirement: Profile switching is explicit
 Every desktop request that touches profile data SHALL name the window's profile; switching profiles SHALL detach the window's sessions, request tickets for the new profile and re-attach, and a window SHALL never show data from two profiles at once.

@@ -48,7 +48,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 |---|---|---|---|---|
 | `approval.respond` | `tool-system` | 1.0 | [`ApprovalRespondParams`](#approvalrespondparams) | [`Ack`](#ack) |
 | `autoprune.offer` | `session-storage` | 1.0 | [`AutopruneOfferParams`](#autopruneofferparams) | [`AutopruneOffer`](#autopruneoffer) |
-| `bot.chat.ensure` | `bot-mode` | 1.0 | not served yet | |
+| `bot.chat.ensure` | `bot-mode` | 1.0 | [`ProfileParams`](#profileparams) | [`BotChat`](#botchat) |
 | `bot.create` | `bot-mode` | 1.0 | not served yet | |
 | `bot.meta.get` | `bot-mode` | 1.0 | not served yet | |
 | `bot.meta.update` | `bot-mode` | 1.0 | not served yet | |
@@ -60,6 +60,8 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `complete.path` | `tui` | 1.0 | [`CompleteParams`](#completeparams) | [`Completions`](#completions) |
 | `complete.slash` | `tui` | 1.0 | [`CompleteParams`](#completeparams) | [`Completions`](#completions) |
 | `config.get` | `tui` | 1.0 | [`ConfigGetParams`](#configgetparams) | [`ConfigValue`](#configvalue) |
+| `config.patch` | `desktop-app` | 1.0 | [`ConfigPatchParams`](#configpatchparams) | [`ConfigPatched`](#configpatched) |
+| `config.reload` | `desktop-app` | 1.0 | [`ProfileParams`](#profileparams) | [`ConfigReloaded`](#configreloaded) |
 | `cron.blueprints.fill` | `scheduled-jobs` | 1.0 | [`BlueprintFillParams`](#blueprintfillparams) | [`BlueprintFilled`](#blueprintfilled) |
 | `cron.blueprints.list` | `scheduled-jobs` | 1.0 | [`BlueprintsListParams`](#blueprintslistparams) | [`BlueprintList`](#blueprintlist) |
 | `daemon.update` | `workspace-architecture` | 1.0 | not served yet | |
@@ -402,6 +404,15 @@ One slot, as a form field.
 |---|---|---|---|
 | `profile` | string or null | no | The profile (the connection's only one when omitted). |
 
+### `BotChat`
+
+`bot.chat.ensure` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `created` | boolean | yes | Whether this call created it. |
+| `session_id` | string | yes | The profile's canonical Bot Chat. |
+
 ### `BudgetStanding`
 
 One budget's standing in `usage.updated`.
@@ -476,6 +487,7 @@ One `commands.catalog` entry.
 | `name` | string | yes | The name without `/`. |
 | `reason` | string or null | no | Why it does not run there. |
 | `source` | [`CommandSource`](#commandsource) | yes | Built-in, quick command, skill or client-handled. |
+| `subcommands` | array of [`SubcommandEntry`](#subcommandentry) | no | Subcommands with their own disposition on this surface (a palette offers a command when it or one of them runs here). |
 
 ### `CommandSource`
 
@@ -546,6 +558,15 @@ One component's health.
 | `since` | string | yes | When it entered the state (RFC 3339). |
 | `state` | string | yes | `ok`, `degraded` or `down`. |
 
+### `ConfigChange`
+
+One change of a `config.patch`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `key` | string | yes | A dotted key (`delegation.model`). |
+| `value` | any | no | The new value (typed by the key's schema); `null` or absent removes the key so its default applies. |
+
 ### `ConfigGetParams`
 
 `config.get` params.
@@ -554,6 +575,34 @@ One component's health.
 |---|---|---|---|
 | `key` | string | yes | A dotted key (`model.default`). |
 | `profile` | string or null | no | The profile; required when the connection is granted several. |
+
+### `ConfigPatchParams`
+
+`config.patch` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `changes` | array of [`ConfigChange`](#configchange) | yes | Applied together, validated as a whole: all or none. |
+| `profile` | string | yes | The window's profile. |
+
+### `ConfigPatched`
+
+`config.patch` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `keys` | array of string | yes | The keys the patch named. |
+
+### `ConfigReloaded`
+
+`config.reload` result: the profile's configuration state.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `error` | string or null | no | Why the file on disk is not in use, while it is invalid. |
+| `pending_restart` | array of string | no | Keys that apply after a daemon restart. |
+| `profile` | string | yes | The profile. |
+| `reloads` | integer | yes | Valid edits loaded since the daemon started. |
 
 ### `ConfigValue`
 
@@ -1075,6 +1124,14 @@ The daemon's build target and its support tier.
 | `target` | string | yes | The Rust target triple. |
 | `tier` | string | yes | `tier1`, `tier2` or `unsupported`. |
 
+### `ProfileParams`
+
+A call that only names the window's profile.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string | yes | The window's profile. |
+
 ### `PromptImage`
 
 An image attached to a prompt: a file the daemon reads (checked like `chat --image`), or an image the session already holds (as `command.dispatch` returns them for `/retry`).
@@ -1211,6 +1268,7 @@ What the daemon serves.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `include_hidden` | boolean | no | Also hidden sessions: canonical Bot Chats, archived and hidden ones. |
 | `limit` | integer or null | no | At most this many, newest activity first (default 50). |
 | `profile` | string or null | no | The profile; required only when the ticket grants several. |
 
@@ -1290,6 +1348,16 @@ One delegated child of a session.
 | `status` | string | yes | `running`, `completed`, `failed` or `stopped`. |
 | `subagent_id` | string | yes | The child's id. |
 | `title` | string or null | no | Its task's title. |
+
+### `SubcommandEntry`
+
+One subcommand of a `commands.catalog` entry.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `disposition` | [`Disposition`](#disposition) | yes | Whether it runs from the asking client's surface. |
+| `name` | string | yes | The first word after the command. |
+| `reason` | string or null | no | Why it does not run there. |
 
 ### `SubmitParams`
 

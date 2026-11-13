@@ -332,6 +332,8 @@ pub mod api;
 pub mod dashboard;
 #[cfg(feature = "dashboard")]
 pub mod dashboard_plugins;
+#[cfg(all(unix, feature = "dashboard"))]
+pub mod desktop;
 #[cfg(feature = "dashboard")]
 pub mod oidc;
 #[cfg(feature = "gateway")]

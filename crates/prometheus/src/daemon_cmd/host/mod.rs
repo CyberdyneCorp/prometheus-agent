@@ -47,6 +47,7 @@ mod dashboard;
 #[cfg(feature = "dashboard")]
 mod dashboard_change;
 mod delegations;
+mod desktop;
 mod discovery;
 mod gateway;
 mod health_sample;
@@ -597,6 +598,7 @@ impl Host for DaemonHost {
             let profile = &self.profile(profile)?;
             let options = pmt_store::ListOptions {
                 limit: Some(params.limit.unwrap_or(50)),
+                all: params.include_hidden,
                 ..pmt_store::ListOptions::default()
             };
             let loaded = profile.loaded.lock().await;
@@ -604,6 +606,10 @@ impl Host for DaemonHost {
                 .store
                 .list_sessions(&options)?
                 .into_iter()
+                // The canonical Bot Chat is reached through its bot, not
+                // the sessions list (spec: desktop-app, Bot chats are
+                // created atomically by the daemon).
+                .filter(|s| params.include_hidden || !s.bot_chat)
                 .map(|s| SessionSummary {
                     live: loaded
                         .get(&s.id)
@@ -972,6 +978,25 @@ impl Host for DaemonHost {
             crate::plugins_host::reload::check_target(&loaded, plugin)?;
             Ok(crate::plugins_host::reload::report(&loaded, plugin, false))
         })
+    }
+
+    fn config_patch<'a>(
+        &'a self,
+        profile: &'a str,
+        changes: Vec<pmt_rpc::contracts::ConfigChange>,
+    ) -> HostFuture<'a, ()> {
+        Box::pin(self.patch_config(profile, changes))
+    }
+
+    fn config_reload<'a>(
+        &'a self,
+        profile: &'a str,
+    ) -> HostFuture<'a, pmt_rpc::contracts::ConfigReloaded> {
+        Box::pin(self.reload_config(profile))
+    }
+
+    fn bot_chat<'a>(&'a self, profile: &'a str) -> HostFuture<'a, (String, bool)> {
+        Box::pin(async move { self.ensure_bot_chat(&self.profile(profile)?).await })
     }
 
     fn config_get<'a>(&'a self, profile: &'a str, key: &'a str) -> HostFuture<'a, ConfigValue> {

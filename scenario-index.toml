@@ -4065,3 +4065,61 @@ capabilities = [
 
 [web-dashboard."Listener lifecycle within the daemon"]
 "Second dashboard command" = ["crates/prometheus/tests/dashboard_http.rs::a_second_command_reuses_the_listener_and_stop_leaves_the_daemon_running"]
+
+# Group 62.1-62.4 (desktop app). Desktop E2E tests run the desktop page in
+# Chromium at the webview origin with its `shell` command served by the
+# real shell core (crates/prometheus/tests/common/desktop.rs); the Tauri
+# tests (apps/desktop/src-tauri, run by scripts/check's desktop gate) cover
+# the native IPC boundary.
+[desktop-app."Daemon attachment through the bundled binary"]
+"Ensure prints garbage" = { tests = ["crates/pmt-desktop/tests/attach.rs::ensure_printing_garbage_is_a_no_result_error_and_no_attachment", "crates/pmt-desktop/src/ensure.rs::only_one_json_object_is_a_result", "crates/prometheus/tests/desktop_e2e.rs::the_desktop_attaches_through_the_bundled_binary"], note = "a fake bundled binary exits 2 with non-JSON stdout: the shell answers the no-result error with the last stderr line and stores no endpoint (the page shows it with Retry); the E2E attaches through the real binary's `daemon ensure --json`" }
+
+[desktop-app."Ensure is bounded"]
+"Cold start exceeds the deadline" = { tests = ["crates/pmt-desktop/tests/attach.rs::a_cold_start_past_the_deadline_is_a_timeout_with_the_log_link", "crates/pmt-desktop/src/ensure.rs::the_errors_read_as_the_spec_words_them"], note = "the app's bound is DEADLINE + GRACE = 75 s (unit test); the integration test runs a 1 s bound against a binary that sleeps and gets the timeout with the `<home>/logs/gateway.log` link, never an attachment" }
+
+[desktop-app."Local endpoint validation"]
+"Non-loopback endpoint" = ["crates/pmt-desktop/src/endpoint.rs::a_non_loopback_endpoint_is_refused", "crates/pmt-desktop/tests/attach.rs::a_non_loopback_endpoint_is_refused"]
+
+[desktop-app."Version skew restarts a stale daemon"]
+"Daemon outlived a CLI update to an older app" = ["crates/pmt-desktop/src/skew.rs::a_daemon_that_outlived_a_cli_update_to_an_older_app_is_kept", "crates/pmt-desktop/tests/attach.rs::a_daemon_that_outlived_a_cli_update_to_an_older_app_keeps_running", "crates/pmt-desktop/tests/attach.rs::a_stale_daemon_restarts_silently_but_asks_first_while_turns_run"]
+
+[desktop-app."One-use dial tickets never reach the webview's storage"]
+"Replayed ticket" = { tests = ["crates/prometheus/tests/desktop_e2e.rs::the_desktop_attaches_through_the_bundled_binary", "crates/pmt-desktop/src/dial.rs::a_dial_never_prints_its_ticket"], note = "desktop-attach.spec.ts: every ticket the shell issued is absent from the page's URL, cookies, DOM, localStorage, sessionStorage, IndexedDB and caches, and a socket presenting a consumed one is closed with 4401" }
+"Ticket flood" = ["crates/pmt-desktop/src/dial.rs::a_hundred_pending_dials_refuse_the_next", "crates/pmt-desktop/src/dial.rs::a_dial_is_bound_to_the_window_that_asked"]
+
+[desktop-app."Shared client defaults"]
+"Reconnect re-advertises" = { tests = ["crates/prometheus/tests/desktop_e2e.rs::the_desktop_reconnects_and_keeps_its_session"], note = "desktop-reconnect.spec.ts: after `daemon restart` the new socket's first frame is rpc.hello as `desktop` with server_requests = true, and it re-attaches the open session" }
+
+[desktop-app."Reconnect backoff with full jitter"]
+"Flapping daemon" = { tests = ["crates/prometheus/tests/desktop_e2e.rs::the_desktop_reconnects_and_keeps_its_session"], note = "desktop-reconnect.spec.ts runs the page's Backoff: three connections closing after 2 s leave attempt 3 and a 2400 ms ceiling" }
+
+[desktop-app."Native command allowlist"]
+"Plugin tries a native command" = { tests = ["apps/desktop/src-tauri/src/app_tests.rs::a_plugin_frame_has_no_native_commands", "apps/desktop/src-tauri/src/app_tests.rs::only_the_typed_shell_command_is_reachable", "crates/pmt-desktop/tests/attach.rs::a_plugin_refusal_is_logged_at_warn_with_the_plugin_id", "crates/pmt-desktop/src/request.rs::requests_are_typed_and_anything_else_is_rejected"], note = "Tauri mock runtime with the app's capability file: an invoke from a plugin frame's origin is refused by the ACL; a frame's request relayed by the page is refused and logged at WARN with the plugin id" }
+
+[desktop-app."Windows never open themselves"]
+"Artifact script opens a window" = ["apps/desktop/src-tauri/src/app_tests.rs::an_artifact_script_opens_no_window", "crates/pmt-desktop/src/navigation.rs::an_artifact_script_opens_no_window", "crates/prometheus/tests/desktop_e2e.rs::the_desktop_attaches_through_the_bundled_binary"]
+
+[desktop-app."External URL scheme allowlist"]
+"javascript link from the agent" = ["apps/desktop/src-tauri/src/app_tests.rs::a_javascript_link_from_the_agent_is_invalid_and_opens_nothing", "crates/pmt-desktop/src/links.rs::a_javascript_link_is_invalid", "crates/prometheus/tests/desktop_e2e.rs::the_desktop_attaches_through_the_bundled_binary"]
+
+[desktop-app."Deep links"]
+"Link with a prompt payload" = ["apps/desktop/src-tauri/src/app_tests.rs::a_deep_link_with_a_prompt_payload_opens_an_empty_draft", "crates/pmt-desktop/src/deeplink.rs::a_prompt_payload_is_dropped", "crates/prometheus/tests/desktop_e2e.rs::the_desktop_attaches_through_the_bundled_binary"]
+
+[desktop-app."Sessions are created with desktop source"]
+"New chat" = ["crates/prometheus/tests/desktop_protocol.rs::a_desktop_chat_is_created_with_desktop_source", "crates/prometheus/tests/desktop_e2e.rs::the_desktop_attaches_through_the_bundled_binary"]
+
+[desktop-app."Gone-session verdict"]
+"Resume during reconnect" = { tests = ["crates/prometheus/tests/desktop_e2e.rs::the_desktop_reconnects_and_keeps_its_session"], note = "desktop-reconnect.spec.ts: with the daemon stopped the window stays on the session with Retry; a -32003 answer while connected opens a fresh draft" }
+
+[desktop-app."Slash palette from one command registry"]
+"Subcommand available, parent not" = { tests = ["crates/prometheus/tests/desktop_e2e.rs::desktop_settings_palette_bots_and_profiles", "crates/prometheus/tests/desktop_protocol.rs::the_desktop_catalog_has_terminal_only_reasons_and_subcommand_dispositions"], note = "desktop-settings.spec.ts runs the page's palette over a catalog where /skills is unavailable except `pending`, and the real catalog's subcommand dispositions in the window" }
+"Terminal-only command" = ["crates/prometheus/tests/desktop_protocol.rs::the_desktop_catalog_has_terminal_only_reasons_and_subcommand_dispositions", "crates/prometheus/tests/desktop_e2e.rs::desktop_settings_palette_bots_and_profiles"]
+
+[desktop-app."Bot chats are created atomically by the daemon"]
+"Two windows open the same bot during a restart" = ["crates/prometheus/tests/desktop_protocol.rs::two_windows_opening_the_same_bot_during_a_restart_share_one_bot_chat", "crates/prometheus/tests/desktop_e2e.rs::desktop_settings_palette_bots_and_profiles"]
+
+[desktop-app."Settings write validated config patches"]
+"Clearing the subagent route" = ["crates/prometheus/tests/desktop_protocol.rs::clearing_the_subagent_route_removes_it_in_one_validated_patch", "crates/prometheus/tests/desktop_e2e.rs::desktop_settings_palette_bots_and_profiles"]
+
+[desktop-app."Profile switching is explicit"]
+"Restart gateway under a profile" = ["crates/prometheus/tests/desktop_protocol.rs::a_config_reload_names_the_windows_profile", "crates/prometheus/tests/desktop_e2e.rs::desktop_settings_palette_bots_and_profiles"]

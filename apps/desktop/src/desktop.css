@@ -1,0 +1,16 @@
+/* The desktop window's layout on top of the dashboard's styles. */
+body { height: 100vh; display: flex; flex-direction: column; }
+#app { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.layout { flex: 1; display: grid; grid-template-columns: 220px 1fr 280px; min-height: 0; }
+nav.side { border-right: 1px solid var(--line); padding: 12px; display: flex; flex-direction: column; gap: 8px; overflow: auto; }
+nav.side ul.sessions { list-style: none; margin: 0; padding: 0; }
+nav.side ul.sessions button { width: 100%; text-align: left; }
+section.chat { display: flex; flex-direction: column; padding: 12px; min-height: 0; }
+section.chat .transcript { flex: 1; overflow: auto; }
+section.settings { border-left: 1px solid var(--line); padding: 12px; }
+ul.palette { list-style: none; margin: 0 0 6px; padding: 0; }
+ul.palette li { cursor: pointer; padding: 2px 6px; }
+ul.palette li:hover { background: var(--line); }
+.field-error { color: var(--bad); }
+.connection[data-state="reconnecting"] { color: var(--warn); }
+.boot, .boot-failed, .confirm-restart { padding: 24px; }

@@ -19,6 +19,10 @@ use serde::Serialize;
 
 use crate::hub::Hub;
 
+fn not_served(why: &str) -> Error {
+    Error::new(&pmt_core::error::codes::RPC_NOT_SERVED, why)
+}
+
 /// A boxed host future.
 pub type HostFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, Error>> + Send + 'a>>;
 
@@ -416,6 +420,30 @@ pub trait Host: Send + Sync + 'static {
                 "this daemon hosts no plugins",
             ))
         })
+    }
+
+    /// Applies a validated configuration patch to `profile`
+    /// (`config.patch`): all changes or none.
+    fn config_patch<'a>(
+        &'a self,
+        _profile: &'a str,
+        _changes: Vec<pmt_rpc::contracts::ConfigChange>,
+    ) -> HostFuture<'a, ()> {
+        Box::pin(async { Err(not_served("this host has no configuration files")) })
+    }
+
+    /// Re-reads `profile`'s configuration now (`config.reload`).
+    fn config_reload<'a>(
+        &'a self,
+        _profile: &'a str,
+    ) -> HostFuture<'a, pmt_rpc::contracts::ConfigReloaded> {
+        Box::pin(async { Err(not_served("this host has no configuration files")) })
+    }
+
+    /// `profile`'s canonical Bot Chat, created when it has none
+    /// (`bot.chat.ensure`); `true` when created now.
+    fn bot_chat<'a>(&'a self, _profile: &'a str) -> HostFuture<'a, (String, bool)> {
+        Box::pin(async { Err(not_served("this host has no bot chats")) })
     }
 
     /// Each served profile's configuration state, for `daemon status`.

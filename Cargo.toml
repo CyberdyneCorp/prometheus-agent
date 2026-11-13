@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "xtask"]
+exclude = ["apps/desktop/src-tauri"]
 default-members = ["crates/*"]
 
 [workspace.package]
@@ -16,6 +17,7 @@ repository = "https://github.com/CyberdyneCorp/prometheus-agent"
 pmt-agent = { path = "crates/pmt-agent" }
 pmt-api = { path = "crates/pmt-api" }
 pmt-web = { path = "crates/pmt-web" }
+pmt-desktop = { path = "crates/pmt-desktop" }
 pmt-automation = { path = "crates/pmt-automation" }
 pmt-config = { path = "crates/pmt-config" }
 pmt-core = { path = "crates/pmt-core" }

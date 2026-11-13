@@ -103,6 +103,23 @@ pub struct CommandEntry {
     /// Why it does not run there.
     #[serde(default)]
     pub reason: Option<String>,
+    /// Subcommands with their own disposition on this surface (a palette
+    /// offers a command when it or one of them runs here).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subcommands: Vec<SubcommandEntry>,
+}
+
+/// One subcommand of a `commands.catalog` entry.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SubcommandEntry {
+    /// The first word after the command.
+    pub name: String,
+    /// Whether it runs from the asking client's surface.
+    pub disposition: Disposition,
+    /// Why it does not run there.
+    #[serde(default)]
+    pub reason: Option<String>,
 }
 
 /// `commands.catalog` result.

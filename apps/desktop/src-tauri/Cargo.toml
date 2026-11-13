@@ -1,0 +1,55 @@
+# The desktop app (design: Tauri 2, system webview). Its own workspace: the
+# webview toolkits (WebKitGTK, WKWebView, WebView2) do not build for the
+# musl and Android targets the main workspace covers, so this crate stays
+# thin and everything testable without a webview lives in
+# crates/pmt-desktop. scripts/check builds, lints and tests it where the
+# webview toolkit exists (see desktop_gate there).
+[workspace]
+
+[package]
+name = "prometheus-desktop"
+description = "Prometheus desktop app: the Tauri shell over the profile's gateway daemon"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+repository = "https://github.com/CyberdyneCorp/prometheus-agent"
+
+[[bin]]
+name = "prometheus-desktop"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2.7", default-features = false, features = [] }
+
+[dependencies]
+pmt-core = { path = "../../../crates/pmt-core" }
+pmt-config = { path = "../../../crates/pmt-config" }
+pmt-desktop = { path = "../../../crates/pmt-desktop" }
+serde_json = "1.0"
+tauri = { version = "2.12", features = [] }
+# Deep links (`prometheus://`) and forwarding them to the running instance.
+tauri-plugin-deep-link = "2.6"
+tauri-plugin-single-instance = { version = "2.5", features = ["deep-link"] }
+# The native commands of the allowlist. Their JavaScript commands are never
+# granted to the webview (capabilities/main.json): the shell calls their
+# Rust APIs only from its own typed `shell` command.
+tauri-plugin-clipboard-manager = "2.5"
+tauri-plugin-dialog = "2.8"
+tauri-plugin-global-shortcut = "2.4"
+tauri-plugin-notification = "2.8"
+tauri-plugin-opener = "2.7"
+tokio = { version = "1.54", features = ["rt-multi-thread", "macros"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter"] }
+
+[dev-dependencies]
+tauri = { version = "2.12", features = ["test"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+unreachable_pub = "warn"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }

@@ -325,6 +325,7 @@ impl Host for FakeHost {
             source,
             disposition,
             reason: None,
+            subcommands: Vec::new(),
         };
         let commands = vec![
             entry("compress", CommandSource::Builtin, Disposition::Exec),

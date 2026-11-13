@@ -134,11 +134,15 @@ fn ensure_prints_the_endpoint_status_and_stop_end_it() {
         [
             "build_id",
             "control",
+            "features",
             "instance_id",
             "rpc_protocol",
-            "rpc_url"
+            "rpc_url",
+            "version"
         ]
     );
+    assert_eq!(endpoint["features"], json!(["session-attach"]));
+    assert_eq!(endpoint["version"], env!("CARGO_PKG_VERSION"));
     let again: Value =
         serde_json::from_str(&ok(&run(home.path(), &["--json", "daemon", "ensure"]))).unwrap();
     assert_eq!(again, endpoint, "the same daemon");

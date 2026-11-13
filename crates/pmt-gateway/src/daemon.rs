@@ -67,6 +67,10 @@ pub async fn run(
         rpc_protocol: server.protocol().to_string(),
         started_at: server.started_at().to_owned(),
         health_url: server.health_url().map(str::to_owned),
+        features: pmt_rpc::discovery::FEATURES
+            .iter()
+            .map(|f| (*f).to_owned())
+            .collect(),
     };
     server.set_endpoint(endpoint.clone());
     let control_task = pmt_core::spawn::spawn(control.serve(Arc::clone(&server)).in_current_span());

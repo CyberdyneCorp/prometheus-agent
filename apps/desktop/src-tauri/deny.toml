@@ -1,0 +1,72 @@
+# cargo-deny policy of the desktop app's own workspace: the same license
+# allowlist and advisory policy as the repository's deny.toml (keep the
+# `allow` list identical), with the exceptions this graph needs. The
+# advisories ignored below are in the Linux webview and D-Bus stack that
+# Tauri and its official plugins pin; nothing else provides them.
+
+[graph]
+all-features = true
+
+[advisories]
+unmaintained = "all"
+yanked = "deny"
+ignore = [
+    # proc-macro-error (build-time macro) through gtk-rs 0.18's glib-macros:
+    # Tauri's Linux webview (WebKitGTK) bindings; no release without it.
+    { id = "RUSTSEC-2024-0370", reason = "gtk-rs 0.18 of Tauri's Linux webview stack; no maintained replacement" },
+    # zvariant, zvariant_derive and zbus_names through zbus 5: D-Bus on
+    # Linux for notifications, the opener and single-instance; the Tauri
+    # plugins pin zbus 5.
+    { id = "RUSTSEC-2026-0370", reason = "zbus 5 D-Bus stack pinned by the Tauri plugins (Linux only)" },
+    { id = "RUSTSEC-2026-0371", reason = "zbus 5 D-Bus stack pinned by the Tauri plugins (Linux only)" },
+    { id = "RUSTSEC-2026-0372", reason = "zbus 5 D-Bus stack pinned by the Tauri plugins (Linux only)" },
+]
+
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "MPL-2.0",
+    "Zlib",
+    "Unicode-3.0",
+]
+confidence-threshold = 0.93
+unused-allowed-license = "allow"
+
+# A public-domain dedication (Creative Commons Zero), through the deep-link
+# plugin's ini parser (const-random); no conditions at all.
+[[licenses.exceptions]]
+crate = "tiny-keccak"
+allow = ["CC0-1.0"]
+
+# The clipboard plugin's Windows support (arboard -> clipboard-win ->
+# error-code), as in the repository's deny.toml.
+[[licenses.exceptions]]
+crate = "clipboard-win"
+allow = ["BSL-1.0"]
+
+[[licenses.exceptions]]
+crate = "error-code"
+allow = ["BSL-1.0"]
+
+# Apache-2.0 with the LLVM exception (only adds a permission), through
+# gtk-rs's system-deps on Linux.
+[[licenses.exceptions]]
+crate = "target-lexicon"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

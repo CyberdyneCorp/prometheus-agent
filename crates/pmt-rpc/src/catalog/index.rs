@@ -131,6 +131,8 @@ pub const INDEX: &[IndexEntry] = &[
     // desktop-app
     method("ui.prefs.get", "desktop-app"),
     method("ui.prefs.patch", "desktop-app"),
+    method("config.patch", "desktop-app"),
+    method("config.reload", "desktop-app"),
     // messaging-gateway
     method("pairing.approve", "messaging-gateway"),
     // security-boundaries
