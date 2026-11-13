@@ -90,7 +90,11 @@ pub(crate) fn snap<R: Runtime>(app: &AppHandle<R>) {
 
 /// The bar's place on the screen.
 pub(crate) fn bounds<R: Runtime>(app: &AppHandle<R>) -> Option<Bounds> {
-    let window = bar(app)?;
+    window_bounds(&bar(app)?)
+}
+
+/// Where `window` is on the screen.
+pub(crate) fn window_bounds<R: Runtime>(window: &tauri::WebviewWindow<R>) -> Option<Bounds> {
     let at = window.outer_position().ok()?;
     let size = window.outer_size().ok()?;
     Some(Bounds {

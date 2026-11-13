@@ -97,9 +97,11 @@ impl DaemonHost {
             self.launch.user_home().map(PathBuf::as_path),
             true,
         );
+        let desktop = super::desktop_ui::UiPorts::new(scope.clone(), Arc::clone(&profile.store));
         let factory = Factory::new(scope, &self.launch, &flags(setup), ad_hoc, options)?
             .with_current(profile.current.clone())
             .with_messaging(Arc::new(ports))
+            .with_desktop(Arc::new(desktop))
             .hosted_by(daemon);
         let factory = Arc::new(factory);
         factories.insert(key, Arc::clone(&factory));

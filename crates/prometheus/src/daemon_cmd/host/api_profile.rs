@@ -283,7 +283,7 @@ fn toolsets(scope: &pmt_config::ProfileScope) -> Result<Value, Error> {
     let (registry, extensions) = crate::tools_cmd::profile_registry(scope)?;
     let surface = SessionSurface::Api;
     let selection =
-        crate::chat::session::tools::selection(&registry, config, false, &extensions, &surface)?;
+        crate::chat::session::tools::selection(&registry, scope, false, &extensions, &surface)?;
     let active: BTreeSet<&str> = registry
         .toolsets()
         .filter(|t| {

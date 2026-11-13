@@ -132,7 +132,10 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `moa.presets.list` | `mixture-of-agents` | 1.0 | [`MoaPresetsListParams`](#moapresetslistparams) | [`MoaPresetList`](#moapresetlist) |
 | `moa.presets.put` | `mixture-of-agents` | 1.0 | [`MoaPresetsPutParams`](#moapresetsputparams) | [`MoaPresetList`](#moapresetlist) |
 | `model.options` | `tui` | 1.0 | [`ModelOptionsParams`](#modeloptionsparams) | [`ModelOptions`](#modeloptions) |
+| `onboarding.ensure` | `desktop-app` | 1.0 | [`ProfileParams`](#profileparams) | [`OnboardingChat`](#onboardingchat) |
 | `pairing.approve` | `messaging-gateway` | 1.0 | [`PairingApproveParams`](#pairingapproveparams) | [`PairingApproved`](#pairingapproved) |
+| `process.list` | `desktop-app` | 1.0 | [`SessionRef`](#sessionref) | [`ProcessList`](#processlist) |
+| `process.log` | `desktop-app` | 1.0 | [`ProcessRef`](#processref) | [`ProcessLog`](#processlog) |
 | `projects.create` | `projects` | 1.0 | [`ProjectsCreateParams`](#projectscreateparams) | [`ProjectRow`](#projectrow) |
 | `projects.list` | `projects` | 1.0 | [`ProjectsListParams`](#projectslistparams) | [`ProjectsList`](#projectslist) |
 | `prompt.submit` | `workspace-architecture` | 1.0 | [`SubmitParams`](#submitparams) | [`Submitted`](#submitted) |
@@ -196,6 +199,17 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `clarify.request` | `workspace-architecture` | 1.0 | [`ClarifyRequestParams`](#clarifyrequestparams) | [`ClarifyAnswers`](#clarifyanswers) |
 | `secret.request` | `workspace-architecture` | 1.0 | [`SecretRequestParams`](#secretrequestparams) | [`SecretAnswer`](#secretanswer) |
 | `sudo.request` | `workspace-architecture` | 1.0 | [`SudoRequestParams`](#sudorequestparams) | [`SudoAnswer`](#sudoanswer) |
+| `ui.annotate_preview` | `desktop-app` | 1.0 | [`UiCall`](#uicall) | any |
+| `ui.close_terminal` | `desktop-app` | 1.0 | [`UiCall`](#uicall) | any |
+| `ui.desktop_preview` | `desktop-app` | 1.0 | [`UiCall`](#uicall) | any |
+| `ui.drive_preview` | `desktop-app` | 1.0 | [`UiCall`](#uicall) | any |
+| `ui.focus_pane` | `desktop-app` | 1.0 | [`UiCall`](#uicall) | any |
+| `ui.gui_tour` | `desktop-app` | 1.0 | [`UiCall`](#uicall) | any |
+| `ui.read_terminal` | `desktop-app` | 1.0 | [`UiCall`](#uicall) | any |
+| `ui.read_window_below` | `desktop-app` | 1.0 | [`UiCall`](#uicall) | any |
+| `ui.set_theme` | `desktop-app` | 1.0 | [`UiCall`](#uicall) | any |
+| `ui.setup_beat` | `desktop-app` | 1.0 | [`UiCall`](#uicall) | any |
+| `ui.show_tip` | `desktop-app` | 1.0 | [`UiCall`](#uicall) | any |
 
 ## Events
 
@@ -207,7 +221,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `health.changed` | `observability` | 1.0 | [`HealthChanged`](#healthchanged) |
 | `local_model.context_grown` | `local-models` | 1.0 | not served yet |
 | `message.delivery` | `messaging-gateway` | 1.0 | not served yet |
-| `message.reaction` | `desktop-app` | 1.0 | not served yet |
+| `message.reaction` | `desktop-app` | 1.0 | [`MessageReaction`](#messagereaction) |
 | `pty.exited` | `desktop-app` | 1.0 | [`PtyOutput`](#ptyoutput) |
 | `pty.output` | `desktop-app` | 1.0 | [`PtyOutput`](#ptyoutput) |
 | `queue.changed` | `desktop-app` | 1.0 | [`QueueState`](#queuestate) |
@@ -215,6 +229,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `request.resolved` | `workspace-architecture` | 1.0 | [`RequestResolved`](#requestresolved) |
 | `session.event` | `workspace-architecture` | 1.0 | any |
 | `session.presence` | `messaging-gateway` | 1.0 | not served yet |
+| `session.project` | `projects` | 1.0 | [`SessionProject`](#sessionproject) |
 | `turn.finished` | `workspace-architecture` | 1.0 | [`TurnFinished`](#turnfinished) |
 | `ui.prefs.changed` | `desktop-app` | 1.0 | [`UiPrefs`](#uiprefs) |
 | `usage.updated` | `observability` | 1.0 | [`UsageUpdated`](#usageupdated) |
@@ -615,6 +630,7 @@ What the client can handle.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `events` | array of string | no | Events introduced after the client's minor version that it understands anyway. |
+| `features` | array of string | no | Optional client features (`desktop_ui`: the desktop UI toolset's `ui.*` requests go to this client). |
 | `server_requests` | boolean | no | The client answers server-to-client requests (approvals, clarify, secrets, sudo). Without it they resolve unanswered at once. |
 
 ### `ClientKind`
@@ -1308,6 +1324,16 @@ One MCP server of a session.
 |---|---|---|---|
 | `line` | string or null | no | `Memory: +<added> ~<patched> -<removed> (review with /memory review)` when the agent changed memory in the session and `memory.review_mode` is not `off`; `null` otherwise. |
 
+### `MessageReaction`
+
+`message.reaction` payload.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `message_id` | string | yes | The message. |
+| `reactions` | array of [`Reaction`](#reaction) | yes | Its reactions after the change. |
+| `session_id` | string | yes | The session. |
+
 ### `MetricPoint`
 
 One data point of a metric.
@@ -1446,6 +1472,15 @@ One `model.options` entry.
 | `profile` | string or null | no | The profile, when no session is named. |
 | `session_id` | string or null | no | The session (it must be attached). |
 
+### `OnboardingChat`
+
+`onboarding.ensure` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `created` | boolean | yes | Whether this call created it. |
+| `session_id` | string | yes | The profile's onboarding chat. |
+
 ### `OpenRequest`
 
 A server-to-client request still waiting for an answer.
@@ -1485,6 +1520,43 @@ The daemon's build target and its support tier.
 | `features` | array of [`FeatureSupport`](#featuresupport) | no | The support matrix of this host, from runtime probes (spec: web-dashboard, Honest platform support matrix). |
 | `target` | string | yes | The Rust target triple. |
 | `tier` | string | yes | `tier1`, `tier2` or `unsupported`. |
+
+### `ProcessEntry`
+
+One background process of a session.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `command` | string | yes | Its command line. |
+| `process_id` | string | yes | Its id (`proc_…`). |
+| `state` | string | yes | `running`, `exited`... |
+
+### `ProcessList`
+
+`process.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `processes` | array of [`ProcessEntry`](#processentry) | yes | The session's live background processes. |
+
+### `ProcessLog`
+
+`process.log` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `output` | string | yes | Its buffered output (redacted, shaped like the `process` tool's). |
+| `process_id` | string | yes | The process. |
+| `state` | string | yes | Its state. |
+
+### `ProcessRef`
+
+`process.log` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `process_id` | string | yes | The background process. |
+| `session_id` | string | yes | The session. |
 
 ### `ProfileParams`
 
@@ -1678,6 +1750,15 @@ One quota window.
 | `resets_at` | string or null | no | When it resets (RFC 3339). |
 | `used_percent` | number | yes | Used share, 0-100. |
 
+### `Reaction`
+
+One reaction on a message.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `by` | string | yes | Who reacted (`agent`). |
+| `emoji` | string | yes | The emoji. |
+
 ### `RepoRow`
 
 A repository offered for project creation.
@@ -1798,6 +1879,17 @@ What the daemon serves.
 | `limit` | integer or null | no | At most this many, newest activity first (default 50). |
 | `profile` | string or null | no | The profile; required only when the ticket grants several. |
 
+### `SessionProject`
+
+`session.project` payload: a session moved to another project.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `cwd` | string | yes | The working directory the session moves to at its next tool call. |
+| `project_id` | string | yes | Its project. |
+| `session_id` | string | yes | The session. |
+| `slug` | string | yes | The project's slug. |
+
 ### `SessionRef`
 
 A session named by id.
@@ -1832,6 +1924,7 @@ One listed session.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `live` | boolean | yes | Whether a turn is running in the daemon. |
+| `project_id` | string or null | no | Its project (`prj_...`), when it has one. |
 | `session_id` | string | yes | `ses_<ULID>`. |
 | `started_at` | string | yes | When it started (RFC 3339). |
 | `title` | string or null | no | Its title, when it has one. |
@@ -1996,6 +2089,7 @@ One message of a transcript.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `id` | string | yes | `msg_<ULID>`. |
+| `reactions` | array of [`Reaction`](#reaction) | no | Its reactions (spec: desktop-app, Agent reactions). |
 | `role` | string | yes | `user`, `assistant`, `tool` or `system`. |
 | `text` | string or null | no | Its text, when it has any. |
 
@@ -2022,6 +2116,16 @@ Why a turn ended in error.
 | `report` | any | no | The turn's `--usage-file` report (session, lineage root, route, billing source, tokens, cost and cost status of its model calls). |
 | `turn_id` | string | yes | The turn. |
 | `usage` | any | no | The turn's token and cost totals, as the turn loop reports them. |
+
+### `UiCall`
+
+`ui.<tool>` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `arguments` | any | yes | The tool's arguments (validated by the daemon first). |
+| `deadline_ms` | integer or null | no | Milliseconds until the request settles unanswered (set by the daemon when it sends the request). |
+| `session_id` | string | yes | The session whose turn called the tool. |
 
 ### `UiPrefs`
 

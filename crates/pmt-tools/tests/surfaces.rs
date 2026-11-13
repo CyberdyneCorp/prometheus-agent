@@ -113,8 +113,13 @@ fn each_surface_starts_from_its_builtin_default() {
     let config = Config::default();
     let starting =
         |key: &str| surface(key).starting_toolsets(&registry, &config.tools, &config.toolsets);
-    for key in ["cli", "tui", "desktop", "cron"] {
+    for key in ["cli", "cron"] {
         assert_eq!(starting(key), ["core"], "{key}");
+    }
+    // GUI sessions switch projects by default (spec: projects, Project
+    // tool for GUI sessions).
+    for key in ["tui", "desktop"] {
+        assert_eq!(starting(key), ["core", "project"], "{key}");
     }
     assert_eq!(starting("api"), ["api_server"]);
     assert_eq!(starting("acp"), ["acp"]);
@@ -306,4 +311,43 @@ fn disabling_core_or_a_single_purpose_toolset_removes_everything_it_lists() {
     };
     let cli = select(&registry, "cli", &config);
     assert!(!cli.contains("x_search") && cli.contains("terminal"));
+}
+
+/// The desktop UI toolset is folded into desktop sessions only, minus the
+/// tools the user opted out of; the onboarding chat also gets
+/// `setup_beat` (spec: desktop-app, Desktop UI toolset contract;
+/// First-run onboarding chat).
+#[test]
+fn desktop_toolsets_fold_into_desktop_sessions_only() {
+    let registry = registry();
+    let named = strings(&["core", "desktop_ui", "onboarding"]);
+    let resolved = || Selection::resolve(&registry, &named, &[]).unwrap();
+    let cli = resolved()
+        .folded_for(&registry, &SessionSurface::Cli, &[], &[])
+        .unwrap();
+    assert!(
+        !cli.contains("read_terminal") && !cli.contains("setup_beat"),
+        "named on another surface, still stripped"
+    );
+    let desktop = resolved()
+        .folded_for(&registry, &SessionSurface::Desktop, &[], &["show_tip"])
+        .unwrap();
+    assert!(desktop.contains("read_terminal") && desktop.contains("gui_tour"));
+    assert!(!desktop.contains("show_tip") && !desktop.contains("setup_beat"));
+    let onboarding = resolved()
+        .folded_for(&registry, &SessionSurface::Onboarding, &[], &[])
+        .unwrap();
+    assert!(onboarding.contains("setup_beat") && onboarding.contains("show_tip"));
+    let disabled = resolved()
+        .folded_for(
+            &registry,
+            &SessionSurface::Desktop,
+            &strings(&["desktop_ui"]),
+            &[],
+        )
+        .unwrap();
+    assert!(
+        !disabled.contains("read_terminal"),
+        "tools.disabled_toolsets still applies"
+    );
 }

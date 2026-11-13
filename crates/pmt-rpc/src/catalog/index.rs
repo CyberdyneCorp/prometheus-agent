@@ -168,6 +168,9 @@ pub const INDEX: &[IndexEntry] = &[
     long("center.list", "desktop-app"),
     long("projects.list", "projects"),
     long("projects.create", "projects"),
+    method("process.list", "desktop-app"),
+    method("process.log", "desktop-app"),
+    method("onboarding.ensure", "desktop-app"),
     // messaging-gateway
     method("pairing.approve", "messaging-gateway"),
     // security-boundaries
@@ -253,6 +256,18 @@ pub const INDEX: &[IndexEntry] = &[
     server_request("clarify.request", WA),
     server_request("secret.request", WA),
     server_request("sudo.request", WA),
+    // the desktop UI toolset (desktop-app)
+    server_request("ui.read_terminal", "desktop-app"),
+    server_request("ui.close_terminal", "desktop-app"),
+    server_request("ui.desktop_preview", "desktop-app"),
+    server_request("ui.drive_preview", "desktop-app"),
+    server_request("ui.annotate_preview", "desktop-app"),
+    server_request("ui.read_window_below", "desktop-app"),
+    server_request("ui.focus_pane", "desktop-app"),
+    server_request("ui.gui_tour", "desktop-app"),
+    server_request("ui.show_tip", "desktop-app"),
+    server_request("ui.set_theme", "desktop-app"),
+    server_request("ui.setup_beat", "desktop-app"),
     // events
     event("usage.updated", "observability"),
     event("health.changed", "observability"),
@@ -264,6 +279,7 @@ pub const INDEX: &[IndexEntry] = &[
     event("automation.state", "session-automation"),
     event("message.reaction", "desktop-app"),
     event("ui.prefs.changed", "desktop-app"),
+    event("session.project", "projects"),
     event("queue.changed", "desktop-app"),
     event("pty.output", "desktop-app"),
     event("pty.exited", "desktop-app"),

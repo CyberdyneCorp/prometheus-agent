@@ -2,9 +2,11 @@
 // Projects sidebar; projects, Repository discovery): explicit projects,
 // repositories of the profile's sessions and the repositories the
 // daemon's background scan found, each with one-click project creation.
-// Discovered rows go as soon as scanning is turned off.
+// Discovered rows go as soon as scanning is turned off. Each project
+// lists its sessions; a session the `project` tool moved shows under its
+// new project at once (`session.project`).
 
-import type { ProjectsList, RepoRow } from "../../../schema/rpc";
+import type { ProjectsList, RepoRow, SessionList } from "../../../schema/rpc";
 import { h, notice } from "../../../web/src/lib/dom";
 import type { DesktopClient } from "./client";
 
@@ -18,6 +20,7 @@ export class ProjectsSidebar {
   constructor(
     private readonly client: DesktopClient,
     private readonly openFolder: (path: string) => void,
+    private readonly openSession: (sessionId: string) => void = () => {},
   ) {}
 
   async load(): Promise<void> {
@@ -25,7 +28,8 @@ export class ProjectsSidebar {
     delete this.el.dataset.ready;
     try {
       const listed = await this.client.call<ProjectsList>("projects.list", { profile: this.client.profile });
-      this.render(listed, await this.discovery());
+      const sessions = await this.client.call<SessionList>("session.list", { profile: this.client.profile }).catch((): SessionList => ({ sessions: [] }));
+      this.render(listed, await this.discovery(), sessions);
       if (listed.scanning) this.timer = window.setTimeout(() => void this.load(), SCANNING_MS);
     } catch (err) {
       this.el.replaceChildren(h("h3", {}, "Projects"), notice((err as Error).message, "warn"));
@@ -44,11 +48,17 @@ export class ProjectsSidebar {
     return h("label", { class: "repo-scan" }, toggle, " Discover repositories");
   }
 
-  private render(listed: ProjectsList, discovery: HTMLElement): void {
+  private render(listed: ProjectsList, discovery: HTMLElement, sessions: SessionList): void {
     const projects = listed.projects.map((p) => {
       const open = h("button", { type: "button", name: "open-project", "data-project": p.slug, disabled: !p.path }, p.name);
       open.addEventListener("click", () => p.path && this.openFolder(p.path));
-      return h("li", { "data-project": p.slug }, open);
+      const own = sessions.sessions.filter((s) => s.project_id === p.id);
+      const items = own.map((s) => {
+        const chat = h("button", { type: "button", name: "project-session", "data-session": s.session_id }, s.title ?? s.session_id);
+        chat.addEventListener("click", () => this.openSession(s.session_id));
+        return h("li", { "data-session": s.session_id }, chat);
+      });
+      return h("li", { "data-project": p.slug }, open, items.length > 0 ? h("ul", { class: "project-sessions" }, ...items) : "");
     });
     this.el.replaceChildren(
       h("h3", {}, "Projects"),

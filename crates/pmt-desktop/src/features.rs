@@ -68,6 +68,7 @@ pub(crate) fn owns(request: &Request) -> bool {
             | Request::HudReset
             | Request::HudDrag
             | Request::WindowBelow
+            | Request::ReadWindowBelow
     )
 }
 
@@ -200,6 +201,11 @@ impl Shell {
             Request::HudReset => self.native.reset_hud().map(|()| ok()),
             Request::HudDrag => self.native.drag_hud().map(|()| ok()),
             Request::WindowBelow => to_json(&self.window_below()),
+            Request::ReadWindowBelow => to_json(&crate::below::report(
+                &self.native.facts(),
+                self.native.screen().as_ref(),
+                std::process::id(),
+            )),
             request => self.quick_ask(window, request),
         }
     }

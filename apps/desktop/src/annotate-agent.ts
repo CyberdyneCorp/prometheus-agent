@@ -6,6 +6,10 @@
 // app: CSS selector, markup, layout-relevant computed styles and a
 // snapshot, with password and hidden field values and attributes that
 // look like keys or tokens redacted here, before anything leaves the page.
+// The same script carries the preview agent the desktop UI tools use
+// (preview-agent.ts).
+
+import { installPreviewAgent } from "./preview-agent";
 
 const REDACTED = "[redacted]";
 const SECRET_NAME = /token|secret|key|auth|passw|session|csrf|bearer|credential/i;
@@ -149,3 +153,4 @@ function install(): void {
 }
 
 install();
+installPreviewAgent();

@@ -41,6 +41,10 @@ static TOOL_AFTER: LazyLock<Regex> =
 static TOOL_BEFORE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)\btools?\s+$").expect("valid regex"));
 
+/// Identifiers that extend a tool's name but name something else: ids
+/// and prompt layers, not misspelt tools.
+const NOT_TOOLS: &[&str] = &["process_id", "project_id", "project_context"];
+
 /// The names the check knows.
 pub(crate) struct Names {
     /// Registered tool names.
@@ -67,6 +71,9 @@ impl Names {
 
     /// The registered tool `name` extends (`todo` for `todo_list`).
     fn extended(&self, name: &str) -> Option<&str> {
+        if NOT_TOOLS.contains(&name) {
+            return None;
+        }
         self.tools
             .iter()
             .find(|tool| {

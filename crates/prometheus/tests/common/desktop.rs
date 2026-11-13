@@ -25,6 +25,7 @@ pub struct Recorder {
     calls: Mutex<Vec<String>>,
     facts: Facts,
     below: Option<WindowBelow>,
+    screen: Option<pmt_desktop::below::Screen>,
     save_to: Option<PathBuf>,
 }
 
@@ -48,12 +49,19 @@ pub struct Setup {
     pub links: Vec<String>,
     /// The window underneath the HUD bar.
     pub below: Option<WindowBelow>,
+    /// The screen's windows and the main window's place
+    /// (`read_window_below`).
+    pub screen: Option<pmt_desktop::below::Screen>,
     /// What a save dialog answers.
     pub save_to: Option<PathBuf>,
     /// The environment of the daemon the shell starts (stand-in services).
     pub env: Vec<(String, String)>,
     /// The connection registry (none: the local connection only).
     pub connections: Option<pmt_desktop::connections::service::ConnectionsConfig>,
+    /// The machine was never set up: the window opens the onboarding
+    /// chat (otherwise the harness marks onboarding done, as on a machine
+    /// that went through it).
+    pub first_run: bool,
 }
 
 impl Default for Setup {
@@ -66,9 +74,11 @@ impl Default for Setup {
             },
             links: Vec::new(),
             below: None,
+            screen: None,
             save_to: None,
             env: Vec::new(),
             connections: None,
+            first_run: false,
         }
     }
 }
@@ -120,6 +130,9 @@ impl Native for Recorder {
     fn window_below(&self) -> Option<WindowBelow> {
         self.below.clone()
     }
+    fn screen(&self) -> Option<pmt_desktop::below::Screen> {
+        self.screen.clone()
+    }
     fn save_path(&self, name: &str) -> Option<PathBuf> {
         let _ = self.record(format!("save {name}"));
         self.save_to.clone()
@@ -160,10 +173,19 @@ pub fn start(home: &Path) -> Harness {
 /// Starts the harness for `home` as `setup` says; the shell reads the
 /// default profile's `[desktop]` options as the app does at launch.
 pub fn start_with(home: &Path, setup: Setup) -> Harness {
+    let prefs = home.join("ui-prefs.json");
+    if !setup.first_run && !prefs.exists() {
+        std::fs::write(
+            &prefs,
+            r#"{"prefs": {"onboarding": "done"}, "revision": 1}"#,
+        )
+        .unwrap();
+    }
     let recorder = Arc::new(Recorder {
         calls: Mutex::default(),
         facts: setup.facts,
         below: setup.below,
+        screen: setup.screen,
         save_to: setup.save_to,
     });
     let shell = Shell::new(

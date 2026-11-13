@@ -516,6 +516,7 @@ fn hello(server: &Server, conn: &Conn, id: &Id, params: &Value) -> ControlFlow<(
         minor,
         advertised: Arc::new(advertised),
         server_requests: hello.capabilities.server_requests,
+        features: Arc::new(hello.capabilities.features.clone()),
     });
     send(conn, frame::result(id, &result));
     ControlFlow::Continue(())

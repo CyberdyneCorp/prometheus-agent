@@ -207,6 +207,9 @@ pub enum Request {
     HudDrag,
     /// The metadata of the window underneath the HUD bar (never pixels).
     WindowBelow,
+    /// `read_window_below`: the window beneath the desktop window, with
+    /// the frontmost app and what the platform withholds.
+    ReadWindowBelow,
     /// Exports a profile through `profile export` (secrets are never
     /// included), with the desktop appearance as an optional overlay.
     ProfileExport {
@@ -407,6 +410,11 @@ pub trait Native: Send + Sync {
     }
     /// The window underneath the HUD bar.
     fn window_below(&self) -> Option<crate::hud::WindowBelow> {
+        None
+    }
+    /// The on-screen windows and the main window's place (`None`: the
+    /// platform did not list them).
+    fn screen(&self) -> Option<crate::below::Screen> {
         None
     }
     /// Where to save a file (a save dialog suggesting `name`).

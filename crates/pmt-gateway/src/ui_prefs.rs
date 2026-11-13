@@ -38,6 +38,13 @@ pub const KEYS: &[&str] = &[
     "model_favourites",
     "dismissed_tips",
     "tours",
+    // Opt-outs that hide desktop UI tools from the next session on, and
+    // the first-run onboarding state (spec: desktop-app, Desktop UI
+    // toolset contract; First-run onboarding chat).
+    "message_reactions",
+    "tours_enabled",
+    "tips_enabled",
+    "onboarding",
 ];
 
 /// The largest value of one preference, serialized.

@@ -1187,6 +1187,13 @@
           },
           "type": "array"
         },
+        "features": {
+          "description": "Optional client features (`desktop_ui`: the desktop UI toolset's\n`ui.*` requests go to this client).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "server_requests": {
           "default": false,
           "description": "The client answers server-to-client requests (approvals, clarify,\nsecrets, sudo). Without it they resolve unanswered at once.",
@@ -3167,6 +3174,33 @@
       },
       "type": "object"
     },
+    "MessageReaction": {
+      "additionalProperties": false,
+      "description": "`message.reaction` payload.",
+      "properties": {
+        "message_id": {
+          "description": "The message.",
+          "type": "string"
+        },
+        "reactions": {
+          "description": "Its reactions after the change.",
+          "items": {
+            "$ref": "#/$defs/Reaction"
+          },
+          "type": "array"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "message_id",
+        "reactions"
+      ],
+      "type": "object"
+    },
     "MetricPoint": {
       "additionalProperties": false,
       "description": "One data point of a metric.",
@@ -3608,6 +3642,25 @@
       },
       "type": "object"
     },
+    "OnboardingChat": {
+      "additionalProperties": false,
+      "description": "`onboarding.ensure` result.",
+      "properties": {
+        "created": {
+          "description": "Whether this call created it.",
+          "type": "boolean"
+        },
+        "session_id": {
+          "description": "The profile's onboarding chat.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "created"
+      ],
+      "type": "object"
+    },
     "OpenRequest": {
       "additionalProperties": false,
       "description": "A server-to-client request still waiting for an answer.",
@@ -3708,6 +3761,90 @@
       "required": [
         "target",
         "tier"
+      ],
+      "type": "object"
+    },
+    "ProcessEntry": {
+      "additionalProperties": false,
+      "description": "One background process of a session.",
+      "properties": {
+        "command": {
+          "description": "Its command line.",
+          "type": "string"
+        },
+        "process_id": {
+          "description": "Its id (`proc_…`).",
+          "type": "string"
+        },
+        "state": {
+          "description": "`running`, `exited`...",
+          "type": "string"
+        }
+      },
+      "required": [
+        "process_id",
+        "command",
+        "state"
+      ],
+      "type": "object"
+    },
+    "ProcessList": {
+      "additionalProperties": false,
+      "description": "`process.list` result.",
+      "properties": {
+        "processes": {
+          "description": "The session's live background processes.",
+          "items": {
+            "$ref": "#/$defs/ProcessEntry"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "processes"
+      ],
+      "type": "object"
+    },
+    "ProcessLog": {
+      "additionalProperties": false,
+      "description": "`process.log` result.",
+      "properties": {
+        "output": {
+          "description": "Its buffered output (redacted, shaped like the `process` tool's).",
+          "type": "string"
+        },
+        "process_id": {
+          "description": "The process.",
+          "type": "string"
+        },
+        "state": {
+          "description": "Its state.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "process_id",
+        "state",
+        "output"
+      ],
+      "type": "object"
+    },
+    "ProcessRef": {
+      "additionalProperties": false,
+      "description": "`process.log` params.",
+      "properties": {
+        "process_id": {
+          "description": "The background process.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "process_id"
       ],
       "type": "object"
     },
@@ -4217,6 +4354,25 @@
       ],
       "type": "object"
     },
+    "Reaction": {
+      "additionalProperties": false,
+      "description": "One reaction on a message.",
+      "properties": {
+        "by": {
+          "description": "Who reacted (`agent`).",
+          "type": "string"
+        },
+        "emoji": {
+          "description": "The emoji.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "by",
+        "emoji"
+      ],
+      "type": "object"
+    },
     "RepoRow": {
       "additionalProperties": false,
       "description": "A repository offered for project creation.",
@@ -4575,6 +4731,35 @@
       },
       "type": "object"
     },
+    "SessionProject": {
+      "additionalProperties": false,
+      "description": "`session.project` payload: a session moved to another project.",
+      "properties": {
+        "cwd": {
+          "description": "The working directory the session moves to at its next tool call.",
+          "type": "string"
+        },
+        "project_id": {
+          "description": "Its project.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        },
+        "slug": {
+          "description": "The project's slug.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "project_id",
+        "slug",
+        "cwd"
+      ],
+      "type": "object"
+    },
     "SessionRef": {
       "additionalProperties": false,
       "description": "A session named by id.",
@@ -4684,6 +4869,13 @@
         "live": {
           "description": "Whether a turn is running in the daemon.",
           "type": "boolean"
+        },
+        "project_id": {
+          "description": "Its project (`prj_...`), when it has one.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "session_id": {
           "description": "`ses_<ULID>`.",
@@ -5105,6 +5297,13 @@
           "description": "`msg_<ULID>`.",
           "type": "string"
         },
+        "reactions": {
+          "description": "Its reactions (spec: desktop-app, Agent reactions).",
+          "items": {
+            "$ref": "#/$defs/Reaction"
+          },
+          "type": "array"
+        },
         "role": {
           "description": "`user`, `assistant`, `tool` or `system`.",
           "type": "string"
@@ -5196,6 +5395,34 @@
       "required": [
         "turn_id",
         "exit_reason"
+      ],
+      "type": "object"
+    },
+    "UiCall": {
+      "additionalProperties": false,
+      "description": "`ui.<tool>` params.",
+      "properties": {
+        "arguments": {
+          "description": "The tool's arguments (validated by the daemon first)."
+        },
+        "deadline_ms": {
+          "default": null,
+          "description": "Milliseconds until the request settles unanswered (set by the\ndaemon when it sends the request).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "session_id": {
+          "description": "The session whose turn called the tool.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "arguments"
       ],
       "type": "object"
     },
@@ -6074,8 +6301,10 @@
       "since": "1.0"
     },
     "message.reaction": {
-      "declared": false,
       "owner": "desktop-app",
+      "payload": {
+        "$ref": "#/$defs/MessageReaction"
+      },
       "since": "1.0"
     },
     "pty.exited": {
@@ -6121,6 +6350,13 @@
     "session.presence": {
       "declared": false,
       "owner": "messaging-gateway",
+      "since": "1.0"
+    },
+    "session.project": {
+      "owner": "projects",
+      "payload": {
+        "$ref": "#/$defs/SessionProject"
+      },
       "since": "1.0"
     },
     "turn.finished": {
@@ -6880,6 +7116,16 @@
       },
       "since": "1.0"
     },
+    "onboarding.ensure": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/ProfileParams"
+      },
+      "result": {
+        "$ref": "#/$defs/OnboardingChat"
+      },
+      "since": "1.0"
+    },
     "pairing.approve": {
       "owner": "messaging-gateway",
       "params": {
@@ -6887,6 +7133,26 @@
       },
       "result": {
         "$ref": "#/$defs/PairingApproved"
+      },
+      "since": "1.0"
+    },
+    "process.list": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/ProcessList"
+      },
+      "since": "1.0"
+    },
+    "process.log": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/ProcessRef"
+      },
+      "result": {
+        "$ref": "#/$defs/ProcessLog"
       },
       "since": "1.0"
     },
@@ -7446,6 +7712,94 @@
       "result": {
         "$ref": "#/$defs/SudoAnswer"
       },
+      "since": "1.0"
+    },
+    "ui.annotate_preview": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/UiCall"
+      },
+      "result": true,
+      "since": "1.0"
+    },
+    "ui.close_terminal": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/UiCall"
+      },
+      "result": true,
+      "since": "1.0"
+    },
+    "ui.desktop_preview": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/UiCall"
+      },
+      "result": true,
+      "since": "1.0"
+    },
+    "ui.drive_preview": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/UiCall"
+      },
+      "result": true,
+      "since": "1.0"
+    },
+    "ui.focus_pane": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/UiCall"
+      },
+      "result": true,
+      "since": "1.0"
+    },
+    "ui.gui_tour": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/UiCall"
+      },
+      "result": true,
+      "since": "1.0"
+    },
+    "ui.read_terminal": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/UiCall"
+      },
+      "result": true,
+      "since": "1.0"
+    },
+    "ui.read_window_below": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/UiCall"
+      },
+      "result": true,
+      "since": "1.0"
+    },
+    "ui.set_theme": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/UiCall"
+      },
+      "result": true,
+      "since": "1.0"
+    },
+    "ui.setup_beat": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/UiCall"
+      },
+      "result": true,
+      "since": "1.0"
+    },
+    "ui.show_tip": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/UiCall"
+      },
+      "result": true,
       "since": "1.0"
     }
   },

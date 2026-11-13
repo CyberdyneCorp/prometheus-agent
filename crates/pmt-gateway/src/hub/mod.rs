@@ -43,6 +43,8 @@ pub struct Peer {
     pub advertised: Arc<Vec<String>>,
     /// It answers server-to-client requests.
     pub server_requests: bool,
+    /// The optional features its client advertised (`desktop_ui`).
+    pub features: Arc<Vec<String>>,
     /// The client's id in `request.resolved` (`<kind>-<connection>`).
     pub client_id: String,
     /// Driver or observer.
@@ -54,6 +56,11 @@ impl Peer {
     /// whose client answers server requests.
     fn answers(&self) -> bool {
         self.server_requests && self.role == AttachRole::Driver
+    }
+
+    /// Whether it answers requests that need client feature `feature`.
+    fn answers_with(&self, feature: Option<&str>) -> bool {
+        self.answers() && feature.is_none_or(|f| self.features.iter().any(|have| have == f))
     }
 }
 
@@ -182,6 +189,8 @@ struct Pending {
     params: Value,
     reply: oneshot::Sender<(Value, String)>,
     sent_to: Vec<ConnId>,
+    /// The client feature a recipient needs (`desktop_ui`).
+    feature: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -354,6 +363,7 @@ impl Hub {
         }
         let latest_seq = log.next_seq;
         let answers = peer.answers();
+        let recipient = peer.clone();
         let tx = peer.tx.clone();
         log.attached.insert(conn, peer);
         log.unattended_since = None;
@@ -369,7 +379,9 @@ impl Hub {
             if pending.session_id != session_id {
                 continue;
             }
-            if answers && !pending.sent_to.contains(&conn) {
+            if recipient.answers_with(pending.feature.as_deref())
+                && !pending.sent_to.contains(&conn)
+            {
                 pending.sent_to.push(conn);
                 let text = frame::request(&Id::Str(id.clone()), &pending.method, &pending.params);
                 let _ = tx.send(Message::text(text));
@@ -722,8 +734,32 @@ impl Hub {
         self: &Arc<Self>,
         session_id: &str,
         method: &str,
+        params: Value,
+        timeout: Duration,
+    ) -> Option<Value> {
+        self.ask_featured(session_id, method, params, timeout, None)
+            .await
+    }
+
+    /// Whether an attached driver of the session answers requests that
+    /// need client feature `feature`.
+    #[must_use]
+    pub fn has_feature(&self, session_id: &str, feature: &str) -> bool {
+        self.state()
+            .sessions
+            .get(session_id)
+            .is_some_and(|s| s.attached.values().any(|p| p.answers_with(Some(feature))))
+    }
+
+    /// [`Hub::ask`] sent only to drivers whose client advertised
+    /// `feature` (every capable driver when `None`).
+    pub async fn ask_featured(
+        self: &Arc<Self>,
+        session_id: &str,
+        method: &str,
         mut params: Value,
         timeout: Duration,
+        feature: Option<&str>,
     ) -> Option<Value> {
         if let Some(fields) = params.as_object_mut() {
             let deadline = u64::try_from(timeout.as_millis()).unwrap_or(u64::MAX);
@@ -733,7 +769,7 @@ impl Hub {
             self.violations.report(method, &violation);
             return None;
         }
-        let Some((id, answer)) = self.open_request(session_id, method, params) else {
+        let Some((id, answer)) = self.open_request(session_id, method, params, feature) else {
             let id = format!("srq-{}", random_hex(6));
             self.state().settle(&id);
             self.cancel_event(session_id, &id, "no_responder");
@@ -788,6 +824,7 @@ impl Hub {
         session_id: &str,
         method: &str,
         params: Value,
+        feature: Option<&str>,
     ) -> Option<(String, oneshot::Receiver<(Value, String)>)> {
         let mut state = self.state();
         let capable: Vec<(ConnId, Peer)> = state
@@ -795,7 +832,7 @@ impl Hub {
             .get(session_id)?
             .attached
             .iter()
-            .filter(|(_, p)| p.answers())
+            .filter(|(_, p)| p.answers_with(feature))
             .map(|(c, p)| (*c, p.clone()))
             .collect();
         if capable.is_empty() {
@@ -815,6 +852,7 @@ impl Hub {
                 params,
                 reply,
                 sent_to: capable.into_iter().map(|(c, _)| c).collect(),
+                feature: feature.map(str::to_owned),
             },
         );
         Some((id, answer))

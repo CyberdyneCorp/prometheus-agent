@@ -164,6 +164,14 @@ impl<R: Runtime> Native for TauriNative<R> {
         pmt_desktop::hud::below(&self.facts(), &bar)
     }
 
+    fn screen(&self) -> Option<pmt_desktop::below::Screen> {
+        let main = self.app.get_webview_window("main")?;
+        Some(pmt_desktop::below::Screen {
+            window: crate::hud::window_bounds(&main)?,
+            windows: pmt_desktop::hud::screen(&self.facts())?,
+        })
+    }
+
     fn save_path(&self, name: &str) -> Option<PathBuf> {
         self.app
             .dialog()

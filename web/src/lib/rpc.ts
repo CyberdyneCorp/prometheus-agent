@@ -50,6 +50,9 @@ export interface RpcOptions {
   heartbeatMs: number;
   /** A socket that received nothing this long is dead (0: never). */
   deadAfterMs: number;
+  /** Optional client features advertised in `rpc.hello` (`desktop_ui`:
+   *  this window renders the desktop UI tools' `ui.*` requests). */
+  features?: string[];
 }
 
 const DASHBOARD: RpcOptions = {
@@ -108,7 +111,7 @@ export class Rpc {
       client: this.options.client,
       client_version: this.options.clientVersion,
       protocol: PROTOCOL,
-      capabilities: { server_requests: true, events: [] },
+      capabilities: { server_requests: true, events: [], ...(this.options.features?.length ? { features: this.options.features } : {}) },
     })) as HelloResult;
     this.ping = window.setInterval(() => this.beat(), this.options.heartbeatMs);
     return this.hello;

@@ -366,6 +366,7 @@ impl Gateway {
             minor: server.protocol().minor,
             advertised: Arc::default(),
             server_requests: true,
+            features: Arc::default(),
             client_id: format!("gateway-{conn}"),
             role: pmt_rpc::contracts::AttachRole::Driver,
         };

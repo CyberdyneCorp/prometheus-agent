@@ -29,7 +29,7 @@ pub struct Bounds {
 }
 
 impl Bounds {
-    fn overlaps(&self, other: &Self) -> bool {
+    pub(crate) fn overlaps(&self, other: &Self) -> bool {
         self.x < other.x + other.width
             && other.x < self.x + self.width
             && self.y < other.y + other.height
@@ -49,7 +49,7 @@ pub struct WindowBelow {
 }
 
 /// One window of the screen, as an OS lists it.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Candidate {
     /// The application.
     pub app: String,
@@ -62,6 +62,10 @@ pub struct Candidate {
     /// Its layer (0: ordinary windows).
     #[serde(default)]
     pub layer: i64,
+    /// The OS's id of the window (macOS window number, Windows handle,
+    /// X11 window id).
+    #[serde(default)]
+    pub id: String,
     /// Where it is.
     pub bounds: Bounds,
 }
@@ -84,7 +88,14 @@ pub fn pick(windows: &[Candidate], hud: &Bounds, own_pid: u32) -> Option<WindowB
 /// platform does not say).
 #[must_use]
 pub fn below(facts: &Facts, hud: &Bounds) -> Option<WindowBelow> {
-    let windows = match facts.os.as_str() {
+    pick(&screen(facts)?, hud, std::process::id())
+}
+
+/// This machine's on-screen windows, front to back (`None`: the platform
+/// does not list them, or its listing tool failed).
+#[must_use]
+pub fn screen(facts: &Facts) -> Option<Vec<Candidate>> {
+    Some(match facts.os.as_str() {
         "macos" => json_lines(&run(
             "osascript",
             &["-l", "JavaScript", "-e", MACOS_SCRIPT],
@@ -95,8 +106,7 @@ pub fn below(facts: &Facts, hud: &Bounds) -> Option<WindowBelow> {
         )?),
         "linux" if !facts.wayland => x11_windows()?,
         _ => return None,
-    };
-    pick(&windows, hud, std::process::id())
+    })
 }
 
 fn run(program: &str, args: &[&str]) -> Option<String> {
@@ -127,7 +137,7 @@ var out = [];
 for (var i = 0; i < list.count; i++) {
   var w = ObjC.deepUnwrap(list.objectAtIndex(i));
   var b = w.kCGWindowBounds || {};
-  out.push(JSON.stringify({app: w.kCGWindowOwnerName || '', title: w.kCGWindowName || '', pid: w.kCGWindowOwnerPID || 0,
+  out.push(JSON.stringify({app: w.kCGWindowOwnerName || '', title: w.kCGWindowName || '', pid: w.kCGWindowOwnerPID || 0, id: String(w.kCGWindowNumber || ''),
     layer: w.kCGWindowLayer || 0, bounds: {x: Math.round(b.X || 0), y: Math.round(b.Y || 0), width: Math.round(b.Width || 0), height: Math.round(b.Height || 0)}}));
 }
 out.join('\n');
@@ -153,7 +163,7 @@ foreach ($h in [PmtWindows]::All()) {
   $r = New-Object PmtWindows+RECT; [void][PmtWindows]::GetWindowRect($h, [ref]$r)
   $p = 0; [void][PmtWindows]::GetWindowThreadProcessId($h, [ref]$p)
   $app = (Get-Process -Id $p -ErrorAction SilentlyContinue).ProcessName
-  @{app = "$app"; title = $s.ToString(); pid = [int]$p; layer = 0; bounds = @{x = $r.L; y = $r.T; width = $r.R - $r.L; height = $r.B - $r.T}} | ConvertTo-Json -Compress
+  @{app = "$app"; title = $s.ToString(); pid = [int]$p; id = "$h"; layer = 0; bounds = @{x = $r.L; y = $r.T; width = $r.R - $r.L; height = $r.B - $r.T}} | ConvertTo-Json -Compress
 }
 "#;
 
@@ -170,7 +180,10 @@ fn x11_windows() -> Option<Vec<Candidate>> {
                 &["-id", id, "_NET_WM_NAME", "WM_CLASS", "_NET_WM_PID"],
             )?;
             let geometry = run("xwininfo", &["-id", id])?;
-            Some(x11_candidate(&props, &geometry))
+            Some(Candidate {
+                id: id.clone(),
+                ..x11_candidate(&props, &geometry)
+            })
         })
         .collect();
     windows.retain(|w| w.bounds.width > 0);
@@ -220,6 +233,7 @@ pub fn x11_candidate(props: &str, geometry: &str) -> Candidate {
         title: quoted("_NET_WM_NAME"),
         pid,
         layer: 0,
+        id: String::new(),
         bounds: Bounds {
             x: number("Absolute upper-left X:"),
             y: number("Absolute upper-left Y:"),

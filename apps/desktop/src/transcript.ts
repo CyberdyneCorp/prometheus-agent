@@ -6,7 +6,7 @@
 // (read through the session's own connection, never from a local path),
 // and following new output only while the view is at the bottom.
 
-import type { Envelope, TranscriptMessage } from "../../../schema/rpc";
+import type { Envelope, Reaction, TranscriptMessage } from "../../../schema/rpc";
 import { Transcript } from "../../../web/src/components/transcript";
 import { h } from "../../../web/src/lib/dom";
 
@@ -89,6 +89,20 @@ export class DesktopTranscript extends Transcript {
       }
     }
     return el;
+  }
+
+  /** A message's reactions changed (`message.reaction`). A prompt sent
+   *  in this window has no stored id yet: it is found by its place among
+   *  the stored prompts. */
+  async react(messageId: string, reactions: Reaction[]): Promise<void> {
+    let el = this.el.querySelector<HTMLElement>(`[data-message-id="${messageId}"]`);
+    if (!el) {
+      const stored = (await this.source()).filter((m) => m.text && (m.role === "user" || m.role === "assistant"));
+      const prompt = stored.filter(isPrompt).findIndex((m) => m.id === messageId);
+      el = prompt < 0 ? null : this.el.querySelector<HTMLElement>(`[data-prompt="${prompt + 1}"]`);
+      if (el) el.dataset.messageId = messageId;
+    }
+    if (el) showReactions(el, reactions);
   }
 
   /** Follows new output only when the view was at the bottom. */
@@ -196,7 +210,11 @@ export class DesktopTranscript extends Transcript {
       this.el.append(earlier);
     }
     this.nextPrompt = this.messages.slice(0, this.start).filter(isPrompt).length + 1;
-    for (const m of this.messages.slice(this.start)) this.message(m.role, m.text ?? "");
+    for (const m of this.messages.slice(this.start)) {
+      const el = this.message(m.role, m.text ?? "");
+      el.dataset.messageId = m.id;
+      showReactions(el, m.reactions ?? []);
+    }
     this.rendering = false;
     this.renderRail();
   }
@@ -216,6 +234,13 @@ export class DesktopTranscript extends Transcript {
       }),
     );
   }
+}
+
+/** Shows `reactions` under message `el` (none: no row). */
+function showReactions(el: HTMLElement, reactions: Reaction[]): void {
+  el.querySelector(".reactions")?.remove();
+  if (reactions.length === 0) return;
+  el.append(h("div", { class: "reactions", "aria-label": "Reactions" }, ...reactions.map((r) => h("span", { class: "reaction", "data-by": r.by, title: r.by }, r.emoji))));
 }
 
 /** The diff a file tool's output carries (`write_file`, `patch`). */

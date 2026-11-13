@@ -115,6 +115,8 @@ pub struct HelloState {
     pub advertised: Arc<Vec<String>>,
     /// It answers server requests.
     pub server_requests: bool,
+    /// The optional features it advertised (`desktop_ui`).
+    pub features: Arc<Vec<String>>,
 }
 
 /// One client connection.
@@ -142,6 +144,7 @@ impl Conn {
             minor: hello.map_or(0, |h| h.minor),
             advertised: hello.map(|h| Arc::clone(&h.advertised)).unwrap_or_default(),
             server_requests: hello.is_some_and(|h| h.server_requests),
+            features: hello.map(|h| Arc::clone(&h.features)).unwrap_or_default(),
             client_id: self.client_id(),
             role,
         }

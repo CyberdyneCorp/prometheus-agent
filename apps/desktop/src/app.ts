@@ -28,6 +28,9 @@ import { LAST_PROFILE } from "./quickask";
 import { SettingsPanel } from "./settings";
 import { type Attach, onShellEvent, shell } from "./shell";
 import { Switcher } from "./switcher";
+import { Onboarding } from "./onboarding";
+import { Guide } from "./tour";
+import { toolPrefsControls, UiTools } from "./ui-tools";
 import { NOT_FOUND } from "./verdict";
 import { type Workspace, workspace } from "./workspace";
 
@@ -117,7 +120,8 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
   const localProfile = served.includes("default") ? "default" : (served[0] ?? "default");
   // The primary connection, or the last one that connected.
   const opening = listing?.launch ?? LOCAL;
-  const client = new DesktopClient(opening === LOCAL ? localProfile : lastProfile(opening), opening);
+  // This window renders the desktop UI tools of the sessions it shows.
+  const client = new DesktopClient(opening === LOCAL ? localProfile : lastProfile(opening), opening, ["desktop_ui"]);
   const dialogs = h("div", { class: "dialogs" });
   const chat = new ChatView({ client, window: label, dialogs });
   const pool = new ProfileClients(client);
@@ -187,6 +191,7 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
 
   client.onEvent = (envelope) => chat.apply(envelope);
   client.onRequest = (request) => {
+    if (ui.handle(request)) return;
     chat.request(request);
     if (request.method === "approval.request") attention.approval(request.id, request.params as unknown as ApprovalRequestParams, chat.title());
   };
@@ -211,7 +216,13 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
     void refresh();
     void settings.reset();
     manage.reset();
-    void prefs.start({}).catch((err: unknown) => console.warn("UI preferences unavailable:", err));
+    void prefs
+      .start({})
+      .then(async () => {
+        // The first launch of the app's main window opens onboarding.
+        if (label === "main" && !location.hash && client.connection === LOCAL) await onboarding.firstRun();
+      })
+      .catch((err: unknown) => console.warn("UI preferences or onboarding unavailable:", err));
     void panels.load(client.profile);
     void projects.load();
     void applyFonts(client);
@@ -237,7 +248,11 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
   const opener: Opener = { chat, client, switchTo, profiles: served, dialogs };
   const graph = new MemoryGraph(client);
   chat.onJourney = () => void graph.open();
-  const projects = new ProjectsSidebar(client, (path) => chat.draft(path));
+  const projects = new ProjectsSidebar(
+    client,
+    (path) => chat.draft(path),
+    (sessionId) => void chat.open(sessionId),
+  );
   const zoom = new Zoom();
   const files = profileFiles(prefs, zoom, say);
   const manage = new ManagePane(client, pool, served, dialogs, {
@@ -249,7 +264,11 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
     exportProfile: files.exportProfile,
     importProfile: files.importProfile,
   });
-  const work = workspace(client, chat, h("div", {}, settings.el, desktopSection, accentControl(prefs), connections.el), dialogs, [{ name: "manage", label: "Manage", el: manage.el, shown: () => manage.reset() }]);
+  const work = workspace(client, chat, h("div", {}, settings.el, desktopSection, accentControl(prefs), toolPrefsControls(prefs), connections.el), dialogs, [{ name: "manage", label: "Manage", el: manage.el, shown: () => manage.reset() }]);
+  const guide = new Guide();
+  const onboarding = new Onboarding(client, chat, prefs, dialogs);
+  const ui = new UiTools(client, { chat, terminal: work.terminal, preview: work.preview, driver: work.driver, layout: work.layout, prefs, guide, onboarding, dialogs });
+  client.on("session.project", () => void Promise.all([projects.load(), refresh()]));
   const keys = work.shortcuts;
   manage.setShortcuts(keys.panel);
   keys.onSave = (overrides) => void prefs.set("keybindings", overrides).catch(() => {});
@@ -258,7 +277,7 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
   const palette = new CommandPalette(() => paletteEntries(opener, work, { graph, files, zoom }));
   windowActions(keys, opener, { palette, graph, zoom });
   work.aside.append(panels.el);
-  const side = h("nav", { class: "side" }, switcher.el, newChat, botChat, list, projects.el);
+  const side = h("nav", { class: "side" }, switcher.el, newChat, botChat, onboarding.skip, list, projects.el);
   listenToShell(opener);
   onShellEvent("hud-summon", () => void toggleHud(client.profile, chat.sessionId));
   root().replaceChildren(
@@ -275,6 +294,7 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
     background.el,
     graph.el,
     palette.el,
+    guide.el,
   );
   remember(client.profile);
   void connections.render().catch((err: unknown) => console.warn("connections:", err));

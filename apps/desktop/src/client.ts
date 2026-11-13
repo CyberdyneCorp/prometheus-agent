@@ -63,10 +63,13 @@ export class DesktopClient {
   latch: Latch | null = null;
   onLatched: (latch: Latch) => void = () => {};
 
-  /** `connection` is a registry id (`local`: the app's own daemon). */
+  /** `connection` is a registry id (`local`: the app's own daemon);
+   *  `features` go into every `rpc.hello` (the window's own client
+   *  advertises `desktop_ui`, background clients nothing). */
   constructor(
     public profile: string,
     public connection = "local",
+    private readonly features: string[] = [],
   ) {}
 
   /** The daemon's `rpc.hello` answer on the current connection. */
@@ -126,7 +129,7 @@ export class DesktopClient {
 
   private async connect(): Promise<void> {
     const dial = await shell<Dial>("prepare_dial", { connection: this.connection, profile: this.profile });
-    const rpc = new Rpc(DESKTOP);
+    const rpc = new Rpc({ ...DESKTOP, features: this.features });
     rpc.onEvent = (envelope) => this.received(envelope);
     rpc.onRequest = (request) => this.onRequest(request);
     try {

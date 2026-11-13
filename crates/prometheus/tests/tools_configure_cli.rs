@@ -68,7 +68,11 @@ fn configure_toggles_a_toolset_and_picks_a_provider() {
     );
     assert_eq!(out.status.code(), Some(0), "{}", stderr(&out));
     let text = config(home.path());
-    assert!(text.contains("tui = [\"core\", \"web\"]"), "{text}");
+    // The tui's own defaults (core and project) stay in the written list.
+    assert!(
+        text.contains("tui = [\"core\", \"project\", \"web\"]"),
+        "{text}"
+    );
     assert!(text.contains("search_backend = \"searxng\""), "{text}");
     assert!(
         stderr(&out).contains("unknown web_extract provider 'nosuch'"),

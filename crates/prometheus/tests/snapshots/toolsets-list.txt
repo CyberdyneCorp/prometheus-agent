@@ -40,6 +40,9 @@
   delegation  (1 tool)
     Delegate work to subagents
     tools: delegate_task
+  desktop_ui  (11 tools)
+    The desktop window: reactions, terminal and preview panes, tours, tips, appearance
+    tools: react_to_message, read_terminal, close_terminal, desktop_preview, drive_preview, annotate_preview, read_window_below, focus_pane, gui_tour, show_tip, set_theme
   file  (4 tools)
     Read, write, patch and search files
     tools: read_file, write_file, patch, search_files
@@ -56,6 +59,9 @@
   messaging  (1 tool)
     Send messages and reactions to messaging chats (needs the gateway daemon)
     tools: send_message
+  onboarding  (1 tool)
+    The first-run onboarding chat's setup cards
+    tools: setup_beat
   platform-discord  (28 tools)
     The core tools plus those of the discord platform
     includes: core
@@ -80,6 +86,9 @@
   process  (1 tool)
     Background process management
     tools: process
+  project  (1 tool)  [default-off]
+    Switch or create the session's project (on by default for desktop and tui)
+    tools: project
   safe  (4 tools)
     Web, vision and image generation; nothing that executes
     includes: web, vision, image_gen

@@ -8,6 +8,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
+use serde_json::Value;
+
 use pmt_core::error::Error;
 use pmt_rpc::contracts::{
     BannerInfo, ClientKind, CommandCatalog, CompactParams, Compacted, CompleteParams, Completions,
@@ -563,6 +565,30 @@ pub trait Host: Send + Sync + 'static {
         Box::pin(async { Err(not_served("this host has no bot chats")) })
     }
 
+    /// `profile`'s first-run onboarding chat, created when it has none
+    /// (`onboarding.ensure`); `true` when created now.
+    fn onboarding_chat<'a>(&'a self, _profile: &'a str) -> HostFuture<'a, (String, bool)> {
+        Box::pin(async { Err(not_served("this host has no onboarding chat")) })
+    }
+
+    /// The session's background processes (`process.list`).
+    fn processes<'a>(
+        &'a self,
+        _profile: &'a str,
+        _session_id: &'a str,
+    ) -> HostFuture<'a, pmt_rpc::contracts::ProcessList> {
+        Box::pin(async { Err(not_served("this host has no background processes")) })
+    }
+
+    /// One background process's buffered output (`process.log`).
+    fn process_log<'a>(
+        &'a self,
+        _profile: &'a str,
+        _process: pmt_rpc::contracts::ProcessRef,
+    ) -> HostFuture<'a, pmt_rpc::contracts::ProcessLog> {
+        Box::pin(async { Err(not_served("this host has no background processes")) })
+    }
+
     /// Each served profile's configuration state, for `daemon status`.
     fn config(&self) -> Vec<pmt_rpc::control::ProfileConfig> {
         Vec::new()
@@ -602,6 +628,17 @@ pub struct Author {
 
 /// Receives a turn's answer text as it streams.
 pub type Deltas = Arc<dyn Fn(&str) + Send + Sync>;
+
+/// What became of a request only clients with a feature receive.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FeatureAnswer {
+    /// No attached driver advertised the feature.
+    NoClient,
+    /// Nobody answered before the deadline.
+    Unanswered,
+    /// The first answer.
+    Answered(Value),
+}
 
 /// A session's way to its attached clients.
 #[derive(Clone)]
@@ -669,6 +706,37 @@ impl Link {
     pub fn emit<E: Event>(&self, payload: &E::Payload) {
         let data = serde_json::to_value(payload).unwrap_or_default();
         self.hub.publish(&self.session_id, E::NAME, data);
+    }
+
+    /// Whether a driver of the session advertised client feature
+    /// `feature` (`desktop_ui`: an open desktop window).
+    #[must_use]
+    pub fn has_feature(&self, feature: &str) -> bool {
+        self.hub.has_feature(&self.session_id, feature)
+    }
+
+    /// Sends server request `method` only to the session's drivers that
+    /// advertised `feature`, waiting up to `timeout`.
+    pub async fn ask_feature(
+        &self,
+        method: &str,
+        params: Value,
+        timeout: Duration,
+        feature: &str,
+    ) -> FeatureAnswer {
+        if !self.has_feature(feature) {
+            return FeatureAnswer::NoClient;
+        }
+        match self
+            .hub
+            .ask_featured(&self.session_id, method, params, timeout, Some(feature))
+            .await
+        {
+            Some(value) => FeatureAnswer::Answered(value),
+            // The last such client left while the request was open.
+            None if !self.has_feature(feature) => FeatureAnswer::NoClient,
+            None => FeatureAnswer::Unanswered,
+        }
     }
 
     /// Asks the session's capable clients; `None` is unanswered (callers

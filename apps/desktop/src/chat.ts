@@ -6,7 +6,7 @@
 // above the composer, the model picker and the status bar. Each session
 // keeps its distance from the bottom when the window leaves it.
 
-import type { ApprovalRequestParams, ClarifyRequestParams, Decision, Envelope, FsFile, TranscriptMessage } from "../../../schema/rpc";
+import type { ApprovalRequestParams, ClarifyRequestParams, Decision, Envelope, FsFile, Reaction, TranscriptMessage } from "../../../schema/rpc";
 import { approvalCard } from "../../../web/src/components/approval";
 import { clarifyCard } from "../../../web/src/components/clarify";
 import { h, notice } from "../../../web/src/lib/dom";
@@ -206,8 +206,18 @@ export class ChatView {
     return `data:${file.mime};base64,${file.data}`;
   }
 
+  /** Puts the keyboard in the composer (`focus_pane chat`). */
+  focusComposer(): void {
+    this.el.querySelector<HTMLTextAreaElement>("textarea[name=prompt]")?.focus();
+  }
+
   apply(envelope: Envelope): void {
     if (!envelope.session_id || envelope.session_id !== this.sessionId) return;
+    if (envelope.event === "message.reaction") {
+      const data = envelope.data as { message_id: string; reactions: Reaction[] };
+      void this.transcript.react(data.message_id, data.reactions);
+      return;
+    }
     if (envelope.event === "session.event") this.live = true;
     // The last event this window received of the session.
     this.el.dataset.lastSeq = String(envelope.seq);

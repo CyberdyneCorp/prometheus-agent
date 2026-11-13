@@ -49,6 +49,8 @@ const READS: &[&str] = &[
     "artifacts.list",
     "pty.attach",
     "pty.list",
+    "process.list",
+    "process.log",
     "git.review",
     "projects.list",
     "manage.catalog",

@@ -147,6 +147,14 @@ fn every_shipped_toolset_expands_to_its_specified_tools() {
         ("code_execution", strings(&["execute_code"])),
         ("delegation", strings(&["delegate_task"])),
         ("kanban", Vec::new()),
+        // desktop-app, Desktop UI toolset contract; First-run onboarding
+        // chat; projects, Project tool for GUI sessions.
+        ("project", strings(&["project"])),
+        (
+            "desktop_ui",
+            strings(pmt_tools::agent_level_desktop::DESKTOP_UI_TOOLS),
+        ),
+        ("onboarding", strings(&["setup_beat"])),
         (
             "debugging",
             [
@@ -210,7 +218,7 @@ fn default_off_and_posture_flags() {
     };
     assert_eq!(
         flagged(|t| t.default_off),
-        ["x_search", "video", "video_gen", "kanban"]
+        ["x_search", "video", "video_gen", "kanban", "project"]
     );
     assert_eq!(flagged(|t| t.posture), ["coding"]);
     // Default-off toolsets join `all` only when named explicitly.

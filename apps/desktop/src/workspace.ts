@@ -12,6 +12,7 @@ import type { DesktopClient } from "./client";
 import { FileBrowser } from "./files";
 import { type Arrangement, Layout, type Mode } from "./layout";
 import { PreviewRail } from "./preview";
+import { PreviewDriver } from "./preview-driver";
 import { ReviewPane } from "./review";
 import { shell } from "./shell";
 import { Shortcuts } from "./shortcuts";
@@ -53,6 +54,10 @@ export interface Workspace {
   paneNames: string[];
   /** Lays the window out once it is in the document. */
   start(side: HTMLElement): void;
+  /** The parts the desktop UI tools act on. */
+  terminal: TerminalPane;
+  preview: PreviewRail;
+  driver: PreviewDriver;
 }
 
 /** A pane the window adds (management panes). */
@@ -66,6 +71,7 @@ export interface ExtraPane {
 export function workspace(client: DesktopClient, chat: ChatView, settings: HTMLElement, dialogs: HTMLElement, extra: ExtraPane[]): Workspace {
   const files = new FileBrowser(client);
   const preview = new PreviewRail(client, (comments) => chat.attachComments(comments.text, comments.images));
+  const driver = new PreviewDriver(preview);
   const terminal = new TerminalPane(client, (text) => chat.attachComments(text, []));
   const subagents = new SubagentsFrame(client);
   const review = new ReviewPane(client, dialogs);
@@ -134,6 +140,9 @@ export function workspace(client: DesktopClient, chat: ChatView, settings: HTMLE
       side = sideEl;
       layout.start();
     },
+    terminal,
+    preview,
+    driver,
   };
 }
 

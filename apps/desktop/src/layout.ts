@@ -98,6 +98,24 @@ export class Layout {
     this.apply(this.state.mode, layout.arrangement);
   }
 
+  /** Every preset and saved layout, by name. */
+  names(): { presets: string[]; saved: string[] } {
+    return { presets: Object.keys(PRESETS), saved: Object.keys(this.state.saved) };
+  }
+
+  /** Applies preset or saved layout `name` in its own mode; `false` when
+   *  there is none of that name (nothing changes then). */
+  applyNamed(name: string): boolean {
+    const layout = PRESETS[name] ?? this.state.saved[name];
+    if (!layout) return false;
+    if (layout.mode !== this.state.mode) {
+      this.state.mode = layout.mode;
+      this.render();
+    }
+    this.use(name);
+    return true;
+  }
+
   saveAs(name: string): void {
     this.state.saved[name] = { mode: this.state.mode, arrangement: this.arrangement };
     this.persist();

@@ -165,6 +165,7 @@ impl Host for FakeHost {
                 title: None,
                 started_at: "2026-01-01T00:00:00Z".into(),
                 live: false,
+                project_id: None,
             })
             .collect();
         Box::pin(async move { Ok(SessionList { sessions }) })
@@ -222,6 +223,7 @@ impl Host for FakeHost {
                 id: format!("msg_{n}"),
                 role: "assistant".into(),
                 text: Some(text.clone()),
+                reactions: Vec::new(),
             })
             .collect();
         Box::pin(async { Ok(Transcript { messages }) })
@@ -566,6 +568,7 @@ pub fn hello(major: u16, minor: u16, server_requests: bool) -> HelloParams {
         capabilities: ClientCapabilities {
             server_requests,
             events: Vec::new(),
+            features: Vec::new(),
         },
     }
 }

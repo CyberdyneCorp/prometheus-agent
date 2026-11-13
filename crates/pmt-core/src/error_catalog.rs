@@ -998,6 +998,9 @@ error_codes! {
     /// The PTY or the shell could not start or be used.
     TERMINAL_PTY = ("terminal.pty", Unavailable,
         "The daemon could not open a pseudo-terminal or start the user's shell (`SHELL`, else /bin/sh; `COMSPEC` on Windows).");
+    /// A background process the session does not have (any more).
+    PROCESS_NOT_FOUND = ("process.not_found", NotFound,
+        "No such live background process in this session: it was never started there or its record expired (`process.list`).");
     /// A queue entry that is no longer queued.
     QUEUE_ENTRY_NOT_FOUND = ("queue.entry_not_found", NotFound,
         "The queued input already started or was deleted; `queue.list` shows what is still queued.");

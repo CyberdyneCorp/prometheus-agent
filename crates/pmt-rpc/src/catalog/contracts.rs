@@ -93,6 +93,7 @@ mod security;
 mod terminal;
 mod tui;
 mod turn;
+mod ui;
 mod upkeep;
 mod workspace;
 mod worktree;
@@ -113,6 +114,7 @@ pub use security::*;
 pub use terminal::*;
 pub use tui::*;
 pub use turn::*;
+pub use ui::*;
 pub use upkeep::*;
 pub use workspace::*;
 pub use worktree::*;
@@ -187,6 +189,10 @@ pub struct ClientCapabilities {
     /// understands anyway.
     #[serde(default)]
     pub events: Vec<String>,
+    /// Optional client features (`desktop_ui`: the desktop UI toolset's
+    /// `ui.*` requests go to this client).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub features: Vec<String>,
 }
 
 /// `rpc.hello` params: the first request on every connection.
@@ -531,6 +537,9 @@ pub struct SessionSummary {
     pub started_at: String,
     /// Whether a turn is running in the daemon.
     pub live: bool,
+    /// Its project (`prj_...`), when it has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<String>,
 }
 
 /// `session.list` result.
@@ -607,6 +616,9 @@ pub struct TranscriptMessage {
     pub role: String,
     /// Its text, when it has any.
     pub text: Option<String>,
+    /// Its reactions (spec: desktop-app, Agent reactions).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reactions: Vec<Reaction>,
 }
 
 /// `session.transcript` result.

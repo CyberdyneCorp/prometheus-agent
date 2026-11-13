@@ -437,6 +437,54 @@ JetBrains Mono, SIL Open Font License 1.1). Exporting a profile runs `profile ex
 secrets and adds the appearance (theme, mode, shortcuts, zoom) as an
 overlay that an import applies again.
 
+## The agent in the window
+
+Desktop sessions get the `desktop_ui` toolset: the agent can react to
+your messages, read the terminal tab beside the chat, close the read-only
+tab that mirrors a background process (the process keeps running), open,
+read, drive and annotate the preview page, read the metadata of the OS
+window beneath the app, reveal a pane, run tours, show tips and change
+the accent, mode and layout. Each call reaches the window as a `ui.<tool>`
+request only when a desktop window that renders these tools is attached
+to the session; otherwise the tool answers `{"success": false, "error":
+"<tool> needs an open Prometheus Desktop window"}` and the turn carries
+on. The window has 30 s to answer (300 s for pickers, tours and setup
+cards), and effects that move focus apply only in the focused window.
+
+The daemon checks every call before the window sees it: unknown panes,
+a tour given both steps and a preset, unknown accents or modes and marks
+without a target are refused; preview addresses follow the web tools' URL
+safety policy (loopback dev servers and workspace files are allowed);
+typing into a password field asks for your approval first; and what the
+window reads back is redacted. Refs from `drive_preview elements` belong
+to the page they were listed on: after a navigation they are stale and
+the agent must list elements again. A navigation clears the marks of
+[`annotate_preview`](../reference/tools.md#annotate_preview). On macOS, [`read_window_below`](../reference/tools.md#read_window_below) gives an empty title and
+names the Screen Recording permission until you grant it; on native
+Wayland it explains that the compositor does not list other windows.
+
+Settings → *Agent in the window* has the switches that hide tools: *Let
+the agent react to messages* (off by default), *Guided tours* and *In-app
+tips* (on). They are machine-wide display preferences
+(`message_reactions`, `tours_enabled`, `tips_enabled`) and change the
+toolset from the next chat on: a running chat keeps its tools, so its
+prompt cache does too.
+
+Desktop and TUI sessions also get the [`project`](../reference/tools.md#project) tool (see the [projects
+guide](projects.md#the-project-tool)); the Projects sidebar lists each
+project's chats and moves a chat under its new project as soon as the
+tool switches it.
+
+### First launch
+
+On the first launch the window opens the onboarding chat
+(`onboarding.ensure`), the only session with the `onboarding` toolset.
+Its [`setup_beat`](../reference/tools.md#setup_beat) tool shows one card at a time (name, theme, layout,
+connectors, plugins, tour, build), waits up to 300 s for your answer and
+keeps it in `<profile>/onboarding/<session>.json`; an unanswered card
+times out and the defaults stay. A suggested plugin installs only through
+the catalog's consent dialog, and only *Skip setup* ends onboarding early.
+
 ## Remote and SSH connections
 
 Settings → Connections lists the daemons the app reaches. `This computer`

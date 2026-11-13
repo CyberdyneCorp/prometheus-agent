@@ -221,6 +221,7 @@ impl DaemonHost {
                 return Err(err);
             }
         };
+        super::desktop_ui::bind(id, &session, &first.link);
         turns.fetch_add(1, Ordering::AcqRel);
         // In the submitting request's session span: the turn's records go
         // to the profile's logs.
@@ -285,6 +286,7 @@ impl DaemonHost {
     /// is closed (or was not loaded).
     pub(super) async fn close_loaded(profile: &Profile, id: SessionId, reason: EndReason) -> bool {
         let mut loaded = profile.loaded.lock().await;
+        super::desktop_ui::unbind(id);
         let Some(session) = loaded.remove(&id) else {
             return true;
         };
@@ -313,6 +315,7 @@ impl DaemonHost {
         if session.busy.load(Ordering::Acquire) || queued {
             return false;
         }
+        super::desktop_ui::unbind(id);
         let Some(session) = loaded.remove(&id) else {
             return true;
         };

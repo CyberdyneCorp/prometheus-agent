@@ -3,9 +3,12 @@
 // workspace (`pty.open`), shown with their recent output on (re)attach
 // (`pty.attach`) and live `pty.output`. Only drivers type; hiding the
 // pane keeps the shells running, closing a tab ends its shell, and
-// selected output goes to the composer with Add to chat.
+// selected output goes to the composer with Add to chat. Each background
+// process of the session shows in a read-only tab that mirrors its output
+// (spec: desktop-app, Terminal pane tools); closing that tab never stops
+// the process, and `read_terminal` reads whichever tab is focused.
 
-import type { Envelope, PtyAttached, PtyList, PtyOpened } from "../../../schema/rpc";
+import type { Envelope, ProcessList, ProcessLog, PtyAttached, PtyList, PtyOpened } from "../../../schema/rpc";
 import { h, notice } from "../../../web/src/lib/dom";
 import type { DesktopClient } from "./client";
 
@@ -28,6 +31,11 @@ export function keyInput(event: KeyboardEvent): string | null {
   return event.key.length === 1 && !event.metaKey ? event.key : null;
 }
 
+/** Most lines one `read_terminal` returns. */
+const MAX_LINES = 2000;
+/** How often mirrors of background processes refresh. */
+const MIRROR_MS = 1000;
+
 export class TerminalPane {
   readonly el = h("section", { class: "terminals", "aria-label": "Terminal" });
   private readonly tabs = h("div", { class: "terminal-tabs" });
@@ -36,6 +44,10 @@ export class TerminalPane {
   private readonly shown = new Map<string, HTMLPreElement>();
   private sessionId: string | null = null;
   private current: string | null = null;
+  /** Mirror tabs by process id, and the ones the user or agent closed. */
+  private readonly mirrors = new Set<string>();
+  private readonly closedMirrors = new Set<string>();
+  private mirrorTimer = 0;
 
   constructor(
     private readonly client: DesktopClient,
@@ -63,12 +75,74 @@ export class TerminalPane {
   async follow(sessionId: string | null): Promise<void> {
     this.sessionId = sessionId;
     this.shown.clear();
+    this.mirrors.clear();
+    this.closedMirrors.clear();
+    window.clearInterval(this.mirrorTimer);
     this.tabs.replaceChildren();
     this.screens.replaceChildren();
     this.status.replaceChildren();
     if (!sessionId) return;
     const listed = await this.client.call<PtyList>("pty.list", { session_id: sessionId }).catch(() => ({ terminals: [] }));
     for (const id of listed.terminals) await this.attach(id);
+    this.mirrorTimer = window.setInterval(() => void this.refreshMirrors(sessionId), MIRROR_MS);
+  }
+
+  /** `read_terminal`: the focused tab's visible screen, or `count` lines
+   *  of its scrollback from `start_line` (0 = oldest). */
+  read(args: { start_line?: number; count?: number }): Record<string, unknown> {
+    const screen = this.current ? this.shown.get(this.current) : undefined;
+    if (!screen) return { success: false, error: "no terminal tab is open beside the chat" };
+    const lines = (screen.textContent ?? "").replace(/\n$/, "").split("\n");
+    const lineHeight = Number.parseFloat(getComputedStyle(screen).lineHeight) || 16;
+    const viewport = Math.max(1, Math.floor(screen.clientHeight / lineHeight) || 24);
+    const total = lines.length;
+    const start = args.start_line ?? Math.max(0, total - viewport);
+    const count = Math.min(MAX_LINES, args.count ?? (args.start_line === undefined ? viewport : MAX_LINES));
+    const end = Math.min(total, start + count);
+    return { success: true, tab: this.current, total_lines: total, start, end, viewport_rows: viewport, cursor_row: total - 1, text: lines.slice(start, end).join("\n") };
+  }
+
+  /** `close_terminal`: closes the mirror tab of a background process; the
+   *  process keeps running and buffering. */
+  closeMirror(id: string): Record<string, unknown> {
+    // An id or a unique prefix of one, as the `process` tool takes them.
+    const matches = [...this.mirrors].filter((m) => m.startsWith(id) || m.startsWith(`proc_${id}`));
+    if (matches.length !== 1) {
+      return { success: false, error: matches.length === 0 ? `no terminal tab mirrors process ${id}` : `${id} matches several processes: ${matches.join(", ")}` };
+    }
+    const processId = matches[0] ?? id;
+    this.closedMirrors.add(processId);
+    this.mirrors.delete(processId);
+    this.drop(processId);
+    return { success: true, process_id: processId, note: "the tab is closed; the process keeps running and its output keeps buffering" };
+  }
+
+  /** Opens a mirror for each new background process and refreshes the
+   *  open ones. */
+  private async refreshMirrors(sessionId: string): Promise<void> {
+    const listed = await this.client.call<ProcessList>("process.list", { session_id: sessionId }).catch(() => ({ processes: [] }) as ProcessList);
+    if (sessionId !== this.sessionId) return;
+    for (const p of listed.processes) {
+      if (this.closedMirrors.has(p.process_id)) continue;
+      if (!this.mirrors.has(p.process_id)) this.addMirror(p.process_id, p.command);
+      const log = await this.client.call<ProcessLog>("process.log", { session_id: sessionId, process_id: p.process_id }).catch(() => null);
+      const screen = this.shown.get(p.process_id);
+      if (log && screen && this.mirrors.has(p.process_id)) screen.textContent = log.output;
+    }
+  }
+
+  private addMirror(id: string, command: string): void {
+    this.mirrors.add(id);
+    const screen = h("pre", { class: "terminal-screen mirror", tabindex: 0, "data-process": id, "aria-label": `Process ${id}`, "aria-readonly": "true" });
+    this.shown.set(id, screen);
+    const tab = h("button", { type: "button", name: "terminal-tab", "data-process": id, title: command }, `${id} (read only)`);
+    tab.addEventListener("click", () => this.select(id));
+    const close = h("button", { type: "button", name: "close-mirror", "data-process": id, "aria-label": `Close the ${id} mirror` }, "×");
+    close.addEventListener("click", () => this.closeMirror(id));
+    this.tabs.append(h("span", { class: "terminal-tab", "data-pty": id }, tab, close));
+    this.screens.append(screen);
+    if (!this.current) this.select(id);
+    else screen.hidden = true;
   }
 
   private async open(): Promise<void> {

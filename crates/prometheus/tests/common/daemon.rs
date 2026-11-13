@@ -33,6 +33,44 @@ pub fn start<'a>(home: &'a Path, extra: &[&str]) -> Daemon<'a> {
     }
 }
 
+/// [`start`] with `env` set in the daemon's environment.
+pub fn start_env<'a>(home: &'a Path, env: &[(&str, &str)]) -> Daemon<'a> {
+    let out = super::command(home)
+        .args(["daemon", "start"])
+        .envs(env.iter().copied())
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    let text = ok(&out);
+    assert!(text.starts_with("daemon started (pid "), "{text}");
+    Daemon {
+        home,
+        pid: record(home).process.pid,
+    }
+}
+
+/// A desktop window's connection to `profile`: it answers server
+/// requests and advertises `features` (call inside a runtime).
+pub async fn desktop(home: &Path, profile: &str, features: &[&str]) -> (Client, Inbox) {
+    let hello = HelloParams {
+        client: ClientKind::Desktop,
+        capabilities: ClientCapabilities {
+            server_requests: true,
+            events: Vec::new(),
+            features: features.iter().map(|f| (*f).to_owned()).collect(),
+        },
+        ..hello(true)
+    };
+    Client::connect(
+        &record(home).endpoint,
+        Purpose::Interactive,
+        vec![profile.into()],
+        &hello,
+    )
+    .await
+    .unwrap()
+}
+
 /// The running daemon's discovery record.
 pub fn record(home: &Path) -> DaemonRecord {
     match discover(home).unwrap() {
@@ -50,6 +88,7 @@ pub fn hello(server_requests: bool) -> HelloParams {
         capabilities: ClientCapabilities {
             server_requests,
             events: Vec::new(),
+            features: Vec::new(),
         },
     }
 }

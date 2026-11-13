@@ -14,7 +14,7 @@ test-group = "browser"
 
 # The dashboard's and the desktop page's browser tests start a Playwright Chromium each.
 [[profile.default.overrides]]
-filter = "package(prometheus) & (binary(dashboard_e2e) | binary(dashboard_browser) | binary(desktop_e2e) | binary(desktop_background) | binary(desktop_review) | binary(desktop_manage) | binary(desktop_switching))"
+filter = "package(prometheus) & (binary(dashboard_e2e) | binary(dashboard_browser) | binary(desktop_e2e) | binary(desktop_background) | binary(desktop_review) | binary(desktop_manage) | binary(desktop_switching) | binary(desktop_ui))"
 test-group = "browser"
 
 # The real-pyright LSP test downloads pyright from the npm registry on

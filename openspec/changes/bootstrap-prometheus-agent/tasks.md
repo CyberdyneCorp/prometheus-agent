@@ -589,9 +589,9 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 65. M3 Desktop UI toolset
 
-- [ ] 65.1 Implement the desktop UI toolset contract (absent without an attached window, tips toggle mid-session), agent reactions (own messages only), terminal pane tools and the preview pane tool (private addresses blocked); verify with desktop E2E tests (spec: desktop-app)
-- [ ] 65.2 Implement driving the preview page (stale refs, password typing gated), annotating the preview page (navigation clears marks) and reading the window below (permission prompts on macOS); verify with desktop E2E tests (spec: desktop-app)
-- [ ] 65.3 Implement pane focus, tours and tips, the appearance tool, the project tool for GUI sessions (switching keeps the prompt cache) and the first-run onboarding chat (tool only in that chat, card deadline); verify with desktop E2E tests (spec: desktop-app, spec: projects)
+- [x] 65.1 Implement the desktop UI toolset contract (absent without an attached window, tips toggle mid-session), agent reactions (own messages only), terminal pane tools and the preview pane tool (private addresses blocked); verify with desktop E2E tests (spec: desktop-app)
+- [x] 65.2 Implement driving the preview page (stale refs, password typing gated), annotating the preview page (navigation clears marks) and reading the window below (permission prompts on macOS); verify with desktop E2E tests (spec: desktop-app)
+- [x] 65.3 Implement pane focus, tours and tips, the appearance tool, the project tool for GUI sessions (switching keeps the prompt cache) and the first-run onboarding chat (tool only in that chat, card deadline); verify with desktop E2E tests (spec: desktop-app, spec: projects)
 
 ## 66. M3 ACP adapter
 

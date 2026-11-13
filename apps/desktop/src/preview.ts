@@ -33,6 +33,10 @@ export class PreviewRail {
   private readonly status = h("div", { class: "preview-status" });
   private readonly body = h("div", { class: "preview-body" });
   private frame: HTMLIFrameElement | null = null;
+  /** What the open tab shows, and its label. */
+  page: { kind: "web" | "file"; address: string; label: string } | null = null;
+  /** A new tab was opened (the driver starts over). */
+  onOpened: () => void = () => {};
 
   constructor(
     private readonly client: DesktopClient,
@@ -53,18 +57,34 @@ export class PreviewRail {
     return this.frame !== null;
   }
 
-  async open(target: PreviewTarget): Promise<void> {
+  /** The open tab's frame. */
+  get current(): HTMLIFrameElement | null {
+    return this.frame;
+  }
+
+  /** Opens `target` as the rail's tab (named `label`); whether it opened
+   *  (else the rail's status says why). */
+  async open(target: PreviewTarget, label?: string): Promise<boolean> {
     this.status.replaceChildren();
     this.show();
     const loaded = "url" in target ? this.web(target.url) : await this.file(target.sessionId, target.path);
-    if (!loaded) return;
+    if (!loaded) return false;
     this.close();
     this.el.hidden = false;
     this.frame = loaded;
+    const address = "url" in target ? target.url : target.path;
+    this.page = { kind: "url" in target ? "web" : "file", address, label: label ?? address };
+    this.onOpened();
     this.frame.addEventListener("load", () => {
       this.frame?.setAttribute("data-loads", String(Number(this.frame.dataset.loads ?? "0") + 1));
     });
     this.body.append(this.frame);
+    return true;
+  }
+
+  /** Why the last open failed. */
+  get problem(): string {
+    return this.status.textContent ?? "";
   }
 
   private web(url: string): HTMLIFrameElement | null {
@@ -108,5 +128,6 @@ export class PreviewRail {
     this.annotate.clear();
     this.frame?.remove();
     this.frame = null;
+    this.page = null;
   }
 }

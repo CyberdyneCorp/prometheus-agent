@@ -3796,6 +3796,9 @@ capabilities = [
 [projects."Repository discovery"]
 "Excluded path skipped" = { tests = ["crates/pmt-worktrees/src/discover.rs::excluded_hidden_dependency_and_deep_folders_are_skipped", "crates/pmt-worktrees/src/discover.rs::subtrees_the_sandbox_denies_are_skipped", "crates/prometheus/src/daemon_cmd/host/projects.rs::the_scan_skips_what_the_profile_sandbox_denies", "crates/prometheus/tests/dashboard_browser.rs::the_projects_page_offers_discovered_repositories"], note = "~/scratch excluded: ~/scratch/tmp is not listed (hidden, dependency, nested and too-deep repositories are skipped too, and so are subtrees the profile sandbox denies: credential stores, a Prometheus home below a scan root); the dashboard /projects page (web/e2e/projects.spec.ts) offers the discovered repositories with one-click Create project and does not list ~/code/scratch/tmp; the daemon cache and the desktop sidebar rows are in crates/prometheus/tests/desktop_manage.rs" }
 
+[projects."Project tool for GUI sessions"]
+"Switch keeps prompt cache" = { tests = ["crates/prometheus/tests/desktop_ui_tools.rs::switching_project_moves_the_next_command_and_keeps_the_prompt"], note = "a desktop session in project api calls project switch web: the session's next terminal command (pwd) runs in web's primary folder, the stored system prompt hash is unchanged, the session row carries web's project id and session.project tells the surface" }
+
 [projects."Projects in backups and exports"]
 "Missing folder flagged" = ["crates/prometheus/tests/projects_backup.rs::an_imported_profile_keeps_folders_missing_on_this_machine"]
 
@@ -4289,3 +4292,46 @@ capabilities = [
 [distribution-and-update."Desktop packages and signing"]
 "Store install refuses self-update" = ["crates/prometheus/tests/update_channels.rs::desktop_packages_stamp_their_owner_and_the_cli_is_the_bundled_binary"]
 "CLI and desktop cannot skew" = ["crates/prometheus/tests/update_channels.rs::desktop_packages_stamp_their_owner_and_the_cli_is_the_bundled_binary"]
+
+# Group 65 (desktop UI toolset). desktop_ui_tools.rs drives real daemon
+# sessions with the mock model and a protocol client standing in for the
+# desktop window (it advertises the desktop_ui feature and answers ui.*);
+# desktop_ui.rs drives desktop-ui.spec.ts and desktop-onboarding.spec.ts
+# in the desktop browser harness.
+[desktop-app."Desktop UI toolset contract"]
+"No window attached" = { tests = ["crates/prometheus/tests/desktop_ui_tools.rs::window_tools_need_a_window_and_refused_calls_never_reach_it"], note = "a desktop connection without the desktop_ui feature (the closed window) is attached: read_terminal answers {success: false, error: \"read_terminal needs an open Prometheus Desktop window\"} and the mock's next answer ends the turn; with a featured window attached the same tool reaches it as ui.read_terminal with its 30 s deadline" }
+"Turning tips off mid-session" = { tests = ["crates/prometheus/tests/desktop_ui_tools.rs::opt_outs_apply_from_the_next_session_and_only_onboarding_gets_setup_beat", "crates/prometheus/src/chat/session/desktop_prefs.rs::defaults_hide_reactions_only_and_flags_toggle_each_tool"], note = "ui.prefs tips_enabled = false during a session: `tools list --session` of the running session still exposes show_tip after another turn; a session created afterwards does not (gui_tour stays)" }
+
+[desktop-app."Agent reactions"]
+"Reacting to an earlier message" = { tests = ["crates/prometheus/tests/desktop_ui_tools.rs::the_agent_reacts_to_its_own_conversation_only", "crates/prometheus/tests/desktop_ui.rs::the_agent_drives_the_window_through_the_desktop_ui_tools"], note = "with message reactions on, messages_back = 1 sets the agent's reaction on the user message before the latest (session.transcript reactions); in the window (desktop-ui.spec.ts) message.reaction puts 😂 on prompt 1 and none on prompt 2" }
+"Foreign message id" = { tests = ["crates/prometheus/tests/desktop_ui_tools.rs::the_agent_reacts_to_its_own_conversation_only"], note = "a real message id of another session of the profile gives {success: false, error: \"message <id> is not part of this conversation\"}" }
+
+[desktop-app."Terminal pane tools"]
+"Closing a mirror tab" = { tests = ["crates/prometheus/tests/desktop_ui.rs::the_agent_drives_the_window_through_the_desktop_ui_tools"], note = "a background server started by the terminal tool gets a read-only mirror tab (process.list / process.log); read_terminal reads it; close_terminal closes only the tab, which does not come back, and process poll still reports the server running" }
+
+[desktop-app."Preview pane tool"]
+"Blocked private address" = { tests = ["crates/prometheus/tests/desktop_ui_tools.rs::window_tools_need_a_window_and_refused_calls_never_reach_it"], note = "desktop_preview open of http://169.254.169.254/latest/meta-data is refused by the web tools' URL safety policy (cloud metadata endpoint) and the window receives no ui.desktop_preview request" }
+
+[desktop-app."Driving the preview page"]
+"Stale ref" = { tests = ["crates/prometheus/tests/desktop_ui.rs::the_agent_drives_the_window_through_the_desktop_ui_tools"], note = "refs from elements on form.html; after clicking the link to page2.html, clicking e1 answers that the ref is stale and to call elements again" }
+"Typing a password" = { tests = ["crates/prometheus/tests/desktop_ui.rs::the_agent_drives_the_window_through_the_desktop_ui_tools"], note = "drive_preview type into input[type=password]: the approval card shows while the field is still empty; after Allow once the text is typed" }
+
+[desktop-app."Annotating the preview page"]
+"Navigation clears marks" = { tests = ["crates/prometheus/tests/desktop_ui.rs::the_agent_drives_the_window_through_the_desktop_ui_tools", "crates/prometheus/src/daemon_cmd/host/desktop_ui/check.rs::marks_and_actions_name_their_missing_target"], note = "two annotate_preview marks are drawn in the page; following the link leaves none" }
+
+[desktop-app."Reading the window below"]
+"Missing macOS permission" = { tests = ["crates/prometheus/tests/desktop_ui.rs::the_agent_drives_the_window_through_the_desktop_ui_tools", "crates/pmt-desktop/src/below.rs::an_untitled_window_on_macos_names_the_screen_recording_permission"], note = "a harness with macOS facts lists an untitled Safari window beneath the app: the result has app Safari, an empty title and a note naming the Screen Recording permission" }
+
+[desktop-app."Pane focus, tours and tips"]
+"Unknown pane" = ["crates/prometheus/tests/desktop_ui_tools.rs::window_tools_need_a_window_and_refused_calls_never_reach_it", "crates/prometheus/src/daemon_cmd/host/desktop_ui/check.rs::an_unknown_pane_lists_the_five_allowed_ones"]
+"Preset and steps together" = ["crates/prometheus/tests/desktop_ui_tools.rs::window_tools_need_a_window_and_refused_calls_never_reach_it", "crates/prometheus/src/daemon_cmd/host/desktop_ui/check.rs::a_tour_takes_steps_or_a_preset_not_both"]
+
+[desktop-app."Appearance tool"]
+"Unknown layout" = { tests = ["crates/prometheus/tests/desktop_ui.rs::the_agent_drives_the_window_through_the_desktop_ui_tools"], note = "set_theme {layout: cockpit, accent: violet}: the error lists the presets and saved layouts and the accent stays unchanged; a valid accent and mode then apply" }
+
+[desktop-app."Project tool"]
+"Switching project" = { tests = ["crates/prometheus/tests/desktop_ui.rs::the_agent_drives_the_window_through_the_desktop_ui_tools", "crates/prometheus/tests/desktop_ui_tools.rs::switching_project_moves_the_next_command_and_keeps_the_prompt"], note = "a chat opened in project api calls project switch web: the Projects sidebar lists it under web, not api; the daemon test proves the workspace move" }
+
+[desktop-app."First-run onboarding chat"]
+"Regular chats lack the tool" = { tests = ["crates/prometheus/tests/desktop_ui_tools.rs::opt_outs_apply_from_the_next_session_and_only_onboarding_gets_setup_beat", "crates/prometheus/tests/desktop_ui.rs::the_first_launch_opens_the_onboarding_chat"], note = "only the onboarding.ensure session exposes setup_beat; a regular chat's forged setup_beat never reaches the window and shows no card; the onboarding source tag is refused to session.create" }
+"Card deadline" = { tests = ["crates/prometheus/tests/desktop_ui_tools.rs::an_unanswered_setup_card_times_out_and_keeps_the_defaults"], note = "the theme card left unanswered: setup_beat returns that the theme card timed out and the defaults stay in place, recorded as timed out in the session's onboarding record (debug daemons take PMT_TEST_UI_USER_WAIT_SECS = 2 instead of 300 s)" }

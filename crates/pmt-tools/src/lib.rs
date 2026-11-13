@@ -24,6 +24,7 @@
 pub mod agent_level;
 pub mod agent_level_cron;
 pub mod agent_level_delegation;
+pub mod agent_level_desktop;
 pub mod approval;
 pub mod args;
 pub mod browser;
@@ -84,5 +85,6 @@ pub fn builtin_tools(environments: &Arc<Environments>) -> Vec<RegisteredTool> {
     tools.extend(vision::tools(environments));
     tools.extend(browser::tools(environments));
     tools.extend(agent_level::tools());
+    tools.extend(agent_level_desktop::tools());
     tools
 }

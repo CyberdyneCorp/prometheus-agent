@@ -169,7 +169,7 @@ impl Factory {
                 surface.clone(),
             );
             let select: super::tool_state::Selector = Box::new(move |registry, toolsets| {
-                tools::selection(registry, scope.config(), interactive, toolsets, &surface)
+                tools::selection(registry, &scope, interactive, toolsets, &surface)
             });
             state.defer(super::tool_state::Deferred { discovery, select });
         }
@@ -282,10 +282,9 @@ impl Factory {
     /// Registry and selection errors; store errors recording the surface.
     pub(crate) async fn apply_tools_now(&self, live: &Live, reason: &str) -> Result<(), Error> {
         let (registry, toolsets) = self.session_registry()?;
-        let config = self.scope.config();
         let selection = tools::selection(
             &registry,
-            config,
+            &self.scope,
             self.options.interactive,
             &toolsets,
             &live.session_surface,

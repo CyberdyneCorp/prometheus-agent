@@ -441,6 +441,8 @@ export interface ClarifyRequestParams {
 export interface ClientCapabilities {
   /** Events introduced after the client's minor version that it understands anyway. */
   events?: Array<string>;
+  /** Optional client features (`desktop_ui`: the desktop UI toolset's `ui.*` requests go to this client). */
+  features?: Array<string>;
   /** The client answers server-to-client requests (approvals, clarify, secrets, sudo). Without it they resolve unanswered at once. */
   server_requests?: boolean;
 }
@@ -1127,6 +1129,16 @@ export interface MemorySummary {
   line?: string | null;
 }
 
+/** `message.reaction` payload. */
+export interface MessageReaction {
+  /** The message. */
+  message_id: string;
+  /** Its reactions after the change. */
+  reactions: Array<Reaction>;
+  /** The session. */
+  session_id: string;
+}
+
 /** One data point of a metric. */
 export interface MetricPoint {
   /** Its bounded attributes (never content, paths or user ids). */
@@ -1273,6 +1285,14 @@ export interface ModelOptionsParams {
   session_id?: string | null;
 }
 
+/** `onboarding.ensure` result. */
+export interface OnboardingChat {
+  /** Whether this call created it. */
+  created: boolean;
+  /** The profile's onboarding chat. */
+  session_id: string;
+}
+
 /** A server-to-client request still waiting for an answer. */
 export interface OpenRequest {
   /** `srq-<12 hex>`. */
@@ -1311,6 +1331,40 @@ export interface PlatformSupport {
   target: string;
   /** `tier1`, `tier2` or `unsupported`. */
   tier: string;
+}
+
+/** One background process of a session. */
+export interface ProcessEntry {
+  /** Its command line. */
+  command: string;
+  /** Its id (`proc_…`). */
+  process_id: string;
+  /** `running`, `exited`... */
+  state: string;
+}
+
+/** `process.list` result. */
+export interface ProcessList {
+  /** The session's live background processes. */
+  processes: Array<ProcessEntry>;
+}
+
+/** `process.log` result. */
+export interface ProcessLog {
+  /** Its buffered output (redacted, shaped like the `process` tool's). */
+  output: string;
+  /** The process. */
+  process_id: string;
+  /** Its state. */
+  state: string;
+}
+
+/** `process.log` params. */
+export interface ProcessRef {
+  /** The background process. */
+  process_id: string;
+  /** The session. */
+  session_id: string;
 }
 
 /** A call that only names the window's profile. */
@@ -1496,6 +1550,14 @@ export interface QuotaWindow {
   used_percent: number;
 }
 
+/** One reaction on a message. */
+export interface Reaction {
+  /** Who reacted (`agent`). */
+  by: string;
+  /** The emoji. */
+  emoji: string;
+}
+
 /** A repository offered for project creation. */
 export interface RepoRow {
   /** When a scan last saw it (discovered rows; RFC 3339). */
@@ -1611,6 +1673,18 @@ export interface SessionListParams {
   profile?: string | null;
 }
 
+/** `session.project` payload: a session moved to another project. */
+export interface SessionProject {
+  /** The working directory the session moves to at its next tool call. */
+  cwd: string;
+  /** Its project. */
+  project_id: string;
+  /** The session. */
+  session_id: string;
+  /** The project's slug. */
+  slug: string;
+}
+
 /** A session named by id. */
 export interface SessionRef {
   /** `ses_<ULID>`. */
@@ -1649,6 +1723,8 @@ export interface SessionSetup {
 export interface SessionSummary {
   /** Whether a turn is running in the daemon. */
   live: boolean;
+  /** Its project (`prj_...`), when it has one. */
+  project_id?: string | null;
   /** `ses_<ULID>`. */
   session_id: string;
   /** When it started (RFC 3339). */
@@ -1800,6 +1876,8 @@ export interface Transcript {
 export interface TranscriptMessage {
   /** `msg_<ULID>`. */
   id: string;
+  /** Its reactions (spec: desktop-app, Agent reactions). */
+  reactions?: Array<Reaction>;
   /** `user`, `assistant`, `tool` or `system`. */
   role: string;
   /** Its text, when it has any. */
@@ -1832,6 +1910,16 @@ export interface TurnFinished {
   turn_id: string;
   /** The turn's token and cost totals, as the turn loop reports them. */
   usage?: unknown;
+}
+
+/** `ui.<tool>` params. */
+export interface UiCall {
+  /** The tool's arguments (validated by the daemon first). */
+  arguments: unknown;
+  /** Milliseconds until the request settles unanswered (set by the daemon when it sends the request). */
+  deadline_ms?: number | null;
+  /** The session whose turn called the tool. */
+  session_id: string;
 }
 
 /** The machine's display preferences. */
@@ -2180,7 +2268,10 @@ export interface Methods {
   "moa.presets.list": { params: MoaPresetsListParams; result: MoaPresetList };
   "moa.presets.put": { params: MoaPresetsPutParams; result: MoaPresetList };
   "model.options": { params: ModelOptionsParams; result: ModelOptions };
+  "onboarding.ensure": { params: ProfileParams; result: OnboardingChat };
   "pairing.approve": { params: PairingApproveParams; result: PairingApproved };
+  "process.list": { params: SessionRef; result: ProcessList };
+  "process.log": { params: ProcessRef; result: ProcessLog };
   "projects.create": { params: ProjectsCreateParams; result: ProjectRow };
   "projects.list": { params: ProjectsListParams; result: ProjectsList };
   "prompt.submit": { params: SubmitParams; result: Submitted };
@@ -2235,18 +2326,31 @@ export interface ServerRequests {
   "clarify.request": { params: ClarifyRequestParams; result: ClarifyAnswers };
   "secret.request": { params: SecretRequestParams; result: SecretAnswer };
   "sudo.request": { params: SudoRequestParams; result: SudoAnswer };
+  "ui.annotate_preview": { params: UiCall; result: unknown };
+  "ui.close_terminal": { params: UiCall; result: unknown };
+  "ui.desktop_preview": { params: UiCall; result: unknown };
+  "ui.drive_preview": { params: UiCall; result: unknown };
+  "ui.focus_pane": { params: UiCall; result: unknown };
+  "ui.gui_tour": { params: UiCall; result: unknown };
+  "ui.read_terminal": { params: UiCall; result: unknown };
+  "ui.read_window_below": { params: UiCall; result: unknown };
+  "ui.set_theme": { params: UiCall; result: unknown };
+  "ui.setup_beat": { params: UiCall; result: unknown };
+  "ui.show_tip": { params: UiCall; result: unknown };
 }
 
 export interface Events {
   "adapter.state": AdapterStatePayload;
   "automation.state": AutomationStatePayload;
   "health.changed": HealthChanged;
+  "message.reaction": MessageReaction;
   "pty.exited": PtyOutput;
   "pty.output": PtyOutput;
   "queue.changed": QueueState;
   "request.cancel": RequestCancel;
   "request.resolved": RequestResolved;
   "session.event": unknown;
+  "session.project": SessionProject;
   "turn.finished": TurnFinished;
   "ui.prefs.changed": UiPrefs;
   "usage.updated": UsageUpdated;
@@ -2292,7 +2396,6 @@ export const UNDECLARED = [
   "achievement.unlocked",
   "local_model.context_grown",
   "message.delivery",
-  "message.reaction",
   "session.presence",
   "wake.detected",
 ] as const;

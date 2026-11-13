@@ -49,6 +49,7 @@ mod dashboard;
 mod dashboard_change;
 mod delegations;
 mod desktop;
+mod desktop_ui;
 mod discovery;
 mod gateway;
 mod health_sample;
@@ -602,6 +603,14 @@ impl Host for DaemonHost {
             new.model.clone_from(&target.model);
             if let Some(tag) = &params.source_tag {
                 pmt_store::sessions::check_source_tag(tag)?;
+                // Only `onboarding.ensure` makes the onboarding chat, the
+                // one session with `setup_beat`.
+                if tag == crate::chat::session::tools::ONBOARDING_TAG {
+                    return Err(Error::new(
+                        &codes::SESSION_INVALID_SOURCE_TAG,
+                        "the source tag 'onboarding' is reserved for the desktop's onboarding chat (onboarding.ensure)",
+                    ));
+                }
                 new.source_tag = Some(tag.clone());
             }
             new.cwd = Some(cwd.to_string_lossy().into_owned());
@@ -645,6 +654,7 @@ impl Host for DaemonHost {
                     session_id: s.id.to_string(),
                     title: s.title,
                     started_at: s.started_at.to_string(),
+                    project_id: s.project_id.map(|p| p.to_string()),
                 })
                 .collect();
             Ok(SessionList { sessions })
@@ -702,6 +712,7 @@ impl Host for DaemonHost {
                 .map(|m| TranscriptMessage {
                     id: m.id.to_string(),
                     role: m.role.as_str().to_owned(),
+                    reactions: desktop_ui::reactions_of(m.metadata.as_ref()),
                     text: m.content,
                 })
                 .collect();
@@ -1126,6 +1137,26 @@ impl Host for DaemonHost {
 
     fn bot_chat<'a>(&'a self, profile: &'a str) -> HostFuture<'a, (String, bool)> {
         Box::pin(async move { self.ensure_bot_chat(&self.profile(profile)?).await })
+    }
+
+    fn onboarding_chat<'a>(&'a self, profile: &'a str) -> HostFuture<'a, (String, bool)> {
+        Box::pin(async move { desktop_ui::ensure_chat(self, &self.profile(profile)?).await })
+    }
+
+    fn processes<'a>(
+        &'a self,
+        _profile: &'a str,
+        session_id: &'a str,
+    ) -> HostFuture<'a, pmt_rpc::contracts::ProcessList> {
+        Box::pin(async move { Ok(desktop_ui::processes(session_id)) })
+    }
+
+    fn process_log<'a>(
+        &'a self,
+        _profile: &'a str,
+        process: pmt_rpc::contracts::ProcessRef,
+    ) -> HostFuture<'a, pmt_rpc::contracts::ProcessLog> {
+        Box::pin(async move { desktop_ui::process_log(&process) })
     }
 
     fn config_get<'a>(&'a self, profile: &'a str, key: &'a str) -> HostFuture<'a, ConfigValue> {

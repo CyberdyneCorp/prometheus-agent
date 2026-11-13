@@ -179,17 +179,25 @@ fn build_gate(
 /// An unknown toolset (`registry.unknown_name`, exit 78).
 pub fn selection(
     registry: &ToolRegistry,
-    config: &Config,
+    scope: &ProfileScope,
     interactive: bool,
     plugins: &[String],
     surface: &SessionSurface,
 ) -> Result<Selection, Error> {
+    let config = scope.config();
     let mut enabled = match (surface, &config.api_server.toolsets) {
         (SessionSurface::Api, Some(listed)) => api_toolsets(registry, config, listed),
         _ => surface.starting_toolsets(registry, &config.tools, &config.toolsets),
     };
     crate::tools_cmd::opt_in(&mut enabled, plugins, surface);
-    let selection = Selection::resolve(registry, &enabled, &config.tools.disabled_toolsets)?;
+    let disabled = &config.tools.disabled_toolsets;
+    let hidden = if surface.folded_toolsets().is_empty() {
+        Vec::new()
+    } else {
+        super::desktop_prefs::hidden_tools(scope.home())
+    };
+    let selection = Selection::resolve(registry, &enabled, disabled)?
+        .folded_for(registry, surface, disabled, &hidden)?;
     Ok(if interactive {
         selection
     } else {
@@ -242,6 +250,9 @@ pub fn surface_of(session: &pmt_store::Session) -> SessionSurface {
     }
     match session.source {
         Source::Tui => SessionSurface::Tui,
+        Source::Desktop if session.source_tag.as_deref() == Some(ONBOARDING_TAG) => {
+            SessionSurface::Onboarding
+        }
         Source::Desktop => SessionSurface::Desktop,
         Source::Cron => SessionSurface::Cron,
         Source::Api => SessionSurface::Api,
@@ -255,6 +266,10 @@ pub fn surface_of(session: &pmt_store::Session) -> SessionSurface {
 
 /// The source tag of unattended ACP sessions (spec: acp-adapter).
 const ACP_UNATTENDED_TAG: &str = "acp-unattended";
+
+/// The source tag of the desktop's first-run onboarding chat (spec:
+/// desktop-app, First-run onboarding chat).
+pub const ONBOARDING_TAG: &str = "onboarding";
 
 /// The schema-variant traits of `model`'s current route.
 pub async fn route_traits(model: &dyn pmt_agent::turn::model::ModelPort) -> RouteTraits {
@@ -412,7 +427,17 @@ pub struct SwappableTools {
     replay: std::sync::OnceLock<Arc<dyn crate::replay::ToolReplay>>,
     /// The restriction of a running `/plan` turn.
     plan: std::sync::Mutex<Option<super::plan::Plan>>,
+    /// A working directory the `project` tool moved the session to,
+    /// applied before its next batch (spec: projects, Project tool for GUI
+    /// sessions).
+    pending_move: std::sync::Mutex<Option<std::path::PathBuf>>,
+    /// What applies such a move (the daemon's session; none elsewhere).
+    mover: std::sync::OnceLock<Mover>,
 }
+
+/// Moves a session's working directory (rebuilding its environment).
+pub type Mover =
+    Arc<dyn Fn(std::path::PathBuf) -> BoxFuture<'static, Result<(), Error>> + Send + Sync>;
 
 impl SwappableTools {
     /// A port over `tools`.
@@ -425,6 +450,47 @@ impl SwappableTools {
             recording: std::sync::OnceLock::new(),
             replay: std::sync::OnceLock::new(),
             plan: std::sync::Mutex::default(),
+            pending_move: std::sync::Mutex::default(),
+            mover: std::sync::OnceLock::new(),
+        }
+    }
+
+    /// Lets the session's working directory move (see
+    /// [`Self::move_before_next_call`]).
+    pub fn set_mover(&self, mover: Mover) {
+        let _ = self.mover.set(mover);
+    }
+
+    /// Whether the session's working directory can move.
+    #[must_use]
+    pub fn can_move(&self) -> bool {
+        self.mover.get().is_some()
+    }
+
+    /// Moves the session to `cwd` before its next tool call runs; the
+    /// prompt and tool array stay as they are.
+    pub fn move_before_next_call(&self, cwd: std::path::PathBuf) {
+        *self
+            .pending_move
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(cwd);
+    }
+
+    async fn apply_pending_move(&self) {
+        let cwd = self
+            .pending_move
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        let (Some(cwd), Some(mover)) = (cwd, self.mover.get()) else {
+            return;
+        };
+        if let Err(err) = mover(cwd.clone()).await {
+            self.announce(format!(
+                "[the session could not move to {}: {}]",
+                cwd.display(),
+                err.message()
+            ));
         }
     }
 
@@ -475,6 +541,7 @@ impl SwappableTools {
         cancel: &CancelToken,
         journal: Option<Arc<dyn pmt_agent::turn::CallJournal>>,
     ) -> ToolBatch {
+        self.apply_pending_move().await;
         if let Some(mask) = self.plan_mask(calls)
             && mask.contains(&false)
         {

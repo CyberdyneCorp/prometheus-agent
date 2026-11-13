@@ -7,6 +7,7 @@
 //! to Tauri.
 
 pub mod attention;
+pub mod below;
 pub mod catalog;
 pub mod connections;
 pub mod deeplink;

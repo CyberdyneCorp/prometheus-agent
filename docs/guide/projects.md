@@ -122,6 +122,21 @@ and the dashboard's `/projects` page create a project in one click,
 dashboard shows what the cache holds (a desktop scan included) and starts
 a scan itself only when `projects.repo_scan_enabled = true`.
 
+## The project tool
+
+Desktop and TUI sessions get the [`project`](../reference/tools.md#project) tool (toolset `project`, on by
+default for those surfaces; `tools.disabled_toolsets = ["project"]` turns
+it off). `list` shows the profile's projects with the session's own
+marked, `create` makes a project from a name and a folder (the session's
+directory when none is given; a folder that already belongs to a project
+returns that project) and `switch` takes a project id or slug. `create`
+and `switch` move only the calling session: its working directory becomes
+the project's primary folder from its next tool call, the session is
+recorded under the project and the desktop is told at once. The system
+prompt, the tool array and the profile's active project stay as they
+were, so the prompt cache survives, and a `cd` in the terminal never
+switches projects.
+
 ## Backups and exports
 
 Projects and the active pointer live in `state.db`, so whole-home backups
