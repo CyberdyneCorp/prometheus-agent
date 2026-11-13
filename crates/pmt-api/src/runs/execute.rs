@@ -47,10 +47,22 @@ pub(super) async fn execute(shared: Arc<Shared>, run: Arc<Run>, turn: ApiTurn, f
         run: &run,
         interim,
     };
+    // A stop answered before the turn installed its interrupt (the run
+    // is `running` a moment before) would be lost: it is sent again once
+    // the turn shows it runs.
+    let mut stop_resent = false;
     let outcome = loop {
         tokio::select! {
             outcome = &mut work => break outcome,
-            Some(event) = rx.recv() => relay.event(event),
+            Some(event) = rx.recv() => {
+                relay.event(event);
+                if !stop_resent && run.state.lock().expect("run poisoned").stopping {
+                    stop_resent = true;
+                    if let Err(err) = shared.host.interrupt(&run.profile, &run.session).await {
+                        tracing::debug!(run = run.id, "interrupt: {err}");
+                    }
+                }
+            }
         }
     };
     while let Ok(event) = rx.try_recv() {
