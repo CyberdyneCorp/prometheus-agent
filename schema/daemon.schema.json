@@ -48,6 +48,36 @@
       },
       "type": "object"
     },
+    "AuthMode": {
+      "description": "How a remote browser authenticates.",
+      "oneOf": [
+        {
+          "const": "none",
+          "description": "Only the one-time login links `prometheus dashboard` prints\n(loopback binds).",
+          "type": "string"
+        },
+        {
+          "const": "password",
+          "description": "A password whose argon2id hash is the launch profile's\n`DASHBOARD_PASSWORD_HASH` secret.",
+          "type": "string"
+        },
+        {
+          "const": "oidc",
+          "description": "An OpenID Connect provider.",
+          "type": "string"
+        },
+        {
+          "const": "portal",
+          "description": "The hosted account portal.",
+          "type": "string"
+        },
+        {
+          "const": "token",
+          "description": "One deployment credential.",
+          "type": "string"
+        }
+      ]
+    },
     "DaemonGateway": {
       "additionalProperties": false,
       "description": "`daemon.toml [gateway]`: the messaging gateway keys every served\nprofile shares.",
@@ -132,6 +162,133 @@
             "probe_interval_secs": 30
           },
           "description": "The runtime liveness watchdog (spec: observability, Runtime liveness\nwatchdog and task dump)."
+        }
+      },
+      "type": "object"
+    },
+    "DashboardAuth": {
+      "additionalProperties": false,
+      "description": "`[dashboard.auth]`.",
+      "properties": {
+        "drivers": {
+          "default": [],
+          "description": "Subjects that attach to sessions as drivers; every other remotely\nsigned-in user is an observer (`password` is the password mode's\nsubject).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "mode": {
+          "$ref": "#/$defs/AuthMode",
+          "default": "none",
+          "description": "The sign-in provider for remote browsers."
+        },
+        "oidc": {
+          "$ref": "#/$defs/OidcConfig",
+          "default": {
+            "allowed_subjects": []
+          },
+          "description": "`[dashboard.auth.oidc]`."
+        },
+        "portal": {
+          "$ref": "#/$defs/PortalConfig",
+          "default": {},
+          "description": "`[dashboard.auth.portal]`."
+        }
+      },
+      "type": "object"
+    },
+    "DashboardConfig": {
+      "additionalProperties": false,
+      "description": "`daemon.toml [dashboard]`.",
+      "properties": {
+        "auth": {
+          "$ref": "#/$defs/DashboardAuth",
+          "default": {
+            "drivers": [],
+            "mode": "none",
+            "oidc": {
+              "allowed_subjects": []
+            },
+            "portal": {}
+          },
+          "description": "How remote browsers sign in."
+        },
+        "base_path": {
+          "default": "/",
+          "description": "The path prefix the dashboard is served under (a reverse proxy's\nmount point, such as `/prometheus`).",
+          "type": "string"
+        },
+        "host": {
+          "default": "127.0.0.1",
+          "description": "The address the listener binds. Anything but a loopback address\nneeds `auth.mode` and TLS.",
+          "type": "string"
+        },
+        "max_upload_bytes": {
+          "default": 26214400,
+          "description": "The largest chat attachment upload.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "port": {
+          "default": 9120,
+          "description": "The port (`0`: chosen by the OS).",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "public_host": {
+          "description": "A host name accepted in the `Host` header besides the bound names.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tls": {
+          "$ref": "#/$defs/DashboardTls",
+          "default": {},
+          "description": "TLS served by the listener itself."
+        },
+        "trust_proxy": {
+          "default": false,
+          "description": "Honour `X-Forwarded-*` headers from `trusted_proxies`.",
+          "type": "boolean"
+        },
+        "trust_proxy_tls": {
+          "default": false,
+          "description": "A trusted proxy terminates TLS in front of a plain listener.",
+          "type": "boolean"
+        },
+        "trusted_proxies": {
+          "default": [],
+          "description": "Proxy addresses whose `X-Forwarded-*` headers are honoured.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "DashboardTls": {
+      "additionalProperties": false,
+      "description": "`[dashboard.tls]`: PEM files.",
+      "properties": {
+        "cert": {
+          "description": "The certificate chain.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "key": {
+          "description": "The private key.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "type": "object"
@@ -256,6 +413,49 @@
           "maximum": 65535,
           "minimum": 0,
           "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "OidcConfig": {
+      "additionalProperties": false,
+      "description": "`[dashboard.auth.oidc]`.",
+      "properties": {
+        "allowed_subjects": {
+          "default": [],
+          "description": "Subjects (`sub` claims) allowed to sign in.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "client_id": {
+          "description": "The client id registered at the issuer.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "issuer": {
+          "description": "The issuer URL (its `/.well-known/openid-configuration` is read).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "PortalConfig": {
+      "additionalProperties": false,
+      "description": "`[dashboard.auth.portal]`.",
+      "properties": {
+        "client_id": {
+          "description": "The dashboard's registered OAuth client at the account portal.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "type": "object"
@@ -561,6 +761,28 @@
         }
       },
       "description": "The gateway daemon: its client listener and lifecycle."
+    },
+    "dashboard": {
+      "$ref": "#/$defs/DashboardConfig",
+      "default": {
+        "auth": {
+          "drivers": [],
+          "mode": "none",
+          "oidc": {
+            "allowed_subjects": []
+          },
+          "portal": {}
+        },
+        "base_path": "/",
+        "host": "127.0.0.1",
+        "max_upload_bytes": 26214400,
+        "port": 9120,
+        "tls": {},
+        "trust_proxy": false,
+        "trust_proxy_tls": false,
+        "trusted_proxies": []
+      },
+      "description": "The web dashboard's listener (spec: web-dashboard)."
     },
     "gateway": {
       "$ref": "#/$defs/DaemonGateway",

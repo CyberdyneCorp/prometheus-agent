@@ -556,9 +556,9 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 61. M3 Web dashboard
 
-- [ ] 61.1 Implement `prometheus dashboard` on `127.0.0.1:9120` with the SPA embedded in the binary, listener lifecycle within the daemon and a configurable reverse-proxy base path; verify that the binary serves the SPA offline (spec: web-dashboard)
-- [ ] 61.2 Implement loopback auth with an HttpOnly session cookie, CSRF protection, fail-closed non-loopback binds, Host validation, same-origin only and the public endpoint list; verify with HTTP security tests (spec: web-dashboard)
-- [ ] 61.3 Implement profile-addressed routes, structured chat over the client protocol, observer-by-default remote users and the live event stream; verify with Playwright E2E tests (spec: web-dashboard)
+- [x] 61.1 Implement `prometheus dashboard` on `127.0.0.1:9120` with the SPA embedded in the binary, listener lifecycle within the daemon and a configurable reverse-proxy base path; verify that the binary serves the SPA offline (spec: web-dashboard)
+- [x] 61.2 Implement loopback auth with an HttpOnly session cookie, CSRF protection, fail-closed non-loopback binds, Host validation, same-origin only and the public endpoint list; verify with HTTP security tests (spec: web-dashboard)
+- [x] 61.3 Implement profile-addressed routes, structured chat over the client protocol, observer-by-default remote users and the live event stream; verify with Playwright E2E tests (spec: web-dashboard)
 - [ ] 61.4 Implement the built-in pages, write-only secrets, schema-driven config editing, the honest platform matrix, redacted bounded logs, upload/download limits, and the cost, harness-evolution and experience views; verify with Playwright tests (spec: web-dashboard)
 - [ ] 61.5 Implement the REST endpoint inventory (config schema served from the typed config, bulk maintenance needs confirmation), additional dashboard sign-in providers (token mode refused without its secret) and registering a dashboard with the account portal; verify with HTTP tests (spec: web-dashboard)
 - [ ] 61.6 Implement paired device credentials for remote clients (revocation, expiring pairing codes), remote desktop clients attaching through the dashboard listener, the gateway's remote client attachment (off by default, revoked devices refused), the desktop workspace in the browser, webapp sign-out across tabs with the insecure-context notice, and webapp file staging and terminals; verify with Playwright tests (spec: web-dashboard, spec: messaging-gateway)

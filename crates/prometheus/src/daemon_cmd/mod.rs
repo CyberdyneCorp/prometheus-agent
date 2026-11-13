@@ -15,11 +15,12 @@ mod messaging;
 mod platform_cmd;
 mod record;
 pub(crate) mod self_guard;
-mod send_cmd;
+pub(crate) mod send_cmd;
 mod serve;
 pub mod service;
 mod slack_manifest_cmd;
 pub(crate) mod standalone;
+mod support_matrix;
 mod systemd;
 #[cfg(debug_assertions)]
 mod test_adapter;
@@ -219,7 +220,7 @@ fn start_failed(why: &str) -> Error {
 }
 
 /// The running daemon; a daemon still starting gets `wait` to publish.
-fn wait_running(home: &Path, wait: Duration) -> Result<Option<DaemonRecord>, Error> {
+pub(crate) fn wait_running(home: &Path, wait: Duration) -> Result<Option<DaemonRecord>, Error> {
     let deadline = std::time::Instant::now() + wait;
     loop {
         match discover(home)? {
@@ -301,7 +302,7 @@ fn spawn_detached(home: &Path, profile: Option<&str>) -> Result<std::process::Ch
         .map_err(|e| start_failed(&format!("cannot launch it: {e}")))
 }
 
-fn control_call(
+pub(crate) fn control_call(
     record: &DaemonRecord,
     request: &ControlRequest,
 ) -> Result<control::ControlResponse, Error> {

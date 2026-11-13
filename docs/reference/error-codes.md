@@ -376,6 +376,10 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `daemon.not_running` | `unavailable` | 69 | No gateway daemon runs for this home; start it with `prometheus daemon start`. |
 | `daemon.start_failed` | `unavailable` | 69 | `prometheus daemon start` launched the daemon but it exited or did not publish its endpoint in time; see `prometheus logs daemon` and the exit status in the message. |
 | `daemon.no_profile` | `config` | 78 | Every profile of the home failed to load (each error is logged), so the daemon has nothing to serve. |
+| `dashboard.not_running` | `unavailable` | 69 | The gateway daemon has no dashboard listener running; start one with `prometheus dashboard`. |
+| `dashboard.port_in_use` | `config` | 78 | Another process holds the dashboard port; set `dashboard.port` in `daemon.toml` or pass `--port`. |
+| `dashboard.signin_failed` | `auth` | 78 | A dashboard sign-in through `dashboard.auth.mode` failed: the identity provider was unreachable or answered badly, the ID token did not verify (signature, issuer, audience, expiry, nonce), or the subject is not allowed. |
+| `dashboard.bind_refused` | `config` | 78 | A dashboard bound to a non-loopback address needs `dashboard.auth.mode` (with its provider configured and its secret set) and TLS (`dashboard.tls.cert`/`key` or `dashboard.trust_proxy_tls`); the message names the missing item. |
 | `session.busy` | `conflict` | 75 | The session is running a turn; submit again when it finishes. |
 | `session.not_attached` | `permission_denied` | 77 | Every session-addressed method needs the connection to attach to the session first (`session.attach`); the error does not say whether the session exists. |
 | `profile.not_granted` | `permission_denied` | 77 | The request names a profile the connection's ticket does not grant; get a ticket for that profile. |

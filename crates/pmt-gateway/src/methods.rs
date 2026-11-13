@@ -169,7 +169,15 @@ async fn owner(call: &Call, session_id: &str) -> Result<String, RpcError> {
     Err(denied(session_id))
 }
 
+/// Attaches the connection; a connection granted observation only (a
+/// remote dashboard user who is not a driver) attaches as an observer
+/// whatever it asked for.
 fn join(call: &Call, session_id: &str, role: c::AttachRole, since: Option<&Since>) -> c::Attached {
+    let role = if call.conn.grant.observer_only {
+        c::AttachRole::Observer
+    } else {
+        role
+    };
     call.server
         .hub()
         .attach(call.conn.id, session_id, call.conn.peer(role), since)

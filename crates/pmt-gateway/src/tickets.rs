@@ -31,6 +31,9 @@ pub struct Grant {
     pub purpose: Purpose,
     /// The client's pid, as it reported it.
     pub pid: Option<u32>,
+    /// Sessions are attached as an observer only (remote dashboard users
+    /// not listed as drivers).
+    pub observer_only: bool,
 }
 
 /// The outcome of presenting a ticket.
@@ -161,6 +164,7 @@ mod tests {
             profiles,
             purpose,
             pid: None,
+            observer_only: false,
         }
     }
 

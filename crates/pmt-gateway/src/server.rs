@@ -76,6 +76,8 @@ pub struct ServerOptions {
     pub health_url: Option<String>,
     /// The Prometheus home (task dumps go to its `logs/`).
     pub home: Option<std::path::PathBuf>,
+    /// The platform support matrix the daemon probed at start.
+    pub platform_features: Vec<pmt_rpc::contracts::FeatureSupport>,
 }
 
 impl ServerOptions {
@@ -97,6 +99,7 @@ impl ServerOptions {
             only_pid: None,
             health_url: None,
             home: None,
+            platform_features: Vec::new(),
         }
     }
 }
@@ -207,6 +210,7 @@ pub struct Server {
     only_pid: Option<u32>,
     health_url: Option<String>,
     home: Option<std::path::PathBuf>,
+    platform_features: Vec<pmt_rpc::contracts::FeatureSupport>,
     /// Sessions created with an idempotency key: (profile, key) to the
     /// session and when it was created.
     pub(crate) created: tokio::sync::Mutex<HashMap<(String, String), (String, Instant)>>,
@@ -215,6 +219,8 @@ pub struct Server {
     pub(crate) admitted: tokio::sync::Mutex<std::collections::VecDeque<Admitted>>,
     /// The messaging gateway, once started.
     messaging: OnceLock<crate::messaging::Gateway>,
+    /// The web dashboard's controller, when the daemon has one.
+    dashboard: OnceLock<Arc<dyn crate::dashboard::DashboardControl>>,
     /// Every messaging adapter failed for good and the policy is to exit.
     adapters_down: AtomicBool,
 }
@@ -288,9 +294,11 @@ impl Server {
             only_pid: options.only_pid,
             health_url: options.health_url,
             home: options.home,
+            platform_features: options.platform_features,
             created: tokio::sync::Mutex::default(),
             admitted: tokio::sync::Mutex::default(),
             messaging: OnceLock::new(),
+            dashboard: OnceLock::new(),
             adapters_down: AtomicBool::new(false),
         };
         let server = Arc::new(server);
@@ -458,6 +466,24 @@ impl Server {
         self.adapters_down.load(Ordering::Relaxed)
     }
 
+    /// Installs the web dashboard's controller (once).
+    pub fn set_dashboard(&self, controller: Arc<dyn crate::dashboard::DashboardControl>) {
+        let _ = self.dashboard.set(controller);
+    }
+
+    /// The web dashboard's controller.
+    #[must_use]
+    pub fn dashboard(&self) -> Option<&Arc<dyn crate::dashboard::DashboardControl>> {
+        self.dashboard.get()
+    }
+
+    /// Cancelled once draining is over and connections close with 1001;
+    /// listeners outside this crate (the dashboard) close with it.
+    #[must_use]
+    pub fn closing(&self) -> CancellationToken {
+        self.closing.clone()
+    }
+
     /// Records the running messaging gateway (the first call wins).
     pub fn set_messaging(&self, gateway: crate::messaging::Gateway) {
         let _ = self.messaging.set(gateway);
@@ -512,10 +538,17 @@ impl Server {
                 server_requests: names(pmt_rpc::Kind::ServerRequest),
                 events,
             },
-            platform_support: PlatformSupport {
-                target: self.identity.target.clone(),
-                tier: self.identity.tier.clone(),
-            },
+            platform_support: self.platform_support(),
+        }
+    }
+
+    /// The daemon's target, tier and support matrix.
+    #[must_use]
+    pub fn platform_support(&self) -> PlatformSupport {
+        PlatformSupport {
+            target: self.identity.target.clone(),
+            tier: self.identity.tier.clone(),
+            features: self.platform_features.clone(),
         }
     }
 

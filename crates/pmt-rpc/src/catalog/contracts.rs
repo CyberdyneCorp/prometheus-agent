@@ -213,6 +213,23 @@ pub struct PlatformSupport {
     pub target: String,
     /// `tier1`, `tier2` or `unsupported`.
     pub tier: String,
+    /// The support matrix of this host, from runtime probes (spec:
+    /// web-dashboard, Honest platform support matrix).
+    #[serde(default)]
+    pub features: Vec<FeatureSupport>,
+}
+
+/// One row of the platform support matrix.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FeatureSupport {
+    /// The feature (`sandbox.local`, `containers`...).
+    pub feature: String,
+    /// `supported`, `degraded` or `unsupported`.
+    pub state: String,
+    /// What the probe found: the mechanism in use, or what is missing and
+    /// whether the operating system or a dependency lacks it.
+    pub reason: String,
 }
 
 /// `rpc.hello` result.

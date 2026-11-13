@@ -373,6 +373,10 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::daemon_cmd::DaemonCommand,
     },
+    /// Open the web dashboard: start the daemon's dashboard listener and
+    /// sign the browser in with a one-time login link.
+    #[cfg(feature = "dashboard")]
+    Dashboard(crate::dashboard_cmd::DashboardArgs),
     /// Messaging adapters of the running daemon and the profile's delivery
     /// outbox.
     #[cfg(feature = "gateway")]

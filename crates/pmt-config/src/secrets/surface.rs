@@ -24,6 +24,7 @@ pub const BUILTIN: &[&str] = &[
     "EMAIL_PASSWORD",
     "WHATSAPP_BRIDGE_TOKEN",
     crate::daemon_relay::DEFAULT_TOKEN_SECRET,
+    crate::daemon_dashboard::PASSWORD_HASH_SECRET,
 ];
 
 /// The surface-only secret names of one profile, each with the platform

@@ -119,6 +119,7 @@ pub(crate) fn answer(
                 profiles,
                 purpose,
                 pid,
+                observer_only: false,
             };
             match server.tickets.issue(grant, &server.profiles()) {
                 Ok(ticket) => ControlResponse {
@@ -151,6 +152,7 @@ pub(crate) fn answer(
         | ControlRequest::GatewayHandoff { .. }
         | ControlRequest::GatewayPlatform { .. }
         | ControlRequest::PluginsReload { .. }
+        | ControlRequest::Dashboard { .. }
         | ControlRequest::ResolveRole { .. } => failure(&Error::new(
             &codes::RPC_INVALID_REQUEST,
             "this request is answered asynchronously",
@@ -282,6 +284,24 @@ fn failure(err: &Error) -> ControlResponse {
     }
 }
 
+/// `prometheus dashboard`: the daemon's dashboard controller, when this
+/// build has one.
+async fn dashboard(server: &Server, action: pmt_rpc::control::DashboardAction) -> ControlResponse {
+    let Some(controller) = server.dashboard() else {
+        return failure(&Error::new(
+            &codes::SURFACE_NOT_INCLUDED,
+            "surface 'dashboard' is not included in this daemon",
+        ));
+    };
+    match controller.control(action).await {
+        Ok(state) => ControlResponse {
+            dashboard: Some(state),
+            ..ControlResponse::default()
+        },
+        Err(err) => failure(&err),
+    }
+}
+
 /// Reads one request line from `stream` and writes the answer.
 async fn handle<S: AsyncRead + AsyncWrite + Unpin>(
     server: Arc<Server>,
@@ -335,6 +355,7 @@ async fn handle<S: AsyncRead + AsyncWrite + Unpin>(
                 Err(err) => failure(&err),
             }
         }
+        Ok(ControlRequest::Dashboard { action }) => dashboard(&server, action).await,
         Ok(request) => answer(&server, request, peer_pid),
         Err(e) => failure(&Error::new(
             &codes::RPC_INVALID_REQUEST,

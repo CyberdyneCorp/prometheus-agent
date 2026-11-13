@@ -119,6 +119,12 @@ pub enum ControlRequest {
     /// `<home>/logs/task-dump-<UTC>.txt` without stopping (`prometheus
     /// debug dump-tasks`); answers its path.
     DumpTasks,
+    /// Opens, reports or stops the web dashboard's listener (`prometheus
+    /// dashboard`).
+    Dashboard {
+        /// What to do.
+        action: DashboardAction,
+    },
     /// A graceful drain and exit; `restart` marks the daemon retiring so
     /// it refuses new work while it drains.
     Stop {
@@ -126,6 +132,40 @@ pub enum ControlRequest {
         #[serde(default)]
         restart: bool,
     },
+}
+
+/// A `dashboard` control request.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "do", rename_all = "snake_case", deny_unknown_fields)]
+pub enum DashboardAction {
+    /// Starts the listener unless it runs (`host`/`port` override
+    /// `daemon.toml` for the daemon's lifetime) and mints a one-time
+    /// login link.
+    Open {
+        /// `--host`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        host: Option<String>,
+        /// `--port`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        port: Option<u16>,
+    },
+    /// The running listener's URL.
+    Status,
+    /// Stops the listener; the daemon keeps running.
+    Stop,
+}
+
+/// The dashboard listener, as a `dashboard` control request reports it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DashboardState {
+    /// The dashboard's URL (`http://127.0.0.1:9120/`).
+    pub url: String,
+    /// A one-time login URL (`Open` only); single use, 60 s.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub login_url: Option<String>,
+    /// `Open` started the listener (it was not running).
+    #[serde(default)]
+    pub started: bool,
 }
 
 /// A file sent with a `gateway send` message.
@@ -337,6 +377,9 @@ pub struct ControlResponse {
     /// `PluginsReload`: the reload report.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reloaded: Option<String>,
+    /// `Dashboard`: the listener.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dashboard: Option<DashboardState>,
     /// `DumpTasks`: the dump's path.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dumped: Option<String>,

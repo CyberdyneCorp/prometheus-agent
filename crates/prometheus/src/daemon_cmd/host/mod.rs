@@ -40,6 +40,8 @@ mod cron_admit;
 mod cron_continue;
 mod cron_fire;
 mod cron_send;
+#[cfg(feature = "dashboard")]
+mod dashboard;
 mod delegations;
 mod discovery;
 mod gateway;

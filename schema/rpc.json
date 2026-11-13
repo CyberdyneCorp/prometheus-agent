@@ -1496,6 +1496,30 @@
       ],
       "type": "object"
     },
+    "FeatureSupport": {
+      "additionalProperties": false,
+      "description": "One row of the platform support matrix.",
+      "properties": {
+        "feature": {
+          "description": "The feature (`sandbox.local`, `containers`...).",
+          "type": "string"
+        },
+        "reason": {
+          "description": "What the probe found: the mechanism in use, or what is missing and\nwhether the operating system or a dependency lacks it.",
+          "type": "string"
+        },
+        "state": {
+          "description": "`supported`, `degraded` or `unsupported`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "feature",
+        "state",
+        "reason"
+      ],
+      "type": "object"
+    },
     "FilesRollbackParams": {
       "additionalProperties": false,
       "description": "`files.rollback` params: no checkpoint lists them; `diff` previews.",
@@ -2615,6 +2639,14 @@
       "additionalProperties": false,
       "description": "The daemon's build target and its support tier.",
       "properties": {
+        "features": {
+          "default": [],
+          "description": "The support matrix of this host, from runtime probes (spec:\nweb-dashboard, Honest platform support matrix).",
+          "items": {
+            "$ref": "#/$defs/FeatureSupport"
+          },
+          "type": "array"
+        },
         "target": {
           "description": "The Rust target triple.",
           "type": "string"

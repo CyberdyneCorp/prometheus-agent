@@ -1136,6 +1136,18 @@ error_codes! {
     /// No profile of the home can be served.
     DAEMON_NO_PROFILE = ("daemon.no_profile", Config,
         "Every profile of the home failed to load (each error is logged), so the daemon has nothing to serve.");
+    /// No dashboard listener runs in the daemon.
+    DASHBOARD_NOT_RUNNING = ("dashboard.not_running", Unavailable,
+        "The gateway daemon has no dashboard listener running; start one with `prometheus dashboard`.");
+    /// The dashboard port is held by another process.
+    DASHBOARD_PORT_IN_USE = ("dashboard.port_in_use", Config,
+        "Another process holds the dashboard port; set `dashboard.port` in `daemon.toml` or pass `--port`.");
+    /// A remote dashboard sign-in was refused.
+    DASHBOARD_SIGNIN_FAILED = ("dashboard.signin_failed", Auth,
+        "A dashboard sign-in through `dashboard.auth.mode` failed: the identity provider was unreachable or answered badly, the ID token did not verify (signature, issuer, audience, expiry, nonce), or the subject is not allowed.");
+    /// A non-loopback dashboard bind lacks authentication or TLS.
+    DASHBOARD_BIND_REFUSED = ("dashboard.bind_refused", Config,
+        "A dashboard bound to a non-loopback address needs `dashboard.auth.mode` (with its provider configured and its secret set) and TLS (`dashboard.tls.cert`/`key` or `dashboard.trust_proxy_tls`); the message names the missing item.");
     /// A turn is already running in the session.
     SESSION_BUSY = ("session.busy", Conflict,
         "The session is running a turn; submit again when it finishes.");

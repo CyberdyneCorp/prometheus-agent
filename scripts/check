@@ -107,9 +107,21 @@ docs_gate() {
     fi
 }
 
+# The dashboard SPA (web/): its pinned npm tools, the TypeScript checks and
+# web/dist matching its sources (the binary embeds web/dist), and the
+# Chromium build of the pinned Playwright that the dashboard's browser
+# tests (crates/prometheus/tests/dashboard_e2e.rs) drive.
+web_gate() {
+    command -v npm >/dev/null || die "npm not found (the dashboard needs Node.js 22)"
+    step npm ci --prefix web --no-audit --no-fund --loglevel=error
+    step npm run --prefix web check
+    (cd web && step npx --no-install playwright install chromium --only-shell)
+}
+
 run_gates() {
     local with_perf=$1
     check_tools
+    web_gate
     step cargo fmt --all --check
     step cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
     step cargo nextest run --workspace --all-features --locked --no-tests=fail

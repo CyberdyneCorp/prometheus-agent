@@ -51,6 +51,9 @@ pub struct DaemonConfig {
     /// The OpenAI-compatible API server's listener (spec: api-server).
     #[serde(default)]
     pub api_server: crate::daemon_api::ApiListener,
+    /// The web dashboard's listener (spec: web-dashboard).
+    #[serde(default)]
+    pub dashboard: crate::daemon_dashboard::DashboardConfig,
 }
 
 /// `daemon.toml [gateway]`: the messaging gateway keys every served
@@ -502,6 +505,10 @@ impl DaemonConfig {
             .map_err(|message| parse_error(&message))?;
         config
             .api_server
+            .validate()
+            .map_err(|message| parse_error(&message))?;
+        config
+            .dashboard
             .validate()
             .map_err(|message| parse_error(&message))?;
         if let Some(unknown) = config

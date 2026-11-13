@@ -209,6 +209,30 @@ impl State {
     }
 }
 
+/// One event the hub sent, as a [`Tap`] sees it.
+#[derive(Debug, Clone, Copy)]
+pub struct Tapped<'a> {
+    /// The owning profile.
+    pub profile: &'a str,
+    /// The session, for session events and server requests.
+    pub session_id: Option<&'a str>,
+    /// The event or server-request name.
+    pub event: &'a str,
+    /// Its payload (a server request's params with its `id`).
+    pub data: &'a Value,
+}
+
+/// Sees every event and opened server request (the dashboard's daemon
+/// event stream). It runs on the publishing task, so it must not block.
+#[derive(Clone)]
+pub struct Tap(pub Arc<dyn Fn(&Tapped<'_>) + Send + Sync>);
+
+impl std::fmt::Debug for Tap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Tap")
+    }
+}
+
 /// Sessions, their event logs and the open server requests.
 #[derive(Debug)]
 pub struct Hub {
@@ -219,6 +243,8 @@ pub struct Hub {
     state: Mutex<State>,
     /// The sequence of daemon-wide events.
     daemon_seq: std::sync::atomic::AtomicU64,
+    /// Who else sees the events.
+    tap: std::sync::OnceLock<Tap>,
 }
 
 /// One event to send: the frame and who may see it.
@@ -243,6 +269,23 @@ impl Hub {
             violations,
             state: Mutex::default(),
             daemon_seq: std::sync::atomic::AtomicU64::new(0),
+            tap: std::sync::OnceLock::new(),
+        }
+    }
+
+    /// Installs the tap (once).
+    pub fn set_tap(&self, tap: Tap) {
+        let _ = self.tap.set(tap);
+    }
+
+    fn tapped(&self, profile: &str, session_id: Option<&str>, event: &str, data: &Value) {
+        if let Some(tap) = self.tap.get() {
+            (tap.0)(&Tapped {
+                profile,
+                session_id,
+                event,
+                data,
+            });
         }
     }
 
@@ -254,6 +297,15 @@ impl Hub {
     #[must_use]
     pub fn epoch(&self) -> &str {
         &self.epoch
+    }
+
+    /// Whether any connection is attached to `session_id`.
+    #[must_use]
+    pub fn has_clients(&self, session_id: &str) -> bool {
+        self.state()
+            .sessions
+            .get(session_id)
+            .is_some_and(|log| !log.attached.is_empty())
     }
 
     /// Records that `session_id` belongs to `profile`.
@@ -498,6 +550,7 @@ impl Hub {
         for peer in &peers {
             self.send_event(peer, &envelope);
         }
+        self.tapped(profile, None, event, &envelope.data);
     }
 
     /// Appends an event to the session's log and sends it to every
@@ -514,6 +567,13 @@ impl Hub {
         // connection their events out of `seq` order. The sends only
         // queue on each connection's unbounded channel.
         self.deliver(&delivery);
+        let profile = state
+            .sessions
+            .get(session_id)
+            .map(|log| log.profile.clone())
+            .unwrap_or_default();
+        drop(state);
+        self.tapped(&profile, Some(session_id), event, &delivery.envelope.data);
     }
 
     fn record(&self, state: &mut State, session_id: &str, event: &str, data: Value) -> Delivery {
@@ -661,6 +721,19 @@ impl Hub {
             self.cancel_event(session_id, &id, "no_responder");
             return None;
         };
+        if self.tap.get().is_some() {
+            let mut tapped = self
+                .state()
+                .requests
+                .get(&id)
+                .map(|p| p.params.clone())
+                .unwrap_or_default();
+            if let Some(fields) = tapped.as_object_mut() {
+                fields.insert("id".into(), id.clone().into());
+            }
+            let profile = self.profile_of(session_id).unwrap_or_default();
+            self.tapped(&profile, Some(session_id), method, &tapped);
+        }
         let mut guard = CancelOnDrop {
             hub: Arc::clone(self),
             session_id: session_id.to_owned(),

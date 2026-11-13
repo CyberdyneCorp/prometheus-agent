@@ -23,6 +23,22 @@ Every key `<PROMETHEUS_HOME>/daemon.toml` accepts: machine-wide settings shared 
 | `daemon.watchdog.enabled` | boolean | `true` | any | `restart` | Run the watchdog. |
 | `daemon.watchdog.max_strikes` | integer | `3` | 1 to 100 | `restart` | Consecutive strikes before the dump and exit. |
 | `daemon.watchdog.probe_interval_secs` | integer | `30` | 1 to 3600 | `restart` | Seconds between probes; a probe not answered within this is a strike. |
+| `dashboard.auth.drivers` | array of string | `[]` | any | `restart` | Subjects that attach to sessions as drivers; every other remotely signed-in user is an observer (`password` is the password mode's subject). |
+| `dashboard.auth.mode` | one of "none", "password", "oidc", "portal", "token" | `"none"` | `"none"`, `"password"`, `"oidc"`, `"portal"`, `"token"` | `restart` | The sign-in provider for remote browsers. |
+| `dashboard.auth.oidc.allowed_subjects` | array of string | `[]` | any | `restart` | Subjects (`sub` claims) allowed to sign in. |
+| `dashboard.auth.oidc.client_id` | string | unset | any | `restart` | The client id registered at the issuer. |
+| `dashboard.auth.oidc.issuer` | string | unset | any | `restart` | The issuer URL (its `/.well-known/openid-configuration` is read). |
+| `dashboard.auth.portal.client_id` | string | unset | any | `restart` | The dashboard's registered OAuth client at the account portal. |
+| `dashboard.base_path` | string | `"/"` | any | `restart` | The path prefix the dashboard is served under (a reverse proxy's mount point, such as `/prometheus`). |
+| `dashboard.host` | string | `"127.0.0.1"` | any | `restart` | The address the listener binds. Anything but a loopback address needs `auth.mode` and TLS. |
+| `dashboard.max_upload_bytes` | integer | `26214400` | ≥ 0 | `restart` | The largest chat attachment upload. |
+| `dashboard.port` | integer | `9120` | 0 to 65535 | `restart` | The port (`0`: chosen by the OS). |
+| `dashboard.public_host` | string | unset | any | `restart` | A host name accepted in the `Host` header besides the bound names. |
+| `dashboard.tls.cert` | string | unset | any | `restart` | The certificate chain. |
+| `dashboard.tls.key` | string | unset | any | `restart` | The private key. |
+| `dashboard.trust_proxy` | boolean | `false` | any | `restart` | Honour `X-Forwarded-*` headers from `trusted_proxies`. |
+| `dashboard.trust_proxy_tls` | boolean | `false` | any | `restart` | A trusted proxy terminates TLS in front of a plain listener. |
+| `dashboard.trusted_proxies` | array of string | `[]` | any | `restart` | Proxy addresses whose `X-Forwarded-*` headers are honoured. |
 | `gateway.http.listen` | string | `"127.0.0.1:8644"` | any | `restart` | Where every webhook-style adapter is served, at `/p/<profile>/<platform>/`. |
 | `gateway.http.public` | boolean | `false` | any | `restart` | Allow a non-loopback `listen` address (logged at WARN on every start). |
 | `gateway.limits.max_concurrent_sessions` | integer | `0` | ≥ 0 | `restart` | Sessions with a running turn at once, across every profile and surface; further turns wait first in, first out ("Waiting for a free slot"). `0`: unbounded. |

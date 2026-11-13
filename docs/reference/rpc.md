@@ -678,6 +678,16 @@ One event frame: the notification params and the replay item.
 | `last_seen` | integer | yes | The last sequence number the client saw (0 for none). |
 | `session_id` | string | yes | The session. |
 
+### `FeatureSupport`
+
+One row of the platform support matrix.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `feature` | string | yes | The feature (`sandbox.local`, `containers`...). |
+| `reason` | string | yes | What the probe found: the mechanism in use, or what is missing and whether the operating system or a dependency lacks it. |
+| `state` | string | yes | `supported`, `degraded` or `unsupported`. |
+
 ### `FilesRollbackParams`
 
 `files.rollback` params: no checkpoint lists them; `diff` previews.
@@ -1061,6 +1071,7 @@ The daemon's build target and its support tier.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `features` | array of [`FeatureSupport`](#featuresupport) | no | The support matrix of this host, from runtime probes (spec: web-dashboard, Honest platform support matrix). |
 | `target` | string | yes | The Rust target triple. |
 | `tier` | string | yes | `tier1`, `tier2` or `unsupported`. |
 

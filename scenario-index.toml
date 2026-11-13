@@ -74,6 +74,15 @@ capabilities = [
     "workspace-architecture",
 ]
 
+# M3 (task groups 61-81) is being implemented: its indexed scenarios are
+# checked, unindexed ones are pending. Each area adds its capabilities
+# here; drop `partial` when M3 is complete (task 81.x).
+[milestones.M3]
+partial = true
+capabilities = [
+    "web-dashboard",
+]
+
 [workspace-architecture."Single binary with subcommand surfaces"]
 "Alias invocation" = ["crates/prometheus/tests/version.rs::pmt_alias_prints_the_same_identity_line", "crates/prometheus/tests/version.rs::pmt_alias_prints_the_same_version_json"]
 "Unknown subcommand" = ["crates/prometheus/tests/chat_cli.rs::a_mistyped_subcommand_exits_2_with_a_suggestion"]
@@ -3922,3 +3931,74 @@ capabilities = [
 [platform-adapters."WASM adapter plugin isolation"]
 "Undeclared host blocked" = ["crates/prometheus/tests/plugins_adapter.rs::a_plugin_adapter_serves_its_platform_under_its_grants_and_a_trap_restarts_only_it", "crates/pmt-plugins/tests/runtime.rs::an_undeclared_host_is_blocked_before_any_connection"]
 "Crash is contained" = ["crates/prometheus/tests/plugins_adapter.rs::a_plugin_adapter_serves_its_platform_under_its_grants_and_a_trap_restarts_only_it", "crates/prometheus/src/plugins_host/adapter.rs::the_fifth_crash_within_ten_minutes_is_fatal"]
+
+# ---------------------------------------------------------------------------
+# M3 (partial): entries grouped by task group.
+
+# 61. M3 Web dashboard (61.1-61.4).
+
+[web-dashboard."Dashboard command and listener defaults"]
+"Default launch" = { tests = ["crates/prometheus/tests/dashboard_http.rs::the_default_port_is_9120_and_a_held_port_exits_78_naming_it", "crates/pmt-config/src/daemon_dashboard.rs::the_defaults_bind_loopback_port_9120"], note = "the test needs port 9120 free on the machine; `--no-open` prints the login link a browser would open" }
+"Port conflict" = ["crates/prometheus/tests/dashboard_http.rs::the_default_port_is_9120_and_a_held_port_exits_78_naming_it"]
+
+[web-dashboard."SPA is embedded in the binary"]
+"Unknown asset" = ["crates/prometheus/tests/dashboard_http.rs::the_embedded_spa_is_served_with_hashed_assets"]
+"Deep link reload" = ["crates/prometheus/tests/dashboard_http.rs::the_embedded_spa_is_served_with_hashed_assets"]
+
+[web-dashboard."Loopback authentication with an HttpOnly session cookie"]
+"Reused login link" = ["crates/prometheus/tests/dashboard_http.rs::a_login_link_signs_in_once_with_a_strict_http_only_cookie", "crates/pmt-web/src/auth/tickets.rs::a_ticket_works_once_and_only_within_a_minute"]
+"Page source has no token" = ["crates/prometheus/tests/dashboard_http.rs::served_pages_carry_no_credential"]
+
+[web-dashboard."CSRF protection on state-changing requests"]
+"Cross-site form post" = { tests = ["crates/prometheus/tests/dashboard_http.rs::state_changes_need_the_sessions_csrf_token", "crates/prometheus/tests/dashboard_http.rs::a_login_link_signs_in_once_with_a_strict_http_only_cookie", "crates/pmt-web/src/auth/sessions.rs::only_the_bound_csrf_token_passes"], note = "browsers withhold the SameSite=Strict cookie from a cross-site post (the cookie attribute is asserted); a same-site post without the header gets 403 csrf, and a WebSocket without the csrf subprotocol entry closes 4403" }
+
+[web-dashboard."Non-loopback binds fail closed"]
+"LAN bind without auth" = ["crates/prometheus/tests/dashboard_http.rs::a_lan_bind_without_auth_exits_78_and_never_listens", "crates/pmt-web/src/listener.rs::a_lan_bind_without_auth_or_its_secret_is_refused"]
+"Password mode login" = ["crates/prometheus/tests/dashboard_http.rs::five_wrong_passwords_in_a_minute_lock_the_address_out", "crates/pmt-web/src/auth/password.rs::five_failures_in_a_minute_lock_the_address_out_for_five_minutes"]
+
+[web-dashboard."Host header validation"]
+"DNS rebinding" = ["crates/prometheus/tests/dashboard_http.rs::a_foreign_or_malformed_host_header_is_refused", "crates/pmt-web/src/guard.rs::only_the_listeners_own_names_pass"]
+
+[web-dashboard."Same-origin only"]
+"Cross-origin WebSocket" = ["crates/prometheus/tests/dashboard_http.rs::only_the_dashboards_own_origin_is_served"]
+
+[web-dashboard."Public endpoints"]
+"Health probe" = ["crates/prometheus/tests/dashboard_http.rs::the_health_probe_is_public_and_reads_no_profile_data"]
+
+[web-dashboard."Profile-addressed routes"]
+"Deleting a session" = ["crates/prometheus/tests/dashboard_api.rs::profile_routes_touch_only_the_named_profile"]
+"Typo in profile" = ["crates/prometheus/tests/dashboard_api.rs::profile_routes_touch_only_the_named_profile"]
+
+[web-dashboard."Reverse-proxy base path from config"]
+"Behind a proxy at /prometheus" = ["crates/prometheus/tests/dashboard_http.rs::a_base_path_prefixes_every_asset_url", "crates/pmt-web/src/assets.rs::every_asset_url_of_the_shell_is_under_the_base_path"]
+
+[web-dashboard."Structured chat over the client protocol"]
+"Approval from the browser" = ["crates/prometheus/tests/dashboard_e2e.rs::an_approval_is_answered_from_the_browser_over_the_client_protocol"]
+
+[web-dashboard."Remote dashboard users are observers by default"]
+"OIDC viewer submits" = { tests = ["crates/prometheus/tests/dashboard_e2e.rs::an_oidc_viewer_sees_a_disabled_composer_and_cannot_submit", "crates/prometheus/tests/dashboard_api.rs::a_remote_user_not_listed_as_driver_cannot_submit"], note = "against a fake OpenID Connect provider (crates/prometheus/tests/common/oidc.rs) issuing ES256 ID tokens" }
+
+[web-dashboard."Live event stream"]
+"Approval badge" = ["crates/prometheus/tests/dashboard_e2e.rs::a_session_waiting_for_approval_shows_a_badge_on_the_sessions_page", "crates/prometheus/tests/dashboard_api.rs::a_pending_approval_reaches_the_event_stream_of_its_profile", "crates/pmt-web/src/events.rs::an_approval_request_becomes_a_dashboard_event_with_its_profile"]
+
+[web-dashboard."Built-in pages"]
+"Status page exists" = ["crates/prometheus/tests/dashboard_e2e.rs::the_status_page_and_every_built_in_route_render"]
+
+[web-dashboard."Secrets are write-only"]
+"Reading a key" = ["crates/prometheus/tests/dashboard_api.rs::secrets_are_listed_by_name_and_never_returned", "crates/prometheus/tests/dashboard_e2e.rs::secrets_set_in_the_browser_are_never_shown_again"]
+
+[web-dashboard."Config editing is schema-driven"]
+"Invalid value" = ["crates/prometheus/tests/dashboard_api.rs::an_invalid_config_value_is_refused_and_the_file_unchanged", "crates/prometheus/tests/dashboard_e2e.rs::the_config_page_refuses_an_invalid_value_and_keeps_the_file"]
+
+[web-dashboard."Cost and usage view (upgrade)"]
+"Delegation cost rolls up" = ["crates/prometheus/tests/dashboard_e2e.rs::the_usage_page_rolls_children_up_and_shows_the_budget"]
+"Budget warning" = ["crates/prometheus/tests/dashboard_e2e.rs::the_usage_page_rolls_children_up_and_shows_the_budget"]
+
+[web-dashboard."Logs page is redacted and bounded"]
+"Path traversal" = ["crates/prometheus/tests/dashboard_api.rs::logs_are_named_from_the_registry_bounded_and_redacted", "crates/prometheus/tests/dashboard_e2e.rs::the_logs_page_tails_registry_logs"]
+
+[web-dashboard."Upload and download limits"]
+"Oversized upload" = ["crates/prometheus/tests/dashboard_api.rs::an_oversized_upload_is_refused_before_anything_is_stored"]
+
+[web-dashboard."Listener lifecycle within the daemon"]
+"Second dashboard command" = ["crates/prometheus/tests/dashboard_http.rs::a_second_command_reuses_the_listener_and_stop_leaves_the_daemon_running"]

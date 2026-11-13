@@ -62,6 +62,7 @@ Commands:
   pause        Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
   portal       The Nous Portal subscription and its tool gateway routing
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
+  dashboard    Open the web dashboard: start the daemon's dashboard listener and sign the browser in with a one-time login link
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
   connectors   Hosted app connectors (Gmail, Notion, Linear...) on the Nous connector gateway: list them, list and rename accounts, connect and disconnect accounts
@@ -20937,6 +20938,60 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus daemon help help
 ```
 
+## `prometheus dashboard`
+
+```text
+Open the web dashboard: start the daemon's dashboard listener and sign the browser in with a one-time login link
+
+Usage: prometheus dashboard [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --host <HOST>
+          Bind this address instead of `dashboard.host` (until the daemon stops). A non-loopback address needs authentication and TLS
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --port <PORT>
+          Bind this port instead of `dashboard.port` (`0`: any free port)
+
+      --no-open
+          Print the login link instead of opening a browser
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --status
+          Print the running dashboard's URL (exit 69 when none runs)
+
+      --stop
+          Stop the dashboard listener; the daemon keeps running
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus gateway`
 
 ```text
@@ -26754,6 +26809,7 @@ Commands:
   pause        Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
   portal       The Nous Portal subscription and its tool gateway routing
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
+  dashboard    Open the web dashboard: start the daemon's dashboard listener and sign the browser in with a one-time login link
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
   connectors   Hosted app connectors (Gmail, Notion, Linear...) on the Nous connector gateway: list them, list and rename accounts, connect and disconnect accounts
@@ -30012,6 +30068,14 @@ Stop and remove the unit `install-service` installed
 Usage: prometheus help daemon uninstall-service
 ```
 
+## `prometheus help dashboard`
+
+```text
+Open the web dashboard: start the daemon's dashboard listener and sign the browser in with a one-time login link
+
+Usage: prometheus help dashboard
+```
+
 ## `prometheus help gateway`
 
 ```text
@@ -31037,6 +31101,7 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.worktrees_prune.v1` | `prometheus worktrees prune` |
 | `prometheus.worktrees_restore.v1` | `prometheus worktrees restore` |
 | `prometheus.daemon_status.v1` | `prometheus daemon status` |
+| `prometheus.dashboard.v1` | `prometheus dashboard` |
 | `prometheus.gateway_status.v1` | `prometheus gateway status` |
 | `prometheus.gateway_platforms.v1` | `prometheus gateway platforms` |
 | `prometheus.gateway_outbox.v1` | `prometheus gateway outbox list` |

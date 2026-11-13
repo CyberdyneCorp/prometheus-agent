@@ -3817,6 +3817,38 @@ dependencies = [
 [[package]]
 name = "pmt-web"
 version = "0.1.0"
+dependencies = [
+ "argon2",
+ "base64 0.23.1",
+ "bytes",
+ "futures-util",
+ "getrandom 0.4.3",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "jiff",
+ "pmt-config",
+ "pmt-core",
+ "pmt-gateway",
+ "pmt-net",
+ "pmt-obs",
+ "pmt-rpc",
+ "pmt-store",
+ "rcgen",
+ "reqwest",
+ "ring",
+ "rustls",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tempfile",
+ "tokio",
+ "tokio-rustls",
+ "tokio-tungstenite",
+ "tokio-util",
+ "tracing",
+ "url",
+]
 
 [[package]]
 name = "pmt-worktrees"
@@ -3929,6 +3961,7 @@ dependencies = [
 name = "prometheus"
 version = "0.1.0"
 dependencies = [
+ "argon2",
  "async-openai",
  "base64 0.23.1",
  "clap",
@@ -3981,6 +4014,7 @@ dependencies = [
  "pmt-update",
  "pmt-vault",
  "pmt-voice",
+ "pmt-web",
  "pmt-worktrees",
  "prost",
  "pulldown-cmark",
@@ -3989,6 +4023,7 @@ dependencies = [
  "rcgen",
  "regex",
  "reqwest",
+ "ring",
  "rmcp",
  "rpassword",
  "rusqlite",
@@ -4004,6 +4039,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-rustls",
+ "tokio-tungstenite",
  "toml",
  "tracing",
  "tracing-subscriber",

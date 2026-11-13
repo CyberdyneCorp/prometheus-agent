@@ -516,6 +516,16 @@ export interface EventsSinceParams {
   session_id: string;
 }
 
+/** One row of the platform support matrix. */
+export interface FeatureSupport {
+  /** The feature (`sandbox.local`, `containers`...). */
+  feature: string;
+  /** What the probe found: the mechanism in use, or what is missing and whether the operating system or a dependency lacks it. */
+  reason: string;
+  /** `supported`, `degraded` or `unsupported`. */
+  state: string;
+}
+
 /** `files.rollback` params: no checkpoint lists them; `diff` previews. */
 export interface FilesRollbackParams {
   /** Overwrite hand-edited files too. */
@@ -912,6 +922,8 @@ export interface PairingApproved {
 
 /** The daemon's build target and its support tier. */
 export interface PlatformSupport {
+  /** The support matrix of this host, from runtime probes (spec: web-dashboard, Honest platform support matrix). */
+  features?: Array<FeatureSupport>;
   /** The Rust target triple. */
   target: string;
   /** `tier1`, `tier2` or `unsupported`. */

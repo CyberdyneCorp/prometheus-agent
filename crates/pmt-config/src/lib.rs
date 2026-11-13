@@ -18,6 +18,7 @@ pub mod catalog;
 pub mod credential;
 pub mod daemon;
 pub mod daemon_api;
+pub mod daemon_dashboard;
 pub mod daemon_local;
 pub mod daemon_relay;
 pub mod delegation_check;

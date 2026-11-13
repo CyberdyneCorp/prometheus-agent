@@ -240,6 +240,8 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Tui(_)) => prometheus::surface::require("tui").map(|()| 0),
         #[cfg(not(feature = "gateway"))]
         Some(Command::Gateway(_)) => prometheus::surface::require("gateway").map(|()| 0),
+        #[cfg(feature = "dashboard")]
+        Some(Command::Dashboard(args)) => prometheus::dashboard_cmd::run(args, &ctx),
         #[cfg(not(feature = "dashboard"))]
         Some(Command::Dashboard(_)) => prometheus::surface::require("dashboard").map(|()| 0),
         #[cfg(not(feature = "acp"))]

@@ -114,6 +114,15 @@ jobs:
         if: runner.os == 'Linux' && runner.arch == 'ARM64'
         run: npx --yes playwright@1.49.1 install --with-deps chromium
 
+      # The dashboard's browser tests drive the Chromium of the Playwright
+      # pinned in web/package.json; scripts/check installs it, the system
+      # libraries it needs come first on Linux.
+      - name: Install the dashboard test browser's system libraries
+        if: runner.os == 'Linux'
+        run: |
+          npm ci --prefix web --no-audit --no-fund
+          (cd web && npx --no-install playwright install-deps chromium)
+
       # Ubuntu 24.04's AppArmor refuses unprivileged user namespaces, which
       # Chromium's own sandbox needs ("No usable sandbox!" then SIGABRT).
       - name: Allow user namespaces for Chromium's sandbox

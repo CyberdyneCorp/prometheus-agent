@@ -388,6 +388,10 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "daemon status",
     },
     JsonShape {
+        schema: "prometheus.dashboard.v1",
+        command: "dashboard",
+    },
+    JsonShape {
         schema: "prometheus.gateway_status.v1",
         command: "gateway status",
     },

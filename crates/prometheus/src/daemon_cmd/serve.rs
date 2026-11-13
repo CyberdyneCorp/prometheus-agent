@@ -74,16 +74,7 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result
                 )?
                 .with_turn_cap(config.gateway.limits.max_concurrent_sessions),
             );
-            let mut options = ServerOptions::new(identity(), host.names());
-            options.rpc = config.daemon.rpc.clone();
-            options.idle_session_close = Duration::from_secs(config.daemon.idle_session_close_secs);
-            options.max_live_client_sessions = config.gateway.limits.max_live_client_sessions;
-            options.crash_reporter = Some(Arc::new(crate::startup::crash_reporter(
-                Some(&home.to_path_buf()),
-                ctx.launch,
-            )));
-            options.health_url = Some(health_url);
-            options.home = Some(home.to_path_buf());
+            let options = server_options(home, ctx, &config, host.names(), health_url);
             let watcher = pmt_core::spawn::spawn(super::host::watch(Arc::clone(&host)));
             let sweeper = pmt_core::spawn::spawn(super::host::sweep_worktrees(Arc::clone(&host)));
             let scheduler = pmt_core::spawn::spawn(super::host::schedule_cron(Arc::clone(&host)));
@@ -117,7 +108,7 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result
                 ctx.launch,
                 enabled_adapters(&scopes_of(&server, &host)),
             );
-            start_api(&config, &server, &host).await;
+            start_listeners(&config, &server, &host).await;
             if let Some(systemd) = &systemd {
                 systemd.notify("READY=1");
             }
@@ -138,6 +129,41 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result
     // Turns still running past the drain are abandoned with the runtime.
     runtime.shutdown_timeout(Duration::from_secs(1));
     Ok(exit)
+}
+
+/// How the daemon's server is set up from `daemon.toml` and the host
+/// (with the platform support matrix probed now).
+fn server_options(
+    home: &Path,
+    ctx: &Context<'_>,
+    config: &DaemonConfig,
+    profiles: Vec<String>,
+    health_url: String,
+) -> ServerOptions {
+    let mut options = ServerOptions::new(identity(), profiles);
+    options.rpc = config.daemon.rpc.clone();
+    options.idle_session_close = Duration::from_secs(config.daemon.idle_session_close_secs);
+    options.max_live_client_sessions = config.gateway.limits.max_live_client_sessions;
+    options.crash_reporter = Some(Arc::new(crate::startup::crash_reporter(
+        Some(&home.to_path_buf()),
+        ctx.launch,
+    )));
+    options.health_url = Some(health_url);
+    options.home = Some(home.to_path_buf());
+    options.platform_features = super::support_matrix::probe(home);
+    options
+}
+
+/// The HTTP surfaces: the API server, and the dashboard's controller
+/// (its listener opens when `prometheus dashboard` asks).
+async fn start_listeners(config: &DaemonConfig, server: &Arc<Server>, host: &Arc<DaemonHost>) {
+    start_api(config, server, host).await;
+    #[cfg(feature = "dashboard")]
+    pmt_web::Dashboard::install(
+        server,
+        Arc::clone(host) as Arc<dyn pmt_web::DashboardHost>,
+        config.dashboard.clone(),
+    );
 }
 
 /// Starts the API server when a served profile enables it; a listener
