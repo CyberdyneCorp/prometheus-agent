@@ -54,6 +54,7 @@ async fn an_approval_answered_in_the_desktop_app_updates_the_card() {
     let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
     let desktop = Peer {
         tx,
+        features: std::sync::Arc::default(),
         minor: h.server.protocol().minor,
         advertised: Arc::default(),
         server_requests: true,

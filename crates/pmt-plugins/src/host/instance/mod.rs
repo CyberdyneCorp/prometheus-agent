@@ -29,6 +29,7 @@ mod backend;
 mod engine;
 mod memory;
 mod meter;
+mod panel;
 mod router;
 mod surfaces;
 
@@ -39,7 +40,7 @@ pub(crate) use meter::Meter;
 use super::bindings::PluginHost;
 use super::bindings::exports::prometheus::{
     context_engine, delegation_router, hook, memory_provider, platform_adapter, provider,
-    terminal_backend, tool,
+    terminal_backend, tool, ui_panel,
 };
 use super::imports::{CallInfo, Context, HostState};
 use super::{Limits, Runtime};
@@ -71,6 +72,7 @@ pub struct Instance {
     memory_hooks: Option<memory_provider::hooks::GuestIndices>,
     engine: Option<context_engine::plugin::GuestIndices>,
     adapter: Option<platform_adapter::plugin::GuestIndices>,
+    panel: Option<ui_panel::plugin::GuestIndices>,
     /// `tool.tools()`, read once: a session starting while the instance
     /// is busy (a plugin call waiting on a subagent it launched) must not
     /// wait for it.
@@ -137,6 +139,7 @@ impl Instance {
             memory_hooks: memory_provider::hooks::GuestIndices::new(&pre).ok(),
             engine: context_engine::plugin::GuestIndices::new(&pre).ok(),
             adapter: platform_adapter::plugin::GuestIndices::new(&pre).ok(),
+            panel: ui_panel::plugin::GuestIndices::new(&pre).ok(),
             tool_specs: Mutex::new(None),
             id,
             pre,

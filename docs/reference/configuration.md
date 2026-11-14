@@ -57,6 +57,12 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `auxiliary.approval.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.approval.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.approval.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.commit_message.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
+| `auxiliary.commit_message.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.commit_message.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
+| `auxiliary.commit_message.model` | string | unset | any | `next_session` | Model id. |
+| `auxiliary.commit_message.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.commit_message.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.compression.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.compression.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
 | `auxiliary.compression.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
@@ -236,6 +242,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `delegation.model` | string | unset | any | `next_session` | The model children run on unless the task or its agent names one (`provider/model`); unset: the parent's current route. |
 | `delegation.oneshot_max_children` | integer | `2` | ≥ 0 | `next_session` | Children a finite one-shot run (`chat -z`, cron, eval) may spawn (`0` is unlimited); interactive and gateway sessions are never charged. |
 | `delegation.progress_events` | boolean | `true` | any | `next_session` | Publish `subagent.*` progress events on the root session's stream. |
+| `delegation.reasoning_effort` | one of "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra" | unset | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`, `"ultra"` | `next_session` | The reasoning effort children request (clamped to their model's most); unset: the parent profile's `agent.reasoning_effort`. |
 | `delegation.request_overrides` | table | unset | any | `next_session` | Request parameters set on every child model call, winning over the route's own; the `extra_body` table is merged one level deep into the request body. |
 | `delegation.review.model` | string | unset | any | `next_session` | The reviewer's model (with `provider`, a model id there; alone, `provider/model`). |
 | `delegation.review.provider` | string | unset | any | `next_session` | Provider of the reviewer's model. |
@@ -243,6 +250,20 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `delegation.wire_format` | one of "chat_completions", "responses", "anthropic_messages" | unset | `"chat_completions"`, `"responses"`, `"anthropic_messages"` | `next_session` | Wire format of the direct endpoint (default: inferred from its URL, as for a custom provider). |
 | `delegation.worktree_branch_prefix` | string | `"prometheus"` | any | `next_session` | Prefix of a child's worktree branch (`<prefix>/subagent-<id>`). |
 | `delegation.worktree_isolation` | boolean | `false` | any | `next_session` | Run each child in its own git worktree and branch when the parent uses the local terminal backend inside a git repository. |
+| `desktop.accessibility_tree` | boolean | `true` | any | `restart` | Expose the webview's accessibility tree to assistive technology. |
+| `desktop.disable_gpu` | string | `"auto"` | any | `restart` | `auto` (disable GPU acceleration only on remote displays), `on` or `off`. |
+| `desktop.font_family` | string | `""` | any | `restart` | The chat and interface font, in front of the theme's stack; empty uses the theme's font. |
+| `desktop.hud.snap_hotkey` | string | `"CommandOrControl+Shift+G"` | any | `restart` | The global chord that snaps the HUD to the pointer; empty disables it. |
+| `desktop.hud.tap_to_summon` | boolean | `false` | any | `restart` | Summon the HUD with a tap (a left click) on the tray icon. |
+| `desktop.keep_in_tray` | boolean | `true` | any | `restart` | Keep the app in the tray (macOS menu bar, Windows notification area, Linux `StatusNotifierItem`) after its last window closes. |
+| `desktop.linux_secret_store` | string | `"auto"` | any | `restart` | `auto`, `secret-service` or `kwallet`. |
+| `desktop.linux_window_backend` | string | `"auto"` | any | `restart` | `auto`, `wayland` or `x11` (X11 runs through `XWayland` on a Wayland session). |
+| `desktop.manage_launcher_entry` | boolean | `true` | any | `restart` | Linux: keep the XDG `.desktop` launcher entry current; `false` preserves an existing entry and still creates a missing one. |
+| `desktop.quick_ask.hotkey` | string | `"CommandOrControl+Shift+Space"` | any | `restart` | The global chord that opens the quick-ask panel; empty disables it. |
+| `desktop.quick_ask.profile` | string | `""` | any | `restart` | The profile asked; empty is the last used profile. |
+| `desktop.quick_ask.reuse_secs` | integer | `900` | ≥ 0 | `restart` | A quick-ask session active within this many seconds is asked again instead of starting a new one. |
+| `desktop.ssh_path` | string | `""` | any | `restart` | The `ssh` client of `ssh` connections (Windows: the bundled or an installed OpenSSH); empty runs `ssh` from the `PATH`. |
+| `desktop.terminal_font_family` | string | `""` | any | `restart` | The terminal pane's font; empty uses the bundled monospace font. |
 | `display.bell_on_complete` | boolean | `false` | any | `live` | Ring the terminal bell when a turn completes. |
 | `display.bell_on_prompt` | boolean | `false` | any | `live` | Ring the terminal bell when an approval or clarify prompt opens. |
 | `display.compact` | boolean | `false` | any | `live` | Compact layout. |
@@ -381,6 +402,8 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.platforms.<name>.routes.<name>.deliver` | string | unset | any | `next_session` | Where the answer goes: `origin` (the HTTP caller's response), `log` (recorded under `<profile>/logs/webhook/<route>.jsonl`), `github_comment` (a comment on the payload's pull request or issue) or a send target `platform[:chat_id[:thread_id]]`. Unset: `origin`. |
 | `gateway.platforms.<name>.routes.<name>.deliver_extra` | array of string | unset | any | `next_session` | More send targets that receive a copy. |
 | `gateway.platforms.<name>.routes.<name>.deliver_only` | boolean | `false` | any | `next_session` | Run no model: the rendered prompt is sent verbatim to `deliver`. |
+| `gateway.platforms.<name>.routes.<name>.description` | string | unset | any | `next_session` | What the route is for (shown by the dashboard's `/webhooks`). |
+| `gateway.platforms.<name>.routes.<name>.enabled` | boolean | `true` | any | `next_session` | Serve the route; a disabled route answers 403 (no restart needed for a subscription: the adapter re-reads them when they change). |
 | `gateway.platforms.<name>.routes.<name>.events` | array of string | `[]` | any | `next_session` | Event types admitted (`X-GitHub-Event`, `X-GitLab-Event` or the payload's `event_type`); empty admits every event. |
 | `gateway.platforms.<name>.routes.<name>.filters` | any or array of any | unset | any | `next_session` | Conditions a payload must meet; a request that fails them is answered `ignored` with reason `filter`. |
 | `gateway.platforms.<name>.routes.<name>.github_token_secret` | string | unset | a secret name | `next_session` | The secret holding the GitHub token `github_comment` posts with. |
@@ -598,6 +621,10 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `plugins.wasm.max_memory_bytes` | integer | `268435456` | ≥ 65536 | `next_session` | Linear memory cap of one plugin instance. |
 | `privacy.owner_emails` | array of string | `[]` | any | `next_session` | The profile owner's email addresses, which `redact_pii` keeps. |
 | `privacy.redact_pii` | boolean | `false` | any | `next_session` | Replace phone numbers, other people's email addresses and messaging user ids (with a stable `user_<hash>`) in what reaches model providers, logs, trajectories and telemetry. |
+| `projects.repo_scan_enabled` | boolean | unset | any | `live` | Scan for git repositories; unset is on for the desktop app and off for every other surface. |
+| `projects.repo_scan_exclude_paths` | array of string | `[]` | any | `live` | Subtrees never scanned (`~` is the user's home). |
+| `projects.repo_scan_max_depth` | integer | `4` | 1 to 16 | `live` | How many directory levels below a root are scanned. |
+| `projects.repo_scan_roots` | array of string | `[]` | any | `live` | The folders scanned (`~` is the user's home); empty scans the home. |
 | `prompt.context_file_max_chars` | integer | `0` | ≥ 0 | `next_session` | Character cap per context file; `0` derives it from the model's context window. |
 | `prompt.context_file_read_timeout_secs` | integer | `5` | ≥ 0 | `next_session` | Time allowed to read each context file. |
 | `prompt.include_session_id` | boolean | `false` | any | `next_session` | Add `Session ID: ses_<ULID>` to the session tier. |

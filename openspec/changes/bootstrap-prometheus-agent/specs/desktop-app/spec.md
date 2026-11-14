@@ -19,10 +19,10 @@ The ensure step SHALL be bounded by 60 s plus a 15 s grace, and an expired ensur
 
 #### Scenario: Cold start exceeds the deadline
 - **WHEN** the daemon is not ready after 75 s
-- **THEN** the desktop SHALL show the timeout diagnostic with a link to `<home>/logs/daemon.log` and SHALL NOT attach
+- **THEN** the desktop SHALL show the timeout diagnostic with a link to the daemon's log `<home>/logs/gateway.log` and SHALL NOT attach
 
 ### Requirement: Local endpoint validation
-For the app-managed `local` connection the desktop SHALL accept an ensure endpoint only when its origin is `http` on `127.0.0.1` or `[::1]` with an explicit port and no credentials, path, query or fragment, and it carries a non-empty `instance_id`, an `rpc_protocol` whose major the desktop speaks, and the `session-attach` feature; otherwise it SHALL refuse with `Invalid local gateway endpoint: <reason>`; non-loopback backends SHALL be reachable only as registered `remote` or `ssh` connections under the requirement Remote connections are authenticated and encrypted, never by an ensure result.
+For the app-managed `local` connection the desktop SHALL accept an ensure endpoint only when its `rpc_url` origin is plain `http` (the `ws` scheme) on `127.0.0.1` or `[::1]` with an explicit port and no credentials, query or fragment, its path is the protocol's `/rpc`, and it carries a non-empty `instance_id`, an `rpc_protocol` whose major the desktop speaks, and the `session-attach` feature; otherwise it SHALL refuse with `Invalid local gateway endpoint: <reason>`; non-loopback backends SHALL be reachable only as registered `remote` or `ssh` connections under the requirement Remote connections are authenticated and encrypted, never by an ensure result.
 **Milestone:** M3
 
 #### Scenario: Non-loopback endpoint
@@ -130,12 +130,12 @@ Each bot profile's persistent chat SHALL be obtained with `bot.chat.ensure {prof
 - **THEN** both SHALL receive the same `session_id` and exactly one bot chat SHALL exist
 
 ### Requirement: Settings write validated config patches
-Settings screens SHALL write configuration only through `config.patch {profile, changes}`, which validates the whole patch against the config schema and applies it atomically; coupled fields (for example `delegation.model` and `delegation.provider`) SHALL be written in one patch, and a schema violation SHALL leave the file unchanged and show the validator's message next to the field.
+Settings screens SHALL write configuration only through `config.patch {profile, changes}`, which validates the whole patch against the config schema and applies it atomically; coupled fields (for example the subagent route: `delegation.model` with the direct endpoint keys `delegation.base_url`, `delegation.api_key_secret` and `delegation.wire_format`) SHALL be written in one patch, and a schema violation SHALL leave the file unchanged and show the validator's message next to the field.
 **Milestone:** M3
 
 #### Scenario: Clearing the subagent route
 - **WHEN** the user selects "Inherit from main agent"
-- **THEN** one `config.patch` SHALL remove both `delegation.model` and `delegation.provider`
+- **THEN** one `config.patch` SHALL remove `delegation.model` together with the direct endpoint keys `delegation.base_url`, `delegation.api_key_secret` and `delegation.wire_format`
 
 ### Requirement: Profile switching is explicit
 Every desktop request that touches profile data SHALL name the window's profile; switching profiles SHALL detach the window's sessions, request tickets for the new profile and re-attach, and a window SHALL never show data from two profiles at once.
@@ -165,7 +165,7 @@ When a server request arrives for a session whose window is not focused, the des
 - **THEN** a notification SHALL appear and the approval SHALL stay pending until answered in a card or settled by its deadline
 
 ### Requirement: Plugin UI contributions are isolated
-Desktop UI contributions SHALL come only from installed, enabled plugins that declare a `ui` entry in their manifest; each SHALL load in a sandboxed frame on its own origin `plugin-<id>.localhost`, SHALL talk to the app only through the plugin UI SDK message channel (which exposes the capabilities granted to that plugin and nothing else), and SHALL get storage isolated by that origin; a contribution from a plugin whose package signature was not verified SHALL load only when that plugin was installed with `--allow-unsigned` (as recorded on its install record under the `plugin-system` signature policy).
+Desktop UI contributions SHALL come only from installed, enabled plugins that declare a `ui` entry in their manifest (a `[ui]` table with `label`, `entry` and the plugin UI SDK capabilities `sdk` it uses, such as `sessions.read`, which are granted with the plugin's `ui` capability); each SHALL load in a sandboxed frame on its own origin `plugin-<id>.localhost`, SHALL talk to the app only through the plugin UI SDK message channel (which exposes the capabilities granted to that plugin and nothing else), and SHALL get storage isolated by that origin; a contribution from a plugin whose package signature was not verified SHALL load only when that plugin was installed with `--allow-unsigned` (as recorded on its install record under the `plugin-system` signature policy).
 **Milestone:** M3
 
 #### Scenario: Plugin reads another plugin's storage
@@ -261,7 +261,7 @@ The shell SHALL read launch options from the `desktop` section of the active pro
 - **THEN** the app SHALL launch with `auto` and show `desktop.disable_gpu: expected one of "auto", "on", "off"`
 
 ### Requirement: Machine-wide UI preferences
-Display preferences (theme, light/dark mode, accent, density, status-bar items, keybindings, saved layouts, interface mode, model-picker favourites, dismissed tips and tours) SHALL be stored once per machine by the local daemon through `ui.prefs.get` and `ui.prefs.patch` and shared by every desktop window and webapp tab on that machine, propagating to open windows within 2 s; credentials, grants, drafts and per-window state (open tabs, pane sizes, scroll positions, zoom) SHALL never be written there, a corrupt file SHALL be kept as `.corrupt-<timestamp>` and rebuilt from the open windows' values, and a client meeting the store for the first time SHALL only add keys the store lacks, never overwrite existing ones.
+Display preferences (theme, light/dark mode, accent, density, status-bar items, keybindings, saved layouts, interface mode, model-picker favourites, dismissed tips and tours) SHALL be stored once per machine by the local daemon through `ui.prefs.get` and `ui.prefs.patch` and shared by every desktop window and webapp tab on that machine, propagating to open windows within 2 s (the daemon sends `ui.prefs.changed` to every connection that asked to watch); credentials, grants, drafts and per-window state (open tabs, pane sizes, scroll positions, zoom) SHALL never be written there, a corrupt file SHALL be kept as `.corrupt-<timestamp>` and rebuilt from the open windows' values, and a client meeting the store for the first time SHALL only add keys the store lacks, never overwrite existing ones.
 **Milestone:** M3
 
 #### Scenario: Theme changed in the webapp
@@ -275,7 +275,7 @@ Display preferences (theme, light/dark mode, accent, density, status-bar items, 
 - **THEN** the change SHALL be stored on this machine, not on the remote daemon
 
 ### Requirement: Chat transcript rendering
-The chat view SHALL stream assistant text and structured tool-activity rows, let the user expand a tool row to view images the tool produced (fetched through the session's own connection, never from a local path for a remote session), render cron and delegation completions as collapsed disclosures whose body is the result only, show a timeline rail with one marker per user prompt once a session has 4 or more turns (clicking jumps to that prompt, `Show earlier` pages backwards), open a find bar on `CommandOrControl+F` that searches the rendered transcript, and restore each session's saved distance from the bottom on return, following new output only when the session was left at the bottom.
+The chat view SHALL stream assistant text and structured tool-activity rows, let the user expand a tool row to view images the tool produced (fetched through the session's own connection with `fs.read {session_id, path}`, never from a local path for a remote session), render cron and delegation completions as collapsed disclosures whose body is the result only, show a timeline rail with one marker per user prompt once a session has 4 or more turns (clicking jumps to that prompt, `Show earlier` pages backwards), open a find bar on `CommandOrControl+F` that searches the rendered transcript, and restore each session's saved distance from the bottom on return, following new output only when the session was left at the bottom.
 **Milestone:** M3
 
 #### Scenario: Jump from the timeline
@@ -298,7 +298,7 @@ Each chat SHALL keep its own composer draft (text and staged attachments) per wi
 - **THEN** the typed text SHALL appear in the new composer with the restore strip and nothing SHALL be sent
 
 ### Requirement: Composer history and queue editing
-In an empty composer `Up`/`Down` SHALL recall the profile's previous prompts, and queued prompts SHALL be shown above the composer from the daemon-held queue of the session (`queue.list`, `queue.edit`, `queue.delete`, `queue.pause`, `queue.resume`), so every attached window sees the same list and it survives app and daemon restarts; pressing Stop or `Esc` while prompts are queued SHALL interrupt the running turn and pause the queue, and a turn whose outcome was lost in a daemon restart SHALL be shown as `Turn lost during restart` with a single Discard action that unblocks the queue without re-sending it.
+In an empty composer `Up`/`Down` SHALL recall the profile's previous prompts, and queued prompts SHALL be shown above the composer from the daemon-held queue of the session (`queue.list`, `queue.edit`, `queue.delete`, `queue.pause`, `queue.resume`, with a `queue.changed` event to every attached client), so every attached window sees the same list and it survives app and daemon restarts; pressing Stop or `Esc` while prompts are queued SHALL interrupt the running turn and pause the queue, and a turn whose outcome was lost in a daemon restart SHALL be shown as `Turn lost during restart` with a single Discard action that unblocks the queue without re-sending it.
 **Milestone:** M3
 
 #### Scenario: Edit a queued prompt
@@ -348,7 +348,7 @@ Settings → Model → Subagents SHALL edit the delegated agent's provider, mode
 - **THEN** the draft SHALL be discarded and `config.toml` SHALL be unchanged
 
 ### Requirement: File browser pane
-The file browser SHALL show the session workspace as a lazily loaded tree listed through the session's own terminal backend (`fs.list {session_id, path}`), hide entries ignored by `.gitignore` unless the user toggles them on, preview text files up to 2 MiB and common image formats inline, open other files only through the guarded file opener, refresh changed entries after each tool call that writes in the workspace, and offer Reveal in file tree from file references in the transcript.
+The file browser SHALL show the session workspace as a lazily loaded tree listed through the session's own terminal backend (`fs.list {session_id, path}`), hide entries ignored by `.gitignore` unless the user toggles them on, preview text files up to 2 MiB and common image formats inline (`fs.read {session_id, path, max_bytes}`, through the same backend), open other files only through the guarded file opener, refresh changed entries after each tool call that writes in the workspace, and offer Reveal in file tree from file references in the transcript.
 **Milestone:** M3
 
 #### Scenario: Container session

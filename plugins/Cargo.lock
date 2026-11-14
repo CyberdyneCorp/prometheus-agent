@@ -582,6 +582,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "testing-panel"
+version = "0.1.0"
+dependencies = [
+ "wit-bindgen",
+]
+
+[[package]]
 name = "testing-probe"
 version = "0.1.0"
 dependencies = [

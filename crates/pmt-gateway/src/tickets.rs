@@ -31,6 +31,13 @@ pub struct Grant {
     pub purpose: Purpose,
     /// The client's pid, as it reported it.
     pub pid: Option<u32>,
+    /// Sessions are attached as an observer only (remote dashboard users
+    /// not listed as drivers).
+    pub observer_only: bool,
+    /// The principal administers the daemon (`daemon.update`): the
+    /// machine's own user (a control-channel ticket) or a device paired
+    /// with the `admin` role.
+    pub admin: bool,
 }
 
 /// The outcome of presenting a ticket.
@@ -161,6 +168,8 @@ mod tests {
             profiles,
             purpose,
             pid: None,
+            observer_only: false,
+            admin: false,
         }
     }
 

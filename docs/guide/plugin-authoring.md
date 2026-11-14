@@ -327,6 +327,97 @@ and queues every call; see the Memory guide. A `context-engine` plugin
 exports `initialize`, `compact`, `select`, `tool-schemas` and
 `handle-tool-call`.
 
+### Dashboard pages and slots
+
+A plugin adds to the web dashboard with a `[dashboard]` table (no world
+is needed for a page alone):
+
+```toml
+[dashboard]
+label = "Weather"
+icon = "cloud"                    # optional
+entry = "dashboard/index.html"    # the default
+slots = ["header-right", "sessions:top"]
+
+[dashboard.tab]
+path = "/weather"
+position = "after:sessions"       # end (default), after:<page> or before:<page>
+override = "/sessions"            # optional: replace one built-in page
+hidden = false                    # true: routable, no navigation entry
+```
+
+The slots are `header-left`, `header-right`, `header-banner`, `sidebar`
+(shown only with a `cockpit` theme), `pre-main`, `post-main`,
+`footer-left`, `footer-right`, `overlay`, and `<page>:top` or
+`<page>:bottom` for each built-in page. Each tab and slot shows the
+`entry` HTML file in a frame with `sandbox="allow-scripts"`: the frame has
+an opaque origin, so it never sees the dashboard's cookies or storage, and
+its policy allows no network request at all. Put the scripts and styles
+inline. The frame talks to the dashboard through the `prometheus` object
+the dashboard adds to it:
+
+- `prometheus.register()` says the frame is ready. A frame that has not
+  registered within 2 seconds is reported on `/plugins`, and an override
+  falls back to the built-in page.
+- `prometheus.context()` gives the profile, route, slot and theme.
+- `prometheus.api(method, path, body)` calls the plugin's own backend
+  routes (below). `path` starts with `/` and is relative to the plugin's
+  routes; a path with `.` or `..` segments, `%`, `\` or `#` is refused
+  (`bad backend request`), so a frame never reaches another dashboard
+  route.
+- `prometheus.navigate(path)` opens a dashboard page.
+
+When two plugins override the same page, the first one in load order
+(dependencies first, then by id) renders it, and `/plugins` reports the
+other. `POST /api/plugins/rescan` (the Rescan button on `/plugins`) picks
+up plugins installed since the dashboard opened.
+
+Backend routes need the `ui-panel` world. A request to
+`/api/plugins/<id>/<path>` reaches `on-action` as JSON with `kind`
+(`"http"`), `method`, `path`, `query`, `profile`, `role` and `body`.
+Answer `{"status": 200, "body": ...}`, or any other JSON for a 200 with
+that body; an `Err` answers 400 with its text. The daemon never runs the
+plugin itself: each request starts the plugin host
+(`prometheus plugins panel-call <id>`), which loads the plugin under its
+grants and answers within 30 seconds or is stopped. Observers can only
+`GET`.
+
+### Desktop panels
+
+A plugin adds a panel to the desktop app with a `[ui]` table; it needs
+the `ui` capability, and approving that capability approves the SDK
+capabilities the table lists:
+
+```toml
+[capabilities]
+ui = true
+
+[ui]
+label = "Weather"
+entry = "ui/index.html"     # the default
+sdk = ["sessions.read"]     # what the panel may ask the app for
+```
+
+The panel's `entry` HTML loads in a frame on the plugin's own origin
+(`plugin-<id>://localhost`, `http://plugin-<id>.localhost` on Windows),
+so its `localStorage` is the plugin's alone; its policy allows no network
+request. It talks to the app only through the `sdk` object (also
+`prometheus`) the app adds to it: `sdk.register()`, `sdk.context()`
+(plugin, profile, theme) and `sdk.sessions.list()` (with `sessions.read`;
+without it the call rejects with
+`capability sessions.read not granted to plugin <id>`). With
+`connections.read`, `sdk.host.connections()` lists the desktop's
+connections (ids, names, kinds and the primary id, never a URL, host or
+credential) and `sdk.host.agents()` the agents of every connection (handles
+such as `@research-homelab` when a profile name exists on several
+connections); with `agents.open`, `sdk.host.ensureAgent(connection_id,
+profile)` opens the agent's chat on its own daemon and
+`sdk.host.warmAgent(connection_id, profile)` readies its connection (an SSH
+tunnel). Native commands
+are never available to a panel. A panel loads only when the plugin's
+package signature was verified at install, or it was installed with
+`--allow-unsigned`.
+
 ## Limits worth designing for
 
 - Each call has `plugins.wasm.call_timeout_ms` (default 30 s) of CPU time;

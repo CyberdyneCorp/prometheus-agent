@@ -11,8 +11,9 @@
 //! change time of a version is the commit time of the first commit since
 //! the base whose `Cargo.lock` holds it, or now for an uncommitted change.
 //!
-//! The workspace has no JavaScript or Python lockfiles yet; the dashboard,
-//! desktop and Python-bridge packages join this gate with their lockfiles.
+//! It covers the workspace's `Cargo.lock` and the desktop app's own
+//! (`apps/desktop/src-tauri`, a separate workspace). The JavaScript and
+//! Python lockfiles are not covered yet.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -213,13 +214,32 @@ fn git(root: &Path, args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
-/// The versions the working tree's lock gained since `base`, each with
-/// the time it was first locked on this branch.
+/// The Cargo lockfiles the gate covers.
+const LOCKFILES: &[&str] = &["Cargo.lock", "apps/desktop/src-tauri/Cargo.lock"];
+
+/// The versions every covered lock gained since `base` (a lock new on
+/// this branch gained all of its versions).
 fn added_since(root: &Path, base: &str) -> Result<Vec<Locked>, String> {
-    let before = crates_io_versions(&git(root, &["show", &format!("{base}:Cargo.lock")])?)?;
+    let mut added = Vec::new();
+    for lock in LOCKFILES {
+        if root.join(lock).is_file() {
+            added.extend(added_in(root, base, lock)?);
+        }
+    }
+    added.sort();
+    added.dedup_by(|a, b| a.name == b.name && a.version == b.version);
+    Ok(added)
+}
+
+/// The versions `lock` gained since `base`, each with the time it was
+/// first locked on this branch.
+fn added_in(root: &Path, base: &str, lock: &str) -> Result<Vec<Locked>, String> {
+    let before = match git(root, &["show", &format!("{base}:{lock}")]) {
+        Ok(text) => crates_io_versions(&text)?,
+        Err(_) => BTreeSet::new(),
+    };
     let now = crates_io_versions(
-        &std::fs::read_to_string(root.join("Cargo.lock"))
-            .map_err(|e| format!("Cargo.lock: {e}"))?,
+        &std::fs::read_to_string(root.join(lock)).map_err(|e| format!("{lock}: {e}"))?,
     )?;
     let mut pending: BTreeSet<(String, String)> = now.difference(&before).cloned().collect();
     let mut first_locked: BTreeMap<(String, String), Timestamp> = BTreeMap::new();
@@ -231,7 +251,7 @@ fn added_since(root: &Path, base: &str) -> Result<Vec<Locked>, String> {
             "--format=%H %ct",
             &format!("{base}..HEAD"),
             "--",
-            "Cargo.lock",
+            lock,
         ],
     )?;
     for line in log.lines() {
@@ -246,7 +266,7 @@ fn added_since(root: &Path, base: &str) -> Result<Vec<Locked>, String> {
             .ok()
             .and_then(|s| Timestamp::from_second(s).ok())
             .ok_or_else(|| format!("bad commit time in: {line}"))?;
-        let locked = crates_io_versions(&git(root, &["show", &format!("{commit}:Cargo.lock")])?)?;
+        let locked = crates_io_versions(&git(root, &["show", &format!("{commit}:{lock}")])?)?;
         pending.retain(|key| {
             if locked.contains(key) {
                 first_locked.insert(key.clone(), at);

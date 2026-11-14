@@ -10,6 +10,7 @@
 //! `--pairing-code` the phone links by typing the code shown instead.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 
 use clap::{Args, Subcommand};
@@ -69,6 +70,57 @@ pub(super) fn run(args: &WhatsappArgs, ctx: &Context<'_>) -> Result<u8, Error> {
     }
     let scope = ctx.scope()?;
     let bridge = bridge(ctx)?;
+    let command = link_command(&scope, &bridge, pairing_code.as_deref())?;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| Error::new(&codes::OUTPUT_IO, format!("cannot start the runtime: {e}")))?;
+    let never = pmt_core::cancel::CancelToken::new();
+    let linked = runtime.block_on(pair(command, pair_window(), &never, &mut show))?;
+    let profile = scope.name();
+    crate::output::print(&format!(
+        "linked {linked}; the gateway connects with it on its next start (prometheus -p {profile} gateway reload)"
+    ))
+}
+
+/// What the bridge asks the user to do while pairing.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Shown<'a> {
+    /// Scan this QR code's data (each refresh replaces the one before).
+    Qr(&'a str),
+    /// Type this pairing code on the phone.
+    Code(&'a str),
+}
+
+/// The terminal's way of showing a pairing step.
+fn show(shown: Shown<'_>) -> Result<(), Error> {
+    match shown {
+        Shown::Qr(data) => {
+            let qr = qr_text(data)?;
+            // Each refresh replaces the code shown before.
+            println!(
+                "\x1b[2J\x1b[H{qr}\nScan with WhatsApp: Settings > Linked devices > Link a device (refreshes until linked)"
+            );
+        }
+        Shown::Code(code) => println!(
+            "Pairing code: {code}\nOn the phone: WhatsApp > Linked devices > Link a device > Link with phone number instead"
+        ),
+    }
+    Ok(())
+}
+
+/// The bridge command that links `scope` (replacing an earlier session
+/// under `<profile>/platforms/whatsapp/session/`), by QR code or with a
+/// pairing code for `phone`.
+///
+/// # Errors
+///
+/// `home.io` for the session directory, `config.invalid` for bad options.
+pub(crate) fn link_command(
+    scope: &pmt_config::ProfileScope,
+    bridge: &Bridge,
+    phone: Option<&str>,
+) -> Result<tokio::process::Command, Error> {
     let session = scope
         .dir()
         .join("platforms")
@@ -88,18 +140,10 @@ pub(super) fn run(args: &WhatsappArgs, ctx: &Context<'_>) -> Result<u8, Error> {
         .args(["--pair-only", "--pair-json"])
         .args(pmt_adapters_whatsapp::profile_args(scope.dir()))
         .args(["--mode", mode]);
-    if let Some(phone) = pairing_code {
+    if let Some(phone) = phone {
         command.args(["--pairing-code", phone]);
     }
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|e| Error::new(&codes::OUTPUT_IO, format!("cannot start the runtime: {e}")))?;
-    let linked = runtime.block_on(pair(command, pair_window()))?;
-    let profile = scope.name();
-    crate::output::print(&format!(
-        "linked {linked}; the gateway connects with it on its next start (prometheus -p {profile} gateway reload)"
-    ))
+    Ok(command)
 }
 
 /// The terminal's width (`COLUMNS` when set, as shells export it).
@@ -112,7 +156,7 @@ fn columns() -> u16 {
 }
 
 /// How long pairing may take (shortened only in debug builds' tests).
-fn pair_window() -> Duration {
+pub(crate) fn pair_window() -> Duration {
     #[cfg(debug_assertions)]
     if let Some(secs) = std::env::var("PMT_TEST_WHATSAPP_PAIR_SECS")
         .ok()
@@ -124,7 +168,7 @@ fn pair_window() -> Duration {
 }
 
 /// How the bridge is started.
-enum Bridge {
+pub(crate) enum Bridge {
     /// The managed runtime: Node with the bridge script.
     Managed { node: PathBuf, script: PathBuf },
     /// A stand-in bridge executable (debug builds' tests).
@@ -149,19 +193,36 @@ impl Bridge {
 
 /// The bridge to pair with, installing the managed runtime when needed.
 fn bridge(ctx: &Context<'_>) -> Result<Bridge, Error> {
+    let root = ctx.home()?.root().to_path_buf();
+    let progress: pmt_update::runtimes::install::Progress =
+        std::sync::Arc::new(|line| eprintln!("{line}"));
+    bridge_at(&root, &crate::update_cmd::outbound_policy(ctx), &progress)
+}
+
+/// The bridge of the home at `root`, installing the managed runtime (the
+/// pinned Node, then the shipped bridge) through `policy` when needed.
+///
+/// # Errors
+///
+/// Runtime install errors.
+pub(crate) fn bridge_at(
+    root: &Path,
+    policy: &pmt_net::http::OutboundPolicy,
+    progress: &pmt_update::runtimes::install::Progress,
+) -> Result<Bridge, Error> {
     #[cfg(debug_assertions)]
     if let Some(fake) = std::env::var_os("PMT_TEST_WHATSAPP_BRIDGE") {
         return Ok(Bridge::Fake(PathBuf::from(fake)));
     }
-    let root = ctx.home()?.root().to_path_buf();
-    let config = pmt_config::DaemonConfig::load(&root)?;
-    let store = pmt_update::runtimes::Store::open(&root);
-    let installer = crate::runtimes_cmd::installer(ctx, store, &config);
+    let config = pmt_config::DaemonConfig::load(root)?;
+    let store = pmt_update::runtimes::Store::open(root);
+    let installer =
+        crate::runtimes_cmd::browser::installer(store, &config, policy, Arc::clone(progress));
     let node = crate::model_cmd::block_on(installer.install("node"))??.exe();
-    pmt_adapters_whatsapp::install::install(&root, &node, &|line| eprintln!("{line}"))?;
+    pmt_adapters_whatsapp::install::install(root, &node, &|line| progress(line))?;
     Ok(Bridge::Managed {
         node,
-        script: pmt_adapters_whatsapp::install::dir(&root).join("bridge.js"),
+        script: pmt_adapters_whatsapp::install::dir(root).join("bridge.js"),
     })
 }
 
@@ -198,8 +259,14 @@ fn qr_text(data: &str) -> Result<String, Error> {
 }
 
 /// Runs the pairing bridge until the phone links (the linked account),
-/// the bridge fails, or `window` passes.
-async fn pair(mut command: tokio::process::Command, window: Duration) -> Result<String, Error> {
+/// the bridge fails, `window` passes or `cancel` fires (the bridge is
+/// stopped); each step to show goes to `show`.
+pub(crate) async fn pair(
+    mut command: tokio::process::Command,
+    window: Duration,
+    cancel: &pmt_core::cancel::CancelToken,
+    show: &mut (dyn FnMut(Shown<'_>) -> Result<(), Error> + Send),
+) -> Result<String, Error> {
     let mut child = command
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
@@ -215,7 +282,14 @@ async fn pair(mut command: tokio::process::Command, window: Duration) -> Result<
     let mut lines = tokio::io::BufReader::new(stdout).lines();
     let deadline = tokio::time::Instant::now() + window;
     loop {
-        let line = match tokio::time::timeout_at(deadline, lines.next_line()).await {
+        let next = tokio::select! {
+            () = cancel.cancelled() => {
+                let _ = child.kill().await;
+                return Err(Error::new(&codes::GATEWAY_PAIRING_TIMEOUT, "WhatsApp pairing was cancelled"));
+            }
+            next = tokio::time::timeout_at(deadline, lines.next_line()) => next,
+        };
+        let line = match next {
             Err(_) => {
                 let _ = child.kill().await;
                 return Err(Error::new(
@@ -235,7 +309,7 @@ async fn pair(mut command: tokio::process::Command, window: Duration) -> Result<
             }
         };
         let event: Value = serde_json::from_str(&line).unwrap_or(Value::Null);
-        if let Some(linked) = on_event(&event)? {
+        if let Some(linked) = on_event(&event, show)? {
             // The bridge saves the credentials, then exits by itself.
             let _ = tokio::time::timeout(Duration::from_secs(10), child.wait()).await;
             return Ok(linked);
@@ -244,21 +318,13 @@ async fn pair(mut command: tokio::process::Command, window: Duration) -> Result<
 }
 
 /// Shows one pairing event; `Some(account)` once linked.
-fn on_event(event: &Value) -> Result<Option<String>, Error> {
+fn on_event(
+    event: &Value,
+    show: &mut (dyn FnMut(Shown<'_>) -> Result<(), Error> + Send),
+) -> Result<Option<String>, Error> {
     match event["event"].as_str().unwrap_or_default() {
-        "qr" => {
-            let qr = qr_text(event["qr"].as_str().unwrap_or_default())?;
-            // Each refresh replaces the code shown before.
-            println!(
-                "\x1b[2J\x1b[H{qr}\nScan with WhatsApp: Settings > Linked devices > Link a device (refreshes until linked)"
-            );
-        }
-        "pairing_code" => {
-            let code = event["code"].as_str().unwrap_or_default();
-            println!(
-                "Pairing code: {code}\nOn the phone: WhatsApp > Linked devices > Link a device > Link with phone number instead"
-            );
-        }
+        "qr" => show(Shown::Qr(event["qr"].as_str().unwrap_or_default()))?,
+        "pairing_code" => show(Shown::Code(event["code"].as_str().unwrap_or_default()))?,
         "connected" => {
             let user = event["user"]["name"]
                 .as_str()
@@ -295,11 +361,30 @@ mod tests {
 
     #[test]
     fn events_link_fail_or_wait() {
+        let mut shown = Vec::new();
+        let mut show = |step: Shown<'_>| {
+            shown.push(match step {
+                Shown::Qr(data) | Shown::Code(data) => data.to_owned(),
+            });
+            Ok(())
+        };
         assert_eq!(
-            on_event(&json!({"event": "connected", "user": {"name": "Ana"}})).unwrap(),
+            on_event(
+                &json!({"event": "connected", "user": {"name": "Ana"}}),
+                &mut show
+            )
+            .unwrap(),
             Some("Ana".to_owned())
         );
-        assert!(on_event(&json!({"event": "error", "error": "logged_out"})).is_err());
-        assert_eq!(on_event(&json!({"event": "started"})).unwrap(), None);
+        assert!(on_event(&json!({"event": "error", "error": "logged_out"}), &mut show).is_err());
+        assert_eq!(
+            on_event(&json!({"event": "started"}), &mut show).unwrap(),
+            None
+        );
+        assert_eq!(
+            on_event(&json!({"event": "qr", "qr": "2@x"}), &mut show).unwrap(),
+            None
+        );
+        assert_eq!(shown, ["2@x"]);
     }
 }

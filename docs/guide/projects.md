@@ -102,6 +102,41 @@ $ prometheus projects restore api
 restored project 'api'
 ```
 
+## Repository discovery
+
+With `projects.repo_scan_enabled` on (unset: on for the desktop app, off
+for every other surface), the daemon scans `projects.repo_scan_roots`
+(default: your home directory) down to `projects.repo_scan_max_depth`
+(default 4) levels for git repositories, in the background and without
+following symlinks. It skips `projects.repo_scan_exclude_paths` subtrees
+(`~` is your home), hidden folders, dependency folders (`node_modules`,
+`target`, `.venv`, `vendor`), folders the OS will not list and subtrees
+the profile's sandbox may not read (its credential stores, such as
+`~/.ssh` or browser profiles, and the Prometheus home when it lies below
+a scan root), and does not look inside a repository for more. What it found is cached per profile in
+`state.db` with when it was last seen; changing a scan key invalidates
+only that profile's cache, and turning scanning off clears it.
+Discovered repositories are only offered (the desktop's Projects sidebar
+and the dashboard's `/projects` page create a project in one click,
+`projects.create`); no project is ever created automatically. The
+dashboard shows what the cache holds (a desktop scan included) and starts
+a scan itself only when `projects.repo_scan_enabled = true`.
+
+## The project tool
+
+Desktop and TUI sessions get the [`project`](../reference/tools.md#project) tool (toolset `project`, on by
+default for those surfaces; `tools.disabled_toolsets = ["project"]` turns
+it off). `list` shows the profile's projects with the session's own
+marked, `create` makes a project from a name and a folder (the session's
+directory when none is given; a folder that already belongs to a project
+returns that project) and `switch` takes a project id or slug. `create`
+and `switch` move only the calling session: its working directory becomes
+the project's primary folder from its next tool call, the session is
+recorded under the project and the desktop is told at once. The system
+prompt, the tool array and the profile's active project stay as they
+were, so the prompt cache survives, and a `cd` in the terminal never
+switches projects.
+
 ## Backups and exports
 
 Projects and the active pointer live in `state.db`, so whole-home backups

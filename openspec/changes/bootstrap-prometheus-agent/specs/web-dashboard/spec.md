@@ -234,18 +234,18 @@ The dashboard listener SHALL run inside the gateway daemon (one per Prometheus h
 - **THEN** no second listener SHALL start and the browser SHALL open a new login link to the existing one
 
 ### Requirement: Additional dashboard sign-in providers
-`dashboard.auth.mode` SHALL also accept `portal` (sign-in through the hosted account portal's OAuth, verifying that the account owns the dashboard's registered client `dashboard.auth.portal.client_id`) and `token` (a single deployment credential read from the secrets store entry `dashboard_session_token`, compared in constant time on both `Authorization: Bearer` requests and the WebSocket upgrade, with no browser sign-in form); `GET /api/health` SHALL report the active provider names in `auth_providers`, and an OAuth callback URL SHALL be `<dashboard.public_url>/auth/callback` when `dashboard.public_url` is set, else derived from trusted proxy headers.
+`dashboard.auth.mode` SHALL also accept `portal` (sign-in through the hosted account portal's OAuth, verifying that the account owns the dashboard's registered client `dashboard.auth.portal.client_id`) and `token` (a single deployment credential read from the secrets store entry `DASHBOARD_SESSION_TOKEN`, compared in constant time on both `Authorization: Bearer` requests and the WebSocket upgrade, with no browser sign-in form); `GET /api/health` SHALL report the active provider names in `auth_providers`, and an OAuth callback URL SHALL be `<dashboard.public_url>/auth/callback` when `dashboard.public_url` is set, else derived from trusted proxy headers.
 **Milestone:** M3
 
 #### Scenario: Token deployment
-- **GIVEN** `dashboard.auth.mode = "token"` and the secret `dashboard_session_token` set
+- **GIVEN** `dashboard.auth.mode = "token"` and the secret `DASHBOARD_SESSION_TOKEN` set
 - **WHEN** a client calls `/api/profiles/default/sessions` with the matching bearer token over TLS
 - **THEN** the response SHALL be 200
 
 #### Scenario: Token mode without the secret
-- **GIVEN** `dashboard.auth.mode = "token"` and no `dashboard_session_token` secret
+- **GIVEN** `dashboard.auth.mode = "token"` and no `DASHBOARD_SESSION_TOKEN` secret
 - **WHEN** the dashboard starts on a non-loopback host
-- **THEN** the command SHALL exit 78 naming `dashboard_session_token`
+- **THEN** the command SHALL exit 78 naming `DASHBOARD_SESSION_TOKEN`
 
 ### Requirement: Registering a dashboard with the account portal
 `prometheus dashboard register [--name <label>] [--redirect-uri <https url>]` SHALL use the profile's existing portal sign-in to register a self-hosted OAuth client for this dashboard, write the returned client id to `dashboard.auth.portal.client_id` through a validated config patch, print the registered name, and exit 78 with `sign in to the portal first: prometheus auth login portal` when no portal login exists; a `--redirect-uri` that is not `https` (other than loopback) SHALL be refused with exit 2.
@@ -377,7 +377,7 @@ The dashboard and webapp SHALL support themes defined as TOML files with a palet
 - **THEN** the theme SHALL be rejected naming the 32 KiB limit
 
 ### Requirement: Dashboard plugin contributions
-Plugins that declare a `dashboard` entry in `plugin.toml` (label, icon, `tab.path`, `tab.position` as `end|after:<page>|before:<page>`, optional `tab.override` of one built-in route, `tab.hidden`, slots) SHALL render in sandboxed frames with an opaque origin and talk to the dashboard only through the plugin UI SDK message channel with their granted capabilities; slots SHALL be the shell slots `header-left`, `header-right`, `header-banner`, `sidebar` (cockpit variant only), `pre-main`, `post-main`, `footer-left`, `footer-right`, `overlay` and `<page>:top|bottom` for each built-in page; when two plugins override the same route the first in load order SHALL win and the other SHALL be reported on `/plugins`; plugin backend routes SHALL be served at `/api/plugins/<id>/` by the plugin host under the plugin's grants, never in the daemon process; `POST /api/plugins/rescan` SHALL reload discovery, and a plugin that has not registered within 2 s SHALL not block the first render.
+Plugins that declare a `dashboard` entry in `plugin.toml` (label, icon, `entry` (the frames' HTML file, default `dashboard/index.html`), `tab.path`, `tab.position` as `end|after:<page>|before:<page>`, optional `tab.override` of one built-in route, `tab.hidden`, slots) SHALL render in sandboxed frames with an opaque origin and talk to the dashboard only through the plugin UI SDK message channel with their granted capabilities; slots SHALL be the shell slots `header-left`, `header-right`, `header-banner`, `sidebar` (cockpit variant only), `pre-main`, `post-main`, `footer-left`, `footer-right`, `overlay` and `<page>:top|bottom` for each built-in page; when two plugins override the same route the first in load order SHALL win and the other SHALL be reported on `/plugins`; plugin backend routes SHALL be served at `/api/plugins/<id>/` by the plugin host under the plugin's grants, never in the daemon process; `POST /api/plugins/rescan` SHALL reload discovery, and a plugin that has not registered within 2 s SHALL not block the first render.
 **Milestone:** M3
 
 #### Scenario: Override conflict

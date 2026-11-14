@@ -67,6 +67,10 @@ pub struct DelegationConfig {
     /// (`provider/model`); unset: the parent's current route.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// The reasoning effort children request (clamped to their model's
+    /// most); unset: the parent profile's `agent.reasoning_effort`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<super::ReasoningLevel>,
     /// The fallback chain of children that pin a route of their own (a
     /// task's or agent's model, `delegation.model`, a direct endpoint),
     /// entries as in `[[fallback.chain]]`; unset: such children get no
@@ -148,6 +152,7 @@ impl Default for DelegationConfig {
             progress_events: true,
             router: "default".to_owned(),
             model: None,
+            reasoning_effort: None,
             fallback_chain: None,
             worktree_isolation: false,
             worktree_branch_prefix: "prometheus".to_owned(),

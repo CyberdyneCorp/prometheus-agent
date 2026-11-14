@@ -151,7 +151,25 @@ fn check_free(
     Ok(())
 }
 
-fn subscribe(scope: &ProfileScope, args: &SubscribeArgs, json: bool) -> Result<u8, Error> {
+/// A subscription just created: its URL, and the generated secret (the
+/// only time it is ever shown).
+pub(crate) struct Created {
+    pub url: String,
+    pub secret_name: String,
+    pub secret: Option<String>,
+}
+
+/// Creates the subscription `args` describe (with `description`).
+///
+/// # Errors
+///
+/// `config.invalid` for a taken name or a bad route, secrets and store
+/// errors.
+pub(crate) fn create(
+    scope: &ProfileScope,
+    args: &SubscribeArgs,
+    description: &str,
+) -> Result<Created, Error> {
     let name = args.name.as_str();
     let mut subscriptions = webhook_subscriptions::load(scope.dir())?;
     check_free(scope, &subscriptions, name)?;
@@ -162,7 +180,8 @@ fn subscribe(scope: &ProfileScope, args: &SubscribeArgs, json: bool) -> Result<u
         }
         None => webhook_subscriptions::secret_name(name),
     };
-    let route = route_of(args, &secret_name);
+    let mut route = route_of(args, &secret_name);
+    description.clone_into(&mut route.description);
     let key = format!("webhooks.{name}");
     pmt_config::gateway_check::check_webhook_route(scope.config(), &key, name, &route)?;
     if let Some(job) = &route.cron_job {
@@ -188,8 +207,20 @@ fn subscribe(scope: &ProfileScope, args: &SubscribeArgs, json: bool) -> Result<u
         },
     );
     webhook_subscriptions::save(scope.dir(), &subscriptions)?;
-    let url = url(scope, name);
-    let secret = generated.as_ref().map(|s| s.expose().to_owned());
+    Ok(Created {
+        url: url(scope, name),
+        secret_name,
+        secret: generated.as_ref().map(|s| s.expose().to_owned()),
+    })
+}
+
+fn subscribe(scope: &ProfileScope, args: &SubscribeArgs, json: bool) -> Result<u8, Error> {
+    let name = args.name.as_str();
+    let Created {
+        url,
+        secret_name,
+        secret,
+    } = create(scope, args, "")?;
     if json {
         return crate::output::json(&json!({
             "name": name, "url": url, "secret_name": secret_name, "secret": secret,
@@ -211,6 +242,62 @@ fn subscribe(scope: &ProfileScope, args: &SubscribeArgs, json: bool) -> Result<u
         text.push_str("\nnote: the webhook adapter is off; enable it: prometheus config set gateway.platforms.webhook.enabled true");
     }
     crate::output::print(&text)
+}
+
+/// Enables or disables subscription `name` (the adapter re-reads the
+/// file, so no restart is needed).
+///
+/// # Errors
+///
+/// `webhook.not_found`, configuration errors.
+pub(crate) fn set_enabled(scope: &ProfileScope, name: &str, enabled: bool) -> Result<(), Error> {
+    let mut subscriptions = webhook_subscriptions::load(scope.dir())?;
+    let found = subscriptions.get_mut(name).ok_or_else(|| not_found(name))?;
+    found.route.enabled = enabled;
+    webhook_subscriptions::save(scope.dir(), &subscriptions)
+}
+
+/// The subscriptions as the dashboard lists them (never a secret value),
+/// and whether the webhook adapter is enabled.
+///
+/// # Errors
+///
+/// Configuration errors.
+pub(crate) fn rows(scope: &ProfileScope) -> Result<serde_json::Value, Error> {
+    let subscriptions = webhook_subscriptions::load(scope.dir())?;
+    let rows: Vec<_> = subscriptions
+        .iter()
+        .map(|(name, s)| {
+            json!({
+                "name": name,
+                "description": s.route.description,
+                "url": url(scope, name),
+                "events": s.route.events,
+                "deliver": s.route.deliver_target(),
+                "deliver_only": s.route.deliver_only,
+                "enabled": s.route.enabled,
+                "created_at": s.created_at,
+            })
+        })
+        .collect();
+    Ok(json!({"subscriptions": rows, "adapter_enabled": webhook_enabled(scope)}))
+}
+
+/// Removes subscription `name` (and the secret generated for it).
+///
+/// # Errors
+///
+/// `webhook.not_found`, configuration and secrets errors.
+pub(crate) fn delete(scope: &ProfileScope, name: &str) -> Result<(), Error> {
+    let mut subscriptions = webhook_subscriptions::load(scope.dir())?;
+    let removed = subscriptions.remove(name).ok_or_else(|| not_found(name))?;
+    webhook_subscriptions::save(scope.dir(), &subscriptions)?;
+    if removed.generated_secret
+        && let Some(secret) = &removed.route.secret_secret
+    {
+        scope.secrets().store().remove(&secret.0)?;
+    }
+    Ok(())
 }
 
 fn webhook_enabled(scope: &ProfileScope) -> bool {
@@ -264,25 +351,32 @@ fn list(scope: &ProfileScope, json: bool) -> Result<u8, Error> {
 }
 
 fn remove(scope: &ProfileScope, name: &str) -> Result<u8, Error> {
-    let mut subscriptions = webhook_subscriptions::load(scope.dir())?;
-    let removed = subscriptions.remove(name).ok_or_else(|| not_found(name))?;
-    webhook_subscriptions::save(scope.dir(), &subscriptions)?;
-    if removed.generated_secret
-        && let Some(secret) = &removed.route.secret_secret
-    {
-        scope.secrets().store().remove(&secret.0)?;
-    }
+    delete(scope, name)?;
     eprintln!("removed webhook route '{name}'");
     Ok(0)
 }
 
+/// A signed test delivery sent to route `name`: its delivery id and the
+/// listener's status.
+pub(crate) struct TestSent {
+    pub delivery: String,
+    pub status: u16,
+    pub runs_turn: bool,
+}
+
+/// Sends a test event signed with route `name`'s secret to the daemon's
+/// listener (`payload` replaces the default body).
+///
+/// # Errors
+///
+/// `webhook.not_found`, secrets errors, `webhook.test_failed` when the
+/// listener is unreachable or does not accept it.
 #[cfg(feature = "gateway")]
-fn test(
+pub(crate) async fn send_test(
     scope: &ProfileScope,
     name: &str,
-    payload: Option<&std::path::Path>,
-    json: bool,
-) -> Result<u8, Error> {
+    payload: Option<Vec<u8>>,
+) -> Result<TestSent, Error> {
     let subscriptions = webhook_subscriptions::load(scope.dir())?;
     let route = &subscriptions
         .get(name)
@@ -294,16 +388,10 @@ fn test(
         .ok_or_else(|| not_found(name))?;
     let secret = scope.secrets().resolve(&secret_name.0)?;
     let event = route.events.first().map_or("test", String::as_str);
-    let body = match payload {
-        Some(path) => std::fs::read(path).map_err(|e| {
-            Error::new(
-                &codes::WEBHOOK_TEST_FAILED,
-                format!("cannot read --payload {}: {e}", path.display()),
-            )
-        })?,
-        None => serde_json::to_vec(&json!({"event_type": event, "test": true, "route": name}))
-            .unwrap_or_default(),
-    };
+    let body = payload.unwrap_or_else(|| {
+        serde_json::to_vec(&json!({"event_type": event, "test": true, "route": name}))
+            .unwrap_or_default()
+    });
     let delivery = format!("test-{}", ulid::Ulid::generate().to_string().to_lowercase());
     let signature = pmt_adapters_webhook::github_signature(secret.expose(), &body);
     let url = url(scope, name);
@@ -313,24 +401,22 @@ fn test(
         pmt_net::http::client_builder_loopback_direct(&pmt_net::http::OutboundPolicy::default())?
             .build()
             .map_err(|e| Error::new(&codes::WEBHOOK_TEST_FAILED, format!("no HTTP client: {e}")))?;
-    let response = crate::model_cmd::block_on(async {
-        client
-            .post(&url)
-            .header("content-type", "application/json")
-            .header("x-github-event", event)
-            .header("x-github-delivery", &delivery)
-            .header("x-hub-signature-256", signature)
-            .body(body)
-            .send()
-            .await
-    })?
-    .map_err(|e| {
-        Error::new(
-            &codes::WEBHOOK_TEST_FAILED,
-            format!("cannot reach the webhook listener at {url}: {e}"),
-        )
-        .with_hint("start the daemon with the webhook adapter enabled: prometheus daemon start")
-    })?;
+    let response = client
+        .post(&url)
+        .header("content-type", "application/json")
+        .header("x-github-event", event)
+        .header("x-github-delivery", &delivery)
+        .header("x-hub-signature-256", signature)
+        .body(body)
+        .send()
+        .await
+        .map_err(|e| {
+            Error::new(
+                &codes::WEBHOOK_TEST_FAILED,
+                format!("cannot reach the webhook listener at {url}: {e}"),
+            )
+            .with_hint("start the daemon with the webhook adapter enabled: prometheus daemon start")
+        })?;
     let status = response.status().as_u16();
     if !(200..300).contains(&status) {
         return Err(Error::new(
@@ -338,8 +424,37 @@ fn test(
             format!("the listener answered {status} for the test delivery"),
         ));
     }
-    // A forwarding or job-firing route runs no turn of its own.
-    let runs_turn = !route.deliver_only && route.cron_job.is_none();
+    Ok(TestSent {
+        delivery,
+        status,
+        // A forwarding or job-firing route runs no turn of its own.
+        runs_turn: !route.deliver_only && route.cron_job.is_none(),
+    })
+}
+
+#[cfg(feature = "gateway")]
+fn test(
+    scope: &ProfileScope,
+    name: &str,
+    payload: Option<&std::path::Path>,
+    json: bool,
+) -> Result<u8, Error> {
+    let body = payload
+        .map(|path| {
+            std::fs::read(path).map_err(|e| {
+                Error::new(
+                    &codes::WEBHOOK_TEST_FAILED,
+                    format!("cannot read --payload {}: {e}", path.display()),
+                )
+            })
+        })
+        .transpose()?;
+    let sent = crate::model_cmd::block_on(send_test(scope, name, body))??;
+    let TestSent {
+        delivery,
+        status,
+        runs_turn,
+    } = sent;
     let session = runs_turn
         .then(|| test_session(scope, name, &delivery))
         .flatten();

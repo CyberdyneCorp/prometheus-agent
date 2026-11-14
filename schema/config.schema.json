@@ -520,6 +520,17 @@
           ],
           "description": "Smart approvals."
         },
+        "commit_message": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuxiliaryTask"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Commit messages of the desktop's review pane (defaults to the main\nmodel)."
+        },
         "compression": {
           "anyOf": [
             {
@@ -2313,6 +2324,17 @@
           "description": "Publish `subagent.*` progress events on the root session's stream.",
           "type": "boolean"
         },
+        "reasoning_effort": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReasoningLevel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The reasoning effort children request (clamped to their model's\nmost); unset: the parent profile's `agent.reasoning_effort`."
+        },
         "request_overrides": {
           "additionalProperties": true,
           "description": "Request parameters set on every child model call, winning over the\nroute's own; the `extra_body` table is merged one level deep into\nthe request body.",
@@ -2372,6 +2394,76 @@
         }
       },
       "type": "object"
+    },
+    "DesktopConfig": {
+      "additionalProperties": false,
+      "description": "The `[desktop]` section.",
+      "properties": {
+        "accessibility_tree": {
+          "default": true,
+          "description": "Expose the webview's accessibility tree to assistive technology.",
+          "type": "boolean"
+        },
+        "disable_gpu": {
+          "default": "auto",
+          "description": "`auto` (disable GPU acceleration only on remote displays), `on` or\n`off`.",
+          "type": "string"
+        },
+        "font_family": {
+          "default": "",
+          "description": "The chat and interface font, in front of the theme's stack; empty\nuses the theme's font.",
+          "type": "string"
+        },
+        "hud": {
+          "$ref": "#/$defs/HudConfig",
+          "default": {
+            "snap_hotkey": "CommandOrControl+Shift+G",
+            "tap_to_summon": false
+          },
+          "description": "HUD mode: the chrome-free floating chat bar."
+        },
+        "keep_in_tray": {
+          "default": true,
+          "description": "Keep the app in the tray (macOS menu bar, Windows notification\narea, Linux `StatusNotifierItem`) after its last window closes.",
+          "type": "boolean"
+        },
+        "linux_secret_store": {
+          "default": "auto",
+          "description": "`auto`, `secret-service` or `kwallet`.",
+          "type": "string"
+        },
+        "linux_window_backend": {
+          "default": "auto",
+          "description": "`auto`, `wayland` or `x11` (X11 runs through `XWayland` on a Wayland\nsession).",
+          "type": "string"
+        },
+        "manage_launcher_entry": {
+          "default": true,
+          "description": "Linux: keep the XDG `.desktop` launcher entry current; `false`\npreserves an existing entry and still creates a missing one.",
+          "type": "boolean"
+        },
+        "quick_ask": {
+          "$ref": "#/$defs/QuickAskConfig",
+          "default": {
+            "hotkey": "CommandOrControl+Shift+Space",
+            "profile": "",
+            "reuse_secs": 900
+          },
+          "description": "The global quick-ask hotkey."
+        },
+        "ssh_path": {
+          "default": "",
+          "description": "The `ssh` client of `ssh` connections (Windows: the bundled or an\ninstalled OpenSSH); empty runs `ssh` from the `PATH`.",
+          "type": "string"
+        },
+        "terminal_font_family": {
+          "default": "",
+          "description": "The terminal pane's font; empty uses the bundled monospace font.",
+          "type": "string"
+        }
+      },
+      "type": "object",
+      "x-apply": "restart"
     },
     "DialogPolicy": {
       "description": "Dialog policies.",
@@ -3762,6 +3854,24 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "HudConfig": {
+      "additionalProperties": false,
+      "description": "The `[desktop.hud]` section (spec: desktop-app, HUD mode).",
+      "properties": {
+        "snap_hotkey": {
+          "default": "CommandOrControl+Shift+G",
+          "description": "The global chord that snaps the HUD to the pointer; empty disables\nit.",
+          "type": "string"
+        },
+        "tap_to_summon": {
+          "default": false,
+          "description": "Summon the HUD with a tap (a left click) on the tray icon.",
+          "type": "boolean"
+        }
+      },
+      "type": "object",
+      "x-apply": "restart"
     },
     "ImageGenConfig": {
       "additionalProperties": false,
@@ -6847,6 +6957,45 @@
       ],
       "type": "object"
     },
+    "ProjectsConfig": {
+      "additionalProperties": false,
+      "description": "The `[projects]` section.",
+      "properties": {
+        "repo_scan_enabled": {
+          "description": "Scan for git repositories; unset is on for the desktop app and off\nfor every other surface.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "repo_scan_exclude_paths": {
+          "default": [],
+          "description": "Subtrees never scanned (`~` is the user's home).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "repo_scan_max_depth": {
+          "default": 4,
+          "description": "How many directory levels below a root are scanned.",
+          "format": "uint32",
+          "maximum": 16,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "repo_scan_roots": {
+          "default": [],
+          "description": "The folders scanned (`~` is the user's home); empty scans the home.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
     "PromptCacheConfig": {
       "additionalProperties": false,
       "description": "The `[prompt_cache]` section.",
@@ -7380,6 +7529,31 @@
           "type": "string"
         }
       ]
+    },
+    "QuickAskConfig": {
+      "additionalProperties": false,
+      "description": "The `[desktop.quick_ask]` section.",
+      "properties": {
+        "hotkey": {
+          "default": "CommandOrControl+Shift+Space",
+          "description": "The global chord that opens the quick-ask panel; empty disables it.",
+          "type": "string"
+        },
+        "profile": {
+          "default": "",
+          "description": "The profile asked; empty is the last used profile.",
+          "type": "string"
+        },
+        "reuse_secs": {
+          "default": 900,
+          "description": "A quick-ask session active within this many seconds is asked again\ninstead of starting a new one.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "restart"
     },
     "QuickCommand": {
       "additionalProperties": false,
@@ -10551,6 +10725,15 @@
           "description": "Run no model: the rendered prompt is sent verbatim to `deliver`.",
           "type": "boolean"
         },
+        "description": {
+          "description": "What the route is for (shown by the dashboard's `/webhooks`).",
+          "type": "string"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Serve the route; a disabled route answers 403 (no restart needed\nfor a subscription: the adapter re-reads them when they change).",
+          "type": "boolean"
+        },
         "events": {
           "default": [],
           "description": "Event types admitted (`X-GitHub-Event`, `X-GitLab-Event` or the\npayload's `event_type`); empty admits every event.",
@@ -11150,6 +11333,30 @@
       },
       "description": "Subagent delegation."
     },
+    "desktop": {
+      "$ref": "#/$defs/DesktopConfig",
+      "default": {
+        "accessibility_tree": true,
+        "disable_gpu": "auto",
+        "font_family": "",
+        "hud": {
+          "snap_hotkey": "CommandOrControl+Shift+G",
+          "tap_to_summon": false
+        },
+        "keep_in_tray": true,
+        "linux_secret_store": "auto",
+        "linux_window_backend": "auto",
+        "manage_launcher_entry": true,
+        "quick_ask": {
+          "hotkey": "CommandOrControl+Shift+Space",
+          "profile": "",
+          "reuse_secs": 900
+        },
+        "ssh_path": "",
+        "terminal_font_family": ""
+      },
+      "description": "The desktop app: tray, quick-ask hotkey and launch options."
+    },
     "display": {
       "$ref": "#/$defs/DisplayConfig",
       "default": {
@@ -11522,6 +11729,15 @@
         "redact_pii": false
       },
       "description": "PII redaction."
+    },
+    "projects": {
+      "$ref": "#/$defs/ProjectsConfig",
+      "default": {
+        "repo_scan_exclude_paths": [],
+        "repo_scan_max_depth": 4,
+        "repo_scan_roots": []
+      },
+      "description": "Repository discovery for project creation."
     },
     "prompt": {
       "$ref": "#/$defs/PromptConfig",

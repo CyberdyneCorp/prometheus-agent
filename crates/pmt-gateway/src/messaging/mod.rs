@@ -49,6 +49,7 @@ mod inbound;
 pub mod key;
 mod lane;
 pub use lane::LOGIN_IN_DM;
+pub mod actions;
 mod limits;
 mod locks;
 pub mod markup;
@@ -61,6 +62,7 @@ pub mod mock_server;
 pub mod multipart;
 pub mod operate;
 mod outbox;
+pub mod pane;
 mod peer;
 pub mod plugin_ops;
 pub mod policy;
@@ -364,6 +366,7 @@ impl Gateway {
             minor: server.protocol().minor,
             advertised: Arc::default(),
             server_requests: true,
+            features: Arc::default(),
             client_id: format!("gateway-{conn}"),
             role: pmt_rpc::contracts::AttachRole::Driver,
         };

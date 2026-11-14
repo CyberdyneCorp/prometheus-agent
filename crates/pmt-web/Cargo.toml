@@ -1,11 +1,51 @@
 [package]
 name = "pmt-web"
-description = "Prometheus web dashboard (placeholder)"
+description = "Prometheus web dashboard: the daemon's dashboard listener serving the embedded SPA, its sign-in, the dashboard REST API and the client protocol over WebSocket"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 repository.workspace = true
+
+[dependencies]
+# Password sign-in (`dashboard.auth.mode = "password"`): argon2id PHC hashes.
+argon2 = { workspace = true, features = ["password-hash"] }
+base64.workspace = true
+bytes.workspace = true
+futures-util.workspace = true
+# Session, CSRF and login-ticket secrets.
+getrandom.workspace = true
+http-body-util.workspace = true
+hyper = { workspace = true, features = ["server", "http1"] }
+hyper-util.workspace = true
+jiff.workspace = true
+pmt-config.workspace = true
+pmt-core.workspace = true
+pmt-gateway.workspace = true
+pmt-net.workspace = true
+pmt-obs.workspace = true
+pmt-rpc.workspace = true
+pmt-store.workspace = true
+# OIDC discovery, token exchange and JWKS, through the shared outbound client.
+reqwest.workspace = true
+# OIDC ID-token signatures (ES256, RS256).
+ring.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio = { workspace = true, features = ["net", "io-util"] }
+# Dashboard theme files.
+toml.workspace = true
+# TLS served by the listener itself (`dashboard.tls`).
+tokio-rustls.workspace = true
+tokio-tungstenite.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["net", "io-util", "test-util"] }
 
 [lints]
 workspace = true

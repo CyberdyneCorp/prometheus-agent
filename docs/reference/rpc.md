@@ -46,23 +46,33 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 
 | Name | Owner | Since | Params | Result |
 |---|---|---|---|---|
+| `adapters.list` | `desktop-app` | 1.0 | [`ProfileParams`](#profileparams) | [`AdapterList`](#adapterlist) |
+| `adapters.pairing.cancel` | `desktop-app` | 1.0 | [`AdapterRef`](#adapterref) | [`Ack`](#ack) |
+| `adapters.pairing.start` | `desktop-app` | 1.0 | [`AdapterRef`](#adapterref) | any |
+| `adapters.pairing.state` | `desktop-app` | 1.0 | [`AdapterRef`](#adapterref) | any |
+| `adapters.restart` | `desktop-app` | 1.0 | [`AdapterRef`](#adapterref) | [`AdapterRow`](#adapterrow) |
+| `adapters.save` | `desktop-app` | 1.0 | [`AdapterSaveParams`](#adaptersaveparams) | [`AdapterRow`](#adapterrow) |
 | `approval.respond` | `tool-system` | 1.0 | [`ApprovalRespondParams`](#approvalrespondparams) | [`Ack`](#ack) |
+| `artifacts.list` | `desktop-app` | 1.0 | [`ArtifactsListParams`](#artifactslistparams) | [`ArtifactList`](#artifactlist) |
 | `autoprune.offer` | `session-storage` | 1.0 | [`AutopruneOfferParams`](#autopruneofferparams) | [`AutopruneOffer`](#autopruneoffer) |
-| `bot.chat.ensure` | `bot-mode` | 1.0 | not served yet | |
+| `bot.chat.ensure` | `bot-mode` | 1.0 | [`ProfileParams`](#profileparams) | [`BotChat`](#botchat) |
 | `bot.create` | `bot-mode` | 1.0 | not served yet | |
 | `bot.meta.get` | `bot-mode` | 1.0 | not served yet | |
 | `bot.meta.update` | `bot-mode` | 1.0 | not served yet | |
 | `bot.relay.deliver` | `agent-interop` | 1.0 | not served yet | |
 | `bot.relay.drain` | `agent-interop` | 1.0 | not served yet | |
 | `bot.roster.list` | `bot-mode` | 1.0 | not served yet | |
+| `center.list` | `desktop-app` | 1.0 | [`CenterParams`](#centerparams) | [`CenterList`](#centerlist) |
 | `command.dispatch` | `workspace-architecture` | 1.0 | [`DispatchParams`](#dispatchparams) | [`Dispatched`](#dispatched) |
 | `commands.catalog` | `tui` | 1.0 | [`SessionRef`](#sessionref) | [`CommandCatalog`](#commandcatalog) |
 | `complete.path` | `tui` | 1.0 | [`CompleteParams`](#completeparams) | [`Completions`](#completions) |
 | `complete.slash` | `tui` | 1.0 | [`CompleteParams`](#completeparams) | [`Completions`](#completions) |
 | `config.get` | `tui` | 1.0 | [`ConfigGetParams`](#configgetparams) | [`ConfigValue`](#configvalue) |
+| `config.patch` | `desktop-app` | 1.0 | [`ConfigPatchParams`](#configpatchparams) | [`ConfigPatched`](#configpatched) |
+| `config.reload` | `desktop-app` | 1.0 | [`ProfileParams`](#profileparams) | [`ConfigReloaded`](#configreloaded) |
 | `cron.blueprints.fill` | `scheduled-jobs` | 1.0 | [`BlueprintFillParams`](#blueprintfillparams) | [`BlueprintFilled`](#blueprintfilled) |
 | `cron.blueprints.list` | `scheduled-jobs` | 1.0 | [`BlueprintsListParams`](#blueprintslistparams) | [`BlueprintList`](#blueprintlist) |
-| `daemon.update` | `workspace-architecture` | 1.0 | not served yet | |
+| `daemon.update` | `workspace-architecture` | 1.0 | [`DaemonUpdateParams`](#daemonupdateparams) | [`DaemonUpdated`](#daemonupdated) |
 | `egress.set` | `security-boundaries` | 1.0 | [`EgressSetParams`](#egresssetparams) | [`EgressState`](#egressstate) |
 | `evolve.cancel` | `harness-evolution` | 1.0 | not served yet | |
 | `evolve.choose` | `harness-evolution` | 1.0 | not served yet | |
@@ -80,6 +90,16 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `experience.show` | `experience-library` | 1.0 | not served yet | |
 | `files.rollback` | `execution-environments` | 1.0 | [`FilesRollbackParams`](#filesrollbackparams) | [`FilesRolledBack`](#filesrolledback) |
 | `files.undo` | `execution-environments` | 1.0 | [`FilesUndoParams`](#filesundoparams) | [`FilesUndone`](#filesundone) |
+| `fs.list` | `desktop-app` | 1.0 | [`FsListParams`](#fslistparams) | [`FsListing`](#fslisting) |
+| `fs.read` | `desktop-app` | 1.0 | [`FsReadParams`](#fsreadparams) | [`FsFile`](#fsfile) |
+| `git.branch` | `desktop-app` | 1.0 | [`GitBranchParams`](#gitbranchparams) | [`GitRan`](#gitran) |
+| `git.commit` | `desktop-app` | 1.0 | [`GitCommitParams`](#gitcommitparams) | [`GitRan`](#gitran) |
+| `git.message` | `desktop-app` | 1.0 | [`SessionRef`](#sessionref) | [`GitMessage`](#gitmessage) |
+| `git.pr` | `desktop-app` | 1.0 | [`SessionRef`](#sessionref) | [`GitRan`](#gitran) |
+| `git.revert` | `desktop-app` | 1.0 | [`GitPaths`](#gitpaths) | [`Ack`](#ack) |
+| `git.review` | `desktop-app` | 1.0 | [`GitReviewParams`](#gitreviewparams) | [`GitReview`](#gitreview) |
+| `git.stage` | `desktop-app` | 1.0 | [`GitPaths`](#gitpaths) | [`Ack`](#ack) |
+| `git.unstage` | `desktop-app` | 1.0 | [`GitPaths`](#gitpaths) | [`Ack`](#ack) |
 | `grants.list` | `security-boundaries` | 1.0 | not served yet | |
 | `grants.revoke` | `security-boundaries` | 1.0 | not served yet | |
 | `groups.capabilities` | `bot-mode` | 1.0 | not served yet | |
@@ -105,13 +125,31 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `local.update` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
 | `local.use` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
 | `lsp.status` | `lsp-diagnostics` | 1.0 | [`LspStatusParams`](#lspstatusparams) | [`LspStatus`](#lspstatus) |
+| `manage.catalog` | `desktop-app` | 1.0 | [`ManageCatalogParams`](#managecatalogparams) | any |
+| `manage.change` | `desktop-app` | 1.0 | [`ManageChangeParams`](#managechangeparams) | any |
 | `memory.summary` | `memory` | 1.0 | [`SessionRef`](#sessionref) | [`MemorySummary`](#memorysummary) |
 | `moa.presets.delete` | `mixture-of-agents` | 1.0 | [`MoaPresetsDeleteParams`](#moapresetsdeleteparams) | [`MoaPresetList`](#moapresetlist) |
 | `moa.presets.list` | `mixture-of-agents` | 1.0 | [`MoaPresetsListParams`](#moapresetslistparams) | [`MoaPresetList`](#moapresetlist) |
 | `moa.presets.put` | `mixture-of-agents` | 1.0 | [`MoaPresetsPutParams`](#moapresetsputparams) | [`MoaPresetList`](#moapresetlist) |
-| `model.options` | `tui` | 1.0 | [`SessionRef`](#sessionref) | [`ModelOptions`](#modeloptions) |
+| `model.options` | `tui` | 1.0 | [`ModelOptionsParams`](#modeloptionsparams) | [`ModelOptions`](#modeloptions) |
+| `onboarding.ensure` | `desktop-app` | 1.0 | [`ProfileParams`](#profileparams) | [`OnboardingChat`](#onboardingchat) |
 | `pairing.approve` | `messaging-gateway` | 1.0 | [`PairingApproveParams`](#pairingapproveparams) | [`PairingApproved`](#pairingapproved) |
+| `process.list` | `desktop-app` | 1.0 | [`SessionRef`](#sessionref) | [`ProcessList`](#processlist) |
+| `process.log` | `desktop-app` | 1.0 | [`ProcessRef`](#processref) | [`ProcessLog`](#processlog) |
+| `projects.create` | `projects` | 1.0 | [`ProjectsCreateParams`](#projectscreateparams) | [`ProjectRow`](#projectrow) |
+| `projects.list` | `projects` | 1.0 | [`ProjectsListParams`](#projectslistparams) | [`ProjectsList`](#projectslist) |
 | `prompt.submit` | `workspace-architecture` | 1.0 | [`SubmitParams`](#submitparams) | [`Submitted`](#submitted) |
+| `pty.attach` | `desktop-app` | 1.0 | [`PtyRef`](#ptyref) | [`PtyAttached`](#ptyattached) |
+| `pty.close` | `desktop-app` | 1.0 | [`PtyRef`](#ptyref) | [`Ack`](#ack) |
+| `pty.input` | `desktop-app` | 1.0 | [`PtyInputParams`](#ptyinputparams) | [`Ack`](#ack) |
+| `pty.list` | `desktop-app` | 1.0 | [`SessionRef`](#sessionref) | [`PtyList`](#ptylist) |
+| `pty.open` | `desktop-app` | 1.0 | [`PtyOpenParams`](#ptyopenparams) | [`PtyOpened`](#ptyopened) |
+| `pty.resize` | `desktop-app` | 1.0 | [`PtyResizeParams`](#ptyresizeparams) | [`Ack`](#ack) |
+| `queue.delete` | `desktop-app` | 1.0 | [`QueueItemParams`](#queueitemparams) | [`QueueState`](#queuestate) |
+| `queue.edit` | `desktop-app` | 1.0 | [`QueueEditParams`](#queueeditparams) | [`QueueState`](#queuestate) |
+| `queue.list` | `desktop-app` | 1.0 | [`SessionRef`](#sessionref) | [`QueueState`](#queuestate) |
+| `queue.pause` | `desktop-app` | 1.0 | [`SessionRef`](#sessionref) | [`QueueState`](#queuestate) |
+| `queue.resume` | `desktop-app` | 1.0 | [`SessionRef`](#sessionref) | [`QueueState`](#queuestate) |
 | `rpc.hello` | `workspace-architecture` | 1.0 | [`HelloParams`](#helloparams) | [`HelloResult`](#helloresult) |
 | `rpc.ping` | `workspace-architecture` | 1.0 | [`Empty`](#empty) | [`Ack`](#ack) |
 | `screen.handback` | `execution-environments` | 1.0 | not served yet | |
@@ -133,13 +171,15 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `session.transcript` | `workspace-architecture` | 1.0 | [`SessionRef`](#sessionref) | [`Transcript`](#transcript) |
 | `session.tree` | `session-storage` | 1.0 | [`SessionRef`](#sessionref) | [`Lineage`](#lineage) |
 | `subagent.list` | `tui` | 1.0 | [`SessionRef`](#sessionref) | [`SubagentList`](#subagentlist) |
+| `subagent.steer` | `desktop-app` | 1.0 | [`SubagentSteerParams`](#subagentsteerparams) | [`SubagentControlled`](#subagentcontrolled) |
+| `subagent.stop` | `desktop-app` | 1.0 | [`SubagentRef`](#subagentref) | [`SubagentControlled`](#subagentcontrolled) |
 | `subagent.subscribe` | `tui` | 1.0 | not served yet | |
 | `system.health` | `observability` | 1.0 | [`SystemParams`](#systemparams) | [`SystemHealth`](#systemhealth) |
 | `system.metrics` | `observability` | 1.0 | [`SystemParams`](#systemparams) | [`MetricsSnapshot`](#metricssnapshot) |
 | `tools.call` | `tool-system` | 1.0 | not served yet | |
 | `tools.list` | `tool-system` | 1.0 | not served yet | |
-| `ui.prefs.get` | `desktop-app` | 1.0 | not served yet | |
-| `ui.prefs.patch` | `desktop-app` | 1.0 | not served yet | |
+| `ui.prefs.get` | `desktop-app` | 1.0 | [`UiPrefsGetParams`](#uiprefsgetparams) | [`UiPrefs`](#uiprefs) |
+| `ui.prefs.patch` | `desktop-app` | 1.0 | [`UiPrefsPatchParams`](#uiprefspatchparams) | [`UiPrefs`](#uiprefs) |
 | `vault.add` | `security-boundaries` | 1.0 | [`VaultAddParams`](#vaultaddparams) | [`VaultItem`](#vaultitem) |
 | `vault.list` | `security-boundaries` | 1.0 | [`VaultListParams`](#vaultlistparams) | [`VaultItems`](#vaultitems) |
 | `vault.remove` | `security-boundaries` | 1.0 | [`VaultRemoveParams`](#vaultremoveparams) | [`VaultItem`](#vaultitem) |
@@ -159,6 +199,17 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `clarify.request` | `workspace-architecture` | 1.0 | [`ClarifyRequestParams`](#clarifyrequestparams) | [`ClarifyAnswers`](#clarifyanswers) |
 | `secret.request` | `workspace-architecture` | 1.0 | [`SecretRequestParams`](#secretrequestparams) | [`SecretAnswer`](#secretanswer) |
 | `sudo.request` | `workspace-architecture` | 1.0 | [`SudoRequestParams`](#sudorequestparams) | [`SudoAnswer`](#sudoanswer) |
+| `ui.annotate_preview` | `desktop-app` | 1.0 | [`UiCall`](#uicall) | any |
+| `ui.close_terminal` | `desktop-app` | 1.0 | [`UiCall`](#uicall) | any |
+| `ui.desktop_preview` | `desktop-app` | 1.0 | [`UiCall`](#uicall) | any |
+| `ui.drive_preview` | `desktop-app` | 1.0 | [`UiCall`](#uicall) | any |
+| `ui.focus_pane` | `desktop-app` | 1.0 | [`UiCall`](#uicall) | any |
+| `ui.gui_tour` | `desktop-app` | 1.0 | [`UiCall`](#uicall) | any |
+| `ui.read_terminal` | `desktop-app` | 1.0 | [`UiCall`](#uicall) | any |
+| `ui.read_window_below` | `desktop-app` | 1.0 | [`UiCall`](#uicall) | any |
+| `ui.set_theme` | `desktop-app` | 1.0 | [`UiCall`](#uicall) | any |
+| `ui.setup_beat` | `desktop-app` | 1.0 | [`UiCall`](#uicall) | any |
+| `ui.show_tip` | `desktop-app` | 1.0 | [`UiCall`](#uicall) | any |
 
 ## Events
 
@@ -170,12 +221,18 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `health.changed` | `observability` | 1.0 | [`HealthChanged`](#healthchanged) |
 | `local_model.context_grown` | `local-models` | 1.0 | not served yet |
 | `message.delivery` | `messaging-gateway` | 1.0 | not served yet |
-| `message.reaction` | `desktop-app` | 1.0 | not served yet |
+| `message.reaction` | `desktop-app` | 1.0 | [`MessageReaction`](#messagereaction) |
+| `pty.detached` | `desktop-app` | 1.0 | [`PtyRef`](#ptyref) |
+| `pty.exited` | `desktop-app` | 1.0 | [`PtyOutput`](#ptyoutput) |
+| `pty.output` | `desktop-app` | 1.0 | [`PtyOutput`](#ptyoutput) |
+| `queue.changed` | `desktop-app` | 1.0 | [`QueueState`](#queuestate) |
 | `request.cancel` | `workspace-architecture` | 1.0 | [`RequestCancel`](#requestcancel) |
 | `request.resolved` | `workspace-architecture` | 1.0 | [`RequestResolved`](#requestresolved) |
 | `session.event` | `workspace-architecture` | 1.0 | any |
 | `session.presence` | `messaging-gateway` | 1.0 | not served yet |
+| `session.project` | `projects` | 1.0 | [`SessionProject`](#sessionproject) |
 | `turn.finished` | `workspace-architecture` | 1.0 | [`TurnFinished`](#turnfinished) |
+| `ui.prefs.changed` | `desktop-app` | 1.0 | [`UiPrefs`](#uiprefs) |
 | `usage.updated` | `observability` | 1.0 | [`UsageUpdated`](#usageupdated) |
 | `wake.detected` | `voice-mode` | 1.0 | not served yet |
 
@@ -188,6 +245,49 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `ok` | boolean | yes | Always true. |
+
+### `AdapterList`
+
+`adapters.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `adapters` | array of [`AdapterRow`](#adapterrow) | yes | Every adapter available to the profile. |
+
+### `AdapterRef`
+
+An adapter of a profile.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `platform` | string | yes | The platform. |
+| `profile` | string | yes | The profile. |
+
+### `AdapterRow`
+
+One messaging adapter of a profile.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `display` | string | yes | Its display name. |
+| `enabled` | boolean | yes | Enabled in the configuration. |
+| `pairing` | string or null | no | Its interactive pairing flow (`telegram_qr`, `whatsapp_qr`). |
+| `platform` | string | yes | The platform. |
+| `reason` | string or null | no | Why, for `error`. |
+| `secrets` | object | yes | Its secrets and whether each is set (never values). |
+| `state` | string | yes | `not_configured`, `saved` (credentials stored, disabled), `pending_restart` (configuration changed since it started), `connecting`, `connected`, `error` or `daemon_stopped`. |
+
+### `AdapterSaveParams`
+
+`adapters.save` params: credentials and the enable switch, written together; nothing restarts.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `clear` | array of string | no | Secrets to delete. |
+| `enabled` | boolean or null | no | The new enable switch. |
+| `platform` | string | yes | The platform. |
+| `profile` | string | yes | The profile. |
+| `secrets` | object | no | Secrets to store (write-only). |
 
 ### `AdapterStatePayload`
 
@@ -258,6 +358,41 @@ Why a call needs approval.
 | `decision` | [`Decision`](#decision) | yes | The decision. |
 | `id` | string | yes | The `approval.request` id (`srq-<12 hex>`). |
 | `replacement` | string or null | no | An edited command to run instead. |
+
+### `Artifact`
+
+One image, file or link a session produced.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `call_id` | string or null | no | The tool call that wrote or produced it. |
+| `created_at` | string | yes | When (RFC 3339). |
+| `id` | string | yes | Stable id (`<message id>:<n>`). |
+| `kind` | string | yes | `image`, `file` or `link`. |
+| `session_id` | string | yes | The session that produced it. |
+| `session_title` | string | yes | Its title (empty when untitled). |
+| `tool` | string or null | no | That call's tool. |
+| `value` | string | yes | The path (as the session names it) or the URL. |
+
+### `ArtifactList`
+
+`artifacts.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `artifacts` | array of [`Artifact`](#artifact) | yes | Newest first. |
+| `next_cursor` | string or null | no | The next page's cursor, while there is one. |
+
+### `ArtifactsListParams`
+
+`artifacts.list` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `cursor` | string or null | no | Where the previous page ended. |
+| `profile` | string or null | no | The profile (required when the connection is granted several). |
+| `query` | string or null | no | Only artifacts whose value or session title contains this text. |
+| `session_id` | string or null | no | Only this session's artifacts (the composer's suggestions). |
 
 ### `AttachParams`
 
@@ -402,6 +537,15 @@ One slot, as a form field.
 |---|---|---|---|
 | `profile` | string or null | no | The profile (the connection's only one when omitted). |
 
+### `BotChat`
+
+`bot.chat.ensure` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `created` | boolean | yes | Whether this call created it. |
+| `session_id` | string | yes | The profile's canonical Bot Chat. |
+
 ### `BudgetStanding`
 
 One budget's standing in `usage.updated`.
@@ -413,6 +557,53 @@ One budget's standing in `usage.updated`.
 | `scope` | string | yes | `turn`, `session`, `root`, `daily`, `monthly` or `unattended`. |
 | `spent` | number | yes | Spent in the scope's period. |
 | `unit` | string | yes | `usd` or `tokens`. |
+
+### `CenterApproval`
+
+A pending approval.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string | yes | Its session's profile. |
+| `request_id` | string | yes | The request. |
+| `session_id` | string | yes | The session. |
+| `summary` | string | yes | What is asked (the command or the tool). |
+
+### `CenterList`
+
+`center.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `approvals` | array of [`CenterApproval`](#centerapproval) | yes | Pending approvals. |
+| `sessions` | array of [`CenterSession`](#centersession) | yes | Running sessions across the connection's profiles. |
+| `subagents` | array of [`CenterSubagent`](#centersubagent) | yes | Active subagents. |
+
+### `CenterParams`
+
+`center.list` params.
+
+
+### `CenterSession`
+
+A session with a running turn.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string | yes | Its profile. |
+| `session_id` | string | yes | The session. |
+| `title` | string or null | no | Its title. |
+
+### `CenterSubagent`
+
+An active subagent.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `goal` | string | yes | Its task. |
+| `profile` | string | yes | Its parent's profile. |
+| `session_id` | string | yes | The parent session. |
+| `subagent_id` | string | yes | The child. |
 
 ### `ClarifyAnswers`
 
@@ -440,6 +631,7 @@ What the client can handle.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `events` | array of string | no | Events introduced after the client's minor version that it understands anyway. |
+| `features` | array of string | no | Optional client features (`desktop_ui`: the desktop UI toolset's `ui.*` requests go to this client). |
 | `server_requests` | boolean | no | The client answers server-to-client requests (approvals, clarify, secrets, sudo). Without it they resolve unanswered at once. |
 
 ### `ClientKind`
@@ -476,6 +668,7 @@ One `commands.catalog` entry.
 | `name` | string | yes | The name without `/`. |
 | `reason` | string or null | no | Why it does not run there. |
 | `source` | [`CommandSource`](#commandsource) | yes | Built-in, quick command, skill or client-handled. |
+| `subcommands` | array of [`SubcommandEntry`](#subcommandentry) | no | Subcommands with their own disposition on this surface (a palette offers a command when it or one of them runs here). |
 
 ### `CommandSource`
 
@@ -546,6 +739,15 @@ One component's health.
 | `since` | string | yes | When it entered the state (RFC 3339). |
 | `state` | string | yes | `ok`, `degraded` or `down`. |
 
+### `ConfigChange`
+
+One change of a `config.patch`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `key` | string | yes | A dotted key (`delegation.model`). |
+| `value` | any | no | The new value (typed by the key's schema); `null` or absent removes the key so its default applies. |
+
 ### `ConfigGetParams`
 
 `config.get` params.
@@ -554,6 +756,34 @@ One component's health.
 |---|---|---|---|
 | `key` | string | yes | A dotted key (`model.default`). |
 | `profile` | string or null | no | The profile; required when the connection is granted several. |
+
+### `ConfigPatchParams`
+
+`config.patch` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `changes` | array of [`ConfigChange`](#configchange) | yes | Applied together, validated as a whole: all or none. |
+| `profile` | string | yes | The window's profile. |
+
+### `ConfigPatched`
+
+`config.patch` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `keys` | array of string | yes | The keys the patch named. |
+
+### `ConfigReloaded`
+
+`config.reload` result: the profile's configuration state.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `error` | string or null | no | Why the file on disk is not in use, while it is invalid. |
+| `pending_restart` | array of string | no | Keys that apply after a daemon restart. |
+| `profile` | string | yes | The profile. |
+| `reloads` | integer | yes | Valid edits loaded since the daemon started. |
 
 ### `ConfigValue`
 
@@ -565,6 +795,15 @@ One component's health.
 | `source` | string | yes | The layer it comes from (`default`, `file`, `set`, `managed`). |
 | `value` | any | yes | Its effective value (secrets are never configuration values). |
 
+### `ContextCategory`
+
+One category of `session.context_usage`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `category` | string | yes | `system_prompt`, `tool_definitions`, `skills`, `memory`, `rules`, `mcp`, `subagent_definitions` or `conversation`. |
+| `tokens` | integer | yes | Its estimated tokens. |
+
 ### `ContextUsage`
 
 `session.context_usage` result.
@@ -572,10 +811,28 @@ One component's health.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `billing_source` | string or null | no | The current route's `billing_source` (`subscription:<provider>/<label>`, `api_key:<provider>[/<label>]`, `local`...), when the session is loaded. |
+| `categories` | array of [`ContextCategory`](#contextcategory) | no | `tokens` by category; they sum to `tokens` (empty when the session is not loaded). |
 | `context_window` | integer or null | no | The model's context window, when known. |
 | `cost_usd` | number or null | no | The session's cost so far in the usage ledger's currency (USD), priced calls only. |
 | `subscription` | [`SubscriptionStatus`](#subscriptionstatus) or null | no | The subscription the current route bills, when it is one. |
 | `tokens` | integer | yes | Estimated tokens of the active context. |
+
+### `DaemonUpdateParams`
+
+`daemon.update` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `check` | boolean | no | Only look for an update (`prometheus update --check`). |
+
+### `DaemonUpdated`
+
+`daemon.update` result. A refusal (another owner such as a package manager or the container image, the update lock held) is an error with the updater's own code and message.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `message` | string | yes | What the check printed, or where the updater writes its log. |
+| `status` | string | yes | `started` (the updater runs detached and hands the daemon over when it finishes) or `checked`. |
 
 ### `Decision`
 
@@ -678,6 +935,16 @@ One event frame: the notification params and the replay item.
 | `last_seen` | integer | yes | The last sequence number the client saw (0 for none). |
 | `session_id` | string | yes | The session. |
 
+### `FeatureSupport`
+
+One row of the platform support matrix.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `feature` | string | yes | The feature (`sandbox.local`, `containers`...). |
+| `reason` | string | yes | What the probe found: the mechanism in use, or what is missing and whether the operating system or a dependency lacks it. |
+| `state` | string | yes | `supported`, `degraded` or `unsupported`. |
+
 ### `FilesRollbackParams`
 
 `files.rollback` params: no checkpoint lists them; `diff` previews.
@@ -738,6 +1005,144 @@ The system prompt a session froze on its first turn.
 |---|---|---|---|
 | `sha256` | string | yes | `sha256:<hex>` of the prompt text. |
 | `text` | string | yes | The prompt text, its tiers joined in request order. |
+
+### `FsEntry`
+
+One listed entry.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `dir` | boolean | yes | A directory (expanded lazily with another `fs.list`). |
+| `ignored` | boolean | no | Ignored by a `.gitignore` (listed only with `show_ignored`). |
+| `name` | string | yes | The file name. |
+| `path` | string | yes | Its path as the session names it (relative to the workspace when inside it). |
+| `size` | integer or null | no | Its size in bytes, for a file. |
+
+### `FsFile`
+
+`fs.read` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `absolute` | string or null | no | Where the file is on this machine, when the session's backend is the host's filesystem (the guarded opener may open it). |
+| `data` | string | yes | The bytes read, base64. |
+| `kind` | string | yes | `text`, `image` or `binary`. |
+| `mime` | string or null | no | The media type of an image (`image/png`...). |
+| `path` | string | yes | The file as the session names it. |
+| `size` | integer | yes | Its whole size in bytes. |
+| `truncated` | boolean | yes | Only the first `max_bytes` are in `data`. |
+| `workspace` | string or null | no | The session's workspace on this machine, with `absolute`. |
+
+### `FsListParams`
+
+`fs.list` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `path` | string | no | A directory, relative to the session's workspace (`.` its root). |
+| `session_id` | string | yes | The session (attached). |
+| `show_ignored` | boolean | no | Also list entries `.gitignore` files ignore. |
+
+### `FsListing`
+
+`fs.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `entries` | array of [`FsEntry`](#fsentry) | yes | Directories first, then files, by name. |
+| `path` | string | yes | The listed directory. |
+
+### `FsReadParams`
+
+`fs.read` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `max_bytes` | integer or null | no | Read at most this many bytes from the start (default and cap 8 MiB); the pane previews the first 2 MiB. |
+| `path` | string | yes | The file, relative to the session's workspace or absolute. |
+| `session_id` | string | yes | The session (attached). |
+
+### `GitBranchParams`
+
+`git.branch` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `create` | boolean | no | Create it (`git switch -c`) instead of switching to it. |
+| `name` | string | yes | The branch. |
+| `session_id` | string | yes | The session. |
+
+### `GitCommitParams`
+
+`git.commit` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `message` | string | yes | The commit message. |
+| `push` | boolean | no | Commit & Push: commit and push through the session's terminal backend. |
+| `session_id` | string | yes | The session. |
+
+### `GitFile`
+
+One changed file.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `patch` | string | yes | The unified diff (cut at 256 KiB). |
+| `path` | string | yes | Its path in the repository. |
+| `staged` | boolean | yes | Part of the change is staged (`uncommitted` only). |
+| `status` | string | yes | `added`, `modified`, `deleted` or `type-changed`. |
+
+### `GitMessage`
+
+`git.message` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `message` | string | yes | The suggested commit message (empty when no auxiliary route answers). |
+
+### `GitPaths`
+
+`git.stage`, `git.unstage` and `git.revert` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `paths` | array of string | yes | Paths in the repository. |
+| `session_id` | string | yes | The session. |
+
+### `GitRan`
+
+What a command run through the session's terminal backend printed.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `commit` | string or null | no | The commit made (`git.commit`). |
+| `ok` | boolean | yes | Whether it succeeded. |
+| `output` | string | yes | Its output. |
+
+### `GitReview`
+
+`git.review` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `ahead` | integer | yes | Commits ahead of upstream. |
+| `behind` | integer | yes | Commits behind upstream. |
+| `branch` | string or null | no | The checked-out branch (`None`: detached). |
+| `files` | array of [`GitFile`](#gitfile) | yes | The changed files. |
+| `gh` | boolean | yes | The `gh` executable is available (Create PR is offered). |
+| `read_only` | boolean | yes | Nothing in this scope may be staged, reverted or committed. |
+| `root` | string | yes | The working tree's top folder. |
+| `scope` | string | yes | The scope shown. |
+
+### `GitReviewParams`
+
+`git.review` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `scope` | string | no | `uncommitted` (default), `branch` or `last-turn`. |
+| `session_id` | string | yes | The session whose workspace is reviewed. |
 
 ### `HealthChanged`
 
@@ -808,6 +1213,7 @@ One learned skill or memory entry.
 | `origin` | string | yes | Who created it: a skill's `user`, `agent`, `hub` or `bundled` (a used bundled skill); an entry's `user`, `agent`, `background_review`, `provider`, `consolidation` or `import`. |
 | `title` | string | yes | The skill's name or the entry's text (one line, shortened). |
 | `updated_at` | string | yes | When it last changed (RFC 3339). |
+| `uses` | integer | no | How often it was used: a skill's loads, an entry's recalls (the memory graph's `used` filter). |
 
 ### `Lineage`
 
@@ -880,6 +1286,27 @@ One running language server.
 |---|---|---|---|
 | `profile` | string or null | no | The profile (the connection's only one when omitted). |
 
+### `ManageCatalogParams`
+
+`manage.catalog` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `catalog` | string | yes | `skills`, `optional_skills`, `toolsets`, `models`, `plugins`, `mcp`, `cron`, `cron_runs` (of the job `target` names) or `memory`. |
+| `profile` | string | yes | The profile the pane targets. |
+| `target` | string or null | no | The job whose runs `cron_runs` lists. |
+
+### `ManageChangeParams`
+
+`manage.change` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `body` | any | no | The change's fields. |
+| `change` | string | yes | `skill` (`{"enabled"}`), `skill_archive`, `toolset`, `cron_update` (`{"enabled"}` pauses or resumes), `cron_delete`, `cron_run` or `memory` (`{"replace"\|"remove": ...}`). |
+| `profile` | string | yes | The profile that owns what changes (a job's owning profile in the all-profiles view). |
+| `target` | string or null | no | The skill, toolset or job. |
+
 ### `McpServerState`
 
 One MCP server of a session.
@@ -897,6 +1324,16 @@ One MCP server of a session.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `line` | string or null | no | `Memory: +<added> ~<patched> -<removed> (review with /memory review)` when the agent changed memory in the session and `memory.review_mode` is not `off`; `null` otherwise. |
+
+### `MessageReaction`
+
+`message.reaction` payload.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `message_id` | string | yes | The message. |
+| `reactions` | array of [`Reaction`](#reaction) | yes | Its reactions after the change. |
+| `session_id` | string | yes | The session. |
 
 ### `MetricPoint`
 
@@ -1014,7 +1451,9 @@ One `model.options` entry.
 |---|---|---|---|
 | `context_window` | integer or null | no | The model's context window, when known. |
 | `id` | string | yes | `<provider>/<model>`. |
+| `max_reasoning` | string or null | no | The most reasoning the model takes (`none` when it does not reason); a higher requested level is clamped to it. |
 | `provider` | string | yes | The provider. |
+| `risky` | string or null | no | Why switching the session to it is risky (the conversation does not fit its window, it cannot call tools...); clients confirm. |
 
 ### `ModelOptions`
 
@@ -1024,6 +1463,24 @@ One `model.options` entry.
 |---|---|---|---|
 | `current` | string or null | no | The session's model (`<provider>/<model>`). |
 | `models` | array of [`ModelOption`](#modeloption) | yes | The models a `/model` switch may pick, current first. |
+
+### `ModelOptionsParams`
+
+`model.options` params: a session's options, or a profile's before any session exists (the composer's picker of a new chat).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string or null | no | The profile, when no session is named. |
+| `session_id` | string or null | no | The session (it must be attached). |
+
+### `OnboardingChat`
+
+`onboarding.ensure` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `created` | boolean | yes | Whether this call created it. |
+| `session_id` | string | yes | The profile's onboarding chat. |
 
 ### `OpenRequest`
 
@@ -1061,8 +1518,94 @@ The daemon's build target and its support tier.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `features` | array of [`FeatureSupport`](#featuresupport) | no | The support matrix of this host, from runtime probes (spec: web-dashboard, Honest platform support matrix). |
 | `target` | string | yes | The Rust target triple. |
 | `tier` | string | yes | `tier1`, `tier2` or `unsupported`. |
+
+### `ProcessEntry`
+
+One background process of a session.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `command` | string | yes | Its command line. |
+| `process_id` | string | yes | Its id (`proc_…`). |
+| `state` | string | yes | `running`, `exited`... |
+
+### `ProcessList`
+
+`process.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `processes` | array of [`ProcessEntry`](#processentry) | yes | The session's live background processes. |
+
+### `ProcessLog`
+
+`process.log` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `output` | string | yes | Its buffered output (redacted, shaped like the `process` tool's). |
+| `process_id` | string | yes | The process. |
+| `state` | string | yes | Its state. |
+
+### `ProcessRef`
+
+`process.log` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `process_id` | string | yes | The background process. |
+| `session_id` | string | yes | The session. |
+
+### `ProfileParams`
+
+A call that only names the window's profile.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string | yes | The window's profile. |
+
+### `ProjectRow`
+
+One explicit project.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | yes | `prj_...`. |
+| `name` | string | yes | Its display name. |
+| `path` | string or null | no | Its primary folder. |
+| `slug` | string | yes | Its slug. |
+
+### `ProjectsCreateParams`
+
+`projects.create` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string or null | no | The display name (the folder name when omitted). |
+| `path` | string | yes | The repository folder. |
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
+
+### `ProjectsList`
+
+`projects.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `discovered` | array of [`RepoRow`](#reporow) | yes | Repositories the background scan found that are no project's. |
+| `inferred` | array of [`RepoRow`](#reporow) | yes | Repositories of the profile's sessions that are no project's. |
+| `projects` | array of [`ProjectRow`](#projectrow) | yes | Projects created explicitly. |
+| `scanning` | boolean | yes | A scan is running or this listing started one: list again for its rows. |
+
+### `ProjectsListParams`
+
+`projects.list` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
 
 ### `PromptImage`
 
@@ -1072,6 +1615,120 @@ An image attached to a prompt: a file the daemon reads (checked like `chat --ima
 |---|---|
 | `` | An absolute path on the daemon's machine. |
 | `` | A blob reference (`blob:sha256:<hex>`) of one of the session's earlier user messages. |
+| `` | The image itself, as a `data:<mime>;base64,` URL (a snapshot the desktop made, such as an annotation's). |
+
+### `PtyAttached`
+
+`pty.attach` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `pty_id` | string | yes | The terminal. |
+| `replay` | string | yes | Its recent output (at most 1 MiB), base64. |
+
+### `PtyInputParams`
+
+`pty.input` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `data` | string | yes | What is typed (UTF-8 text, control characters included). |
+| `pty_id` | string | yes | The terminal. |
+| `session_id` | string | yes | The session. |
+
+### `PtyList`
+
+`pty.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `terminals` | array of string | yes | The session's terminals. |
+
+### `PtyOpenParams`
+
+`pty.open` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `cols` | integer | no | Columns. |
+| `rows` | integer | no | Rows. |
+| `session_id` | string | yes | The session whose workspace the shell starts in (attached as a driver). |
+
+### `PtyOpened`
+
+`pty.open` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `pty_id` | string | yes | The new terminal. |
+
+### `PtyOutput`
+
+`pty.output` and `pty.exited` payload.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `data` | string | no | The output, base64 (empty for `pty.exited`). |
+| `pty_id` | string | yes | The terminal. |
+
+### `PtyRef`
+
+A terminal of a session.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `pty_id` | string | yes | The terminal. |
+| `session_id` | string | yes | The session. |
+
+### `PtyResizeParams`
+
+`pty.resize` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `cols` | integer | yes | Columns. |
+| `pty_id` | string | yes | The terminal. |
+| `rows` | integer | yes | Rows. |
+| `session_id` | string | yes | The session. |
+
+### `QueueEditParams`
+
+`queue.edit` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | yes | The queued input. |
+| `session_id` | string | yes | The session. |
+| `text` | string | yes | Its new text. |
+
+### `QueueEntry`
+
+One input waiting in a session's queue.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | yes | The input's turn id. |
+| `lost` | boolean | no | A turn whose outcome was lost when the daemon stopped during it: it blocks the queue until it is deleted (Discard), and is never sent again. |
+| `text` | string | yes | The prompt text. |
+
+### `QueueItemParams`
+
+`queue.delete` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | yes | The queued input (or the lost turn, to discard it). |
+| `session_id` | string | yes | The session. |
+
+### `QueueState`
+
+A session's queue.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `entries` | array of [`QueueEntry`](#queueentry) | yes | In run order; a lost turn comes first. |
+| `paused` | boolean | yes | Paused: no queued input starts until `queue.resume`. |
+| `session_id` | string | yes | The session. |
 
 ### `QuotaStatus`
 
@@ -1093,6 +1750,25 @@ One quota window.
 | `name` | string | yes | `5h`, `weekly`... |
 | `resets_at` | string or null | no | When it resets (RFC 3339). |
 | `used_percent` | number | yes | Used share, 0-100. |
+
+### `Reaction`
+
+One reaction on a message.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `by` | string | yes | Who reacted (`agent`). |
+| `emoji` | string | yes | The emoji. |
+
+### `RepoRow`
+
+A repository offered for project creation.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `last_seen` | string or null | no | When a scan last saw it (discovered rows; RFC 3339). |
+| `name` | string | yes | Its folder name. |
+| `path` | string | yes | Its folder. |
 
 ### `RequestCancel`
 
@@ -1200,8 +1876,20 @@ What the daemon serves.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `include_hidden` | boolean | no | Also hidden sessions: canonical Bot Chats, archived and hidden ones. |
 | `limit` | integer or null | no | At most this many, newest activity first (default 50). |
 | `profile` | string or null | no | The profile; required only when the ticket grants several. |
+
+### `SessionProject`
+
+`session.project` payload: a session moved to another project.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `cwd` | string | yes | The working directory the session moves to at its next tool call. |
+| `project_id` | string | yes | Its project. |
+| `session_id` | string | yes | The session. |
+| `slug` | string | yes | The project's slug. |
 
 ### `SessionRef`
 
@@ -1237,6 +1925,7 @@ One listed session.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `live` | boolean | yes | Whether a turn is running in the daemon. |
+| `project_id` | string or null | no | Its project (`prj_...`), when it has one. |
 | `session_id` | string | yes | `ses_<ULID>`. |
 | `started_at` | string | yes | When it started (RFC 3339). |
 | `title` | string or null | no | Its title, when it has one. |
@@ -1261,6 +1950,15 @@ How a steer is delivered.
 | `session_id` | string | yes | The session. |
 | `text` | string | yes | The steer; empty or whitespace-only text is refused (`empty steer`). |
 
+### `SubagentControlled`
+
+What a control call did.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `status` | string | yes | `queued` (steer: delivered at the child's next checkpoint) or `interrupt_requested` (stop). |
+| `subagent_id` | string | yes | The child. |
+
 ### `SubagentList`
 
 `subagent.list` result.
@@ -1269,16 +1967,47 @@ How a steer is delivered.
 |---|---|---|---|
 | `subagents` | array of [`SubagentSummary`](#subagentsummary) | yes | The session's children, oldest first. |
 
+### `SubagentRef`
+
+`subagent.stop` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `session_id` | string | yes | The parent session. |
+| `subagent_id` | string | yes | The child. |
+
+### `SubagentSteerParams`
+
+`subagent.steer` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `session_id` | string | yes | The parent session. |
+| `subagent_id` | string | yes | The child. |
+| `text` | string | yes | The guidance. |
+
 ### `SubagentSummary`
 
 One delegated child of a session.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `activity` | string or null | no | What it is doing now. |
+| `elapsed_ms` | integer or null | no | How long it has run, in milliseconds. |
 | `session_id` | string | yes | Its child session. |
 | `status` | string | yes | `running`, `completed`, `failed` or `stopped`. |
 | `subagent_id` | string | yes | The child's id. |
 | `title` | string or null | no | Its task's title. |
+
+### `SubcommandEntry`
+
+One subcommand of a `commands.catalog` entry.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `disposition` | [`Disposition`](#disposition) | yes | Whether it runs from the asking client's surface. |
+| `name` | string | yes | The first word after the command. |
+| `reason` | string or null | no | Why it does not run there. |
 
 ### `SubmitParams`
 
@@ -1361,6 +2090,7 @@ One message of a transcript.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `id` | string | yes | `msg_<ULID>`. |
+| `reactions` | array of [`Reaction`](#reaction) | no | Its reactions (spec: desktop-app, Agent reactions). |
 | `role` | string | yes | `user`, `assistant`, `tool` or `system`. |
 | `text` | string or null | no | Its text, when it has any. |
 
@@ -1387,6 +2117,42 @@ Why a turn ended in error.
 | `report` | any | no | The turn's `--usage-file` report (session, lineage root, route, billing source, tokens, cost and cost status of its model calls). |
 | `turn_id` | string | yes | The turn. |
 | `usage` | any | no | The turn's token and cost totals, as the turn loop reports them. |
+
+### `UiCall`
+
+`ui.<tool>` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `arguments` | any | yes | The tool's arguments (validated by the daemon first). |
+| `deadline_ms` | integer or null | no | Milliseconds until the request settles unanswered (set by the daemon when it sends the request). |
+| `session_id` | string | yes | The session whose turn called the tool. |
+
+### `UiPrefs`
+
+The machine's display preferences.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `prefs` | object | yes | Every stored preference. |
+| `revision` | integer | yes | Grows with every change. |
+
+### `UiPrefsGetParams`
+
+`ui.prefs.get` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `watch` | boolean | no | Also send this connection `ui.prefs.changed` after every change. |
+
+### `UiPrefsPatchParams`
+
+`ui.prefs.patch` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `only_missing` | boolean | no | A client meeting the store for the first time: set only the keys the store lacks, never overwrite. |
+| `set` | object | yes | Keys to set; `null` removes one. |
 
 ### `UsageTotalsView`
 

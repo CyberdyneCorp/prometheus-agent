@@ -123,6 +123,7 @@ fn skill_node(usage: &SkillUsage, dir: Option<&Path>) -> JourneyNode {
         created_at: created.to_string(),
         updated_at: updated.max(created).to_string(),
         origin: usage.created_by.as_str().to_owned(),
+        uses: usage.use_count,
     }
 }
 
@@ -134,6 +135,7 @@ fn memory_node(entry: &MemoryEntry) -> JourneyNode {
         created_at: entry.created_at.to_string(),
         updated_at: entry.updated_at.to_string(),
         origin: entry.origin.as_str().to_owned(),
+        uses: entry.recall_count,
     }
 }
 

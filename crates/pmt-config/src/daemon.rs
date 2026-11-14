@@ -51,6 +51,13 @@ pub struct DaemonConfig {
     /// The OpenAI-compatible API server's listener (spec: api-server).
     #[serde(default)]
     pub api_server: crate::daemon_api::ApiListener,
+    /// The web dashboard's listener (spec: web-dashboard).
+    #[serde(default)]
+    pub dashboard: crate::daemon_dashboard::DashboardConfig,
+    /// The desktop workspace in the browser, on the dashboard listener
+    /// (spec: web-dashboard, Desktop workspace in the browser).
+    #[serde(default)]
+    pub webapp: crate::daemon_dashboard::WebappConfig,
 }
 
 /// `daemon.toml [gateway]`: the messaging gateway keys every served
@@ -177,6 +184,9 @@ pub struct DaemonSection {
     /// this `WatchdogSec`; the daemon notifies only while its watchdog
     /// probes succeed. `0` (default): no systemd watchdog.
     pub systemd_watchdog_secs: u64,
+    /// Remote client attachment with paired device tokens (spec:
+    /// messaging-gateway, Remote client attachment).
+    pub remote: crate::daemon_remote::RemoteConfig,
 }
 
 impl Default for DaemonSection {
@@ -188,6 +198,7 @@ impl Default for DaemonSection {
             idle_session_close_secs: 3600,
             watchdog: WatchdogConfig::default(),
             systemd_watchdog_secs: 0,
+            remote: crate::daemon_remote::RemoteConfig::default(),
         }
     }
 }
@@ -463,6 +474,15 @@ impl DaemonConfig {
                 .with_source(e));
             }
         };
+        Self::parse(&path, &text)
+    }
+
+    /// Parses and validates the text of `daemon.toml` at `path`.
+    ///
+    /// # Errors
+    ///
+    /// `config.parse` (exit 78) for invalid TOML or an unknown key or value.
+    pub fn parse(path: &Path, text: &str) -> Result<Self, Error> {
         let parse_error = |message: &str| {
             Error::new(
                 &codes::CONFIG_PARSE,
@@ -470,7 +490,7 @@ impl DaemonConfig {
             )
             .with_hint(format!("fix or remove {}", path.display()))
         };
-        let config: Self = toml::from_str(&text).map_err(|e| parse_error(e.message()))?;
+        let config: Self = toml::from_str(text).map_err(|e| parse_error(e.message()))?;
         if !(1..=100).contains(&config.update.snapshot_keep) {
             return Err(parse_error(
                 "update.snapshot_keep: must be between 1 and 100",
@@ -504,6 +524,22 @@ impl DaemonConfig {
             .api_server
             .validate()
             .map_err(|message| parse_error(&message))?;
+        config
+            .dashboard
+            .validate()
+            .map_err(|message| parse_error(&message))?;
+        config
+            .daemon
+            .remote
+            .validate()
+            .map_err(|message| parse_error(&message))?;
+        if !config.webapp.public_url.is_empty() {
+            crate::daemon_dashboard::check_public_url(
+                "webapp.public_url",
+                &config.webapp.public_url,
+            )
+            .map_err(|message| parse_error(&message))?;
+        }
         if let Some(unknown) = config
             .runtimes
             .exclude

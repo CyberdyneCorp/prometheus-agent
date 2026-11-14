@@ -472,7 +472,7 @@ impl pmt_api::ApiHost for DaemonHost {
 
 /// The profile's known secrets (always) merged with its configured
 /// redaction (PII when `privacy.redact_pii` is set).
-fn forced_redactor(scope: &ProfileScope) -> Result<pmt_core::secret::Redactor, Error> {
+pub(super) fn forced_redactor(scope: &ProfileScope) -> Result<pmt_core::secret::Redactor, Error> {
     let secrets = scope.secrets().redactor()?;
     Ok(match pmt_obs::redaction::profile_redactor(scope)? {
         Some(profile) => secrets.merged(&profile),

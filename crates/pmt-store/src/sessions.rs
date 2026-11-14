@@ -346,6 +346,43 @@ impl Store {
         })
     }
 
+    /// The newest live session tagged `new.source_tag` (the desktop's
+    /// onboarding chat), created from `new` in the same transaction when
+    /// there is none; `true` when created now.
+    ///
+    /// # Errors
+    ///
+    /// `store.busy`, `store.sqlite`; `session.not_found` for a `new`
+    /// without a tag.
+    pub fn ensure_tagged_session(&self, new: &NewSession) -> Result<(Session, bool), Error> {
+        let profile_id = self.profile_id().to_string();
+        let tag = new.source_tag.clone().ok_or_else(|| {
+            Error::new(
+                &codes::SESSION_NOT_FOUND,
+                "a tagged session needs a source tag",
+            )
+        })?;
+        self.write(|tx| {
+            let current: Option<String> = tx
+                .query_row(
+                    "SELECT id FROM sessions WHERE source_tag = ?1 AND archived = 'none' \
+                     ORDER BY started_at DESC, id DESC LIMIT 1",
+                    [&tag],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(sql)?;
+            if let Some(id) = current {
+                let id: SessionId = id.parse().map_err(|e| corrupt("sessions.id", e))?;
+                return Ok((load(tx, id)?.ok_or_else(|| not_found(id))?, false));
+            }
+            Ok((
+                insert(tx, new, (SessionId::new(), None), &profile_id)?,
+                true,
+            ))
+        })
+    }
+
     /// The session `id`.
     ///
     /// # Errors

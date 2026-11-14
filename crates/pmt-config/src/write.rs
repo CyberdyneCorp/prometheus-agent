@@ -155,6 +155,46 @@ impl ConfigFile {
         })
     }
 
+    /// Applies a settings patch (`config.patch`): each `(key, Some(raw))`
+    /// is typed by the key's schema and set, each `(key, None)` removed so
+    /// its default applies, and the result is validated as a whole: all
+    /// changes or none.
+    ///
+    /// # Errors
+    ///
+    /// As [`set`](Self::set) and [`unset`](Self::unset) for the first
+    /// failing change; the validation errors of the result. Nothing is
+    /// written on error.
+    pub fn patch(&self, changes: &[(String, Option<String>)]) -> Result<(), Error> {
+        let mut typed = Vec::with_capacity(changes.len());
+        for (key, raw) in changes {
+            crate::managed::check_writable(key)?;
+            let value = match raw {
+                Some(raw) => Some(typed_value(key, raw)?),
+                None if catalog::lookup(key).is_none() => {
+                    return Err(Error::new(
+                        &codes::CONFIG_INVALID_ARGUMENT,
+                        crate::validate::unknown_key(key, None).message,
+                    ));
+                }
+                None => None,
+            };
+            typed.push((key.as_str(), value));
+        }
+        self.modify(|doc| {
+            for (key, value) in typed {
+                match value {
+                    Some(value) => edit::set(doc, key, value)
+                        .map_err(|message| Error::new(&codes::CONFIG_INVALID_ARGUMENT, message))?,
+                    None => {
+                        edit::remove(doc, key);
+                    }
+                }
+            }
+            Ok(())
+        })
+    }
+
     /// Sets every `(key, value)` already typed by the caller (tables
     /// included: an MCP server, a platform) in one write that is validated
     /// as a whole (all or none). `hermes-migration` writes this way.

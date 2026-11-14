@@ -1,0 +1,39 @@
+//! The Prometheus desktop app (spec: desktop-app): a thin Tauri shell over
+//! the profile's gateway daemon. The shell's logic lives in `pmt-desktop`;
+//! this crate binds it to the webview, the OS plugins and the windows.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+mod app;
+mod hud;
+mod launch;
+mod native;
+mod panels;
+mod tray;
+
+fn main() {
+    // Started through the "Install command-line tool" link to the AppImage
+    // (`~/.local/bin/prometheus`): this is the CLI, not a window.
+    if std::env::var_os("APPIMAGE").is_some()
+        && pmt_desktop::cli_link::runs_cli(std::env::var_os("ARGV0").as_deref())
+    {
+        std::process::exit(app::run_bundled_cli());
+    }
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_writer(std::io::stderr)
+        .init();
+    let launch = match launch::Launch::read() {
+        Ok(launch) => launch,
+        Err(e) => {
+            eprintln!("Prometheus Desktop could not start: {e}");
+            std::process::exit(78);
+        }
+    };
+    // The webview toolkit reads its switches from the environment before
+    // the first window: start again with them when they are missing.
+    if let Some(code) = launch.relaunch_with_environment() {
+        std::process::exit(code);
+    }
+    launch.keep_launcher_entry();
+    app::run(launch);
+}

@@ -373,6 +373,22 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::daemon_cmd::DaemonCommand,
     },
+    /// Open the web dashboard: start the daemon's dashboard listener and
+    /// sign the browser in with a one-time login link.
+    #[cfg(feature = "dashboard")]
+    Dashboard(crate::dashboard_cmd::DashboardArgs),
+    /// Run the gateway daemon in the foreground with the dashboard listener
+    /// open and no browser (for service managers); remote clients attach
+    /// through the dashboard listener.
+    #[cfg(feature = "dashboard")]
+    Serve(ServeArgs),
+    /// Open the desktop workspace in the browser (`webapp.enabled`).
+    #[cfg(feature = "dashboard")]
+    Webapp(crate::webapp_cmd::WebappArgs),
+    /// Launch the Prometheus Desktop app for the selected profile, or
+    /// install it (`--install`).
+    #[command(visible_alias = "gui")]
+    Desktop(crate::desktop_cmd::DesktopArgs),
     /// Messaging adapters of the running daemon and the profile's delivery
     /// outbox.
     #[cfg(feature = "gateway")]
@@ -504,6 +520,14 @@ pub enum Command {
     #[cfg(not(feature = "dashboard"))]
     #[command(hide = true)]
     Dashboard(crate::surface::MissingArgs),
+    /// `serve` (the dashboard surface), left out of this build (exit 69).
+    #[cfg(not(feature = "dashboard"))]
+    #[command(hide = true)]
+    Serve(crate::surface::MissingArgs),
+    /// `webapp` (the dashboard surface), left out of this build (exit 69).
+    #[cfg(not(feature = "dashboard"))]
+    #[command(hide = true)]
+    Webapp(crate::surface::MissingArgs),
     /// `acp`, left out of this build (exit 69).
     #[cfg(not(feature = "acp"))]
     #[command(hide = true)]
@@ -520,6 +544,19 @@ pub enum Command {
     #[cfg(not(feature = "eval"))]
     #[command(hide = true)]
     Eval(crate::surface::MissingArgs),
+}
+
+/// `prometheus serve` arguments.
+#[derive(Debug, Clone, Args)]
+pub struct ServeArgs {
+    /// Bind the dashboard listener to this address instead of
+    /// `dashboard.host` (a non-loopback address needs authentication and
+    /// TLS).
+    #[arg(long)]
+    pub host: Option<String>,
+    /// Bind this port instead of `dashboard.port`.
+    #[arg(long)]
+    pub port: Option<u16>,
 }
 
 /// `prometheus demo` flags.
@@ -1109,6 +1146,10 @@ pub enum ProfileCommand {
         /// hidden prompt (or from stdin).
         #[arg(long)]
         with_secrets: bool,
+        /// Also include the desktop appearance (a JSON file the desktop
+        /// app wrote), applied by the desktop after an import.
+        #[arg(long, value_name = "FILE")]
+        appearance: Option<std::path::PathBuf>,
     },
     /// Create a profile from an archive `profile export` wrote.
     Import {

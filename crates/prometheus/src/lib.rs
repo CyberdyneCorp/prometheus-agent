@@ -31,8 +31,11 @@ pub mod curator_cmd;
 pub mod daemon_client;
 #[cfg(feature = "gateway")]
 pub mod daemon_cmd;
+#[cfg(feature = "dashboard")]
+pub mod dashboard_cmd;
 pub mod debug_cmd;
 pub mod demo_cmd;
+pub mod desktop_cmd;
 pub mod doctor_cmd;
 pub mod egress;
 pub mod fallback_cmd;
@@ -97,6 +100,8 @@ pub mod usage_cmd;
 pub mod vault_cmd;
 pub mod verify_cmd;
 pub mod version;
+#[cfg(feature = "dashboard")]
+pub mod webapp_cmd;
 pub mod webhooks_cmd;
 pub mod worktrees_cmd;
 

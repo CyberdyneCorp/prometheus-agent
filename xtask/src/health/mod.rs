@@ -21,7 +21,7 @@ const NESTING_LIMIT: u32 = 5;
 const FILE_LINES_LIMIT: u32 = 1_500;
 
 /// Directories, relative to the root, that hold the Rust sources.
-const SOURCE_DIRS: [&str; 2] = ["crates", "xtask"];
+const SOURCE_DIRS: [&str; 3] = ["crates", "xtask", "apps/desktop/src-tauri/src"];
 
 /// Measures every source file under `root` against the budgets and
 /// `root/health.toml`; with `base`, also rejects exceptions added or raised

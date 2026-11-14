@@ -14,6 +14,138 @@
       ],
       "type": "object"
     },
+    "AdapterList": {
+      "additionalProperties": false,
+      "description": "`adapters.list` result.",
+      "properties": {
+        "adapters": {
+          "description": "Every adapter available to the profile.",
+          "items": {
+            "$ref": "#/$defs/AdapterRow"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "adapters"
+      ],
+      "type": "object"
+    },
+    "AdapterRef": {
+      "additionalProperties": false,
+      "description": "An adapter of a profile.",
+      "properties": {
+        "platform": {
+          "description": "The platform.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The profile.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "platform"
+      ],
+      "type": "object"
+    },
+    "AdapterRow": {
+      "additionalProperties": false,
+      "description": "One messaging adapter of a profile.",
+      "properties": {
+        "display": {
+          "description": "Its display name.",
+          "type": "string"
+        },
+        "enabled": {
+          "description": "Enabled in the configuration.",
+          "type": "boolean"
+        },
+        "pairing": {
+          "default": null,
+          "description": "Its interactive pairing flow (`telegram_qr`, `whatsapp_qr`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "platform": {
+          "description": "The platform.",
+          "type": "string"
+        },
+        "reason": {
+          "default": null,
+          "description": "Why, for `error`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "secrets": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "description": "Its secrets and whether each is set (never values).",
+          "type": "object"
+        },
+        "state": {
+          "description": "`not_configured`, `saved` (credentials stored, disabled),\n`pending_restart` (configuration changed since it started),\n`connecting`, `connected`, `error` or `daemon_stopped`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "platform",
+        "display",
+        "state",
+        "enabled",
+        "secrets"
+      ],
+      "type": "object"
+    },
+    "AdapterSaveParams": {
+      "additionalProperties": false,
+      "description": "`adapters.save` params: credentials and the enable switch, written\ntogether; nothing restarts.",
+      "properties": {
+        "clear": {
+          "default": [],
+          "description": "Secrets to delete.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "enabled": {
+          "default": null,
+          "description": "The new enable switch.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "platform": {
+          "description": "The platform.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The profile.",
+          "type": "string"
+        },
+        "secrets": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Secrets to store (write-only).",
+          "type": "object"
+        }
+      },
+      "required": [
+        "profile",
+        "platform"
+      ],
+      "type": "object"
+    },
     "AdapterStatePayload": {
       "additionalProperties": false,
       "description": "`adapter.state` payload: one messaging adapter changed state (spec:\nplatform-adapters, Adapter state reporting and reconnect).",
@@ -244,6 +376,125 @@
         "id",
         "decision"
       ],
+      "type": "object"
+    },
+    "Artifact": {
+      "additionalProperties": false,
+      "description": "One image, file or link a session produced.",
+      "properties": {
+        "call_id": {
+          "default": null,
+          "description": "The tool call that wrote or produced it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "created_at": {
+          "description": "When (RFC 3339).",
+          "type": "string"
+        },
+        "id": {
+          "description": "Stable id (`<message id>:<n>`).",
+          "type": "string"
+        },
+        "kind": {
+          "description": "`image`, `file` or `link`.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session that produced it.",
+          "type": "string"
+        },
+        "session_title": {
+          "description": "Its title (empty when untitled).",
+          "type": "string"
+        },
+        "tool": {
+          "default": null,
+          "description": "That call's tool.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value": {
+          "description": "The path (as the session names it) or the URL.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "value",
+        "session_id",
+        "session_title",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "ArtifactList": {
+      "additionalProperties": false,
+      "description": "`artifacts.list` result.",
+      "properties": {
+        "artifacts": {
+          "description": "Newest first.",
+          "items": {
+            "$ref": "#/$defs/Artifact"
+          },
+          "type": "array"
+        },
+        "next_cursor": {
+          "default": null,
+          "description": "The next page's cursor, while there is one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "artifacts"
+      ],
+      "type": "object"
+    },
+    "ArtifactsListParams": {
+      "additionalProperties": false,
+      "description": "`artifacts.list` params.",
+      "properties": {
+        "cursor": {
+          "default": null,
+          "description": "Where the previous page ended.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile (required when the connection is granted several).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "query": {
+          "default": null,
+          "description": "Only artifacts whose value or session title contains this text.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_id": {
+          "default": null,
+          "description": "Only this session's artifacts (the composer's suggestions).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "AttachParams": {
@@ -695,6 +946,25 @@
       },
       "type": "object"
     },
+    "BotChat": {
+      "additionalProperties": false,
+      "description": "`bot.chat.ensure` result.",
+      "properties": {
+        "created": {
+          "description": "Whether this call created it.",
+          "type": "boolean"
+        },
+        "session_id": {
+          "description": "The profile's canonical Bot Chat.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "created"
+      ],
+      "type": "object"
+    },
     "BudgetStanding": {
       "additionalProperties": false,
       "description": "One budget's standing in `usage.updated`.",
@@ -729,6 +999,129 @@
         "limit",
         "spent",
         "remaining"
+      ],
+      "type": "object"
+    },
+    "CenterApproval": {
+      "additionalProperties": false,
+      "description": "A pending approval.",
+      "properties": {
+        "profile": {
+          "description": "Its session's profile.",
+          "type": "string"
+        },
+        "request_id": {
+          "description": "The request.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        },
+        "summary": {
+          "description": "What is asked (the command or the tool).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "session_id",
+        "request_id",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "CenterList": {
+      "additionalProperties": false,
+      "description": "`center.list` result.",
+      "properties": {
+        "approvals": {
+          "description": "Pending approvals.",
+          "items": {
+            "$ref": "#/$defs/CenterApproval"
+          },
+          "type": "array"
+        },
+        "sessions": {
+          "description": "Running sessions across the connection's profiles.",
+          "items": {
+            "$ref": "#/$defs/CenterSession"
+          },
+          "type": "array"
+        },
+        "subagents": {
+          "description": "Active subagents.",
+          "items": {
+            "$ref": "#/$defs/CenterSubagent"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "sessions",
+        "approvals",
+        "subagents"
+      ],
+      "type": "object"
+    },
+    "CenterParams": {
+      "additionalProperties": false,
+      "description": "`center.list` params.",
+      "type": "object"
+    },
+    "CenterSession": {
+      "additionalProperties": false,
+      "description": "A session with a running turn.",
+      "properties": {
+        "profile": {
+          "description": "Its profile.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        },
+        "title": {
+          "default": null,
+          "description": "Its title.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "profile",
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "CenterSubagent": {
+      "additionalProperties": false,
+      "description": "An active subagent.",
+      "properties": {
+        "goal": {
+          "description": "Its task.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "Its parent's profile.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The parent session.",
+          "type": "string"
+        },
+        "subagent_id": {
+          "description": "The child.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "session_id",
+        "subagent_id",
+        "goal"
       ],
       "type": "object"
     },
@@ -789,6 +1182,13 @@
         "events": {
           "default": [],
           "description": "Events introduced after the client's minor version that it\nunderstands anyway.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "features": {
+          "description": "Optional client features (`desktop_ui`: the desktop UI toolset's\n`ui.*` requests go to this client).",
           "items": {
             "type": "string"
           },
@@ -897,6 +1297,13 @@
         "source": {
           "$ref": "#/$defs/CommandSource",
           "description": "Built-in, quick command, skill or client-handled."
+        },
+        "subcommands": {
+          "description": "Subcommands with their own disposition on this surface (a palette\noffers a command when it or one of them runs here).",
+          "items": {
+            "$ref": "#/$defs/SubcommandEntry"
+          },
+          "type": "array"
         }
       },
       "required": [
@@ -1082,6 +1489,24 @@
       ],
       "type": "object"
     },
+    "ConfigChange": {
+      "additionalProperties": false,
+      "description": "One change of a `config.patch`.",
+      "properties": {
+        "key": {
+          "description": "A dotted key (`delegation.model`).",
+          "type": "string"
+        },
+        "value": {
+          "default": null,
+          "description": "The new value (typed by the key's schema); `null` or absent removes\nthe key so its default applies."
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "type": "object"
+    },
     "ConfigGetParams": {
       "additionalProperties": false,
       "description": "`config.get` params.",
@@ -1101,6 +1526,82 @@
       },
       "required": [
         "key"
+      ],
+      "type": "object"
+    },
+    "ConfigPatchParams": {
+      "additionalProperties": false,
+      "description": "`config.patch` params.",
+      "properties": {
+        "changes": {
+          "description": "Applied together, validated as a whole: all or none.",
+          "items": {
+            "$ref": "#/$defs/ConfigChange"
+          },
+          "type": "array"
+        },
+        "profile": {
+          "description": "The window's profile.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "changes"
+      ],
+      "type": "object"
+    },
+    "ConfigPatched": {
+      "additionalProperties": false,
+      "description": "`config.patch` result.",
+      "properties": {
+        "keys": {
+          "description": "The keys the patch named.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "keys"
+      ],
+      "type": "object"
+    },
+    "ConfigReloaded": {
+      "additionalProperties": false,
+      "description": "`config.reload` result: the profile's configuration state.",
+      "properties": {
+        "error": {
+          "default": null,
+          "description": "Why the file on disk is not in use, while it is invalid.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pending_restart": {
+          "default": [],
+          "description": "Keys that apply after a daemon restart.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "profile": {
+          "description": "The profile.",
+          "type": "string"
+        },
+        "reloads": {
+          "description": "Valid edits loaded since the daemon started.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "profile",
+        "reloads"
       ],
       "type": "object"
     },
@@ -1127,6 +1628,27 @@
       ],
       "type": "object"
     },
+    "ContextCategory": {
+      "additionalProperties": false,
+      "description": "One category of `session.context_usage`.",
+      "properties": {
+        "category": {
+          "description": "`system_prompt`, `tool_definitions`, `skills`, `memory`, `rules`,\n`mcp`, `subagent_definitions` or `conversation`.",
+          "type": "string"
+        },
+        "tokens": {
+          "description": "Its estimated tokens.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "category",
+        "tokens"
+      ],
+      "type": "object"
+    },
     "ContextUsage": {
       "additionalProperties": false,
       "description": "`session.context_usage` result.",
@@ -1137,6 +1659,14 @@
             "string",
             "null"
           ]
+        },
+        "categories": {
+          "default": [],
+          "description": "`tokens` by category; they sum to `tokens` (empty when the session\nis not loaded).",
+          "items": {
+            "$ref": "#/$defs/ContextCategory"
+          },
+          "type": "array"
         },
         "context_window": {
           "description": "The model's context window, when known.",
@@ -1176,6 +1706,37 @@
       },
       "required": [
         "tokens"
+      ],
+      "type": "object"
+    },
+    "DaemonUpdateParams": {
+      "additionalProperties": false,
+      "description": "`daemon.update` params.",
+      "properties": {
+        "check": {
+          "default": false,
+          "description": "Only look for an update (`prometheus update --check`).",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "DaemonUpdated": {
+      "additionalProperties": false,
+      "description": "`daemon.update` result. A refusal (another owner such as a package\nmanager or the container image, the update lock held) is an error\nwith the updater's own code and message.",
+      "properties": {
+        "message": {
+          "description": "What the check printed, or where the updater writes its log.",
+          "type": "string"
+        },
+        "status": {
+          "description": "`started` (the updater runs detached and hands the daemon over\nwhen it finishes) or `checked`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "message"
       ],
       "type": "object"
     },
@@ -1496,6 +2057,30 @@
       ],
       "type": "object"
     },
+    "FeatureSupport": {
+      "additionalProperties": false,
+      "description": "One row of the platform support matrix.",
+      "properties": {
+        "feature": {
+          "description": "The feature (`sandbox.local`, `containers`...).",
+          "type": "string"
+        },
+        "reason": {
+          "description": "What the probe found: the mechanism in use, or what is missing and\nwhether the operating system or a dependency lacks it.",
+          "type": "string"
+        },
+        "state": {
+          "description": "`supported`, `degraded` or `unsupported`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "feature",
+        "state",
+        "reason"
+      ],
+      "type": "object"
+    },
     "FilesRollbackParams": {
       "additionalProperties": false,
       "description": "`files.rollback` params: no checkpoint lists them; `diff` previews.",
@@ -1675,6 +2260,397 @@
       "required": [
         "sha256",
         "text"
+      ],
+      "type": "object"
+    },
+    "FsEntry": {
+      "additionalProperties": false,
+      "description": "One listed entry.",
+      "properties": {
+        "dir": {
+          "description": "A directory (expanded lazily with another `fs.list`).",
+          "type": "boolean"
+        },
+        "ignored": {
+          "default": false,
+          "description": "Ignored by a `.gitignore` (listed only with `show_ignored`).",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "The file name.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Its path as the session names it (relative to the workspace when\ninside it).",
+          "type": "string"
+        },
+        "size": {
+          "default": null,
+          "description": "Its size in bytes, for a file.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "dir"
+      ],
+      "type": "object"
+    },
+    "FsFile": {
+      "additionalProperties": false,
+      "description": "`fs.read` result.",
+      "properties": {
+        "absolute": {
+          "default": null,
+          "description": "Where the file is on this machine, when the session's backend is\nthe host's filesystem (the guarded opener may open it).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "data": {
+          "description": "The bytes read, base64.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "`text`, `image` or `binary`.",
+          "type": "string"
+        },
+        "mime": {
+          "default": null,
+          "description": "The media type of an image (`image/png`...).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "The file as the session names it.",
+          "type": "string"
+        },
+        "size": {
+          "description": "Its whole size in bytes.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "truncated": {
+          "description": "Only the first `max_bytes` are in `data`.",
+          "type": "boolean"
+        },
+        "workspace": {
+          "default": null,
+          "description": "The session's workspace on this machine, with `absolute`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "size",
+        "truncated",
+        "kind",
+        "data"
+      ],
+      "type": "object"
+    },
+    "FsListParams": {
+      "additionalProperties": false,
+      "description": "`fs.list` params.",
+      "properties": {
+        "path": {
+          "default": ".",
+          "description": "A directory, relative to the session's workspace (`.` its root).",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session (attached).",
+          "type": "string"
+        },
+        "show_ignored": {
+          "default": false,
+          "description": "Also list entries `.gitignore` files ignore.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "FsListing": {
+      "additionalProperties": false,
+      "description": "`fs.list` result.",
+      "properties": {
+        "entries": {
+          "description": "Directories first, then files, by name.",
+          "items": {
+            "$ref": "#/$defs/FsEntry"
+          },
+          "type": "array"
+        },
+        "path": {
+          "description": "The listed directory.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "entries"
+      ],
+      "type": "object"
+    },
+    "FsReadParams": {
+      "additionalProperties": false,
+      "description": "`fs.read` params.",
+      "properties": {
+        "max_bytes": {
+          "default": null,
+          "description": "Read at most this many bytes from the start (default and cap\n8 MiB); the pane previews the first 2 MiB.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "The file, relative to the session's workspace or absolute.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session (attached).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "path"
+      ],
+      "type": "object"
+    },
+    "GitBranchParams": {
+      "additionalProperties": false,
+      "description": "`git.branch` params.",
+      "properties": {
+        "create": {
+          "default": false,
+          "description": "Create it (`git switch -c`) instead of switching to it.",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "The branch.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "name"
+      ],
+      "type": "object"
+    },
+    "GitCommitParams": {
+      "additionalProperties": false,
+      "description": "`git.commit` params.",
+      "properties": {
+        "message": {
+          "description": "The commit message.",
+          "type": "string"
+        },
+        "push": {
+          "default": false,
+          "description": "Commit & Push: commit and push through the session's terminal\nbackend.",
+          "type": "boolean"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "message"
+      ],
+      "type": "object"
+    },
+    "GitFile": {
+      "additionalProperties": false,
+      "description": "One changed file.",
+      "properties": {
+        "patch": {
+          "description": "The unified diff (cut at 256 KiB).",
+          "type": "string"
+        },
+        "path": {
+          "description": "Its path in the repository.",
+          "type": "string"
+        },
+        "staged": {
+          "description": "Part of the change is staged (`uncommitted` only).",
+          "type": "boolean"
+        },
+        "status": {
+          "description": "`added`, `modified`, `deleted` or `type-changed`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "status",
+        "staged",
+        "patch"
+      ],
+      "type": "object"
+    },
+    "GitMessage": {
+      "additionalProperties": false,
+      "description": "`git.message` result.",
+      "properties": {
+        "message": {
+          "description": "The suggested commit message (empty when no auxiliary route\nanswers).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "type": "object"
+    },
+    "GitPaths": {
+      "additionalProperties": false,
+      "description": "`git.stage`, `git.unstage` and `git.revert` params.",
+      "properties": {
+        "paths": {
+          "description": "Paths in the repository.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "paths"
+      ],
+      "type": "object"
+    },
+    "GitRan": {
+      "additionalProperties": false,
+      "description": "What a command run through the session's terminal backend printed.",
+      "properties": {
+        "commit": {
+          "default": null,
+          "description": "The commit made (`git.commit`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ok": {
+          "description": "Whether it succeeded.",
+          "type": "boolean"
+        },
+        "output": {
+          "description": "Its output.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "output",
+        "ok"
+      ],
+      "type": "object"
+    },
+    "GitReview": {
+      "additionalProperties": false,
+      "description": "`git.review` result.",
+      "properties": {
+        "ahead": {
+          "description": "Commits ahead of upstream.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "behind": {
+          "description": "Commits behind upstream.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "branch": {
+          "description": "The checked-out branch (`None`: detached).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "files": {
+          "description": "The changed files.",
+          "items": {
+            "$ref": "#/$defs/GitFile"
+          },
+          "type": "array"
+        },
+        "gh": {
+          "description": "The `gh` executable is available (Create PR is offered).",
+          "type": "boolean"
+        },
+        "read_only": {
+          "description": "Nothing in this scope may be staged, reverted or committed.",
+          "type": "boolean"
+        },
+        "root": {
+          "description": "The working tree's top folder.",
+          "type": "string"
+        },
+        "scope": {
+          "description": "The scope shown.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "root",
+        "ahead",
+        "behind",
+        "scope",
+        "files",
+        "read_only",
+        "gh"
+      ],
+      "type": "object"
+    },
+    "GitReviewParams": {
+      "additionalProperties": false,
+      "description": "`git.review` params.",
+      "properties": {
+        "scope": {
+          "default": "uncommitted",
+          "description": "`uncommitted` (default), `branch` or `last-turn`.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session whose workspace is reviewed.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
       ],
       "type": "object"
     },
@@ -1879,6 +2855,13 @@
         "updated_at": {
           "description": "When it last changed (RFC 3339).",
           "type": "string"
+        },
+        "uses": {
+          "default": 0,
+          "description": "How often it was used: a skill's loads, an entry's recalls (the\nmemory graph's `used` filter).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
         }
       },
       "required": [
@@ -2092,6 +3075,64 @@
       },
       "type": "object"
     },
+    "ManageCatalogParams": {
+      "additionalProperties": false,
+      "description": "`manage.catalog` params.",
+      "properties": {
+        "catalog": {
+          "description": "`skills`, `optional_skills`, `toolsets`, `models`, `plugins`,\n`mcp`, `cron`, `cron_runs` (of the job `target` names) or `memory`.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The profile the pane targets.",
+          "type": "string"
+        },
+        "target": {
+          "default": null,
+          "description": "The job whose runs `cron_runs` lists.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "profile",
+        "catalog"
+      ],
+      "type": "object"
+    },
+    "ManageChangeParams": {
+      "additionalProperties": false,
+      "description": "`manage.change` params.",
+      "properties": {
+        "body": {
+          "default": null,
+          "description": "The change's fields."
+        },
+        "change": {
+          "description": "`skill` (`{\"enabled\"}`), `skill_archive`, `toolset`, `cron_update`\n(`{\"enabled\"}` pauses or resumes), `cron_delete`, `cron_run` or\n`memory` (`{\"replace\"|\"remove\": ...}`).",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The profile that owns what changes (a job's owning profile in the\nall-profiles view).",
+          "type": "string"
+        },
+        "target": {
+          "default": null,
+          "description": "The skill, toolset or job.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "profile",
+        "change"
+      ],
+      "type": "object"
+    },
     "McpServerState": {
       "additionalProperties": false,
       "description": "One MCP server of a session.",
@@ -2131,6 +3172,33 @@
           ]
         }
       },
+      "type": "object"
+    },
+    "MessageReaction": {
+      "additionalProperties": false,
+      "description": "`message.reaction` payload.",
+      "properties": {
+        "message_id": {
+          "description": "The message.",
+          "type": "string"
+        },
+        "reactions": {
+          "description": "Its reactions after the change.",
+          "items": {
+            "$ref": "#/$defs/Reaction"
+          },
+          "type": "array"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "message_id",
+        "reactions"
+      ],
       "type": "object"
     },
     "MetricPoint": {
@@ -2499,9 +3567,25 @@
           "description": "`<provider>/<model>`.",
           "type": "string"
         },
+        "max_reasoning": {
+          "default": null,
+          "description": "The most reasoning the model takes (`none` when it does not\nreason); a higher requested level is clamped to it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "provider": {
           "description": "The provider.",
           "type": "string"
+        },
+        "risky": {
+          "default": null,
+          "description": "Why switching the session to it is risky (the conversation does\nnot fit its window, it cannot call tools...); clients confirm.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -2532,6 +3616,48 @@
       },
       "required": [
         "models"
+      ],
+      "type": "object"
+    },
+    "ModelOptionsParams": {
+      "additionalProperties": false,
+      "description": "`model.options` params: a session's options, or a profile's before\nany session exists (the composer's picker of a new chat).",
+      "properties": {
+        "profile": {
+          "default": null,
+          "description": "The profile, when no session is named.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_id": {
+          "default": null,
+          "description": "The session (it must be attached).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "OnboardingChat": {
+      "additionalProperties": false,
+      "description": "`onboarding.ensure` result.",
+      "properties": {
+        "created": {
+          "description": "Whether this call created it.",
+          "type": "boolean"
+        },
+        "session_id": {
+          "description": "The profile's onboarding chat.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "created"
       ],
       "type": "object"
     },
@@ -2615,6 +3741,14 @@
       "additionalProperties": false,
       "description": "The daemon's build target and its support tier.",
       "properties": {
+        "features": {
+          "default": [],
+          "description": "The support matrix of this host, from runtime probes (spec:\nweb-dashboard, Honest platform support matrix).",
+          "items": {
+            "$ref": "#/$defs/FeatureSupport"
+          },
+          "type": "array"
+        },
         "target": {
           "description": "The Rust target triple.",
           "type": "string"
@@ -2628,6 +3762,218 @@
         "target",
         "tier"
       ],
+      "type": "object"
+    },
+    "ProcessEntry": {
+      "additionalProperties": false,
+      "description": "One background process of a session.",
+      "properties": {
+        "command": {
+          "description": "Its command line.",
+          "type": "string"
+        },
+        "process_id": {
+          "description": "Its id (`proc_…`).",
+          "type": "string"
+        },
+        "state": {
+          "description": "`running`, `exited`...",
+          "type": "string"
+        }
+      },
+      "required": [
+        "process_id",
+        "command",
+        "state"
+      ],
+      "type": "object"
+    },
+    "ProcessList": {
+      "additionalProperties": false,
+      "description": "`process.list` result.",
+      "properties": {
+        "processes": {
+          "description": "The session's live background processes.",
+          "items": {
+            "$ref": "#/$defs/ProcessEntry"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "processes"
+      ],
+      "type": "object"
+    },
+    "ProcessLog": {
+      "additionalProperties": false,
+      "description": "`process.log` result.",
+      "properties": {
+        "output": {
+          "description": "Its buffered output (redacted, shaped like the `process` tool's).",
+          "type": "string"
+        },
+        "process_id": {
+          "description": "The process.",
+          "type": "string"
+        },
+        "state": {
+          "description": "Its state.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "process_id",
+        "state",
+        "output"
+      ],
+      "type": "object"
+    },
+    "ProcessRef": {
+      "additionalProperties": false,
+      "description": "`process.log` params.",
+      "properties": {
+        "process_id": {
+          "description": "The background process.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "process_id"
+      ],
+      "type": "object"
+    },
+    "ProfileParams": {
+      "additionalProperties": false,
+      "description": "A call that only names the window's profile.",
+      "properties": {
+        "profile": {
+          "description": "The window's profile.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "type": "object"
+    },
+    "ProjectRow": {
+      "additionalProperties": false,
+      "description": "One explicit project.",
+      "properties": {
+        "id": {
+          "description": "`prj_...`.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Its display name.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Its primary folder.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "slug": {
+          "description": "Its slug.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "slug"
+      ],
+      "type": "object"
+    },
+    "ProjectsCreateParams": {
+      "additionalProperties": false,
+      "description": "`projects.create` params.",
+      "properties": {
+        "name": {
+          "default": null,
+          "description": "The display name (the folder name when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "The repository folder.",
+          "type": "string"
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "ProjectsList": {
+      "additionalProperties": false,
+      "description": "`projects.list` result.",
+      "properties": {
+        "discovered": {
+          "description": "Repositories the background scan found that are no project's.",
+          "items": {
+            "$ref": "#/$defs/RepoRow"
+          },
+          "type": "array"
+        },
+        "inferred": {
+          "description": "Repositories of the profile's sessions that are no project's.",
+          "items": {
+            "$ref": "#/$defs/RepoRow"
+          },
+          "type": "array"
+        },
+        "projects": {
+          "description": "Projects created explicitly.",
+          "items": {
+            "$ref": "#/$defs/ProjectRow"
+          },
+          "type": "array"
+        },
+        "scanning": {
+          "description": "A scan is running or this listing started one: list again for\nits rows.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "projects",
+        "inferred",
+        "discovered",
+        "scanning"
+      ],
+      "type": "object"
+    },
+    "ProjectsListParams": {
+      "additionalProperties": false,
+      "description": "`projects.list` params.",
+      "properties": {
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "PromptImage": {
@@ -2658,8 +4004,292 @@
             "blob"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The image itself, as a `data:<mime>;base64,` URL (a snapshot the\ndesktop made, such as an annotation's).",
+          "properties": {
+            "data": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "type": "object"
         }
       ]
+    },
+    "PtyAttached": {
+      "additionalProperties": false,
+      "description": "`pty.attach` result.",
+      "properties": {
+        "pty_id": {
+          "description": "The terminal.",
+          "type": "string"
+        },
+        "replay": {
+          "description": "Its recent output (at most 1 MiB), base64.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pty_id",
+        "replay"
+      ],
+      "type": "object"
+    },
+    "PtyInputParams": {
+      "additionalProperties": false,
+      "description": "`pty.input` params.",
+      "properties": {
+        "data": {
+          "description": "What is typed (UTF-8 text, control characters included).",
+          "type": "string"
+        },
+        "pty_id": {
+          "description": "The terminal.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "pty_id",
+        "data"
+      ],
+      "type": "object"
+    },
+    "PtyList": {
+      "additionalProperties": false,
+      "description": "`pty.list` result.",
+      "properties": {
+        "terminals": {
+          "description": "The session's terminals.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "terminals"
+      ],
+      "type": "object"
+    },
+    "PtyOpenParams": {
+      "additionalProperties": false,
+      "description": "`pty.open` params.",
+      "properties": {
+        "cols": {
+          "default": 80,
+          "description": "Columns.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rows": {
+          "default": 24,
+          "description": "Rows.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "session_id": {
+          "description": "The session whose workspace the shell starts in (attached as a\ndriver).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "PtyOpened": {
+      "additionalProperties": false,
+      "description": "`pty.open` result.",
+      "properties": {
+        "pty_id": {
+          "description": "The new terminal.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pty_id"
+      ],
+      "type": "object"
+    },
+    "PtyOutput": {
+      "additionalProperties": false,
+      "description": "`pty.output` and `pty.exited` payload.",
+      "properties": {
+        "data": {
+          "default": "",
+          "description": "The output, base64 (empty for `pty.exited`).",
+          "type": "string"
+        },
+        "pty_id": {
+          "description": "The terminal.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pty_id"
+      ],
+      "type": "object"
+    },
+    "PtyRef": {
+      "additionalProperties": false,
+      "description": "A terminal of a session.",
+      "properties": {
+        "pty_id": {
+          "description": "The terminal.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "pty_id"
+      ],
+      "type": "object"
+    },
+    "PtyResizeParams": {
+      "additionalProperties": false,
+      "description": "`pty.resize` params.",
+      "properties": {
+        "cols": {
+          "description": "Columns.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "pty_id": {
+          "description": "The terminal.",
+          "type": "string"
+        },
+        "rows": {
+          "description": "Rows.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "pty_id",
+        "cols",
+        "rows"
+      ],
+      "type": "object"
+    },
+    "QueueEditParams": {
+      "additionalProperties": false,
+      "description": "`queue.edit` params.",
+      "properties": {
+        "id": {
+          "description": "The queued input.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        },
+        "text": {
+          "description": "Its new text.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "id",
+        "text"
+      ],
+      "type": "object"
+    },
+    "QueueEntry": {
+      "additionalProperties": false,
+      "description": "One input waiting in a session's queue.",
+      "properties": {
+        "id": {
+          "description": "The input's turn id.",
+          "type": "string"
+        },
+        "lost": {
+          "default": false,
+          "description": "A turn whose outcome was lost when the daemon stopped during it:\nit blocks the queue until it is deleted (Discard), and is never\nsent again.",
+          "type": "boolean"
+        },
+        "text": {
+          "description": "The prompt text.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text"
+      ],
+      "type": "object"
+    },
+    "QueueItemParams": {
+      "additionalProperties": false,
+      "description": "`queue.delete` params.",
+      "properties": {
+        "id": {
+          "description": "The queued input (or the lost turn, to discard it).",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "id"
+      ],
+      "type": "object"
+    },
+    "QueueState": {
+      "additionalProperties": false,
+      "description": "A session's queue.",
+      "properties": {
+        "entries": {
+          "description": "In run order; a lost turn comes first.",
+          "items": {
+            "$ref": "#/$defs/QueueEntry"
+          },
+          "type": "array"
+        },
+        "paused": {
+          "description": "Paused: no queued input starts until `queue.resume`.",
+          "type": "boolean"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "entries",
+        "paused"
+      ],
+      "type": "object"
     },
     "QuotaStatus": {
       "additionalProperties": false,
@@ -2721,6 +4351,52 @@
       "required": [
         "name",
         "used_percent"
+      ],
+      "type": "object"
+    },
+    "Reaction": {
+      "additionalProperties": false,
+      "description": "One reaction on a message.",
+      "properties": {
+        "by": {
+          "description": "Who reacted (`agent`).",
+          "type": "string"
+        },
+        "emoji": {
+          "description": "The emoji.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "by",
+        "emoji"
+      ],
+      "type": "object"
+    },
+    "RepoRow": {
+      "additionalProperties": false,
+      "description": "A repository offered for project creation.",
+      "properties": {
+        "last_seen": {
+          "default": null,
+          "description": "When a scan last saw it (discovered rows; RFC 3339).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "Its folder name.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Its folder.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "name"
       ],
       "type": "object"
     },
@@ -3029,6 +4705,11 @@
       "additionalProperties": false,
       "description": "`session.list` params.",
       "properties": {
+        "include_hidden": {
+          "default": false,
+          "description": "Also hidden sessions: canonical Bot Chats, archived and hidden\nones.",
+          "type": "boolean"
+        },
         "limit": {
           "default": null,
           "description": "At most this many, newest activity first (default 50).",
@@ -3048,6 +4729,35 @@
           ]
         }
       },
+      "type": "object"
+    },
+    "SessionProject": {
+      "additionalProperties": false,
+      "description": "`session.project` payload: a session moved to another project.",
+      "properties": {
+        "cwd": {
+          "description": "The working directory the session moves to at its next tool call.",
+          "type": "string"
+        },
+        "project_id": {
+          "description": "Its project.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        },
+        "slug": {
+          "description": "The project's slug.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "project_id",
+        "slug",
+        "cwd"
+      ],
       "type": "object"
     },
     "SessionRef": {
@@ -3160,6 +4870,13 @@
           "description": "Whether a turn is running in the daemon.",
           "type": "boolean"
         },
+        "project_id": {
+          "description": "Its project (`prj_...`), when it has one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "session_id": {
           "description": "`ses_<ULID>`.",
           "type": "string"
@@ -3227,6 +4944,25 @@
       ],
       "type": "object"
     },
+    "SubagentControlled": {
+      "additionalProperties": false,
+      "description": "What a control call did.",
+      "properties": {
+        "status": {
+          "description": "`queued` (steer: delivered at the child's next checkpoint) or\n`interrupt_requested` (stop).",
+          "type": "string"
+        },
+        "subagent_id": {
+          "description": "The child.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "subagent_id",
+        "status"
+      ],
+      "type": "object"
+    },
     "SubagentList": {
       "additionalProperties": false,
       "description": "`subagent.list` result.",
@@ -3244,10 +4980,71 @@
       ],
       "type": "object"
     },
+    "SubagentRef": {
+      "additionalProperties": false,
+      "description": "`subagent.stop` params.",
+      "properties": {
+        "session_id": {
+          "description": "The parent session.",
+          "type": "string"
+        },
+        "subagent_id": {
+          "description": "The child.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "subagent_id"
+      ],
+      "type": "object"
+    },
+    "SubagentSteerParams": {
+      "additionalProperties": false,
+      "description": "`subagent.steer` params.",
+      "properties": {
+        "session_id": {
+          "description": "The parent session.",
+          "type": "string"
+        },
+        "subagent_id": {
+          "description": "The child.",
+          "type": "string"
+        },
+        "text": {
+          "description": "The guidance.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "subagent_id",
+        "text"
+      ],
+      "type": "object"
+    },
     "SubagentSummary": {
       "additionalProperties": false,
       "description": "One delegated child of a session.",
       "properties": {
+        "activity": {
+          "default": null,
+          "description": "What it is doing now.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "elapsed_ms": {
+          "default": null,
+          "description": "How long it has run, in milliseconds.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "session_id": {
           "description": "Its child session.",
           "type": "string"
@@ -3273,6 +5070,33 @@
         "subagent_id",
         "session_id",
         "status"
+      ],
+      "type": "object"
+    },
+    "SubcommandEntry": {
+      "additionalProperties": false,
+      "description": "One subcommand of a `commands.catalog` entry.",
+      "properties": {
+        "disposition": {
+          "$ref": "#/$defs/Disposition",
+          "description": "Whether it runs from the asking client's surface."
+        },
+        "name": {
+          "description": "The first word after the command.",
+          "type": "string"
+        },
+        "reason": {
+          "default": null,
+          "description": "Why it does not run there.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "disposition"
       ],
       "type": "object"
     },
@@ -3473,6 +5297,13 @@
           "description": "`msg_<ULID>`.",
           "type": "string"
         },
+        "reactions": {
+          "description": "Its reactions (spec: desktop-app, Agent reactions).",
+          "items": {
+            "$ref": "#/$defs/Reaction"
+          },
+          "type": "array"
+        },
         "role": {
           "description": "`user`, `assistant`, `tool` or `system`.",
           "type": "string"
@@ -3564,6 +5395,88 @@
       "required": [
         "turn_id",
         "exit_reason"
+      ],
+      "type": "object"
+    },
+    "UiCall": {
+      "additionalProperties": false,
+      "description": "`ui.<tool>` params.",
+      "properties": {
+        "arguments": {
+          "description": "The tool's arguments (validated by the daemon first)."
+        },
+        "deadline_ms": {
+          "default": null,
+          "description": "Milliseconds until the request settles unanswered (set by the\ndaemon when it sends the request).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "session_id": {
+          "description": "The session whose turn called the tool.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "arguments"
+      ],
+      "type": "object"
+    },
+    "UiPrefs": {
+      "additionalProperties": false,
+      "description": "The machine's display preferences.",
+      "properties": {
+        "prefs": {
+          "additionalProperties": true,
+          "description": "Every stored preference.",
+          "type": "object"
+        },
+        "revision": {
+          "description": "Grows with every change.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "prefs",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "UiPrefsGetParams": {
+      "additionalProperties": false,
+      "description": "`ui.prefs.get` params.",
+      "properties": {
+        "watch": {
+          "default": false,
+          "description": "Also send this connection `ui.prefs.changed` after every change.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "UiPrefsPatchParams": {
+      "additionalProperties": false,
+      "description": "`ui.prefs.patch` params.",
+      "properties": {
+        "only_missing": {
+          "default": false,
+          "description": "A client meeting the store for the first time: set only the keys\nthe store lacks, never overwrite.",
+          "type": "boolean"
+        },
+        "set": {
+          "additionalProperties": true,
+          "description": "Keys to set; `null` removes one.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "set"
       ],
       "type": "object"
     },
@@ -4388,8 +6301,38 @@
       "since": "1.0"
     },
     "message.reaction": {
-      "declared": false,
       "owner": "desktop-app",
+      "payload": {
+        "$ref": "#/$defs/MessageReaction"
+      },
+      "since": "1.0"
+    },
+    "pty.detached": {
+      "owner": "desktop-app",
+      "payload": {
+        "$ref": "#/$defs/PtyRef"
+      },
+      "since": "1.0"
+    },
+    "pty.exited": {
+      "owner": "desktop-app",
+      "payload": {
+        "$ref": "#/$defs/PtyOutput"
+      },
+      "since": "1.0"
+    },
+    "pty.output": {
+      "owner": "desktop-app",
+      "payload": {
+        "$ref": "#/$defs/PtyOutput"
+      },
+      "since": "1.0"
+    },
+    "queue.changed": {
+      "owner": "desktop-app",
+      "payload": {
+        "$ref": "#/$defs/QueueState"
+      },
       "since": "1.0"
     },
     "request.cancel": {
@@ -4416,10 +6359,24 @@
       "owner": "messaging-gateway",
       "since": "1.0"
     },
+    "session.project": {
+      "owner": "projects",
+      "payload": {
+        "$ref": "#/$defs/SessionProject"
+      },
+      "since": "1.0"
+    },
     "turn.finished": {
       "owner": "workspace-architecture",
       "payload": {
         "$ref": "#/$defs/TurnFinished"
+      },
+      "since": "1.0"
+    },
+    "ui.prefs.changed": {
+      "owner": "desktop-app",
+      "payload": {
+        "$ref": "#/$defs/UiPrefs"
       },
       "since": "1.0"
     },
@@ -4437,6 +6394,66 @@
     }
   },
   "methods": {
+    "adapters.list": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/ProfileParams"
+      },
+      "result": {
+        "$ref": "#/$defs/AdapterList"
+      },
+      "since": "1.0"
+    },
+    "adapters.pairing.cancel": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/AdapterRef"
+      },
+      "result": {
+        "$ref": "#/$defs/Ack"
+      },
+      "since": "1.0"
+    },
+    "adapters.pairing.start": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/AdapterRef"
+      },
+      "result": true,
+      "since": "1.0"
+    },
+    "adapters.pairing.state": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/AdapterRef"
+      },
+      "result": true,
+      "since": "1.0"
+    },
+    "adapters.restart": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/AdapterRef"
+      },
+      "result": {
+        "$ref": "#/$defs/AdapterRow"
+      },
+      "since": "1.0"
+    },
+    "adapters.save": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/AdapterSaveParams"
+      },
+      "result": {
+        "$ref": "#/$defs/AdapterRow"
+      },
+      "since": "1.0"
+    },
     "approval.respond": {
       "owner": "tool-system",
       "params": {
@@ -4444,6 +6461,17 @@
       },
       "result": {
         "$ref": "#/$defs/Ack"
+      },
+      "since": "1.0"
+    },
+    "artifacts.list": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/ArtifactsListParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ArtifactList"
       },
       "since": "1.0"
     },
@@ -4458,8 +6486,13 @@
       "since": "1.0"
     },
     "bot.chat.ensure": {
-      "declared": false,
       "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/ProfileParams"
+      },
+      "result": {
+        "$ref": "#/$defs/BotChat"
+      },
       "since": "1.0"
     },
     "bot.create": {
@@ -4490,6 +6523,17 @@
     "bot.roster.list": {
       "declared": false,
       "owner": "bot-mode",
+      "since": "1.0"
+    },
+    "center.list": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/CenterParams"
+      },
+      "result": {
+        "$ref": "#/$defs/CenterList"
+      },
       "since": "1.0"
     },
     "command.dispatch": {
@@ -4544,6 +6588,26 @@
       },
       "since": "1.0"
     },
+    "config.patch": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/ConfigPatchParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ConfigPatched"
+      },
+      "since": "1.0"
+    },
+    "config.reload": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/ProfileParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ConfigReloaded"
+      },
+      "since": "1.0"
+    },
     "cron.blueprints.fill": {
       "owner": "scheduled-jobs",
       "params": {
@@ -4565,9 +6629,14 @@
       "since": "1.0"
     },
     "daemon.update": {
-      "declared": false,
       "long": true,
       "owner": "workspace-architecture",
+      "params": {
+        "$ref": "#/$defs/DaemonUpdateParams"
+      },
+      "result": {
+        "$ref": "#/$defs/DaemonUpdated"
+      },
       "since": "1.0"
     },
     "egress.set": {
@@ -4667,6 +6736,116 @@
       },
       "result": {
         "$ref": "#/$defs/FilesUndone"
+      },
+      "since": "1.0"
+    },
+    "fs.list": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/FsListParams"
+      },
+      "result": {
+        "$ref": "#/$defs/FsListing"
+      },
+      "since": "1.0"
+    },
+    "fs.read": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/FsReadParams"
+      },
+      "result": {
+        "$ref": "#/$defs/FsFile"
+      },
+      "since": "1.0"
+    },
+    "git.branch": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/GitBranchParams"
+      },
+      "result": {
+        "$ref": "#/$defs/GitRan"
+      },
+      "since": "1.0"
+    },
+    "git.commit": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/GitCommitParams"
+      },
+      "result": {
+        "$ref": "#/$defs/GitRan"
+      },
+      "since": "1.0"
+    },
+    "git.message": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/GitMessage"
+      },
+      "since": "1.0"
+    },
+    "git.pr": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/GitRan"
+      },
+      "since": "1.0"
+    },
+    "git.revert": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/GitPaths"
+      },
+      "result": {
+        "$ref": "#/$defs/Ack"
+      },
+      "since": "1.0"
+    },
+    "git.review": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/GitReviewParams"
+      },
+      "result": {
+        "$ref": "#/$defs/GitReview"
+      },
+      "since": "1.0"
+    },
+    "git.stage": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/GitPaths"
+      },
+      "result": {
+        "$ref": "#/$defs/Ack"
+      },
+      "since": "1.0"
+    },
+    "git.unstage": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/GitPaths"
+      },
+      "result": {
+        "$ref": "#/$defs/Ack"
       },
       "since": "1.0"
     },
@@ -4875,6 +7054,24 @@
       },
       "since": "1.0"
     },
+    "manage.catalog": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/ManageCatalogParams"
+      },
+      "result": true,
+      "since": "1.0"
+    },
+    "manage.change": {
+      "long": true,
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/ManageChangeParams"
+      },
+      "result": true,
+      "since": "1.0"
+    },
     "memory.summary": {
       "owner": "memory",
       "params": {
@@ -4919,10 +7116,20 @@
       "long": true,
       "owner": "tui",
       "params": {
-        "$ref": "#/$defs/SessionRef"
+        "$ref": "#/$defs/ModelOptionsParams"
       },
       "result": {
         "$ref": "#/$defs/ModelOptions"
+      },
+      "since": "1.0"
+    },
+    "onboarding.ensure": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/ProfileParams"
+      },
+      "result": {
+        "$ref": "#/$defs/OnboardingChat"
       },
       "since": "1.0"
     },
@@ -4936,6 +7143,48 @@
       },
       "since": "1.0"
     },
+    "process.list": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/ProcessList"
+      },
+      "since": "1.0"
+    },
+    "process.log": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/ProcessRef"
+      },
+      "result": {
+        "$ref": "#/$defs/ProcessLog"
+      },
+      "since": "1.0"
+    },
+    "projects.create": {
+      "long": true,
+      "owner": "projects",
+      "params": {
+        "$ref": "#/$defs/ProjectsCreateParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ProjectRow"
+      },
+      "since": "1.0"
+    },
+    "projects.list": {
+      "long": true,
+      "owner": "projects",
+      "params": {
+        "$ref": "#/$defs/ProjectsListParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ProjectsList"
+      },
+      "since": "1.0"
+    },
     "prompt.submit": {
       "owner": "workspace-architecture",
       "params": {
@@ -4943,6 +7192,116 @@
       },
       "result": {
         "$ref": "#/$defs/Submitted"
+      },
+      "since": "1.0"
+    },
+    "pty.attach": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/PtyRef"
+      },
+      "result": {
+        "$ref": "#/$defs/PtyAttached"
+      },
+      "since": "1.0"
+    },
+    "pty.close": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/PtyRef"
+      },
+      "result": {
+        "$ref": "#/$defs/Ack"
+      },
+      "since": "1.0"
+    },
+    "pty.input": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/PtyInputParams"
+      },
+      "result": {
+        "$ref": "#/$defs/Ack"
+      },
+      "since": "1.0"
+    },
+    "pty.list": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/PtyList"
+      },
+      "since": "1.0"
+    },
+    "pty.open": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/PtyOpenParams"
+      },
+      "result": {
+        "$ref": "#/$defs/PtyOpened"
+      },
+      "since": "1.0"
+    },
+    "pty.resize": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/PtyResizeParams"
+      },
+      "result": {
+        "$ref": "#/$defs/Ack"
+      },
+      "since": "1.0"
+    },
+    "queue.delete": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/QueueItemParams"
+      },
+      "result": {
+        "$ref": "#/$defs/QueueState"
+      },
+      "since": "1.0"
+    },
+    "queue.edit": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/QueueEditParams"
+      },
+      "result": {
+        "$ref": "#/$defs/QueueState"
+      },
+      "since": "1.0"
+    },
+    "queue.list": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/QueueState"
+      },
+      "since": "1.0"
+    },
+    "queue.pause": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/QueueState"
+      },
+      "since": "1.0"
+    },
+    "queue.resume": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/QueueState"
       },
       "since": "1.0"
     },
@@ -5154,6 +7513,26 @@
       },
       "since": "1.0"
     },
+    "subagent.steer": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/SubagentSteerParams"
+      },
+      "result": {
+        "$ref": "#/$defs/SubagentControlled"
+      },
+      "since": "1.0"
+    },
+    "subagent.stop": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/SubagentRef"
+      },
+      "result": {
+        "$ref": "#/$defs/SubagentControlled"
+      },
+      "since": "1.0"
+    },
     "subagent.subscribe": {
       "declared": false,
       "owner": "tui",
@@ -5190,13 +7569,23 @@
       "since": "1.0"
     },
     "ui.prefs.get": {
-      "declared": false,
       "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/UiPrefsGetParams"
+      },
+      "result": {
+        "$ref": "#/$defs/UiPrefs"
+      },
       "since": "1.0"
     },
     "ui.prefs.patch": {
-      "declared": false,
       "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/UiPrefsPatchParams"
+      },
+      "result": {
+        "$ref": "#/$defs/UiPrefs"
+      },
       "since": "1.0"
     },
     "vault.add": {
@@ -5330,6 +7719,94 @@
       "result": {
         "$ref": "#/$defs/SudoAnswer"
       },
+      "since": "1.0"
+    },
+    "ui.annotate_preview": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/UiCall"
+      },
+      "result": true,
+      "since": "1.0"
+    },
+    "ui.close_terminal": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/UiCall"
+      },
+      "result": true,
+      "since": "1.0"
+    },
+    "ui.desktop_preview": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/UiCall"
+      },
+      "result": true,
+      "since": "1.0"
+    },
+    "ui.drive_preview": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/UiCall"
+      },
+      "result": true,
+      "since": "1.0"
+    },
+    "ui.focus_pane": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/UiCall"
+      },
+      "result": true,
+      "since": "1.0"
+    },
+    "ui.gui_tour": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/UiCall"
+      },
+      "result": true,
+      "since": "1.0"
+    },
+    "ui.read_terminal": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/UiCall"
+      },
+      "result": true,
+      "since": "1.0"
+    },
+    "ui.read_window_below": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/UiCall"
+      },
+      "result": true,
+      "since": "1.0"
+    },
+    "ui.set_theme": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/UiCall"
+      },
+      "result": true,
+      "since": "1.0"
+    },
+    "ui.setup_beat": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/UiCall"
+      },
+      "result": true,
+      "since": "1.0"
+    },
+    "ui.show_tip": {
+      "owner": "desktop-app",
+      "params": {
+        "$ref": "#/$defs/UiCall"
+      },
+      "result": true,
       "since": "1.0"
     }
   },

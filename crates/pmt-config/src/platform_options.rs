@@ -48,7 +48,13 @@ pub struct TelegramOptions {
     /// `sendRichMessage`: the raw Markdown, up to 32768 characters), falling
     /// back to `MarkdownV2` when Telegram refuses one.
     pub rich_messages: bool,
+    /// The onboarding service Create with QR asks to create a bot
+    /// (`POST <url>/v1/telegram/pairings`, then polls the pairing).
+    pub setup_service_url: String,
 }
+
+/// The hosted Telegram onboarding service.
+pub const DEFAULT_TELEGRAM_SETUP_URL: &str = "https://setup.hermes-agent.nousresearch.com";
 
 impl Default for TelegramOptions {
     fn default() -> Self {
@@ -63,6 +69,7 @@ impl Default for TelegramOptions {
             group_topics: BTreeMap::new(),
             ignore_root_dm: false,
             rich_messages: false,
+            setup_service_url: DEFAULT_TELEGRAM_SETUP_URL.to_owned(),
         }
     }
 }

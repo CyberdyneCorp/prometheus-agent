@@ -156,7 +156,7 @@ fn media(body: &str) -> Result<(String, Vec<OutboundAttachment>), Error> {
     Ok((text, attachments))
 }
 
-pub(super) fn control_error(err: &pmt_rpc::control::ControlError) -> Error {
+pub(crate) fn control_error(err: &pmt_rpc::control::ControlError) -> Error {
     let code = pmt_core::error::ERROR_CODES
         .iter()
         .find(|c| c.code == err.code)

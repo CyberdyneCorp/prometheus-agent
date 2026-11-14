@@ -11,12 +11,14 @@
 
 pub mod archive;
 pub mod create;
+pub mod discover;
 pub mod exit;
 pub mod git;
 pub mod inspect;
 pub mod names;
 pub mod registry;
 pub mod repo;
+pub mod review;
 pub mod sweep;
 pub mod tree;
 

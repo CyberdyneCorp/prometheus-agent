@@ -53,6 +53,31 @@ const CHATS: &[Surface] = &[
     Surface::Acp,
 ];
 
+/// The subcommands of built-ins, for the per-surface palette (spec:
+/// desktop-app, Slash palette from one command registry; skills, Skill
+/// write approval and the hub commands in chat).
+pub(super) const SUBCOMMANDS: &[(&str, &[super::Subcommand])] = &[(
+    "skills",
+    &[
+        sub("pending"),
+        sub("diff"),
+        sub("approve"),
+        sub("reject"),
+        sub("approval"),
+        sub("search"),
+        sub("install"),
+        sub("inspect"),
+    ],
+)];
+
+/// A chat-surface subcommand.
+const fn sub(name: &'static str) -> super::Subcommand {
+    super::Subcommand {
+        name,
+        surfaces: CHATS,
+    }
+}
+
 /// Builds one entry.
 #[allow(clippy::too_many_arguments)]
 const fn command(
@@ -813,6 +838,16 @@ pub static BUILTINS: &[Command] = &[
         "slash.desc.redraw",
         &[],
         &[Surface::Cli, Surface::Tui],
+        Immediate,
+        Effect::None,
+    ),
+    command(
+        "keys",
+        &[],
+        Config,
+        "slash.desc.keys",
+        &[],
+        &[Surface::Tui],
         Immediate,
         Effect::None,
     ),

@@ -47,3 +47,30 @@ method!(/// `memory.summary`: the one-line summary of the agent's memory changes
 method!(/// `autoprune.offer`: the low-disk prune question, at most once a day,
     /// for an interactive client's startup.
     AutopruneOfferCall = "autoprune.offer" (AutopruneOfferParams) -> AutopruneOffer);
+
+/// `daemon.update` params.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DaemonUpdateParams {
+    /// Only look for an update (`prometheus update --check`).
+    #[serde(default)]
+    pub check: bool,
+}
+
+/// `daemon.update` result. A refusal (another owner such as a package
+/// manager or the container image, the update lock held) is an error
+/// with the updater's own code and message.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DaemonUpdated {
+    /// `started` (the updater runs detached and hands the daemon over
+    /// when it finishes) or `checked`.
+    pub status: String,
+    /// What the check printed, or where the updater writes its log.
+    pub message: String,
+}
+
+method!(/// `daemon.update`: updates this daemon's install through the same
+    /// code path as `prometheus update` (spec: desktop-app, Update every
+    /// connected instance); only for principals the daemon grants admin.
+    DaemonUpdate = "daemon.update" (DaemonUpdateParams) -> DaemonUpdated);

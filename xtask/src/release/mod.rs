@@ -12,12 +12,19 @@
 //! - `sign`: a detached `.minisig` for each file
 //! - `channels`: the Homebrew formula, `WinGet` manifests, Termux recipe,
 //!   Nix release pins and container build context of a release
+//! - `desktop-feed`: the desktop app's update feed over the desktop
+//!   updater archives of a release
+//! - `msix`: the Windows desktop packages' MSIX manifests (App Installer
+//!   and Microsoft Store identities) and App Installer file
 //! - `verify`: every expected artifact present, matching the signed
-//!   manifest, checksummed, signed and with an SBOM
+//!   manifest, checksummed, signed and with an SBOM; desktop packages
+//!   complete per OS and signed (every OS with `--require-desktop`)
 
 mod channels;
+mod desktop;
 mod installers;
 mod manifest;
+mod msix;
 mod notes;
 mod sbom;
 mod sign;
@@ -109,9 +116,37 @@ pub(crate) enum Step {
         #[arg(long)]
         out: PathBuf,
     },
+    /// Write `desktop-<channel>.json`, the desktop app's update feed, for
+    /// the desktop updater archives in `--dir`.
+    DesktopFeed {
+        /// Release directory.
+        #[arg(long)]
+        dir: PathBuf,
+        /// Release tag.
+        #[arg(long)]
+        tag: String,
+    },
+    /// Write the MSIX manifests (x64 and arm64, App Installer and
+    /// Microsoft Store identities), the App Installer file, `version.txt`
+    /// and `publisher.txt` of the Windows desktop packages into `--out`.
+    Msix {
+        /// Release tag.
+        #[arg(long)]
+        tag: String,
+        /// The App Installer identity's publisher (its signing
+        /// certificate's subject).
+        #[arg(long)]
+        publisher: String,
+        /// The Microsoft Store identity's publisher (from Partner Center).
+        #[arg(long)]
+        store_publisher: String,
+        /// Output directory.
+        #[arg(long)]
+        out: PathBuf,
+    },
     /// Check a release directory: every target archive, its checksum,
-    /// signature and SBOM, the signed manifest and channel index, and the
-    /// signed installers.
+    /// signature and SBOM, the signed manifest and channel index, the
+    /// signed installers and the desktop packages.
     Verify {
         /// Release directory.
         #[arg(long)]
@@ -119,6 +154,9 @@ pub(crate) enum Step {
         /// The public key the release was signed with.
         #[arg(long)]
         key: PathBuf,
+        /// Fail when an OS has no desktop packages (the dry run).
+        #[arg(long)]
+        require_desktop: bool,
     },
 }
 
@@ -147,6 +185,17 @@ pub(crate) fn run(step: Step) -> Result<(), String> {
         Step::ContainerContext { dir, out } => {
             channels::container_context(&crate::repo_root(), &dir, &out)
         }
-        Step::Verify { dir, key } => manifest::verify(&dir, &key),
+        Step::DesktopFeed { dir, tag } => desktop::write_feed(&dir, &tag),
+        Step::Msix {
+            tag,
+            publisher,
+            store_publisher,
+            out,
+        } => msix::write(&tag, &publisher, &store_publisher, &out),
+        Step::Verify {
+            dir,
+            key,
+            require_desktop,
+        } => manifest::verify(&dir, &key, require_desktop),
     }
 }

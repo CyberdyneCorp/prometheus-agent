@@ -130,6 +130,10 @@ async fn script(text: String, link: Link, turn: String, answers: Answers) {
 }
 
 impl Host for FakeHost {
+    fn terminal_cwd<'a>(&'a self, _: &'a str, _: &'a str) -> HostFuture<'a, PathBuf> {
+        Box::pin(async { Ok(PathBuf::from(env!("CARGO_MANIFEST_DIR"))) })
+    }
+
     fn owns<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, bool> {
         let owned = self
             .sessions
@@ -161,6 +165,7 @@ impl Host for FakeHost {
                 title: None,
                 started_at: "2026-01-01T00:00:00Z".into(),
                 live: false,
+                project_id: None,
             })
             .collect();
         Box::pin(async move { Ok(SessionList { sessions }) })
@@ -218,6 +223,7 @@ impl Host for FakeHost {
                 id: format!("msg_{n}"),
                 role: "assistant".into(),
                 text: Some(text.clone()),
+                reactions: Vec::new(),
             })
             .collect();
         Box::pin(async { Ok(Transcript { messages }) })
@@ -231,6 +237,7 @@ impl Host for FakeHost {
                 cost_usd: None,
                 billing_source: None,
                 subscription: None,
+                categories: Vec::new(),
             })
         })
     }
@@ -325,6 +332,7 @@ impl Host for FakeHost {
             source,
             disposition,
             reason: None,
+            subcommands: Vec::new(),
         };
         let commands = vec![
             entry("compress", CommandSource::Builtin, Disposition::Exec),
@@ -365,7 +373,7 @@ impl Host for FakeHost {
         })
     }
 
-    fn model_options<'a>(&'a self, _: &'a str, _: &'a str) -> HostFuture<'a, ModelOptions> {
+    fn model_options<'a>(&'a self, _: &'a str, _: Option<&'a str>) -> HostFuture<'a, ModelOptions> {
         Box::pin(async {
             Ok(ModelOptions {
                 current: Some("mock/m1".into()),
@@ -373,6 +381,8 @@ impl Host for FakeHost {
                     id: "mock/m1".into(),
                     provider: "mock".into(),
                     context_window: Some(8000),
+                    max_reasoning: None,
+                    risky: None,
                 }],
             })
         })
@@ -558,6 +568,7 @@ pub fn hello(major: u16, minor: u16, server_requests: bool) -> HelloParams {
         capabilities: ClientCapabilities {
             server_requests,
             events: Vec::new(),
+            features: Vec::new(),
         },
     }
 }

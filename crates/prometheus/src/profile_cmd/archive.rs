@@ -28,20 +28,38 @@ fn passphrase(why: &str) -> Result<SecretString, Error> {
     Ok(value)
 }
 
-/// `profile export <name> -o FILE [--with-sessions] [--with-secrets]`.
+/// `profile export <name> -o FILE [--with-sessions] [--with-secrets]
+/// [--appearance FILE]`.
 ///
 /// # Errors
 ///
-/// Profile, store and archive errors.
+/// Profile, store and archive errors; `output.io` for an unreadable
+/// appearance file.
 pub(super) fn export(
     home: &Home,
     name: &str,
     output: &Path,
-    with_sessions: bool,
-    with_secrets: bool,
+    (with_sessions, with_secrets): (bool, bool),
+    appearance: Option<&Path>,
     json: bool,
 ) -> Result<u8, Error> {
-    let manifest = export_archive(home, name, output, with_sessions, with_secrets)?;
+    let appearance = appearance
+        .map(|path| {
+            std::fs::read(path).map_err(|e| {
+                Error::new(
+                    &codes::OUTPUT_IO,
+                    format!("cannot read {}: {e}", path.display()),
+                )
+            })
+        })
+        .transpose()?;
+    let manifest = export_with(
+        home,
+        name,
+        output,
+        (with_sessions, with_secrets),
+        appearance,
+    )?;
     if json {
         return crate::output::json(&manifest);
     }
@@ -73,6 +91,17 @@ pub fn export_archive(
     with_sessions: bool,
     with_secrets: bool,
 ) -> Result<profile_archive::ExportManifest, Error> {
+    export_with(home, name, output, (with_sessions, with_secrets), None)
+}
+
+/// [`export_archive`] with the desktop appearance overlay.
+fn export_with(
+    home: &Home,
+    name: &str,
+    output: &Path,
+    (with_sessions, with_secrets): (bool, bool),
+    appearance: Option<Vec<u8>>,
+) -> Result<profile_archive::ExportManifest, Error> {
     let profile = home.existing_profile(&ProfileName::parse(name)?)?;
     let scope = open_scope(profile.clone())?;
     let memory = memory_jsonl(&scope)?;
@@ -91,6 +120,7 @@ pub fn export_archive(
         memory,
         projects,
         sealed_secrets,
+        appearance,
     };
     profile_archive::export(&profile, output, &options, crate::build_info::VERSION)
 }
@@ -206,6 +236,16 @@ pub fn import_archive(
     }
     if let Some(projects) = staged.read(profile_archive::PROJECTS_ENTRY)? {
         restore_projects(&scope, &projects)?;
+    }
+    // The desktop reads it back and applies it after the import.
+    if let Some(appearance) = staged.read(profile_archive::APPEARANCE_ENTRY)? {
+        let path = scope.path(profile_archive::APPEARANCE_ENTRY);
+        pmt_core::private_fs::write_atomic(&path, &appearance).map_err(|e| {
+            Error::new(
+                &codes::OUTPUT_IO,
+                format!("cannot write {}: {e}", path.display()),
+            )
+        })?;
     }
     Ok((staged.manifest.clone(), profile.name().to_string()))
 }

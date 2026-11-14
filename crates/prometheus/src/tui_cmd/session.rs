@@ -65,7 +65,10 @@ impl Tui<'_> {
         self.background(async move {
             Done::Models(
                 client
-                    .call_typed::<ModelOptionsList>(&params)
+                    .call_typed::<ModelOptionsList>(&pmt_rpc::contracts::ModelOptionsParams {
+                        session_id: Some(params.session_id.clone()),
+                        profile: None,
+                    })
                     .await
                     .unwrap_or_default(),
             )

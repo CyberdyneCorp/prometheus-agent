@@ -71,6 +71,12 @@ enum Admission {
 
 type Socket = WebSocketStream<TcpStream>;
 
+/// What a WebSocket can run over: the daemon's own TCP listener, or a
+/// connection another listener (the dashboard's) upgraded.
+pub trait Transport: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static {}
+
+impl<T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static> Transport for T {}
+
 /// Serves one accepted TCP connection until it closes.
 // The upgrade callback's error type is fixed by tungstenite.
 #[allow(clippy::result_large_err)]
@@ -87,7 +93,9 @@ pub async fn serve(server: Arc<Server>, stream: TcpStream) {
         return;
     };
     match admission {
-        Some(Admission::Accepted(grant)) => run(server, socket, grant).await,
+        Some(Admission::Accepted(grant)) => {
+            run(server, socket, grant, Ends::default()).await;
+        }
         Some(Admission::Refused(code)) => refuse(socket, code).await,
         None => {}
     }
@@ -194,7 +202,37 @@ async fn refuse(mut socket: Socket, code: CloseCode) {
     let _ = tokio::time::timeout(Duration::from_secs(1), socket.close(None)).await;
 }
 
-async fn run(server: Arc<Server>, socket: Socket, grant: Grant) {
+/// Serves a client protocol connection another listener admitted and
+/// upgraded (the dashboard's `/api/rpc`, which authenticates with its own
+/// session cookie instead of a ticket): from `rpc.hello` on, it is any
+/// other connection.
+/// `ends` closes it from outside.
+pub async fn serve_upgraded<S: Transport>(
+    server: Arc<Server>,
+    socket: WebSocketStream<S>,
+    grant: Grant,
+    ends: Ends,
+) {
+    run(server, socket, grant, ends).await;
+}
+
+/// What ends a connection another listener admitted, besides the daemon
+/// stopping.
+#[derive(Debug, Clone, Default)]
+pub struct Ends {
+    /// The listener stops: closed with 1001 while the daemon keeps running.
+    pub stop: CancellationToken,
+    /// The credential it was admitted with is gone (a revoked device, a
+    /// signed-out browser): closed with 4401.
+    pub revoked: CancellationToken,
+}
+
+async fn run<S: Transport>(
+    server: Arc<Server>,
+    socket: WebSocketStream<S>,
+    grant: Grant,
+    ends: Ends,
+) {
     let (sink, stream) = socket.split();
     let (tx, rx) = mpsc::unbounded_channel();
     let dead = CancellationToken::new();
@@ -209,7 +247,7 @@ async fn run(server: Arc<Server>, socket: Socket, grant: Grant) {
     server.connections.fetch_add(1, Ordering::Relaxed);
     let writer = pmt_core::spawn::spawn(write_loop(sink, rx, dead.clone()).in_current_span());
     let in_order = pmt_core::spawn::spawn(ordered_loop(queue).in_current_span());
-    read_loop(&server, &conn, stream, &dead).await;
+    read_loop(&server, &conn, stream, &dead, &ends).await;
     in_order.abort();
     server.hub().detach_all(conn.id);
     server.connections.fetch_sub(1, Ordering::Relaxed);
@@ -217,8 +255,8 @@ async fn run(server: Arc<Server>, socket: Socket, grant: Grant) {
     let _ = tokio::time::timeout(Duration::from_secs(2), writer).await;
 }
 
-async fn write_loop(
-    mut sink: SplitSink<Socket, Message>,
+async fn write_loop<S: Transport>(
+    mut sink: SplitSink<WebSocketStream<S>, Message>,
     mut rx: mpsc::UnboundedReceiver<Message>,
     dead: CancellationToken,
 ) {
@@ -232,17 +270,26 @@ async fn write_loop(
     dead.cancel();
 }
 
-async fn read_loop(
+async fn read_loop<S: Transport>(
     server: &Arc<Server>,
     conn: &Arc<Conn>,
-    mut stream: SplitStream<Socket>,
+    mut stream: SplitStream<WebSocketStream<S>>,
     dead: &CancellationToken,
+    ends: &Ends,
 ) {
     loop {
         let next = tokio::select! {
             () = dead.cancelled() => return,
             () = server.closing.cancelled() => {
                 let _ = conn.tx.send(close_message(CloseCode::ShuttingDown));
+                return;
+            }
+            () = ends.stop.cancelled() => {
+                let _ = conn.tx.send(close_message(CloseCode::ShuttingDown));
+                return;
+            }
+            () = ends.revoked.cancelled() => {
+                let _ = conn.tx.send(close_message(CloseCode::BadCredential));
                 return;
             }
             next = tokio::time::timeout(IDLE_TIMEOUT, stream.next()) => next,
@@ -469,6 +516,7 @@ fn hello(server: &Server, conn: &Conn, id: &Id, params: &Value) -> ControlFlow<(
         minor,
         advertised: Arc::new(advertised),
         server_requests: hello.capabilities.server_requests,
+        features: Arc::new(hello.capabilities.features.clone()),
     });
     send(conn, frame::result(id, &result));
     ControlFlow::Continue(())

@@ -1,0 +1,535 @@
+// The desktop window (spec: desktop-app): attaches through the shell,
+// then renders sessions, chat and settings over the window's protocol
+// client. Every profile-data request names the window's profile, and a
+// profile switch detaches and redials before anything of the new profile
+// is shown. Display preferences are the machine's (the local daemon's
+// `ui.prefs`), approvals for an unfocused window become notifications,
+// and plugin panels load on their own origins.
+
+import type { ApprovalRequestParams } from "../../../schema/rpc";
+import { h, notice } from "../../../web/src/lib/dom";
+import { Prefs } from "../../../web/src/lib/prefs";
+import { applyFonts, restore, snapshot, Zoom } from "./appearance";
+import { Attention, focusCard } from "./attention";
+import { ChatView } from "./chat";
+import { DesktopClient } from "./client";
+import { Background, ConnectionsPanel, Groups, LOCAL, type Listing, listConnections } from "./connections";
+import { CommandPalette, type Entry } from "./command-palette";
+import { desktopSettings } from "./desktop-settings";
+import { MemoryGraph } from "./graph";
+import { hudWindow, toggleHud } from "./hud";
+import { type InstallLink, installDialog } from "./install";
+import { ManagePane } from "./manage";
+import { PanelHost } from "./panels";
+import { ProfileClients } from "./profiles";
+import { ProjectsSidebar } from "./projects";
+import { localPrefsChannel } from "./remote-prefs";
+import { LAST_PROFILE } from "./quickask";
+import { SettingsPanel } from "./settings";
+import { type Attach, isWebapp, onShellEvent, shell } from "./shell";
+import { Switcher } from "./switcher";
+import type { TerminalPane } from "./terminal";
+import { Onboarding } from "./onboarding";
+import { Guide } from "./tour";
+import { toolPrefsControls, UiTools } from "./ui-tools";
+import { NOT_FOUND } from "./verdict";
+import { showProfile, stageFile } from "./web-shell";
+import { type Workspace, workspace } from "./workspace";
+
+interface SessionSummary {
+  session_id: string;
+  title?: string | null;
+}
+
+type DeepLink = { open: "session"; session_id: string } | { open: "new"; profile?: string; cwd?: string } | InstallLink;
+
+interface Launch {
+  notices: string[];
+  /** This window's label (drafts are kept per window). */
+  window?: string;
+}
+
+/** How often the window asks for an app update (the shell checks the
+ *  channel at most every 6 hours). */
+const UPDATE_CHECK_MS = 60 * 60 * 1000;
+
+const root = (): HTMLElement => document.getElementById("app") as HTMLElement;
+const notices = h("div", { class: "notices", "aria-live": "polite" });
+
+function say(text: string, kind: "info" | "warn" | "error" = "info"): void {
+  notices.append(notice(text, kind));
+}
+
+/** Attaches to the local daemon (asking before restarting a busy stale
+ *  one) and opens the window, or shows why not with Retry. */
+export async function boot(restart = false): Promise<void> {
+  root().replaceChildren(h("p", { class: "boot", role: "status" }, "Starting Prometheus…"));
+  const outcome = await shell<Attach>(restart ? "restart_daemon" : "attach", {}).catch((err: unknown): Attach => ({ status: "failed", error: String(err) }));
+  if (outcome.status === "failed") return failed(outcome.error, outcome.log);
+  if (outcome.status === "confirm_restart") return confirmRestart(outcome);
+  if (outcome.status === "no_local") return noLocal();
+  if (outcome.notice) say(outcome.notice, "warn");
+  const launch = await shell<Launch>("launch_options").catch((): Launch => ({ notices: [] }));
+  const listing = await listConnections().catch(() => null);
+  window_(outcome.profiles, launch.window ?? "main", listing);
+}
+
+function failed(error: string, log?: string): void {
+  const retry = h("button", { type: "button", name: "retry" }, "Retry");
+  retry.addEventListener("click", () => void boot());
+  const logLink = log ? h("p", {}, "See the daemon log: ", h("a", { href: log, class: "log-link" }, log)) : null;
+  root().replaceChildren(h("section", { class: "boot-failed", role: "alert" }, h("h1", {}, "Prometheus could not start"), h("p", { class: "error" }, error), logLink, retry));
+}
+
+function noLocal(): void {
+  root().replaceChildren(
+    h(
+      "section",
+      { class: "boot-failed", role: "status" },
+      h("h1", {}, "No local daemon"),
+      h("p", {}, "The app was started with --ignore-existing, so it did not start a gateway daemon on this machine. Start it without the flag to use the local agent."),
+    ),
+  );
+}
+
+function confirmRestart(outcome: { running_turns: number; daemon: string; bundled: string }): void {
+  const restart = h("button", { type: "button", name: "restart" }, "Restart now");
+  restart.addEventListener("click", () => void boot(true));
+  const later = h("button", { type: "button", name: "later" }, "Not now");
+  later.addEventListener("click", () => window_([], "main", null));
+  root().replaceChildren(
+    h(
+      "section",
+      { class: "confirm-restart", role: "alertdialog" },
+      h("p", {}, `The running daemon (${outcome.daemon}) is not this app's build (${outcome.bundled}) and ${outcome.running_turns} turn(s) are running. Restart it now?`),
+      restart,
+      later,
+    ),
+  );
+}
+
+interface Opener {
+  chat: ChatView;
+  client: DesktopClient;
+  switchTo: (profile: string) => Promise<void>;
+  profiles: string[];
+  dialogs: HTMLElement;
+}
+
+function window_(profiles: string[], label: string, listing: Listing | null): void {
+  const served = profiles.length > 0 ? profiles : ["default"];
+  // The default profile first, as the CLI does without `-p`.
+  const localProfile = served.includes("default") ? "default" : (served[0] ?? "default");
+  // The primary connection, or the last one that connected.
+  const opening = listing?.launch ?? LOCAL;
+  // This window renders the desktop UI tools of the sessions it shows.
+  const client = new DesktopClient(opening === LOCAL ? localProfile : lastProfile(opening), opening, ["desktop_ui"]);
+  const dialogs = h("div", { class: "dialogs" });
+  const chat = new ChatView({ client, window: label, dialogs });
+  const pool = new ProfileClients(client);
+  const settings = new SettingsPanel(client, served, pool);
+  const attention = new Attention();
+  const panels = new PanelHost(client);
+  // Display preferences are this machine's, whatever connection shows.
+  const prefs = new Prefs(localPrefsChannel(client, localProfile));
+  const status = h("span", { class: "connection", role: "status" }, "Connecting…");
+  const list = h("ul", { class: "sessions", "aria-label": "Sessions" });
+  const picker = h("select", { name: "profile", "aria-label": "Profile" }, ...served.map((p) => h("option", { value: p, selected: p === "default" }, p)));
+  const desktopSection = h("section", { class: "desktop-settings", "aria-label": "Desktop settings" });
+  const connections = new ConnectionsPanel();
+  const background = new Background((id, params, title) => attention.approval(id, params, title));
+  const switcher = new Switcher(new Groups(), (connection, profile) => void switchConnection(connection, profile));
+
+  const refresh = async () => {
+    const listed = await client.call<{ sessions: SessionSummary[] }>("session.list", { profile: client.profile }).catch(() => ({ sessions: [] }));
+    list.replaceChildren(
+      ...listed.sessions.map((s) => {
+        const button = h("button", { type: "button", "data-session": s.session_id }, s.title ?? s.session_id);
+        button.addEventListener("click", () => void chat.open(s.session_id));
+        return h("li", {}, button);
+      }),
+    );
+  };
+  const switchTo = async (profile: string) => {
+    if (profile === client.profile) return;
+    chat.draft();
+    list.replaceChildren();
+    picker.value = profile;
+    remember(profile);
+    await client.switchProfile(profile);
+  };
+  // Another connection: a session left open keeps streaming on its own
+  // background connection; the switch is remembered only once it connects
+  // (the shell records each successful connect).
+  const switchConnection = async (connection: string, profile: string | null) => {
+    const target = profile ?? (connection === LOCAL ? localProfile : lastProfile(connection));
+    if (connection === client.connection) return void switchTo(target);
+    const leaving = { connection: client.connection, profile: client.profile, session: chat.sessionId };
+    chat.draft();
+    list.replaceChildren();
+    background.release(connection, target);
+    try {
+      await client.switchTo(connection, target);
+    } catch (err) {
+      say(`Could not connect to ${connections.name(connection)}: ${String(err)}`, "error");
+    } finally {
+      if (leaving.session) background.keep(leaving.connection, connections.name(leaving.connection), leaving.profile, leaving.session);
+      showSwitch();
+    }
+  };
+  const showSwitch = () => {
+    const granted = client.connection === LOCAL ? served : (client.hello?.profiles ?? [client.profile]);
+    picker.replaceChildren(...granted.map((p) => h("option", { value: p, selected: p === client.profile }, switcher.profileLabel(client.connection, p))));
+    switcher.update(null, client.connection, granted, client.profile);
+  };
+  connections.onChange = (registry) => switcher.update(registry, client.connection, client.connection === LOCAL ? served : (client.hello?.profiles ?? [client.profile]), client.profile);
+  connections.onRetried = (id) => {
+    if (id === client.connection && client.state === "latched") client.retry();
+  };
+  client.onLatched = (latch) => {
+    status.textContent = `Stopped · ${connections.name(client.connection)}`;
+    say(latch.message, "error");
+  };
+
+  client.onEvent = (envelope) => chat.apply(envelope);
+  client.onRequest = (request) => {
+    if (ui.handle(request)) return;
+    chat.request(request);
+    if (request.method === "approval.request") attention.approval(request.id, request.params as unknown as ApprovalRequestParams, chat.title());
+  };
+  for (const event of ["request.resolved", "request.cancel"]) client.on(event, (envelope) => attention.settled((envelope.data as { id: string }).id));
+  client.on("turn.finished", (envelope) => {
+    attention.turn(envelope.session_id ?? "", false, "");
+    if (envelope.session_id) void chat.turnFinished(envelope.session_id);
+  });
+  chat.onSubmitted = (sessionId) => attention.turn(sessionId, true, chat.title() ?? sessionId);
+  client.onTruncated = (sessionId) => {
+    if (sessionId === chat.sessionId) void chat.reload();
+  };
+  client.onState = (state) => {
+    status.dataset.state = state;
+    if (state === "latched") return;
+    const where = client.connection === LOCAL ? "" : ` on ${connections.name(client.connection)}`;
+    status.textContent = state === "connected" ? `Connected · ${client.profile}${where}` : state === "reconnecting" ? "Reconnecting…" : "Connecting…";
+    if (state !== "connected") return;
+    void shell("connection_connected", { id: client.connection }).catch(() => {});
+    rememberProfile(client.connection, client.profile);
+    showSwitch();
+    void refresh();
+    void settings.reset();
+    manage.reset();
+    void prefs
+      .start({})
+      .then(async () => {
+        // The first launch of the app's main window opens onboarding.
+        if (label === "main" && !location.hash && client.connection === LOCAL && !isWebapp()) await onboarding.firstRun();
+      })
+      .catch((err: unknown) => console.warn("UI preferences or onboarding unavailable:", err));
+    void panels.load(client.profile);
+    void projects.load();
+    void applyFonts(client);
+    if (!isWebapp()) void desktopSettings(client, desktopSection).catch((err: unknown) => console.warn("desktop settings:", err));
+  };
+  client.onReattached = () => void chat.reattached();
+  picker.addEventListener("change", () => void switchTo(picker.value));
+
+  const newChat = h("button", { type: "button", name: "new-chat" }, "New chat");
+  newChat.addEventListener("click", () => chat.draft());
+  const botChat = h("button", { type: "button", name: "bot-chat" }, "Bot chat");
+  botChat.addEventListener("click", async () => {
+    // A click during a daemon restart waits for the redial: the daemon's
+    // get-or-create makes every window land on the same chat.
+    try {
+      const chatRef = await client.callAcrossRestart<{ session_id: string }>("bot.chat.ensure", { profile: client.profile });
+      await chat.open(chatRef.session_id);
+    } catch (err) {
+      say(`Could not open the bot chat: ${(err as Error).message}`, "error");
+    }
+  });
+
+  const opener: Opener = { chat, client, switchTo, profiles: served, dialogs };
+  const graph = new MemoryGraph(client);
+  chat.onJourney = () => void graph.open();
+  const projects = new ProjectsSidebar(
+    client,
+    (path) => chat.draft(path),
+    (sessionId) => void chat.open(sessionId),
+  );
+  const zoom = new Zoom();
+  const files = profileFiles(prefs, zoom, say);
+  const manage = new ManagePane(client, pool, served, dialogs, {
+    openSession: async (profile, sessionId) => {
+      if (served.includes(profile)) await switchTo(profile);
+      await openOwned(sessionId, opener);
+    },
+    switchProfile: switchTo,
+    exportProfile: files.exportProfile,
+    importProfile: files.importProfile,
+  });
+  const work = workspace(client, chat, h("div", {}, settings.el, desktopSection, accentControl(prefs), toolPrefsControls(prefs), connections.el), dialogs, [{ name: "manage", label: "Manage", el: manage.el, shown: () => manage.reset() }]);
+  if (isWebapp()) webappParts(client, chat, work.terminal, [desktopSection, connections.el]);
+  const guide = new Guide();
+  const onboarding = new Onboarding(client, chat, prefs, dialogs);
+  const ui = new UiTools(client, { chat, terminal: work.terminal, preview: work.preview, driver: work.driver, layout: work.layout, prefs, guide, onboarding, dialogs });
+  client.on("session.project", () => void Promise.all([projects.load(), refresh()]));
+  const keys = work.shortcuts;
+  manage.setShortcuts(keys.panel);
+  keys.onSave = (overrides) => void prefs.set("keybindings", overrides).catch(() => {});
+  prefs.onChange((values) => keys.load(values.keybindings));
+  panels.onShortcut = (shortcut) => keys.add(shortcut);
+  const palette = new CommandPalette(() => paletteEntries(opener, work, { graph, files, zoom }));
+  windowActions(keys, opener, { palette, graph, zoom });
+  work.aside.append(panels.el);
+  const side = h("nav", { class: "side" }, switcher.el, newChat, botChat, onboarding.skip, list, projects.el);
+  listenToShell(opener);
+  onShellEvent("hud-summon", () => void toggleHud(client.profile, chat.sessionId));
+  root().replaceChildren(
+    h("header", { class: "top" }, h("span", { class: "brand" }, "Prometheus"), switcher.picker, picker, work.layout.el, status),
+    h(
+      "div",
+      { class: "layout" },
+      side,
+      work.center,
+      work.aside,
+    ),
+    dialogs,
+    notices,
+    background.el,
+    graph.el,
+    palette.el,
+    guide.el,
+  );
+  remember(client.profile);
+  void connections.render().catch((err: unknown) => console.warn("connections:", err));
+  work.start(side);
+  chat.draft();
+  void poppedOut(opener, side, work.center);
+  client.start();
+  void afterReady(opener);
+}
+
+/** A popped-out window (`#session=<profile>/<id>`) or the HUD bar
+ *  (`#hud=<profile>/<id>`): that session only, without the sidebar and
+ *  tabs. */
+async function poppedOut(o: Opener, side: HTMLElement, center: HTMLElement): Promise<void> {
+  const match = /^#(session|hud)=([^/]+)\/(.+)$/.exec(location.hash);
+  if (!match) return;
+  const [, kind = "", profile = "", sessionId = ""] = match;
+  side.remove();
+  center.querySelector(".center-bar")?.remove();
+  document.documentElement.dataset.window = "pop-out";
+  if (kind === "hud") hudWindow(o.chat, center);
+  await o.client.ready();
+  if (o.profiles.includes(profile)) await o.switchTo(profile);
+  await o.chat.open(sessionId);
+}
+
+/** The shell's events: deep links, focus requests after a notification
+ *  click, sessions opened from the tray or the quick-ask panel. */
+function listenToShell(o: Opener): void {
+  onShellEvent("deep-link", (payload) => void deepLink(payload as DeepLink, o));
+  onShellEvent("focus-request", (payload) => void focusRequest(payload as { request_id: string; session_id: string }, o));
+  onShellEvent("open-session", (payload) => {
+    const asked = payload as { profile?: string; session_id: string };
+    void (async () => {
+      if (asked.profile && o.profiles.includes(asked.profile)) await o.switchTo(asked.profile);
+      await openOwned(asked.session_id, o);
+    })();
+  });
+}
+
+/** What waits for the window: held deep links, launch notices, updates. */
+async function afterReady(o: Opener): Promise<void> {
+  const launch = await shell<Launch>("launch_options").catch((): Launch => ({ notices: [] }));
+  for (const line of launch.notices) say(line, "warn");
+  const held = await shell<DeepLink[]>("take_links").catch(() => []);
+  for (const link of held) await deepLink(link, o);
+  const checkUpdates = async () => {
+    const outcome = await shell<{ available?: { version: string } }>("background_check").catch(() => ({}) as { available?: { version: string } });
+    if (outcome.available) say(`Prometheus ${outcome.available.version} is available: Settings → Updates.`);
+  };
+  void checkUpdates();
+  window.setInterval(() => void checkUpdates(), UPDATE_CHECK_MS);
+}
+
+/** The profile last shown on each connection (per device). */
+const PROFILES_KEY = "prometheus.connection-profiles";
+
+function lastProfile(connection: string): string {
+  try {
+    const known = JSON.parse(localStorage.getItem(PROFILES_KEY) ?? "{}") as Record<string, string>;
+    return known[connection] ?? "default";
+  } catch {
+    return "default";
+  }
+}
+
+function rememberProfile(connection: string, profile: string): void {
+  try {
+    const known = JSON.parse(localStorage.getItem(PROFILES_KEY) ?? "{}") as Record<string, string>;
+    known[connection] = profile;
+    localStorage.setItem(PROFILES_KEY, JSON.stringify(known));
+  } catch {
+    // The connection's default profile then opens.
+  }
+}
+
+/** The accent colour, a machine-wide display preference. */
+function accentControl(prefs: Prefs): HTMLElement {
+  const input = h("input", { type: "color", name: "accent", "aria-label": "Accent colour", value: "#d9480f" });
+  const apply = (value: unknown) => {
+    if (typeof value !== "string") return;
+    input.value = value;
+    document.documentElement.style.setProperty("--accent", value);
+  };
+  prefs.onChange((values) => apply(values.accent));
+  input.addEventListener("change", () => void prefs.set("accent", input.value).catch((err: unknown) => console.warn("accent:", err)));
+  return h("label", { class: "accent" }, "Accent colour ", input);
+}
+
+/** The webapp's version of the window (spec: web-dashboard, Desktop
+ *  workspace in the browser; Webapp file staging and terminals): files
+ *  dropped or pasted on the composer or a terminal are staged under the
+ *  profile, and the desktop-only settings (the updater, launch options,
+ *  remote connections) are not shown. */
+function webappParts(client: DesktopClient, chat: ChatView, terminal: TerminalPane, nativeOnly: HTMLElement[]): void {
+  const stage = (file: File) => stageFile(client.profile, file);
+  chat.composer.stager = stage;
+  terminal.onDrop = stage;
+  for (const el of nativeOnly) el.hidden = true;
+}
+
+function remember(profile: string): void {
+  showProfile(profile);
+  try {
+    localStorage.setItem(LAST_PROFILE, profile);
+  } catch {
+    // The quick-ask panel then asks the default profile.
+  }
+}
+
+/** A notification was clicked: show its session and focus its card. The
+ *  request stays pending until the user answers it in the card. */
+async function focusRequest(asked: { request_id: string; session_id: string }, o: Opener): Promise<void> {
+  if (o.chat.sessionId !== asked.session_id) await openOwned(asked.session_id, o);
+  if (!focusCard(asked.request_id)) say("That approval was already answered or settled.", "info");
+}
+
+/** Opens `sessionId` in the profile that owns it: the window's first,
+ *  then the other served profiles. */
+async function openOwned(sessionId: string, o: Opener): Promise<void> {
+  const first = o.client.profile;
+  for (const profile of [first, ...o.profiles.filter((p) => p !== first)]) {
+    await o.switchTo(profile);
+    try {
+      await o.client.call("session.attach", { session_id: sessionId, role: "observer" });
+      await o.client.call("session.detach", { session_id: sessionId });
+      await o.chat.open(sessionId);
+      return;
+    } catch (err) {
+      if ((err as { code?: number }).code !== NOT_FOUND) break;
+    }
+  }
+  await o.switchTo(first);
+  await o.chat.open(sessionId);
+}
+
+/** What a deep link opens; it never submits input or answers a request,
+ *  and an install link only opens the consent dialog. */
+async function deepLink(link: DeepLink, o: Opener): Promise<void> {
+  switch (link.open) {
+    case "new":
+      if (link.profile && o.profiles.includes(link.profile)) await o.switchTo(link.profile);
+      o.chat.draft(link.cwd ?? null);
+      return;
+    case "session":
+      await openOwned(link.session_id, o);
+      return;
+    default:
+      await installDialog(link, o.client.profile, o.dialogs);
+  }
+}
+
+interface Extras {
+  palette: CommandPalette;
+  graph: MemoryGraph;
+  zoom: Zoom;
+}
+
+/** The window's actions beyond the workspace's: the palette, the HUD,
+ *  the memory graph and zoom. */
+function windowActions(keys: Workspace["shortcuts"], o: Opener, x: Extras): void {
+  const actions: [string, string, string, () => void][] = [
+    ["palette", "Command palette", "CommandOrControl+K", () => void x.palette.open()],
+    ["palette-p", "Command palette (alternative)", "CommandOrControl+P", () => void x.palette.open()],
+    ["hud", "HUD mode", "CommandOrControl+Shift+H", () => void toggleHud(hudProfile(o), hudSession(o))],
+    ["memory-graph", "Memory graph", "CommandOrControl+Shift+M", () => void x.graph.open()],
+    ["zoom-in", "Zoom in", "CommandOrControl+=", () => x.zoom.step(1)],
+    ["zoom-out", "Zoom out", "CommandOrControl+-", () => x.zoom.step(-1)],
+    ["zoom-reset", "Actual size", "CommandOrControl+0", () => x.zoom.step(0)],
+  ];
+  for (const [id, label, chord, run] of actions) keys.add({ id, label, chord, run });
+}
+
+/** The HUD bar toggles its own session; the main window its chat's. */
+function hudProfile(o: Opener): string {
+  return /^#hud=([^/]+)\//.exec(location.hash)?.[1] ?? o.client.profile;
+}
+
+function hudSession(o: Opener): string | null {
+  return /^#hud=[^/]+\/(.+)$/.exec(location.hash)?.[1] ?? o.chat.sessionId;
+}
+
+interface ProfileFiles {
+  exportProfile: (profile: string) => Promise<void>;
+  importProfile: () => Promise<void>;
+}
+
+/** Export through `profile export` (never with secrets), with the
+ *  appearance as the overlay; an import applies the overlay it carries. */
+function profileFiles(prefs: Prefs, zoom: Zoom, tell: typeof say): ProfileFiles {
+  return {
+    exportProfile: async (profile) => {
+      try {
+        const done = await shell<{ path?: string; cancelled?: boolean }>("profile_export", { profile, appearance: snapshot(prefs) });
+        if (done.path) tell(`Exported profile ${profile} to ${done.path} (no secrets included).`);
+      } catch (err) {
+        tell(`Export failed: ${String(err)}`, "error");
+      }
+    },
+    importProfile: async () => {
+      try {
+        const done = await shell<{ profile?: string; appearance?: unknown; cancelled?: boolean }>("profile_import");
+        if (!done.profile) return;
+        await restore(prefs, zoom, done.appearance);
+        tell(`Imported profile ${done.profile}; restart the app to serve it.`);
+      } catch (err) {
+        tell(`Import failed: ${String(err)}`, "error");
+      }
+    },
+  };
+}
+
+interface PaletteParts {
+  graph: MemoryGraph;
+  files: ProfileFiles;
+  zoom: Zoom;
+}
+
+/** What the palette finds: pages, settings, sessions and actions. */
+async function paletteEntries(o: Opener, work: Workspace, p: PaletteParts): Promise<Entry[]> {
+  const pages: Entry[] = work.paneNames.map((name) => ({ kind: "page", label: name, run: () => work.showPane(name) }));
+  const settings: Entry[] = ["Model → Subagents", "General", "Keyboard shortcuts", "HUD"].map((label) => ({ kind: "setting", label, run: () => work.showPane(label === "Keyboard shortcuts" ? "manage" : "settings") }));
+  const listed = await o.client.call<{ sessions: SessionSummary[] }>("session.list", { profile: o.client.profile }).catch(() => ({ sessions: [] as SessionSummary[] }));
+  const sessions: Entry[] = listed.sessions.map((s) => ({ kind: "session", label: s.title ?? s.session_id, keywords: s.session_id, run: () => void o.chat.open(s.session_id) }));
+  const actions: Entry[] = [
+    { kind: "action", label: "New chat", run: () => o.chat.draft() },
+    { kind: "action", label: "Memory graph", run: () => void p.graph.open() },
+    { kind: "action", label: "HUD mode", run: () => void toggleHud(o.client.profile, o.chat.sessionId) },
+    { kind: "action", label: "Zoom in", run: () => p.zoom.step(1) },
+    { kind: "action", label: "Zoom out", run: () => p.zoom.step(-1) },
+    { kind: "action", label: "Import profile…", run: () => void p.files.importProfile() },
+    ...o.profiles.map((profile): Entry => ({ kind: "action", label: `Export profile ${profile}`, run: () => void p.files.exportProfile(profile) })),
+  ];
+  return [...pages, ...settings, ...sessions, ...actions];
+}

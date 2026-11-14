@@ -103,6 +103,23 @@ pub struct CommandEntry {
     /// Why it does not run there.
     #[serde(default)]
     pub reason: Option<String>,
+    /// Subcommands with their own disposition on this surface (a palette
+    /// offers a command when it or one of them runs here).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subcommands: Vec<SubcommandEntry>,
+}
+
+/// One subcommand of a `commands.catalog` entry.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SubcommandEntry {
+    /// The first word after the command.
+    pub name: String,
+    /// Whether it runs from the asking client's surface.
+    pub disposition: Disposition,
+    /// Why it does not run there.
+    #[serde(default)]
+    pub reason: Option<String>,
 }
 
 /// `commands.catalog` result.
@@ -157,6 +174,14 @@ pub struct ModelOption {
     /// The model's context window, when known.
     #[serde(default)]
     pub context_window: Option<u64>,
+    /// The most reasoning the model takes (`none` when it does not
+    /// reason); a higher requested level is clamped to it.
+    #[serde(default)]
+    pub max_reasoning: Option<String>,
+    /// Why switching the session to it is risky (the conversation does
+    /// not fit its window, it cannot call tools...); clients confirm.
+    #[serde(default)]
+    pub risky: Option<String>,
 }
 
 /// `model.options` result.
@@ -183,6 +208,12 @@ pub struct SubagentSummary {
     /// Its task's title.
     #[serde(default)]
     pub title: Option<String>,
+    /// How long it has run, in milliseconds.
+    #[serde(default)]
+    pub elapsed_ms: Option<u64>,
+    /// What it is doing now.
+    #[serde(default)]
+    pub activity: Option<String>,
 }
 
 /// `subagent.list` result.
@@ -267,7 +298,7 @@ method!(/// `complete.path`: entries for a typed path, listed through the
     /// session's own terminal backend (empty when it is unreachable).
     CompletePath = "complete.path" (CompleteParams) -> Completions);
 method!(/// `model.options`: the models the session may switch to.
-    ModelOptionsList = "model.options" (SessionRef) -> ModelOptions);
+    ModelOptionsList = "model.options" (super::ModelOptionsParams) -> ModelOptions);
 method!(/// `subagent.list`: the session's delegated children.
     SubagentListing = "subagent.list" (SessionRef) -> SubagentList);
 method!(/// `config.get`: one effective configuration value of a profile.

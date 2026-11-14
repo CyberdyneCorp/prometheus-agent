@@ -394,6 +394,7 @@ impl DaemonHost {
             from_lane: false,
             resume: None,
             api: None,
+            entry: None,
         };
         Self::start_with(
             Arc::clone(&self.turns),

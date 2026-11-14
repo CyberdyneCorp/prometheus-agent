@@ -17,6 +17,7 @@ wasmtime::component::bindgen!({
         "../../wit/memory-provider",
         "../../wit/context-engine",
         "../../wit/platform-adapter",
+        "../../wit/ui-panel",
     ],
     inline: "
         package prometheus:runtime;
@@ -29,6 +30,7 @@ wasmtime::component::bindgen!({
             include prometheus:memory-provider/memory-provider@1.0.0;
             include prometheus:context-engine/context-engine@1.0.0;
             include prometheus:platform-adapter/platform-adapter@1.0.0;
+            include prometheus:ui-panel/ui-panel@1.0.0;
         }
     ",
     world: "prometheus:runtime/plugin-host",

@@ -464,6 +464,7 @@ async fn attached_clients_see_adapter_state_changes() {
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
     let desktop = pmt_gateway::hub::Peer {
         tx,
+        features: std::sync::Arc::default(),
         minor: h.server.protocol().minor,
         advertised: std::sync::Arc::default(),
         server_requests: false,

@@ -7,6 +7,7 @@ pub mod clarify;
 pub mod connections;
 pub mod cron;
 pub mod delegation;
+pub mod desktop;
 pub mod memory;
 pub mod messaging;
 pub mod session_search;
@@ -23,6 +24,7 @@ use serde_json::Value;
 pub use clarify::Clarifier;
 pub use cron::CronPort;
 pub use delegation::{CodePort, DelegationPort};
+pub use desktop::{DesktopPort, DesktopPorts};
 pub use memory::{MemoryPort, Recalled};
 pub use messaging::{MessagingPort, MessagingPorts, ReadCheck};
 pub use session_search::SessionSearch;
@@ -41,6 +43,7 @@ pub struct AgentTools {
     delegation: Option<Arc<dyn DelegationPort>>,
     code: Option<Arc<dyn CodePort>>,
     cron: Option<Arc<dyn CronPort>>,
+    desktop: Option<Arc<dyn DesktopPort>>,
 }
 
 impl AgentTools {
@@ -69,6 +72,7 @@ impl AgentTools {
             delegation: None,
             code: None,
             cron: None,
+            desktop: None,
         })
     }
 
@@ -118,6 +122,14 @@ impl AgentTools {
         self
     }
 
+    /// Runs the desktop UI tools, `setup_beat` and `project` through
+    /// `port`.
+    #[must_use]
+    pub fn with_desktop(mut self, port: Arc<dyn DesktopPort>) -> Self {
+        self.desktop = Some(port);
+        self
+    }
+
     /// Runs `execute_code` through `port`.
     #[must_use]
     pub fn with_code(mut self, port: Arc<dyn CodePort>) -> Self {
@@ -146,6 +158,10 @@ impl AgentTools {
             "cronjob" => match &self.cron {
                 Some(port) => port.call(self.session, arguments).await,
                 None => ToolResult::error(cron::NO_CRON),
+            },
+            name if desktop::handles(name) => match &self.desktop {
+                Some(port) => port.call(name, arguments, cancel).await,
+                None => desktop::unavailable(name),
             },
             "todo" => self.todo(arguments),
             "clarify" => self.clarify.call(arguments).await,
