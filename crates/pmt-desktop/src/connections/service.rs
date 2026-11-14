@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use pmt_config::secrets::keychain::Keychain;
 use serde::Serialize;
@@ -17,13 +17,9 @@ use sha2::{Digest as _, Sha256};
 use super::credentials::{Credentials, Pins};
 use super::ssh::{Ssh, SshPrograms};
 use super::{Connection, Kind, LOCAL, Registry};
+use crate::dial::{self, DialError};
 use crate::request::Request;
 use crate::shell::{Shell, ok, to_json};
-
-/// How long a forwarder ticket stays valid (the daemon's ticket TTL).
-const TICKET_TTL: Duration = Duration::from_secs(30);
-/// Forwarder tickets outstanding at most.
-const MAX_TICKETS: usize = 100;
 
 /// `bytes` random bytes as lowercase hex.
 ///
@@ -133,16 +129,18 @@ impl Shared {
             .clone()
     }
 
-    /// A one-use ticket of connection `id`'s forwarder.
-    pub(crate) fn issue(&self, id: &str) -> Result<String, String> {
+    /// A one-use ticket of connection `id`'s forwarder, under the same
+    /// limits as the shell's own dial tickets ([`dial::TTL`],
+    /// [`dial::MAX_PENDING`]).
+    pub(crate) fn issue(&self, id: &str) -> Result<String, DialError> {
         let mut tickets = self.tickets.lock().unwrap_or_else(PoisonError::into_inner);
         let now = Instant::now();
         tickets.retain(|_, (_, expires)| *expires > now);
-        if tickets.len() >= MAX_TICKETS {
-            return Err("Too many pending gateway dials".to_owned());
+        if tickets.len() >= dial::MAX_PENDING {
+            return Err(DialError::TooMany);
         }
         let ticket = random_hex(24);
-        tickets.insert(hash(&ticket), (id.to_owned(), now + TICKET_TTL));
+        tickets.insert(hash(&ticket), (id.to_owned(), now + dial::TTL));
         Ok(ticket)
     }
 
@@ -355,5 +353,37 @@ impl Shell {
 
     pub(crate) fn is_local(id: Option<&str>) -> bool {
         id.is_none_or(|id| id == LOCAL)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Connections;
+    use crate::dial::{DialError, MAX_PENDING};
+
+    /// Scenario: Ticket flood (the forwarders' tickets): the shell's dial
+    /// limit applies to them too, with the same refusal.
+    #[test]
+    fn forwarder_tickets_share_the_dial_limit() {
+        let connections = Connections::default();
+        for _ in 0..MAX_PENDING {
+            connections.shared.issue("r1").unwrap();
+        }
+        let refused = connections.shared.issue("r1");
+        assert_eq!(refused, Err(DialError::TooMany));
+        assert_eq!(
+            refused.unwrap_err().to_string(),
+            "Too many pending gateway dials"
+        );
+    }
+
+    #[test]
+    fn a_forwarder_ticket_works_once_and_only_for_its_connection() {
+        let connections = Connections::default();
+        let ticket = connections.shared.issue("r1").unwrap();
+        assert!(!connections.shared.redeem("r2", &ticket));
+        let again = connections.shared.issue("r1").unwrap();
+        assert!(connections.shared.redeem("r1", &again));
+        assert!(!connections.shared.redeem("r1", &again), "one use");
     }
 }

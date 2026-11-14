@@ -232,7 +232,10 @@ impl Shell {
         let entry = live.get(&connection.id).ok_or("no forwarder")?;
         let port = entry.forwarder.port;
         if connection.kind == Kind::Remote {
-            return Ok((port, shared.issue(&connection.id)?));
+            return shared
+                .issue(&connection.id)
+                .map(|ticket| (port, ticket))
+                .map_err(|e| e.to_string());
         }
         let target = ssh_target(connection)?;
         let ticket = self

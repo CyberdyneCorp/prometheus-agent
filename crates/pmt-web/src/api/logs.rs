@@ -3,12 +3,16 @@
 //! daemon-wide component (`gateway`, `update`, `migrate`) or
 //! `<profile>/<component>` of a served profile. A name is looked up, never
 //! used as a path; every record is redacted before it leaves the daemon.
+//! A caller limited to some profiles (a device paired with `--profile`)
+//! sees only those profiles' logs: the daemon-wide ones span every
+//! profile, so they are left out for it too.
 
 use std::path::PathBuf;
 
 use pmt_obs::logs::{self, COMPONENTS, HOME_COMPONENTS};
 use serde_json::{Value, json};
 
+use super::Caller;
 use crate::Shared;
 use crate::http::{Reply, Req, error, from_error, json_reply};
 
@@ -23,10 +27,12 @@ struct Entry {
     profile: Option<String>,
 }
 
-/// Every log the dashboard may tail.
-fn registry(shared: &Shared) -> Vec<Entry> {
+/// Every log `caller` may tail.
+fn registry(shared: &Shared, caller: &Caller) -> Vec<Entry> {
+    let unrestricted = caller.signed.profiles.is_none();
     let mut entries: Vec<Entry> = HOME_COMPONENTS
         .iter()
+        .filter(|_| unrestricted)
         .filter_map(|component| {
             let home = shared.server.home()?;
             Some(Entry {
@@ -38,6 +44,9 @@ fn registry(shared: &Shared) -> Vec<Entry> {
         })
         .collect();
     for profile in shared.server.profiles() {
+        if !caller.signed.may_use(&profile) {
+            continue;
+        }
         let Some(scope) = shared.host.scope(&profile) else {
             continue;
         };
@@ -53,8 +62,8 @@ fn registry(shared: &Shared) -> Vec<Entry> {
     entries
 }
 
-pub(crate) fn tail(shared: &Shared, req: &Req) -> Reply {
-    let entries = registry(shared);
+pub(crate) fn tail(shared: &Shared, caller: &Caller, req: &Req) -> Reply {
+    let entries = registry(shared, caller);
     let Some(name) = req.param("file") else {
         let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();
         return json_reply(200, &json!({"files": names}));

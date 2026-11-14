@@ -55,3 +55,43 @@ test("a plugin that never registers does not hold up the page it overrides", asy
   await page.locator("nav a", { hasText: "Plugins" }).click();
   await expect(page.getByRole("row", { name: /^mute .*did not register within 2 s$/ })).toHaveCount(1);
 });
+
+test("a plugin frame cannot reach other dashboard routes through dot segments", async ({ page }) => {
+  const url = await signIn(page);
+  await page.goto(`${url}weather`);
+  const weather = page.frameLocator('main iframe[data-plugin="weather"]');
+  await expect(weather.locator("#forecast")).toHaveText("forecast sunny");
+  const frame = page.frames().find((f) => f.url().includes("/api/plugin-frames/weather"));
+  expect(frame).toBeDefined();
+  const sent: string[] = [];
+  page.on("request", (r) => sent.push(new URL(r.url()).pathname));
+  const escapes = [
+    "/%2e%2e/%2e%2e/profiles/default/secrets/STOLEN",
+    "/.%2e/.%2E/profiles/default/secrets/STOLEN",
+    "/%2E%2e/rescan",
+    "/..\\..\\profiles/default/config",
+    "/./../../profiles/default/config",
+  ];
+  for (const path of escapes) {
+    const answer = await frame!.evaluate(
+      (p) =>
+        (window as unknown as { prometheus: { api: (m: string, p: string, b?: unknown) => Promise<unknown> } }).prometheus
+          .api("PUT", p, { value: "x" })
+          .then(
+            () => "sent",
+            (e: Error) => e.message,
+          ),
+      path,
+    );
+    expect(answer, path).toBe("bad backend request");
+  }
+  const forecast = await frame!.evaluate(() =>
+    (window as unknown as { prometheus: { api: (m: string, p: string) => Promise<{ forecast: string }> } }).prometheus
+      .api("GET", "/forecast")
+      .then((x) => x.forecast),
+  );
+  expect(forecast).toBe("sunny");
+  // Routine page traffic may run meanwhile; none of the targets was hit.
+  const reached = sent.filter((p) => /\/(secrets|config)(\/|$)|\/rescan$/.test(p));
+  expect(reached).toEqual([]);
+});

@@ -469,3 +469,35 @@ fn an_expired_telegram_setup_saves_nothing() {
         config
     );
 }
+
+/// One pairing table for every surface: a Telegram flow started from the
+/// dashboard is the one the desktop's Messaging pane sees over RPC, a
+/// second start there is refused, and a cancel there stops it.
+#[test]
+fn a_pairing_started_over_rest_is_the_one_the_rpc_panes_see() {
+    let service = onboarding(usize::MAX);
+    let home = telegram_home(&service);
+    let _daemon = Daemon::start(home.path(), &[]);
+    let at = At::open(home.path());
+    let started = at.post("/api/profiles/default/adapters/telegram/pairing");
+    assert_eq!(started.status, 202, "{started:?}");
+    wait("the QR code shows", Duration::from_secs(10), || {
+        at.state("telegram")["state"] == "qr"
+    });
+    let params = json!({"profile": "default", "platform": "telegram"});
+    let frame = |id: u64, method: &str| json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params});
+    let (second, state, cancelled) = runtime().block_on(async {
+        let mut ws = dashboard::rpc(at.port, &at.signed).await;
+        let second = common::ws::request_on(&mut ws, &frame(1, "adapters.pairing.start")).await;
+        let state = common::ws::request_on(&mut ws, &frame(2, "adapters.pairing.state")).await;
+        let cancelled = common::ws::request_on(&mut ws, &frame(3, "adapters.pairing.cancel")).await;
+        (second, state, cancelled)
+    });
+    assert_eq!(
+        second["error"]["message"], "a pairing is already running for this adapter",
+        "{second}"
+    );
+    assert_eq!(state["result"]["state"], "qr", "{state}");
+    assert!(cancelled.get("error").is_none(), "{cancelled}");
+    assert_eq!(at.state("telegram")["state"], "cancelled");
+}

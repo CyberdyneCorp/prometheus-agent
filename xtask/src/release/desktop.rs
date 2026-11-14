@@ -10,7 +10,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use pmt_desktop::update::{FEED_SCHEMA, Feed};
+use pmt_desktop::update::{Archive, FEED_SCHEMA, Feed};
 use pmt_update::{Channel, ReleaseVersion, TrustRoot};
 
 /// The packages of one OS: published together or not at all.
@@ -70,15 +70,21 @@ pub(super) fn feed_name(channel: Channel) -> String {
     format!("desktop-{channel}.json")
 }
 
+/// The feed entry of updater archive `file` in `dir`, when present.
+fn archive(dir: &Path, file: &str) -> Option<Archive> {
+    std::fs::read(dir.join(file))
+        .ok()
+        .map(|bytes| Archive::of(file, &bytes))
+}
+
 /// Writes `desktop-<channel>.json` into `dir` for the updater archives it
-/// holds.
+/// holds, each with its SHA-256.
 pub(super) fn write_feed(dir: &Path, tag: &str) -> Result<(), String> {
     let version = ReleaseVersion::parse(tag).map_err(|e| e.to_string())?;
-    let platforms: BTreeMap<String, String> = GROUPS
+    let platforms: BTreeMap<String, Archive> = GROUPS
         .iter()
         .filter_map(|g| g.updater)
-        .filter(|(file, _)| dir.join(file).is_file())
-        .map(|(file, key)| (key.to_owned(), file.to_owned()))
+        .filter_map(|(file, key)| Some((key.to_owned(), archive(dir, file)?)))
         .collect();
     let feed = Feed {
         schema: FEED_SCHEMA.to_owned(),
@@ -103,12 +109,13 @@ fn signed_ok(dir: &Path, name: &str, trust: &TrustRoot) -> Result<Vec<u8>, Strin
     Ok(bytes)
 }
 
-/// Checks the signed feed lists exactly `updaters` at `version`.
+/// Checks the signed feed lists exactly `updaters` (names and digests)
+/// at `version`.
 fn check_feed(
     dir: &Path,
     version: &ReleaseVersion,
     trust: &TrustRoot,
-    updaters: &BTreeMap<String, String>,
+    updaters: &BTreeMap<String, Archive>,
     problems: &mut Vec<String>,
 ) {
     let name = feed_name(version.channel());
@@ -147,8 +154,10 @@ pub(super) fn verify(dir: &Path, version: &ReleaseVersion, trust: &TrustRoot) ->
                 problems.push(format!("desktop {}: {problem}", group.os));
             }
         }
-        if let Some((file, key)) = group.updater {
-            updaters.insert(key.to_owned(), file.to_owned());
+        if let Some((file, key)) = group.updater
+            && let Some(entry) = archive(dir, file)
+        {
+            updaters.insert(key.to_owned(), entry);
         }
     }
     if !updaters.is_empty() {
@@ -200,6 +209,21 @@ mod tests {
         write_feed(&dir, "v1.6.0").unwrap();
         sign("desktop-stable.json");
         assert_eq!(verify(&dir, &version, &trust), Vec::<String>::new());
+        let feed = std::fs::read_to_string(dir.join("desktop-stable.json")).unwrap();
+        assert!(feed.contains("\"sha256\""), "{feed}");
+        // An older signed archive put in place of the listed one.
+        let tarball = "prometheus-desktop-universal2-apple-darwin.app.tar.gz";
+        std::fs::write(dir.join(tarball), "an older signed build").unwrap();
+        sign(tarball);
+        let problems = verify(&dir, &version, &trust);
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("desktop-stable.json: lists")),
+            "{problems:?}"
+        );
+        std::fs::write(dir.join(tarball), tarball).unwrap();
+        sign(tarball);
         // Linux published only its AppImage: refused.
         std::fs::write(dir.join("prometheus-desktop-x86_64-linux.AppImage"), "x").unwrap();
         sign("prometheus-desktop-x86_64-linux.AppImage");

@@ -39,12 +39,41 @@ type Message = { prometheus: 1; id: number; method: string; params?: Record<stri
 
 const METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE"]);
 
+/** The dashboard path of backend route `path` of plugin `id`, or `null`
+ *  when it could name anything else. The browser's URL parser folds
+ *  dot segments (also percent-encoded ones, `%2e%2e`, and backslashes)
+ *  before the request is sent, so the path is refused when it has any of
+ *  those and the resolved URL must still lie under the plugin's prefix:
+ *  a frame never reaches another dashboard route with the user's CSRF
+ *  token. */
+export function pluginPath(id: string, path: string, profile: string): string | null {
+  const [route, query] = splitQuery(path);
+  const segments = route.split("/").slice(1);
+  const unsafe =
+    !route.startsWith("/") ||
+    /[%\\]/.test(route) ||
+    path.includes("#") ||
+    segments.some((s) => s === "." || s === "..");
+  if (unsafe) return null;
+  const prefix = `/api/plugins/${encodeURIComponent(id)}`;
+  const joined = `${prefix}${route}?${query ? `${query}&` : ""}profile=${encodeURIComponent(profile)}`;
+  const resolved = new URL(`${base}${joined}`, location.origin);
+  const inside =
+    resolved.origin === location.origin &&
+    (resolved.pathname === `${base}${prefix}` || resolved.pathname.startsWith(`${base}${prefix}/`));
+  return inside ? joined : null;
+}
+
+function splitQuery(path: string): [string, string] {
+  const at = path.indexOf("?");
+  return at < 0 ? [path, ""] : [path.slice(0, at), path.slice(at + 1)];
+}
+
 async function backendCall(entry: Mounted, params: Record<string, unknown>): Promise<unknown> {
   if (!entry.plugin.backend) throw new Error("this plugin has no backend routes");
   const method = String(params.method ?? "GET").toUpperCase();
-  const path = String(params.path ?? "/");
-  if (!METHODS.has(method) || !path.startsWith("/") || path.includes("..")) throw new Error("bad backend request");
-  const url = `/api/plugins/${encodeURIComponent(entry.plugin.id)}${path}${path.includes("?") ? "&" : "?"}profile=${encodeURIComponent(entry.profile)}`;
+  const url = pluginPath(entry.plugin.id, String(params.path ?? "/"), entry.profile);
+  if (!METHODS.has(method) || url === null) throw new Error("bad backend request");
   const calls: Record<string, (u: string, b?: unknown) => Promise<unknown>> = {
     GET: (u) => api.get(u),
     POST: (u, b) => api.post(u, b),

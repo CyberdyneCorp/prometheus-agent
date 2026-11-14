@@ -171,23 +171,45 @@ impl Guard {
         Some(format!("{scheme}://{host}"))
     }
 
-    /// The client's address: the peer, or the first `X-Forwarded-For`
-    /// entry when the peer is a trusted proxy and `trust_proxy` is on.
+    /// The client's address: the peer, or, when the peer is a trusted
+    /// proxy and `trust_proxy` is on, the address `X-Forwarded-For` names
+    /// (see [`forwarded_client`]).
     pub(crate) fn client_ip(&self, req: &Req, peer: SocketAddr) -> IpAddr {
         let trusted = self.trust_proxy && self.trusted_proxies.contains(&peer.ip());
         if !trusted {
             return peer.ip();
         }
-        req.header("x-forwarded-for")
-            .and_then(|list| list.split(',').next())
-            .and_then(|first| first.trim().parse().ok())
-            .unwrap_or_else(|| peer.ip())
+        forwarded_client(
+            req.header("x-forwarded-for"),
+            peer.ip(),
+            &self.trusted_proxies,
+        )
     }
 
     /// Cookies are `Secure` when browsers reach the dashboard over TLS.
     pub(crate) fn secure_cookies(&self) -> bool {
         self.https
     }
+}
+
+/// The client behind trusted proxy `peer`: proxies append the address
+/// they received from, so the list is walked from the right, skipping
+/// the trusted proxies, and the first other address is the client. The
+/// entries left of it are whatever the client sent and are never used
+/// (a client rotating them would get a fresh sign-in limiter bucket per
+/// request). A malformed entry ends the walk at the last trusted hop.
+fn forwarded_client(list: Option<&str>, peer: IpAddr, trusted: &[IpAddr]) -> IpAddr {
+    let mut client = peer;
+    for entry in list.unwrap_or_default().rsplit(',') {
+        let Ok(hop) = entry.trim().parse::<IpAddr>() else {
+            break;
+        };
+        client = hop;
+        if !trusted.contains(&hop) {
+            break;
+        }
+    }
+    client
 }
 
 /// Sets the security headers on `reply`; a reply that set its own policy
@@ -223,6 +245,31 @@ mod tests {
             &pmt_config::daemon_dashboard::WebappConfig::default(),
             9120,
         )
+    }
+
+    /// A trusted proxy's `X-Forwarded-For` is read from the right: the
+    /// entries the client wrote itself are never its address.
+    #[test]
+    fn the_client_is_the_rightmost_untrusted_forwarded_address() {
+        let ip = |s: &str| s.parse::<std::net::IpAddr>().unwrap();
+        let proxy = ip("10.0.0.1");
+        let inner = ip("10.0.0.2");
+        let trusted = [proxy, inner];
+        for (header, client) in [
+            (Some("1.2.3.4, 203.0.113.7"), "203.0.113.7"),
+            (Some("10.0.0.99, 203.0.113.7, 10.0.0.2"), "203.0.113.7"),
+            (Some("203.0.113.7"), "203.0.113.7"),
+            (Some("10.0.0.2"), "10.0.0.2"),
+            (Some("1.2.3.4, garbage, 10.0.0.2"), "10.0.0.2"),
+            (Some(""), "10.0.0.1"),
+            (None, "10.0.0.1"),
+        ] {
+            assert_eq!(
+                super::forwarded_client(header, proxy, &trusted),
+                ip(client),
+                "{header:?}"
+            );
+        }
     }
 
     /// Scenario: DNS rebinding.

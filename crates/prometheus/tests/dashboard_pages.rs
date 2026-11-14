@@ -107,6 +107,90 @@ fn files_outside_the_workspace_root_are_refused_and_never_listed() {
     assert!(!workspace.join("renamed.txt").exists());
 }
 
+/// The Files page applies a session's file-access rules inside its root
+/// (spec: web-dashboard, Files page): a session started in the user's
+/// home offers that home as a root, but its credential stores and dotenv
+/// files answer 403 to drivers and observers alike and are not listed.
+#[cfg(unix)]
+#[test]
+fn a_session_root_in_the_users_home_never_serves_its_credentials() {
+    let home = mock_home();
+    let user = common::user_home(home.path());
+    std::fs::create_dir_all(user.join(".ssh")).unwrap();
+    std::fs::write(user.join(".ssh/id_ed25519"), "PRIVATE KEY").unwrap();
+    std::fs::create_dir_all(user.join(".aws")).unwrap();
+    std::fs::write(user.join(".aws/credentials"), "aws_secret").unwrap();
+    std::fs::write(user.join(".env"), "API_KEY=hunter2").unwrap();
+    std::fs::write(user.join("notes.txt"), "home notes").unwrap();
+    let _daemon = daemon::start(home.path(), &[]);
+    let at = open(home.path());
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let created = rt.block_on(async {
+        let mut ws = dashboard::rpc(at.port, &at.signed).await;
+        let frame = json!({"jsonrpc": "2.0", "id": 1, "method": "session.create",
+            "params": {"profile": "default", "cwd": user}});
+        common::ws::request_on(&mut ws, &frame).await
+    });
+    let session = created["result"]["session_id"]
+        .as_str()
+        .expect("session id")
+        .to_owned();
+    let root = format!("session:{session}");
+    let roots = at.get("/api/profiles/default/files").json();
+    assert!(
+        roots["roots"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|r| r["id"] == root.as_str()),
+        "{roots}"
+    );
+    let read = |path: &str| format!("/api/profiles/default/files/read?root={root}&path={path}");
+    let notes = at.get(&read("notes.txt"));
+    assert_eq!((notes.status, notes.body.as_str()), (200, "home notes"));
+    let listing = at.get(&format!(
+        "/api/profiles/default/files/list?root={root}&path="
+    ));
+    assert_eq!(listing.status, 200, "{listing:?}");
+    for hidden in [".ssh", ".aws", ".env"] {
+        assert!(
+            !listing.body.contains(&format!("\"{hidden}\"")),
+            "{hidden}: {}",
+            listing.body
+        );
+    }
+    let paired = ok(&run(
+        home.path(),
+        &[
+            "--json",
+            "daemon",
+            "pair-device",
+            "viewer",
+            "--role",
+            "observer",
+        ],
+    ));
+    let token = serde_json::from_str::<Value>(&paired).unwrap()["token"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    for path in [".ssh/id_ed25519", ".aws/credentials", ".env"] {
+        let driver = at.get(&read(path));
+        let observer = common::api::Request::new("GET", &read(path))
+            .header("Authorization", &format!("Bearer {token}"))
+            .send(at.port);
+        for answer in [driver, observer] {
+            assert_eq!(answer.status, 403, "{path}: {answer:?}");
+            for secret in ["PRIVATE KEY", "aws_secret", "hunter2"] {
+                assert!(!answer.body.contains(secret), "{path}: {}", answer.body);
+            }
+        }
+    }
+}
+
 /// Scenario: Offline docs (the documentation is compiled in; nothing is
 /// fetched).
 #[test]

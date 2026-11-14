@@ -86,7 +86,9 @@ built for (`stable` or `canary`). It reads the channel's feed
 (`desktop-<channel>.json`, signed like every release file) at most every
 6 hours, offers a newer version in a notice and under Settings → Updates,
 downloads it only when you click Download and install, and verifies its
-signature before anything is written: a bad one is discarded with
+signature and that its SHA-256 is the one the signed feed lists for your
+platform before anything is written (so an older signed build served in
+its place is not installed as the new version): a bad one is discarded with
 `Update signature invalid; not installed` and the app stays as it is. A
 second apply while one runs answers `An update is already in progress.`
 The verified update installs when you quit or click Restart now; the
@@ -357,7 +359,10 @@ reattaching replays up to 1 MiB of output, and closing the tab ends the
 shell. One window (or webapp tab) holds a terminal at a time: another one
 that attaches takes it over, the first gets `pty.detached` and shows
 **Take back**, and its typing is refused (`terminal.taken`) until it
-attaches again. *Add to chat* puts the selected output in the composer.
+attaches again. Each shell's terminal size follows its pane: the
+window tells the daemon the character grid the pane shows (`pty.resize`)
+when the terminal opens, when it is taken back and when the pane's size
+settles after a change. *Add to chat* puts the selected output in the composer.
 
 While the session has running subagents, a frame above the composer shows
 them; a selected child can be steered (`subagent.steer`, queued for its

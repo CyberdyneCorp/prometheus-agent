@@ -89,7 +89,7 @@ pub(crate) async fn post(shared: &Arc<Shared>, body: Incoming, ip: IpAddr) -> Re
     if shared.auth.mode != AuthMode::Password {
         return crate::http::not_found();
     }
-    if let Err(retry) = shared.auth.limiter.check(ip) {
+    if let Err(retry) = shared.auth.limiter.attempt(ip) {
         let mut reply = page(429, "Too many attempts", "<p>Try again later.</p>");
         if let Ok(value) = HeaderValue::from_str(&retry.to_string()) {
             reply.headers_mut().insert("retry-after", value);
@@ -108,12 +108,17 @@ pub(crate) async fn post(shared: &Arc<Shared>, body: Incoming, ip: IpAddr) -> Re
         .host
         .scope(&launch)
         .and_then(|scope| scope.secrets().resolve(PASSWORD_HASH_SECRET).ok());
-    let verified = hash.is_some_and(|hash| password::verify(&password, hash.expose()));
+    // argon2 is deliberately slow: it runs off the listener's workers.
+    let verified = match hash {
+        Some(hash) => pmt_core::spawn::blocking(move || password::verify(&password, hash.expose()))
+            .await
+            .unwrap_or(false),
+        None => false,
+    };
     if verified {
         shared.auth.limiter.succeed(ip);
         return sign_in(shared, "password", None);
     }
-    shared.auth.limiter.fail(ip);
     password_form(shared, Some("Wrong password."))
 }
 

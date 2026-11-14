@@ -474,6 +474,56 @@ fn logs_are_named_from_the_registry_bounded_and_redacted() {
     );
 }
 
+/// A device limited to some profiles tails only their logs: other
+/// profiles' logs and the daemon-wide ones (which span every profile)
+/// are neither listed nor served to it.
+#[test]
+fn a_profile_bound_device_sees_only_its_profiles_logs() {
+    let home = mock_home();
+    common::api::profile(home.path(), "work", "");
+    common::api::multiplex(home.path());
+    let _daemon = daemon::start(home.path(), &[]);
+    let opened = dashboard::open(home.path(), &[]);
+    let paired = ok(&run(
+        home.path(),
+        &[
+            "--json",
+            "daemon",
+            "pair-device",
+            "laptop",
+            "--profile-binding",
+            "work",
+        ],
+    ));
+    let token = serde_json::from_str::<Value>(&paired).unwrap()["token"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let bearer = format!("Bearer {token}");
+    let logs = |path: &str| {
+        Request::new("GET", path)
+            .header("Authorization", &bearer)
+            .send(opened.port)
+    };
+    let files = logs("/api/logs").json();
+    let names: Vec<&str> = files["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    assert!(names.contains(&"work/agent"), "{files}");
+    assert!(
+        names.iter().all(|n| n.starts_with("work/")),
+        "only work's logs: {files}"
+    );
+    for foreign in ["default/agent", "gateway"] {
+        let answer = logs(&format!("/api/logs?file={foreign}"));
+        assert_eq!(answer.status, 400, "{foreign}: {answer:?}");
+    }
+    assert_eq!(logs("/api/logs?file=work/agent").status, 200);
+}
+
 /// Sends an upload of `len` bytes, tolerating a server that answers and
 /// closes before the body is sent; the raw answer.
 fn upload_raw(port: u16, signed: &Signed, len: usize) -> String {

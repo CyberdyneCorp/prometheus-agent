@@ -185,12 +185,9 @@ fn optional_skills(scope: &ProfileScope, user_home: Option<&std::path::Path>) ->
 /// The management panes over the dashboard's daemon side.
 #[cfg(feature = "dashboard")]
 mod manage {
-    use std::sync::{Arc, LazyLock};
-
     use pmt_core::error::{Error, codes};
     use pmt_gateway::panes::PairingOp;
     use pmt_rpc::contracts as c;
-    use pmt_web::pairing::PairingFlows;
     use pmt_web::{Catalog, Change, DashboardHost as _};
     use serde_json::{Value, json};
 
@@ -199,9 +196,6 @@ mod manage {
     fn unsupported(what: &str) -> Error {
         Error::new(&codes::CLI_USAGE, format!("unknown {what}"))
     }
-
-    /// The desktop's pairing flows (the dashboard keeps its own).
-    static FLOWS: LazyLock<Arc<PairingFlows>> = LazyLock::new(Arc::default);
 
     const CATALOGS: &[(&str, Catalog)] = &[
         ("toolsets", Catalog::Toolsets),
@@ -264,14 +258,15 @@ mod manage {
                 )
             })?;
         let key = (profile.to_owned(), platform.to_owned());
+        let flows = host.pairing_flows();
         match op {
-            PairingOp::State => Ok(FLOWS.state(&key)),
+            PairingOp::State => Ok(flows.state(&key)),
             PairingOp::Cancel => {
-                FLOWS.cancel(&key);
+                flows.cancel(&key);
                 Ok(json!({"state": "cancelled"}))
             }
             PairingOp::Start => {
-                host.start_pairing(Arc::clone(&FLOWS), profile, flow)?;
+                host.start_pairing(flows, profile, flow)?;
                 Ok(json!({"state": "starting", "flow": flow.as_str()}))
             }
         }

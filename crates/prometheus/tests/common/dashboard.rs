@@ -223,6 +223,19 @@ pub async fn https(
     root: &rustls::pki_types::CertificateDer<'static>,
     request: &str,
 ) -> (u16, String) {
+    https_split(port, root, request, "", None).await
+}
+
+/// As [`https`], sending `head`, then waiting at `barrier` (when given)
+/// before sending `tail`: requests that are all inside the server at
+/// once.
+pub async fn https_split(
+    port: u16,
+    root: &rustls::pki_types::CertificateDer<'static>,
+    head: &str,
+    tail: &str,
+    barrier: Option<&tokio::sync::Barrier>,
+) -> (u16, String) {
     use std::sync::Arc;
     use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
     let mut roots = rustls::RootCertStore::empty();
@@ -240,7 +253,17 @@ pub async fn https(
         .unwrap();
     let name = rustls::pki_types::ServerName::IpAddress(std::net::Ipv4Addr::LOCALHOST.into());
     let mut tls = connector.connect(name, tcp).await.unwrap();
-    tls.write_all(request.as_bytes()).await.unwrap();
+    tls.write_all(head.as_bytes()).await.unwrap();
+    tls.flush().await.unwrap();
+    if let Some(barrier) = barrier {
+        barrier.wait().await;
+        // Every request's head has reached the server and been handled
+        // as far as it can go without its body.
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    }
+    if !tail.is_empty() {
+        tls.write_all(tail.as_bytes()).await.unwrap();
+    }
     let mut raw = Vec::new();
     let _ = tls.read_to_end(&mut raw).await;
     let text = String::from_utf8_lossy(&raw).into_owned();

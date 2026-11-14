@@ -6,8 +6,8 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use pmt_desktop::update::{
-    FEED_SCHEMA, Fetch, Fetching, IN_PROGRESS, Mechanism, NO_UPDATES, SIGNATURE_INVALID, Updater,
-    UpdaterConfig,
+    Archive, FEED_SCHEMA, Fetch, Fetching, IN_PROGRESS, Mechanism, NO_UPDATES, SIGNATURE_INVALID,
+    Updater, UpdaterConfig,
 };
 use serde_json::json;
 
@@ -44,11 +44,18 @@ impl Origin {
     }
 
     fn release(&self, archive: &[u8], served: Option<&[u8]>) {
+        self.release_listing(archive, archive, served);
+    }
+
+    /// Publishes 1.6.0 whose signed feed names `listed`'s digest and whose
+    /// URL serves `archive` (signed by the release key either way).
+    fn release_listing(&self, listed: &[u8], archive: &[u8], served: Option<&[u8]>) {
+        let entry = Archive::of("prometheus-desktop-x86_64-linux.AppImage", listed);
         let feed = json!({
             "schema": FEED_SCHEMA,
             "version": "1.6.0",
             "notes": "faster startup",
-            "platforms": {"linux-x86_64": "prometheus-desktop-x86_64-linux.AppImage"},
+            "platforms": {"linux-x86_64": entry},
         });
         self.publish(
             &format!("{ORIGIN}/channels/desktop-stable.json"),
@@ -121,6 +128,26 @@ async fn a_tampered_update_is_discarded_and_the_current_version_kept() {
         !dir.path().join("staged").exists(),
         "nothing reached the disk"
     );
+}
+
+/// An older build signed by the release key, served at the new version's
+/// URL, is not the archive the signed feed names: it is discarded rather
+/// than installed as the new version.
+#[tokio::test]
+async fn an_older_signed_archive_under_the_new_url_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let origin = Arc::new(Origin::default());
+    origin.release_listing(b"the 1.6.0 app", b"the 1.4.0 app", None);
+    let updater = updater(&origin, dir.path());
+    assert_eq!(
+        updater.check(true).await.available.unwrap().version,
+        "1.6.0"
+    );
+    let applied = updater.apply().await;
+    assert!(!applied.ok, "{applied:?}");
+    assert_eq!(applied.message.as_deref(), Some(SIGNATURE_INVALID));
+    assert_eq!(updater.staged(), None, "nothing is staged");
+    assert!(!dir.path().join("staged").exists());
 }
 
 #[tokio::test]

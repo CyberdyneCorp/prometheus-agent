@@ -361,7 +361,10 @@ the dashboard adds to it:
   falls back to the built-in page.
 - `prometheus.context()` gives the profile, route, slot and theme.
 - `prometheus.api(method, path, body)` calls the plugin's own backend
-  routes (below).
+  routes (below). `path` starts with `/` and is relative to the plugin's
+  routes; a path with `.` or `..` segments, `%`, `\` or `#` is refused
+  (`bad backend request`), so a frame never reaches another dashboard
+  route.
 - `prometheus.navigate(path)` opens a dashboard page.
 
 When two plugins override the same page, the first one in load order

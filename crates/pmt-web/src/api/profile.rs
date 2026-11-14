@@ -78,11 +78,11 @@ pub(crate) async fn route(
         (&Method::GET, ["adapters"]) => channels::list(shared, &at),
         (&Method::PUT, ["adapters", name]) => channels::save(&at, name, body).await,
         (&Method::GET, ["files"]) => files::list_roots(&at),
-        (&Method::GET, ["files", "list"]) => files::list(&at, req),
-        (&Method::GET, ["files", "read"]) => files::read(&at, req),
+        (&Method::GET, ["files", "list"]) => files::list(shared, &at, req),
+        (&Method::GET, ["files", "read"]) => files::read(shared, &at, req),
         (&Method::POST, ["files", "upload"]) => files::upload(shared, &at, req, body).await,
-        (&Method::POST, ["files", "rename"]) => files::rename(&at, req, body).await,
-        (&Method::DELETE, ["files"]) => files::delete(&at, req),
+        (&Method::POST, ["files", "rename"]) => files::rename(shared, &at, req, body).await,
+        (&Method::DELETE, ["files"]) => files::delete(shared, &at, req),
         (&Method::POST, ["adapters", name, "test"]) => {
             adapter_actions::test(shared, profile, name).await
         }

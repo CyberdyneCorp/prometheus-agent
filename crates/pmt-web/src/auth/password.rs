@@ -40,19 +40,19 @@ pub(crate) struct Limiter {
 }
 
 impl Limiter {
-    /// `Err(seconds)` while `ip` is locked out.
-    pub(crate) fn check(&self, ip: IpAddr) -> Result<(), u64> {
-        let by_ip = self.by_ip.lock().expect("limiter poisoned");
-        match by_ip.get(&ip).and_then(|r| r.locked_until) {
-            Some(until) if until > Instant::now() => Err((until - Instant::now()).as_secs().max(1)),
-            _ => Ok(()),
-        }
-    }
-
-    /// Counts a wrong password from `ip`.
-    pub(crate) fn fail(&self, ip: IpAddr) {
+    /// Reserves one attempt for `ip`: `Err(seconds)` while it is locked
+    /// out. The attempt counts as a failure from the start, so concurrent
+    /// requests cannot all pass before the first failure is recorded; a
+    /// correct password clears it with [`Limiter::succeed`]. The attempt
+    /// that reaches [`MAX_FAILURES`] still runs and starts the lockout.
+    pub(crate) fn attempt(&self, ip: IpAddr) -> Result<(), u64> {
         let mut by_ip = self.by_ip.lock().expect("limiter poisoned");
         let now = Instant::now();
+        if let Some(until) = by_ip.get(&ip).and_then(|r| r.locked_until)
+            && until > now
+        {
+            return Err((until - now).as_secs().max(1));
+        }
         // Addresses with nothing recent to remember are forgotten, so the
         // table stays as small as the current attackers.
         by_ip.retain(|_, r| {
@@ -68,9 +68,10 @@ impl Limiter {
             record.locked_until = Some(now + LOCKOUT);
             record.failures.clear();
         }
+        Ok(())
     }
 
-    /// Forgets `ip`'s failures after a correct password.
+    /// Forgets `ip`'s attempts after a correct password.
     pub(crate) fn succeed(&self, ip: IpAddr) {
         self.by_ip.lock().expect("limiter poisoned").remove(&ip);
     }
@@ -108,15 +109,13 @@ pub(crate) mod tests {
         let limiter = Limiter::default();
         let ip: IpAddr = "192.0.2.7".parse().unwrap();
         let other: IpAddr = "192.0.2.8".parse().unwrap();
-        for _ in 0..4 {
-            limiter.fail(ip);
-            assert_eq!(limiter.check(ip), Ok(()));
+        for _ in 0..5 {
+            assert_eq!(limiter.attempt(ip), Ok(()));
         }
-        limiter.fail(ip);
-        assert_eq!(limiter.check(ip), Err(300));
-        assert_eq!(limiter.check(other), Ok(()));
+        assert_eq!(limiter.attempt(ip), Err(300));
+        assert_eq!(limiter.attempt(other), Ok(()));
         tokio::time::advance(LOCKOUT).await;
-        assert_eq!(limiter.check(ip), Ok(()));
+        assert_eq!(limiter.attempt(ip), Ok(()));
     }
 
     #[tokio::test(start_paused = true)]
@@ -124,9 +123,23 @@ pub(crate) mod tests {
         let limiter = Limiter::default();
         let ip: IpAddr = "192.0.2.7".parse().unwrap();
         for _ in 0..8 {
-            limiter.fail(ip);
+            assert_eq!(limiter.attempt(ip), Ok(()));
             tokio::time::advance(std::time::Duration::from_secs(16)).await;
         }
-        assert_eq!(limiter.check(ip), Ok(()));
+        assert_eq!(limiter.attempt(ip), Ok(()));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_correct_password_forgets_the_attempts() {
+        let limiter = Limiter::default();
+        let ip: IpAddr = "192.0.2.7".parse().unwrap();
+        for _ in 0..4 {
+            assert_eq!(limiter.attempt(ip), Ok(()));
+        }
+        limiter.succeed(ip);
+        for _ in 0..5 {
+            assert_eq!(limiter.attempt(ip), Ok(()));
+        }
+        assert_eq!(limiter.attempt(ip), Err(300));
     }
 }

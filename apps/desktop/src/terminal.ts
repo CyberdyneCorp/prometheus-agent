@@ -10,7 +10,9 @@
 // One window or tab holds a terminal at a time: another one attaching
 // takes it over (`pty.detached` here) until Take back attaches again. In
 // the webapp a file dropped on a terminal is staged under the profile and
-// its path typed into the shell.
+// its path typed into the shell. Each shell's PTY is told the character
+// grid its pane shows (`pty.resize`) when it opens, is taken back, or the
+// pane's size settles after a change.
 
 import type { Envelope, ProcessList, ProcessLog, PtyAttached, PtyList, PtyOpened } from "../../../schema/rpc";
 import { h, notice } from "../../../web/src/lib/dom";
@@ -35,6 +37,27 @@ export function keyInput(event: KeyboardEvent): string | null {
   return event.key.length === 1 && !event.metaKey ? event.key : null;
 }
 
+/** The character grid `screen` shows: its content box over one cell of
+ *  its font, measured with a hidden probe. `null` while it is hidden. */
+export function gridOf(screen: HTMLElement): { cols: number; rows: number } | null {
+  if (!screen.isConnected || screen.clientWidth === 0) return null;
+  const probe = h("span", { "aria-hidden": "true" }, "0".repeat(10));
+  probe.style.cssText = "position:absolute;visibility:hidden;white-space:pre";
+  screen.append(probe);
+  const cell = probe.getBoundingClientRect();
+  probe.remove();
+  const style = getComputedStyle(screen);
+  const px = (v: string) => Number.parseFloat(v) || 0;
+  const width = screen.clientWidth - px(style.paddingLeft) - px(style.paddingRight);
+  const height = screen.clientHeight - px(style.paddingTop) - px(style.paddingBottom);
+  if (cell.width === 0 || cell.height === 0) return null;
+  const clamp = (n: number) => Math.min(1000, Math.max(2, Math.floor(n)));
+  return { cols: clamp(width / (cell.width / 10)), rows: clamp(height / cell.height) };
+}
+
+/** How long the pane's size must hold before the PTY is told. */
+const RESIZE_SETTLE_MS = 150;
+
 /** Most lines one `read_terminal` returns. */
 const MAX_LINES = 2000;
 /** How often mirrors of background processes refresh. */
@@ -52,6 +75,10 @@ export class TerminalPane {
   private readonly mirrors = new Set<string>();
   private readonly closedMirrors = new Set<string>();
   private mirrorTimer = 0;
+  /** The grid each PTY was last told (`pty.resize`), so it is sent only
+   *  when the pane's size really changed. */
+  private readonly sizes = new Map<string, string>();
+  private resizeTimer = 0;
 
   constructor(
     private readonly client: DesktopClient,
@@ -65,6 +92,12 @@ export class TerminalPane {
       if (selected) this.addToChat(`\`\`\`\n${selected}\n\`\`\``);
     });
     this.el.append(h("div", { class: "terminal-bar" }, open, add), this.tabs, this.screens, this.status);
+    // The PTY follows the pane: a shell wraps and full-screen programs
+    // draw for the grid the user sees.
+    new ResizeObserver(() => {
+      window.clearTimeout(this.resizeTimer);
+      this.resizeTimer = window.setTimeout(() => this.fit(this.current), RESIZE_SETTLE_MS);
+    }).observe(this.screens);
     client.on("pty.output", (envelope) => this.output(envelope));
     client.on("pty.exited", (envelope) => this.exited(envelope));
     client.on("pty.detached", (envelope) => {
@@ -86,6 +119,7 @@ export class TerminalPane {
   async follow(sessionId: string | null): Promise<void> {
     this.sessionId = sessionId;
     this.shown.clear();
+    this.sizes.clear();
     this.mirrors.clear();
     this.closedMirrors.clear();
     window.clearInterval(this.mirrorTimer);
@@ -221,6 +255,8 @@ export class TerminalPane {
       delete screen.dataset.detached;
       this.status.replaceChildren();
       screen.focus();
+      // The other window may have sized it for itself.
+      this.fit(id, true);
     } catch (err) {
       this.status.replaceChildren(notice((err as Error).message, "warn"));
     }
@@ -241,6 +277,25 @@ export class TerminalPane {
     this.current = id;
     for (const [key, screen] of this.shown) screen.hidden = key !== id;
     this.shown.get(id)?.focus();
+    this.fit(id);
+  }
+
+  /** Tells PTY `id` the grid its screen shows, when that changed (`force`:
+   *  also when it did not). Mirrors of background processes have none. */
+  private fit(id: string | null, force = false): void {
+    const screen = id ? this.shown.get(id) : undefined;
+    if (!id || !screen || !this.sessionId || this.mirrors.has(id) || screen.dataset.detached) return;
+    const grid = gridOf(screen);
+    if (!grid) return;
+    const size = `${grid.cols}x${grid.rows}`;
+    if (!force && this.sizes.get(id) === size) return;
+    this.sizes.set(id, size);
+    void this.client.call("pty.resize", { session_id: this.sessionId, pty_id: id, ...grid }).then(
+      () => {
+        screen.dataset.grid = size;
+      },
+      () => this.sizes.delete(id),
+    );
   }
 
   private output(envelope: Envelope): void {
@@ -259,6 +314,7 @@ export class TerminalPane {
   private drop(id: string): void {
     this.shown.get(id)?.remove();
     this.shown.delete(id);
+    this.sizes.delete(id);
     this.tabs.querySelector(`.terminal-tab[data-pty="${id}"]`)?.remove();
     if (this.current === id) this.select([...this.shown.keys()][0] ?? "");
   }

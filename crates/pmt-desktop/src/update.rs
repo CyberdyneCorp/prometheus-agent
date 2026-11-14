@@ -93,9 +93,44 @@ pub struct Feed {
     /// One line of release notes.
     #[serde(default)]
     pub notes: String,
-    /// Update archive file names by platform key, published under the
-    /// release's tag (`<origin>/v<version>/<file>`).
-    pub platforms: std::collections::BTreeMap<String, String>,
+    /// Update archives by platform key, published under the release's
+    /// tag (`<origin>/v<version>/<file>`).
+    pub platforms: std::collections::BTreeMap<String, Archive>,
+}
+
+/// One platform's update archive in the feed. Its digest binds the
+/// archive to this signed feed: an archive's own signature only says the
+/// release key signed it once, so an older signed build served at the new
+/// version's URL would otherwise install as that version (a downgrade).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Archive {
+    /// Its file name.
+    pub file: String,
+    /// Its SHA-256, lowercase hex.
+    pub sha256: String,
+}
+
+impl Archive {
+    /// The entry of `file` with `bytes`.
+    #[must_use]
+    pub fn of(file: &str, bytes: &[u8]) -> Self {
+        Self {
+            file: file.to_owned(),
+            sha256: sha256_hex(bytes),
+        }
+    }
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::Digest as _;
+    use std::fmt::Write as _;
+    sha2::Sha256::digest(bytes)
+        .iter()
+        .fold(String::with_capacity(64), |mut hex, byte| {
+            let _ = write!(hex, "{byte:02x}");
+            hex
+        })
 }
 
 /// A newer version on the channel.
@@ -107,6 +142,8 @@ pub struct Offer {
     pub notes: String,
     /// The archive's URL.
     pub url: String,
+    /// The archive's SHA-256 the signed feed names.
+    pub sha256: String,
 }
 
 /// A verified archive waiting for the next quit or restart.
@@ -278,7 +315,14 @@ impl Updater {
             );
         };
         let archive = match verified(fetch, key, &offer.url).await {
-            Ok(bytes) => bytes,
+            Ok(bytes) if sha256_hex(&bytes) == offer.sha256.to_ascii_lowercase() => bytes,
+            Ok(_) => {
+                tracing::warn!(
+                    version = offer.version,
+                    "discarded an update archive the signed feed does not name"
+                );
+                return Outcome::signed(false, Some(SIGNATURE_INVALID.to_owned()));
+            }
             Err(Failure::Signature) => {
                 tracing::warn!(
                     version = offer.version,
@@ -351,11 +395,12 @@ async fn latest(
     if !newer(&feed.version, &config.current) {
         return Ok(None);
     }
-    let Some(file) = feed.platforms.get(&config.platform) else {
+    let Some(archive) = feed.platforms.get(&config.platform) else {
         return Ok(None);
     };
     Ok(Some(Offer {
-        url: format!("{origin}/v{}/{file}", feed.version),
+        url: format!("{origin}/v{}/{}", feed.version, archive.file),
+        sha256: archive.sha256.clone(),
         version: feed.version,
         notes: feed.notes,
     }))

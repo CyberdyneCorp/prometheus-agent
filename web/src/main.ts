@@ -18,6 +18,7 @@ import { filesPage } from "./pages/files";
 import { profileBuilderPage } from "./pages/profile-builder";
 import { applyTheme, currentLayout, currentTheme, themesPage } from "./pages/themes";
 import { pluginsPage } from "./pages/plugins";
+import { pairingPage } from "./pages/pairing";
 import { projectsPage } from "./pages/projects";
 import { webhooksPage } from "./pages/webhooks";
 import {
@@ -69,7 +70,6 @@ const NAV: [string, string][] = [
 
 /** Pages whose backends arrive with later capabilities. */
 const PENDING: [string, string, string][] = [
-  ["/pairing", "Pairing", "Pairing approval in the dashboard"],
   ["/kanban", "Kanban", "The kanban board"],
   ["/achievements", "Achievements", "Achievements"],
 ];
@@ -87,6 +87,7 @@ function routes(): void {
   route("/memory", memoryPage);
   route("/toolsets", toolsetsPage);
   route("/adapters", adaptersPage);
+  route("/pairing", pairingPage);
   route("/logs", logsPage);
   route("/status", statusPage);
   route("/profiles", profilesPage);

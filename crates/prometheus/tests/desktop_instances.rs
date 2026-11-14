@@ -195,7 +195,7 @@ fn app_updater(dir: &std::path::Path) -> Updater {
     let origin = Origin::default();
     let feed = json!({
         "schema": FEED_SCHEMA, "version": "1.1.0", "notes": "",
-        "platforms": {"test-platform": "desktop.tar.gz"},
+        "platforms": {"test-platform": pmt_desktop::update::Archive::of("desktop.tar.gz", b"app archive")},
     });
     origin.publish(
         &format!("{ORIGIN}/channels/desktop-stable.json"),

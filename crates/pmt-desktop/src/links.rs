@@ -79,9 +79,63 @@ impl Opened {
 
 /// Extensions that run code when opened, on any OS.
 const EXECUTABLE: &[&str] = &[
-    "app", "appimage", "bat", "cmd", "com", "command", "cpl", "deb", "desktop", "dmg", "exe",
-    "hta", "jar", "js", "jse", "lnk", "msc", "msi", "pkg", "ps1", "rpm", "scr", "scpt", "sh",
-    "terminal", "url", "vbe", "vbs", "workflow", "wsf",
+    "app",
+    "appimage",
+    "appinstaller",
+    "application",
+    "appref-ms",
+    "appx",
+    "appxbundle",
+    "bat",
+    "chm",
+    "cmd",
+    "com",
+    "command",
+    "cpl",
+    "deb",
+    "desktop",
+    "dmg",
+    "exe",
+    "fileloc",
+    "gadget",
+    "hta",
+    "inetloc",
+    "inf",
+    "jar",
+    "js",
+    "jse",
+    "lnk",
+    "mpkg",
+    "msc",
+    "msi",
+    "msix",
+    "msixbundle",
+    "msp",
+    "mst",
+    "pif",
+    "pkg",
+    "ps1",
+    "psd1",
+    "psm1",
+    "py",
+    "pyw",
+    "reg",
+    "rpm",
+    "scf",
+    "scr",
+    "scpt",
+    "settingcontent-ms",
+    "sh",
+    "terminal",
+    "url",
+    "vb",
+    "vbe",
+    "vbs",
+    "webloc",
+    "workflow",
+    "ws",
+    "wsf",
+    "wsh",
 ];
 
 /// Checks a local path for the guarded opener: it must exist, resolve
@@ -189,6 +243,34 @@ mod tests {
         let elsewhere = outside.path().join("x.md");
         std::fs::write(&elsewhere, "x").unwrap();
         assert!(guard_file(&note, home.path(), None).is_ok());
+        // Types that run code or open any URL scheme when opened, also
+        // where no exec bit exists (Windows) to fall back on.
+        for ext in [
+            "py",
+            "pyw",
+            "pif",
+            "reg",
+            "msp",
+            "appref-ms",
+            "application",
+            "chm",
+            "scf",
+            "psm1",
+            "ws",
+            "wsh",
+            "webloc",
+            "inetloc",
+            "fileloc",
+            "PY",
+        ] {
+            let file = home.path().join(format!("launch.{ext}"));
+            std::fs::write(&file, "x").unwrap();
+            assert_eq!(
+                guard_file(&file, home.path(), None),
+                Err("executable"),
+                "{ext}"
+            );
+        }
         assert_eq!(
             guard_file(&tool, home.path(), Some(workspace.path())),
             Err("executable")

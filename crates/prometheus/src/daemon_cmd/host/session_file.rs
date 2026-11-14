@@ -12,11 +12,11 @@ use std::sync::Arc;
 
 use pmt_config::ProfileScope;
 use pmt_config::grants::{GrantsFile, Subject, baseline};
-use pmt_core::capability::Places;
+use pmt_core::capability::{Access, Places};
 use pmt_core::error::{Error, codes};
 use pmt_core::id::SessionId;
 use pmt_store::Store;
-use pmt_tools::files::{FileBackend as _, Kind, LocalBackend, guards};
+use pmt_tools::files::{ControlPaths, FileBackend as _, Kind, LocalBackend, guards};
 
 /// The largest file served (the whole file is read into memory).
 pub(super) const MAX_DOWNLOAD: u64 = 100 * 1024 * 1024;
@@ -31,19 +31,24 @@ fn refused(message: impl Into<String>) -> Error {
     Error::new(&codes::CAPABILITY_NOT_GRANTED, message)
 }
 
-/// The backend the session's file tools use on the host, for `cwd`.
+/// The backend the session's file tools use on the host, for `cwd`
+/// (`session`: also the session's own tool output).
 fn backend(
     scope: &ProfileScope,
-    session: &str,
+    session: Option<&str>,
     cwd: &Path,
     user_home: Option<&Path>,
 ) -> Result<LocalBackend, Error> {
     let granted = GrantsFile::of(scope.profile())
         .load()?
         .capabilities(&Subject::Profile);
-    let capabilities = baseline(&scope.config().security).union(&granted).union(
-        &pmt_tools::environments::tool_output_reads(scope.dir(), session),
-    );
+    let mut capabilities = baseline(&scope.config().security).union(&granted);
+    if let Some(session) = session {
+        capabilities = capabilities.union(&pmt_tools::environments::tool_output_reads(
+            scope.dir(),
+            session,
+        ));
+    }
     let home = user_home.map(Path::to_path_buf).unwrap_or_default();
     let places = Places {
         user_home: home.clone(),
@@ -87,7 +92,7 @@ pub(super) fn read(
     if let Some(refusal) = guards::read_refusal(&path, raw) {
         return Err(refused(refusal));
     }
-    let backend = backend(scope, session, &cwd, user_home)?;
+    let backend = backend(scope, Some(session), &cwd, user_home)?;
     let meta = backend.metadata(&path).map_err(|e| io_error(&path, &e))?;
     if meta.kind != Kind::File {
         return Err(refused(format!("{raw} is not a file")));
@@ -115,4 +120,41 @@ fn io_error(path: &Path, err: &std::io::Error) -> Error {
         ),
         _ => Error::io(&codes::HOME_IO, path, err),
     }
+}
+
+/// The Files page's rules below workspace root `root` (spec: web-dashboard,
+/// Files page): the ones a session working in `root` applies on the host,
+/// so the page never reaches what the session's file tools may not. Reads
+/// pass the device-namespace and protected-secret guards; writes the
+/// device-namespace and control-file guards; both the capability set
+/// (baseline, grants, the session's tool output) with the credential
+/// stores its sandbox denies.
+///
+/// # Errors
+///
+/// When the profile's grants cannot be read.
+pub(super) fn rules(
+    scope: &ProfileScope,
+    session: Option<&str>,
+    root: &Path,
+    user_home: Option<&Path>,
+) -> Result<pmt_web::FileRules, Error> {
+    let backend = backend(scope, session, root, user_home)?;
+    let control = ControlPaths {
+        prometheus_home: scope.home().to_path_buf(),
+    };
+    Ok(Box::new(move |path: &Path, access: Access| {
+        let shown = path.to_string_lossy();
+        if let Some(refusal) = guards::device_namespace(&shown) {
+            return Err(refusal);
+        }
+        let guarded = match access {
+            Access::Read => guards::read_refusal(path, &shown),
+            Access::Write => control.write_refusal(&guards::resolve_existing(path)),
+        };
+        if let Some(refusal) = guarded {
+            return Err(refusal);
+        }
+        backend.check(access, path).map_err(|e| e.to_string())
+    }))
 }

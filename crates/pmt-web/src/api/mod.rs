@@ -101,7 +101,7 @@ pub(crate) async fn route(shared: &Arc<Shared>, req: &Req, body: Incoming) -> Re
         (_, ["plugins", id, rest @ ..]) => {
             plugins::backend(shared, &caller, req, id, rest, body).await
         }
-        (&Method::GET, ["logs"]) => logs::tail(shared, req),
+        (&Method::GET, ["logs"]) => logs::tail(shared, &caller, req),
         (&Method::GET, ["events" | "rpc"]) => {
             crate::http::error(426, "upgrade_required", "this endpoint is a WebSocket")
         }

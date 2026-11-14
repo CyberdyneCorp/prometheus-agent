@@ -84,6 +84,25 @@ impl pmt_web::DashboardHost for DaemonHost {
         })
     }
 
+    fn file_rules(
+        &self,
+        profile: &str,
+        session: Option<&str>,
+        root: &std::path::Path,
+    ) -> Result<pmt_web::FileRules, Error> {
+        let served = self.profile(profile)?;
+        super::session_file::rules(
+            &served.scope(),
+            session,
+            root,
+            self.launch.user_home().map(std::path::PathBuf::as_path),
+        )
+    }
+
+    fn pairing_flows(&self) -> Arc<pmt_web::pairing::PairingFlows> {
+        Arc::clone(&self.pairing_flows)
+    }
+
     fn pair_adapter<'a>(
         &'a self,
         profile: &'a str,

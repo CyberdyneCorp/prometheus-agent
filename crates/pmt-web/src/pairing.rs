@@ -1,6 +1,7 @@
-//! The interactive pairing flows of one surface (spec: web-dashboard,
-//! Channel setup forms; desktop-app, Telegram quick setup by QR), by
-//! (profile, platform): at most one runs per adapter, every step it
+//! The daemon's interactive pairing flows (spec: web-dashboard, Channel
+//! setup forms; desktop-app, Telegram quick setup by QR), by (profile,
+//! platform), shared by every surface: at most one runs per adapter, every
+//! step it
 //! reports becomes its current state, and once cancelled a late step or
 //! result is discarded (the flow itself writes nothing after a cancel).
 
@@ -22,7 +23,7 @@ struct Flow {
     running: bool,
 }
 
-/// The pairing flows of one surface.
+/// The daemon's pairing flows.
 #[derive(Debug, Default)]
 pub struct PairingFlows {
     flows: Mutex<HashMap<FlowKey, Flow>>,

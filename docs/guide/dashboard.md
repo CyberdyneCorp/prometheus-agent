@@ -101,7 +101,10 @@ drivers = ["password"]       # subjects that may send messages
   the hash with any argon2id tool, for example `argon2 "$(openssl rand
   -hex 8)" -id -e`, and pipe it to `prometheus secrets set
   DASHBOARD_PASSWORD_HASH`. After 5 wrong passwords within a minute, an
-  address gets `429` for 5 minutes.
+  address gets `429` for 5 minutes; concurrent attempts count too, so an
+  address never gets more than 5 guesses per lockout. Behind a trusted
+  proxy, the address is the rightmost `X-Forwarded-For` entry that is not
+  one of `trusted_proxies` (entries a client writes itself are ignored).
 - `oidc` signs users in through `[dashboard.auth.oidc]` (`issuer`,
   `client_id`, `allowed_subjects`). It uses the authorization code flow
   with PKCE, checks the ID token's signature (ES256 or RS256) and the
@@ -147,11 +150,12 @@ configuration, secrets, sessions or the vault. A change over the API gets
 | `/status` | The daemon's version, uptime, clients, sessions, adapters and platform support matrix. |
 | `/config` | Forms built from the configuration schema of the running build. A save is one validated write. Keys that only apply to new sessions are marked "applies next session". |
 | `/secrets` | Secret names, where each one comes from, and when it changed. You can set or delete a secret, but values are write-only: no page or API returns one. |
-| `/logs` | The last records (at most 5000) of a log from the daemon's list, redacted. |
+| `/logs` | The last records (at most 5000) of a log from the daemon's list, redacted. A device paired for some profiles only (`--profile-binding`) sees only those profiles' logs, not the daemon-wide ones. |
 | `/models`, `/skills`, `/profiles` | The profile's catalogs and the daemon's profiles. |
 | `/adapters` | Every adapter available to the profile with its messaging state, pause and resume, and a configure form built from the adapter's options schema. Secret fields are write-only (blank keeps the stored value). A save is one validated config patch plus the secret writes: a missing required field (such as Matrix's `homeserver`) is refused naming it, and nothing is written. **Test** checks that the endpoints the saved configuration points at answer, without connecting; **Restart adapter** restarts that one adapter from its saved configuration. WhatsApp offers **Link with QR**: the QR code refreshes until the phone links (at most 120 seconds), then the adapter restarts. Telegram offers **Create with QR**: scan the code (or open the link) and confirm in Telegram within 180 seconds; the bot's token is stored as `TELEGRAM_BOT_TOKEN`, your Telegram account becomes the only allowed user, and only the Telegram adapter restarts. Cancel saves nothing, and so does a setup that times out. The onboarding service is `gateway.platforms.telegram.options.setup_service_url`. |
 | `/webhooks` | The profile's webhook subscriptions (URL, events, delivery, enabled). Creating one shows its URL and HMAC secret once; no API returns the secret again. Enable or disable (a disabled route answers 403, no restart), delete, or send a signed test event. When the webhook adapter is off, the page says so. |
-| `/files` | The profile's workspace (`<profile>/workspace`) and its recent sessions' working directories: list, preview (text up to 2 MiB, images), download, upload (`dashboard.max_upload_bytes`), rename and confirmed delete. Paths that leave the root, links included, get 403 and are never listed. |
+| `/files` | The profile's workspace (`<profile>/workspace`) and, when the profile runs its sessions on the local backend (`terminal.backend = "local"`), its recent sessions' working directories: list, preview (text up to 2 MiB, images), download, upload (`dashboard.max_upload_bytes`), rename and confirmed delete. Paths that leave the root, links included, get 403 and are never listed. Inside a root the page follows the file-access rules of a session working there: credential stores the sandbox denies (`~/.ssh`, `~/.aws`, the Prometheus home...), dotenv files and device paths get 403 and are not listed, so a session started in your home does not expose your keys. |
+| `/pairing` | The profile's DM pairings: pending requests (platform, sender, when it asked, when its code expires) and approved senders. A sender who messages an adapter gets a one-time code in that chat; type it next to their request and press **Approve** (as `prometheus pairing approve <platform> <code>`). Codes are never listed. Observers see the list read-only. |
 | `/docs` | This documentation, embedded in the binary and searchable offline. Searching a configuration key shows its reference entry; "applies next session" notes and config errors link to the key's entry. |
 | `/profile-builder` | Creates a profile in steps (name and description, model and provider, `SOUL.md`, toolsets, skills, adapters) with `profile create` and one validated config patch; nothing is created when a step is refused. Cloning copies another profile's configuration without its secrets, sessions or memories. |
 | `/themes` | The built-in themes (`default`, `default-large`, `midnight`, `ember`, `mono`, `cyberpunk`, `rose`) and user themes from `<home>/themes/dashboard/<name>.toml` (palette, typography from local fonts only, layout, `layout_variant`, component colours and at most 32 KiB of `custom_css`). A theme with `@import` or a `url()` to another origin, or too much CSS, is listed with the reason and never applied. The choice is kept by the browser. |
@@ -159,7 +163,7 @@ configuration, secrets, sessions or the vault. A change over the API gets
 | `/mcp`, `/cron`, `/memory` | The profile's MCP servers, cron jobs (with their state and next run) and memory entries. These pages are read-only for now: change them with `prometheus mcp`, `cron` and `memory`. |
 
 These pages are listed in the navigation, but this build does not
-implement them yet, so each one says so: `/pairing`, `/kanban` and
+implement them yet, so each one says so: `/kanban` and
 `/achievements`. The `/evolution` and
 `/experience` pages read the harness-evolution and experience-library
 methods of the client protocol, and they report when the daemon does not

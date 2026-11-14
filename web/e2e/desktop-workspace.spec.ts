@@ -71,6 +71,22 @@ test("a terminal is a shell of the session's workspace", async ({ page }) => {
   await page.keyboard.type("echo e2e-$((40+2))");
   await page.keyboard.press("Enter");
   await expect(screen).toContainText("e2e-42");
+  // The PTY is told the grid the pane shows, and again when it changes.
+  await expect(screen).toHaveAttribute("data-grid", /^\d+x\d+$/);
+  const sttySize = async () => {
+    const grid = (await screen.getAttribute("data-grid")) ?? "";
+    const [cols, rows] = grid.split("x");
+    await page.keyboard.type("stty size");
+    await page.keyboard.press("Enter");
+    await expect(screen).toContainText(`${rows} ${cols}`);
+    return grid;
+  };
+  const first = await sttySize();
+  const viewport = page.viewportSize() ?? { width: 1280, height: 720 };
+  await page.setViewportSize({ width: viewport.width - 240, height: viewport.height - 120 });
+  await expect(screen).not.toHaveAttribute("data-grid", first);
+  await sttySize();
+  await page.setViewportSize(viewport);
   // CommandOrControl+W over the terminal does not close the tab.
   await page.keyboard.press("Control+w");
   await expect(page.locator("nav.chat-tabs button[name=tab]")).toHaveCount(1);

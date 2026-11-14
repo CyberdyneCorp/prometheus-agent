@@ -3968,7 +3968,7 @@ capabilities = [
 
 [web-dashboard."Non-loopback binds fail closed"]
 "LAN bind without auth" = ["crates/prometheus/tests/dashboard_http.rs::a_lan_bind_without_auth_exits_78_and_never_listens", "crates/pmt-web/src/listener.rs::a_lan_bind_without_auth_or_its_secret_is_refused"]
-"Password mode login" = ["crates/prometheus/tests/dashboard_http.rs::five_wrong_passwords_in_a_minute_lock_the_address_out", "crates/pmt-web/src/auth/password.rs::five_failures_in_a_minute_lock_the_address_out_for_five_minutes"]
+"Password mode login" = ["crates/prometheus/tests/dashboard_http.rs::five_wrong_passwords_in_a_minute_lock_the_address_out", "crates/prometheus/tests/dashboard_http.rs::concurrent_wrong_passwords_get_no_more_than_five_guesses", "crates/pmt-web/src/auth/password.rs::five_failures_in_a_minute_lock_the_address_out_for_five_minutes"]
 
 [web-dashboard."Host header validation"]
 "DNS rebinding" = ["crates/prometheus/tests/dashboard_http.rs::a_foreign_or_malformed_host_header_is_refused", "crates/pmt-web/src/guard.rs::only_the_listeners_own_names_pass"]
@@ -4026,7 +4026,7 @@ capabilities = [
 "Cancelled setup" = { tests = ["crates/prometheus/tests/dashboard_channels.rs::a_cancelled_telegram_setup_writes_nothing", "crates/prometheus/tests/desktop_manage.rs::desktop_management_messaging_projects_shortcuts_and_profile_files"], note = "dashboard: a result arriving after DELETE adapters/telegram/pairing is discarded and no secret is written; desktop (web/e2e/desktop-manage.spec.ts, closing the QR dialog...): Close sends adapters.pairing.cancel while the stand-in holds the poll, the stand-in then answers ready and the daemon discards it: TELEGRAM_BOT_TOKEN stays unset and config.toml (allowlist) is unchanged" }
 
 [web-dashboard."Files page"]
-"Symlink escape" = { tests = ["crates/prometheus/tests/dashboard_pages.rs::files_outside_the_workspace_root_are_refused_and_never_listed"], note = "cfg(unix): the fixture is a symbolic link to /etc" }
+"Symlink escape" = { tests = ["crates/prometheus/tests/dashboard_pages.rs::files_outside_the_workspace_root_are_refused_and_never_listed", "crates/prometheus/tests/dashboard_pages.rs::a_session_root_in_the_users_home_never_serves_its_credentials"], note = "cfg(unix): the fixture is a symbolic link to /etc" }
 
 [web-dashboard."Embedded documentation"]
 "Offline docs" = ["crates/prometheus/tests/dashboard_pages.rs::the_embedded_docs_find_a_config_keys_reference_entry", "crates/pmt-web/src/docs.rs::the_configuration_reference_is_embedded_with_its_key_rows", "crates/prometheus/tests/dashboard_browser.rs::the_webhooks_and_docs_pages_work_in_the_browser"]
@@ -4051,7 +4051,7 @@ capabilities = [
 "Approval badge" = ["crates/prometheus/tests/dashboard_e2e.rs::a_session_waiting_for_approval_shows_a_badge_on_the_sessions_page", "crates/prometheus/tests/dashboard_api.rs::a_pending_approval_reaches_the_event_stream_of_its_profile", "crates/pmt-web/src/events.rs::an_approval_request_becomes_a_dashboard_event_with_its_profile"]
 
 [web-dashboard."Built-in pages"]
-"Status page exists" = ["crates/prometheus/tests/dashboard_e2e.rs::the_status_page_and_every_built_in_route_render"]
+"Status page exists" = ["crates/prometheus/tests/dashboard_e2e.rs::the_status_page_and_every_built_in_route_render", "crates/prometheus/tests/dashboard_browser.rs::the_pairing_page_approves_a_stranger_with_their_code"]
 
 [web-dashboard."Secrets are write-only"]
 "Reading a key" = ["crates/prometheus/tests/dashboard_api.rs::secrets_are_listed_by_name_and_never_returned", "crates/prometheus/tests/dashboard_e2e.rs::secrets_set_in_the_browser_are_never_shown_again"]
@@ -4094,7 +4094,7 @@ capabilities = [
 
 [desktop-app."One-use dial tickets never reach the webview's storage"]
 "Replayed ticket" = { tests = ["crates/prometheus/tests/desktop_e2e.rs::the_desktop_attaches_through_the_bundled_binary", "crates/pmt-desktop/src/dial.rs::a_dial_never_prints_its_ticket"], note = "desktop-attach.spec.ts: every ticket the shell issued is absent from the page's URL, cookies, DOM, localStorage, sessionStorage, IndexedDB and caches, and a socket presenting a consumed one is closed with 4401" }
-"Ticket flood" = ["crates/pmt-desktop/src/dial.rs::a_hundred_pending_dials_refuse_the_next", "crates/pmt-desktop/src/dial.rs::a_dial_is_bound_to_the_window_that_asked"]
+"Ticket flood" = ["crates/pmt-desktop/src/dial.rs::a_hundred_pending_dials_refuse_the_next", "crates/pmt-desktop/src/dial.rs::a_dial_is_bound_to_the_window_that_asked", "crates/pmt-desktop/src/connections/service.rs::forwarder_tickets_share_the_dial_limit"]
 
 [desktop-app."Shared client defaults"]
 "Reconnect re-advertises" = { tests = ["crates/prometheus/tests/desktop_e2e.rs::the_desktop_reconnects_and_keeps_its_session"], note = "desktop-reconnect.spec.ts: after `daemon restart` the new socket's first frame is rpc.hello as `desktop` with server_requests = true, and it re-attaches the open session" }
@@ -4157,7 +4157,7 @@ capabilities = [
 "Wayland without the portal" = { tests = ["crates/pmt-desktop/src/platform.rs::wayland_without_the_portal_disables_the_hotkey_with_the_reason", "crates/prometheus/tests/desktop_background.rs::launch_links_install_dialog_shared_preferences_and_platform_support"], note = "the harness reports a Wayland session: Settings disables the quick-ask hotkey control with the reason" }
 
 [desktop-app."Signed in-app updates"]
-"Bad signature" = ["crates/pmt-desktop/tests/update.rs::a_tampered_update_is_discarded_and_the_current_version_kept", "crates/pmt-desktop/tests/update.rs::a_second_apply_while_one_runs_is_refused", "crates/pmt-desktop/tests/update.rs::background_checks_ask_the_channel_at_most_every_six_hours"]
+"Bad signature" = ["crates/pmt-desktop/tests/update.rs::a_tampered_update_is_discarded_and_the_current_version_kept", "crates/pmt-desktop/tests/update.rs::an_older_signed_archive_under_the_new_url_is_refused", "crates/pmt-desktop/tests/update.rs::a_second_apply_while_one_runs_is_refused", "crates/pmt-desktop/tests/update.rs::background_checks_ask_the_channel_at_most_every_six_hours"]
 
 [desktop-app."Development builds have no updater"]
 "Apply on a commit build" = ["crates/pmt-desktop/tests/update.rs::a_build_without_the_release_key_has_no_updater_and_asks_nothing", "crates/prometheus/tests/desktop_background.rs::launch_links_install_dialog_shared_preferences_and_platform_support"]

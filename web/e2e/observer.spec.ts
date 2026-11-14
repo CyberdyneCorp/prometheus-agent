@@ -22,6 +22,9 @@ test("an OIDC viewer cannot send", async ({ browser }) => {
   await expect(viewer.locator(".message.assistant")).toHaveCount(1);
   await expect(viewer.getByLabel("Message")).toBeDisabled();
   await expect(viewer.getByRole("button", { name: "Send" })).toBeDisabled();
+  await viewer.goto(`${url}pairing`);
+  await expect(viewer.getByText("You are an observer: approving needs a driver.")).toBeVisible();
+  await viewer.goto(`${url}chat?session=${session}`);
 
   const token = await csrf(viewer, url);
   const code = await viewer.evaluate(

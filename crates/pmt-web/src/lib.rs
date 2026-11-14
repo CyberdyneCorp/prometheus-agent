@@ -44,7 +44,7 @@ use pmt_gateway::{HostFuture, Server};
 use pmt_rpc::control::{DashboardAction, DashboardState, DeviceEntry};
 use tokio_util::sync::CancellationToken;
 
-pub use host::{Catalog, Change, DashboardHost, PairingSink, SessionFile};
+pub use host::{Catalog, Change, DashboardHost, FileRules, PairingSink, SessionFile};
 
 /// What every request handler of a running listener shares.
 pub(crate) struct Shared {
@@ -55,8 +55,9 @@ pub(crate) struct Shared {
     guard: guard::Guard,
     auth: auth::Auth,
     feed: Arc<events::Feed>,
-    /// The adapters' interactive pairing flows.
-    pairings: pairing::PairingFlows,
+    /// The adapters' interactive pairing flows: the daemon's one table,
+    /// which the desktop's Messaging pane shares.
+    pairings: Arc<pairing::PairingFlows>,
     /// The plugins' dashboard contributions, per profile.
     plugins: api::plugins::Scanned,
     /// Cancelled when the listener stops.
@@ -193,7 +194,7 @@ impl Dashboard {
             server: Arc::clone(&self.server),
             host: Arc::clone(&self.host),
             feed: Arc::clone(&self.feed),
-            pairings: pairing::PairingFlows::default(),
+            pairings: self.host.pairing_flows(),
             plugins: api::plugins::Scanned::default(),
             stop: CancellationToken::new(),
             base: base.clone(),

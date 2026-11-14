@@ -73,6 +73,12 @@ pub struct SessionFile {
     pub bytes: Vec<u8>,
 }
 
+/// The Files page's access rules below one workspace root: `Err` with
+/// the refusal when `path` (absolute, links resolved) may not be accessed
+/// that way.
+pub type FileRules =
+    Box<dyn Fn(&std::path::Path, pmt_core::capability::Access) -> Result<(), String> + Send + Sync>;
+
 /// Where an interactive adapter pairing flow reports its steps (each a
 /// JSON object with a `state`: `qr` with an `image` data URI, `code`...),
 /// and how it learns that the user closed it: a cancelled flow stops and
@@ -144,6 +150,26 @@ pub trait DashboardHost: Send + Sync {
         session: &'a str,
         path: &'a str,
     ) -> HostFuture<'a, SessionFile>;
+
+    /// The rules the Files page applies below workspace root `root` of the
+    /// profile: those of a session working there (`session`: that
+    /// session, whose own tool output it may also read), so the page
+    /// reaches only what the session's file tools may.
+    ///
+    /// # Errors
+    ///
+    /// When the profile's grants cannot be read.
+    fn file_rules(
+        &self,
+        profile: &str,
+        session: Option<&str>,
+        root: &std::path::Path,
+    ) -> Result<FileRules, pmt_core::error::Error>;
+
+    /// The daemon's interactive pairing flows, one table for every
+    /// surface (dashboard, desktop panes), so at most one flow runs per
+    /// adapter whichever surface started it and any surface can cancel it.
+    fn pairing_flows(&self) -> Arc<crate::pairing::PairingFlows>;
 
     /// Runs an adapter's interactive pairing `flow` for the profile
     /// (`WhatsApp` QR linking, Telegram Create with QR), reporting each step

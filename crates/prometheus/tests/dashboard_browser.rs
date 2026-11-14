@@ -169,3 +169,50 @@ fn the_channel_forms_test_restart_and_pair_in_the_browser() {
     );
     playwright(home.path(), "adapters.spec.ts", &[]);
 }
+
+/// Built-in pages (`/pairing`): a stranger who messaged an adapter is
+/// approved on the Pairing page with the code the chat gave them, and an
+/// observer device cannot approve over the API.
+#[test]
+fn the_pairing_page_approves_a_stranger_with_their_code() {
+    use common::gateway::{Daemon, send, texts, wait_said};
+    let home = mock_home();
+    append_config(home.path(), "\n[gateway.platforms.test]\nenabled = true\n");
+    let _daemon = Daemon::start(home.path());
+    send(home.path(), "default", "stranger", "hi");
+    wait_said(home.path(), "default", "Your pairing code is ");
+    let code: String = texts(home.path(), "default")[0]
+        .split("Your pairing code is ")
+        .nth(1)
+        .unwrap()
+        .chars()
+        .take(8)
+        .collect();
+    let opened = common::dashboard::open(home.path(), &[]);
+    let paired = ok(&run(
+        home.path(),
+        &[
+            "--json",
+            "daemon",
+            "pair-device",
+            "viewer",
+            "--role",
+            "observer",
+        ],
+    ));
+    let token = serde_json::from_str::<serde_json::Value>(&paired).unwrap()["token"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let refused =
+        common::api::Request::new("POST", &format!("/api/profiles/default/pairing/{code}"))
+            .header("Authorization", &format!("Bearer {token}"))
+            .json(&serde_json::json!({"platform": "test"}))
+            .send(opened.port);
+    assert_eq!(refused.status, 403, "{refused:?}");
+    playwright(
+        home.path(),
+        "pairing.spec.ts",
+        &[("PMT_PAIRING_CODE", &code)],
+    );
+}

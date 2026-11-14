@@ -181,6 +181,10 @@ pub(super) struct DaemonHost {
     /// The host itself, for work that outlives the request that started it
     /// (a desktop pairing flow).
     me: std::sync::OnceLock<std::sync::Weak<DaemonHost>>,
+    /// The adapters' interactive pairing flows, shared by the dashboard
+    /// and the desktop's Messaging pane.
+    #[cfg(feature = "dashboard")]
+    pairing_flows: Arc<pmt_web::pairing::PairingFlows>,
 }
 
 fn session_id(text: &str) -> Result<SessionId, Error> {
@@ -267,6 +271,8 @@ impl DaemonHost {
             api_keys: api::KeyCache::default(),
             api: std::sync::OnceLock::new(),
             me: std::sync::OnceLock::new(),
+            #[cfg(feature = "dashboard")]
+            pairing_flows: Arc::default(),
         })
     }
 

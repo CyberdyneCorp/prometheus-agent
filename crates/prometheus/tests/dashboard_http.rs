@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 
 use common::api::Request;
 use common::dashboard::{
-    self, Opened, call, certificate, get, https, path_of, set_cookie, sign_in,
+    self, Opened, call, certificate, get, https, https_split, path_of, set_cookie, sign_in,
 };
 use common::ws::close_code;
 use common::{daemon, mock_home, ok, run, stderr, stdout};
@@ -450,9 +450,12 @@ fn phc(password: &str) -> String {
         .to_string()
 }
 
-/// Scenario: Password mode login.
-#[test]
-fn five_wrong_passwords_in_a_minute_lock_the_address_out() {
+/// A home whose dashboard signs in with a password over TLS, and the
+/// certificate to trust.
+fn password_home() -> (
+    tempfile::TempDir,
+    rustls::pki_types::CertificateDer<'static>,
+) {
     let home = mock_home();
     let cert = certificate(home.path());
     ok(&common::run_with_stdin(
@@ -464,36 +467,72 @@ fn five_wrong_passwords_in_a_minute_lock_the_address_out() {
         home.path().join("daemon.toml"),
         format!(
             "[dashboard]\n[dashboard.auth]\nmode = \"password\"\n[dashboard.tls]\ncert = {:?}\nkey = {:?}\n",
-            home.path().join("cert.pem"),
-            home.path().join("key.pem")
+            home.path().join("cert.pem").to_string_lossy(),
+            home.path().join("key.pem").to_string_lossy()
         ),
     )
     .unwrap();
-    let _daemon = daemon::start(home.path(), &[]);
-    let opened: Opened = dashboard::open(home.path(), &[]);
+    (home, cert)
+}
+
+/// The port of the running daemon's HTTPS dashboard.
+fn https_port(home: &std::path::Path) -> u16 {
+    let opened: Opened = dashboard::open(home, &[]);
     assert!(opened.url.starts_with("https://"), "{opened:?}");
+    opened.port
+}
+
+/// Scenario: Password mode login.
+#[test]
+fn five_wrong_passwords_in_a_minute_lock_the_address_out() {
+    let (home, cert) = password_home();
+    let _daemon = daemon::start(home.path(), &[]);
+    let port = https_port(home.path());
     let rt = runtime();
-    let (code, text) = rt.block_on(https(
-        opened.port,
-        &cert,
-        &login_post(opened.port, "hunter22"),
-    ));
+    let (code, text) = rt.block_on(https(port, &cert, &login_post(port, "hunter22")));
     assert_eq!(code, 303, "{text}");
     assert!(
         text.contains("HttpOnly; SameSite=Strict; Path=/;") && text.contains("; Secure"),
         "{text}"
     );
     for attempt in 1..=5 {
-        let (code, text) =
-            rt.block_on(https(opened.port, &cert, &login_post(opened.port, "wrong")));
+        let (code, text) = rt.block_on(https(port, &cert, &login_post(port, "wrong")));
         assert_eq!(code, 401, "attempt {attempt}: {text}");
     }
-    let (code, text) = rt.block_on(https(opened.port, &cert, &login_post(opened.port, "wrong")));
+    let (code, text) = rt.block_on(https(port, &cert, &login_post(port, "wrong")));
     assert_eq!(code, 429, "{text}");
-    let (code, _) = rt.block_on(https(
-        opened.port,
-        &cert,
-        &login_post(opened.port, "hunter22"),
-    ));
+    let (code, _) = rt.block_on(https(port, &cert, &login_post(port, "hunter22")));
+    assert_eq!(code, 429, "locked out even with the right password");
+}
+
+/// Concurrent guesses share the address's 5 attempts: each is counted
+/// before its password is checked, so 10 at once get at most 5 answers
+/// and the rest 429.
+#[test]
+fn concurrent_wrong_passwords_get_no_more_than_five_guesses() {
+    let (home, cert) = password_home();
+    let _daemon = daemon::start(home.path(), &[]);
+    let port = https_port(home.path());
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    // Each guess sends its headers, and its body only once all ten are
+    // in, so every guess is past the limiter before any is verified.
+    let request = login_post(port, "wrong");
+    let (head, body) = request.split_at(request.len() - "password=wrong".len());
+    let barrier = tokio::sync::Barrier::new(10);
+    let codes: Vec<u16> = rt.block_on(async {
+        let guesses = (0..10).map(|_| https_split(port, &cert, head, body, Some(&barrier)));
+        futures_util::future::join_all(guesses)
+            .await
+            .into_iter()
+            .map(|(code, _)| code)
+            .collect()
+    });
+    let wrong = codes.iter().filter(|c| **c == 401).count();
+    let refused = codes.iter().filter(|c| **c == 429).count();
+    assert_eq!((wrong, refused), (5, 5), "{codes:?}");
+    let (code, _) = rt.block_on(https(port, &cert, &login_post(port, "hunter22")));
     assert_eq!(code, 429, "locked out even with the right password");
 }
