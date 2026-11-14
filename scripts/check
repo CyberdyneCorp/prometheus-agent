@@ -8,6 +8,12 @@
 #        scripts/check --perf [ARGS...]        run only the startup, memory and size
 #                                              budgets (`cargo xtask perf ARGS...`)
 #        scripts/check --install-hook pre-push  run the gates before every `git push`
+#        scripts/check --clean                 `cargo clean`, unless gates are running
+#
+# Gate runs share this checkout's target/, so only one runs at a time: a
+# second one (or --clean) started meanwhile stops with the holder's pid
+# instead of rebuilding or deleting what the first is using. A disk
+# cleaner should use --clean rather than a bare `cargo clean`.
 #
 # The full run checks the budgets against perf/baseline.json. The budgets are
 # defined for the reference runner only (spec: Startup time budget), so CI's
@@ -32,6 +38,25 @@ cd "$root"
 die() {
     echo "check: $*" >&2
     exit 1
+}
+
+# One gate run per checkout. The lock lives in the git directory, which
+# `cargo clean` never touches; mkdir is atomic and portable (macOS has no
+# flock). A lock whose process is gone is stale and taken over.
+lock_dir=$(git rev-parse --absolute-git-dir)/prometheus-check.lock
+
+take_lock() {
+    local holder
+    if ! mkdir "$lock_dir" 2>/dev/null; then
+        holder=$(cat "$lock_dir/pid" 2>/dev/null || true)
+        if [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; then
+            die "another scripts/check (pid $holder) is using this checkout's target/; wait for it to finish"
+        fi
+        rm -rf "$lock_dir"
+        mkdir "$lock_dir" 2>/dev/null || die "another scripts/check just took this checkout's lock"
+    fi
+    echo $$ >"$lock_dir/pid"
+    trap 'rm -rf "$lock_dir"' EXIT
 }
 
 # First token of a command's output that looks like a version number.
@@ -191,15 +216,20 @@ EOF
 }
 
 case "${1:-}" in
+"" | --no-perf | --perf | --clean) take_lock ;;
+esac
+
+case "${1:-}" in
 "") run_gates yes ;;
 --no-perf) run_gates no ;;
 --perf)
     shift
     step cargo xtask perf "$@"
     ;;
+--clean) step cargo clean ;;
 --install-hook)
     [ $# -eq 2 ] || die "usage: scripts/check --install-hook <hook-name>"
     install_hook "$2"
     ;;
-*) die "unknown argument: $1 (usage: scripts/check [--no-perf | --perf [ARGS...] | --install-hook pre-push])" ;;
+*) die "unknown argument: $1 (usage: scripts/check [--no-perf | --perf [ARGS...] | --clean | --install-hook pre-push])" ;;
 esac

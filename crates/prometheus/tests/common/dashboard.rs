@@ -277,6 +277,28 @@ pub async fn https_split(
 
 pub const WEB: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../web");
 
+/// The page snapshots Playwright wrote for failed tests
+/// (`error-context.md`): what the page showed at the failure. The output
+/// directory is a temp dir gone after the test, so a failure on CI is
+/// only diagnosable from what the panic carries.
+fn error_contexts(dir: &Path) -> String {
+    use std::fmt::Write as _;
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return String::new();
+    };
+    let mut text = String::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            text.push_str(&error_contexts(&path));
+        } else if path.file_name().is_some_and(|n| n == "error-context.md") {
+            let context = std::fs::read_to_string(&path).unwrap_or_default();
+            let _ = write!(text, "\n--- {}\n{context}", path.display());
+        }
+    }
+    text
+}
+
 /// Runs `web/e2e/<spec>` against `home`'s running daemon.
 pub fn playwright(home: &Path, spec: &str, extra: &[(&str, &str)]) {
     let web = std::path::Path::new(WEB);
@@ -309,8 +331,9 @@ pub fn playwright(home: &Path, spec: &str, extra: &[(&str, &str)]) {
         .unwrap();
     assert!(
         out.status.success(),
-        "{spec} failed\n{}\n{}",
+        "{spec} failed\n{}\n{}{}",
         String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
+        String::from_utf8_lossy(&out.stderr),
+        error_contexts(&home.join("playwright"))
     );
 }
