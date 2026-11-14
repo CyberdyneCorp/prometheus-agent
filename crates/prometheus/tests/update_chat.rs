@@ -7,9 +7,9 @@
 mod common;
 
 use std::process::{Child, Command, Stdio};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use common::gateway::{adapter_dir, send, texts, wait, wait_said, wait_said_within};
+use common::gateway::{adapter_dir, send, texts, wait, wait_said};
 use common::release::{Fixture, next_patch};
 use pmt_rpc::discovery::{Discovery, discover};
 use pmt_update::Channel;
@@ -34,6 +34,30 @@ fn daemon(f: &Fixture) -> Child {
     child
 }
 
+/// Waits until the chat says `text`; on timeout the panic carries what
+/// the detached updater printed, its receipt (the stages it reached), the
+/// restarted daemon's stderr and the end of the gateway log, so a stall
+/// names the step that hung.
+fn wait_updated(f: &Fixture, text: &str, budget: Duration) {
+    let deadline = Instant::now() + budget;
+    while !texts(&f.home, "default").iter().any(|t| t.contains(text)) {
+        if Instant::now() >= deadline {
+            let read = |path: &str| std::fs::read_to_string(f.home.join(path)).unwrap_or_default();
+            let log = read("logs/gateway.log");
+            let tail: Vec<&str> = log.lines().rev().take(40).collect();
+            panic!(
+                "default never said {text:?}; it said {:?}\n--- updater output\n{}\n--- receipt\n{}\n--- new daemon stderr\n{}\n--- gateway log (last 40 lines, newest first)\n{}",
+                texts(&f.home, "default"),
+                read("logs/update-from-chat.log"),
+                read("updates/receipts/latest.json"),
+                read("logs/daemon-stderr.log"),
+                tail.join("\n"),
+            );
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
 #[test]
 fn an_admin_updates_from_the_chat() {
     let f = Fixture::self_install();
@@ -55,12 +79,7 @@ fn an_admin_updates_from_the_chat() {
     wait_said(&f.home, "default", "checking the stable channel");
     // Download, self-test, swap and handover: minutes on the slow Intel
     // macOS runner (a ~100 MB debug-build tarball).
-    wait_said_within(
-        &f.home,
-        "default",
-        &format!("updated to {next}"),
-        Duration::from_mins(4),
-    );
+    wait_updated(&f, &format!("updated to {next}"), Duration::from_mins(4));
     // Stage lines, at most one per 2 s: a newer stage replaces a waiting
     // one, so which middle stages show depends on timing. The last one,
     // written just before the handover stops this daemon, always shows.

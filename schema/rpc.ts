@@ -42,6 +42,52 @@ export interface Ack {
   ok: boolean;
 }
 
+/** `adapters.list` result. */
+export interface AdapterList {
+  /** Every adapter available to the profile. */
+  adapters: Array<AdapterRow>;
+}
+
+/** An adapter of a profile. */
+export interface AdapterRef {
+  /** The platform. */
+  platform: string;
+  /** The profile. */
+  profile: string;
+}
+
+/** One messaging adapter of a profile. */
+export interface AdapterRow {
+  /** Its display name. */
+  display: string;
+  /** Enabled in the configuration. */
+  enabled: boolean;
+  /** Its interactive pairing flow (`telegram_qr`, `whatsapp_qr`). */
+  pairing?: string | null;
+  /** The platform. */
+  platform: string;
+  /** Why, for `error`. */
+  reason?: string | null;
+  /** Its secrets and whether each is set (never values). */
+  secrets: Record<string, boolean>;
+  /** `not_configured`, `saved` (credentials stored, disabled), `pending_restart` (configuration changed since it started), `connecting`, `connected`, `error` or `daemon_stopped`. */
+  state: string;
+}
+
+/** `adapters.save` params: credentials and the enable switch, written together; nothing restarts. */
+export interface AdapterSaveParams {
+  /** Secrets to delete. */
+  clear?: Array<string>;
+  /** The new enable switch. */
+  enabled?: boolean | null;
+  /** The platform. */
+  platform: string;
+  /** The profile. */
+  profile: string;
+  /** Secrets to store (write-only). */
+  secrets?: Record<string, string>;
+}
+
 /** `adapter.state` payload: one messaging adapter changed state (spec: platform-adapters, Adapter state reporting and reconnect). */
 export interface AdapterStatePayload {
   /** Outside `connected` longer than `gateway.reconnect_attention_secs` (set once per outage, cleared on reconnect). */
@@ -111,6 +157,46 @@ export interface ApprovalRespondParams {
   id: string;
   /** An edited command to run instead. */
   replacement?: string | null;
+}
+
+/** One image, file or link a session produced. */
+export interface Artifact {
+  /** The tool call that wrote or produced it. */
+  call_id?: string | null;
+  /** When (RFC 3339). */
+  created_at: string;
+  /** Stable id (`<message id>:<n>`). */
+  id: string;
+  /** `image`, `file` or `link`. */
+  kind: string;
+  /** The session that produced it. */
+  session_id: string;
+  /** Its title (empty when untitled). */
+  session_title: string;
+  /** That call's tool. */
+  tool?: string | null;
+  /** The path (as the session names it) or the URL. */
+  value: string;
+}
+
+/** `artifacts.list` result. */
+export interface ArtifactList {
+  /** Newest first. */
+  artifacts: Array<Artifact>;
+  /** The next page's cursor, while there is one. */
+  next_cursor?: string | null;
+}
+
+/** `artifacts.list` params. */
+export interface ArtifactsListParams {
+  /** Where the previous page ended. */
+  cursor?: string | null;
+  /** The profile (required when the connection is granted several). */
+  profile?: string | null;
+  /** Only artifacts whose value or session title contains this text. */
+  query?: string | null;
+  /** Only this session's artifacts (the composer's suggestions). */
+  session_id?: string | null;
 }
 
 /** `session.attach` params. */
@@ -264,6 +350,14 @@ export interface BlueprintsListParams {
   profile?: string | null;
 }
 
+/** `bot.chat.ensure` result. */
+export interface BotChat {
+  /** Whether this call created it. */
+  created: boolean;
+  /** The profile's canonical Bot Chat. */
+  session_id: string;
+}
+
 /** One budget's standing in `usage.updated`. */
 export interface BudgetStanding {
   /** The limit. */
@@ -276,6 +370,53 @@ export interface BudgetStanding {
   spent: number;
   /** `usd` or `tokens`. */
   unit: string;
+}
+
+/** A pending approval. */
+export interface CenterApproval {
+  /** Its session's profile. */
+  profile: string;
+  /** The request. */
+  request_id: string;
+  /** The session. */
+  session_id: string;
+  /** What is asked (the command or the tool). */
+  summary: string;
+}
+
+/** `center.list` result. */
+export interface CenterList {
+  /** Pending approvals. */
+  approvals: Array<CenterApproval>;
+  /** Running sessions across the connection's profiles. */
+  sessions: Array<CenterSession>;
+  /** Active subagents. */
+  subagents: Array<CenterSubagent>;
+}
+
+/** `center.list` params. */
+export type CenterParams = Record<string, unknown>;
+
+/** A session with a running turn. */
+export interface CenterSession {
+  /** Its profile. */
+  profile: string;
+  /** The session. */
+  session_id: string;
+  /** Its title. */
+  title?: string | null;
+}
+
+/** An active subagent. */
+export interface CenterSubagent {
+  /** Its task. */
+  goal: string;
+  /** Its parent's profile. */
+  profile: string;
+  /** The parent session. */
+  session_id: string;
+  /** The child. */
+  subagent_id: string;
 }
 
 /** `clarify.request` result. */
@@ -300,6 +441,8 @@ export interface ClarifyRequestParams {
 export interface ClientCapabilities {
   /** Events introduced after the client's minor version that it understands anyway. */
   events?: Array<string>;
+  /** Optional client features (`desktop_ui`: the desktop UI toolset's `ui.*` requests go to this client). */
+  features?: Array<string>;
   /** The client answers server-to-client requests (approvals, clarify, secrets, sudo). Without it they resolve unanswered at once. */
   server_requests?: boolean;
 }
@@ -329,6 +472,8 @@ export interface CommandEntry {
   reason?: string | null;
   /** Built-in, quick command, skill or client-handled. */
   source: CommandSource;
+  /** Subcommands with their own disposition on this surface (a palette offers a command when it or one of them runs here). */
+  subcommands?: Array<SubcommandEntry>;
 }
 
 /** Where a command comes from. */
@@ -390,12 +535,46 @@ export interface ComponentHealth {
   state: string;
 }
 
+/** One change of a `config.patch`. */
+export interface ConfigChange {
+  /** A dotted key (`delegation.model`). */
+  key: string;
+  /** The new value (typed by the key's schema); `null` or absent removes the key so its default applies. */
+  value?: unknown;
+}
+
 /** `config.get` params. */
 export interface ConfigGetParams {
   /** A dotted key (`model.default`). */
   key: string;
   /** The profile; required when the connection is granted several. */
   profile?: string | null;
+}
+
+/** `config.patch` params. */
+export interface ConfigPatchParams {
+  /** Applied together, validated as a whole: all or none. */
+  changes: Array<ConfigChange>;
+  /** The window's profile. */
+  profile: string;
+}
+
+/** `config.patch` result. */
+export interface ConfigPatched {
+  /** The keys the patch named. */
+  keys: Array<string>;
+}
+
+/** `config.reload` result: the profile's configuration state. */
+export interface ConfigReloaded {
+  /** Why the file on disk is not in use, while it is invalid. */
+  error?: string | null;
+  /** Keys that apply after a daemon restart. */
+  pending_restart?: Array<string>;
+  /** The profile. */
+  profile: string;
+  /** Valid edits loaded since the daemon started. */
+  reloads: number;
 }
 
 /** `config.get` result. */
@@ -408,10 +587,20 @@ export interface ConfigValue {
   value: unknown;
 }
 
+/** One category of `session.context_usage`. */
+export interface ContextCategory {
+  /** `system_prompt`, `tool_definitions`, `skills`, `memory`, `rules`, `mcp`, `subagent_definitions` or `conversation`. */
+  category: string;
+  /** Its estimated tokens. */
+  tokens: number;
+}
+
 /** `session.context_usage` result. */
 export interface ContextUsage {
   /** The current route's `billing_source` (`subscription:<provider>/<label>`, `api_key:<provider>[/<label>]`, `local`...), when the session is loaded. */
   billing_source?: string | null;
+  /** `tokens` by category; they sum to `tokens` (empty when the session is not loaded). */
+  categories?: Array<ContextCategory>;
   /** The model's context window, when known. */
   context_window?: number | null;
   /** The session's cost so far in the usage ledger's currency (USD), priced calls only. */
@@ -420,6 +609,20 @@ export interface ContextUsage {
   subscription?: SubscriptionStatus | null;
   /** Estimated tokens of the active context. */
   tokens: number;
+}
+
+/** `daemon.update` params. */
+export interface DaemonUpdateParams {
+  /** Only look for an update (`prometheus update --check`). */
+  check?: boolean;
+}
+
+/** `daemon.update` result. A refusal (another owner such as a package manager or the container image, the update lock held) is an error with the updater's own code and message. */
+export interface DaemonUpdated {
+  /** What the check printed, or where the updater writes its log. */
+  message: string;
+  /** `started` (the updater runs detached and hands the daemon over when it finishes) or `checked`. */
+  status: string;
 }
 
 /** An approval answer. */
@@ -516,6 +719,16 @@ export interface EventsSinceParams {
   session_id: string;
 }
 
+/** One row of the platform support matrix. */
+export interface FeatureSupport {
+  /** The feature (`sandbox.local`, `containers`...). */
+  feature: string;
+  /** What the probe found: the mechanism in use, or what is missing and whether the operating system or a dependency lacks it. */
+  reason: string;
+  /** `supported`, `degraded` or `unsupported`. */
+  state: string;
+}
+
 /** `files.rollback` params: no checkpoint lists them; `diff` previews. */
 export interface FilesRollbackParams {
   /** Overwrite hand-edited files too. */
@@ -576,6 +789,152 @@ export interface FrozenPrompt {
   sha256: string;
   /** The prompt text, its tiers joined in request order. */
   text: string;
+}
+
+/** One listed entry. */
+export interface FsEntry {
+  /** A directory (expanded lazily with another `fs.list`). */
+  dir: boolean;
+  /** Ignored by a `.gitignore` (listed only with `show_ignored`). */
+  ignored?: boolean;
+  /** The file name. */
+  name: string;
+  /** Its path as the session names it (relative to the workspace when inside it). */
+  path: string;
+  /** Its size in bytes, for a file. */
+  size?: number | null;
+}
+
+/** `fs.read` result. */
+export interface FsFile {
+  /** Where the file is on this machine, when the session's backend is the host's filesystem (the guarded opener may open it). */
+  absolute?: string | null;
+  /** The bytes read, base64. */
+  data: string;
+  /** `text`, `image` or `binary`. */
+  kind: string;
+  /** The media type of an image (`image/png`...). */
+  mime?: string | null;
+  /** The file as the session names it. */
+  path: string;
+  /** Its whole size in bytes. */
+  size: number;
+  /** Only the first `max_bytes` are in `data`. */
+  truncated: boolean;
+  /** The session's workspace on this machine, with `absolute`. */
+  workspace?: string | null;
+}
+
+/** `fs.list` params. */
+export interface FsListParams {
+  /** A directory, relative to the session's workspace (`.` its root). */
+  path?: string;
+  /** The session (attached). */
+  session_id: string;
+  /** Also list entries `.gitignore` files ignore. */
+  show_ignored?: boolean;
+}
+
+/** `fs.list` result. */
+export interface FsListing {
+  /** Directories first, then files, by name. */
+  entries: Array<FsEntry>;
+  /** The listed directory. */
+  path: string;
+}
+
+/** `fs.read` params. */
+export interface FsReadParams {
+  /** Read at most this many bytes from the start (default and cap 8 MiB); the pane previews the first 2 MiB. */
+  max_bytes?: number | null;
+  /** The file, relative to the session's workspace or absolute. */
+  path: string;
+  /** The session (attached). */
+  session_id: string;
+}
+
+/** `git.branch` params. */
+export interface GitBranchParams {
+  /** Create it (`git switch -c`) instead of switching to it. */
+  create?: boolean;
+  /** The branch. */
+  name: string;
+  /** The session. */
+  session_id: string;
+}
+
+/** `git.commit` params. */
+export interface GitCommitParams {
+  /** The commit message. */
+  message: string;
+  /** Commit & Push: commit and push through the session's terminal backend. */
+  push?: boolean;
+  /** The session. */
+  session_id: string;
+}
+
+/** One changed file. */
+export interface GitFile {
+  /** The unified diff (cut at 256 KiB). */
+  patch: string;
+  /** Its path in the repository. */
+  path: string;
+  /** Part of the change is staged (`uncommitted` only). */
+  staged: boolean;
+  /** `added`, `modified`, `deleted` or `type-changed`. */
+  status: string;
+}
+
+/** `git.message` result. */
+export interface GitMessage {
+  /** The suggested commit message (empty when no auxiliary route answers). */
+  message: string;
+}
+
+/** `git.stage`, `git.unstage` and `git.revert` params. */
+export interface GitPaths {
+  /** Paths in the repository. */
+  paths: Array<string>;
+  /** The session. */
+  session_id: string;
+}
+
+/** What a command run through the session's terminal backend printed. */
+export interface GitRan {
+  /** The commit made (`git.commit`). */
+  commit?: string | null;
+  /** Whether it succeeded. */
+  ok: boolean;
+  /** Its output. */
+  output: string;
+}
+
+/** `git.review` result. */
+export interface GitReview {
+  /** Commits ahead of upstream. */
+  ahead: number;
+  /** Commits behind upstream. */
+  behind: number;
+  /** The checked-out branch (`None`: detached). */
+  branch?: string | null;
+  /** The changed files. */
+  files: Array<GitFile>;
+  /** The `gh` executable is available (Create PR is offered). */
+  gh: boolean;
+  /** Nothing in this scope may be staged, reverted or committed. */
+  read_only: boolean;
+  /** The working tree's top folder. */
+  root: string;
+  /** The scope shown. */
+  scope: string;
+}
+
+/** `git.review` params. */
+export interface GitReviewParams {
+  /** `uncommitted` (default), `branch` or `last-turn`. */
+  scope?: string;
+  /** The session whose workspace is reviewed. */
+  session_id: string;
 }
 
 /** `health.changed` payload. */
@@ -656,6 +1015,8 @@ export interface JourneyNode {
   title: string;
   /** When it last changed (RFC 3339). */
   updated_at: string;
+  /** How often it was used: a skill's loads, an entry's recalls (the memory graph's `used` filter). */
+  uses?: number;
 }
 
 /** `session.tree` / `session.siblings` result. */
@@ -730,6 +1091,28 @@ export interface LspStatusParams {
   profile?: string | null;
 }
 
+/** `manage.catalog` params. */
+export interface ManageCatalogParams {
+  /** `skills`, `optional_skills`, `toolsets`, `models`, `plugins`, `mcp`, `cron`, `cron_runs` (of the job `target` names) or `memory`. */
+  catalog: string;
+  /** The profile the pane targets. */
+  profile: string;
+  /** The job whose runs `cron_runs` lists. */
+  target?: string | null;
+}
+
+/** `manage.change` params. */
+export interface ManageChangeParams {
+  /** The change's fields. */
+  body?: unknown;
+  /** `skill` (`{"enabled"}`), `skill_archive`, `toolset`, `cron_update` (`{"enabled"}` pauses or resumes), `cron_delete`, `cron_run` or `memory` (`{"replace"|"remove": ...}`). */
+  change: string;
+  /** The profile that owns what changes (a job's owning profile in the all-profiles view). */
+  profile: string;
+  /** The skill, toolset or job. */
+  target?: string | null;
+}
+
 /** One MCP server of a session. */
 export interface McpServerState {
   /** Its configured name. */
@@ -744,6 +1127,16 @@ export interface McpServerState {
 export interface MemorySummary {
   /** `Memory: +<added> ~<patched> -<removed> (review with /memory review)` when the agent changed memory in the session and `memory.review_mode` is not `off`; `null` otherwise. */
   line?: string | null;
+}
+
+/** `message.reaction` payload. */
+export interface MessageReaction {
+  /** The message. */
+  message_id: string;
+  /** Its reactions after the change. */
+  reactions: Array<Reaction>;
+  /** The session. */
+  session_id: string;
 }
 
 /** One data point of a metric. */
@@ -868,8 +1261,12 @@ export interface ModelOption {
   context_window?: number | null;
   /** `<provider>/<model>`. */
   id: string;
+  /** The most reasoning the model takes (`none` when it does not reason); a higher requested level is clamped to it. */
+  max_reasoning?: string | null;
   /** The provider. */
   provider: string;
+  /** Why switching the session to it is risky (the conversation does not fit its window, it cannot call tools...); clients confirm. */
+  risky?: string | null;
 }
 
 /** `model.options` result. */
@@ -878,6 +1275,22 @@ export interface ModelOptions {
   current?: string | null;
   /** The models a `/model` switch may pick, current first. */
   models: Array<ModelOption>;
+}
+
+/** `model.options` params: a session's options, or a profile's before any session exists (the composer's picker of a new chat). */
+export interface ModelOptionsParams {
+  /** The profile, when no session is named. */
+  profile?: string | null;
+  /** The session (it must be attached). */
+  session_id?: string | null;
+}
+
+/** `onboarding.ensure` result. */
+export interface OnboardingChat {
+  /** Whether this call created it. */
+  created: boolean;
+  /** The profile's onboarding chat. */
+  session_id: string;
 }
 
 /** A server-to-client request still waiting for an answer. */
@@ -912,10 +1325,92 @@ export interface PairingApproved {
 
 /** The daemon's build target and its support tier. */
 export interface PlatformSupport {
+  /** The support matrix of this host, from runtime probes (spec: web-dashboard, Honest platform support matrix). */
+  features?: Array<FeatureSupport>;
   /** The Rust target triple. */
   target: string;
   /** `tier1`, `tier2` or `unsupported`. */
   tier: string;
+}
+
+/** One background process of a session. */
+export interface ProcessEntry {
+  /** Its command line. */
+  command: string;
+  /** Its id (`proc_…`). */
+  process_id: string;
+  /** `running`, `exited`... */
+  state: string;
+}
+
+/** `process.list` result. */
+export interface ProcessList {
+  /** The session's live background processes. */
+  processes: Array<ProcessEntry>;
+}
+
+/** `process.log` result. */
+export interface ProcessLog {
+  /** Its buffered output (redacted, shaped like the `process` tool's). */
+  output: string;
+  /** The process. */
+  process_id: string;
+  /** Its state. */
+  state: string;
+}
+
+/** `process.log` params. */
+export interface ProcessRef {
+  /** The background process. */
+  process_id: string;
+  /** The session. */
+  session_id: string;
+}
+
+/** A call that only names the window's profile. */
+export interface ProfileParams {
+  /** The window's profile. */
+  profile: string;
+}
+
+/** One explicit project. */
+export interface ProjectRow {
+  /** `prj_...`. */
+  id: string;
+  /** Its display name. */
+  name: string;
+  /** Its primary folder. */
+  path?: string | null;
+  /** Its slug. */
+  slug: string;
+}
+
+/** `projects.create` params. */
+export interface ProjectsCreateParams {
+  /** The display name (the folder name when omitted). */
+  name?: string | null;
+  /** The repository folder. */
+  path: string;
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+}
+
+/** `projects.list` result. */
+export interface ProjectsList {
+  /** Repositories the background scan found that are no project's. */
+  discovered: Array<RepoRow>;
+  /** Repositories of the profile's sessions that are no project's. */
+  inferred: Array<RepoRow>;
+  /** Projects created explicitly. */
+  projects: Array<ProjectRow>;
+  /** A scan is running or this listing started one: list again for its rows. */
+  scanning: boolean;
+}
+
+/** `projects.list` params. */
+export interface ProjectsListParams {
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
 }
 
 /** An image attached to a prompt: a file the daemon reads (checked like `chat --image`), or an image the session already holds (as `command.dispatch` returns them for `/retry`). */
@@ -923,7 +1418,115 @@ export type PromptImage = {
   path: string;
 } | {
   blob: string;
+} | {
+  data: string;
 };
+
+/** `pty.attach` result. */
+export interface PtyAttached {
+  /** The terminal. */
+  pty_id: string;
+  /** Its recent output (at most 1 MiB), base64. */
+  replay: string;
+}
+
+/** `pty.input` params. */
+export interface PtyInputParams {
+  /** What is typed (UTF-8 text, control characters included). */
+  data: string;
+  /** The terminal. */
+  pty_id: string;
+  /** The session. */
+  session_id: string;
+}
+
+/** `pty.list` result. */
+export interface PtyList {
+  /** The session's terminals. */
+  terminals: Array<string>;
+}
+
+/** `pty.open` params. */
+export interface PtyOpenParams {
+  /** Columns. */
+  cols?: number;
+  /** Rows. */
+  rows?: number;
+  /** The session whose workspace the shell starts in (attached as a driver). */
+  session_id: string;
+}
+
+/** `pty.open` result. */
+export interface PtyOpened {
+  /** The new terminal. */
+  pty_id: string;
+}
+
+/** `pty.output` and `pty.exited` payload. */
+export interface PtyOutput {
+  /** The output, base64 (empty for `pty.exited`). */
+  data?: string;
+  /** The terminal. */
+  pty_id: string;
+}
+
+/** A terminal of a session. */
+export interface PtyRef {
+  /** The terminal. */
+  pty_id: string;
+  /** The session. */
+  session_id: string;
+}
+
+/** `pty.resize` params. */
+export interface PtyResizeParams {
+  /** Columns. */
+  cols: number;
+  /** The terminal. */
+  pty_id: string;
+  /** Rows. */
+  rows: number;
+  /** The session. */
+  session_id: string;
+}
+
+/** `queue.edit` params. */
+export interface QueueEditParams {
+  /** The queued input. */
+  id: string;
+  /** The session. */
+  session_id: string;
+  /** Its new text. */
+  text: string;
+}
+
+/** One input waiting in a session's queue. */
+export interface QueueEntry {
+  /** The input's turn id. */
+  id: string;
+  /** A turn whose outcome was lost when the daemon stopped during it: it blocks the queue until it is deleted (Discard), and is never sent again. */
+  lost?: boolean;
+  /** The prompt text. */
+  text: string;
+}
+
+/** `queue.delete` params. */
+export interface QueueItemParams {
+  /** The queued input (or the lost turn, to discard it). */
+  id: string;
+  /** The session. */
+  session_id: string;
+}
+
+/** A session's queue. */
+export interface QueueState {
+  /** In run order; a lost turn comes first. */
+  entries: Array<QueueEntry>;
+  /** Paused: no queued input starts until `queue.resume`. */
+  paused: boolean;
+  /** The session. */
+  session_id: string;
+}
 
 /** A subscription's plan and quota windows. */
 export interface QuotaStatus {
@@ -945,6 +1548,24 @@ export interface QuotaWindow {
   resets_at?: string | null;
   /** Used share, 0-100. */
   used_percent: number;
+}
+
+/** One reaction on a message. */
+export interface Reaction {
+  /** Who reacted (`agent`). */
+  by: string;
+  /** The emoji. */
+  emoji: string;
+}
+
+/** A repository offered for project creation. */
+export interface RepoRow {
+  /** When a scan last saw it (discovered rows; RFC 3339). */
+  last_seen?: string | null;
+  /** Its folder name. */
+  name: string;
+  /** Its folder. */
+  path: string;
 }
 
 /** `request.cancel` payload: a server request timed out or was cancelled. */
@@ -1044,10 +1665,24 @@ export interface SessionList {
 
 /** `session.list` params. */
 export interface SessionListParams {
+  /** Also hidden sessions: canonical Bot Chats, archived and hidden ones. */
+  include_hidden?: boolean;
   /** At most this many, newest activity first (default 50). */
   limit?: number | null;
   /** The profile; required only when the ticket grants several. */
   profile?: string | null;
+}
+
+/** `session.project` payload: a session moved to another project. */
+export interface SessionProject {
+  /** The working directory the session moves to at its next tool call. */
+  cwd: string;
+  /** Its project. */
+  project_id: string;
+  /** The session. */
+  session_id: string;
+  /** The project's slug. */
+  slug: string;
 }
 
 /** A session named by id. */
@@ -1088,6 +1723,8 @@ export interface SessionSetup {
 export interface SessionSummary {
   /** Whether a turn is running in the daemon. */
   live: boolean;
+  /** Its project (`prj_...`), when it has one. */
+  project_id?: string | null;
   /** `ses_<ULID>`. */
   session_id: string;
   /** When it started (RFC 3339). */
@@ -1109,14 +1746,44 @@ export interface SteerParams {
   text: string;
 }
 
+/** What a control call did. */
+export interface SubagentControlled {
+  /** `queued` (steer: delivered at the child's next checkpoint) or `interrupt_requested` (stop). */
+  status: string;
+  /** The child. */
+  subagent_id: string;
+}
+
 /** `subagent.list` result. */
 export interface SubagentList {
   /** The session's children, oldest first. */
   subagents: Array<SubagentSummary>;
 }
 
+/** `subagent.stop` params. */
+export interface SubagentRef {
+  /** The parent session. */
+  session_id: string;
+  /** The child. */
+  subagent_id: string;
+}
+
+/** `subagent.steer` params. */
+export interface SubagentSteerParams {
+  /** The parent session. */
+  session_id: string;
+  /** The child. */
+  subagent_id: string;
+  /** The guidance. */
+  text: string;
+}
+
 /** One delegated child of a session. */
 export interface SubagentSummary {
+  /** What it is doing now. */
+  activity?: string | null;
+  /** How long it has run, in milliseconds. */
+  elapsed_ms?: number | null;
   /** Its child session. */
   session_id: string;
   /** `running`, `completed`, `failed` or `stopped`. */
@@ -1125,6 +1792,16 @@ export interface SubagentSummary {
   subagent_id: string;
   /** Its task's title. */
   title?: string | null;
+}
+
+/** One subcommand of a `commands.catalog` entry. */
+export interface SubcommandEntry {
+  /** Whether it runs from the asking client's surface. */
+  disposition: Disposition;
+  /** The first word after the command. */
+  name: string;
+  /** Why it does not run there. */
+  reason?: string | null;
 }
 
 /** `prompt.submit` params. */
@@ -1199,6 +1876,8 @@ export interface Transcript {
 export interface TranscriptMessage {
   /** `msg_<ULID>`. */
   id: string;
+  /** Its reactions (spec: desktop-app, Agent reactions). */
+  reactions?: Array<Reaction>;
   /** `user`, `assistant`, `tool` or `system`. */
   role: string;
   /** Its text, when it has any. */
@@ -1231,6 +1910,38 @@ export interface TurnFinished {
   turn_id: string;
   /** The turn's token and cost totals, as the turn loop reports them. */
   usage?: unknown;
+}
+
+/** `ui.<tool>` params. */
+export interface UiCall {
+  /** The tool's arguments (validated by the daemon first). */
+  arguments: unknown;
+  /** Milliseconds until the request settles unanswered (set by the daemon when it sends the request). */
+  deadline_ms?: number | null;
+  /** The session whose turn called the tool. */
+  session_id: string;
+}
+
+/** The machine's display preferences. */
+export interface UiPrefs {
+  /** Every stored preference. */
+  prefs: Record<string, unknown>;
+  /** Grows with every change. */
+  revision: number;
+}
+
+/** `ui.prefs.get` params. */
+export interface UiPrefsGetParams {
+  /** Also send this connection `ui.prefs.changed` after every change. */
+  watch?: boolean;
+}
+
+/** `ui.prefs.patch` params. */
+export interface UiPrefsPatchParams {
+  /** A client meeting the store for the first time: set only the keys the store lacks, never overwrite. */
+  only_missing?: boolean;
+  /** Keys to set; `null` removes one. */
+  set: Record<string, unknown>;
 }
 
 /** Usage totals of a session or a lineage. */
@@ -1500,18 +2211,40 @@ export interface WorktreeStatus {
 }
 
 export interface Methods {
+  "adapters.list": { params: ProfileParams; result: AdapterList };
+  "adapters.pairing.cancel": { params: AdapterRef; result: Ack };
+  "adapters.pairing.start": { params: AdapterRef; result: unknown };
+  "adapters.pairing.state": { params: AdapterRef; result: unknown };
+  "adapters.restart": { params: AdapterRef; result: AdapterRow };
+  "adapters.save": { params: AdapterSaveParams; result: AdapterRow };
   "approval.respond": { params: ApprovalRespondParams; result: Ack };
+  "artifacts.list": { params: ArtifactsListParams; result: ArtifactList };
   "autoprune.offer": { params: AutopruneOfferParams; result: AutopruneOffer };
+  "bot.chat.ensure": { params: ProfileParams; result: BotChat };
+  "center.list": { params: CenterParams; result: CenterList };
   "command.dispatch": { params: DispatchParams; result: Dispatched };
   "commands.catalog": { params: SessionRef; result: CommandCatalog };
   "complete.path": { params: CompleteParams; result: Completions };
   "complete.slash": { params: CompleteParams; result: Completions };
   "config.get": { params: ConfigGetParams; result: ConfigValue };
+  "config.patch": { params: ConfigPatchParams; result: ConfigPatched };
+  "config.reload": { params: ProfileParams; result: ConfigReloaded };
   "cron.blueprints.fill": { params: BlueprintFillParams; result: BlueprintFilled };
   "cron.blueprints.list": { params: BlueprintsListParams; result: BlueprintList };
+  "daemon.update": { params: DaemonUpdateParams; result: DaemonUpdated };
   "egress.set": { params: EgressSetParams; result: EgressState };
   "files.rollback": { params: FilesRollbackParams; result: FilesRolledBack };
   "files.undo": { params: FilesUndoParams; result: FilesUndone };
+  "fs.list": { params: FsListParams; result: FsListing };
+  "fs.read": { params: FsReadParams; result: FsFile };
+  "git.branch": { params: GitBranchParams; result: GitRan };
+  "git.commit": { params: GitCommitParams; result: GitRan };
+  "git.message": { params: SessionRef; result: GitMessage };
+  "git.pr": { params: SessionRef; result: GitRan };
+  "git.revert": { params: GitPaths; result: Ack };
+  "git.review": { params: GitReviewParams; result: GitReview };
+  "git.stage": { params: GitPaths; result: Ack };
+  "git.unstage": { params: GitPaths; result: Ack };
   "journey.list": { params: JourneyListParams; result: JourneyList };
   "local.add": { params: LocalParams; result: LocalReply };
   "local.catalog": { params: LocalParams; result: LocalReply };
@@ -1528,13 +2261,31 @@ export interface Methods {
   "local.update": { params: LocalParams; result: LocalReply };
   "local.use": { params: LocalParams; result: LocalReply };
   "lsp.status": { params: LspStatusParams; result: LspStatus };
+  "manage.catalog": { params: ManageCatalogParams; result: unknown };
+  "manage.change": { params: ManageChangeParams; result: unknown };
   "memory.summary": { params: SessionRef; result: MemorySummary };
   "moa.presets.delete": { params: MoaPresetsDeleteParams; result: MoaPresetList };
   "moa.presets.list": { params: MoaPresetsListParams; result: MoaPresetList };
   "moa.presets.put": { params: MoaPresetsPutParams; result: MoaPresetList };
-  "model.options": { params: SessionRef; result: ModelOptions };
+  "model.options": { params: ModelOptionsParams; result: ModelOptions };
+  "onboarding.ensure": { params: ProfileParams; result: OnboardingChat };
   "pairing.approve": { params: PairingApproveParams; result: PairingApproved };
+  "process.list": { params: SessionRef; result: ProcessList };
+  "process.log": { params: ProcessRef; result: ProcessLog };
+  "projects.create": { params: ProjectsCreateParams; result: ProjectRow };
+  "projects.list": { params: ProjectsListParams; result: ProjectsList };
   "prompt.submit": { params: SubmitParams; result: Submitted };
+  "pty.attach": { params: PtyRef; result: PtyAttached };
+  "pty.close": { params: PtyRef; result: Ack };
+  "pty.input": { params: PtyInputParams; result: Ack };
+  "pty.list": { params: SessionRef; result: PtyList };
+  "pty.open": { params: PtyOpenParams; result: PtyOpened };
+  "pty.resize": { params: PtyResizeParams; result: Ack };
+  "queue.delete": { params: QueueItemParams; result: QueueState };
+  "queue.edit": { params: QueueEditParams; result: QueueState };
+  "queue.list": { params: SessionRef; result: QueueState };
+  "queue.pause": { params: SessionRef; result: QueueState };
+  "queue.resume": { params: SessionRef; result: QueueState };
   "rpc.hello": { params: HelloParams; result: HelloResult };
   "rpc.ping": { params: Empty; result: Ack };
   "session.attach": { params: AttachParams; result: Attached };
@@ -1554,8 +2305,12 @@ export interface Methods {
   "session.transcript": { params: SessionRef; result: Transcript };
   "session.tree": { params: SessionRef; result: Lineage };
   "subagent.list": { params: SessionRef; result: SubagentList };
+  "subagent.steer": { params: SubagentSteerParams; result: SubagentControlled };
+  "subagent.stop": { params: SubagentRef; result: SubagentControlled };
   "system.health": { params: SystemParams; result: SystemHealth };
   "system.metrics": { params: SystemParams; result: MetricsSnapshot };
+  "ui.prefs.get": { params: UiPrefsGetParams; result: UiPrefs };
+  "ui.prefs.patch": { params: UiPrefsPatchParams; result: UiPrefs };
   "vault.add": { params: VaultAddParams; result: VaultItem };
   "vault.list": { params: VaultListParams; result: VaultItems };
   "vault.remove": { params: VaultRemoveParams; result: VaultItem };
@@ -1571,28 +2326,44 @@ export interface ServerRequests {
   "clarify.request": { params: ClarifyRequestParams; result: ClarifyAnswers };
   "secret.request": { params: SecretRequestParams; result: SecretAnswer };
   "sudo.request": { params: SudoRequestParams; result: SudoAnswer };
+  "ui.annotate_preview": { params: UiCall; result: unknown };
+  "ui.close_terminal": { params: UiCall; result: unknown };
+  "ui.desktop_preview": { params: UiCall; result: unknown };
+  "ui.drive_preview": { params: UiCall; result: unknown };
+  "ui.focus_pane": { params: UiCall; result: unknown };
+  "ui.gui_tour": { params: UiCall; result: unknown };
+  "ui.read_terminal": { params: UiCall; result: unknown };
+  "ui.read_window_below": { params: UiCall; result: unknown };
+  "ui.set_theme": { params: UiCall; result: unknown };
+  "ui.setup_beat": { params: UiCall; result: unknown };
+  "ui.show_tip": { params: UiCall; result: unknown };
 }
 
 export interface Events {
   "adapter.state": AdapterStatePayload;
   "automation.state": AutomationStatePayload;
   "health.changed": HealthChanged;
+  "message.reaction": MessageReaction;
+  "pty.detached": PtyRef;
+  "pty.exited": PtyOutput;
+  "pty.output": PtyOutput;
+  "queue.changed": QueueState;
   "request.cancel": RequestCancel;
   "request.resolved": RequestResolved;
   "session.event": unknown;
+  "session.project": SessionProject;
   "turn.finished": TurnFinished;
+  "ui.prefs.changed": UiPrefs;
   "usage.updated": UsageUpdated;
 }
 
 export const UNDECLARED = [
-  "bot.chat.ensure",
   "bot.create",
   "bot.meta.get",
   "bot.meta.update",
   "bot.relay.deliver",
   "bot.relay.drain",
   "bot.roster.list",
-  "daemon.update",
   "evolve.cancel",
   "evolve.choose",
   "evolve.list",
@@ -1621,14 +2392,11 @@ export const UNDECLARED = [
   "subagent.subscribe",
   "tools.call",
   "tools.list",
-  "ui.prefs.get",
-  "ui.prefs.patch",
   "voice.client_config",
   "wake.feed",
   "achievement.unlocked",
   "local_model.context_grown",
   "message.delivery",
-  "message.reaction",
   "session.presence",
   "wake.detected",
 ] as const;

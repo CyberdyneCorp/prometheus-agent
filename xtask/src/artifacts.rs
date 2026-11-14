@@ -35,6 +35,12 @@ pub(crate) fn all() -> Vec<Artifact> {
             contents: daemon_reference(),
         },
         Artifact {
+            // The dashboard's REST inventory (spec: web-dashboard, REST
+            // endpoint inventory); `1` is the API's own version.
+            path: "schema/dashboard-api.json",
+            contents: pretty_schema(&pmt_web::inventory::openapi("1")),
+        },
+        Artifact {
             path: "schema/trajectory/v1.json",
             contents: pretty_schema(&pmt_obs::trajectory::schema()),
         },

@@ -156,7 +156,15 @@ impl Factory {
         if let Some(spec) = child {
             port.set_body_overrides(spec.body_overrides.clone());
         }
-        Ok(Arc::new(SwitchableModel::new(target.clone(), port)))
+        let model = Arc::new(SwitchableModel::new(target.clone(), port));
+        // Children request the subagent route's effort (spec: desktop-app,
+        // Subagent route settings are drafts until applied).
+        if child.is_some()
+            && let Some(level) = self.scope.config().delegation.reasoning_effort
+        {
+            model.set_reasoning(Some(level));
+        }
+        Ok(model)
     }
 
     /// The session's capabilities: a child's narrowed grant, else the

@@ -206,6 +206,7 @@ mod tests {
             created_at: at.to_owned(),
             updated_at: at.to_owned(),
             origin: "agent".to_owned(),
+            uses: 0,
         }
     }
 

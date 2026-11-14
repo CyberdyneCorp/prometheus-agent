@@ -151,6 +151,21 @@ pub(super) fn factories(ctx: &Context<'_>) -> BTreeMap<String, AdapterFactory> {
             pmt_adapters_webhook::factory(),
         ),
     ]);
+    // Debug builds' tests reach a stand-in Bot API.
+    #[cfg(debug_assertions)]
+    if let Some(api) = std::env::var("PMT_TEST_TELEGRAM_API")
+        .ok()
+        .filter(|a| !a.is_empty())
+    {
+        let endpoints = pmt_adapters_telegram::Endpoints {
+            files: format!("{api}/file"),
+            api,
+        };
+        factories.insert(
+            pmt_adapters_telegram::PLATFORM.to_owned(),
+            pmt_adapters_telegram::factory_at(endpoints),
+        );
+    }
     #[cfg(debug_assertions)]
     if let Some(dir) = ctx.launch.test_adapter_dir() {
         factories.insert(

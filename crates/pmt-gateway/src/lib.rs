@@ -20,9 +20,13 @@
 //!
 //! The protocol itself (frames, codes, catalog, client) is `pmt-rpc`.
 
+pub mod cert;
 pub mod connection;
 pub mod control;
 pub mod daemon;
+pub mod dashboard;
+pub mod desktop;
+pub mod devices;
 pub mod discovery;
 pub mod health_http;
 pub mod host;
@@ -32,14 +36,23 @@ pub mod messaging;
 pub mod methods;
 pub mod moa;
 pub mod observability;
+mod observer;
+pub mod panes;
+pub mod pty;
+pub mod queue;
+pub mod remote;
 pub mod router;
 pub mod server;
 pub mod slots;
+pub mod terminals;
 pub mod tickets;
+pub mod ui;
+pub mod ui_prefs;
 pub mod upkeep;
 pub mod vault;
+pub mod workspace;
 pub mod worktree;
 
 pub use daemon::{Exit, run};
-pub use host::{Author, Host, HostFuture, Link};
+pub use host::{Author, FeatureAnswer, Host, HostFuture, Link};
 pub use server::{Identity, Server, ServerOptions};

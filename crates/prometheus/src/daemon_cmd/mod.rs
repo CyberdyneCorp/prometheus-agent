@@ -6,6 +6,7 @@
 //! prints its endpoint, `stop` drains and stops it, `restart` drains and
 //! replaces it, `status` prints its process state.
 
+pub(crate) mod devices_cmd;
 mod enroll_cmd;
 mod gateway_cmd;
 mod health;
@@ -15,16 +16,18 @@ mod messaging;
 mod platform_cmd;
 mod record;
 pub(crate) mod self_guard;
-mod send_cmd;
-mod serve;
+pub(crate) mod send_cmd;
+pub(crate) mod serve;
 pub mod service;
 mod slack_manifest_cmd;
 pub(crate) mod standalone;
+mod support_matrix;
 mod systemd;
 #[cfg(debug_assertions)]
 mod test_adapter;
 mod turn;
 mod update_chat;
+mod update_rpc;
 mod watchdog;
 mod whatsapp_cmd;
 
@@ -63,15 +66,42 @@ pub enum DaemonCommand {
     Restart,
     /// Print the daemon's process state.
     Status,
+    /// Print a one-use 30-second dial ticket for the running daemon's
+    /// client protocol listener, for the selected profile (`--json`: one
+    /// object). A desktop's `ssh` connection runs it over SSH, so the
+    /// remote host needs no network-exposed listener.
+    Ticket,
     /// Install a per-user supervisor unit that starts the daemon at login
     /// (no administrator rights); `--system --run-as-user` installs a
     /// boot-time unit instead (root only).
     InstallService(service::InstallArgs),
     /// Stop and remove the unit `install-service` installed.
     UninstallService(service::UninstallArgs),
+    /// Pair a remote device: print its token (shown once) for the remote
+    /// attachment listener (`daemon.remote`) and the dashboard listener.
+    PairDevice(devices_cmd::PairDeviceArgs),
+    /// Revoke a paired device: its token stops working and its open
+    /// sockets close with 4401.
+    RevokeDevice {
+        /// The device's name.
+        name: String,
+    },
 }
 
 pub use gateway_cmd::{GatewayCommand, OutboxCommand, PairingCommand};
+pub use serve::ServeDashboard;
+
+/// Runs `prometheus serve`: the daemon in the foreground with the
+/// dashboard listener open from the start.
+///
+/// # Errors
+///
+/// As `daemon run`; `dashboard.bind_refused` and `dashboard.port_in_use`
+/// (78) when the listener may not bind.
+pub fn serve_foreground(ctx: &Context<'_>, dashboard: &ServeDashboard) -> Result<u8, Error> {
+    let home = ctx.home()?;
+    serve::run_with(home.root(), ctx, false, Some(dashboard))
+}
 
 /// Runs `prometheus gateway <command>`.
 ///
@@ -109,9 +139,49 @@ pub fn run(command: &DaemonCommand, ctx: &Context<'_>) -> Result<u8, Error> {
         DaemonCommand::Stop => stop(&root, ctx.json),
         DaemonCommand::Restart => restart(&root, ctx),
         DaemonCommand::Status => status(&root, ctx.json),
+        DaemonCommand::Ticket => ticket(&root, ctx),
         DaemonCommand::InstallService(args) => service::install(args, ctx),
         DaemonCommand::UninstallService(args) => service::uninstall(args, ctx),
+        DaemonCommand::PairDevice(args) => devices_cmd::pair_device(&root, args, ctx.json),
+        DaemonCommand::RevokeDevice { name } => devices_cmd::revoke(&root, name, ctx.json),
     }
+}
+
+/// What `ticket --json` prints.
+#[derive(Debug, Serialize)]
+struct TicketOutput<'a> {
+    ticket: &'a str,
+    /// Seconds the ticket stays valid.
+    expires_in_secs: u64,
+    /// The client protocol endpoint the ticket opens.
+    rpc_url: &'a str,
+}
+
+/// A one-use ticket of the running daemon for the selected profile; the
+/// daemon is not started (`ensure` does that).
+fn ticket(home: &Path, ctx: &Context<'_>) -> Result<u8, Error> {
+    let Ok(Discovery::Running(record)) = discover(home) else {
+        return Err(Error::new(
+            &codes::DAEMON_NOT_RUNNING,
+            "the gateway daemon is not running",
+        )
+        .with_hint("start it with: prometheus daemon ensure"));
+    };
+    let profile = ctx.home()?.select_profile(ctx.profile)?;
+    let request = ControlRequest::Ticket {
+        purpose: control::Purpose::Interactive,
+        profiles: vec![profile.to_string()],
+        pid: None,
+    };
+    let issued = control_call(&record, &request).and_then(control::ticket_of)?;
+    if ctx.json {
+        return crate::output::json(&TicketOutput {
+            ticket: &issued.ticket,
+            expires_in_secs: issued.expires_in_secs,
+            rpc_url: &record.endpoint.rpc_url,
+        });
+    }
+    crate::output::print(&issued.ticket)
 }
 
 /// What `ensure --json` prints.
@@ -121,7 +191,12 @@ struct EnsureOutput<'a> {
     control: &'a str,
     instance_id: &'a str,
     build_id: &'a str,
+    /// The daemon's semantic version (the desktop compares it with its
+    /// bundled binary's before restarting a stale daemon).
+    version: &'a str,
     rpc_protocol: &'a str,
+    /// The protocol features the daemon serves.
+    features: &'a [String],
 }
 
 fn start(home: &Path, ctx: &Context<'_>) -> Result<u8, Error> {
@@ -159,7 +234,9 @@ fn ensure_output(record: &DaemonRecord) -> Result<u8, Error> {
         control: &e.control,
         instance_id: &e.instance_id,
         build_id: &e.build_id,
+        version: &record.process.version,
         rpc_protocol: &e.rpc_protocol,
+        features: &e.features,
     })
 }
 
@@ -181,7 +258,10 @@ pub(crate) fn running_or_start(
     home: &Path,
     profile: Option<&str>,
 ) -> Result<(DaemonRecord, bool), Error> {
-    if let Some(record) = wait_running(home, Duration::from_secs(5))? {
+    // A daemon that is still starting holds the home: wait for it as long
+    // as a start of our own would take, rather than spawning a second one
+    // that can only fail on the home lock.
+    if let Some(record) = wait_running(home, START_TIMEOUT)? {
         return Ok((record, false));
     }
     let mut child = spawn_detached(home, profile)?;
@@ -191,8 +271,10 @@ pub(crate) fn running_or_start(
             return Ok((record, true));
         }
         if let Ok(Some(status)) = child.try_wait() {
-            // Another start won the race: its daemon is the one to use.
-            if let Some(record) = wait_running(home, Duration::from_secs(5))? {
+            // Another start won the race: its daemon is the one to use. It
+            // may hold the home lock before it has written its record.
+            let lost_the_lock = status.code() == Some(i32::from(pmt_core::exit::TEMPORARY_FAILURE));
+            if let Some(record) = wait_for_holder(home, lost_the_lock, deadline)? {
                 return Ok((record, false));
             }
             let why = match last_stderr_line(home) {
@@ -210,6 +292,26 @@ pub(crate) fn running_or_start(
     }
 }
 
+/// The daemon that won a start race: when ours lost the home lock, the
+/// holder can still be between taking the lock and writing its record, so
+/// "not running" is waited out until `deadline` too.
+fn wait_for_holder(
+    home: &Path,
+    lost_the_lock: bool,
+    deadline: std::time::Instant,
+) -> Result<Option<DaemonRecord>, Error> {
+    loop {
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        if let Some(record) = wait_running(home, left)? {
+            return Ok(Some(record));
+        }
+        if !lost_the_lock || left.is_zero() {
+            return Ok(None);
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
 fn start_failed(why: &str) -> Error {
     Error::new(
         &codes::DAEMON_START_FAILED,
@@ -219,7 +321,7 @@ fn start_failed(why: &str) -> Error {
 }
 
 /// The running daemon; a daemon still starting gets `wait` to publish.
-fn wait_running(home: &Path, wait: Duration) -> Result<Option<DaemonRecord>, Error> {
+pub(crate) fn wait_running(home: &Path, wait: Duration) -> Result<Option<DaemonRecord>, Error> {
     let deadline = std::time::Instant::now() + wait;
     loop {
         match discover(home)? {
@@ -301,7 +403,7 @@ fn spawn_detached(home: &Path, profile: Option<&str>) -> Result<std::process::Ch
         .map_err(|e| start_failed(&format!("cannot launch it: {e}")))
 }
 
-fn control_call(
+pub(crate) fn control_call(
     record: &DaemonRecord,
     request: &ControlRequest,
 ) -> Result<control::ControlResponse, Error> {

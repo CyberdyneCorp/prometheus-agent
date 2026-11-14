@@ -125,7 +125,10 @@ session's interactive owner: until it detaches or disconnects, another
 exclusive resume fails with `-32004` `session <id> is open in another
 client (pid <n>)` (attaching read-only and forking still work). Attaching
 to a session of another profile is refused with `-32002` exactly like a
-session that does not exist. Every other method that names a session
+session that does not exist; only a connection granted every profile the
+daemon serves (so nothing elsewhere can be disclosed) gets `-32003`
+`session.not_found` for an unknown session, which the desktop takes as
+the session being gone. Every other method that names a session
 (events, transcript, completion, catalog, subagents, fork, changes) needs
 the connection attached to it (`-32002` with `data.code`
 `session.not_attached`), and the ones that drive it (`prompt.submit`,

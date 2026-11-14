@@ -12,6 +12,7 @@ pub mod code;
 pub mod credentials;
 pub mod cron;
 pub mod delegation;
+pub mod desktop_prefs;
 pub mod documents;
 pub mod downgrades;
 mod embed;
@@ -161,6 +162,8 @@ pub struct Factory {
     browser: OnceLock<Option<browser::Shared>>,
     /// The gateway's `send_message` ports (daemon sessions only).
     messaging: Option<Arc<dyn pmt_agent::tools::MessagingPorts>>,
+    /// The daemon's desktop window tools (`None`: no desktop can attach).
+    desktop: Option<Arc<dyn pmt_agent::tools::DesktopPorts>>,
     /// The daemon hosting this factory's sessions (daemon sessions only).
     daemon: Option<pmt_tools::approval::selfterm::Daemon>,
     /// The profile's configuration as it is now: `scope` until a daemon
@@ -339,6 +342,7 @@ impl Factory {
             install_asks: None,
             browser: OnceLock::new(),
             messaging: None,
+            desktop: None,
             daemon: None,
             plugins,
             reread: None,
@@ -726,7 +730,7 @@ impl Factory {
         let surface = tools::surface_of(session);
         let selection = tools::selection(
             &registry,
-            self.scope.config(),
+            &self.scope,
             self.options.interactive,
             &plugin_toolsets,
             &surface,
@@ -991,6 +995,10 @@ impl Factory {
             Some(ports) => tools.with_messaging(ports.port(id, self.read_check(capabilities))),
             None => tools,
         };
+        let tools = match &self.desktop {
+            Some(ports) => tools.with_desktop(ports.port(id)),
+            None => tools,
+        };
         let tools = delegation.equip(tools);
         Ok((Arc::new(tools), clarify))
     }
@@ -1048,6 +1056,14 @@ impl Factory {
     #[must_use]
     pub fn with_messaging(mut self, ports: Arc<dyn pmt_agent::tools::MessagingPorts>) -> Self {
         self.messaging = Some(ports);
+        self
+    }
+
+    /// Runs the desktop UI tools, `setup_beat` and `project` of this
+    /// factory's sessions through `ports` (the daemon).
+    #[must_use]
+    pub fn with_desktop(mut self, ports: Arc<dyn pmt_agent::tools::DesktopPorts>) -> Self {
+        self.desktop = Some(ports);
         self
     }
 

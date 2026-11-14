@@ -299,7 +299,10 @@ configuration, identity file, memory, [projects](projects.md), skills,
 themes, scripts and cron job definitions. It never holds secrets, `state.db`, blobs, logs or backups
 unless asked: `--with-sessions` adds the sessions, and `--with-secrets`
 adds the secrets encrypted with a key derived from a passphrase you type
-at a hidden prompt (Argon2id, XChaCha20-Poly1305).
+at a hidden prompt (Argon2id, XChaCha20-Poly1305). `--appearance <file>`
+adds the desktop app's appearance (a JSON overlay the desktop writes);
+an import leaves it as `desktop-appearance.json` in the new profile for
+the desktop to apply.
 `prometheus profile import <file> [--as <name>]` verifies every member
 against the archive's manifest and asks for the passphrase before it
 creates the profile, so a damaged archive or a wrong passphrase changes

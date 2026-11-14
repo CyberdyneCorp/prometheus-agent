@@ -28,6 +28,7 @@ async fn three_failed_polls_in_a_row_degrade_the_adapter_and_announce_it() {
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
     let client = pmt_gateway::hub::Peer {
         tx,
+        features: std::sync::Arc::default(),
         minor: h.server.protocol().minor,
         advertised: std::sync::Arc::default(),
         server_requests: false,

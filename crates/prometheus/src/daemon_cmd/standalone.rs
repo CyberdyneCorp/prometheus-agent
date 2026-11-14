@@ -81,6 +81,7 @@ impl Standalone {
             setup.set,
             name,
         )?);
+        DaemonHost::adopt(&host);
         let mut options = ServerOptions::new(super::serve::identity(), host.names());
         options.rpc = config.daemon.rpc.clone();
         options.idle_session_close = Duration::from_secs(config.daemon.idle_session_close_secs);

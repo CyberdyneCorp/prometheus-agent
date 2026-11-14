@@ -33,6 +33,7 @@ fn peer(server_requests: bool) -> (Peer, mpsc::UnboundedReceiver<Message>) {
         minor: 0,
         advertised: Arc::default(),
         server_requests,
+        features: Arc::default(),
         client_id: "tui-1".into(),
         role: AttachRole::Driver,
     };

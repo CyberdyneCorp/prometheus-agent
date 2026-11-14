@@ -241,6 +241,20 @@ impl Store {
         self.update_session(id, "cwd = ?2", &Value::Text(cwd.to_owned()))
     }
 
+    /// Moves a session to `project` (the `project` tool's `switch` and
+    /// `create`); its other sessions keep theirs.
+    ///
+    /// # Errors
+    ///
+    /// `session.not_found`, `store.busy`, `store.sqlite`.
+    pub fn set_session_project(
+        &self,
+        id: SessionId,
+        project: &pmt_core::id::ProjectId,
+    ) -> Result<Session, Error> {
+        self.update_session(id, "project_id = ?2", &Value::Text(project.to_string()))
+    }
+
     /// Pins or unpins a session (pinned sessions are never pruned).
     ///
     /// # Errors

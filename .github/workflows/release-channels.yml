@@ -3,7 +3,9 @@
 # `<channel>.json` and its signature in the rolling `channels` release,
 # which is where `prometheus update` and the installers read the channel
 # index (`<origin>/channels/<channel>.json`), with the signed supply-chain
-# advisory catalog (`<origin>/channels/advisories.json`). Then it publishes
+# advisory catalog (`<origin>/channels/advisories.json`) and, when the
+# release has desktop packages, the desktop update feed and App Installer
+# file (`<origin>/channels/desktop-<channel>.{json,appinstaller}`). Then it publishes
 # the package channels rendered by the finalize job (spec:
 # distribution-and-update, Package-manager and image channels), each
 # stamping its install receipt with its own owner:
@@ -16,6 +18,9 @@
 #   needs the HOMEBREW_TAP_TOKEN secret)
 # - WinGet: the manifests submitted to microsoft/winget-pkgs (stable;
 #   needs the WINGET_TOKEN secret)
+# - Microsoft Store: the Store-identity MSIX bundle (owner msstore)
+#   submitted with the Microsoft Store Developer CLI (stable; needs the
+#   PMT_STORE_* secrets)
 # - Termux: the recipe attached to the `channels` release for the
 #   termux-packages pull request (stable)
 
@@ -55,6 +60,20 @@ jobs:
           done
           # The signed advisory catalog (channels/advisories.json).
           cp dist/advisories.json dist/advisories.json.minisig upload/
+          # The desktop app's signed update feed (channels/desktop-<channel>.json)
+          # and the App Installer file Windows installs check on launch
+          # (channels/desktop-<channel>.appinstaller), when this release
+          # carries desktop packages.
+          for feed in dist/desktop-*.json; do
+            [ -e "$feed" ] || continue
+            cp "$feed" "$feed.minisig" upload/
+            channel=$(basename "$feed" .json)
+            channel=${channel#desktop-}
+            if [ -e dist/prometheus-desktop.appinstaller ]; then
+              cp dist/prometheus-desktop.appinstaller "upload/desktop-$channel.appinstaller"
+              cp dist/prometheus-desktop.appinstaller.minisig "upload/desktop-$channel.appinstaller.minisig"
+            fi
+          done
           if ! gh release view channels -R "$REPO" >/dev/null 2>&1; then
             gh release create channels -R "$REPO" --prerelease --title "Release channels" \
               --notes "Signed channel indexes read by prometheus update and the installers."
@@ -70,6 +89,7 @@ jobs:
       PLAN: ${{ inputs.plan }}
       HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
       WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+      STORE_APP_ID: ${{ secrets.PMT_STORE_APP_ID }}
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -143,6 +163,31 @@ jobs:
           gh pr create -R microsoft/winget-pkgs --head "$login:prometheus-$VERSION" \
             --title "New version: CyberdyneCorp.Prometheus version $VERSION" \
             --body "Portable zip of the signed Prometheus $TAG release (owner = winget)."
+      # The Store bundle the finalize job built (absent when the Windows
+      # packages failed to sign: nothing is submitted then).
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: env.CHANNEL == 'stable' && env.STORE_APP_ID != ''
+        continue-on-error: true
+        with:
+          name: desktop-store
+          path: store
+      - name: Microsoft Store
+        if: env.CHANNEL == 'stable' && env.STORE_APP_ID != '' && hashFiles('store/*.msixbundle') != ''
+        env:
+          STORE_TENANT_ID: ${{ secrets.PMT_STORE_TENANT_ID }}
+          STORE_SELLER_ID: ${{ secrets.PMT_STORE_SELLER_ID }}
+          STORE_CLIENT_ID: ${{ secrets.PMT_STORE_CLIENT_ID }}
+          STORE_CLIENT_SECRET: ${{ secrets.PMT_STORE_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          # Microsoft Store Developer CLI, pinned by version and digest.
+          curl -fsSLo msstore.tar.gz \
+            https://github.com/microsoft/msstore-cli/releases/download/v0.4.3/MSStoreCLI-linux-x64.tar.gz
+          echo "5ec484e2d0eb5105d5fd0274a6c7a5a46177b0f4f8def105f3e90fcd6dfdef14  msstore.tar.gz" | sha256sum -c -
+          mkdir msstore && tar -xzf msstore.tar.gz -C msstore
+          ./msstore/msstore reconfigure --tenantId "$STORE_TENANT_ID" --sellerId "$STORE_SELLER_ID" \
+            --clientId "$STORE_CLIENT_ID" --clientSecret "$STORE_CLIENT_SECRET"
+          ./msstore/msstore publish "$PWD/store" --inputDirectory "$PWD/store" --appId "$STORE_APP_ID"
       - name: Termux recipe
         if: env.CHANNEL == 'stable'
         run: |

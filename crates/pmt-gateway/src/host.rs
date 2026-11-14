@@ -8,6 +8,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
+use serde_json::Value;
+
 use pmt_core::error::Error;
 use pmt_rpc::contracts::{
     BannerInfo, ClientKind, CommandCatalog, CompactParams, Compacted, CompleteParams, Completions,
@@ -18,6 +20,48 @@ use pmt_rpc::contracts::{
 use serde::Serialize;
 
 use crate::hub::Hub;
+
+fn not_served(why: &str) -> Error {
+    Error::new(&pmt_core::error::codes::RPC_NOT_SERVED, why)
+}
+
+/// A `queue.*` call.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum QueueOp {
+    /// `queue.list`.
+    List(String),
+    /// `queue.edit`.
+    Edit {
+        /// The session.
+        session_id: String,
+        /// The queued input.
+        id: String,
+        /// Its new text.
+        text: String,
+    },
+    /// `queue.delete` (the lost turn too).
+    Delete {
+        /// The session.
+        session_id: String,
+        /// The queued input.
+        id: String,
+    },
+    /// `queue.pause`.
+    Pause(String),
+    /// `queue.resume`.
+    Resume(String),
+}
+
+impl QueueOp {
+    /// The session it addresses.
+    #[must_use]
+    pub fn session_id(&self) -> &str {
+        match self {
+            Self::List(s) | Self::Pause(s) | Self::Resume(s) => s,
+            Self::Edit { session_id, .. } | Self::Delete { session_id, .. } => session_id,
+        }
+    }
+}
 
 /// A boxed host future.
 pub type HostFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, Error>> + Send + 'a>>;
@@ -365,11 +409,12 @@ pub trait Host: Send + Sync + 'static {
         params: CompleteParams,
     ) -> HostFuture<'a, Completions>;
 
-    /// The models the session may switch to.
+    /// The models the session (or, without one, a new chat of
+    /// `profile`) may use.
     fn model_options<'a>(
         &'a self,
         profile: &'a str,
-        session_id: &'a str,
+        session_id: Option<&'a str>,
     ) -> HostFuture<'a, ModelOptions>;
 
     /// The session's delegated children (none until a host delegates).
@@ -418,6 +463,132 @@ pub trait Host: Send + Sync + 'static {
         })
     }
 
+    /// Applies a validated configuration patch to `profile`
+    /// (`config.patch`): all changes or none.
+    fn config_patch<'a>(
+        &'a self,
+        _profile: &'a str,
+        _changes: Vec<pmt_rpc::contracts::ConfigChange>,
+    ) -> HostFuture<'a, ()> {
+        Box::pin(async { Err(not_served("this host has no configuration files")) })
+    }
+
+    /// Re-reads `profile`'s configuration now (`config.reload`).
+    fn config_reload<'a>(
+        &'a self,
+        _profile: &'a str,
+    ) -> HostFuture<'a, pmt_rpc::contracts::ConfigReloaded> {
+        Box::pin(async { Err(not_served("this host has no configuration files")) })
+    }
+
+    /// One `queue.*` call on a session of `profile` (spec: desktop-app,
+    /// Composer history and queue editing); the session's clients learn
+    /// of a change through `link` (`queue.changed`).
+    fn queue<'a>(
+        &'a self,
+        _profile: &'a str,
+        _op: QueueOp,
+        _link: Link,
+    ) -> HostFuture<'a, pmt_rpc::contracts::QueueState> {
+        Box::pin(async { Err(not_served("this host keeps no prompt queues")) })
+    }
+
+    /// One directory of a session's workspace (`fs.list`), through the
+    /// session's own terminal backend.
+    fn fs_list<'a>(
+        &'a self,
+        _profile: &'a str,
+        _params: pmt_rpc::contracts::FsListParams,
+        _link: Link,
+    ) -> HostFuture<'a, pmt_rpc::contracts::FsListing> {
+        Box::pin(async { Err(not_served("this host has no session workspaces")) })
+    }
+
+    /// The start of one file of a session (`fs.read`), through the
+    /// session's own terminal backend.
+    fn fs_read<'a>(
+        &'a self,
+        _profile: &'a str,
+        _params: pmt_rpc::contracts::FsReadParams,
+        _link: Link,
+    ) -> HostFuture<'a, pmt_rpc::contracts::FsFile> {
+        Box::pin(async { Err(not_served("this host has no session workspaces")) })
+    }
+
+    /// The images, files and links `profile`'s sessions produced
+    /// (`artifacts.list`).
+    fn artifacts<'a>(
+        &'a self,
+        _profile: &'a str,
+        _params: pmt_rpc::contracts::ArtifactsListParams,
+    ) -> HostFuture<'a, pmt_rpc::contracts::ArtifactList> {
+        Box::pin(async { Err(not_served("this host keeps no transcripts")) })
+    }
+
+    /// Where a terminal of the session starts: its workspace.
+    fn terminal_cwd<'a>(
+        &'a self,
+        _profile: &'a str,
+        _session_id: &'a str,
+    ) -> HostFuture<'a, std::path::PathBuf> {
+        Box::pin(async { Err(not_served("this host opens no terminals")) })
+    }
+
+    /// Steers (`Some(text)`) or stops a running child of the session
+    /// (`subagent.steer`, `subagent.stop`); the status it reached.
+    fn subagent_control<'a>(
+        &'a self,
+        _profile: &'a str,
+        _session_id: &'a str,
+        _subagent_id: &'a str,
+        _steer: Option<&'a str>,
+    ) -> HostFuture<'a, String> {
+        Box::pin(async { Err(not_served("this host delegates to no subagents")) })
+    }
+
+    /// The desktop's panes (`git.*`, `projects.*`, `manage.*`, pairing,
+    /// `center.list`); `None` answers them `rpc.not_served`.
+    fn panes(&self) -> Option<&dyn crate::panes::PanesHost> {
+        None
+    }
+
+    /// Updates this daemon's install (`daemon.update`): `check` only
+    /// looks; otherwise the updater starts detached and hands the daemon
+    /// over when it finishes.
+    fn daemon_update(&self, _check: bool) -> HostFuture<'_, pmt_rpc::contracts::DaemonUpdated> {
+        Box::pin(async { Err(not_served("this host does not update itself")) })
+    }
+
+    /// `profile`'s canonical Bot Chat, created when it has none
+    /// (`bot.chat.ensure`); `true` when created now.
+    fn bot_chat<'a>(&'a self, _profile: &'a str) -> HostFuture<'a, (String, bool)> {
+        Box::pin(async { Err(not_served("this host has no bot chats")) })
+    }
+
+    /// `profile`'s first-run onboarding chat, created when it has none
+    /// (`onboarding.ensure`); `true` when created now.
+    fn onboarding_chat<'a>(&'a self, _profile: &'a str) -> HostFuture<'a, (String, bool)> {
+        Box::pin(async { Err(not_served("this host has no onboarding chat")) })
+    }
+
+    /// The session's background processes (`process.list`).
+    fn processes<'a>(
+        &'a self,
+        _profile: &'a str,
+        _session_id: &'a str,
+    ) -> HostFuture<'a, pmt_rpc::contracts::ProcessList> {
+        Box::pin(async { Err(not_served("this host has no background processes")) })
+    }
+
+    /// One background process's buffered output (`process.log`).
+    fn process_log<'a>(
+        &'a self,
+        _profile: &'a str,
+        _process: pmt_rpc::contracts::ProcessRef,
+    ) -> HostFuture<'a, pmt_rpc::contracts::ProcessLog> {
+        Box::pin(async { Err(not_served("this host has no background processes")) })
+    }
+
     /// Each served profile's configuration state, for `daemon status`.
     fn config(&self) -> Vec<pmt_rpc::control::ProfileConfig> {
         Vec::new()
@@ -457,6 +628,17 @@ pub struct Author {
 
 /// Receives a turn's answer text as it streams.
 pub type Deltas = Arc<dyn Fn(&str) + Send + Sync>;
+
+/// What became of a request only clients with a feature receive.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FeatureAnswer {
+    /// No attached driver advertised the feature.
+    NoClient,
+    /// Nobody answered before the deadline.
+    Unanswered,
+    /// The first answer.
+    Answered(Value),
+}
 
 /// A session's way to its attached clients.
 #[derive(Clone)]
@@ -524,6 +706,37 @@ impl Link {
     pub fn emit<E: Event>(&self, payload: &E::Payload) {
         let data = serde_json::to_value(payload).unwrap_or_default();
         self.hub.publish(&self.session_id, E::NAME, data);
+    }
+
+    /// Whether a driver of the session advertised client feature
+    /// `feature` (`desktop_ui`: an open desktop window).
+    #[must_use]
+    pub fn has_feature(&self, feature: &str) -> bool {
+        self.hub.has_feature(&self.session_id, feature)
+    }
+
+    /// Sends server request `method` only to the session's drivers that
+    /// advertised `feature`, waiting up to `timeout`.
+    pub async fn ask_feature(
+        &self,
+        method: &str,
+        params: Value,
+        timeout: Duration,
+        feature: &str,
+    ) -> FeatureAnswer {
+        if !self.has_feature(feature) {
+            return FeatureAnswer::NoClient;
+        }
+        match self
+            .hub
+            .ask_featured(&self.session_id, method, params, timeout, Some(feature))
+            .await
+        {
+            Some(value) => FeatureAnswer::Answered(value),
+            // The last such client left while the request was open.
+            None if !self.has_feature(feature) => FeatureAnswer::NoClient,
+            None => FeatureAnswer::Unanswered,
+        }
     }
 
     /// Asks the session's capable clients; `None` is unanswered (callers

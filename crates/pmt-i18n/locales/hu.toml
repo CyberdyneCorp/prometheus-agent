@@ -424,6 +424,7 @@ config = "A konfigurációs fájl megjelenítése, vagy kulcs lekérése/beáll�
 theme = "Témák listája, vagy váltás egyre"
 verbose = "Az eszközök előrehaladásának léptetése: off, new, all, verbose"
 redraw = "A képernyő törlése és újrarajzolása (a prompt és az állapot újranyomtatása)"
+keys = "Az érvényes billentyűparancsok listázása (ui.tui.keys)"
 statusbar = "Az állapotsor megjelenítése vagy elrejtése (ui.status_bar)"
 battery = "Akkumulátorszint az állapotsorban: on, off vagy status"
 profile = "A profil, amelyben ez a munkamenet fut"

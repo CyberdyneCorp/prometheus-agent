@@ -223,6 +223,26 @@ impl Command {
     }
 }
 
+/// A subcommand whose surfaces differ from or refine its parent's (spec:
+/// desktop-app, Slash palette from one command registry): authored here
+/// once, served by `commands.catalog` with a disposition per surface.
+#[derive(Debug, Clone, Copy)]
+pub struct Subcommand {
+    /// The first word after the command (`pending` of `/skills pending`).
+    pub name: &'static str,
+    /// Where it runs.
+    pub surfaces: &'static [Surface],
+}
+
+/// The declared subcommands of built-in `name`.
+#[must_use]
+pub fn subcommands(name: &str) -> &'static [Subcommand] {
+    builtins::SUBCOMMANDS
+        .iter()
+        .find(|(command, _)| *command == name)
+        .map_or(&[], |(_, subs)| subs)
+}
+
 /// Where a non-built-in command comes from, in precedence order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Source {

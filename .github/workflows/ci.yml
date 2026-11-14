@@ -38,7 +38,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     # The Intel macOS runner needs ~35 min for a cold build alone (clippy
     # plus the test build) before ~25 min of tests; 60 min cancelled it.
-    timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 90 || 60 }}
+    # The Apple silicon one reached 60 min in the smoke step after its
+    # tests (desktop gate included), so it gets 75.
+    timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 90 || matrix.os == 'macos-15' && 75 || 60 }}
     strategy:
       fail-fast: false
       matrix:
@@ -92,6 +94,14 @@ jobs:
         if: endsWith(matrix.target, '-musl')
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends musl-tools
 
+      # The desktop app (scripts/check's desktop gate) builds against
+      # WebKitGTK on the glibc Linux targets.
+      - name: Install the desktop app's webview libraries
+        if: runner.os == 'Linux' && !endsWith(matrix.target, '-musl')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libsoup-3.0-dev librsvg2-dev libxdo-dev
+
       # The shell-completion tests load the scripts in bash and zsh.
       - name: Install zsh
         if: runner.os == 'Linux'
@@ -113,6 +123,15 @@ jobs:
       - name: Install Chromium for the browser tests
         if: runner.os == 'Linux' && runner.arch == 'ARM64'
         run: npx --yes playwright@1.49.1 install --with-deps chromium
+
+      # The dashboard's browser tests drive the Chromium of the Playwright
+      # pinned in web/package.json; scripts/check installs it, the system
+      # libraries it needs come first on Linux.
+      - name: Install the dashboard test browser's system libraries
+        if: runner.os == 'Linux'
+        run: |
+          npm ci --prefix web --no-audit --no-fund
+          (cd web && npx --no-install playwright install-deps chromium)
 
       # Ubuntu 24.04's AppArmor refuses unprivileged user namespaces, which
       # Chromium's own sandbox needs ("No usable sandbox!" then SIGABRT).
@@ -149,10 +168,12 @@ jobs:
 
       # A build without an optional surface still answers to its name with
       # exit 69 (spec: workspace-architecture, Version and build
-      # identity); only the prometheus crate rebuilds.
+      # identity), and the gateway's remote client attachment and device
+      # revocation work without the dashboard (spec: messaging-gateway,
+      # Remote client attachment); only the prometheus crate rebuilds.
       - name: Minimal build without the dashboard
         if: matrix.target == 'x86_64-unknown-linux-gnu'
-        run: cargo test --locked -p prometheus --no-default-features --features tui,gateway,acp,mcp,evolve,eval --test surface_cli
+        run: cargo test --locked -p prometheus --no-default-features --features tui,gateway,acp,mcp,evolve,eval --test surface_cli --test remote_attach
 
       # The offline demo end to end, then the smoke suite, with networking
       # disabled (spec: replay-and-evaluation, Offline smoke demo; Built-in
@@ -215,6 +236,21 @@ jobs:
       - name: Windows sandbox tests
         if: runner.os == 'Windows' && !cancelled()
         run: cargo test -p pmt-sandbox --test sandbox --locked --target "${{ matrix.target }}" -- "windows::"
+
+      # The desktop app on WebView2 (desktop-app, Native command allowlist;
+      # Windows never open themselves; Deep links): its Tauri IPC tests on
+      # the mock runtime with the app's capability file.
+      - name: Windows desktop app tests
+        if: runner.os == 'Windows' && !cancelled()
+        run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --target-dir target/desktop --locked --target "${{ matrix.target }}"
+
+      # The dashboard's platform support matrix (web-dashboard, Honest
+      # platform support matrix — Sandbox strength on Windows): the
+      # sandbox.local row reports the AppContainer's real enforcement, and
+      # a policy it cannot fully enforce is degraded with the reason.
+      - name: Windows platform support matrix tests
+        if: runner.os == 'Windows' && !cancelled()
+        run: cargo test -p prometheus --lib --locked --target "${{ matrix.target }}" -- "daemon_cmd::support_matrix::"
 
       # A real local browser inside the AppContainer (execution-environments,
       # Local browser isolation): the pinned chrome-headless-shell runtime

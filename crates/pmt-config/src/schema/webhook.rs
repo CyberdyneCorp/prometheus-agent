@@ -13,7 +13,14 @@ use super::SecretName;
 /// One webhook route.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
+#[allow(clippy::struct_excessive_bools)] // independent switches of one route
 pub struct WebhookRoute {
+    /// Serve the route; a disabled route answers 403 (no restart needed
+    /// for a subscription: the adapter re-reads them when they change).
+    pub enabled: bool,
+    /// What the route is for (shown by the dashboard's `/webhooks`).
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub description: String,
     /// Event types admitted (`X-GitHub-Event`, `X-GitLab-Event` or the
     /// payload's `event_type`); empty admits every event.
     pub events: Vec<String>,
@@ -85,6 +92,8 @@ pub struct WebhookRoute {
 impl Default for WebhookRoute {
     fn default() -> Self {
         Self {
+            enabled: true,
+            description: String::new(),
             events: Vec::new(),
             secret_secret: None,
             insecure_no_auth: false,

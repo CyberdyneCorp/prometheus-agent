@@ -1,0 +1,26 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "targets": ["deb", "rpm"],
+    "linux": {
+      "deb": {
+        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"],
+        "files": {
+          "/usr/lib/prometheus-desktop/prometheus": "../../../target/desktop-package/cli/prometheus",
+          "/usr/lib/prometheus-desktop/install.json": "../../../target/desktop-package/install-system-package.json"
+        },
+        "postInstallScript": "../../../distrib/desktop/linux/postinst",
+        "preRemoveScript": "../../../distrib/desktop/linux/prerm"
+      },
+      "rpm": {
+        "depends": ["webkit2gtk4.1", "gtk3"],
+        "files": {
+          "/usr/lib/prometheus-desktop/prometheus": "../../../target/desktop-package/cli/prometheus",
+          "/usr/lib/prometheus-desktop/install.json": "../../../target/desktop-package/install-system-package.json"
+        },
+        "postInstallScript": "../../../distrib/desktop/linux/postinst",
+        "preRemoveScript": "../../../distrib/desktop/linux/prerm"
+      }
+    }
+  }
+}

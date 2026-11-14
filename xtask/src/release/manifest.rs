@@ -113,7 +113,9 @@ fn write_file(path: &Path, text: &str) -> Result<(), String> {
 }
 
 /// Checks a release directory end to end; lists every problem.
-pub(super) fn verify(dir: &Path, key: &Path) -> Result<(), String> {
+/// `require_desktop` also insists on every OS's desktop packages (the dry
+/// run); otherwise an OS whose packages failed to sign may be absent.
+pub(super) fn verify(dir: &Path, key: &Path, require_desktop: bool) -> Result<(), String> {
     let key_text = std::fs::read_to_string(key).map_err(|e| format!("{}: {e}", key.display()))?;
     let trust = TrustRoot::from_keys(&[("release", &key_text)]).map_err(|e| e.to_string())?;
     let mut problems = Vec::new();
@@ -131,6 +133,12 @@ pub(super) fn verify(dir: &Path, key: &Path) -> Result<(), String> {
             check_target(dir, manifest, target, &trust, &mut problems);
         }
         check_index(dir, manifest, &trust, &mut problems);
+        problems.extend(super::desktop::verify(
+            dir,
+            &manifest.version,
+            &trust,
+            require_desktop,
+        ));
     }
     for installer in INSTALLERS {
         signed(dir, installer, &trust, &mut problems);
@@ -289,7 +297,7 @@ mod tests {
         let root = crate::repo_root();
         let dir = root.join("target/xtask-test/release-complete");
         release(&dir);
-        verify(&dir, &root.join(PUB)).unwrap();
+        verify(&dir, &root.join(PUB), false).unwrap();
     }
 
     #[test]
@@ -304,7 +312,7 @@ mod tests {
         .unwrap();
         std::fs::remove_file(dir.join(sbom_name(&Artifact::file_name("aarch64-linux-android"))))
             .unwrap();
-        let err = verify(&dir, &root.join(PUB)).unwrap_err();
+        let err = verify(&dir, &root.join(PUB), false).unwrap_err();
         assert_eq!(err, format!("2 problem(s) in {}", dir.display()));
     }
 }

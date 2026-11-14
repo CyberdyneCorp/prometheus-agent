@@ -1,0 +1,14 @@
+#!/bin/sh
+# Puts the bundled CLI on PATH as /usr/bin/prometheus (spec:
+# distribution-and-update, Desktop packages and signing). The binary and
+# its install receipt (owner system-package) stay together in
+# /usr/lib/prometheus-desktop, so `prometheus update` finds the receipt
+# beside the link's target and names the system package manager.
+set -e
+target=/usr/lib/prometheus-desktop/prometheus
+link=/usr/bin/prometheus
+if [ -e "$link" ] && [ "$(readlink "$link" || true)" != "$target" ]; then
+    echo "prometheus-desktop: $link belongs to another install; the bundled CLI stays at $target" >&2
+    exit 0
+fi
+ln -sfn "$target" "$link"

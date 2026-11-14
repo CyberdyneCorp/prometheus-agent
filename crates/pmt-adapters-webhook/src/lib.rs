@@ -236,6 +236,9 @@ impl Webhook {
         let Some(route) = routes.get(route_name) else {
             return status(404, &json!({"error": "unknown route"}));
         };
+        if !route.enabled {
+            return status(403, &json!({"error": "route disabled"}));
+        }
         if request.method != "POST" {
             return status(405, &json!({"error": "POST only"}));
         }

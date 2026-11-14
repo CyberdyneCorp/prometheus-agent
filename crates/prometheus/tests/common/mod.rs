@@ -328,3 +328,16 @@ pub fn browser_sign_in(cmd: &mut std::process::Command) -> (Option<i32>, String)
 }
 #[cfg(feature = "gateway")]
 pub mod api;
+#[cfg(all(unix, feature = "dashboard"))]
+pub mod connections;
+#[cfg(feature = "dashboard")]
+pub mod dashboard;
+#[cfg(feature = "dashboard")]
+pub mod dashboard_plugins;
+#[cfg(all(unix, feature = "dashboard"))]
+pub mod desktop;
+#[cfg(feature = "dashboard")]
+pub mod oidc;
+pub mod plugin_catalog;
+#[cfg(feature = "gateway")]
+pub mod ws;

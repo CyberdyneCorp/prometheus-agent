@@ -9,6 +9,7 @@
 //! prefix of the path on component boundaries, so nested projects resolve
 //! deterministically. Mutations live in [`edit`].
 
+mod discovered;
 mod edit;
 mod transfer;
 
@@ -23,6 +24,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::sql;
 use crate::store::Store;
 
+pub use discovered::DiscoveredRepo;
 pub use edit::NewProject;
 pub use transfer::ProjectsExport;
 

@@ -61,6 +61,13 @@ pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
         .register::<c::CommandDispatch, _, _>(catalog, dispatch)?
         .register::<c::ApprovalRespond, _, _>(catalog, approval_respond)?;
     crate::discovery::register(router, catalog)?;
+    crate::desktop::register(router, catalog)?;
+    crate::ui::register(router, catalog)?;
+    crate::queue::register(router, catalog)?;
+    crate::workspace::register(router, catalog)?;
+    crate::pty::register(router, catalog)?;
+    crate::panes::register(router, catalog)?;
+    crate::ui_prefs::register(router, catalog)?;
     crate::vault::register(router, catalog)?;
     crate::moa::register(router, catalog)?;
     crate::observability::register(router, catalog)?;
@@ -166,10 +173,28 @@ async fn owner(call: &Call, session_id: &str) -> Result<String, RpcError> {
             return Ok(profile.clone());
         }
     }
+    // A connection granted every served profile has looked everywhere:
+    // "not found" then discloses nothing about other profiles (spec:
+    // desktop-app, Gone-session verdict).
+    let granted = &call.conn.grant.profiles;
+    if server.profiles().iter().all(|p| granted.contains(p)) {
+        return Err(rpc(&Error::new(
+            &codes::SESSION_NOT_FOUND,
+            format!("session {session_id} not found"),
+        )));
+    }
     Err(denied(session_id))
 }
 
+/// Attaches the connection; a connection granted observation only (a
+/// remote dashboard user who is not a driver) attaches as an observer
+/// whatever it asked for.
 fn join(call: &Call, session_id: &str, role: c::AttachRole, since: Option<&Since>) -> c::Attached {
+    let role = if call.conn.grant.observer_only {
+        c::AttachRole::Observer
+    } else {
+        role
+    };
     call.server
         .hub()
         .attach(call.conn.id, session_id, call.conn.peer(role), since)

@@ -67,6 +67,10 @@ pub async fn run(
         rpc_protocol: server.protocol().to_string(),
         started_at: server.started_at().to_owned(),
         health_url: server.health_url().map(str::to_owned),
+        features: pmt_rpc::discovery::FEATURES
+            .iter()
+            .map(|f| (*f).to_owned())
+            .collect(),
     };
     server.set_endpoint(endpoint.clone());
     let control_task = pmt_core::spawn::spawn(control.serve(Arc::clone(&server)).in_current_span());
@@ -83,6 +87,7 @@ pub async fn run(
         messaging.shutdown().await;
     }
     server.host().drain(drain).await;
+    server.terminals().close_all();
     server.closing.cancel();
     let _ = accept_task.await;
     reap_task.abort();
@@ -130,6 +135,11 @@ async fn reap(server: Arc<Server>) {
                 .await;
         }
         evict_beyond_cap(&server).await;
+        let hub = server.hub();
+        server.terminals().reap(
+            |session| hub.has_clients(session),
+            std::time::Instant::now(),
+        );
     }
 }
 

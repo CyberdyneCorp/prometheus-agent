@@ -134,7 +134,8 @@ impl Selection {
     }
 
     /// The selection of a session of `surface`: its starting toolsets
-    /// ([`SessionSurface::starting_toolsets`]) minus `tools.disabled_toolsets`.
+    /// ([`SessionSurface::starting_toolsets`]) minus `tools.disabled_toolsets`,
+    /// with the surface's gated toolsets folded in.
     ///
     /// # Errors
     ///
@@ -146,7 +147,59 @@ impl Selection {
         toolsets: &ToolsetsConfig,
     ) -> Result<Self, Error> {
         let enabled = surface.starting_toolsets(registry, tools, toolsets);
-        Self::resolve(registry, &enabled, &tools.disabled_toolsets)
+        Self::resolve(registry, &enabled, &tools.disabled_toolsets)?.folded_for(
+            registry,
+            surface,
+            &tools.disabled_toolsets,
+            &[],
+        )
+    }
+
+    /// This selection with `surface`'s gated toolsets
+    /// ([`SessionSurface::folded_toolsets`]) folded in, except one
+    /// `disabled` names and the `hidden` tools the user opted out of, and
+    /// with the gated toolsets of every other surface taken out even when
+    /// a list named them.
+    ///
+    /// # Errors
+    ///
+    /// A gated toolset missing from `registry`.
+    pub fn folded_for(
+        mut self,
+        registry: &ToolRegistry,
+        surface: &SessionSurface,
+        disabled: &[String],
+        hidden: &[&str],
+    ) -> Result<Self, Error> {
+        let folded = surface.folded_toolsets();
+        for gated in [
+            crate::agent_level_desktop::DESKTOP_UI,
+            crate::agent_level_desktop::ONBOARDING,
+        ] {
+            if folded.contains(&gated) {
+                continue;
+            }
+            let members = registry.members(gated)?;
+            self.tools.retain(|t| !members.contains(t));
+            self.toolsets.retain(|t| t != gated);
+        }
+        self.tools.retain(|t| !hidden.contains(&t.as_str()));
+        for name in folded {
+            if disabled.iter().any(|d| d == name) {
+                let members = registry.members(name)?;
+                self.tools.retain(|t| !members.contains(t));
+                continue;
+            }
+            if !self.toolsets.iter().any(|t| t == name) {
+                self.toolsets.push((*name).to_owned());
+            }
+            for tool in registry.members(name)? {
+                if !hidden.contains(&tool.as_str()) && !self.contains(&tool) {
+                    self.tools.push(tool);
+                }
+            }
+        }
+        Ok(self)
     }
 
     /// The selection `[tools]` configures.

@@ -104,7 +104,7 @@ pub use model::{
 pub use pins::Pin;
 pub use prefill::SessionPrefill;
 pub use process_receipts::ProcessReceipt;
-pub use projects::{Folder, NewProject, Project, ProjectsExport};
+pub use projects::{DiscoveredRepo, Folder, NewProject, Project, ProjectsExport};
 pub use prompts::{PromptTier, SessionPrompt};
 pub use retention::Maintenance;
 pub use rewind::Rewound;
@@ -122,7 +122,7 @@ pub use usage_query::UsageFilter;
 /// The newest `state.db` schema version this build reads and writes
 /// (`store_meta.schema_version`); every embedded migration bumps it, and a
 /// newer store opens read-only. Reported by `prometheus version --json`.
-pub const SCHEMA_VERSION: u32 = 38;
+pub const SCHEMA_VERSION: u32 = 39;
 
 #[cfg(test)]
 mod tests {

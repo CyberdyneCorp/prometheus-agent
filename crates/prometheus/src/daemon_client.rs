@@ -59,6 +59,7 @@ pub fn hello(client: ClientKind, server_requests: bool) -> HelloParams {
         capabilities: ClientCapabilities {
             server_requests,
             events: Vec::new(),
+            features: Vec::new(),
         },
     }
 }

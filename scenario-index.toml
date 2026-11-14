@@ -74,6 +74,19 @@ capabilities = [
     "workspace-architecture",
 ]
 
+# M3 (task groups 61-81) is being implemented: its indexed scenarios are
+# checked, unindexed ones are pending. Each area adds its capabilities
+# here; drop `partial` when M3 is complete (task 81.x).
+[milestones.M3]
+partial = true
+capabilities = [
+    "desktop-app",
+    "distribution-and-update",
+    "messaging-gateway",
+    "projects",
+    "web-dashboard",
+]
+
 [workspace-architecture."Single binary with subcommand surfaces"]
 "Alias invocation" = ["crates/prometheus/tests/version.rs::pmt_alias_prints_the_same_identity_line", "crates/prometheus/tests/version.rs::pmt_alias_prints_the_same_version_json"]
 "Unknown subcommand" = ["crates/prometheus/tests/chat_cli.rs::a_mistyped_subcommand_exits_2_with_a_suggestion"]
@@ -1425,6 +1438,10 @@ capabilities = [
 
 [workspace-architecture."Connection liveness and backpressure"]
 "Ping during compaction" = ["crates/pmt-gateway/tests/sessions.rs::ping_is_answered_during_a_long_compaction"]
+
+[messaging-gateway."Remote client attachment"]
+"Disabled by default" = ["crates/prometheus/tests/remote_attach.rs::no_remote_listener_is_bound_by_default", "crates/pmt-config/src/daemon_remote.rs::the_remote_listener_is_off_by_default_on_port_9121"]
+"Revoked device" = { tests = ["crates/prometheus/tests/remote_attach.rs::the_remote_listener_admits_paired_devices_only"], note = "the listener and revoke-device belong to the gateway: CI also runs remote_attach.rs on a build without the dashboard" }
 
 [messaging-gateway."One gateway daemon per home"]
 "Second foreground daemon refused" = ["crates/prometheus/tests/daemon_cli.rs::a_second_daemon_exits_75_without_opening_any_store"]
@@ -3776,6 +3793,12 @@ capabilities = [
 [projects."Archive and restore"]
 "Archived active project cleared" = ["crates/prometheus/tests/projects_cli.rs::archiving_the_active_project_clears_it_and_hides_it"]
 
+[projects."Repository discovery"]
+"Excluded path skipped" = { tests = ["crates/pmt-worktrees/src/discover.rs::excluded_hidden_dependency_and_deep_folders_are_skipped", "crates/pmt-worktrees/src/discover.rs::subtrees_the_sandbox_denies_are_skipped", "crates/prometheus/src/daemon_cmd/host/projects.rs::the_scan_skips_what_the_profile_sandbox_denies", "crates/prometheus/tests/dashboard_browser.rs::the_projects_page_offers_discovered_repositories"], note = "~/scratch excluded: ~/scratch/tmp is not listed (hidden, dependency, nested and too-deep repositories are skipped too, and so are subtrees the profile sandbox denies: credential stores, a Prometheus home below a scan root); the dashboard /projects page (web/e2e/projects.spec.ts) offers the discovered repositories with one-click Create project and does not list ~/code/scratch/tmp; the daemon cache and the desktop sidebar rows are in crates/prometheus/tests/desktop_manage.rs" }
+
+[projects."Project tool for GUI sessions"]
+"Switch keeps prompt cache" = { tests = ["crates/prometheus/tests/desktop_ui_tools.rs::switching_project_moves_the_next_command_and_keeps_the_prompt"], note = "a desktop session in project api calls project switch web: the session's next terminal command (pwd) runs in web's primary folder, the stored system prompt hash is unchanged, the session row carries web's project id and session.project tells the surface" }
+
 [projects."Projects in backups and exports"]
 "Missing folder flagged" = ["crates/prometheus/tests/projects_backup.rs::an_imported_profile_keeps_folders_missing_on_this_machine"]
 
@@ -3922,3 +3945,393 @@ capabilities = [
 [platform-adapters."WASM adapter plugin isolation"]
 "Undeclared host blocked" = ["crates/prometheus/tests/plugins_adapter.rs::a_plugin_adapter_serves_its_platform_under_its_grants_and_a_trap_restarts_only_it", "crates/pmt-plugins/tests/runtime.rs::an_undeclared_host_is_blocked_before_any_connection"]
 "Crash is contained" = ["crates/prometheus/tests/plugins_adapter.rs::a_plugin_adapter_serves_its_platform_under_its_grants_and_a_trap_restarts_only_it", "crates/prometheus/src/plugins_host/adapter.rs::the_fifth_crash_within_ten_minutes_is_fatal"]
+
+# ---------------------------------------------------------------------------
+# M3 (partial): entries grouped by task group.
+
+# 61. M3 Web dashboard (61.1-61.4).
+
+[web-dashboard."Dashboard command and listener defaults"]
+"Default launch" = { tests = ["crates/prometheus/tests/dashboard_http.rs::the_default_port_is_9120_and_a_held_port_exits_78_naming_it", "crates/pmt-config/src/daemon_dashboard.rs::the_defaults_bind_loopback_port_9120"], note = "the test needs port 9120 free on the machine; `--no-open` prints the login link a browser would open" }
+"Port conflict" = ["crates/prometheus/tests/dashboard_http.rs::the_default_port_is_9120_and_a_held_port_exits_78_naming_it"]
+
+[web-dashboard."SPA is embedded in the binary"]
+"Unknown asset" = ["crates/prometheus/tests/dashboard_http.rs::the_embedded_spa_is_served_with_hashed_assets"]
+"Deep link reload" = ["crates/prometheus/tests/dashboard_http.rs::the_embedded_spa_is_served_with_hashed_assets"]
+
+[web-dashboard."Loopback authentication with an HttpOnly session cookie"]
+"Reused login link" = ["crates/prometheus/tests/dashboard_http.rs::a_login_link_signs_in_once_with_a_strict_http_only_cookie", "crates/pmt-web/src/auth/tickets.rs::a_ticket_works_once_and_only_within_a_minute"]
+"Page source has no token" = ["crates/prometheus/tests/dashboard_http.rs::served_pages_carry_no_credential"]
+
+[web-dashboard."CSRF protection on state-changing requests"]
+"Cross-site form post" = { tests = ["crates/prometheus/tests/dashboard_http.rs::state_changes_need_the_sessions_csrf_token", "crates/prometheus/tests/dashboard_http.rs::a_login_link_signs_in_once_with_a_strict_http_only_cookie", "crates/pmt-web/src/auth/sessions.rs::only_the_bound_csrf_token_passes"], note = "browsers withhold the SameSite=Strict cookie from a cross-site post (the cookie attribute is asserted); a same-site post without the header gets 403 csrf, and a WebSocket without the csrf subprotocol entry closes 4403" }
+
+[web-dashboard."Non-loopback binds fail closed"]
+"LAN bind without auth" = ["crates/prometheus/tests/dashboard_http.rs::a_lan_bind_without_auth_exits_78_and_never_listens", "crates/pmt-web/src/listener.rs::a_lan_bind_without_auth_or_its_secret_is_refused"]
+"Password mode login" = ["crates/prometheus/tests/dashboard_http.rs::five_wrong_passwords_in_a_minute_lock_the_address_out", "crates/prometheus/tests/dashboard_http.rs::concurrent_wrong_passwords_get_no_more_than_five_guesses", "crates/pmt-web/src/auth/password.rs::five_failures_in_a_minute_lock_the_address_out_for_five_minutes"]
+
+[web-dashboard."Host header validation"]
+"DNS rebinding" = ["crates/prometheus/tests/dashboard_http.rs::a_foreign_or_malformed_host_header_is_refused", "crates/pmt-web/src/guard.rs::only_the_listeners_own_names_pass"]
+
+[web-dashboard."Same-origin only"]
+"Cross-origin WebSocket" = ["crates/prometheus/tests/dashboard_http.rs::only_the_dashboards_own_origin_is_served"]
+
+[web-dashboard."Public endpoints"]
+"Health probe" = ["crates/prometheus/tests/dashboard_http.rs::the_health_probe_is_public_and_reads_no_profile_data"]
+
+[web-dashboard."Profile-addressed routes"]
+"Deleting a session" = ["crates/prometheus/tests/dashboard_api.rs::profile_routes_touch_only_the_named_profile"]
+"Typo in profile" = ["crates/prometheus/tests/dashboard_api.rs::profile_routes_touch_only_the_named_profile"]
+
+[web-dashboard."REST endpoint inventory"]
+"Config schema served from the typed config" = { tests = ["crates/prometheus/tests/dashboard_inventory.rs::the_inventory_is_served_and_nothing_else", "crates/pmt-web/src/inventory.rs::only_listed_endpoints_are_found", "crates/pmt-web/src/inventory.rs::every_endpoint_is_in_the_openapi_document_once"], note = "the schema endpoint answers the checked-in schema/config.schema.json (generated from the typed config); every endpoint of schema/dashboard-api.json (generated from pmt_web::inventory) is served and others answer 404" }
+"Bulk maintenance needs confirmation" = ["crates/prometheus/tests/dashboard_inventory.rs::bulk_maintenance_needs_confirmation_and_a_driver"]
+
+[web-dashboard."Additional dashboard sign-in providers"]
+"Token deployment" = ["crates/prometheus/tests/dashboard_inventory.rs::the_deployment_token_opens_the_api_over_tls_and_nothing_else_does"]
+"Token mode without the secret" = ["crates/prometheus/tests/dashboard_inventory.rs::token_mode_without_its_secret_exits_78_naming_it", "crates/pmt-web/src/listener.rs::token_mode_without_its_secret_is_refused_naming_it"]
+
+[web-dashboard."Registering a dashboard with the account portal"]
+"Register with a public callback" = { tests = ["crates/prometheus/tests/dashboard_inventory.rs::register_saves_the_portal_client_id"], note = "against a fake account portal (wiremock) with a stored portal sign-in" }
+
+[web-dashboard."Paired device credentials for remote clients"]
+"Revoking a lost laptop" = ["crates/prometheus/tests/dashboard_devices.rs::a_revoked_device_is_closed_with_4401_and_refused_afterwards", "crates/pmt-gateway/src/devices.rs::a_revoked_device_is_rejected_and_its_sockets_end"]
+"Expired pairing code" = { tests = ["crates/pmt-gateway/src/devices.rs::a_pairing_code_expires_after_ten_minutes_and_works_once", "crates/prometheus/tests/dashboard_devices.rs::a_bad_pairing_code_gets_401_and_issues_no_credential"], note = "the 11-minute-old code is presented on a paused clock; the HTTP exchange of a code that does not redeem answers 401 and issues nothing" }
+
+[web-dashboard."Remote desktop clients attach through the dashboard listener"]
+"Headless VPS" = ["crates/prometheus/tests/dashboard_devices.rs::serve_runs_the_daemon_with_the_dashboard_listener_open"]
+
+[web-dashboard."Desktop workspace in the browser"]
+"Opening from the CLI" = ["crates/prometheus/tests/dashboard_devices.rs::the_webapp_link_lands_on_app_once", "crates/prometheus/tests/dashboard_browser.rs::the_webapp_opens_from_the_cli_and_signs_out_every_tab"]
+"Webapp disabled" = ["crates/prometheus/tests/dashboard_devices.rs::the_webapp_is_off_by_default"]
+
+[web-dashboard."Webapp sign-out and insecure-context notice"]
+"Sign out every tab" = ["crates/prometheus/tests/dashboard_devices.rs::signing_out_ends_every_browser_session_but_not_devices", "crates/prometheus/tests/dashboard_browser.rs::the_webapp_opens_from_the_cli_and_signs_out_every_tab", "crates/pmt-web/src/auth/sessions.rs::signing_everyone_out_ends_every_session_and_its_sockets"]
+
+[web-dashboard."Webapp file staging and terminals"]
+"Oversized drop" = { tests = ["crates/prometheus/tests/dashboard_devices.rs::a_staged_file_over_16_mib_is_refused_with_413", "crates/prometheus/tests/dashboard_browser.rs::the_webapp_opens_from_the_cli_and_signs_out_every_tab", "crates/pmt-gateway/tests/terminals.rs::a_second_driver_attaching_takes_the_terminal_over"], note = "webapp.spec.ts drops a file and a 20 MiB one on the webapp terminal (the desktop's terminal pane over the daemon PTY): 201 then 413 from the staging endpoint; a second tab attaching takes the PTY over (also over the protocol in terminals.rs). Host-file downloads through the session's file-access rules: dashboard_devices.rs::host_files_download_only_through_the_sessions_file_access_rules; sandboxed previews: webapp.spec.ts" }
+
+[web-dashboard."Webhooks page"]
+"Secret shown once" = ["crates/prometheus/tests/dashboard_pages.rs::a_webhook_secret_is_answered_once", "crates/prometheus/tests/dashboard_browser.rs::the_webhooks_and_docs_pages_work_in_the_browser"]
+
+[web-dashboard."Channel setup forms"]
+"Required field missing" = ["crates/prometheus/tests/dashboard_pages.rs::an_adapter_form_without_a_required_field_writes_nothing"]
+
+[web-dashboard."Dashboard plugin contributions"]
+"Override conflict" = ["crates/pmt-plugins/src/dashboard.rs::the_first_override_in_load_order_wins_and_the_other_is_reported", "crates/prometheus/tests/dashboard_plugins.rs::contributions_frames_backends_and_rescan", "crates/prometheus/tests/dashboard_browser.rs::dashboard_plugins_render_in_sandboxed_frames"]
+"Plugin frame reads the session cookie" = { tests = ["crates/prometheus/tests/dashboard_browser.rs::dashboard_plugins_render_in_sandboxed_frames", "crates/prometheus/tests/dashboard_plugins.rs::contributions_frames_backends_and_rescan"], note = "plugins.spec.ts: the frame (sandbox allow-scripts, an opaque origin) reads document.cookie and never sees prometheus_session; the frame document's own policy is sandbox allow-scripts without allow-same-origin and default-src 'none'" }
+
+[desktop-app."Telegram quick setup by QR"]
+"Successful QR setup" = { tests = ["crates/prometheus/tests/desktop_manage.rs::desktop_management_messaging_projects_shortcuts_and_profile_files", "crates/prometheus/tests/dashboard_channels.rs::telegram_create_with_qr_saves_the_token_and_allowlists_the_owner"], note = "a stand-in onboarding service and Bot API (PMT_TEST_TELEGRAM_API, debug builds): the desktop dialog shows the QR and deep link, the token is stored as TELEGRAM_BOT_TOKEN, 4242 is the only allowlisted user and the Telegram row reaches `connected`" }
+"Cancelled setup" = { tests = ["crates/prometheus/tests/dashboard_channels.rs::a_cancelled_telegram_setup_writes_nothing", "crates/prometheus/tests/desktop_manage.rs::desktop_management_messaging_projects_shortcuts_and_profile_files"], note = "dashboard: a result arriving after DELETE adapters/telegram/pairing is discarded and no secret is written; desktop (web/e2e/desktop-manage.spec.ts, closing the QR dialog...): Close sends adapters.pairing.cancel while the stand-in holds the poll, the stand-in then answers ready and the daemon discards it: TELEGRAM_BOT_TOKEN stays unset and config.toml (allowlist) is unchanged" }
+
+[web-dashboard."Files page"]
+"Symlink escape" = { tests = ["crates/prometheus/tests/dashboard_pages.rs::files_outside_the_workspace_root_are_refused_and_never_listed", "crates/prometheus/tests/dashboard_pages.rs::a_session_root_in_the_users_home_never_serves_its_credentials"], note = "cfg(unix): the fixture is a symbolic link to /etc" }
+
+[web-dashboard."Embedded documentation"]
+"Offline docs" = ["crates/prometheus/tests/dashboard_pages.rs::the_embedded_docs_find_a_config_keys_reference_entry", "crates/pmt-web/src/docs.rs::the_configuration_reference_is_embedded_with_its_key_rows", "crates/prometheus/tests/dashboard_browser.rs::the_webhooks_and_docs_pages_work_in_the_browser"]
+
+[web-dashboard."Profile builder"]
+"Clone without secrets" = ["crates/prometheus/tests/dashboard_pages.rs::the_profile_builder_clones_configuration_only"]
+
+[web-dashboard."Dashboard themes"]
+"Theme imports remote CSS" = ["crates/pmt-web/src/themes.rs::remote_css_is_rejected_with_the_reason", "crates/prometheus/tests/dashboard_pages.rs::rejected_themes_are_listed_with_their_reason_and_never_served"]
+"Oversized custom CSS" = ["crates/pmt-web/src/themes.rs::custom_css_over_32_kib_is_rejected_naming_the_limit", "crates/prometheus/tests/dashboard_pages.rs::rejected_themes_are_listed_with_their_reason_and_never_served"]
+
+[web-dashboard."Reverse-proxy base path from config"]
+"Behind a proxy at /prometheus" = ["crates/prometheus/tests/dashboard_http.rs::a_base_path_prefixes_every_asset_url", "crates/pmt-web/src/assets.rs::every_asset_url_of_the_shell_is_under_the_base_path"]
+
+[web-dashboard."Structured chat over the client protocol"]
+"Approval from the browser" = ["crates/prometheus/tests/dashboard_e2e.rs::an_approval_is_answered_from_the_browser_over_the_client_protocol"]
+
+[web-dashboard."Remote dashboard users are observers by default"]
+"OIDC viewer submits" = { tests = ["crates/prometheus/tests/dashboard_e2e.rs::an_oidc_viewer_sees_a_disabled_composer_and_cannot_submit", "crates/prometheus/tests/dashboard_api.rs::a_remote_user_not_listed_as_driver_cannot_submit", "crates/prometheus/tests/dashboard_api.rs::a_remote_observer_cannot_change_profile_state"], note = "against a fake OpenID Connect provider (crates/prometheus/tests/common/oidc.rs) issuing ES256 ID tokens" }
+
+[web-dashboard."Live event stream"]
+"Approval badge" = ["crates/prometheus/tests/dashboard_e2e.rs::a_session_waiting_for_approval_shows_a_badge_on_the_sessions_page", "crates/prometheus/tests/dashboard_api.rs::a_pending_approval_reaches_the_event_stream_of_its_profile", "crates/pmt-web/src/events.rs::an_approval_request_becomes_a_dashboard_event_with_its_profile"]
+
+[web-dashboard."Built-in pages"]
+"Status page exists" = ["crates/prometheus/tests/dashboard_e2e.rs::the_status_page_and_every_built_in_route_render", "crates/prometheus/tests/dashboard_browser.rs::the_pairing_page_approves_a_stranger_with_their_code"]
+
+[web-dashboard."Secrets are write-only"]
+"Reading a key" = ["crates/prometheus/tests/dashboard_api.rs::secrets_are_listed_by_name_and_never_returned", "crates/prometheus/tests/dashboard_e2e.rs::secrets_set_in_the_browser_are_never_shown_again"]
+
+[web-dashboard."Config editing is schema-driven"]
+"Invalid value" = ["crates/prometheus/tests/dashboard_api.rs::an_invalid_config_value_is_refused_and_the_file_unchanged", "crates/prometheus/tests/dashboard_e2e.rs::the_config_page_refuses_an_invalid_value_and_keeps_the_file"]
+
+[web-dashboard."Honest platform support matrix"]
+"Sandbox strength on Windows" = { tests = ["crates/prometheus/src/daemon_cmd/support_matrix.rs::the_windows_sandbox_row_reports_the_appcontainer", "crates/prometheus/src/daemon_cmd/support_matrix.rs::a_degraded_sandbox_row_gives_the_reason_of_each_gap", "crates/prometheus/tests/dashboard_api.rs::the_platform_matrix_is_served_over_http_and_in_the_hello"], note = "the AppContainer test is cfg(windows) and runs in the CI step \"Windows platform support matrix tests\" on both Windows targets; /status renders the served rows" }
+
+[web-dashboard."Cost and usage view (upgrade)"]
+"Delegation cost rolls up" = ["crates/prometheus/tests/dashboard_e2e.rs::the_usage_page_rolls_children_up_and_shows_the_budget"]
+"Budget warning" = ["crates/prometheus/tests/dashboard_e2e.rs::the_usage_page_rolls_children_up_and_shows_the_budget"]
+
+[web-dashboard."Logs page is redacted and bounded"]
+"Path traversal" = ["crates/prometheus/tests/dashboard_api.rs::logs_are_named_from_the_registry_bounded_and_redacted", "crates/prometheus/tests/dashboard_e2e.rs::the_logs_page_tails_registry_logs"]
+
+[web-dashboard."Upload and download limits"]
+"Oversized upload" = ["crates/prometheus/tests/dashboard_api.rs::an_oversized_upload_is_refused_before_anything_is_stored"]
+
+[web-dashboard."Listener lifecycle within the daemon"]
+"Second dashboard command" = ["crates/prometheus/tests/dashboard_http.rs::a_second_command_reuses_the_listener_and_stop_leaves_the_daemon_running"]
+
+# Group 62.1-62.4 (desktop app). Desktop E2E tests run the desktop page in
+# Chromium at the webview origin with its `shell` command served by the
+# real shell core (crates/prometheus/tests/common/desktop.rs); the Tauri
+# tests (apps/desktop/src-tauri, run by scripts/check's desktop gate) cover
+# the native IPC boundary.
+[desktop-app."Daemon attachment through the bundled binary"]
+"Ensure prints garbage" = { tests = ["crates/pmt-desktop/tests/attach.rs::ensure_printing_garbage_is_a_no_result_error_and_no_attachment", "crates/pmt-desktop/src/ensure.rs::only_one_json_object_is_a_result", "crates/prometheus/tests/desktop_e2e.rs::the_desktop_attaches_through_the_bundled_binary"], note = "a fake bundled binary exits 2 with non-JSON stdout: the shell answers the no-result error with the last stderr line and stores no endpoint (the page shows it with Retry); the E2E attaches through the real binary's `daemon ensure --json`" }
+
+[desktop-app."Ensure is bounded"]
+"Cold start exceeds the deadline" = { tests = ["crates/pmt-desktop/tests/attach.rs::a_cold_start_past_the_deadline_is_a_timeout_with_the_log_link", "crates/pmt-desktop/src/ensure.rs::the_errors_read_as_the_spec_words_them"], note = "the app's bound is DEADLINE + GRACE = 75 s (unit test); the integration test runs a 1 s bound against a binary that sleeps and gets the timeout with the `<home>/logs/gateway.log` link, never an attachment" }
+
+[desktop-app."Local endpoint validation"]
+"Non-loopback endpoint" = ["crates/pmt-desktop/src/endpoint.rs::a_non_loopback_endpoint_is_refused", "crates/pmt-desktop/tests/attach.rs::a_non_loopback_endpoint_is_refused"]
+
+[desktop-app."Version skew restarts a stale daemon"]
+"Daemon outlived a CLI update to an older app" = ["crates/pmt-desktop/src/skew.rs::a_daemon_that_outlived_a_cli_update_to_an_older_app_is_kept", "crates/pmt-desktop/tests/attach.rs::a_daemon_that_outlived_a_cli_update_to_an_older_app_keeps_running", "crates/pmt-desktop/tests/attach.rs::a_stale_daemon_restarts_silently_but_asks_first_while_turns_run"]
+
+[desktop-app."One-use dial tickets never reach the webview's storage"]
+"Replayed ticket" = { tests = ["crates/prometheus/tests/desktop_e2e.rs::the_desktop_attaches_through_the_bundled_binary", "crates/pmt-desktop/src/dial.rs::a_dial_never_prints_its_ticket"], note = "desktop-attach.spec.ts: every ticket the shell issued is absent from the page's URL, cookies, DOM, localStorage, sessionStorage, IndexedDB and caches, and a socket presenting a consumed one is closed with 4401" }
+"Ticket flood" = ["crates/pmt-desktop/src/dial.rs::a_hundred_pending_dials_refuse_the_next", "crates/pmt-desktop/src/dial.rs::a_dial_is_bound_to_the_window_that_asked", "crates/pmt-desktop/src/connections/service.rs::forwarder_tickets_share_the_dial_limit"]
+
+[desktop-app."Shared client defaults"]
+"Reconnect re-advertises" = { tests = ["crates/prometheus/tests/desktop_e2e.rs::the_desktop_reconnects_and_keeps_its_session"], note = "desktop-reconnect.spec.ts: after `daemon restart` the new socket's first frame is rpc.hello as `desktop` with server_requests = true, and it re-attaches the open session" }
+
+[desktop-app."Reconnect backoff with full jitter"]
+"Flapping daemon" = { tests = ["crates/prometheus/tests/desktop_e2e.rs::the_desktop_reconnects_and_keeps_its_session"], note = "desktop-reconnect.spec.ts runs the page's Backoff: three connections closing after 2 s leave attempt 3 and a 2400 ms ceiling" }
+
+[desktop-app."Native command allowlist"]
+"Plugin tries a native command" = { tests = ["apps/desktop/src-tauri/src/app_tests.rs::a_plugin_frame_has_no_native_commands", "apps/desktop/src-tauri/src/app_tests.rs::only_the_typed_shell_command_is_reachable", "crates/pmt-desktop/tests/attach.rs::a_plugin_refusal_is_logged_at_warn_with_the_plugin_id", "crates/pmt-desktop/src/request.rs::requests_are_typed_and_anything_else_is_rejected"], note = "Tauri mock runtime with the app's capability file: an invoke from a plugin frame's origin is refused by the ACL; a frame's request relayed by the page is refused and logged at WARN with the plugin id" }
+
+[desktop-app."Windows never open themselves"]
+"Artifact script opens a window" = ["apps/desktop/src-tauri/src/app_tests.rs::an_artifact_script_opens_no_window", "crates/pmt-desktop/src/navigation.rs::an_artifact_script_opens_no_window", "crates/prometheus/tests/desktop_e2e.rs::the_desktop_attaches_through_the_bundled_binary"]
+
+[desktop-app."External URL scheme allowlist"]
+"javascript link from the agent" = ["apps/desktop/src-tauri/src/app_tests.rs::a_javascript_link_from_the_agent_is_invalid_and_opens_nothing", "crates/pmt-desktop/src/links.rs::a_javascript_link_is_invalid", "crates/prometheus/tests/desktop_e2e.rs::the_desktop_attaches_through_the_bundled_binary"]
+
+[desktop-app."Deep links"]
+"Link with a prompt payload" = ["apps/desktop/src-tauri/src/app_tests.rs::a_deep_link_with_a_prompt_payload_opens_an_empty_draft", "crates/pmt-desktop/src/deeplink.rs::a_prompt_payload_is_dropped", "crates/prometheus/tests/desktop_e2e.rs::the_desktop_attaches_through_the_bundled_binary"]
+
+[desktop-app."Sessions are created with desktop source"]
+"New chat" = ["crates/prometheus/tests/desktop_protocol.rs::a_desktop_chat_is_created_with_desktop_source", "crates/prometheus/tests/desktop_e2e.rs::the_desktop_attaches_through_the_bundled_binary"]
+
+[desktop-app."Gone-session verdict"]
+"Resume during reconnect" = { tests = ["crates/prometheus/tests/desktop_e2e.rs::the_desktop_reconnects_and_keeps_its_session"], note = "desktop-reconnect.spec.ts: with the daemon stopped the window stays on the session with Retry; a -32003 answer while connected opens a fresh draft" }
+
+[desktop-app."Slash palette from one command registry"]
+"Subcommand available, parent not" = { tests = ["crates/prometheus/tests/desktop_e2e.rs::desktop_settings_palette_bots_and_profiles", "crates/prometheus/tests/desktop_protocol.rs::the_desktop_catalog_has_terminal_only_reasons_and_subcommand_dispositions"], note = "desktop-settings.spec.ts runs the page's palette over a catalog where /skills is unavailable except `pending`, and the real catalog's subcommand dispositions in the window" }
+"Terminal-only command" = ["crates/prometheus/tests/desktop_protocol.rs::the_desktop_catalog_has_terminal_only_reasons_and_subcommand_dispositions", "crates/prometheus/tests/desktop_e2e.rs::desktop_settings_palette_bots_and_profiles"]
+
+[desktop-app."Bot chats are created atomically by the daemon"]
+"Two windows open the same bot during a restart" = ["crates/prometheus/tests/desktop_protocol.rs::two_windows_opening_the_same_bot_during_a_restart_share_one_bot_chat", "crates/prometheus/tests/desktop_e2e.rs::desktop_settings_palette_bots_and_profiles"]
+
+[desktop-app."Settings write validated config patches"]
+"Clearing the subagent route" = ["crates/prometheus/tests/desktop_protocol.rs::clearing_the_subagent_route_removes_it_in_one_validated_patch", "crates/prometheus/tests/desktop_e2e.rs::desktop_settings_palette_bots_and_profiles"]
+
+[desktop-app."Profile switching is explicit"]
+"Restart gateway under a profile" = ["crates/prometheus/tests/desktop_protocol.rs::a_config_reload_names_the_windows_profile", "crates/prometheus/tests/desktop_e2e.rs::desktop_settings_palette_bots_and_profiles"]
+
+# Group 62.5-62.8 (desktop app). desktop_background.rs drives
+# desktop-background.spec.ts and desktop-launch.spec.ts in the desktop
+# browser harness (the page in Chromium at the webview origin, its shell
+# command served by the real shell core); the shell-core and updater tests
+# run against a recording machine integration and an in-memory release
+# origin signed with the test key.
+[desktop-app."Closing windows does not stop the agent"]
+"Quit during a turn" = { tests = ["crates/prometheus/tests/desktop_background.rs::background_approvals_quitting_plugin_panels_and_quick_ask", "crates/pmt-desktop/src/attention.rs::the_tray_lists_approvals_and_running_sessions"], note = "desktop-background.spec.ts: the window closes while a slow mock turn runs (the tray lists it as running); a new window finds the turn finished in the daemon. The real tray icon and hide-on-close are Tauri code (apps/desktop/src-tauri/src/tray.rs), not driven end to end" }
+
+[desktop-app."Approval notifications never approve"]
+"Background approval" = { tests = ["crates/prometheus/tests/desktop_background.rs::background_approvals_quitting_plugin_panels_and_quick_ask", "crates/pmt-desktop/tests/background.rs::an_approval_notification_only_ever_focuses_its_card", "crates/pmt-desktop/src/attention.rs::activation_hands_over_the_latest_unanswered_approval_once", "apps/desktop/src-tauri/src/app_tests.rs::an_approval_notification_has_no_answer_and_names_the_session_and_tool"], note = "desktop-background.spec.ts: with the window unfocused the approval posts the notification naming the tool; the activation that follows a click focuses the card, sends no approval.respond and leaves its buttons enabled until the user answers in the card" }
+
+[desktop-app."Plugin UI contributions are isolated"]
+"Plugin reads another plugin's storage" = { tests = ["crates/prometheus/tests/desktop_background.rs::background_approvals_quitting_plugin_panels_and_quick_ask"], note = "plugins a and b, installed from unsigned packages with --allow-unsigned, each write a localStorage key in their panel on their own origin (http://plugin-<id>.localhost, the Windows form; plugin-<id>://localhost elsewhere) and see only their own; plugin c (adopted, unverified) does not load" }
+"Ungranted capability" = ["crates/prometheus/tests/desktop_background.rs::background_approvals_quitting_plugin_panels_and_quick_ask", "crates/pmt-plugins/src/manifest/ui.rs::unknown_capabilities_paths_and_ungranted_ui_are_refused", "apps/desktop/src-tauri/src/app_tests.rs::a_plugin_panel_origin_reaches_no_native_command"]
+
+[desktop-app."Global hotkey quick-ask (upgrade)"]
+"Hotkey already taken" = ["crates/pmt-desktop/tests/background.rs::a_taken_hotkey_is_named_in_a_notification_and_the_app_runs_on"]
+"Quick follow-up" = ["crates/pmt-desktop/src/quick_ask.rs::a_quick_follow_up_reuses_the_session", "crates/pmt-desktop/tests/background.rs::a_quick_follow_up_goes_to_the_same_session", "crates/prometheus/tests/desktop_background.rs::background_approvals_quitting_plugin_panels_and_quick_ask"]
+
+[desktop-app."Honest platform support in settings"]
+"Wayland without the portal" = { tests = ["crates/pmt-desktop/src/platform.rs::wayland_without_the_portal_disables_the_hotkey_with_the_reason", "crates/prometheus/tests/desktop_background.rs::launch_links_install_dialog_shared_preferences_and_platform_support"], note = "the harness reports a Wayland session: Settings disables the quick-ask hotkey control with the reason" }
+
+[desktop-app."Signed in-app updates"]
+"Bad signature" = ["crates/pmt-desktop/tests/update.rs::a_tampered_update_is_discarded_and_the_current_version_kept", "crates/pmt-desktop/tests/update.rs::an_older_signed_archive_under_the_new_url_is_refused", "crates/pmt-desktop/tests/update.rs::a_second_apply_while_one_runs_is_refused", "crates/pmt-desktop/tests/update.rs::background_checks_ask_the_channel_at_most_every_six_hours"]
+
+[desktop-app."Development builds have no updater"]
+"Apply on a commit build" = ["crates/pmt-desktop/tests/update.rs::a_build_without_the_release_key_has_no_updater_and_asks_nothing", "crates/prometheus/tests/desktop_background.rs::launch_links_install_dialog_shared_preferences_and_platform_support"]
+
+[desktop-app."Install deep links open a consent flow"]
+"Website install button" = { tests = ["crates/prometheus/tests/desktop_background.rs::launch_links_install_dialog_shared_preferences_and_platform_support"], note = "a live catalog (signed with the test key) lists weather; the dialog shows publisher, version and capabilities; Cancel fetches nothing, Install installs it (the package is fetched exactly once)" }
+"Link pointing at an arbitrary URL" = ["crates/pmt-desktop/tests/background.rs::an_install_link_to_a_url_is_unknown_and_runs_nothing", "crates/pmt-desktop/src/catalog.rs::only_catalog_ids_pass", "crates/prometheus/tests/desktop_background.rs::launch_links_install_dialog_shared_preferences_and_platform_support"]
+
+[desktop-app."Launching the desktop from the CLI"]
+"Launch in a project directory" = ["crates/prometheus/tests/desktop_cli.rs::launching_in_a_project_directory_passes_the_new_chat_link", "crates/prometheus/tests/desktop_background.rs::launch_links_install_dialog_shared_preferences_and_platform_support"]
+"Tampered download" = ["crates/prometheus/tests/desktop_cli.rs::a_tampered_desktop_download_installs_nothing_and_exits_77"]
+
+[desktop-app."Desktop launch options"]
+"Compositor ignores always-on-top" = { tests = ["crates/pmt-desktop/src/options.rs::x11_on_a_wayland_session_opens_through_xwayland"], note = "the shell starts the webview with GDK_BACKEND=x11 (XWayland) before the first window; not exercised on a real Wayland compositor" }
+"Typo in a launch option" = ["crates/pmt-desktop/src/options.rs::a_typo_in_a_launch_option_launches_with_auto_and_a_notice", "crates/pmt-desktop/tests/background.rs::launch_options_carry_the_notice_of_an_invalid_value", "crates/prometheus/tests/desktop_background.rs::launch_links_install_dialog_shared_preferences_and_platform_support"]
+
+[desktop-app."Machine-wide UI preferences"]
+"Theme changed in the webapp" = { tests = ["crates/prometheus/tests/desktop_background.rs::launch_links_install_dialog_shared_preferences_and_platform_support", "crates/pmt-gateway/src/ui_prefs.rs::only_display_preferences_are_stored", "crates/pmt-gateway/src/ui_prefs.rs::a_corrupt_file_is_set_aside_and_the_store_starts_empty"], note = "desktop-launch.spec.ts: dark mode chosen on the dashboard's /themes page repaints the desktop window within 2 s through ui.prefs.changed" }
+"Remote connection keeps local preferences" = { tests = ["crates/prometheus/tests/desktop_switching.rs::switching_connections_keeps_sessions_preferences_and_launch_choice_right"], note = "desktop-connections.spec.ts: with Homelab shown, the accent colour is patched through a connection of the local daemon; the test then finds it in the Laptop home's ui-prefs.json and not in Homelab's" }
+
+# Group 63.1 (desktop chat). desktop_chat.rs drives desktop-chat.spec.ts
+# in the desktop browser harness against the real daemon and a scripted
+# mock model.
+[desktop-app."Chat transcript rendering"]
+"Jump from the timeline" = { tests = ["crates/prometheus/tests/desktop_chat.rs::desktop_chat_composer_queue_status_bar_and_model_picker"], note = "30 prompts; reopened, the window renders the last 10 with a 30-marker rail; marker 5 renders from prompt 5 and scrolls it into view, Show earlier loads prompts 1-4" }
+"Remote image" = { tests = ["crates/prometheus/tests/desktop_chat.rs::desktop_chat_composer_queue_status_bar_and_model_picker", "crates/prometheus/src/daemon_cmd/host/workspace_fs.rs::paths_are_workspace_relative"], note = "the tool row's image is read with fs.read over the session's own connection (a data URL) and no open_path reaches the shell; the connection here is the local one: remote connections are 64.1 and use the same call" }
+
+[desktop-app."Drafts are durable and never sent for the user"]
+"Session deleted elsewhere" = { tests = ["crates/prometheus/tests/desktop_chat.rs::desktop_chat_composer_queue_status_bar_and_model_picker"], note = "the session is deleted with `sessions delete` while the daemon holds it loaded (the daemon now answers not found for it); the draft moves into the fresh draft with the restore strip and Undo, and no prompt.submit is sent" }
+
+[desktop-app."Composer history and queue editing"]
+"Edit a queued prompt" = { tests = ["crates/prometheus/tests/desktop_chat.rs::desktop_chat_composer_queue_status_bar_and_model_picker"], note = "queue.edit in window one reaches window two through queue.changed; Stop interrupts and pauses the queue in both" }
+"Lost turn blocks the queue" = { tests = ["crates/prometheus/tests/desktop_chat.rs::desktop_chat_composer_queue_status_bar_and_model_picker", "crates/prometheus/src/daemon_cmd/host/queue.rs::an_empty_queue_leaves_no_file_and_a_paused_one_is_kept"], note = "`daemon restart` during a 60 s mock turn with a prompt queued; after re-attaching, the lost turn shows only Discard and the queued prompt does not start until it is discarded" }
+
+[desktop-app."Desktop status bar"]
+"Inspecting context use" = { tests = ["crates/prometheus/tests/desktop_chat.rs::desktop_chat_composer_queue_status_bar_and_model_picker", "crates/pmt-agent/src/turn/breakdown.rs::mcp_and_delegation_tools_have_their_own_categories"] }
+"Bypass is session-scoped" = { tests = ["crates/prometheus/tests/desktop_chat.rs::desktop_chat_composer_queue_status_bar_and_model_picker"], note = "bypass confirmed in session A makes /approvals report YOLO there; session B shows it off and /approvals reports the profile's mode" }
+
+[desktop-app."Composer model picker"]
+"Picker does not change the default" = { tests = ["crates/prometheus/tests/desktop_chat.rs::desktop_chat_composer_queue_status_bar_and_model_picker"] }
+"Favourite for a disconnected provider" = { tests = ["crates/prometheus/tests/desktop_chat.rs::desktop_chat_composer_queue_status_bar_and_model_picker"], note = "deepseek is connected by its secret; `secrets rm` drops its model from Favourites and `secrets set` brings it back between the other two starred models" }
+
+[desktop-app."Subagent route settings are drafts until applied"]
+"Leaving without applying" = { tests = ["crates/prometheus/tests/desktop_chat.rs::desktop_chat_composer_queue_status_bar_and_model_picker"], note = "a provider change without a model is refused at Apply; leaving for the General page discards the draft, no config.patch is sent and config.toml is unchanged" }
+
+# Group 63.2 (desktop panes). desktop_panes.rs drives desktop-panes.spec.ts.
+[desktop-app."File browser pane"]
+"Container session" = { tests = ["crates/prometheus/src/daemon_cmd/host/workspace_fs.rs::a_container_sessions_entries_come_from_the_container"], note = "fs.list/fs.read go through the session's own FileSession; the test gives it a container filesystem (a fake backend that is not the host's) and the entries of src/ come from it, its .gitignore applies and no host path is offered to the opener. A real container is not run here (no Docker on CI)" }
+"Large file preview" = { tests = ["crates/prometheus/tests/desktop_panes.rs::desktop_files_artifacts_preview_and_annotations"], note = "a 40 MiB big.log in the session workspace shows exactly its first 2 MiB with the notice; Open externally reaches the shell's guarded opener (open_path)" }
+
+[desktop-app."Artifacts gallery and suggestions"]
+"Dismissed suggestion stays dismissed" = { tests = ["crates/prometheus/tests/desktop_panes.rs::desktop_files_artifacts_preview_and_annotations"], note = "artifacts.list (session) drives the suggestions; after a reload the dismissed report.html stays hidden, the file is still on disk, the Artifacts view lists it with a jump to its session, and a later write brings the suggestion back" }
+
+[desktop-app."Preview rail and in-app browser"]
+"Hidden page keeps its form state" = { tests = ["crates/prometheus/tests/desktop_panes.rs::desktop_files_artifacts_preview_and_annotations"], note = "the preview is a sandboxed frame of the page's own origin in the window (no popups, downloads or top navigation); Hide keeps it mounted and inert, the frame does not load again" }
+"Page calls a native command" = { tests = ["crates/prometheus/tests/desktop_panes.rs::desktop_files_artifacts_preview_and_annotations"], note = "the shell bridge exists only in the app's own document (the Tauri capability grants `shell` to the app origin only); the page's reveal_in_folder fails and nothing reaches the shell" }
+
+[desktop-app."Annotate mode in the in-app browser"]
+"Password field redaction" = { tests = ["crates/prometheus/tests/desktop_panes.rs::desktop_files_artifacts_preview_and_annotations"], note = "the agent (dist/annotate.js, installed in every frame) redacts in the page: the password and hidden values and a token-like attribute become [redacted]; the attached markup keeps the password field; the snapshot is a rasterized image of the redacted element" }
+"Pins do not send" = { tests = ["crates/prometheus/tests/desktop_panes.rs::desktop_files_artifacts_preview_and_annotations"], note = "three pins saved (one deleted keeps the others' numbers) and Add 1 comment only fill the composer; no prompt.submit is sent" }
+
+# Group 63.3 (desktop windows, modes, terminals, subagents).
+[desktop-app."Windows, tabs and panes"]
+"Popped-out session" = { tests = ["crates/prometheus/tests/desktop_workspace.rs::desktop_windows_tabs_modes_terminals_and_subagents"], note = "Pop out asks the shell for a window on #session=<profile>/<id> (recorded by the harness's Native; the Tauri app opens window-N with the same guards); the second page opened there attaches on its own and both end the turn on the same data-last-seq" }
+
+[desktop-app."Interface modes and layouts"]
+"Returning to advanced mode" = { tests = ["crates/prometheus/tests/desktop_workspace.rs::desktop_windows_tabs_modes_terminals_and_subagents"], note = "files pane + left sidebar hidden in advanced, simple mode (Ctrl+B still works there), back to advanced restores that arrangement; a preset opens what it places" }
+
+[desktop-app."Embedded terminals are daemon-owned PTYs"]
+"Seventeenth terminal" = { tests = ["crates/pmt-gateway/tests/terminals.rs::terminals_are_driver_written_replayed_and_capped_at_sixteen"] }
+"Observer cannot type" = { tests = ["crates/pmt-gateway/tests/terminals.rs::terminals_are_driver_written_replayed_and_capped_at_sixteen"], note = "a client attached as observer gets -32002 `observers cannot write to terminals` for pty.input and pty.open (observer-only connections such as webapp observers get the same message from the observer allowlist); the desktop E2E types into a real shell of the session's workspace" }
+
+[desktop-app."Live subagents frame"]
+"Steering is acknowledged as queued" = { tests = ["crates/prometheus/tests/desktop_workspace.rs::desktop_windows_tabs_modes_terminals_and_subagents"], note = "a background child (30 s mock call) shows in the frame; subagent.steer answers `queued` and the frame says `guidance queued for next checkpoint`; Stop requests the interrupt" }
+
+# Group 63.4 (review pane, memory graph, HUD, management panes, messaging, projects, shortcuts).
+[desktop-app."Git review pane"]
+"Last-turn scope" = { tests = ["crates/prometheus/tests/desktop_review.rs::desktop_review_pane_memory_graph_and_hud", "crates/pmt-worktrees/tests/review.rs::last_turn_shows_edits_and_commits_made_during_the_turn_read_only"], note = "a mock turn writes one.txt and two.txt and commits one.txt through the terminal; last-turn (tree snapshot taken when the turn began vs the working tree now) lists both read-only with no stage/revert/commit controls" }
+"Revert needs confirmation" = { tests = ["crates/prometheus/tests/desktop_review.rs::desktop_review_pane_memory_graph_and_hud"], note = "Revert opens the in-window confirmation naming the file; Cancel keeps it, Revert discards it (the new file is gone from disk)" }
+
+[desktop-app."Memory graph"]
+"Share code is content-free" = { tests = ["crates/prometheus/tests/desktop_review.rs::desktop_review_pane_memory_graph_and_hud"], note = "the decoded `pmg1.` code holds objects with exactly id, x and y; the memory text appears nowhere in it" }
+"Deleting a memory mid-session" = { tests = ["crates/prometheus/tests/desktop_review.rs::desktop_review_pane_memory_graph_and_hud"], note = "the node is deleted through manage.change memory {remove}; the open chat's stored system prompt still holds the memory after another turn, a new session's does not" }
+
+[desktop-app."HUD mode"]
+"Asking about the app underneath" = { tests = ["crates/prometheus/tests/desktop_review.rs::desktop_review_pane_memory_graph_and_hud", "crates/pmt-desktop/src/hud.rs::the_topmost_other_window_under_the_bar_is_picked"], note = "CommandOrControl+Shift+H asks the shell for the HUD window (#hud=<profile>/<id>); the harness's Native reports Firefox / Invoice 42 underneath and the HUD's prompt.submit carries that metadata and no images. The per-OS probes (CoreGraphics via JXA, EnumWindows via PowerShell, xprop/xwininfo) are parsed by unit tests; the real windows are not driven" }
+"Snap on native Wayland" = { tests = ["crates/prometheus/tests/desktop_review.rs::desktop_review_pane_memory_graph_and_hud", "crates/pmt-desktop/src/platform.rs::native_wayland_disables_hud_placement_with_the_reason"] }
+
+[desktop-app."Management panes"]
+"Pausing another profile's job" = { tests = ["crates/prometheus/tests/desktop_manage.rs::desktop_management_messaging_projects_shortcuts_and_profile_files"], note = "with `work` active and All profiles on, Pause on home's job sends manage.change cron_update with profile `home` (over a connection granted to `home`) and the job shows paused" }
+
+[desktop-app."Messaging pane shows saved versus running state"]
+"Saved but not started" = { tests = ["crates/prometheus/tests/desktop_manage.rs::desktop_management_messaging_projects_shortcuts_and_profile_files", "crates/pmt-gateway/src/messaging/pane.rs::each_adapter_has_exactly_one_state"], note = "SLACK_BOT_TOKEN stored while Slack is disabled shows `saved`; enabling it shows `pending_restart` with the Restart adapter banner" }
+
+
+[desktop-app."Repository discovery for the Projects sidebar"]
+"Scanning disabled" = { tests = ["crates/prometheus/tests/desktop_manage.rs::desktop_management_messaging_projects_shortcuts_and_profile_files"], note = "alpha and beta are discovered under projects.repo_scan_roots; unchecking Discover repositories (projects.repo_scan_enabled = false) removes them while the explicit project gamma stays" }
+
+[desktop-app."Fonts, shortcuts, palette and profile files"]
+"Conflicting shortcut" = { tests = ["crates/prometheus/tests/desktop_manage.rs::desktop_management_messaging_projects_shortcuts_and_profile_files"], note = "New session bound to CommandOrControl+G flags both it and the review pane until it changes; the binding is kept machine-wide (ui.prefs keybindings)" }
+"Exported profile has no keys" = { tests = ["crates/prometheus/tests/desktop_manage.rs::desktop_management_messaging_projects_shortcuts_and_profile_files"], note = "the palette's Export profile work writes the archive through `profile export` with the appearance overlay; no member holds the secret value set in `work`" }
+
+# Group 64 (desktop remote connections). desktop_connections.rs and
+# desktop_instances.rs drive the shell core (pmt-desktop) against real
+# daemons (a pinned self-signed dashboard listener, a stand-in `ssh` that
+# runs the remote commands on this machine, a self-installed release
+# fixture); desktop_switching.rs drives desktop-connections.spec.ts in the
+# desktop browser harness with two daemons.
+[desktop-app."Connection registry"]
+"Duplicate URL" = { tests = ["crates/pmt-desktop/src/connections/tests.rs::a_second_connection_to_the_same_normalized_url_is_refused", "crates/prometheus/tests/desktop_connections.rs::a_remote_connection_is_pinned_paired_and_dialed_through_the_shell"] }
+"Plugin lists connections" = { tests = ["crates/pmt-desktop/src/connections/tests.rs::plugins_see_names_kinds_and_the_primary_only"], note = "the plugin UI SDK's host.connections() (capability connections.read) answers with the shell's plugin_connections view: ids, names, kinds and the primary id; URLs, hosts and credentials are never in it" }
+
+[desktop-app."Remote connections are authenticated and encrypted"]
+"Plain HTTP to a LAN host" = ["crates/pmt-desktop/src/connections/tests.rs::plain_http_is_refused_except_to_loopback"]
+"Certificate changed" = { tests = ["crates/prometheus/tests/desktop_connections.rs::a_changed_certificate_stops_the_dials_until_it_is_pinned_again"], note = "a TLS server pinned by Test + Trust comes back with another key: Test latches both fingerprints, dials and Tests are refused without contacting the server (its accept count stays), and Re-pin (connection_trust with the presented key) dials again" }
+
+[desktop-app."SSH connections reuse the local ticket model"]
+"Host key changed" = { tests = ["crates/prometheus/tests/desktop_connections.rs::an_ssh_connection_confirms_its_host_key_and_latches_a_changed_one"], note = "a stand-in ssh with strict host-key checking against the app's known_hosts; after the confirmed key the dial works through ssh -W with a ticket from `daemon ticket` over SSH; a new host key gives `The host key has changed since you last connected` with its fingerprint and no further ssh run" }
+"Remote binary missing" = ["crates/prometheus/tests/desktop_connections.rs::test_reports_a_host_without_prometheus"]
+
+[desktop-app."Gateway switching and scoping"]
+"Approval from a background connection" = { tests = ["crates/prometheus/tests/desktop_switching.rs::switching_connections_keeps_sessions_preferences_and_launch_choice_right"], note = "desktop-connections.spec.ts: a Homelab turn asks for approval after the window went back to Laptop; the card under Other connections answers with approval.respond on the background connection that attached the Homelab session (never on a Laptop socket), and the command ran in Homelab's workspace only" }
+"Failed switch is not remembered" = { tests = ["crates/prometheus/tests/desktop_switching.rs::switching_connections_keeps_sessions_preferences_and_launch_choice_right", "crates/pmt-desktop/src/connections/tests.rs::launch_opens_the_last_connection_that_succeeded"], note = "Open on launch: last used; Homelab connects, the switch to the offline VPS fails, and the reloaded window opens on Homelab" }
+
+[desktop-app."Update every connected instance"]
+"One instance is unreachable" = { tests = ["crates/prometheus/tests/desktop_instances.rs::update_all_updates_the_reachable_instances_and_marks_the_offline_one", "crates/prometheus/tests/desktop_instances.rs::an_owned_instance_reports_its_owner_and_drivers_may_not_update"], note = "Homelab is a self-installed release fixture paired with an admin device: daemon.update starts its updater and its receipt reaches success; the app's signed updater stages its update last; the offline VPS row is unreachable. A Homebrew-owned instance reports the owner's refusal on its row and a driver device is refused (rpc.admin_required)" }
+
+[desktop-app."Agents across connections"]
+"Same profile name on two machines" = ["crates/prometheus/tests/desktop_instances.rs::agents_of_two_machines_share_a_roster_but_mentions_stay_local", "crates/pmt-desktop/src/connections/roster.rs::a_profile_on_two_machines_gets_connection_handles"]
+"Mention does not cross machines" = { tests = ["crates/prometheus/tests/desktop_instances.rs::agents_of_two_machines_share_a_roster_but_mentions_stay_local"], note = "`@research-homelab` submitted on the Laptop connection runs its turn on the Laptop and no session or turn appears on Homelab" }
+
+[distribution-and-update."Desktop packages and signing"]
+"Store install refuses self-update" = ["crates/prometheus/tests/update_channels.rs::desktop_packages_stamp_their_owner_and_the_cli_is_the_bundled_binary"]
+"CLI and desktop cannot skew" = ["crates/prometheus/tests/update_channels.rs::desktop_packages_stamp_their_owner_and_the_cli_is_the_bundled_binary"]
+
+# Group 65 (desktop UI toolset). desktop_ui_tools.rs drives real daemon
+# sessions with the mock model and a protocol client standing in for the
+# desktop window (it advertises the desktop_ui feature and answers ui.*);
+# desktop_ui.rs drives desktop-ui.spec.ts and desktop-onboarding.spec.ts
+# in the desktop browser harness.
+[desktop-app."Desktop UI toolset contract"]
+"No window attached" = { tests = ["crates/prometheus/tests/desktop_ui_tools.rs::window_tools_need_a_window_and_refused_calls_never_reach_it"], note = "a desktop connection without the desktop_ui feature (the closed window) is attached: read_terminal answers {success: false, error: \"read_terminal needs an open Prometheus Desktop window\"} and the mock's next answer ends the turn; with a featured window attached the same tool reaches it as ui.read_terminal with its 30 s deadline" }
+"Turning tips off mid-session" = { tests = ["crates/prometheus/tests/desktop_ui_tools.rs::opt_outs_apply_from_the_next_session_and_only_onboarding_gets_setup_beat", "crates/prometheus/src/chat/session/desktop_prefs.rs::defaults_hide_reactions_only_and_flags_toggle_each_tool"], note = "ui.prefs tips_enabled = false during a session: `tools list --session` of the running session still exposes show_tip after another turn; a session created afterwards does not (gui_tour stays)" }
+
+[desktop-app."Agent reactions"]
+"Reacting to an earlier message" = { tests = ["crates/prometheus/tests/desktop_ui_tools.rs::the_agent_reacts_to_its_own_conversation_only", "crates/prometheus/tests/desktop_ui.rs::the_agent_drives_the_window_through_the_desktop_ui_tools"], note = "with message reactions on, messages_back = 1 sets the agent's reaction on the user message before the latest (session.transcript reactions); in the window (desktop-ui.spec.ts) message.reaction puts 😂 on prompt 1 and none on prompt 2" }
+"Foreign message id" = { tests = ["crates/prometheus/tests/desktop_ui_tools.rs::the_agent_reacts_to_its_own_conversation_only"], note = "a real message id of another session of the profile gives {success: false, error: \"message <id> is not part of this conversation\"}" }
+
+[desktop-app."Terminal pane tools"]
+"Closing a mirror tab" = { tests = ["crates/prometheus/tests/desktop_ui.rs::the_agent_drives_the_window_through_the_desktop_ui_tools"], note = "a background server started by the terminal tool gets a read-only mirror tab (process.list / process.log); read_terminal reads it; close_terminal closes only the tab, which does not come back, and process poll still reports the server running" }
+
+[desktop-app."Preview pane tool"]
+"Blocked private address" = { tests = ["crates/prometheus/tests/desktop_ui_tools.rs::window_tools_need_a_window_and_refused_calls_never_reach_it"], note = "desktop_preview open of http://169.254.169.254/latest/meta-data is refused by the web tools' URL safety policy (cloud metadata endpoint) and the window receives no ui.desktop_preview request" }
+
+[desktop-app."Driving the preview page"]
+"Stale ref" = { tests = ["crates/prometheus/tests/desktop_ui.rs::the_agent_drives_the_window_through_the_desktop_ui_tools"], note = "refs from elements on form.html; after clicking the link to page2.html, clicking e1 answers that the ref is stale and to call elements again" }
+"Typing a password" = { tests = ["crates/prometheus/tests/desktop_ui.rs::the_agent_drives_the_window_through_the_desktop_ui_tools"], note = "drive_preview type into input[type=password]: the approval card shows while the field is still empty; after Allow once the text is typed" }
+
+[desktop-app."Annotating the preview page"]
+"Navigation clears marks" = { tests = ["crates/prometheus/tests/desktop_ui.rs::the_agent_drives_the_window_through_the_desktop_ui_tools", "crates/prometheus/src/daemon_cmd/host/desktop_ui/check.rs::marks_and_actions_name_their_missing_target"], note = "two annotate_preview marks are drawn in the page; following the link leaves none" }
+
+[desktop-app."Reading the window below"]
+"Missing macOS permission" = { tests = ["crates/prometheus/tests/desktop_ui.rs::the_agent_drives_the_window_through_the_desktop_ui_tools", "crates/pmt-desktop/src/below.rs::an_untitled_window_on_macos_names_the_screen_recording_permission"], note = "a harness with macOS facts lists an untitled Safari window beneath the app: the result has app Safari, an empty title and a note naming the Screen Recording permission" }
+
+[desktop-app."Pane focus, tours and tips"]
+"Unknown pane" = ["crates/prometheus/tests/desktop_ui_tools.rs::window_tools_need_a_window_and_refused_calls_never_reach_it", "crates/prometheus/src/daemon_cmd/host/desktop_ui/check.rs::an_unknown_pane_lists_the_five_allowed_ones"]
+"Preset and steps together" = ["crates/prometheus/tests/desktop_ui_tools.rs::window_tools_need_a_window_and_refused_calls_never_reach_it", "crates/prometheus/src/daemon_cmd/host/desktop_ui/check.rs::a_tour_takes_steps_or_a_preset_not_both"]
+
+[desktop-app."Appearance tool"]
+"Unknown layout" = { tests = ["crates/prometheus/tests/desktop_ui.rs::the_agent_drives_the_window_through_the_desktop_ui_tools"], note = "set_theme {layout: cockpit, accent: violet}: the error lists the presets and saved layouts and the accent stays unchanged; a valid accent and mode then apply" }
+
+[desktop-app."Project tool"]
+"Switching project" = { tests = ["crates/prometheus/tests/desktop_ui.rs::the_agent_drives_the_window_through_the_desktop_ui_tools", "crates/prometheus/tests/desktop_ui_tools.rs::switching_project_moves_the_next_command_and_keeps_the_prompt"], note = "a chat opened in project api calls project switch web: the Projects sidebar lists it under web, not api; the daemon test proves the workspace move" }
+
+[desktop-app."First-run onboarding chat"]
+"Regular chats lack the tool" = { tests = ["crates/prometheus/tests/desktop_ui_tools.rs::opt_outs_apply_from_the_next_session_and_only_onboarding_gets_setup_beat", "crates/prometheus/tests/desktop_ui.rs::the_first_launch_opens_the_onboarding_chat"], note = "only the onboarding.ensure session exposes setup_beat; a regular chat's forged setup_beat never reaches the window and shows no card; the onboarding source tag is refused to session.create" }
+"Card deadline" = { tests = ["crates/prometheus/tests/desktop_ui_tools.rs::an_unanswered_setup_card_times_out_and_keeps_the_defaults"], note = "the theme card left unanswered: setup_beat returns that the theme card timed out and the defaults stay in place, recorded as timed out in the session's onboarding record (debug daemons take PMT_TEST_UI_USER_WAIT_SECS = 2 instead of 300 s)" }

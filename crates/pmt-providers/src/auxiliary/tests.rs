@@ -253,7 +253,7 @@ fn task_timeouts_and_purposes() {
         );
     }
     assert_eq!(AuxTask::Title.purpose(), "auxiliary.title");
-    assert_eq!(AuxTask::ALL.len(), 12);
+    assert_eq!(AuxTask::ALL.len(), 13);
     for task in AuxTask::ALL {
         assert_eq!(AuxTask::parse(task.as_str()), Some(*task));
     }

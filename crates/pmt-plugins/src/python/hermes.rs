@@ -205,6 +205,8 @@ fn read_as(dir: &Path, id: String) -> Result<Manifest, Error> {
             report.inferred.registers_locales,
             dir,
         ),
+        dashboard: None,
+        ui: None,
         build: None,
         launch: Some(launch),
         id,

@@ -12,7 +12,7 @@ use jiff::Timestamp;
 use pmt_core::error::Error;
 use pmt_core::id::{MessageId, SessionId};
 use pmt_core::secret::Redactor;
-use rusqlite::{Connection, Row, Transaction, params};
+use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
@@ -424,6 +424,45 @@ impl Store {
             }
             let first = next_seq(tx, session)?;
             insert(tx, session, &rows, first)
+        })
+    }
+
+    /// Sets the `reactions` of message `id` in its host metadata (never
+    /// part of what the model sees); `false` when `id` is no message of
+    /// `session`.
+    ///
+    /// # Errors
+    ///
+    /// `store.busy`, `store.sqlite`.
+    pub fn set_message_reactions(
+        &self,
+        session: SessionId,
+        id: MessageId,
+        reactions: &Value,
+    ) -> Result<bool, Error> {
+        self.write(|tx| {
+            let metadata: Option<Option<String>> = tx
+                .query_row(
+                    "SELECT metadata FROM messages WHERE id = ?1 AND session_id = ?2",
+                    params![id.to_string(), session.to_string()],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(sql)?;
+            let Some(metadata) = metadata else {
+                return Ok(false);
+            };
+            let mut metadata = metadata
+                .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+                .filter(Value::is_object)
+                .unwrap_or_else(|| Value::Object(serde_json::Map::new()));
+            metadata["reactions"] = reactions.clone();
+            tx.execute(
+                "UPDATE messages SET metadata = ?3 WHERE id = ?1 AND session_id = ?2",
+                params![id.to_string(), session.to_string(), metadata.to_string()],
+            )
+            .map_err(sql)?;
+            Ok(true)
         })
     }
 

@@ -39,6 +39,10 @@ pub struct JourneyNode {
     /// used bundled skill); an entry's `user`, `agent`,
     /// `background_review`, `provider`, `consolidation` or `import`.
     pub origin: String,
+    /// How often it was used: a skill's loads, an entry's recalls (the
+    /// memory graph's `used` filter).
+    #[serde(default)]
+    pub uses: u64,
 }
 
 /// `journey.list` result.

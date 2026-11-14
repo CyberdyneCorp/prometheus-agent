@@ -64,6 +64,12 @@ in the same job; timing on the shared matrix
 runners is too noisy to gate on. CI also builds the Tier 2 targets (Windows
 x86_64 and aarch64, Android aarch64).
 
+Gate runs share the checkout's `target/`, so one runs at a time: a second
+`scripts/check` started meanwhile stops and names the running one's pid.
+To free disk space, use `scripts/check --clean` (`just clean`) rather than
+a bare `cargo clean`: it refuses while gates are running, instead of
+deleting build outputs a running gate still needs.
+
 Tests that start a real headless Chromium (`pmt-tools`' `browser` test
 binary) belong to the nextest test group `browser` in
 `.config/nextest.toml`, which runs at most two of them at a time: several

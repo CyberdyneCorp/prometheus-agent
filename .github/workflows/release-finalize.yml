@@ -12,6 +12,11 @@
 # - the container images (prometheus `<v>` and `<v>-full`,
 #   prometheus-sandbox `<v>` and `<v>-desktop`, linux/amd64 + linux/arm64),
 #   pushed by digest on a tag and pinned in the manifest
+# - the desktop packages (macOS dmg and updater archive, Windows msixbundle
+#   and App Installer file, Linux AppImage/deb/rpm), each built around the
+#   release's CLI binary and signed per OS (Developer ID + notarization and
+#   Authenticode on a tag; ad hoc and self-signed in the dry run), and the
+#   desktop app's update feed
 # - the package channels (`cargo xtask release channels`): Homebrew
 #   formula, WinGet manifests and their Windows zips, Termux recipe and the
 #   Nix release pins, published by the Release channels job
@@ -77,8 +82,226 @@ jobs:
             dist/prometheus-universal2-apple-darwin.tar.gz
             dist/prometheus-universal2-apple-darwin.tar.gz.sha256
 
-  finalize:
+  # The desktop packages (spec: distribution-and-update, Desktop packages and
+  # signing): each bundles the release's own `prometheus` binary with its
+  # install receipt. On a tag a failed signing, notarization or check drops
+  # that OS's packages (continue-on-error) and the rest of the release still
+  # publishes; in the dry run it fails the run, and `release verify
+  # --require-desktop` insists on every OS.
+  desktop-prepare:
+    runs-on: ubuntu-24.04
+    env:
+      PLAN: ${{ inputs.plan }}
+      PUBLISHING: ${{ startsWith(github.ref, 'refs/tags/') }}
+      WINDOWS_PUBLISHER: ${{ vars.PMT_WINDOWS_PUBLISHER }}
+      STORE_PUBLISHER: ${{ vars.PMT_STORE_PUBLISHER }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+        with:
+          build-warnings: ""
+          cache-key: release-desktop-prepare
+      - name: MSIX manifests and the App Installer file
+        run: |
+          set -euo pipefail
+          tag=$(jq -r '.announcement_tag' <<<"$PLAN")
+          if [ "$PUBLISHING" = true ]; then
+            [ -n "$WINDOWS_PUBLISHER" ] || { echo "the PMT_WINDOWS_PUBLISHER variable is not set" >&2; exit 1; }
+            publisher=$WINDOWS_PUBLISHER
+            store=${STORE_PUBLISHER:-$WINDOWS_PUBLISHER}
+          else
+            publisher="CN=Prometheus Dry Run"
+            store=$publisher
+          fi
+          cargo xtask release msix --tag "$tag" --publisher "$publisher" \
+            --store-publisher "$store" --out manifests
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-manifests
+          path: manifests
+
+  desktop-macos:
     needs: universal
+    runs-on: macos-15
+    continue-on-error: ${{ startsWith(github.ref, 'refs/tags/') }}
+    env:
+      PLAN: ${{ inputs.plan }}
+      PUBLISHING: ${{ startsWith(github.ref, 'refs/tags/') }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+        with:
+          build-warnings: ""
+          target: aarch64-apple-darwin,x86_64-apple-darwin
+          cache-key: release-desktop-macos
+      - uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
+        with:
+          tool: tauri-cli@2.12.4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: universal-archive
+          path: dist
+      - name: Build, sign and check
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          # The in-app updater trusts the release key (none in a dry run:
+          # that build has no updater).
+          if [ "$PUBLISHING" = true ]; then
+            PMT_DESKTOP_RELEASE_KEY=$(cat crates/pmt-update/keys/primary.pub)
+            export PMT_DESKTOP_RELEASE_KEY
+          fi
+          scripts/ci/desktop-package macos dist desktop
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-package-macos
+          path: desktop
+          if-no-files-found: error
+
+  desktop-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-22.04, arch: x86_64 }
+          - { runner: ubuntu-22.04-arm, arch: aarch64 }
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ startsWith(github.ref, 'refs/tags/') }}
+    env:
+      PLAN: ${{ inputs.plan }}
+      PUBLISHING: ${{ startsWith(github.ref, 'refs/tags/') }}
+      # linuxdeploy is itself an AppImage; no FUSE needed to run it.
+      APPIMAGE_EXTRACT_AND_RUN: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+        with:
+          build-warnings: ""
+          cache-key: release-desktop-linux
+      - uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
+        with:
+          tool: tauri-cli@2.12.4
+      - name: Install the webview libraries and packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libsoup-3.0-dev \
+            librsvg2-dev libxdo-dev libayatana-appindicator3-dev patchelf file rpm libfuse2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: artifacts-build-local-${{ matrix.arch }}-unknown-linux-gnu
+          path: dist
+      - name: Build and check
+        run: |
+          set -euo pipefail
+          if [ "$PUBLISHING" = true ]; then
+            PMT_DESKTOP_RELEASE_KEY=$(cat crates/pmt-update/keys/primary.pub)
+            export PMT_DESKTOP_RELEASE_KEY
+          fi
+          scripts/ci/desktop-package linux dist desktop
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-package-linux-${{ matrix.arch }}
+          path: desktop
+          if-no-files-found: error
+
+  desktop-windows-app:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: windows-2025, arch: x86_64 }
+          - { runner: windows-11-arm, arch: aarch64 }
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ startsWith(github.ref, 'refs/tags/') }}
+    env:
+      PLAN: ${{ inputs.plan }}
+      PUBLISHING: ${{ startsWith(github.ref, 'refs/tags/') }}
+    steps:
+      - run: git config --global core.longpaths true
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+        with:
+          build-warnings: ""
+          cache-key: release-desktop-windows
+      - uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
+        with:
+          tool: tauri-cli@2.12.4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: artifacts-build-local-${{ matrix.arch }}-pc-windows-msvc
+          path: dist
+      - name: Build the app and stamp the receipts
+        shell: pwsh
+        run: |
+          if ($env:PUBLISHING -eq "true") {
+            $env:PMT_DESKTOP_RELEASE_KEY = Get-Content crates/pmt-update/keys/primary.pub -Raw
+          }
+          scripts/ci/desktop-package.ps1 -Step app -Dist dist -Out apps
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-windows-app-${{ matrix.arch }}
+          path: apps
+          if-no-files-found: error
+
+  desktop-windows:
+    needs: [desktop-prepare, desktop-windows-app]
+    runs-on: windows-2025
+    continue-on-error: ${{ startsWith(github.ref, 'refs/tags/') }}
+    env:
+      PLAN: ${{ inputs.plan }}
+      PUBLISHING: ${{ startsWith(github.ref, 'refs/tags/') }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: desktop-windows-app-*
+          path: apps
+          merge-multiple: true
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: desktop-manifests
+          path: manifests
+      - name: Bundle, sign, install and check
+        shell: pwsh
+        env:
+          PMT_WINDOWS_CERT_PFX: ${{ secrets.PMT_WINDOWS_CERT_PFX }}
+          PMT_WINDOWS_CERT_PASSWORD: ${{ secrets.PMT_WINDOWS_CERT_PASSWORD }}
+        run: scripts/ci/desktop-package.ps1 -Step bundle -Apps apps -Manifests manifests -Out desktop
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-package-windows
+          path: |
+            desktop/prometheus-desktop-x86_64-pc-windows-msvc.msixbundle
+            desktop/prometheus-desktop.appinstaller
+          if-no-files-found: error
+      # Not a release asset: the Microsoft Store submission's bundle.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-store
+          path: desktop/store
+          if-no-files-found: error
+
+  finalize:
+    needs: [universal, desktop-macos, desktop-linux, desktop-windows]
+    # Runs when a desktop job failed too: that OS then publishes no desktop
+    # package (on a tag) or the dry run's verify step names it.
+    if: ${{ !cancelled() && needs.universal.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -115,6 +338,12 @@ jobs:
         with:
           name: universal-archive
           path: dist
+      - name: Fetch the desktop packages
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: desktop-package-*
+          path: dist
+          merge-multiple: true
       - name: Build the release tooling
         run: cargo build --locked -p xtask
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
@@ -157,6 +386,8 @@ jobs:
           set -euo pipefail
           tag=$(jq -r '.announcement_tag' <<<"$PLAN")
           for archive in dist/prometheus-*.tar.gz; do
+            # The desktop updater archive is not a CLI target.
+            case "$archive" in dist/prometheus-desktop-*) continue ;; esac
             target=$(basename "$archive" .tar.gz)
             target=${target#prometheus-}
             cargo xtask release sbom --target "$target" --out "dist/prometheus-$target.spdx.json"
@@ -164,6 +395,8 @@ jobs:
           cargo xtask release manifest --dir dist --tag "$tag" --commit "$GITHUB_SHA" \
             --images "$RUNNER_TEMP/images.json"
           cargo xtask release installers --out dist
+          # The desktop app's update feed over the updater archives present.
+          cargo xtask release desktop-feed --dir dist --tag "$tag"
           cargo xtask release channels --dir dist --out "$RUNNER_TEMP/channels"
           cp "$RUNNER_TEMP"/channels/archives/*.zip dist/
           # The reference deployments, attached to the release.
@@ -191,12 +424,22 @@ jobs:
             export SIGNING_KEY
             embedded=
           fi
+          # The desktop files of the OSes whose packages were built (the
+          # macOS updater archive is among the .tar.gz files already).
+          shopt -s nullglob
+          desktop=(dist/prometheus-desktop*.{dmg,msixbundle,AppImage,deb,rpm}
+            dist/prometheus-desktop.appinstaller dist/desktop-*.json)
           cargo xtask release sign --key-env SIGNING_KEY $embedded \
             --public-key-out "$RUNNER_TEMP/signing.pub" \
             dist/prometheus-*.tar.gz dist/prometheus-*.zip dist/release-manifest.json dist/channel-*.json \
-            dist/advisories.json dist/runtime-index.json dist/install.sh dist/install.ps1
+            dist/advisories.json dist/runtime-index.json dist/install.sh dist/install.ps1 "${desktop[@]}"
       - name: Verify every artifact
-        run: cargo xtask release verify --dir dist --key "$RUNNER_TEMP/signing.pub"
+        run: |
+          set -euo pipefail
+          # The dry run insists on every OS's desktop packages; a tag
+          # publishes those whose signing succeeded.
+          if [ "$PUBLISHING" = true ]; then require=; else require=--require-desktop; fi
+          cargo xtask release verify --dir dist --key "$RUNNER_TEMP/signing.pub" $require
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: artifacts-release-finalize
@@ -215,6 +458,8 @@ jobs:
             dist/runtime-index.json
             dist/install.sh
             dist/install.ps1
+            dist/prometheus-desktop*
+            dist/desktop-*.json
       # Not an `artifacts-*` artifact: the channel files are published by the
       # Release channels job, not attached to the GitHub release.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

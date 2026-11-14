@@ -103,4 +103,4 @@ tools:
 
 # Remove build output.
 clean:
-    cargo clean
+    scripts/check --clean

@@ -131,7 +131,7 @@ impl Owner {
             Self::Desktop => "the desktop app's uninstaller (or delete the app)",
             Self::Msix | Self::Msstore => "Settings > Apps > Installed apps",
             Self::SystemPackage => {
-                "the system package manager (apt remove or dnf remove prometheus)"
+                "the system package manager (apt remove or dnf remove prometheus-desktop)"
             }
             Self::Dev => "delete the build output (cargo clean)",
         }
@@ -256,10 +256,26 @@ pub fn inferred_owner(binary: &Path) -> Option<Owner> {
     }
 }
 
-/// `install.json` beside `binary`.
+/// `install.json` beside `binary`; for the CLI inside a macOS app bundle
+/// (`<app>.app/Contents/MacOS/prometheus`), in the bundle's
+/// `Contents/Resources`: `Contents/MacOS` holds only code, which the
+/// bundle's code signature seals as such.
 #[must_use]
 pub fn beside(binary: &Path) -> PathBuf {
-    binary.with_file_name(RECEIPT_FILE)
+    let contents = binary
+        .parent()
+        .filter(|dir| dir.file_name().is_some_and(|n| n == "MacOS"))
+        .and_then(Path::parent)
+        .filter(|dir| dir.file_name().is_some_and(|n| n == "Contents"))
+        .filter(|dir| {
+            dir.parent()
+                .and_then(Path::extension)
+                .is_some_and(|e| e == "app")
+        });
+    match contents {
+        Some(contents) => contents.join("Resources").join(RECEIPT_FILE),
+        None => binary.with_file_name(RECEIPT_FILE),
+    }
 }
 
 /// `<home>/updates/install/<first 16 hex of sha256(binary path)>.json`.
@@ -298,6 +314,22 @@ mod tests {
             installed_at: "2026-10-31T00:00:00Z".to_owned(),
             binary: binary.to_owned(),
         }
+    }
+
+    #[test]
+    fn an_app_bundles_receipt_is_among_its_resources() {
+        use std::path::Path;
+        assert_eq!(
+            beside(Path::new(
+                "/Applications/Prometheus.app/Contents/MacOS/prometheus"
+            )),
+            Path::new("/Applications/Prometheus.app/Contents/Resources/install.json")
+        );
+        assert_eq!(
+            beside(Path::new("/opt/MacOS/prometheus")),
+            Path::new("/opt/MacOS/install.json"),
+            "not a bundle"
+        );
     }
 
     #[test]

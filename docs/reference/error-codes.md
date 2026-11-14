@@ -368,6 +368,7 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `rpc.contract_violation` | `internal` | 70 | The daemon produced a result or event payload that does not match its contract (a bug; it is logged and counted in `prometheus.rpc.contract_violations`). |
 | `rpc.request_closed` | `not_found` | 66 | The answered server-to-client request is not open any more (answered elsewhere, timed out or cancelled); the answer was dropped. |
 | `rpc.retiring` | `unavailable` | 69 | The daemon is restarting and refuses new work; reconnect to continue. |
+| `rpc.admin_required` | `permission_denied` | 77 | The method administers the daemon (`daemon.update`) and the connection's principal is not an admin: only the daemon's own OS user (a control-channel ticket) and devices paired with `--role admin` are. |
 | `rpc.session_denied` | `permission_denied` | 77 | The session is not one of the connection's profile, or a mutating method was called without attaching to it; the error does not say whether the session exists elsewhere. |
 | `rpc.connection` | `unavailable` | 69 | The connection to the daemon could not be opened or was closed (the WebSocket close code is in the message). |
 | `rpc.ticket` | `auth` | 78 | The control channel refused the ticket request (unknown profile or purpose, several profiles for a purpose other than `profile-admin`). |
@@ -376,6 +377,21 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `daemon.not_running` | `unavailable` | 69 | No gateway daemon runs for this home; start it with `prometheus daemon start`. |
 | `daemon.start_failed` | `unavailable` | 69 | `prometheus daemon start` launched the daemon but it exited or did not publish its endpoint in time; see `prometheus logs daemon` and the exit status in the message. |
 | `daemon.no_profile` | `config` | 78 | Every profile of the home failed to load (each error is logged), so the daemon has nothing to serve. |
+| `dashboard.not_running` | `unavailable` | 69 | The gateway daemon has no dashboard listener running; start one with `prometheus dashboard`. |
+| `dashboard.port_in_use` | `config` | 78 | Another process holds the dashboard port; set `dashboard.port` in `daemon.toml` or pass `--port`. |
+| `dashboard.signin_failed` | `auth` | 78 | A dashboard sign-in through `dashboard.auth.mode` failed: the identity provider was unreachable or answered badly, the ID token did not verify (signature, issuer, audience, expiry, nonce), or the subject is not allowed. |
+| `dashboard.bind_refused` | `config` | 78 | A dashboard bound to a non-loopback address needs `dashboard.auth.mode` (with its provider configured and its secret set) and TLS (`dashboard.tls.cert`/`key` or `dashboard.trust_proxy_tls`); the message names the missing item. |
+| `dashboard.portal_signin_required` | `config` | 78 | Registering a dashboard with the account portal uses the profile's portal sign-in; sign in first with `prometheus auth login portal`. |
+| `dashboard.register_failed` | `unavailable` | 69 | The account portal did not register the dashboard's OAuth client: it was unreachable or refused the request (the status is in the message). |
+| `device.not_found` | `not_found` | 66 | No paired device has that name; `prometheus dashboard devices` lists them. |
+| `webapp.disabled` | `unavailable` | 69 | The desktop workspace in the browser is off; set `webapp.enabled = true` in `daemon.toml`. |
+| `desktop.not_installed` | `unavailable` | 69 | No Prometheus Desktop app bundle was found where the packages install it; `prometheus desktop --install` downloads the one matching this binary. |
+| `terminal.limit` | `conflict` | 75 | A daemon keeps at most 16 terminals (`pty.open`); close one first. |
+| `terminal.not_found` | `not_found` | 66 | No such terminal in this session: its shell ended or it belongs to another session (`pty.list`). |
+| `terminal.taken` | `conflict` | 75 | Another window or tab took this terminal over; attach to it again (`pty.attach`) to take it back. |
+| `terminal.pty` | `unavailable` | 69 | The daemon could not open a pseudo-terminal or start the user's shell (`SHELL`, else /bin/sh; `COMSPEC` on Windows). |
+| `process.not_found` | `not_found` | 66 | No such live background process in this session: it was never started there or its record expired (`process.list`). |
+| `queue.entry_not_found` | `not_found` | 66 | The queued input already started or was deleted; `queue.list` shows what is still queued. |
 | `session.busy` | `conflict` | 75 | The session is running a turn; submit again when it finishes. |
 | `session.not_attached` | `permission_denied` | 77 | Every session-addressed method needs the connection to attach to the session first (`session.attach`); the error does not say whether the session exists. |
 | `profile.not_granted` | `permission_denied` | 77 | The request names a profile the connection's ticket does not grant; get a ticket for that profile. |

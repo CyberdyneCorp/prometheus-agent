@@ -53,7 +53,7 @@ adapter-kits = [
     "pmt-adapters-whatsapp/kit",
     "pmt-adapters-webhook/kit",
 ]
-dashboard = []
+dashboard = ["gateway", "dep:pmt-web"]
 acp = []
 mcp = []
 evolve = []
@@ -76,6 +76,7 @@ pmt-delegation.workspace = true
 pmt-worktrees.workspace = true
 pmt-gateway = { workspace = true, optional = true }
 pmt-api = { workspace = true, optional = true }
+pmt-web = { workspace = true, optional = true }
 qrcode = { workspace = true, optional = true }
 pmt-adapters-telegram = { workspace = true, optional = true }
 pmt-adapters-discord = { workspace = true, optional = true }
@@ -105,6 +106,9 @@ pmt-store.workspace = true
 pmt-tools.workspace = true
 pmt-tui = { workspace = true, optional = true }
 pmt-update.workspace = true
+# `prometheus desktop --install` installs the app bundle with the desktop
+# updater's own code; the desktop browser tests drive its shell core.
+pmt-desktop.workspace = true
 pmt-vault.workspace = true
 pulldown-cmark.workspace = true
 ratatui = { workspace = true, optional = true }
@@ -185,6 +189,12 @@ rcgen.workspace = true
 pkcs8.workspace = true
 rustls.workspace = true
 tokio-rustls.workspace = true
+# The dashboard tests: WebSocket clients of /api/rpc and /api/events, and
+# the ES256-signed ID tokens of their fake OpenID Connect provider.
+tokio-tungstenite.workspace = true
+ring.workspace = true
+# Password hashes of the dashboard's password sign-in tests.
+argon2 = { workspace = true, features = ["password-hash"] }
 
 [target.'cfg(unix)'.dev-dependencies]
 # SIGINT for the `logs --follow` exit-130 test.

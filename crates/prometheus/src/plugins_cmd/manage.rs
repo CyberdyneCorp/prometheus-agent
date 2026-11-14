@@ -26,41 +26,47 @@ use crate::context::Context;
 use crate::output::{document, print_raw};
 use crate::plugins_host;
 
+/// A plugin's row in `plugins list --json` and the dashboard's `/plugins`.
+#[derive(Serialize)]
+pub(crate) struct Row<'a> {
+    id: &'a str,
+    version: Option<&'a str>,
+    kind: Option<&'a str>,
+    source: &'a str,
+    state: &'a str,
+    problem: Option<&'a str>,
+    digest: Option<&'a str>,
+    shadowed: &'a [PathBuf],
+}
+
+/// The rows of `statuses`.
+pub(crate) fn rows(statuses: &[Status]) -> Vec<Row<'_>> {
+    statuses
+        .iter()
+        .map(|s| Row {
+            id: &s.id,
+            version: s.version.as_deref(),
+            kind: s.kind.map(pmt_plugins::manifest::Kind::as_str),
+            source: s.source.as_str(),
+            state: s.state.as_str(),
+            problem: s.problem.as_deref(),
+            digest: s.digest.as_deref(),
+            shadowed: &s.shadowed,
+        })
+        .collect()
+}
+
 /// `prometheus plugins list`.
 pub(super) fn list(ctx: &Context<'_>) -> Result<u8, Error> {
     let scope = ctx.scope()?;
     let loaded = plugins_host::for_session(&scope, &cwd()).current();
     if ctx.json {
         #[derive(Serialize)]
-        struct Row<'a> {
-            id: &'a str,
-            version: Option<&'a str>,
-            kind: Option<&'a str>,
-            source: &'a str,
-            state: &'a str,
-            problem: Option<&'a str>,
-            digest: Option<&'a str>,
-            shadowed: &'a [PathBuf],
-        }
-        #[derive(Serialize)]
         struct Listing<'a> {
             profile: &'a str,
             plugins: Vec<Row<'a>>,
         }
-        let plugins = loaded
-            .statuses
-            .iter()
-            .map(|s| Row {
-                id: &s.id,
-                version: s.version.as_deref(),
-                kind: s.kind.map(pmt_plugins::manifest::Kind::as_str),
-                source: s.source.as_str(),
-                state: s.state.as_str(),
-                problem: s.problem.as_deref(),
-                digest: s.digest.as_deref(),
-                shadowed: &s.shadowed,
-            })
-            .collect();
+        let plugins = rows(&loaded.statuses);
         let profile = scope.name().as_str();
         return document("plugins list", &Listing { profile, plugins });
     }

@@ -396,8 +396,9 @@ impl Chat<'_, '_> {
 
     /// The session's model, for the status line.
     pub(super) async fn refresh_model(&mut self) {
-        let params = SessionRef {
-            session_id: self.attached.session.clone(),
+        let params = pmt_rpc::contracts::ModelOptionsParams {
+            session_id: Some(self.attached.session.clone()),
+            profile: None,
         };
         let options = self
             .attached

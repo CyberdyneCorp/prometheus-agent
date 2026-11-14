@@ -32,6 +32,9 @@ pub const MEMORY_ENTRY: &str = "memory.json";
 pub const SECRETS_ENTRY: &str = "secrets.sealed";
 /// The projects and the active project (they live in `state.db`), as JSON.
 pub const PROJECTS_ENTRY: &str = "projects.json";
+/// The desktop app's appearance (theme, fonts, zoom, shortcuts), an
+/// optional overlay the desktop applies after an import.
+pub const APPEARANCE_ENTRY: &str = "desktop-appearance.json";
 
 /// Profile files every export holds.
 const FILES: &[&str] = &["config.toml", "SOUL.md"];
@@ -73,6 +76,8 @@ pub struct ExportOptions {
     pub projects: Option<Vec<u8>>,
     /// The sealed secrets ([`crate::sealed::seal`]).
     pub sealed_secrets: Option<Vec<u8>>,
+    /// The desktop appearance overlay as JSON.
+    pub appearance: Option<Vec<u8>>,
 }
 
 /// Writes `profile` to `output`; returns the manifest.
@@ -119,6 +124,7 @@ fn write_export(
         (MEMORY_ENTRY, &options.memory),
         (PROJECTS_ENTRY, &options.projects),
         (SECRETS_ENTRY, &options.sealed_secrets),
+        (APPEARANCE_ENTRY, &options.appearance),
     ] {
         if let Some(bytes) = bytes {
             let path = staging.join(name);
@@ -276,7 +282,7 @@ impl Staged {
         for member in &self.manifest.members {
             let staged = members::on_disk(&self.dir, &member.path);
             match member.path.as_str() {
-                MEMORY_ENTRY | PROJECTS_ENTRY | SECRETS_ENTRY => {}
+                MEMORY_ENTRY | PROJECTS_ENTRY | SECRETS_ENTRY | APPEARANCE_ENTRY => {}
                 DATABASE => sqlite::restore(&staged, &profile.path().join(DATABASE))?,
                 relative => {
                     let target = members::on_disk(profile.path(), relative);
@@ -295,7 +301,14 @@ impl Staged {
 fn importable(relative: &str) -> bool {
     let top = relative.split('/').next().unwrap_or_default();
     FILES.contains(&relative)
-        || [MEMORY_ENTRY, PROJECTS_ENTRY, SECRETS_ENTRY, DATABASE].contains(&relative)
+        || [
+            MEMORY_ENTRY,
+            PROJECTS_ENTRY,
+            SECRETS_ENTRY,
+            APPEARANCE_ENTRY,
+            DATABASE,
+        ]
+        .contains(&relative)
         || (relative.contains('/') && (DIRS.contains(&top) || SESSION_DIRS.contains(&top)))
 }
 

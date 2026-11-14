@@ -509,6 +509,10 @@ pub struct AuxiliaryConfig {
     /// Voice chat (defaults to the main model).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub voice_chat: Option<AuxiliaryTask>,
+    /// Commit messages of the desktop's review pane (defaults to the main
+    /// model).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub commit_message: Option<AuxiliaryTask>,
 }
 
 impl Default for AuxiliaryConfig {
@@ -528,6 +532,7 @@ impl Default for AuxiliaryConfig {
             goal_judge: None,
             side_question: None,
             voice_chat: None,
+            commit_message: None,
         }
     }
 }

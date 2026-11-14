@@ -13,7 +13,8 @@ use crate::methods::{Need, attached_profile, profile_for, rpc};
 use crate::router::Router;
 use crate::server::Call;
 
-/// Registers `memory.summary`, `autoprune.offer` and `journey.list`.
+/// Registers `memory.summary`, `autoprune.offer`, `journey.list` and
+/// `daemon.update`.
 ///
 /// # Errors
 ///
@@ -22,7 +23,8 @@ pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
     router
         .register::<c::MemorySummaryCall, _, _>(catalog, memory_summary)?
         .register::<c::AutopruneOfferCall, _, _>(catalog, autoprune_offer)?
-        .register::<c::JourneyListCall, _, _>(catalog, journey_list)?;
+        .register::<c::JourneyListCall, _, _>(catalog, journey_list)?
+        .register::<c::DaemonUpdate, _, _>(catalog, daemon_update)?;
     Ok(())
 }
 
@@ -57,5 +59,25 @@ async fn journey_list(
     call.server
         .host()
         .journey(&profile, params.since.as_deref())
+        .map_err(|e| rpc(&e))
+}
+
+/// `daemon.update` (spec: desktop-app, Update every connected instance):
+/// only an admin principal may update the daemon; observers never reach
+/// here (it is not an observer read).
+pub(crate) async fn daemon_update(
+    call: Call,
+    params: c::DaemonUpdateParams,
+) -> Result<c::DaemonUpdated, RpcError> {
+    if !call.conn.grant.admin {
+        return Err(rpc(&pmt_core::error::Error::new(
+            &pmt_core::error::codes::RPC_ADMIN_REQUIRED,
+            "daemon.update is only for an admin of this daemon",
+        )));
+    }
+    call.server
+        .host()
+        .daemon_update(params.check)
+        .await
         .map_err(|e| rpc(&e))
 }

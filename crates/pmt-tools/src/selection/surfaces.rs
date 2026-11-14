@@ -14,6 +14,7 @@ use std::fmt;
 
 use pmt_config::schema::{ToolsConfig, ToolsetsConfig};
 
+use crate::agent_level_desktop::{DESKTOP_UI, ONBOARDING, PROJECT};
 use crate::registry::ToolRegistry;
 use crate::toolset;
 
@@ -29,6 +30,9 @@ pub enum SessionSurface {
     Tui,
     /// The desktop app.
     Desktop,
+    /// The desktop's first-run onboarding chat: a desktop session that
+    /// also gets the `onboarding` toolset (configured as `desktop`).
+    Onboarding,
     /// A scheduled job.
     Cron,
     /// The OpenAI-compatible API server.
@@ -67,7 +71,7 @@ impl SessionSurface {
         match self {
             Self::Cli => "cli".to_owned(),
             Self::Tui => "tui".to_owned(),
-            Self::Desktop => "desktop".to_owned(),
+            Self::Desktop | Self::Onboarding => "desktop".to_owned(),
             Self::Cron => "cron".to_owned(),
             Self::Api => "api".to_owned(),
             Self::Acp => "acp".to_owned(),
@@ -87,7 +91,9 @@ impl SessionSurface {
     #[must_use]
     pub fn default_toolset(&self, registry: &ToolRegistry) -> String {
         match self {
-            Self::Cli | Self::Tui | Self::Desktop | Self::Cron => "core".to_owned(),
+            Self::Cli | Self::Tui | Self::Desktop | Self::Onboarding | Self::Cron => {
+                "core".to_owned()
+            }
             Self::Api => "api_server".to_owned(),
             Self::Acp => "acp".to_owned(),
             Self::AcpUnattended => "acp_unattended".to_owned(),
@@ -126,7 +132,29 @@ impl SessionSurface {
                 out.push(name.clone());
             }
         }
+        // GUI surfaces switch projects by default (spec: projects, Project
+        // tool for GUI sessions).
+        let gui = matches!(self, Self::Tui | Self::Desktop | Self::Onboarding);
+        if gui
+            && tools.enabled_toolsets.iter().any(|n| n == "core")
+            && !out.iter().any(|n| n == PROJECT)
+        {
+            out.push(PROJECT.to_owned());
+        }
         out
+    }
+
+    /// The surface-gated toolsets this surface folds in (spec:
+    /// desktop-app, Desktop UI toolset contract; First-run onboarding
+    /// chat): `desktop_ui` for desktop sessions, plus `onboarding` for the
+    /// onboarding chat. No other surface ever gets them.
+    #[must_use]
+    pub fn folded_toolsets(&self) -> &'static [&'static str] {
+        match self {
+            Self::Desktop => &[DESKTOP_UI],
+            Self::Onboarding => &[DESKTOP_UI, ONBOARDING],
+            _ => &[],
+        }
     }
 }
 

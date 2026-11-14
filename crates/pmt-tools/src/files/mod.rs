@@ -199,6 +199,13 @@ impl FileSession {
         Ok(path)
     }
 
+    /// Whether paths are host paths (the local backend), so a client on
+    /// this machine may open them itself.
+    #[must_use]
+    pub fn on_host(&self) -> bool {
+        self.backend().uses_host_filesystem()
+    }
+
     fn backend(&self) -> &dyn FileBackend {
         self.setup.backend.as_ref()
     }

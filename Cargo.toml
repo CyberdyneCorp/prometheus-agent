@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "xtask"]
+exclude = ["apps/desktop/src-tauri"]
 default-members = ["crates/*"]
 
 [workspace.package]
@@ -15,6 +16,8 @@ repository = "https://github.com/CyberdyneCorp/prometheus-agent"
 [workspace.dependencies]
 pmt-agent = { path = "crates/pmt-agent" }
 pmt-api = { path = "crates/pmt-api" }
+pmt-web = { path = "crates/pmt-web" }
+pmt-desktop = { path = "crates/pmt-desktop" }
 pmt-automation = { path = "crates/pmt-automation" }
 pmt-config = { path = "crates/pmt-config" }
 pmt-core = { path = "crates/pmt-core" }
@@ -89,7 +92,7 @@ md-5 = "0.11"
 # Base32 TOTP seeds.
 data-encoding = "2.11"
 # Terminal QR codes for `gateway whatsapp pair` (no image rendering).
-qrcode = { version = "0.14", default-features = false }
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 reqwest = { version = "0.13", default-features = false }
 # TLS for every outbound client: rustls on the ring provider (aws-lc-sys
 # carries the OpenSSL license, outside deny.toml) with the platform verifier,
@@ -103,10 +106,14 @@ ring = "0.17"
 x509-parser = { version = "0.18", default-features = false, features = ["verify"] }
 # The OS roots exported into the CA bundle handed to sandboxed children.
 rustls-native-certs = "0.8"
+# Certificate parsing for public-key fingerprints (already rustls's own verifier).
+webpki = { package = "rustls-webpki", version = "0.103", default-features = false, features = ["alloc", "ring"] }
 # Decrypts an encrypted PKCS#8 client key of an mTLS MCP server
 # (`client_key_password_secret`).
 pkcs8 = { version = "0.10", default-features = false, features = ["encryption", "pem", "std"] }
 base64 = "0.23"
+# Daemon-owned terminals (desktop-app, Embedded terminals are daemon-owned PTYs).
+portable-pty = "0.9"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 resvg = { version = "0.49", default-features = false }
 tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect"] }

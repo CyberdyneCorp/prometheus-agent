@@ -119,6 +119,19 @@ pub enum ControlRequest {
     /// `<home>/logs/task-dump-<UTC>.txt` without stopping (`prometheus
     /// debug dump-tasks`); answers its path.
     DumpTasks,
+    /// Revokes a paired remote device (`prometheus daemon revoke-device`),
+    /// closing its open sockets with 4401; answered by the gateway itself,
+    /// so it works on a daemon built without the dashboard.
+    RevokeDevice {
+        /// The device's name.
+        name: String,
+    },
+    /// Opens, reports or stops the web dashboard's listener (`prometheus
+    /// dashboard`).
+    Dashboard {
+        /// What to do.
+        action: DashboardAction,
+    },
     /// A graceful drain and exit; `restart` marks the daemon retiring so
     /// it refuses new work while it drains.
     Stop {
@@ -126,6 +139,95 @@ pub enum ControlRequest {
         #[serde(default)]
         restart: bool,
     },
+}
+
+/// A `dashboard` control request.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "do", rename_all = "snake_case", deny_unknown_fields)]
+pub enum DashboardAction {
+    /// Starts the listener unless it runs (`host`/`port` override
+    /// `daemon.toml` for the daemon's lifetime) and mints a one-time
+    /// login link.
+    Open {
+        /// `--host`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        host: Option<String>,
+        /// `--port`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        port: Option<u16>,
+        /// The page the login link lands on (`/app` for the webapp).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        next: Option<String>,
+    },
+    /// The running listener's URL.
+    Status,
+    /// Stops the listener; the daemon keeps running.
+    Stop,
+    /// Mints a one-use pairing code (10 minutes) for a device.
+    Pair {
+        /// The device's name.
+        name: String,
+        /// `driver` or `observer`.
+        role: String,
+    },
+    /// The paired devices.
+    Devices,
+    /// Signs every browser out (`prometheus webapp --sign-out`); paired
+    /// devices stay signed in.
+    SignOut,
+}
+
+/// A paired device, as `Devices` lists it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeviceEntry {
+    /// Its name.
+    pub name: String,
+    /// `driver` or `observer`.
+    pub role: String,
+    /// The profiles it may use (empty: every served profile).
+    #[serde(default)]
+    pub profiles: Vec<String>,
+    /// When it was paired (RFC 3339).
+    pub paired_at: String,
+    /// When its credential last rotated (RFC 3339).
+    pub rotated_at: String,
+}
+
+/// The dashboard listener, as a `dashboard` control request reports it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DashboardState {
+    /// The dashboard's URL (`http://127.0.0.1:9120/`).
+    pub url: String,
+    /// A one-time login URL (`Open` only); single use, 60 s.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub login_url: Option<String>,
+    /// `Open` started the listener (it was not running).
+    #[serde(default)]
+    pub started: bool,
+    /// `Pair`: the one-use pairing code.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pairing_code: Option<String>,
+    /// `Devices`: the paired devices.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub devices: Vec<DeviceEntry>,
+    /// `SignOut`: how many browser sessions ended.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signed_out: Option<u64>,
+}
+
+impl DashboardState {
+    /// A state naming only `url`.
+    #[must_use]
+    pub fn at(url: impl Into<String>) -> Self {
+        Self {
+            url: url.into(),
+            login_url: None,
+            started: false,
+            pairing_code: None,
+            devices: Vec::new(),
+            signed_out: None,
+        }
+    }
 }
 
 /// A file sent with a `gateway send` message.
@@ -337,6 +439,9 @@ pub struct ControlResponse {
     /// `PluginsReload`: the reload report.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reloaded: Option<String>,
+    /// `Dashboard`: the listener.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dashboard: Option<DashboardState>,
     /// `DumpTasks`: the dump's path.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dumped: Option<String>,

@@ -1,0 +1,17 @@
+{
+  "name": "prometheus-dashboard",
+  "private": true,
+  "description": "The Prometheus web dashboard SPA, built into web/dist and embedded in the binary",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "check": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p e2e/tsconfig.json && node build.mjs --check",
+    "e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@types/node": "22.20.5",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3"
+  }
+}

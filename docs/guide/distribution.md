@@ -16,6 +16,36 @@ the command that does:
 | Container | `docker pull ghcr.io/cyberdynecorp/prometheus` | `image` | pull the new image |
 | Offline bundle | `install.sh --bundle FILE` | `bundle` | `prometheus update --from-bundle FILE` |
 
+## Desktop packages
+
+Each release also ships the desktop app, built around the same
+`prometheus` binary as that version's archives, so the CLI a desktop
+package puts on PATH always reports the app's version:
+
+| Package | Signed with | CLI on PATH | Receipt owner | Updated by |
+|---|---|---|---|---|
+| macOS `.dmg` (universal, macOS 12+) | Developer ID, notarized and stapled | Settings → Command-line tool links `~/.local/bin/prometheus` | `desktop` | the app's updater |
+| Windows `.msixbundle` (x64, arm64; Windows 10 1809+) | Authenticode | execution aliases `prometheus.exe`, `pmt.exe` | `msix` | App Installer (checks on every launch) |
+| Microsoft Store (its own identity) | the Store | execution aliases `prometheus.exe`, `pmt.exe` | `msstore` | the Microsoft Store |
+| Linux `.AppImage` | minisign | Settings → Command-line tool links `~/.local/bin/prometheus` to the AppImage, which runs its CLI when started under that name | `desktop` | the app's updater |
+| Linux `.deb`, `.rpm` (`prometheus-desktop`) | minisign | `/usr/bin/prometheus` | `system-package` | `apt` / `dnf` |
+
+In an app bundle the receipt lives in `Contents/Resources/install.json`
+(`Contents/MacOS` holds only code); elsewhere it sits beside the binary.
+The deb and rpm keep the CLI and its receipt in `/usr/lib/prometheus-desktop`
+and link `/usr/bin/prometheus` to it, leaving an existing
+`/usr/bin/prometheus` of another package alone. The Release workflow
+builds every package, signs it per OS and checks it by installing it on the
+runner (the dry run on a pull request signs ad hoc on macOS and with a
+self-signed certificate on Windows, and `cargo xtask release verify
+--require-desktop` insists on every OS). On a tag, an OS whose
+notarization, Authenticode or MSIX signing fails publishes no desktop
+package; the rest of the release still ships. The tag build needs the
+`APPLE_*` signing and notarization secrets, `PMT_WINDOWS_CERT_PFX` and
+`PMT_WINDOWS_CERT_PASSWORD` with the `PMT_WINDOWS_PUBLISHER` variable (the
+certificate's subject), and for the Store submission the `PMT_STORE_*`
+secrets and the `PMT_STORE_PUBLISHER` variable.
+
 A WinGet portable install runs no scripts, so it has no receipt:
 Prometheus recognises the WinGet packages directory it runs from. A source
 build has no receipt either and says so:

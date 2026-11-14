@@ -38,6 +38,9 @@ Every tool name the shipped toolsets refer to, and every shipped toolset. Pages 
 | `safe` |  | `web`, `vision`, `image_gen` |  | Web, vision and image generation; nothing that executes |
 | `webhook-safe` | `web_search`, `web_extract`, `vision_analyze`, `clarify` |  |  | Read-only web and vision tools for webhook-triggered runs; nothing that executes or writes |
 | `coding` | `web_search`, `web_extract`, `terminal`, `process`, `read_file`, `write_file`, `patch`, `search_files`, `vision_analyze`, `skills_list`, `skill_view`, `skill_manage`, `browser_exec`, `browser_cdp`, `browser_dialog`, `browser_vault`, `browser_close_profile`, `todo`, `memory`, `session_search`, `clarify`, `execute_code`, `delegate_task`, `manage_connections` |  | posture | Software work: core without media generation, speech, scheduling or computer use |
+| `project` | `project` |  | default-off | Switch or create the session's project (on by default for desktop and tui) |
+| `desktop_ui` | `react_to_message`, `read_terminal`, `close_terminal`, `desktop_preview`, `drive_preview`, `annotate_preview`, `read_window_below`, `focus_pane`, `gui_tour`, `show_tip`, `set_theme` |  |  | The desktop window: reactions, terminal and preview panes, tours, tips, appearance |
+| `onboarding` | `setup_beat` |  |  | The first-run onboarding chat's setup cards |
 | `acp` |  | `coding` |  | The coding tools for ACP editor sessions |
 | `acp_unattended` | `web_search`, `web_extract`, `read_file`, `write_file`, `patch`, `search_files`, `vision_analyze`, `skills_list`, `skill_view`, `skill_manage`, `browser_cdp`, `browser_dialog`, `browser_vault`, `browser_close_profile`, `todo`, `memory`, `session_search`, `clarify`, `delegate_task`, `manage_connections` |  |  | ACP tools for clients that cannot answer prompts: no shell or code execution |
 | `api_server` | `web_search`, `web_extract`, `terminal`, `process`, `read_file`, `write_file`, `patch`, `search_files`, `vision_analyze`, `image_generate`, `skills_list`, `skill_view`, `skill_manage`, `browser_exec`, `browser_cdp`, `browser_dialog`, `browser_vault`, `browser_close_profile`, `todo`, `memory`, `session_search`, `execute_code`, `delegate_task`, `cronjob`, `manage_connections` |  |  | The core tools without speech, clarify and computer use, for API server callers |
@@ -179,3 +182,55 @@ Toolsets: `video_gen`.
 ### `send_message`
 
 Toolsets: `messaging`.
+
+### `project`
+
+Toolsets: `project`.
+
+### `react_to_message`
+
+Toolsets: `desktop_ui`.
+
+### `read_terminal`
+
+Toolsets: `desktop_ui`.
+
+### `close_terminal`
+
+Toolsets: `desktop_ui`.
+
+### `desktop_preview`
+
+Toolsets: `desktop_ui`.
+
+### `drive_preview`
+
+Toolsets: `desktop_ui`.
+
+### `annotate_preview`
+
+Toolsets: `desktop_ui`.
+
+### `read_window_below`
+
+Toolsets: `desktop_ui`.
+
+### `focus_pane`
+
+Toolsets: `desktop_ui`.
+
+### `gui_tour`
+
+Toolsets: `desktop_ui`.
+
+### `show_tip`
+
+Toolsets: `desktop_ui`.
+
+### `set_theme`
+
+Toolsets: `desktop_ui`.
+
+### `setup_beat`
+
+Toolsets: `onboarding`.

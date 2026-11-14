@@ -77,32 +77,46 @@ macro_rules! event {
 }
 
 mod automation;
+mod chat;
 mod cron;
+mod desktop;
 mod files;
 mod journey;
 mod local;
 mod lsp;
+mod manage;
 mod messaging;
 mod moa;
 mod observability;
+mod review;
 mod security;
+mod terminal;
 mod tui;
 mod turn;
+mod ui;
 mod upkeep;
+mod workspace;
 mod worktree;
 pub use automation::*;
+pub use chat::*;
 pub use cron::*;
+pub use desktop::*;
 pub use files::*;
 pub use journey::*;
 pub use local::*;
 pub use lsp::*;
+pub use manage::*;
 pub use messaging::*;
 pub use moa::*;
 pub use observability::*;
+pub use review::*;
 pub use security::*;
+pub use terminal::*;
 pub use tui::*;
 pub use turn::*;
+pub use ui::*;
 pub use upkeep::*;
+pub use workspace::*;
 pub use worktree::*;
 
 /// A `<major>.<minor>` protocol version on the wire.
@@ -175,6 +189,10 @@ pub struct ClientCapabilities {
     /// understands anyway.
     #[serde(default)]
     pub events: Vec<String>,
+    /// Optional client features (`desktop_ui`: the desktop UI toolset's
+    /// `ui.*` requests go to this client).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub features: Vec<String>,
 }
 
 /// `rpc.hello` params: the first request on every connection.
@@ -213,6 +231,23 @@ pub struct PlatformSupport {
     pub target: String,
     /// `tier1`, `tier2` or `unsupported`.
     pub tier: String,
+    /// The support matrix of this host, from runtime probes (spec:
+    /// web-dashboard, Honest platform support matrix).
+    #[serde(default)]
+    pub features: Vec<FeatureSupport>,
+}
+
+/// One row of the platform support matrix.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FeatureSupport {
+    /// The feature (`sandbox.local`, `containers`...).
+    pub feature: String,
+    /// `supported`, `degraded` or `unsupported`.
+    pub state: String,
+    /// What the probe found: the mechanism in use, or what is missing and
+    /// whether the operating system or a dependency lacks it.
+    pub reason: String,
 }
 
 /// `rpc.hello` result.
@@ -484,6 +519,10 @@ pub struct SessionListParams {
     /// At most this many, newest activity first (default 50).
     #[serde(default)]
     pub limit: Option<u32>,
+    /// Also hidden sessions: canonical Bot Chats, archived and hidden
+    /// ones.
+    #[serde(default)]
+    pub include_hidden: bool,
 }
 
 /// One listed session.
@@ -498,6 +537,9 @@ pub struct SessionSummary {
     pub started_at: String,
     /// Whether a turn is running in the daemon.
     pub live: bool,
+    /// Its project (`prj_...`), when it has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<String>,
 }
 
 /// `session.list` result.
@@ -574,6 +616,9 @@ pub struct TranscriptMessage {
     pub role: String,
     /// Its text, when it has any.
     pub text: Option<String>,
+    /// Its reactions (spec: desktop-app, Agent reactions).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reactions: Vec<Reaction>,
 }
 
 /// `session.transcript` result.
@@ -627,6 +672,10 @@ pub struct ContextUsage {
     /// The subscription the current route bills, when it is one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subscription: Option<SubscriptionStatus>,
+    /// `tokens` by category; they sum to `tokens` (empty when the session
+    /// is not loaded).
+    #[serde(default)]
+    pub categories: Vec<ContextCategory>,
 }
 
 /// A subscription's status in `session.context_usage`.
@@ -707,6 +756,9 @@ pub enum PromptImage {
     /// A blob reference (`blob:sha256:<hex>`) of one of the session's
     /// earlier user messages.
     Blob(String),
+    /// The image itself, as a `data:<mime>;base64,` URL (a snapshot the
+    /// desktop made, such as an annotation's).
+    Data(String),
 }
 
 /// The `session.event` type of a notice a command posts after it answered

@@ -5,11 +5,10 @@
 //! configuration value. All of them read: none rebuilds the session's
 //! system prompt, swaps its toolset or reloads its memory snapshot.
 
-use pmt_config::schema::ModelAlias;
 use pmt_core::error::Error;
 use pmt_rpc::contracts::{
     BannerInfo, ClientKind, CommandCatalog, CommandEntry, CommandSource, Completion, Completions,
-    ConfigValue, Disposition, FrozenPrompt, ModelOption, ModelOptions,
+    ConfigValue, Disposition, FrozenPrompt, SubcommandEntry,
 };
 use pmt_tools::environments::Environments;
 use pmt_tools::files::backend::Kind;
@@ -33,15 +32,39 @@ fn surface(client: ClientKind) -> Surface {
     }
 }
 
-fn disposition(runs: bool) -> (Disposition, Option<String>) {
-    if runs {
-        (Disposition::Exec, None)
-    } else {
-        (
-            Disposition::Unavailable,
-            Some("not available on this surface".to_owned()),
-        )
+/// Where `/name` (run on `surfaces`) stands on `surface`; the reason of
+/// an unavailable command is authored here once and shown verbatim by
+/// every client.
+fn disposition(
+    name: &str,
+    surfaces: &[Surface],
+    surface: Surface,
+) -> (Disposition, Option<String>) {
+    if surfaces.contains(&surface) {
+        return (Disposition::Exec, None);
     }
+    let terminal = |s: &Surface| matches!(s, Surface::Cli | Surface::Tui);
+    let reason = if surfaces.iter().any(terminal) && !terminal(&surface) {
+        format!("/{name} is only available in the terminal interface.")
+    } else {
+        "not available on this surface".to_owned()
+    };
+    (Disposition::Unavailable, Some(reason))
+}
+
+fn subcommand_entries(command: &str, surface: Surface) -> Vec<SubcommandEntry> {
+    crate::slash::subcommands(command)
+        .iter()
+        .map(|sub| {
+            let (disposition, reason) =
+                disposition(&format!("{command} {}", sub.name), sub.surfaces, surface);
+            SubcommandEntry {
+                name: sub.name.to_owned(),
+                disposition,
+                reason,
+            }
+        })
+        .collect()
 }
 
 /// Every command of `registry` with its disposition on `surface`.
@@ -54,7 +77,7 @@ pub(super) fn catalog(
         .builtins()
         .iter()
         .map(|command| {
-            let (disposition, reason) = disposition(command.on(surface));
+            let (disposition, reason) = disposition(command.name, command.surfaces, surface);
             let client = CLIENT_COMMANDS.contains(&command.name);
             CommandEntry {
                 name: command.name.to_owned(),
@@ -68,11 +91,12 @@ pub(super) fn catalog(
                 },
                 disposition,
                 reason,
+                subcommands: subcommand_entries(command.name, surface),
             }
         })
         .collect();
     commands.extend(registry.externals().map(|external| {
-        let (disposition, reason) = disposition(external.surfaces.contains(&surface));
+        let (disposition, reason) = disposition(&external.name, &external.surfaces, surface);
         CommandEntry {
             name: external.name.clone(),
             aliases: external.aliases.clone(),
@@ -84,6 +108,7 @@ pub(super) fn catalog(
             },
             disposition,
             reason,
+            subcommands: Vec::new(),
         }
     }));
     commands.sort_by(|a, b| a.name.cmp(&b.name));
@@ -149,56 +174,6 @@ impl DaemonHost {
             })
             .collect();
         Completions { items }
-    }
-
-    pub(super) async fn models_of(
-        &self,
-        profile: &Profile,
-        session: &str,
-    ) -> Result<ModelOptions, Error> {
-        let id = session_id(session)?;
-        let loaded = profile.loaded.lock().await.get(&id).cloned();
-        let current = loaded.map(|s| {
-            let target = s.live.model.target();
-            ModelOption {
-                id: format!("{}/{}", target.provider, target.model.unwrap_or_default()),
-                provider: target.provider,
-                context_window: None,
-            }
-        });
-        let scope = profile.scope();
-        let mut models: Vec<ModelOption> = current.iter().cloned().collect();
-        for alias in scope.config().model.aliases.values() {
-            let (provider, model) = match alias {
-                ModelAlias::Ref(reference) => match reference.split_once('/') {
-                    Some((provider, model)) => (provider.to_owned(), model.to_owned()),
-                    None => continue,
-                },
-                ModelAlias::Route(route) => (route.provider.clone(), route.model.clone()),
-            };
-            let id = format!("{provider}/{model}");
-            if !models.iter().any(|m| m.id == id) {
-                models.push(ModelOption {
-                    id,
-                    provider,
-                    context_window: None,
-                });
-            }
-        }
-        // The Mixture of Agents provider's models are its presets.
-        for id in crate::model_cmd::picker::preset_ids(scope.config()) {
-            if !models.iter().any(|m| m.id == id) {
-                models.push(ModelOption {
-                    id,
-                    provider: pmt_providers::moa::PROVIDER_ID.to_owned(),
-                    context_window: None,
-                });
-            }
-        }
-        Ok(ModelOptions {
-            current: current.map(|c| c.id),
-            models,
-        })
     }
 
     /// What the TUI's banner lists: the loaded session's tools and

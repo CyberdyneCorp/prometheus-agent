@@ -83,7 +83,9 @@ impl Router {
     ///
     /// # Errors
     ///
-    /// `-32601` for a name the catalog does not index as a method, `-32602`
+    /// `-32601` for a name the catalog does not index as a method, `-32002
+    /// session.observer` for a writer called on an observation-only
+    /// connection, `-32602`
     /// for params that break the contract, `-32006 rpc.not_served` for an
     /// indexed method without a handler, the handler's error, or `-32099`
     /// for a result that breaks its contract.
@@ -98,6 +100,7 @@ impl Router {
         if catalog.entry(method).is_none_or(|e| e.kind != Kind::Method) {
             return Err(RpcError::unknown_method(method));
         }
+        crate::observer::check(call.conn.grant.observer_only, method)?;
         let Some(handler) = self.handlers.get(method) else {
             let err = Error::new(
                 &codes::RPC_NOT_SERVED,

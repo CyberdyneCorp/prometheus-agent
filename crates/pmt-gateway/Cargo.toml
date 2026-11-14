@@ -8,6 +8,8 @@ publish.workspace = true
 repository.workspace = true
 
 [dependencies]
+# Terminal output travels base64 in `pty.output`.
+base64.workspace = true
 bytes.workspace = true
 futures-util.workspace = true
 # Random instance ids, epochs, tickets and server-request ids.
@@ -28,10 +30,16 @@ pmt-rpc.workspace = true
 pmt-store.workspace = true
 # vault.* methods.
 pmt-vault.workspace = true
+# Daemon-owned terminals (`pty.*`).
+portable-pty.workspace = true
+# The remote attachment listener's self-signed certificate.
+rcgen.workspace = true
 # Group mention patterns (`gateway.groups.mention_patterns`).
 regex.workspace = true
 # Adapters build their HTTP clients through the gateway's proxy rules.
 reqwest.workspace = true
+# TLS of the remote attachment listener (and the dashboard's, through `cert`).
+rustls.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 # Tickets are kept only as hashes; the Windows control pipe is named by
@@ -42,13 +50,19 @@ sysinfo.workspace = true
 # The conformance kit writes the files it sends into a scratch directory.
 tempfile.workspace = true
 tokio = { workspace = true, features = ["net", "io-util"] }
+# The paired device registry (`run/devices.toml`).
+toml.workspace = true
+tokio-rustls.workspace = true
 tokio-tungstenite.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
+# The remote listener's `?profiles=` query.
+url.workspace = true
+# Public-key fingerprints of the listeners' certificates.
+webpki.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["net", "io-util", "test-util"] }
-toml.workspace = true
 tracing-subscriber.workspace = true
 
 [lints]

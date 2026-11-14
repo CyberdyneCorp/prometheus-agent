@@ -37,6 +37,31 @@ use crate::context::Context;
 /// `home.locked` (75) when a daemon or chat holds the home, `config.*`
 /// (78) for `daemon.toml` or when no profile loads, listener errors.
 pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result<u8, Error> {
+    run_with(home, ctx, replace_locks, None)
+}
+
+/// Where `prometheus serve` opens the dashboard listener at start.
+#[derive(Debug, Clone, Default)]
+pub struct ServeDashboard {
+    /// `--host`.
+    pub host: Option<String>,
+    /// `--port`.
+    pub port: Option<u16>,
+}
+
+/// Runs the daemon in the foreground, opening the dashboard listener at
+/// start when `dashboard` is set (`prometheus serve`): a listener that
+/// may not bind fails the daemon (78) instead of running without it.
+///
+/// # Errors
+///
+/// As [`run`]; `dashboard.bind_refused` and `dashboard.port_in_use` (78).
+pub(crate) fn run_with(
+    home: &Path,
+    ctx: &Context<'_>,
+    replace_locks: bool,
+    dashboard: Option<&ServeDashboard>,
+) -> Result<u8, Error> {
     let span = tracing::info_span!("daemon", component = "gateway");
     let _daemon = span.enter();
     let layout = ctx.home()?;
@@ -74,16 +99,8 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result
                 )?
                 .with_turn_cap(config.gateway.limits.max_concurrent_sessions),
             );
-            let mut options = ServerOptions::new(identity(), host.names());
-            options.rpc = config.daemon.rpc.clone();
-            options.idle_session_close = Duration::from_secs(config.daemon.idle_session_close_secs);
-            options.max_live_client_sessions = config.gateway.limits.max_live_client_sessions;
-            options.crash_reporter = Some(Arc::new(crate::startup::crash_reporter(
-                Some(&home.to_path_buf()),
-                ctx.launch,
-            )));
-            options.health_url = Some(health_url);
-            options.home = Some(home.to_path_buf());
+            DaemonHost::adopt(&host);
+            let options = server_options(home, ctx, &config, host.names(), health_url);
             let watcher = pmt_core::spawn::spawn(super::host::watch(Arc::clone(&host)));
             let sweeper = pmt_core::spawn::spawn(super::host::sweep_worktrees(Arc::clone(&host)));
             let scheduler = pmt_core::spawn::spawn(super::host::schedule_cron(Arc::clone(&host)));
@@ -117,7 +134,7 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result
                 ctx.launch,
                 enabled_adapters(&scopes_of(&server, &host)),
             );
-            start_api(&config, &server, &host).await;
+            let _listeners = start_listeners(home, &config, &server, &host, dashboard).await?;
             if let Some(systemd) = &systemd {
                 systemd.notify("READY=1");
             }
@@ -138,6 +155,114 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result
     // Turns still running past the drain are abandoned with the runtime.
     runtime.shutdown_timeout(Duration::from_secs(1));
     Ok(exit)
+}
+
+/// How the daemon's server is set up from `daemon.toml` and the host
+/// (with the platform support matrix probed now).
+fn server_options(
+    home: &Path,
+    ctx: &Context<'_>,
+    config: &DaemonConfig,
+    profiles: Vec<String>,
+    health_url: String,
+) -> ServerOptions {
+    let mut options = ServerOptions::new(identity(), profiles);
+    options.rpc = config.daemon.rpc.clone();
+    options.idle_session_close = Duration::from_secs(config.daemon.idle_session_close_secs);
+    options.max_live_client_sessions = config.gateway.limits.max_live_client_sessions;
+    options.crash_reporter = Some(Arc::new(crate::startup::crash_reporter(
+        Some(&home.to_path_buf()),
+        ctx.launch,
+    )));
+    options.health_url = Some(health_url);
+    options.home = Some(home.to_path_buf());
+    options.platform_features = super::support_matrix::probe(home);
+    options.allowed_origins = pmt_rpc::origins::DESKTOP_ORIGINS
+        .iter()
+        .map(|o| (*o).to_owned())
+        .collect();
+    options
+}
+
+/// The network surfaces kept alive while the daemon runs.
+#[derive(Default)]
+struct Listeners {
+    _remote: Option<pmt_gateway::remote::RemoteListener>,
+}
+
+/// The HTTP surfaces: the API server, the dashboard's controller (its
+/// listener opens when `prometheus dashboard` asks, or at once for
+/// `prometheus serve`) and the remote attachment listener when
+/// `daemon.remote.enabled` (spec: messaging-gateway, Remote client
+/// attachment), which is the gateway's own and runs on builds without the
+/// dashboard too.
+async fn start_listeners(
+    home: &Path,
+    config: &DaemonConfig,
+    server: &Arc<Server>,
+    host: &Arc<DaemonHost>,
+    serve: Option<&ServeDashboard>,
+) -> Result<Listeners, Error> {
+    start_api(config, server, host).await;
+    let devices = server
+        .devices()
+        .cloned()
+        .unwrap_or_else(|| Arc::new(pmt_gateway::devices::Devices::open(home)));
+    start_dashboard(config, server, host, serve, &devices).await?;
+    let remote =
+        match pmt_gateway::remote::start(server, devices, &config.daemon.remote, home).await {
+            Ok(remote) => remote,
+            Err(err) => {
+                tracing::error!("remote attachment listener not started: {err}");
+                None
+            }
+        };
+    if let Some(remote) = &remote {
+        eprintln!(
+            "Remote clients: wss://{} (certificate {})",
+            remote.addr, remote.fingerprint
+        );
+    }
+    Ok(Listeners { _remote: remote })
+}
+
+/// Installs the dashboard's controller, opening its listener at once for
+/// `prometheus serve`.
+#[cfg(feature = "dashboard")]
+async fn start_dashboard(
+    config: &DaemonConfig,
+    server: &Arc<Server>,
+    host: &Arc<DaemonHost>,
+    serve: Option<&ServeDashboard>,
+    devices: &Arc<pmt_gateway::devices::Devices>,
+) -> Result<(), Error> {
+    let dashboard = pmt_web::Dashboard::install(
+        server,
+        Arc::clone(host) as Arc<dyn pmt_web::DashboardHost>,
+        config.dashboard.clone(),
+        config.webapp.clone(),
+        Arc::clone(devices),
+    );
+    if let Some(serve) = serve {
+        let state = dashboard
+            .open(serve.host.as_deref(), serve.port, None)
+            .await?;
+        eprintln!("Dashboard: {}", state.url);
+    }
+    Ok(())
+}
+
+/// A build without the dashboard has no controller to install.
+#[cfg(not(feature = "dashboard"))]
+#[allow(clippy::unused_async)]
+async fn start_dashboard(
+    _config: &DaemonConfig,
+    _server: &Arc<Server>,
+    _host: &Arc<DaemonHost>,
+    _serve: Option<&ServeDashboard>,
+    _devices: &Arc<pmt_gateway::devices::Devices>,
+) -> Result<(), Error> {
+    Ok(())
 }
 
 /// Starts the API server when a served profile enables it; a listener

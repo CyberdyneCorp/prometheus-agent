@@ -776,6 +776,25 @@ impl ProcessRegistry {
             .collect()
     }
 
+    /// The live processes as `(id, command, state)`, for a read-only
+    /// mirror (spec: desktop-app, Terminal pane tools): reading changes
+    /// nothing, not even the quiet-wait timer.
+    #[must_use]
+    pub fn mirrors(&self) -> Vec<(String, String, String)> {
+        self.lock()
+            .iter()
+            .map(|e| (e.id.clone(), e.command.clone(), state_name(e)))
+            .collect()
+    }
+
+    /// The `(state, buffered output)` of live process `id`, redacted and
+    /// shaped like `log`, without touching the process.
+    #[must_use]
+    pub fn mirror(&self, id: &str) -> Option<(String, String)> {
+        let entry = self.lock().iter().find(|e| e.id == id).cloned()?;
+        Some((state_name(&entry), self.shaped(&entry.output().text)))
+    }
+
     /// Ids of processes still running.
     #[must_use]
     pub fn running(&self) -> Vec<String> {
@@ -920,6 +939,15 @@ fn finish(entry: &Entry, exit_code: i32, killed: bool) {
             exit_code,
         }));
     }
+}
+
+fn state_name(entry: &Entry) -> String {
+    match entry.state() {
+        State::Running => "running",
+        State::Finished { killed: true, .. } => "killed",
+        State::Finished { .. } => "exited",
+    }
+    .to_owned()
 }
 
 fn describe(entry: &Entry) -> Value {

@@ -83,11 +83,18 @@ async fn complete_path(call: Call, params: c::CompleteParams) -> Result<c::Compl
         .unwrap_or_default())
 }
 
-async fn model_options(call: Call, params: c::SessionRef) -> Result<c::ModelOptions, RpcError> {
-    let profile = attached_profile(&call, &params.session_id, Need::Attached)?;
+/// A session's options, or a profile's before any session exists.
+async fn model_options(
+    call: Call,
+    params: c::ModelOptionsParams,
+) -> Result<c::ModelOptions, RpcError> {
+    let profile = match &params.session_id {
+        Some(session_id) => attached_profile(&call, session_id, Need::Attached)?,
+        None => crate::methods::profile_for(&call, params.profile.as_deref())?,
+    };
     call.server
         .host()
-        .model_options(&profile, &params.session_id)
+        .model_options(&profile, params.session_id.as_deref())
         .await
         .map_err(|e| rpc(&e))
 }

@@ -51,7 +51,7 @@ impl DaemonHost {
                 format!("profile '{}' is not served by this daemon", delivery.target),
             )
         })?;
-        let session = self.ensure_bot_chat(&profile).await?;
+        let (session, _) = self.ensure_bot_chat(&profile).await?;
         let admitted = profile.store.cron_admit_receipt(
             delivery.receipt,
             delivery.from,
@@ -95,8 +95,12 @@ impl DaemonHost {
     }
 
     /// The profile's canonical Bot Chat, created (with the profile's
-    /// primary model) when it has none.
-    async fn ensure_bot_chat(&self, profile: &Arc<Profile>) -> Result<String, Error> {
+    /// primary model) when it has none; `true` when created now (the
+    /// store's get-or-create transaction behind `bot.chat.ensure`).
+    pub(super) async fn ensure_bot_chat(
+        &self,
+        profile: &Arc<Profile>,
+    ) -> Result<(String, bool), Error> {
         let cwd = Self::cwd_of(profile, None);
         std::fs::create_dir_all(&cwd).map_err(|e| Error::io(&codes::HOME_IO, &cwd, &e))?;
         let defaults = SessionSetup::default();
@@ -112,6 +116,6 @@ impl DaemonHost {
         if created {
             tracing::info!(session = %session.id, "canonical bot chat created");
         }
-        Ok(session.id.to_string())
+        Ok((session.id.to_string(), created))
     }
 }
