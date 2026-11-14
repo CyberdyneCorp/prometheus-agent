@@ -10,8 +10,22 @@ mod common;
 use std::process::Stdio;
 use std::time::Duration;
 
-use pmt_core::runtime::{Role, RuntimeRecord, run_dir};
+use pmt_core::runtime::{Role, RuntimeRecord, WriterLock, run_dir};
 use pmt_rpc::discovery::{DaemonRecord, Endpoint};
+
+/// Where the stand-in daemon says it listens (nothing dials it).
+fn endpoint() -> Endpoint {
+    Endpoint {
+        instance_id: "starting".into(),
+        build_id: "b".into(),
+        rpc_url: "ws://127.0.0.1:9/rpc".into(),
+        control: "unused".into(),
+        rpc_protocol: "1.0".into(),
+        started_at: "2026-11-14T00:00:00Z".into(),
+        health_url: None,
+        features: Vec::new(),
+    }
+}
 
 #[test]
 fn a_start_waits_for_a_daemon_that_is_still_starting() {
@@ -33,16 +47,7 @@ fn a_start_waits_for_a_daemon_that_is_still_starting() {
     std::thread::sleep(Duration::from_secs(7));
     let published = DaemonRecord {
         process: process.clone(),
-        endpoint: Endpoint {
-            instance_id: "starting".into(),
-            build_id: "b".into(),
-            rpc_url: "ws://127.0.0.1:9/rpc".into(),
-            control: "unused".into(),
-            rpc_protocol: "1.0".into(),
-            started_at: "2026-11-14T00:00:00Z".into(),
-            health_url: None,
-            features: Vec::new(),
-        },
+        endpoint: endpoint(),
     };
     std::fs::write(&record, serde_json::to_vec(&published).unwrap()).unwrap();
     let out = start.wait_with_output().unwrap();
@@ -57,5 +62,35 @@ fn a_start_waits_for_a_daemon_that_is_still_starting() {
         stdout.trim(),
         format!("gateway already running (pid {})", process.pid),
         "the starting daemon is the one used; none was spawned"
+    );
+}
+
+#[test]
+fn a_start_that_loses_the_home_lock_waits_for_the_holder_to_publish() {
+    let home = common::mock_home();
+    // Another daemon took the home lock and has not written its record
+    // yet: our start's own daemon can only fail on the lock (exit 75).
+    let lock = WriterLock::acquire(home.path(), Role::Daemon, vec!["default".into()]).unwrap();
+    let record = run_dir(home.path()).join(Role::Daemon.record_file());
+    std::fs::remove_file(&record).unwrap();
+    let start = common::command(home.path())
+        .args(["daemon", "start"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    std::thread::sleep(Duration::from_secs(3));
+    lock.publish(&endpoint()).unwrap();
+    let out = start.wait_with_output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success(),
+        "{stdout}{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        stdout.trim(),
+        format!("gateway already running (pid {})", lock.record().pid)
     );
 }

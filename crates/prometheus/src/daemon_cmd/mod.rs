@@ -271,8 +271,10 @@ pub(crate) fn running_or_start(
             return Ok((record, true));
         }
         if let Ok(Some(status)) = child.try_wait() {
-            // Another start won the race: its daemon is the one to use.
-            if let Some(record) = wait_running(home, START_TIMEOUT)? {
+            // Another start won the race: its daemon is the one to use. It
+            // may hold the home lock before it has written its record.
+            let lost_the_lock = status.code() == Some(i32::from(pmt_core::exit::TEMPORARY_FAILURE));
+            if let Some(record) = wait_for_holder(home, lost_the_lock, deadline)? {
                 return Ok((record, false));
             }
             let why = match last_stderr_line(home) {
@@ -285,6 +287,26 @@ pub(crate) fn running_or_start(
             return Err(start_failed(
                 "the daemon did not publish its endpoint in time",
             ));
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+/// The daemon that won a start race: when ours lost the home lock, the
+/// holder can still be between taking the lock and writing its record, so
+/// "not running" is waited out until `deadline` too.
+fn wait_for_holder(
+    home: &Path,
+    lost_the_lock: bool,
+    deadline: std::time::Instant,
+) -> Result<Option<DaemonRecord>, Error> {
+    loop {
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        if let Some(record) = wait_running(home, left)? {
+            return Ok(Some(record));
+        }
+        if !lost_the_lock || left.is_zero() {
+            return Ok(None);
         }
         std::thread::sleep(Duration::from_millis(25));
     }
