@@ -258,7 +258,10 @@ pub(crate) fn running_or_start(
     home: &Path,
     profile: Option<&str>,
 ) -> Result<(DaemonRecord, bool), Error> {
-    if let Some(record) = wait_running(home, Duration::from_secs(5))? {
+    // A daemon that is still starting holds the home: wait for it as long
+    // as a start of our own would take, rather than spawning a second one
+    // that can only fail on the home lock.
+    if let Some(record) = wait_running(home, START_TIMEOUT)? {
         return Ok((record, false));
     }
     let mut child = spawn_detached(home, profile)?;
@@ -269,7 +272,7 @@ pub(crate) fn running_or_start(
         }
         if let Ok(Some(status)) = child.try_wait() {
             // Another start won the race: its daemon is the one to use.
-            if let Some(record) = wait_running(home, Duration::from_secs(5))? {
+            if let Some(record) = wait_running(home, START_TIMEOUT)? {
                 return Ok((record, false));
             }
             let why = match last_stderr_line(home) {
