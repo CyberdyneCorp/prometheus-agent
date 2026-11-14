@@ -87,7 +87,12 @@ macos() { # <dist> <out>
     local cli
     cli=$(unpack_cli "$dist/prometheus-universal2-apple-darwin.tar.gz")
     lipo "$cli" -verify_arch arm64 x86_64
-    cp "$cli" "$STAGE/prometheus-universal-apple-darwin"
+    # A universal build compiles each architecture first, and tauri-build
+    # checks the sidecar under every triple; the bundle takes the universal one.
+    local triple
+    for triple in universal-apple-darwin aarch64-apple-darwin x86_64-apple-darwin; do
+        cp "$cli" "$STAGE/prometheus-$triple"
+    done
     stamp "$cli" desktop
     if [ "$PUBLISHING" = true ]; then
         [ -n "${APPLE_SIGNING_IDENTITY:-}" ] && [ -n "${APPLE_ID:-}" ] ||
