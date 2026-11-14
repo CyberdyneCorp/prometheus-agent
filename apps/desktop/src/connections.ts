@@ -304,22 +304,26 @@ export class Background {
   }
 
   private card(client: DesktopClient, name: string, profile: string, id: string, params: ApprovalRequestParams): void {
+    const wrapper = h(
+      "div",
+      { class: "background-request", "data-request": id, "data-pair": Background.key(client.connection, profile), "data-connection": name },
+      h("p", { class: "origin" }, `${name} · ${profile}`),
+    );
     const answer = async (decision: Decision) => {
+      // Answered here: the card stays to show the outcome even when the
+      // daemon's request.resolved arrives before the respond call returns.
+      wrapper.dataset.answered = "true";
       await client.call("approval.respond", { id, decision });
     };
-    this.el.append(
-      h(
-        "div",
-        { class: "background-request", "data-request": id, "data-pair": Background.key(client.connection, profile), "data-connection": name },
-        h("p", { class: "origin" }, `${name} · ${profile}`),
-        approvalCard(id, params, answer, true),
-      ),
-    );
+    wrapper.append(approvalCard(id, params, answer, true));
+    this.el.append(wrapper);
   }
 
+  /** A request settled elsewhere (another window, a timeout): its card goes,
+   *  unless this window answered it and shows the outcome. */
   private settled(id: string): void {
     const card = this.el.querySelector<HTMLElement>(`[data-request="${CSS.escape(id)}"]`);
-    if (card && card.querySelector(".card-status")?.textContent === "") card.remove();
+    if (card && card.dataset.answered !== "true") card.remove();
   }
 }
 
