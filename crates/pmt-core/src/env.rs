@@ -39,6 +39,11 @@ const TEST_MANAGED_DIR: &str = "PMT_TEST_MANAGED_DIR";
 /// can check the terminal is restored and the panic report written (a test
 /// seam; release builds ignore it).
 const TEST_TUI_PANIC: &str = "PMT_TEST_TUI_PANIC";
+/// Debug builds only: the ACP adapter drops the acknowledgement of its
+/// first `prompt.submit` and loses its daemon connection, so the suite can
+/// prove exactly-once resubmission (a fault-injection seam; release builds
+/// ignore it).
+const TEST_ACP_DROP_ACK: &str = "PMT_TEST_ACP_DROP_ACK";
 /// Debug builds only: the battery the status bar sees instead of the
 /// machine's (`none`, or a percentage with an optional `,charging`), so
 /// the test suite runs the same on laptops and towers (a test seam;
@@ -164,6 +169,7 @@ pub struct LaunchEnv {
     ignored: Vec<IgnoredVar>,
     test_managed_dir: Option<PathBuf>,
     test_tui_panic: bool,
+    test_acp_drop_ack: bool,
     test_battery: Option<String>,
     test_adapter_dir: Option<PathBuf>,
     test_service_dir: Option<PathBuf>,
@@ -219,6 +225,7 @@ impl LaunchEnv {
                 Var::LocalAppData => env.local_app_data = non_blank(value).map(PathBuf::from),
                 Var::TestManagedDir => env.test_managed_dir = non_blank(value).map(PathBuf::from),
                 Var::TestTuiPanic => env.test_tui_panic = true,
+                Var::TestAcpDropAck => env.test_acp_drop_ack = true,
                 Var::TestBattery => env.test_battery = env.unicode(name, value),
                 Var::TestAdapterDir => env.test_adapter_dir = non_blank(value).map(PathBuf::from),
                 Var::TestServiceDir => env.test_service_dir = non_blank(value).map(PathBuf::from),
@@ -275,6 +282,14 @@ impl LaunchEnv {
     #[must_use]
     pub fn test_tui_panic(&self) -> bool {
         self.test_tui_panic
+    }
+
+    /// Debug builds: `PMT_TEST_ACP_DROP_ACK` is set, so the ACP adapter
+    /// loses the acknowledgement of its first prompt. Always `false` in
+    /// release builds.
+    #[must_use]
+    pub fn test_acp_drop_ack(&self) -> bool {
+        self.test_acp_drop_ack
     }
 
     /// Debug builds: `PMT_TEST_ADAPTER_DIR`, where the daemon's file-backed
@@ -471,6 +486,7 @@ enum Var {
     Editor,
     TestManagedDir,
     TestTuiPanic,
+    TestAcpDropAck,
     TestBattery,
     TestAdapterDir,
     TestServiceDir,
@@ -516,6 +532,7 @@ fn classify(name: &str, policy: &EnvPolicy<'_>) -> Var {
         "EDITOR" => return Var::Editor,
         TEST_MANAGED_DIR if cfg!(debug_assertions) => return Var::TestManagedDir,
         TEST_TUI_PANIC if cfg!(debug_assertions) => return Var::TestTuiPanic,
+        TEST_ACP_DROP_ACK if cfg!(debug_assertions) => return Var::TestAcpDropAck,
         TEST_BATTERY if cfg!(debug_assertions) => return Var::TestBattery,
         TEST_ADAPTER_DIR if cfg!(debug_assertions) => return Var::TestAdapterDir,
         TEST_SERVICE_DIR if cfg!(debug_assertions) => return Var::TestServiceDir,

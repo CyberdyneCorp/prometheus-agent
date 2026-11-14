@@ -76,6 +76,7 @@ macro_rules! event {
     };
 }
 
+mod acp;
 mod automation;
 mod chat;
 mod cron;
@@ -97,6 +98,7 @@ mod ui;
 mod upkeep;
 mod workspace;
 mod worktree;
+pub use acp::*;
 pub use automation::*;
 pub use chat::*;
 pub use cron::*;
@@ -330,6 +332,10 @@ pub struct SessionCreateParams {
     /// How the session runs (a chat's flags).
     #[serde(default)]
     pub setup: SessionSetup,
+    /// The MCP servers of the editor creating it (an ACP session): run by
+    /// the daemon under the session's capability grants.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub editor_mcp_servers: Vec<EditorMcpServer>,
 }
 
 /// `session.resume` params.
@@ -425,6 +431,9 @@ pub enum ResolveKind {
     /// `-c [<name>]`: the newest CLI session of the directory (empty
     /// reference) or the newest session of the lineage titled `name`.
     Continue,
+    /// The current tip of session id `reference`'s compression chain (the
+    /// session an editor-held id continues in).
+    Tip,
 }
 
 /// `session.resolve` params: a chat's `-r`/`-c` reference.
@@ -523,6 +532,23 @@ pub struct SessionListParams {
     /// ones.
     #[serde(default)]
     pub include_hidden: bool,
+    /// Only sessions this kind of client created.
+    #[serde(default)]
+    pub source: Option<ClientKind>,
+    /// Only sessions working in this directory.
+    #[serde(default)]
+    pub cwd: Option<String>,
+    /// Only sessions with at least this many messages.
+    #[serde(default)]
+    pub min_messages: Option<u64>,
+    /// One row per conversation: a session continued after compression
+    /// is listed as its newest continuation.
+    #[serde(default)]
+    pub tips_only: bool,
+    /// The page after the one whose `next_cursor` this is; an invalid
+    /// cursor is `-32602 invalid cursor`.
+    #[serde(default)]
+    pub cursor: Option<String>,
 }
 
 /// One listed session.
@@ -540,6 +566,12 @@ pub struct SessionSummary {
     /// Its project (`prj_...`), when it has one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project_id: Option<String>,
+    /// Its working directory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
+    /// Its last activity (RFC 3339).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
 }
 
 /// `session.list` result.
@@ -548,6 +580,23 @@ pub struct SessionSummary {
 pub struct SessionList {
     /// The sessions.
     pub sessions: Vec<SessionSummary>,
+    /// The cursor of the next page, when there is one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
+}
+
+/// `session.interrupt` params.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct InterruptParams {
+    /// The session.
+    pub session_id: String,
+    /// Only this admission (`prompt.submit`'s `turn_id`): the running turn
+    /// stops only when it is this one, a queued one leaves the queue (its
+    /// `turn.finished` says `interrupted_by_user`), anything else is left
+    /// alone. Absent: whatever turn runs.
+    #[serde(default)]
+    pub turn_id: Option<String>,
 }
 
 /// `session.events.since` params.
@@ -941,6 +990,21 @@ pub struct ApprovalRequestParams {
     /// again with it).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub explanation: Option<String>,
+    /// For a file edit: the file before and after, for a diff card.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diff: Option<EditDiff>,
+}
+
+/// A file edit an approval asks about.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct EditDiff {
+    /// The absolute path.
+    pub path: String,
+    /// The current content (`null`: a new file).
+    pub old_text: Option<String>,
+    /// The content after the edit.
+    pub new_text: String,
 }
 
 /// `clarify.request` params.
@@ -1134,7 +1198,7 @@ method!(/// `session.resume`: loads the session into the daemon and attaches.
     SessionResume = "session.resume" (ResumeParams) -> Attached);
 method!(/// `session.interrupt`: stops the session's running turn at its next
     /// safe point (the partial turn is kept, marked interrupted).
-    SessionInterrupt = "session.interrupt" (SessionRef) -> Ack);
+    SessionInterrupt = "session.interrupt" (InterruptParams) -> Ack);
 method!(/// `session.resolve`: the session a `-r`/`-c` reference names.
     SessionResolve = "session.resolve" (ResolveParams) -> SessionRef);
 method!(/// `session.fork`: a new session with the parent's active messages up

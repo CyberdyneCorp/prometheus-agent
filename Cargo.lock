@@ -2903,6 +2903,17 @@ checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 [[package]]
 name = "pmt-acp"
 version = "0.1.0"
+dependencies = [
+ "base64 0.23.1",
+ "pmt-core",
+ "pmt-rpc",
+ "serde_json",
+ "sha2 0.11.1",
+ "tokio",
+ "tracing",
+ "ulid",
+ "url",
+]
 
 [[package]]
 name = "pmt-adapters-discord"
@@ -4069,6 +4080,7 @@ dependencies = [
  "minisign",
  "nix 0.31.3",
  "pkcs8",
+ "pmt-acp",
  "pmt-adapters-discord",
  "pmt-adapters-email",
  "pmt-adapters-matrix",

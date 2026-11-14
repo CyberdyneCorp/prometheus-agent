@@ -121,6 +121,23 @@ impl Selection {
         self
     }
 
+    /// This selection without the tools of toolset `name`, as if disabled
+    /// (an ACP session's browser tools when no managed Chromium is
+    /// installed).
+    #[must_use]
+    pub fn without_toolset(mut self, registry: &ToolRegistry, name: &str) -> Self {
+        let members = registry.members(name).unwrap_or_default();
+        let dropped: Vec<String> = self
+            .tools
+            .iter()
+            .filter(|tool| members.contains(tool))
+            .cloned()
+            .collect();
+        self.tools.retain(|tool| !dropped.contains(tool));
+        self.disabled.extend(dropped);
+        self
+    }
+
     /// This selection with `tools` opted in by the session itself (see
     /// [`Selection::session_opt_ins`]); unselected names are ignored.
     #[must_use]

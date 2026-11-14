@@ -74,6 +74,7 @@ pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
     crate::local::register(router, catalog)?;
     crate::upkeep::register(router, catalog)?;
     crate::worktree::register(router, catalog)?;
+    crate::editor::register(router, catalog)?;
     crate::messaging::methods::register(router, catalog)?;
     // `rpc.hello` runs in the read loop (it must come first), but it is
     // registered so its contract is checked like every other result.
@@ -305,13 +306,14 @@ async fn resume(call: Call, params: c::ResumeParams) -> Result<c::Attached, RpcE
     Ok(join(&call, &params.session_id, c::AttachRole::Driver, None))
 }
 
-async fn interrupt(call: Call, params: c::SessionRef) -> Result<c::Ack, RpcError> {
+async fn interrupt(call: Call, params: c::InterruptParams) -> Result<c::Ack, RpcError> {
     let profile = attached_profile(&call, &params.session_id, Need::Driver)?;
-    call.server
-        .host()
-        .interrupt(&profile, &params.session_id)
-        .await
-        .map_err(|e| rpc(&e))?;
+    let host = call.server.host();
+    let stopped = match &params.turn_id {
+        Some(turn) => host.cancel_turn(&profile, &params.session_id, turn).await,
+        None => host.interrupt(&profile, &params.session_id).await,
+    };
+    stopped.map_err(|e| rpc(&e))?;
     Ok(c::Ack::YES)
 }
 

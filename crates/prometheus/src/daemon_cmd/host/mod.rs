@@ -22,8 +22,7 @@ use pmt_rpc::contracts::{
     BannerInfo, ClientKind, CommandCatalog, CompactParams, Compacted, CompleteParams, Completions,
     ConfigValue, ContextUsage, DispatchParams, Dispatched, ForkParams, ModelOptions, ResolveKind,
     ResolveParams, SessionCreateParams, SessionList, SessionListParams, SessionRef, SessionSetup,
-    SessionSummary, SubmitParams, Submitted, Transcript, TranscriptMessage, TurnError,
-    TurnFinished,
+    SubmitParams, Submitted, Transcript, TranscriptMessage, TurnError, TurnFinished,
 };
 use pmt_store::{NewSession, Source, Store, Visibility};
 use tracing::Instrument as _;
@@ -51,8 +50,11 @@ mod delegations;
 mod desktop;
 mod desktop_ui;
 mod discovery;
+mod editor;
+mod editor_bridge;
 mod gateway;
 mod health_sample;
+mod listing;
 mod model_picker;
 mod notify;
 mod panes;
@@ -443,6 +445,7 @@ impl DaemonHost {
             retry: Mutex::default(),
         });
         loaded.insert(id, Arc::clone(&session));
+        editor::on_load(profile, &row, &session, link);
         if let Some(inbox) = &inbox {
             inbox.bind(&session);
         }
@@ -621,6 +624,7 @@ impl Host for DaemonHost {
             }
             new.cwd = Some(cwd.to_string_lossy().into_owned());
             let session = profile.store.create_session(&new)?;
+            editor::created(&profile.store, session.id, &params.editor_mcp_servers)?;
             profile
                 .setups
                 .lock()
@@ -639,31 +643,7 @@ impl Host for DaemonHost {
     ) -> HostFuture<'a, SessionList> {
         Box::pin(async move {
             let profile = &self.profile(profile)?;
-            let options = pmt_store::ListOptions {
-                limit: Some(params.limit.unwrap_or(50)),
-                all: params.include_hidden,
-                ..pmt_store::ListOptions::default()
-            };
-            let loaded = profile.loaded.lock().await;
-            let sessions = profile
-                .store
-                .list_sessions(&options)?
-                .into_iter()
-                // The canonical Bot Chat is reached through its bot, not
-                // the sessions list (spec: desktop-app, Bot chats are
-                // created atomically by the daemon).
-                .filter(|s| params.include_hidden || !s.bot_chat)
-                .map(|s| SessionSummary {
-                    live: loaded
-                        .get(&s.id)
-                        .is_some_and(|l| l.busy.load(Ordering::Acquire)),
-                    session_id: s.id.to_string(),
-                    title: s.title,
-                    started_at: s.started_at.to_string(),
-                    project_id: s.project_id.map(|p| p.to_string()),
-                })
-                .collect();
-            Ok(SessionList { sessions })
+            listing::list(profile, params).await
         })
     }
 
@@ -1186,6 +1166,35 @@ impl Host for DaemonHost {
         )
     }
 
+    fn cancel_turn<'a>(
+        &'a self,
+        profile: &'a str,
+        session_id: &'a str,
+        turn_id: &'a str,
+    ) -> HostFuture<'a, ()> {
+        Box::pin(async move {
+            let profile = &self.profile(profile)?;
+            let id = self::session_id(session_id)?;
+            self.cancel_admission(profile, id, turn_id).await
+        })
+    }
+
+    fn editor<'a>(
+        &'a self,
+        profile: &'a str,
+        request: pmt_gateway::editor::EditorCall,
+        link: Link,
+    ) -> HostFuture<'a, pmt_gateway::editor::EditorReply> {
+        let span = session_span(profile, request.session_id());
+        Box::pin(
+            async move {
+                let profile = &self.profile(profile)?;
+                Box::pin(self.editor_request(profile, request, link)).await
+            }
+            .instrument(span),
+        )
+    }
+
     fn interrupt<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()> {
         Box::pin(async move {
             let profile = &self.profile(profile)?;
@@ -1235,6 +1244,13 @@ impl Host for DaemonHost {
             let request = match params.kind {
                 ResolveKind::Resume => resume::Request::Resume(&params.reference),
                 ResolveKind::Continue => resume::Request::Continue(&params.reference),
+                ResolveKind::Tip => {
+                    let id = session_id(&params.reference)?;
+                    let tip = profile.store.compression_tip(id)?;
+                    return Ok(SessionRef {
+                        session_id: tip.to_string(),
+                    });
+                }
             };
             let cwd = params
                 .cwd
@@ -1267,6 +1283,7 @@ impl Host for DaemonHost {
             let fork = profile
                 .store
                 .fork_session(id, at, params.title.as_deref())?;
+            editor::forked(&profile.store, id, fork.id)?;
             Ok(SessionRef {
                 session_id: fork.id.to_string(),
             })

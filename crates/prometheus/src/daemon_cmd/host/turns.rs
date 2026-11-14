@@ -293,6 +293,8 @@ impl DaemonHost {
         match Arc::try_unwrap(session) {
             Ok(session) => {
                 drop(loaded);
+                crate::mcp_host::editor::unbind(&id.to_string());
+                pmt_tools::editor::unbind(&id.to_string());
                 session.live.close(&profile.store, reason).await;
                 true
             }
@@ -322,6 +324,8 @@ impl DaemonHost {
         match Arc::try_unwrap(session) {
             Ok(session) => {
                 drop(loaded);
+                crate::mcp_host::editor::unbind(&id.to_string());
+                pmt_tools::editor::unbind(&id.to_string());
                 session.live.unload().await;
                 true
             }
@@ -472,6 +476,8 @@ async fn run_one(
 ) -> Option<Follow> {
     *session.current.lock().expect("current poisoned") = Some(job.turn_id.clone());
     session.queue_running(job.entry.as_ref(), &job.link);
+    // Editor MCP servers bound since the last turn apply from this one.
+    session.live.refresh_editor_tools().await;
     // The session's configuration: its start snapshot with the live keys
     // of every reload since.
     let scope = session.live.config.get();

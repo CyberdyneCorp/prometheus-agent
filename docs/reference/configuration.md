@@ -8,6 +8,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 
 | Key | Type | Default | Allowed values | Apply | Description |
 |---|---|---|---|---|---|
+| `acp.use_editor_terminal` | boolean | `false` | any | `next_session` | Run the terminal commands of a local ACP session in the editor's terminal panel when the editor supports it. The editor terminal is outside the OS sandbox, so it is used only while `security.sandbox.mode = "off"`; otherwise commands run sandboxed in the daemon. |
 | `agent.api_max_retries` | integer | `3` | 1 to 10 | `next_session` | Attempts per model call before the fallback chain is consulted. |
 | `agent.auto_recovery_cycles` | integer | `5` | ≥ 0 | `next_session` | Extra wait-and-retry cycles after retries and fallbacks are spent on a transient failure with nothing streamed; `0` disables. |
 | `agent.budget_warning_ratio` | number | unset | > 0.0, < 1.0 | `next_session` | Share of the most-constrained budget at which a one-time `[budget checkpoint]` notice rides the newest tool result; unset is off. |

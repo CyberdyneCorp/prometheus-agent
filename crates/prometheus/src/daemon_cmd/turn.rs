@@ -178,6 +178,11 @@ fn approval_params(session_id: &str, request: &ApprovalRequest) -> ApprovalReque
         remember: request.remember.clone(),
         deadline_ms: None,
         explanation: request.explanation.clone(),
+        diff: request.diff.as_ref().map(|d| pmt_rpc::contracts::EditDiff {
+            path: d.path.clone(),
+            old_text: d.old_text.clone(),
+            new_text: d.new_text.clone(),
+        }),
     }
 }
 

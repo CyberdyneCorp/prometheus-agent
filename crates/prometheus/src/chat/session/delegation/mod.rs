@@ -189,6 +189,7 @@ impl Factory {
                 user_home: self.launch.user_home().map(PathBuf::as_path),
                 interactive: true,
                 cron: false,
+                unattended: false,
                 yolo: false,
                 hooks: None,
                 session_id: id.to_string(),
@@ -311,6 +312,7 @@ mod tests {
             findings: Vec::new(),
             remember: Some("rm -rf".into()),
             explanation: None,
+            diff: None,
         }
     }
 

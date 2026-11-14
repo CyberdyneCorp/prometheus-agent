@@ -9,6 +9,7 @@
 //! come from the servers' tool lists as they were when it started.
 //! Safe mode starts none.
 
+pub mod editor;
 mod launch;
 pub(crate) use launch::INHERITED;
 pub mod oauth;

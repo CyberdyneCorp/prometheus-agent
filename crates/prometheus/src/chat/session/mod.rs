@@ -15,6 +15,7 @@ pub mod delegation;
 pub mod desktop_prefs;
 pub mod documents;
 pub mod downgrades;
+mod editor_tools;
 mod embed;
 mod ending;
 pub mod env;
@@ -726,7 +727,7 @@ impl Factory {
     ) -> Result<(Arc<ToolRegistry>, Selection, pmt_tools::SessionSurface), Error> {
         // Plugin and MCP toolsets: enabling a plugin or configuring a
         // server opts its tools in.
-        let (registry, plugin_toolsets) = self.session_registry()?;
+        let (registry, plugin_toolsets) = self.registries.current_for(session.id)?;
         let surface = tools::surface_of(session);
         let selection = tools::selection(
             &registry,
@@ -790,6 +791,9 @@ impl Factory {
             user_home: self.launch.user_home().map(PathBuf::as_path),
             interactive: self.options.interactive,
             cron: self.options.cron.is_some(),
+            unattended: self.store.session(id).is_ok_and(|row| {
+                tools::surface_of(&row) == pmt_tools::SessionSurface::AcpUnattended
+            }),
             yolo: self.options.yolo,
             hooks: Some(Arc::new(hooks)),
             session_id: id.to_string(),

@@ -157,15 +157,18 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `session.attach` | `workspace-architecture` | 1.0 | [`AttachParams`](#attachparams) | [`Attached`](#attached) |
 | `session.banner` | `tui` | 1.0 | [`SessionRef`](#sessionref) | [`BannerInfo`](#bannerinfo) |
 | `session.compact` | `workspace-architecture` | 1.0 | [`CompactParams`](#compactparams) | [`Compacted`](#compacted) |
+| `session.configure` | `acp-adapter` | 1.0 | [`ConfigureParams`](#configureparams) | [`Configured`](#configured) |
 | `session.context_usage` | `workspace-architecture` | 1.0 | [`SessionRef`](#sessionref) | [`ContextUsage`](#contextusage) |
 | `session.create` | `workspace-architecture` | 1.0 | [`SessionCreateParams`](#sessioncreateparams) | [`SessionRef`](#sessionref) |
 | `session.detach` | `workspace-architecture` | 1.0 | [`SessionRef`](#sessionref) | [`Ack`](#ack) |
+| `session.editor` | `acp-adapter` | 1.0 | [`EditorBindParams`](#editorbindparams) | [`EditorBound`](#editorbound) |
 | `session.events.since` | `workspace-architecture` | 1.0 | [`EventsSinceParams`](#eventssinceparams) | [`EventsSince`](#eventssince) |
 | `session.fork` | `session-storage` | 1.0 | [`ForkParams`](#forkparams) | [`SessionRef`](#sessionref) |
-| `session.interrupt` | `workspace-architecture` | 1.0 | [`SessionRef`](#sessionref) | [`Ack`](#ack) |
+| `session.interrupt` | `workspace-architecture` | 1.0 | [`InterruptParams`](#interruptparams) | [`Ack`](#ack) |
 | `session.list` | `workspace-architecture` | 1.0 | [`SessionListParams`](#sessionlistparams) | [`SessionList`](#sessionlist) |
 | `session.resolve` | `workspace-architecture` | 1.0 | [`ResolveParams`](#resolveparams) | [`SessionRef`](#sessionref) |
 | `session.resume` | `workspace-architecture` | 1.0 | [`ResumeParams`](#resumeparams) | [`Attached`](#attached) |
+| `session.settings` | `acp-adapter` | 1.0 | [`SessionRef`](#sessionref) | [`SessionSettings`](#sessionsettings) |
 | `session.siblings` | `session-storage` | 1.0 | [`SessionRef`](#sessionref) | [`Lineage`](#lineage) |
 | `session.steer` | `agent-turn-loop` | 1.0 | [`SteerParams`](#steerparams) | [`Ack`](#ack) |
 | `session.transcript` | `workspace-architecture` | 1.0 | [`SessionRef`](#sessionref) | [`Transcript`](#transcript) |
@@ -197,6 +200,9 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 |---|---|---|---|---|
 | `approval.request` | `workspace-architecture` | 1.0 | [`ApprovalRequestParams`](#approvalrequestparams) | [`ApprovalAnswer`](#approvalanswer) |
 | `clarify.request` | `workspace-architecture` | 1.0 | [`ClarifyRequestParams`](#clarifyrequestparams) | [`ClarifyAnswers`](#clarifyanswers) |
+| `editor.fs.read` | `acp-adapter` | 1.0 | [`EditorReadParams`](#editorreadparams) | [`EditorFsResult`](#editorfsresult) |
+| `editor.fs.write` | `acp-adapter` | 1.0 | [`EditorWriteParams`](#editorwriteparams) | [`EditorFsResult`](#editorfsresult) |
+| `editor.terminal.run` | `acp-adapter` | 1.0 | [`EditorTerminalParams`](#editorterminalparams) | [`EditorTerminalResult`](#editorterminalresult) |
 | `secret.request` | `workspace-architecture` | 1.0 | [`SecretRequestParams`](#secretrequestparams) | [`SecretAnswer`](#secretanswer) |
 | `sudo.request` | `workspace-architecture` | 1.0 | [`SudoRequestParams`](#sudorequestparams) | [`SudoAnswer`](#sudoanswer) |
 | `ui.annotate_preview` | `desktop-app` | 1.0 | [`UiCall`](#uicall) | any |
@@ -341,6 +347,7 @@ Why a call needs approval.
 |---|---|---|---|
 | `call_id` | string | yes | The model's call id. |
 | `deadline_ms` | integer or null | no | Milliseconds until the request settles unanswered (set by the daemon when it sends the request). |
+| `diff` | [`EditDiff`](#editdiff) or null | no | For a file edit: the file before and after, for a diff card. |
 | `explanation` | string or null | no | What an `explain` answer produced: the parsed command, the rule, the paths it touches and a dry-run preview (the request is asked again with it). |
 | `findings` | array of [`ApprovalFinding`](#approvalfinding) | yes | Why approval is needed. |
 | `remember` | string or null | no | What `session` and `always` record. |
@@ -795,6 +802,27 @@ One change of a `config.patch`.
 | `source` | string | yes | The layer it comes from (`default`, `file`, `set`, `managed`). |
 | `value` | any | yes | Its effective value (secrets are never configuration values). |
 
+### `ConfigureParams`
+
+`session.configure` params: the settings to change (absent ones keep).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `cwd` | string or null | no | A new working directory; refused while a turn runs. |
+| `edit_mode` | [`EditMode`](#editmode) or null | no | The edit mode; refused while a turn runs. |
+| `model` | string or null | no | `<provider>/<model>`; while a turn runs it applies from the next. |
+| `reasoning_effort` | string or null | no | A reasoning effort the model accepts. |
+| `session_id` | string | yes | The session. |
+
+### `Configured`
+
+`session.configure` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `next_turn` | boolean | yes | The model change waits for the running turn to end. |
+| `settings` | [`SessionSettings`](#sessionsettings) | yes | The settings now (a deferred model shows once it applied). |
+
 ### `ContextCategory`
 
 One category of `session.context_usage`.
@@ -875,6 +903,112 @@ Where a command runs from this surface.
 | `exec` | It runs (`command.dispatch`). |
 | `unavailable` | Listed, but refused here with `reason`. |
 | `hidden` | Not offered on this surface. |
+
+### `EditDiff`
+
+A file edit an approval asks about.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `new_text` | string | yes | The content after the edit. |
+| `old_text` | string or null | no | The current content (`null`: a new file). |
+| `path` | string | yes | The absolute path. |
+
+### `EditMode`
+
+How file edits of an editor session are approved (ACP session modes).
+
+| Value | Meaning |
+|---|---|
+| `default` | Ask before every file edit. |
+| `accept_edits` | Edits inside the session's workspace run without asking. |
+| `dont_ask` | Every edit of this session runs without asking. |
+
+### `EditorBindParams`
+
+`session.editor` params: the editor MCP servers of a session an editor loaded, resumed or forked.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `mcp_servers` | array of [`EditorMcpServer`](#editormcpserver) | no | The servers: a non-empty list replaces the session's editor servers from its next turn, an empty one keeps them. |
+| `session_id` | string | yes | The session. |
+
+### `EditorBound`
+
+`session.editor` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `changed` | boolean | yes | Whether the list changed (the new tools apply from the next turn). |
+| `servers` | array of string | yes | The names of the session's editor servers now. |
+
+### `EditorFsResult`
+
+The answer to `editor.fs.read` and `editor.fs.write`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `content` | string or null | no | The file's content (`editor.fs.read`). |
+| `error` | string or null | no | The editor's error, returned to the model as the tool's. |
+
+### `EditorMcpServer`
+
+An MCP server the editor asks the session to use (ACP `mcpServers`): a local command (`stdio`) or a remote endpoint (`http`, `sse`). The daemon runs it under the session's capability grants.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `args` | array of string | no | Its arguments (`stdio`). |
+| `command` | string or null | no | The program (`stdio`). |
+| `env` | array of [`NameValue`](#namevalue) | no | Its environment (`stdio`). |
+| `headers` | array of [`NameValue`](#namevalue) | no | Request headers (`http`, `sse`). |
+| `name` | string | yes | The server's name (its tools are `mcp_<name>_<tool>`). |
+| `transport` | string | yes | `stdio`, `http` or `sse`. |
+| `url` | string or null | no | The endpoint (`http`, `sse`). |
+
+### `EditorReadParams`
+
+`editor.fs.read` params: a text file as the editor has it (unsaved changes included).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `deadline_ms` | integer or null | no | Milliseconds until the request settles unanswered. |
+| `path` | string | yes | The absolute path, inside the session's working directory. |
+| `session_id` | string | yes | The session. |
+
+### `EditorTerminalParams`
+
+`editor.terminal.run` params: a command the editor runs in its own terminal panel.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `command` | string | yes | The shell command line. |
+| `cwd` | string | yes | Its working directory. |
+| `deadline_ms` | integer or null | no | Milliseconds until the request settles unanswered. |
+| `output_byte_limit` | integer | yes | The most output bytes the editor keeps (the tool's output budget). |
+| `session_id` | string | yes | The session. |
+
+### `EditorTerminalResult`
+
+The answer to `editor.terminal.run`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `error` | string or null | no | The editor could not run it. |
+| `exit_code` | integer or null | no | The exit status, when it exited. |
+| `output` | string | no | What the command printed (the editor's retained tail). |
+| `signal` | string or null | no | The signal that ended it, when one did. |
+| `truncated` | boolean | no | The editor dropped output beyond the limit. |
+
+### `EditorWriteParams`
+
+`editor.fs.write` params: the new content of a text file, written through the editor (into an open buffer when there is one).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `content` | string | yes | The whole new content. |
+| `deadline_ms` | integer or null | no | Milliseconds until the request settles unanswered. |
+| `path` | string | yes | The absolute path, inside the session's working directory. |
+| `session_id` | string | yes | The session. |
 
 ### `EgressSetParams`
 
@@ -1184,6 +1318,15 @@ What a command run through the session's terminal backend printed.
 | `protocol` | [`Version`](#version) | yes | The protocol the daemon speaks. |
 | `server_version` | string | yes | The daemon's semantic version. |
 
+### `InterruptParams`
+
+`session.interrupt` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `session_id` | string | yes | The session. |
+| `turn_id` | string or null | no | Only this admission (`prompt.submit`'s `turn_id`): the running turn stops only when it is this one, a queued one leaves the queue (its `turn.finished` says `interrupted_by_user`), anything else is left alone. Absent: whatever turn runs. |
+
 ### `JourneyList`
 
 `journey.list` result.
@@ -1472,6 +1615,15 @@ One `model.options` entry.
 |---|---|---|---|
 | `profile` | string or null | no | The profile, when no session is named. |
 | `session_id` | string or null | no | The session (it must be attached). |
+
+### `NameValue`
+
+One `name=value` pair of an editor MCP server (an environment variable or an HTTP header).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | The name. |
+| `value` | string | yes | The value. |
 
 ### `OnboardingChat`
 
@@ -1796,6 +1948,7 @@ What `session.resolve` looks up.
 |---|---|
 | `resume` | `-r <ref>`: an id, an id prefix, a title or `latest`. |
 | `continue` | `-c [<name>]`: the newest CLI session of the directory (empty reference) or the newest session of the lineage titled `name`. |
+| `tip` | The current tip of session id `reference`'s compression chain (the session an editor-held id continues in). |
 
 ### `ResolveParams`
 
@@ -1855,6 +2008,7 @@ What the daemon serves.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `cwd` | string or null | no | The working directory of the session. |
+| `editor_mcp_servers` | array of [`EditorMcpServer`](#editormcpserver) | no | The MCP servers of the editor creating it (an ACP session): run by the daemon under the session's capability grants. |
 | `exclusive` | boolean | no | Make this connection the session's interactive owner: another connection resuming it exclusively is refused while it is attached. |
 | `idempotency_key` | string or null | no | Retries with the same key within 300 s return the same session instead of creating another one. |
 | `profile` | string or null | no | The profile; required only when the ticket grants several. |
@@ -1868,6 +2022,7 @@ What the daemon serves.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `next_cursor` | string or null | no | The cursor of the next page, when there is one. |
 | `sessions` | array of [`SessionSummary`](#sessionsummary) | yes | The sessions. |
 
 ### `SessionListParams`
@@ -1876,9 +2031,14 @@ What the daemon serves.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `cursor` | string or null | no | The page after the one whose `next_cursor` this is; an invalid cursor is `-32602 invalid cursor`. |
+| `cwd` | string or null | no | Only sessions working in this directory. |
 | `include_hidden` | boolean | no | Also hidden sessions: canonical Bot Chats, archived and hidden ones. |
 | `limit` | integer or null | no | At most this many, newest activity first (default 50). |
+| `min_messages` | integer or null | no | Only sessions with at least this many messages. |
 | `profile` | string or null | no | The profile; required only when the ticket grants several. |
+| `source` | [`ClientKind`](#clientkind) or null | no | Only sessions this kind of client created. |
+| `tips_only` | boolean | no | One row per conversation: a session continued after compression is listed as its newest continuation. |
 
 ### `SessionProject`
 
@@ -1898,6 +2058,23 @@ A session named by id.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `session_id` | string | yes | `ses_<ULID>`. |
+
+### `SessionSettings`
+
+A session's settings as clients show and change them.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `busy` | boolean | yes | Whether a turn runs. |
+| `cwd` | string | yes | The working directory. |
+| `edit_mode` | [`EditMode`](#editmode) or null | no | How file edits are approved (`null`: the session has no edit policy, it is not an editor session). |
+| `model` | string | yes | That model (`<provider>/<model>` names it fully). |
+| `models` | array of string | no | The models a client may switch to (`<provider>/<model>`). |
+| `provider` | string | yes | The provider of the model the next turn uses. |
+| `reasoning_effort` | string | yes | The reasoning effort (`none` when the model has none). |
+| `reasoning_efforts` | array of string | no | The efforts the model accepts. |
+| `session_id` | string | yes | The session. |
+| `title` | string or null | no | The session's title, once it has one. |
 
 ### `SessionSetup`
 
@@ -1924,11 +2101,13 @@ One listed session.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `cwd` | string or null | no | Its working directory. |
 | `live` | boolean | yes | Whether a turn is running in the daemon. |
 | `project_id` | string or null | no | Its project (`prj_...`), when it has one. |
 | `session_id` | string | yes | `ses_<ULID>`. |
 | `started_at` | string | yes | When it started (RFC 3339). |
 | `title` | string or null | no | Its title, when it has one. |
+| `updated_at` | string or null | no | Its last activity (RFC 3339). |
 
 ### `SteerKind`
 

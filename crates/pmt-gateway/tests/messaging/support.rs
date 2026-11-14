@@ -61,6 +61,7 @@ async fn script(
             remember: None,
             deadline_ms: None,
             explanation: None,
+            diff: None,
         };
         let answer = link.ask::<ApprovalAsk>(&params, Some(timeout)).await;
         let approved = answer.is_some_and(|a| a.decision != Decision::Deny);

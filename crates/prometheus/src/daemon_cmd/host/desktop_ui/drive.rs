@@ -77,6 +77,7 @@ async fn approved(port: &UiPort, field: &str) -> bool {
         remember: None,
         deadline_ms: None,
         explanation: None,
+        diff: None,
     };
     let answer = link.ask::<ApprovalAsk>(&params, None).await;
     matches!(

@@ -84,9 +84,9 @@ pub use gateway::{
 pub use gateway_routes::{ProfileRoute, RouteFacts, resolve_route};
 pub use hooks::{HooksConfig, OutboundHook, ShellHook};
 pub use interface::{
-    AutoResume, BusyConfig, BusyIndicator, BusyInputMode, CliConfig, ComposerConfig, DisplayConfig,
-    Interface, KeyChord, MarkdownMode, QuickCommand, QuickCommandKind, ResumeDisplay, ToolProgress,
-    ToolProgressGrouping, TuiConfig, TuiKeys, TuiTheme, UiConfig,
+    AcpConfig, AutoResume, BusyConfig, BusyIndicator, BusyInputMode, CliConfig, ComposerConfig,
+    DisplayConfig, Interface, KeyChord, MarkdownMode, QuickCommand, QuickCommandKind,
+    ResumeDisplay, ToolProgress, ToolProgressGrouping, TuiConfig, TuiKeys, TuiTheme, UiConfig,
 };
 pub use lsp::{
     LSP_SERVER_IDS, LspConfig, LspInstallStrategy, LspPackageManager, LspServerConfig, LspWaitMode,
@@ -160,6 +160,8 @@ pub struct Config {
     /// a newer one is refused.
     #[schemars(extend("x-apply" = "restart"))]
     pub schema_version: u32,
+    /// How ACP editor sessions use the editor.
+    pub acp: AcpConfig,
     /// Turn loop limits, retries and reasoning effort.
     pub agent: AgentConfig,
     /// The OpenAI-compatible API server's view of this profile.
@@ -316,6 +318,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             schema_version: SCHEMA_VERSION,
+            acp: AcpConfig::default(),
             agent: AgentConfig::default(),
             api_server: ApiServerConfig::default(),
             approvals: ApprovalsConfig::default(),

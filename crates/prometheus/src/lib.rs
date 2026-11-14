@@ -6,6 +6,8 @@
 //! the exact parser the binary uses, and so tests can drive each step.
 
 pub mod accounts;
+#[cfg(feature = "acp")]
+pub mod acp_cmd;
 pub mod advisories;
 pub mod approvals_cmd;
 pub mod auth_cmd;

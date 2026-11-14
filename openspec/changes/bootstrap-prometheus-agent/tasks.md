@@ -595,11 +595,11 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 66. M3 ACP adapter
 
-- [ ] 66.1 Implement `prometheus acp` launch flags, stdout-only protocol frames, quiet liveness probes and config from flags/profile only, as a daemon viewer bound to the launch profile; verify with an ACP client test that stdout carries only frames (spec: acp-adapter)
-- [ ] 66.2 Implement initialize, auth reuse, new/load/resume/list/fork sessions and editor MCP servers owned by the daemon session; verify with ACP conformance fixtures (spec: acp-adapter)
-- [ ] 66.3 Implement prompt submission with exactly-once submit, scoped cancel, unknown outcome after a daemon restart, slash commands, edit-approval modes, validated config options, model switching, fail-closed approval/clarify bridging, exactly-once reply projection and terminal tool statuses; verify with fault-injection tests (spec: acp-adapter)
-- [ ] 66.4 Implement content conversion with media staging, metadata projection, editor-native file access and terminal delegation; verify with an editor fixture (spec: acp-adapter)
-- [ ] 66.5 Implement optional browser tools for ACP sessions (runtime missing reported) and unattended ACP clients with relay bridges (auto-approval only through the declared bridge, unattended default toolset); verify with ACP fixtures (spec: acp-adapter)
+- [x] 66.1 Implement `prometheus acp` launch flags, stdout-only protocol frames, quiet liveness probes and config from flags/profile only, as a daemon viewer bound to the launch profile; verify with an ACP client test that stdout carries only frames (spec: acp-adapter)
+- [x] 66.2 Implement initialize, auth reuse, new/load/resume/list/fork sessions and editor MCP servers owned by the daemon session; verify with ACP conformance fixtures (spec: acp-adapter)
+- [x] 66.3 Implement prompt submission with exactly-once submit, scoped cancel, unknown outcome after a daemon restart, slash commands, edit-approval modes, validated config options, model switching, fail-closed approval/clarify bridging, exactly-once reply projection and terminal tool statuses; verify with fault-injection tests (spec: acp-adapter)
+- [x] 66.4 Implement content conversion with media staging, metadata projection, editor-native file access and terminal delegation; verify with an editor fixture (spec: acp-adapter)
+- [x] 66.5 Implement optional browser tools for ACP sessions (runtime missing reported) and unattended ACP clients with relay bridges (auto-approval only through the declared bridge, unattended default toolset); verify with ACP fixtures (spec: acp-adapter)
 
 ## 67. M3 Kanban
 

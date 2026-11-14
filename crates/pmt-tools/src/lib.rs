@@ -33,6 +33,7 @@ pub mod code_exec;
 pub mod connectors;
 pub mod descriptor;
 pub mod dispatch;
+pub mod editor;
 pub mod environments;
 pub mod files;
 pub mod grants;

@@ -43,10 +43,15 @@ pub const DEFAULT_COMPONENT: &str = "agent";
 /// whatever the profile.
 pub const HOME_COMPONENTS: &[&str] = &["gateway", "update", "migrate"];
 
+/// Components whose records live under `<profile>/logs/<component>.log`
+/// (the ACP adapter's `acp.log`).
+pub const PROFILE_COMPONENTS: &[&str] = &["acp"];
+
 /// Every component `prometheus logs` accepts (spec: cli, Log viewer).
 /// `errors` is not a producer: it selects WARN and above of every component.
 pub const COMPONENTS: &[&str] = &[
     "agent",
+    "acp",
     "errors",
     "gateway",
     "adapter",
@@ -95,9 +100,14 @@ pub fn route(home: &Path, component: &str, profile: Option<&str>) -> PathBuf {
     if HOME_COMPONENTS.contains(&component) {
         return home_dir(home).join(format!("{component}.log"));
     }
+    let file = if PROFILE_COMPONENTS.contains(&component) {
+        format!("{component}.log")
+    } else {
+        FILE_NAME.to_owned()
+    };
     match profile.and_then(|name| existing_profile_logs(home, name)) {
-        Some(dir) => dir.join(FILE_NAME),
-        None => home_dir(home).join(FILE_NAME),
+        Some(dir) => dir.join(file),
+        None => home_dir(home).join(file),
     }
 }
 

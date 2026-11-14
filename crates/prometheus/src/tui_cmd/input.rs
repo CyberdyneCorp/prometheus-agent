@@ -6,8 +6,8 @@
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseEventKind};
 use pmt_i18n::t;
 use pmt_rpc::contracts::{
-    CommandDispatch, CompleteParams, CompletePath, CompleteSlash, DispatchParams, ResolveKind,
-    SessionInterrupt, SessionRef,
+    CommandDispatch, CompleteParams, CompletePath, CompleteSlash, DispatchParams, InterruptParams,
+    ResolveKind, SessionInterrupt,
 };
 use pmt_tui::keys::Action;
 use pmt_tui::slash::{Input, LOCAL, Local, classify};
@@ -133,8 +133,9 @@ impl Tui<'_> {
     /// Ctrl+C: stops the running turn, else clears the composer.
     fn interrupt(&mut self) {
         if self.app.status.busy {
-            let params = SessionRef {
+            let params = InterruptParams {
                 session_id: self.link.session.clone(),
+                turn_id: None,
             };
             let client = self.link.client.clone();
             pmt_core::spawn::spawn(async move {

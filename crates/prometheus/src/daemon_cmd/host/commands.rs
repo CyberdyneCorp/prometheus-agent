@@ -40,6 +40,9 @@ pub(super) const CLIENT_COMMANDS: &[&str] = &[
     "battery",
 ];
 
+/// The commands that change what `session.settings` shows.
+const SETTINGS: &[&str] = &["model", "provider", "reasoning", "fast", "title"];
+
 /// The session automation commands.
 const AUTOMATION: &[&str] = &["goal", "subgoal", "loop", "heartbeat"];
 
@@ -99,7 +102,15 @@ impl DaemonHost {
             caller: session.live.surface(),
             chat: None,
         };
-        Ok(run.line(line_of(&params), 0).await)
+        let dispatched = run.line(line_of(&params), 0).await;
+        // Every surface shows the session's model, effort and mode: a
+        // command that may have changed them is announced.
+        if SETTINGS.contains(&params.name.trim_start_matches('/'))
+            && matches!(dispatched, Dispatched::Done { .. })
+        {
+            self.settings_changed(profile, &session, &link).await;
+        }
+        Ok(dispatched)
     }
 
     /// A registry command a messaging user sent (spec: messaging-gateway,

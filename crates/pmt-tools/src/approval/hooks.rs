@@ -131,6 +131,7 @@ mod tests {
                 findings: Vec::new(),
                 remember: None,
                 explanation: None,
+                diff: None,
             },
             choices,
             timeout: Duration::from_mins(1),

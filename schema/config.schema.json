@@ -1,5 +1,18 @@
 {
   "$defs": {
+    "AcpConfig": {
+      "additionalProperties": false,
+      "description": "The `[acp]` section: how `prometheus acp` sessions use the editor\n(spec: acp-adapter, Editor terminal delegation).",
+      "properties": {
+        "use_editor_terminal": {
+          "default": false,
+          "description": "Run the terminal commands of a local ACP session in the editor's\nterminal panel when the editor supports it. The editor terminal is\noutside the OS sandbox, so it is used only while\n`security.sandbox.mode = \"off\"`; otherwise commands run sandboxed\nin the daemon.",
+          "type": "boolean"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
     "AgentCacheConfig": {
       "additionalProperties": false,
       "description": "`[gateway.agent_cache]`.",
@@ -11064,6 +11077,13 @@
   "additionalProperties": false,
   "description": "Root of a profile's `config.toml`.",
   "properties": {
+    "acp": {
+      "$ref": "#/$defs/AcpConfig",
+      "default": {
+        "use_editor_terminal": false
+      },
+      "description": "How ACP editor sessions use the editor."
+    },
     "agent": {
       "$ref": "#/$defs/AgentConfig",
       "default": {

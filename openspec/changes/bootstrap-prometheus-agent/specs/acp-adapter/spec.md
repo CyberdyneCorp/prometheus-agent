@@ -107,7 +107,7 @@ Editor-provided `mcpServers` SHALL be passed to the daemon as part of the sessio
 - **THEN** the response SHALL be `-32602 invalid cursor`
 
 ### Requirement: Fork creates a daemon branch
-`session/fork` SHALL call `session.branch`, move the child to the editor cwd when it differs, attach the child, and bind the child's editor MCP servers to the given list or else to the parent's.
+`session/fork` SHALL call `session.fork`, move the child to the editor cwd when it differs, attach the child, and bind the child's editor MCP servers to the given list or else to the parent's.
 **Milestone:** M3
 
 #### Scenario: Fork without servers
@@ -271,7 +271,7 @@ When the client advertised `terminal` support and `acp.use_editor_terminal = tru
 - **THEN** the session's tools SHALL NOT include browser tools and `prometheus acp --check` SHALL report `browser runtime not installed; run 'prometheus acp --setup-browser'`
 
 ### Requirement: Unattended ACP clients and relay bridges
-`prometheus acp --unattended` SHALL serve ACP clients that cannot show permission prompts (for example channel relay bridges such as `buzz-acp`): it SHALL never forward approval or clarify requests to the client, SHALL resolve approvals with `approvals.unattended_mode` (default `deny`) and the profile's grants, SHALL use the `toolsets.surfaces.acp_unattended` toolset (default the `acp` toolset without terminal and code-execution tools), and SHALL label its sessions with `source: "acp-unattended"`; a client permission answer received on an unattended connection SHALL be ignored and logged at WARN.
+`prometheus acp --unattended` SHALL serve ACP clients that cannot show permission prompts (for example channel relay bridges such as `buzz-acp`): it SHALL never forward approval or clarify requests to the client, SHALL resolve approvals with `approvals.unattended_mode` (default `deny`) and the profile's grants, SHALL use the `toolsets.surfaces.acp_unattended` toolset (default the `acp` toolset without terminal and code-execution tools), and SHALL label its sessions with source `acp` and source tag `acp-unattended`; a client permission answer received on an unattended connection SHALL be ignored and logged at WARN.
 **Milestone:** M3
 
 #### Scenario: Relay bridge auto-approves

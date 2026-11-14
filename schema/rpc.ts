@@ -133,6 +133,8 @@ export interface ApprovalRequestParams {
   call_id: string;
   /** Milliseconds until the request settles unanswered (set by the daemon when it sends the request). */
   deadline_ms?: number | null;
+  /** For a file edit: the file before and after, for a diff card. */
+  diff?: EditDiff | null;
   /** What an `explain` answer produced: the parsed command, the rule, the paths it touches and a dry-run preview (the request is asked again with it). */
   explanation?: string | null;
   /** Why approval is needed. */
@@ -587,6 +589,28 @@ export interface ConfigValue {
   value: unknown;
 }
 
+/** `session.configure` params: the settings to change (absent ones keep). */
+export interface ConfigureParams {
+  /** A new working directory; refused while a turn runs. */
+  cwd?: string | null;
+  /** The edit mode; refused while a turn runs. */
+  edit_mode?: EditMode | null;
+  /** `<provider>/<model>`; while a turn runs it applies from the next. */
+  model?: string | null;
+  /** A reasoning effort the model accepts. */
+  reasoning_effort?: string | null;
+  /** The session. */
+  session_id: string;
+}
+
+/** `session.configure` result. */
+export interface Configured {
+  /** The model change waits for the running turn to end. */
+  next_turn: boolean;
+  /** The settings now (a deferred model shows once it applied). */
+  settings: SessionSettings;
+}
+
 /** One category of `session.context_usage`. */
 export interface ContextCategory {
   /** `system_prompt`, `tool_definitions`, `skills`, `memory`, `rules`, `mcp`, `subagent_definitions` or `conversation`. */
@@ -657,6 +681,111 @@ export type Dispatched = {
 
 /** Where a command runs from this surface. */
 export type Disposition = "exec" | "unavailable" | "hidden";
+
+/** A file edit an approval asks about. */
+export interface EditDiff {
+  /** The content after the edit. */
+  new_text: string;
+  /** The current content (`null`: a new file). */
+  old_text?: string | null;
+  /** The absolute path. */
+  path: string;
+}
+
+/** How file edits of an editor session are approved (ACP session modes). */
+export type EditMode = "default" | "accept_edits" | "dont_ask";
+
+/** `session.editor` params: the editor MCP servers of a session an editor loaded, resumed or forked. */
+export interface EditorBindParams {
+  /** The servers: a non-empty list replaces the session's editor servers from its next turn, an empty one keeps them. */
+  mcp_servers?: Array<EditorMcpServer>;
+  /** The session. */
+  session_id: string;
+}
+
+/** `session.editor` result. */
+export interface EditorBound {
+  /** Whether the list changed (the new tools apply from the next turn). */
+  changed: boolean;
+  /** The names of the session's editor servers now. */
+  servers: Array<string>;
+}
+
+/** The answer to `editor.fs.read` and `editor.fs.write`. */
+export interface EditorFsResult {
+  /** The file's content (`editor.fs.read`). */
+  content?: string | null;
+  /** The editor's error, returned to the model as the tool's. */
+  error?: string | null;
+}
+
+/** An MCP server the editor asks the session to use (ACP `mcpServers`): a local command (`stdio`) or a remote endpoint (`http`, `sse`). The daemon runs it under the session's capability grants. */
+export interface EditorMcpServer {
+  /** Its arguments (`stdio`). */
+  args?: Array<string>;
+  /** The program (`stdio`). */
+  command?: string | null;
+  /** Its environment (`stdio`). */
+  env?: Array<NameValue>;
+  /** Request headers (`http`, `sse`). */
+  headers?: Array<NameValue>;
+  /** The server's name (its tools are `mcp_<name>_<tool>`). */
+  name: string;
+  /** `stdio`, `http` or `sse`. */
+  transport: string;
+  /** The endpoint (`http`, `sse`). */
+  url?: string | null;
+}
+
+/** `editor.fs.read` params: a text file as the editor has it (unsaved changes included). */
+export interface EditorReadParams {
+  /** Milliseconds until the request settles unanswered. */
+  deadline_ms?: number | null;
+  /** The absolute path, inside the session's working directory. */
+  path: string;
+  /** The session. */
+  session_id: string;
+}
+
+/** `editor.terminal.run` params: a command the editor runs in its own terminal panel. */
+export interface EditorTerminalParams {
+  /** The shell command line. */
+  command: string;
+  /** Its working directory. */
+  cwd: string;
+  /** Milliseconds until the request settles unanswered. */
+  deadline_ms?: number | null;
+  /** The most output bytes the editor keeps (the tool's output budget). */
+  output_byte_limit: number;
+  /** The session. */
+  session_id: string;
+}
+
+/** The answer to `editor.terminal.run`. */
+export interface EditorTerminalResult {
+  /** The editor could not run it. */
+  error?: string | null;
+  /** The exit status, when it exited. */
+  exit_code?: number | null;
+  /** What the command printed (the editor's retained tail). */
+  output?: string;
+  /** The signal that ended it, when one did. */
+  signal?: string | null;
+  /** The editor dropped output beyond the limit. */
+  truncated?: boolean;
+}
+
+/** `editor.fs.write` params: the new content of a text file, written through the editor (into an open buffer when there is one). */
+export interface EditorWriteParams {
+  /** The whole new content. */
+  content: string;
+  /** Milliseconds until the request settles unanswered. */
+  deadline_ms?: number | null;
+  /** The absolute path, inside the session's working directory. */
+  path: string;
+  /** The session. */
+  session_id: string;
+}
 
 /** `egress.set` params: changes applied in order (mode, then allow, then deny); an empty change only reads the policy. */
 export interface EgressSetParams {
@@ -987,6 +1116,14 @@ export interface HelloResult {
   server_version: string;
 }
 
+/** `session.interrupt` params. */
+export interface InterruptParams {
+  /** The session. */
+  session_id: string;
+  /** Only this admission (`prompt.submit`'s `turn_id`): the running turn stops only when it is this one, a queued one leaves the queue (its `turn.finished` says `interrupted_by_user`), anything else is left alone. Absent: whatever turn runs. */
+  turn_id?: string | null;
+}
+
 /** `journey.list` result. */
 export interface JourneyList {
   /** The nodes, oldest first. */
@@ -1283,6 +1420,14 @@ export interface ModelOptionsParams {
   profile?: string | null;
   /** The session (it must be attached). */
   session_id?: string | null;
+}
+
+/** One `name=value` pair of an editor MCP server (an environment variable or an HTTP header). */
+export interface NameValue {
+  /** The name. */
+  name: string;
+  /** The value. */
+  value: string;
 }
 
 /** `onboarding.ensure` result. */
@@ -1585,7 +1730,7 @@ export interface RequestResolved {
 }
 
 /** What `session.resolve` looks up. */
-export type ResolveKind = "resume" | "continue";
+export type ResolveKind = "resume" | "continue" | "tip";
 
 /** `session.resolve` params: a chat's `-r`/`-c` reference. */
 export interface ResolveParams {
@@ -1643,6 +1788,8 @@ export interface ServerCapabilities {
 export interface SessionCreateParams {
   /** The working directory of the session. */
   cwd?: string | null;
+  /** The MCP servers of the editor creating it (an ACP session): run by the daemon under the session's capability grants. */
+  editor_mcp_servers?: Array<EditorMcpServer>;
   /** Make this connection the session's interactive owner: another connection resuming it exclusively is refused while it is attached. */
   exclusive?: boolean;
   /** Retries with the same key within 300 s return the same session instead of creating another one. */
@@ -1659,18 +1806,30 @@ export interface SessionCreateParams {
 
 /** `session.list` result. */
 export interface SessionList {
+  /** The cursor of the next page, when there is one. */
+  next_cursor?: string | null;
   /** The sessions. */
   sessions: Array<SessionSummary>;
 }
 
 /** `session.list` params. */
 export interface SessionListParams {
+  /** The page after the one whose `next_cursor` this is; an invalid cursor is `-32602 invalid cursor`. */
+  cursor?: string | null;
+  /** Only sessions working in this directory. */
+  cwd?: string | null;
   /** Also hidden sessions: canonical Bot Chats, archived and hidden ones. */
   include_hidden?: boolean;
   /** At most this many, newest activity first (default 50). */
   limit?: number | null;
+  /** Only sessions with at least this many messages. */
+  min_messages?: number | null;
   /** The profile; required only when the ticket grants several. */
   profile?: string | null;
+  /** Only sessions this kind of client created. */
+  source?: ClientKind | null;
+  /** One row per conversation: a session continued after compression is listed as its newest continuation. */
+  tips_only?: boolean;
 }
 
 /** `session.project` payload: a session moved to another project. */
@@ -1689,6 +1848,30 @@ export interface SessionProject {
 export interface SessionRef {
   /** `ses_<ULID>`. */
   session_id: string;
+}
+
+/** A session's settings as clients show and change them. */
+export interface SessionSettings {
+  /** Whether a turn runs. */
+  busy: boolean;
+  /** The working directory. */
+  cwd: string;
+  /** How file edits are approved (`null`: the session has no edit policy, it is not an editor session). */
+  edit_mode?: EditMode | null;
+  /** That model (`<provider>/<model>` names it fully). */
+  model: string;
+  /** The models a client may switch to (`<provider>/<model>`). */
+  models?: Array<string>;
+  /** The provider of the model the next turn uses. */
+  provider: string;
+  /** The reasoning effort (`none` when the model has none). */
+  reasoning_effort: string;
+  /** The efforts the model accepts. */
+  reasoning_efforts?: Array<string>;
+  /** The session. */
+  session_id: string;
+  /** The session's title, once it has one. */
+  title?: string | null;
 }
 
 /** How a daemon session runs: the session-shaping flags of `prometheus chat`, applied when the session loads (spec: cli, Daemon attachment with in-process fallback). */
@@ -1721,6 +1904,8 @@ export interface SessionSetup {
 
 /** One listed session. */
 export interface SessionSummary {
+  /** Its working directory. */
+  cwd?: string | null;
   /** Whether a turn is running in the daemon. */
   live: boolean;
   /** Its project (`prj_...`), when it has one. */
@@ -1731,6 +1916,8 @@ export interface SessionSummary {
   started_at: string;
   /** Its title, when it has one. */
   title?: string | null;
+  /** Its last activity (RFC 3339). */
+  updated_at?: string | null;
 }
 
 /** How a steer is delivered. */
@@ -2291,15 +2478,18 @@ export interface Methods {
   "session.attach": { params: AttachParams; result: Attached };
   "session.banner": { params: SessionRef; result: BannerInfo };
   "session.compact": { params: CompactParams; result: Compacted };
+  "session.configure": { params: ConfigureParams; result: Configured };
   "session.context_usage": { params: SessionRef; result: ContextUsage };
   "session.create": { params: SessionCreateParams; result: SessionRef };
   "session.detach": { params: SessionRef; result: Ack };
+  "session.editor": { params: EditorBindParams; result: EditorBound };
   "session.events.since": { params: EventsSinceParams; result: EventsSince };
   "session.fork": { params: ForkParams; result: SessionRef };
-  "session.interrupt": { params: SessionRef; result: Ack };
+  "session.interrupt": { params: InterruptParams; result: Ack };
   "session.list": { params: SessionListParams; result: SessionList };
   "session.resolve": { params: ResolveParams; result: SessionRef };
   "session.resume": { params: ResumeParams; result: Attached };
+  "session.settings": { params: SessionRef; result: SessionSettings };
   "session.siblings": { params: SessionRef; result: Lineage };
   "session.steer": { params: SteerParams; result: Ack };
   "session.transcript": { params: SessionRef; result: Transcript };
@@ -2324,6 +2514,9 @@ export interface Methods {
 export interface ServerRequests {
   "approval.request": { params: ApprovalRequestParams; result: ApprovalAnswer };
   "clarify.request": { params: ClarifyRequestParams; result: ClarifyAnswers };
+  "editor.fs.read": { params: EditorReadParams; result: EditorFsResult };
+  "editor.fs.write": { params: EditorWriteParams; result: EditorFsResult };
+  "editor.terminal.run": { params: EditorTerminalParams; result: EditorTerminalResult };
   "secret.request": { params: SecretRequestParams; result: SecretAnswer };
   "sudo.request": { params: SudoRequestParams; result: SudoAnswer };
   "ui.annotate_preview": { params: UiCall; result: unknown };

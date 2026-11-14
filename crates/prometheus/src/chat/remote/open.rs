@@ -70,6 +70,7 @@ pub(super) async fn claim(
         idempotency_key: None,
         exclusive: true,
         setup: start.setup.clone(),
+        editor_mcp_servers: Vec::new(),
     };
     let created: SessionRef = client
         .call_typed::<SessionCreate>(&params)

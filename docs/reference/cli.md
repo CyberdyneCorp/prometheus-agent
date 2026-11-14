@@ -73,6 +73,7 @@ Commands:
   mcp          MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
   plugins      Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
   tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
+  acp          The Agent Client Protocol server editors launch (Zed, VS Code, JetBrains...): a viewer of the profile's gateway daemon on stdio
   schema       Print the JSON Schema of a published contract (`subagent-result`)
   rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
   completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
@@ -15307,7 +15308,7 @@ Arguments:
   [COMPONENT]
           Component to show (default `agent`), or `list` for every component and its file
 
-          [possible values: agent, errors, gateway, adapter, cron, kanban, mcp, plugins, sandbox, providers, rpc, update, migrate, evolve, eval, list]
+          [possible values: agent, acp, errors, gateway, adapter, cron, kanban, mcp, plugins, sandbox, providers, rpc, update, migrate, evolve, eval, list]
 
 Options:
       --home <PATH>
@@ -26269,6 +26270,75 @@ Options:
           Print help
 ```
 
+## `prometheus acp`
+
+```text
+The Agent Client Protocol server editors launch (Zed, VS Code, JetBrains...): a viewer of the profile's gateway daemon on stdio
+
+Usage: prometheus acp [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --version
+          Print the version and exit
+
+      --check
+          Check the profile, the daemon and the model, then exit (0 when ready, 1 naming the first failing check)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --setup
+          Run `prometheus setup`, then offer the browser runtime, and exit
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --setup-browser
+          Install the managed Chromium runtime for ACP browser tools and exit
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --yes
+          Install without asking (`--setup-browser`)
+
+  -m, --model <MODEL>
+          The model of the sessions this process opens
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+      --provider <PROVIDER>
+          The provider of the sessions this process opens
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --yolo
+          Approval-gated calls run without asking
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+      --ignore-user-config
+          Schema defaults instead of the profile's `config.toml`
+
+      --unattended
+          Serve a client that cannot answer prompts (a channel relay bridge): approvals follow `approvals.unattended_mode` and the grants
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus schema`
 
 ```text
@@ -27582,6 +27652,7 @@ Commands:
   mcp          MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
   plugins      Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
   tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
+  acp          The Agent Client Protocol server editors launch (Zed, VS Code, JetBrains...): a viewer of the profile's gateway daemon on stdio
   schema       Print the JSON Schema of a published contract (`subagent-result`)
   rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
   completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
@@ -31669,6 +31740,14 @@ Usage: prometheus help plugins test-adapter
 The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
 
 Usage: prometheus help tui
+```
+
+## `prometheus help acp`
+
+```text
+The Agent Client Protocol server editors launch (Zed, VS Code, JetBrains...): a viewer of the profile's gateway daemon on stdio
+
+Usage: prometheus help acp
 ```
 
 ## `prometheus help schema`

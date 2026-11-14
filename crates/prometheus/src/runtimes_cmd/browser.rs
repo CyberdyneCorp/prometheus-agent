@@ -98,6 +98,16 @@ pub fn needs_local_browser(browser: &BrowserConfig) -> bool {
     browser.cdp_url.is_none() && browser.provider == "local"
 }
 
+/// Whether an ACP session of `scope` can have the browser tools: its
+/// browser is remote (`browser.cdp_url`, a cloud provider) or the managed
+/// `chromium` runtime is installed (`prometheus acp --setup-browser`).
+/// Unlike other surfaces, an editor session never installs it lazily.
+#[must_use]
+pub fn acp_browser_ready(scope: &pmt_config::ProfileScope) -> bool {
+    !needs_local_browser(&scope.config().browser)
+        || Store::open(scope.home()).installed("chromium").is_some()
+}
+
 /// The policies over `installer`'s store with the lazy-install switch from
 /// `daemon.toml`; `confirm` answers `Install <name> <version> (<size>)?
 /// [Y/n]` before a lazy install (an interactive session asks the person;

@@ -878,8 +878,12 @@ impl Hub {
     }
 
     /// An answer from client `by_client` on connection `conn` to request
-    /// `id`. Only the first valid answer of a recipient settles it; an
-    /// error answer settles it unanswered.
+    /// `id`. Only the first valid answer of a recipient settles it. An
+    /// error answer (a dismissed or failed card) withdraws that recipient
+    /// only: another driver may still answer, and once no recipient is
+    /// left the request settles unanswered at once with `request.cancel
+    /// {reason: "no_responder"}` (spec: acp-adapter, Approvals and
+    /// clarify bridge to editor cards with fail-closed semantics).
     pub fn resolve(
         &self,
         conn: ConnId,
@@ -888,7 +892,7 @@ impl Hub {
         answer: Result<Value, pmt_rpc::RpcError>,
     ) -> Answered {
         let mut state = self.state();
-        let Some(pending) = state.requests.get(id) else {
+        let Some(pending) = state.requests.get_mut(id) else {
             return if state.settled.iter().any(|s| s == id) {
                 Answered::Settled
             } else {
@@ -897,6 +901,18 @@ impl Hub {
         };
         if !pending.sent_to.contains(&conn) {
             return Answered::Unknown;
+        }
+        if answer.is_err() {
+            pending.sent_to.retain(|c| *c != conn);
+            if !pending.sent_to.is_empty() {
+                return Answered::Taken;
+            }
+            let session = pending.session_id.clone();
+            state.requests.remove(id);
+            state.settle(id);
+            drop(state);
+            self.cancel_event(&session, id, "no_responder");
+            return Answered::Taken;
         }
         if let Ok(value) = &answer
             && let Err(violation) = self.catalog.check_answer(&pending.method, value)

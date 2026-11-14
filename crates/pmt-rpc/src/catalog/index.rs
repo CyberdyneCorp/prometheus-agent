@@ -102,6 +102,10 @@ pub const INDEX: &[IndexEntry] = &[
     method("session.context_usage", WA),
     method("prompt.submit", WA),
     method("session.interrupt", WA),
+    // acp-adapter
+    method("session.editor", "acp-adapter"),
+    method("session.settings", "acp-adapter"),
+    long("session.configure", "acp-adapter"),
     // agent-turn-loop
     method("session.steer", "agent-turn-loop"),
     long("session.resolve", WA),
@@ -256,6 +260,10 @@ pub const INDEX: &[IndexEntry] = &[
     server_request("clarify.request", WA),
     server_request("secret.request", WA),
     server_request("sudo.request", WA),
+    // the editor behind an ACP connection (acp-adapter)
+    server_request("editor.fs.read", "acp-adapter"),
+    server_request("editor.fs.write", "acp-adapter"),
+    server_request("editor.terminal.run", "acp-adapter"),
     // the desktop UI toolset (desktop-app)
     server_request("ui.read_terminal", "desktop-app"),
     server_request("ui.close_terminal", "desktop-app"),

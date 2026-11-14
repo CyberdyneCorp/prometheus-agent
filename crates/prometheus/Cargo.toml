@@ -54,7 +54,8 @@ adapter-kits = [
     "pmt-adapters-webhook/kit",
 ]
 dashboard = ["gateway", "dep:pmt-web"]
-acp = []
+# The ACP adapter is a client of the gateway daemon.
+acp = ["gateway", "dep:pmt-acp"]
 mcp = []
 evolve = []
 eval = []
@@ -74,6 +75,7 @@ pmt-automation.workspace = true
 pmt-cron.workspace = true
 pmt-delegation.workspace = true
 pmt-worktrees.workspace = true
+pmt-acp = { workspace = true, optional = true }
 pmt-gateway = { workspace = true, optional = true }
 pmt-api = { workspace = true, optional = true }
 pmt-web = { workspace = true, optional = true }
@@ -137,7 +139,7 @@ toml.workspace = true
 # Input ids of the TUI's prompts and idempotency keys of its creates.
 ulid.workspace = true
 # `logs --follow` polls and stops on Ctrl-C.
-tokio = { workspace = true, features = ["signal"] }
+tokio = { workspace = true, features = ["signal", "fs", "io-std", "io-util"] }
 tracing.workspace = true
 unicode-width.workspace = true
 # `debug bundle` archives (`.tar.zst`).
@@ -148,7 +150,7 @@ zstd.workspace = true
 # The controlling terminal's device and session leader (`-c` per terminal);
 # SIGTSTP for the line interface's Ctrl+Z; the effective uid for
 # `daemon install-service --system` and the launchd GUI domain.
-nix = { workspace = true, features = ["term", "process", "signal", "user"] }
+nix = { workspace = true, features = ["term", "process", "signal", "user", "fs"] }
 
 [build-dependencies]
 jiff.workspace = true

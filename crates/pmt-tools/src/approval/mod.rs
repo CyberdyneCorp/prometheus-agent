@@ -31,6 +31,7 @@
 
 pub mod dangerous;
 pub mod detectors;
+pub mod edits;
 pub mod explain;
 mod gate;
 pub mod guardian;
@@ -48,7 +49,7 @@ use std::path::Path;
 
 use serde::Serialize;
 
-pub use gate::{ApprovalRequest, CommandGate, Decision, GateSetup, OwnProcesses, STOP};
+pub use gate::{ApprovalRequest, CommandGate, Decision, EditDiff, GateSetup, OwnProcesses, STOP};
 pub use printable::printable;
 pub use shell::ParseError;
 

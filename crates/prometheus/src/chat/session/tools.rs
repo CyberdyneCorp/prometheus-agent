@@ -41,6 +41,7 @@ pub struct Gate {
 }
 
 /// What builds a session's gate.
+#[allow(clippy::struct_excessive_bools)] // independent gate inputs
 pub struct GateInputs<'a> {
     /// The profile.
     pub scope: &'a ProfileScope,
@@ -54,6 +55,10 @@ pub struct GateInputs<'a> {
     pub interactive: bool,
     /// A scheduled run: approvals follow `approvals.cron_mode`.
     pub cron: bool,
+    /// A session whose client cannot answer prompts (an unattended ACP
+    /// session): approvals follow `approvals.unattended_mode` and the
+    /// grants, never a person.
+    pub unattended: bool,
     /// `--yolo`.
     pub yolo: bool,
     /// Plugin approval observers and transport.
@@ -80,7 +85,9 @@ pub struct GateInputs<'a> {
 /// `[security]` protected-file patterns that do not parse.
 pub fn gate(inputs: &GateInputs<'_>) -> Result<Gate, Error> {
     let config = inputs.scope.config();
-    let (channel, prompts, context) = if inputs.interactive {
+    let (channel, prompts, context) = if inputs.unattended {
+        (Channel::unattended(), None, Context::Unattended)
+    } else if inputs.interactive {
         let (channel, surface) =
             Channel::attached(Duration::from_secs(config.approvals.timeout_secs.max(1)));
         (channel, Some(surface), Context::Interactive)
@@ -198,6 +205,15 @@ pub fn selection(
     };
     let selection = Selection::resolve(registry, &enabled, disabled)?
         .folded_for(registry, surface, disabled, &hidden)?;
+    // An ACP session gets the browser tools only when the managed
+    // Chromium is already installed: absent, never failing at call time
+    // (spec: acp-adapter, Optional browser tools for ACP sessions).
+    let acp = matches!(surface, SessionSurface::Acp | SessionSurface::AcpUnattended);
+    let selection = if acp && !crate::runtimes_cmd::browser::acp_browser_ready(scope) {
+        selection.without_toolset(registry, pmt_tools::browser::TOOLSET)
+    } else {
+        selection
+    };
     Ok(if interactive {
         selection
     } else {
@@ -265,7 +281,7 @@ pub fn surface_of(session: &pmt_store::Session) -> SessionSurface {
 }
 
 /// The source tag of unattended ACP sessions (spec: acp-adapter).
-const ACP_UNATTENDED_TAG: &str = "acp-unattended";
+pub const ACP_UNATTENDED_TAG: &str = "acp-unattended";
 
 /// The source tag of the desktop's first-run onboarding chat (spec:
 /// desktop-app, First-run onboarding chat).

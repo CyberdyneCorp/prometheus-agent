@@ -1,11 +1,28 @@
 [package]
 name = "pmt-acp"
-description = "Prometheus ACP server (placeholder)"
+description = "Prometheus ACP adapter: editors (Agent Client Protocol clients) as viewers of the profile's gateway daemon"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 repository.workspace = true
+
+[dependencies]
+# Inline images travel as base64 in ACP and as `data:` URLs to the daemon.
+base64.workspace = true
+pmt-core.workspace = true
+pmt-rpc.workspace = true
+serde_json.workspace = true
+# Content fingerprints of kept prompt identities.
+sha2.workspace = true
+tokio = { workspace = true, features = ["io-util", "rt", "sync", "time", "macros"] }
+tracing.workspace = true
+ulid.workspace = true
+# `file://` URIs of editor resource links.
+url.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["io-util", "rt", "sync", "time", "macros", "test-util"] }
 
 [lints]
 workspace = true

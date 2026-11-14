@@ -112,7 +112,14 @@ a session's active messages up to a chosen one into a new session (the
 parent is unchanged), `session.tree` lists a session's descendants (forks,
 compression continuations, delegates) with their relation and
 `session.siblings` the other children of its parent, and
-`session.interrupt` stops the running turn.
+`session.interrupt` stops the running turn (with a `turn_id`, only when
+that admission is the one running: a queued one leaves the queue and ends
+as `interrupted_by_user`, any other turn keeps running). `session.resolve`
+with `kind: "tip"` answers the newest continuation of a session id's
+compression chain. `session.list` can narrow its rows by creating
+`source`, `cwd` and `min_messages`, list one row per conversation
+(`tips_only`), and pages through `next_cursor`; a cursor the daemon did
+not hand out is `-32602 invalid cursor`.
 `memory.summary` answers a session's memory review line (`null` when the
 agent changed nothing to review), which a client shows as it leaves or
 resumes the session, and `autoprune.offer` answers the low-disk prune
@@ -199,6 +206,33 @@ answer, or, when some were evicted or the epoch changed, its answer says
 no client has attached to for `daemon.idle_session_close_secs` (3600)
 that runs nothing is closed.
 
+## Editor sessions
+
+The ACP adapter (`prometheus acp`, see [Editors over ACP](acp.md)) uses
+three methods every client may call. `session.settings` answers the
+session's provider, model, the models a switch may pick, its reasoning
+effort, its edit mode (`null` for a session that is not an editor
+session), its cwd, whether a turn runs and its title. `session.configure
+{session_id, edit_mode?, model?, reasoning_effort?, cwd?}` changes them:
+the edit mode and the cwd only while no turn runs (`-32004`), a model
+switch during a turn applies once the turn ended (`next_turn: true`).
+Every change, and every `/model`, `/provider`, `/reasoning`, `/fast` or
+`/title` a client dispatches, is announced to all attached clients as a
+`session.event` of type `session.settings` whose payload is the new
+settings. `session.editor {session_id, mcp_servers}` binds an editor's MCP
+servers to the session (a non-empty list replaces them from the next turn,
+an empty one keeps them; a fork keeps its parent's); `session.create`
+takes them as `editor_mcp_servers`.
+
+An ACP connection whose editor reads and writes files advertises the
+client feature `editor_fs`, one whose editor runs terminals
+`editor_terminal`; the daemon then sends that connection
+`editor.fs.read`, `editor.fs.write` and `editor.terminal.run` server
+requests for the session's files under its cwd and (with
+`acp.use_editor_terminal` and `security.sandbox.mode = "off"`) its
+foreground terminal commands. An approval of a file edit in an editor
+session carries a `diff` (`path`, `old_text`, `new_text`).
+
 ## Server-to-client requests
 
 When a turn needs a person (an approval, a clarifying question, a secret
@@ -212,7 +246,10 @@ receives `request.resolved {id, by_client}`. A request that times out
 `request.cancel`, and a later answer gets `-32004 request <id> already
 settled`. With no capable driver attached, or when the last one leaves,
 the request settles at once as `no_responder` (a `request.cancel` with
-that reason), which denies an approval; the turn keeps running.
+that reason), which denies an approval; the turn keeps running. A client
+that answers with an error (a card its user dismissed) withdraws only its
+own answer: another driver may still answer, and when none is left the
+request settles the same way at once.
 
 ## Talking to the daemon by hand
 

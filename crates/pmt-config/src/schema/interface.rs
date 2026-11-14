@@ -398,3 +398,17 @@ pub enum QuickCommandKind {
     /// Run a shell command.
     Exec,
 }
+
+/// The `[acp]` section: how `prometheus acp` sessions use the editor
+/// (spec: acp-adapter, Editor terminal delegation).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+#[schemars(extend("x-apply" = "next_session"))]
+pub struct AcpConfig {
+    /// Run the terminal commands of a local ACP session in the editor's
+    /// terminal panel when the editor supports it. The editor terminal is
+    /// outside the OS sandbox, so it is used only while
+    /// `security.sandbox.mode = "off"`; otherwise commands run sandboxed
+    /// in the daemon.
+    pub use_editor_terminal: bool,
+}

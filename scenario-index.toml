@@ -80,6 +80,7 @@ capabilities = [
 [milestones.M3]
 partial = true
 capabilities = [
+    "acp-adapter",
     "desktop-app",
     "distribution-and-update",
     "messaging-gateway",
@@ -4335,3 +4336,103 @@ capabilities = [
 [desktop-app."First-run onboarding chat"]
 "Regular chats lack the tool" = { tests = ["crates/prometheus/tests/desktop_ui_tools.rs::opt_outs_apply_from_the_next_session_and_only_onboarding_gets_setup_beat", "crates/prometheus/tests/desktop_ui.rs::the_first_launch_opens_the_onboarding_chat"], note = "only the onboarding.ensure session exposes setup_beat; a regular chat's forged setup_beat never reaches the window and shows no card; the onboarding source tag is refused to session.create" }
 "Card deadline" = { tests = ["crates/prometheus/tests/desktop_ui_tools.rs::an_unanswered_setup_card_times_out_and_keeps_the_defaults"], note = "the theme card left unanswered: setup_beat returns that the theme card timed out and the defaults stay in place, recorded as timed out in the session's onboarding record (debug daemons take PMT_TEST_UI_USER_WAIT_SECS = 2 instead of 300 s)" }
+
+# M3 group 66: the ACP adapter. crates/prometheus/tests/acp/ drives
+# `prometheus acp` over stdio as an editor (fixture.rs) against a daemon on
+# a test home with the mock provider.
+[acp-adapter."Launch entry point and pre-server flags"]
+"Check without a model" = ["crates/prometheus/tests/acp/launch.rs::check_names_the_missing_model_and_passes_once_one_is_set"]
+
+[acp-adapter."Stdout carries only protocol frames"]
+"A component logs during a prompt" = { tests = ["crates/prometheus/tests/acp/launch.rs::logs_go_to_stderr_and_acp_log_redacted_while_stdout_carries_frames"], note = "a whole prompt at logging.level = debug; every stdout line is checked to be a JSON-RPC frame; a WARN record carrying a PMT_SECRET_ value is redacted on stderr and in <profile>/logs/acp.log" }
+
+[acp-adapter."Liveness probes are quiet"]
+"Editor probe" = ["crates/prometheus/tests/acp/launch.rs::liveness_probes_answer_method_not_found_without_a_warning"]
+
+[acp-adapter."Configuration comes from flags and the profile only"]
+"Safe mode without a model" = ["crates/prometheus/tests/acp/launch.rs::safe_mode_without_model_and_provider_refuses_new_sessions", "crates/prometheus/tests/acp/launch.rs::a_non_secret_environment_variable_does_not_change_the_session"]
+
+[acp-adapter."ACP process is a daemon viewer"]
+"Editor closes mid-turn" = ["crates/prometheus/tests/acp/launch.rs::a_turn_survives_the_editor_and_shows_on_load", "crates/prometheus/tests/acp/launch.rs::the_daemon_is_started_for_the_first_session_and_outlives_the_editor"]
+
+[acp-adapter."Daemon connection is bound to the launch profile"]
+"Wrong daemon" = { tests = ["crates/prometheus/tests/acp/launch.rs::a_daemon_without_the_launch_profile_is_refused"], note = "the running daemon serves only default (no gateway.multiplex); an editor launched with -p work gets profile_mismatch on session/new" }
+
+[acp-adapter."Initialize handshake"]
+"Version agrees across surfaces" = ["crates/prometheus/tests/acp/sessions.rs::initialize_negotiates_version_capabilities_and_sign_in"]
+
+[acp-adapter."Authentication reuses profile credentials"]
+"No credentials yet" = ["crates/prometheus/tests/acp/sessions.rs::without_a_credential_only_setup_is_offered_and_it_fails"]
+
+[acp-adapter."New session on the daemon"]
+"Successful creation" = ["crates/prometheus/tests/acp/sessions.rs::a_new_session_is_an_acp_daemon_session_in_the_editor_cwd"]
+
+[acp-adapter."Load and resume replay the logical session"]
+"Reopen after compression" = ["crates/prometheus/tests/acp/sessions.rs::loading_a_compressed_session_attaches_its_continuation", "crates/prometheus/tests/acp/sessions.rs::resume_reattaches_and_an_unattached_session_is_not_found"]
+
+[acp-adapter."Editor MCP servers belong to the daemon session"]
+"Second editor with no servers" = ["crates/prometheus/tests/acp/sessions.rs::a_second_editor_with_no_servers_keeps_the_bound_ones", "crates/prometheus/src/mcp_host/editor.rs::placeholders_and_unknown_transports_are_refused"]
+
+[acp-adapter."Session list is a paged read-only catalog"]
+"Forged cursor" = ["crates/prometheus/tests/acp/sessions.rs::the_session_catalog_pages_acp_sessions_and_refuses_a_forged_cursor", "crates/prometheus/src/daemon_cmd/host/listing.rs::a_cursor_round_trips_and_a_forged_one_is_refused"]
+
+[acp-adapter."Fork creates a daemon branch"]
+"Fork without servers" = ["crates/prometheus/tests/acp/sessions.rs::a_fork_without_servers_keeps_the_parents"]
+
+[acp-adapter."Prompt submission and terminal outcome"]
+"Turn fails" = ["crates/prometheus/tests/acp/prompts.rs::a_failed_turn_is_an_error_and_the_next_prompt_runs", "crates/pmt-acp/src/prompting.rs::a_failed_turn_is_an_error_and_budgets_have_their_stop_reasons"]
+
+[acp-adapter."Cancel targets only this editor's admission"]
+"TUI turn running" = { tests = ["crates/prometheus/tests/acp/prompts.rs::cancel_never_stops_another_surfaces_turn", "crates/prometheus/tests/acp/prompts.rs::cancelling_a_running_command_fails_its_tool_call"], note = "another client attached as a driver submits the running turn; the editor's session/cancel leaves it to finish completed, while cancelling the editor's own admission stops it" }
+
+[acp-adapter."Exactly-once submit across lost acknowledgements"]
+"Resend after a lost ack" = { tests = ["crates/prometheus/tests/acp/prompts.rs::a_resent_prompt_after_a_lost_ack_runs_once", "crates/pmt-acp/src/kept.rs::only_the_same_content_reuses_the_identity_and_the_oldest_session_goes_first"], note = "fault injection (debug builds' PMT_TEST_ACP_DROP_ACK) loses the first acknowledgement with the connection; the resent prompt with its PNG yields one user message and one staged blob" }
+
+[acp-adapter."Daemon restart yields an unknown outcome, never a resend"]
+"Restart mid-turn" = { tests = ["crates/prometheus/tests/acp/prompts.rs::a_daemon_restart_fails_the_prompt_and_reattach_shows_the_outcome", "crates/prometheus/tests/acp/prompts.rs::an_unknown_outcome_refuses_new_work_until_discarded"], note = "kill -9 of the daemon mid-turn fails the prompt with the unknown-outcome message; the restarted daemon records the crashed turn, so re-attach shows the outcome and new work runs. With no recorded outcome (the acknowledgement lost with the connection) new work is refused with unknown_execution naming /discard <id>, which clears it" }
+
+[acp-adapter."Slash commands are answered or refused, never failed"]
+"Path at line start" = ["crates/prometheus/tests/acp/prompts.rs::a_path_at_line_start_is_prompt_text", "crates/pmt-acp/src/slash.rs::a_path_or_an_unknown_word_is_prompt_text"]
+"Refused command" = ["crates/prometheus/tests/acp/prompts.rs::a_refused_command_is_shown_and_ends_the_prompt_normally", "crates/prometheus/tests/acp/prompts.rs::a_command_answer_is_an_agent_message"]
+
+[acp-adapter."Edit-approval modes"]
+"Mode changed in the desktop" = ["crates/prometheus/tests/acp/cards.rs::a_mode_change_elsewhere_reaches_the_editor_and_busy_changes_are_refused", "crates/prometheus/tests/acp/cards.rs::edits_ask_with_a_diff_in_default_mode_and_not_in_accept_edits", "crates/pmt-acp/src/adapter.rs::a_mode_change_from_another_surface_is_a_current_mode_update"]
+
+[acp-adapter."Config options are validated"]
+"Unknown option id" = ["crates/prometheus/tests/acp/cards.rs::config_options_are_validated_and_applied", "crates/pmt-acp/src/options.rs::an_unknown_option_or_value_is_refused_naming_what_is_allowed"]
+
+[acp-adapter."Model switching through the daemon"]
+"Switch during a turn" = ["crates/prometheus/tests/acp/cards.rs::a_model_switch_during_a_turn_applies_from_the_next"]
+
+[acp-adapter."Approvals and clarify bridge to editor cards with fail-closed semantics"]
+"Dismissed card, editor is the only driver" = ["crates/prometheus/tests/acp/cards.rs::a_dismissed_card_denies_at_once_when_the_editor_is_the_only_driver", "crates/pmt-gateway/src/hub/tests.rs::a_dismissed_card_of_the_only_driver_settles_the_request_at_once"]
+"Dismissed card, desktop also attached" = ["crates/prometheus/tests/acp/cards.rs::a_dismissed_card_leaves_the_approval_to_the_desktop", "crates/pmt-gateway/src/hub/tests.rs::a_dismissed_card_leaves_the_request_to_another_driver", "crates/prometheus/tests/acp/cards.rs::clarify_questions_become_cards_with_their_choices_and_skip"]
+
+[acp-adapter."Clarify is part of the ACP toolset"]
+"Default ACP session" = ["crates/prometheus/tests/acp/cards.rs::an_acp_session_has_clarify_and_no_messaging_send_tools"]
+
+[acp-adapter."Reply projection is exactly-once"]
+"Final text after streaming" = ["crates/pmt-acp/src/project.rs::only_the_unseen_remainder_of_the_final_text_is_sent", "crates/prometheus/tests/acp/prompts.rs::the_answer_is_shown_exactly_once"]
+
+[acp-adapter."Every tool call reaches a terminal status"]
+"Interrupted tool" = ["crates/prometheus/tests/acp/prompts.rs::cancelling_a_running_command_fails_its_tool_call", "crates/pmt-acp/src/project.rs::calls_still_open_at_the_turn_end_are_failed"]
+
+[acp-adapter."Prompt content conversion and media staging"]
+"Unsupported image type" = ["crates/prometheus/tests/acp/editor.rs::an_svg_is_omitted_with_a_note_and_file_links_are_inlined", "crates/pmt-acp/src/content.rs::an_svg_is_omitted_with_a_note_and_the_text_still_runs"]
+
+[acp-adapter."Session metadata projection"]
+"Same title republished" = ["crates/prometheus/tests/acp/editor.rs::a_title_is_shown_once_until_it_changes", "crates/pmt-acp/src/adapter.rs::an_unchanged_title_is_not_sent_again"]
+
+[acp-adapter."Editor-native file access (upgrade)"]
+"Unsaved buffer" = ["crates/prometheus/tests/acp/editor.rs::file_tools_under_the_editor_cwd_go_through_the_editor", "crates/pmt-tools/src/editor.rs::reads_under_the_workspace_see_the_editor_buffer_and_others_the_disk"]
+
+[acp-adapter."Editor terminal delegation (upgrade)"]
+"Command in the editor terminal" = ["crates/prometheus/tests/acp/editor.rs::an_unsandboxed_session_runs_commands_in_the_editor_terminal"]
+"Sandboxed session ignores the editor terminal" = ["crates/prometheus/tests/acp/editor.rs::a_sandboxed_session_runs_commands_in_the_daemon"]
+
+[acp-adapter."Optional browser tools for ACP sessions"]
+"Runtime not installed" = ["crates/prometheus/tests/acp/unattended.rs::browser_tools_need_the_managed_chromium_at_session_creation"]
+
+[acp-adapter."Unattended ACP clients and relay bridges"]
+"Relay bridge auto-approves" = ["crates/prometheus/tests/acp/unattended.rs::an_unattended_bridge_is_never_asked_and_the_command_is_blocked", "crates/prometheus/tests/acp/unattended.rs::an_unattended_session_follows_approvals_unattended_mode"]
+"Default unattended toolset" = ["crates/prometheus/tests/acp/unattended.rs::an_unattended_session_has_no_terminal_or_code_execution"]
