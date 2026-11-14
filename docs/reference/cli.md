@@ -25,6 +25,7 @@ Commands:
   browser      Browser sessions: status, and closing the real browser whose profile real-profile browsing copies
   lsp          Language servers behind the diagnostics of file edits: status, registry, installs, restart
   cron         Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and the headless tick
+  kanban       Kanban boards shared by every profile: tasks, dependencies, the dispatcher, workers, review, notifications, export and import
   worktrees    Git worktrees of sessions and subagents: list, sweep and restore archived trees
   projects     Projects: named workspaces spanning folders, the active project, archive and restore
   themes       Themes: list them, use one, set a colour, spinner or branding key of the custom theme, show the one in use
@@ -9572,6 +9573,2652 @@ Usage: prometheus cron help tick
 Print this message or the help of the given subcommand(s)
 
 Usage: prometheus cron help help
+```
+
+## `prometheus kanban`
+
+```text
+Kanban boards shared by every profile: tasks, dependencies, the dispatcher, workers, review, notifications, export and import
+
+Usage: prometheus kanban [OPTIONS] <COMMAND>
+
+Commands:
+  create           Create a task (ready, or todo while a parent is open)
+  list             The board's tasks by priority then age [alias: ls]
+  show             One task: fields, links, comments, attachments, runs and spend
+  edit             Change a task's title, body, priority, reviewer or review lane
+  assign           Assign tasks to a profile (`none` unassigns)
+  link             Make CHILD depend on PARENT
+  unlink           Remove a dependency
+  comment          Add a comment
+  attach           Attach files (at most `kanban.attachment_max_bytes` each)
+  attachments      A task's attachments
+  block            Block tasks with a typed reason
+  unblock          Lift blocks and schedules
+  schedule         Park tasks until a time (RFC 3339), or until unblocked
+  complete         Complete tasks through the completion gates
+  request-review   Hand tasks to review
+  approve          Approve tasks in review
+  request-changes  Send tasks in review back to todo with a comment
+  archive          Archive tasks (a running task's worker is terminated)
+  restore          Restore archived tasks to triage, todo or ready
+  promote          Promote todo tasks whose parents are settled
+  context          Print exactly the context a worker of the task would receive
+  log              A task's event log
+  runs             A task's runs (attempts) with their sessions and spend
+  tail             The board's latest events; `--follow` keeps printing new ones
+  stats            Counts by status and run outcome
+  diag             The dispatcher lease, the last ticks and the open runs
+  dispatch         Run the dispatcher: one tick (`--once`) or a standalone loop
+  notify           Notification subscriptions
+  gc               Purge old subscriptions, tick summaries and leftover scratch workspaces
+  boards           Boards: list, create, rename, archive, switch, export, import
+  help             Print this message or the help of the given subcommand(s)
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban create`
+
+```text
+Create a task (ready, or todo while a parent is open)
+
+Usage: prometheus kanban create [OPTIONS] <TITLE>
+
+Arguments:
+  <TITLE>
+          The title
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --body <BODY>
+          The body (instructions, acceptance criteria)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --assignee <ASSIGNEE>
+          The worker profile
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --reviewer <REVIEWER>
+          The reviewer profile
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --parent <PARENTS>
+          A parent task (repeatable)
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --workspace <WORKSPACE>
+          scratch, worktree[:<branch>] or dir:<absolute path>
+
+          [default: scratch]
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+      --priority <PRIORITY>
+          Higher is claimed first
+
+          [default: 0]
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --status <INITIAL_STATUS>
+          triage, todo or blocked (default: from the parents)
+
+          [possible values: triage, todo, blocked]
+
+      --idempotency-key <IDEMPOTENCY_KEY>
+          Return the live task with this key instead of a duplicate
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+      --review
+          Send worker completions to review
+
+      --no-review
+          Never send worker completions to review
+
+      --max-retries <MAX_RETRIES>
+          Failed runs before the breaker trips
+
+      --budget-usd <BUDGET_USD>
+          USD limit across every run
+
+      --budget-tokens <BUDGET_TOKENS>
+          Token limit across every run
+
+      --artifact <ARTIFACTS>
+          A file the worker must leave in its workspace (repeatable)
+
+      --kind <KIND>
+          agent, eval or evolve
+
+          [default: agent]
+          [possible values: agent, eval, evolve]
+
+      --suite <SUITE>
+          The eval suite (kind eval)
+
+      --provider-mode <PROVIDER_MODE>
+          live or replay (kind eval)
+
+          [possible values: live, replay]
+
+      --target-task <TARGET_TASK>
+          The evolution target task (kind evolve)
+
+      --mode <MODE>
+          parallel or sequential (kind evolve)
+
+          [default: parallel]
+          [possible values: parallel, sequential]
+
+      --budget-k <BUDGET_K>
+          Candidates per round (kind evolve)
+
+          [default: 2]
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban list`
+
+```text
+The board's tasks by priority then age
+
+Usage: prometheus kanban list [OPTIONS]
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --status <STATUS>
+          Only this status
+
+      --assignee <ASSIGNEE>
+          Only this assignee
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --all
+          Include archived tasks
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban show`
+
+```text
+One task: fields, links, comments, attachments, runs and spend
+
+Usage: prometheus kanban show [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The task
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban edit`
+
+```text
+Change a task's title, body, priority, reviewer or review lane
+
+Usage: prometheus kanban edit [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The task
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --title <TITLE>
+          New title
+
+      --body <BODY>
+          New body
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --priority <PRIORITY>
+          New priority
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --reviewer <REVIEWER>
+          New reviewer profile (`none` clears it)
+
+      --review <REVIEW>
+          Review lane: `on`, `off` or `board` (the board's default)
+
+          [possible values: on, off, board]
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban assign`
+
+```text
+Assign tasks to a profile (`none` unassigns)
+
+Usage: prometheus kanban assign [OPTIONS] <PROFILE> <IDS>...
+
+Arguments:
+  <PROFILE>
+          The profile
+
+  <IDS>...
+          The tasks
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban link`
+
+```text
+Make CHILD depend on PARENT
+
+Usage: prometheus kanban link [OPTIONS] <PARENT> <CHILD>
+
+Arguments:
+  <PARENT>
+          The parent
+
+  <CHILD>
+          The child
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --run <RUN>
+          The child's current run id (to link a running child)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban unlink`
+
+```text
+Remove a dependency
+
+Usage: prometheus kanban unlink [OPTIONS] <PARENT> <CHILD>
+
+Arguments:
+  <PARENT>
+          The parent
+
+  <CHILD>
+          The child
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban comment`
+
+```text
+Add a comment
+
+Usage: prometheus kanban comment [OPTIONS] <ID> <BODY>
+
+Arguments:
+  <ID>
+          The task
+
+  <BODY>
+          The text
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban attach`
+
+```text
+Attach files (at most `kanban.attachment_max_bytes` each)
+
+Usage: prometheus kanban attach [OPTIONS] <ID> <FILES>...
+
+Arguments:
+  <ID>
+          The task
+
+  <FILES>...
+          The files
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban attachments`
+
+```text
+A task's attachments
+
+Usage: prometheus kanban attachments [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The task
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban block`
+
+```text
+Block tasks with a typed reason
+
+Usage: prometheus kanban block [OPTIONS] --kind <KIND> --reason <REASON> <IDS>...
+
+Arguments:
+  <IDS>...
+          The tasks
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --kind <KIND>
+          `dependency`, `needs_input`, `capability`, `budget` or `transient`
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --reason <REASON>
+          Why
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban unblock`
+
+```text
+Lift blocks and schedules
+
+Usage: prometheus kanban unblock [OPTIONS] <IDS>...
+
+Arguments:
+  <IDS>...
+          The tasks
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban schedule`
+
+```text
+Park tasks until a time (RFC 3339), or until unblocked
+
+Usage: prometheus kanban schedule [OPTIONS] <IDS>...
+
+Arguments:
+  <IDS>...
+          The tasks
+
+Options:
+      --at <AT>
+          When they wake (RFC 3339)
+
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban complete`
+
+```text
+Complete tasks through the completion gates
+
+Usage: prometheus kanban complete [OPTIONS] <IDS>...
+
+Arguments:
+  <IDS>...
+          The tasks
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --result <RESULT>
+          The result
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --summary <SUMMARY>
+          The summary
+
+      --run <RUN>
+          The open run a live worker owns (completes it for the worker)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --force
+          Complete despite a live worker
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban request-review`
+
+```text
+Hand tasks to review
+
+Usage: prometheus kanban request-review [OPTIONS] <IDS>...
+
+Arguments:
+  <IDS>...
+          The tasks
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --summary <SUMMARY>
+          The summary
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban approve`
+
+```text
+Approve tasks in review
+
+Usage: prometheus kanban approve [OPTIONS] <IDS>...
+
+Arguments:
+  <IDS>...
+          The tasks
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --comment <COMMENT>
+          A comment
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban request-changes`
+
+```text
+Send tasks in review back to todo with a comment
+
+Usage: prometheus kanban request-changes [OPTIONS] --comment <COMMENT> <IDS>...
+
+Arguments:
+  <IDS>...
+          The tasks
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --comment <COMMENT>
+          What to change
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban archive`
+
+```text
+Archive tasks (a running task's worker is terminated)
+
+Usage: prometheus kanban archive [OPTIONS] <IDS>...
+
+Arguments:
+  <IDS>...
+          The tasks
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban restore`
+
+```text
+Restore archived tasks to triage, todo or ready
+
+Usage: prometheus kanban restore [OPTIONS] <IDS>...
+
+Arguments:
+  <IDS>...
+          The tasks
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --to <TO>
+          The status (default: ready or todo by the parents)
+
+          [possible values: triage, todo, ready]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban promote`
+
+```text
+Promote todo tasks whose parents are settled
+
+Usage: prometheus kanban promote [OPTIONS] [IDS]...
+
+Arguments:
+  [IDS]...
+          The tasks (all todo tasks when none)
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban context`
+
+```text
+Print exactly the context a worker of the task would receive
+
+Usage: prometheus kanban context [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The task
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban log`
+
+```text
+A task's event log
+
+Usage: prometheus kanban log [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The task
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban runs`
+
+```text
+A task's runs (attempts) with their sessions and spend
+
+Usage: prometheus kanban runs [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The task
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban tail`
+
+```text
+The board's latest events; `--follow` keeps printing new ones
+
+Usage: prometheus kanban tail [OPTIONS]
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -n, --lines <LINES>
+          Events shown first
+
+          [default: 20]
+
+  -f, --follow
+          Keep printing
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban stats`
+
+```text
+Counts by status and run outcome
+
+Usage: prometheus kanban stats [OPTIONS]
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban diag`
+
+```text
+The dispatcher lease, the last ticks and the open runs
+
+Usage: prometheus kanban diag [OPTIONS]
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban dispatch`
+
+```text
+Run the dispatcher: one tick (`--once`) or a standalone loop
+
+Usage: prometheus kanban dispatch [OPTIONS]
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --once
+          One tick
+
+      --loop
+          Tick every `kanban.dispatch_interval_secs` until stopped
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban work`
+
+```text
+Run a claimed task (started by the dispatcher with its run ticket on stdin)
+
+Usage: prometheus kanban work [OPTIONS] --run <RUN>
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --run <RUN>
+          The run
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban notify`
+
+```text
+Notification subscriptions
+
+Usage: prometheus kanban notify [OPTIONS] <COMMAND>
+
+Commands:
+  subscribe    Report a task's `completed`, `blocked`, `gave_up` and `review_requested` events to a chat, through the subscriber profile's adapter
+  list         Subscriptions of a task, or of the board
+  unsubscribe  Remove a subscription
+  help         Print this message or the help of the given subcommand(s)
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban notify subscribe`
+
+```text
+Report a task's `completed`, `blocked`, `gave_up` and `review_requested` events to a chat, through the subscriber profile's adapter
+
+Usage: prometheus kanban notify subscribe [OPTIONS] --adapter <ADAPTER> --chat <CHAT> <ID>
+
+Arguments:
+  <ID>
+          The task
+
+Options:
+      --adapter <ADAPTER>
+          The adapter (`telegram`, `slack`...)
+
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --chat <CHAT>
+          The chat id
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --thread <THREAD>
+          The thread id
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban notify list`
+
+```text
+Subscriptions of a task, or of the board
+
+Usage: prometheus kanban notify list [OPTIONS] [ID]
+
+Arguments:
+  [ID]
+          The task
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban notify unsubscribe`
+
+```text
+Remove a subscription
+
+Usage: prometheus kanban notify unsubscribe [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The subscription id
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban notify help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus kanban notify help [COMMAND]
+
+Commands:
+  subscribe    Report a task's `completed`, `blocked`, `gave_up` and `review_requested` events to a chat, through the subscriber profile's adapter
+  list         Subscriptions of a task, or of the board
+  unsubscribe  Remove a subscription
+  help         Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus kanban notify help subscribe`
+
+```text
+Report a task's `completed`, `blocked`, `gave_up` and `review_requested` events to a chat, through the subscriber profile's adapter
+
+Usage: prometheus kanban notify help subscribe
+```
+
+## `prometheus kanban notify help list`
+
+```text
+Subscriptions of a task, or of the board
+
+Usage: prometheus kanban notify help list
+```
+
+## `prometheus kanban notify help unsubscribe`
+
+```text
+Remove a subscription
+
+Usage: prometheus kanban notify help unsubscribe
+```
+
+## `prometheus kanban notify help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus kanban notify help help
+```
+
+## `prometheus kanban gc`
+
+```text
+Purge old subscriptions, tick summaries and leftover scratch workspaces
+
+Usage: prometheus kanban gc [OPTIONS]
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban boards`
+
+```text
+Boards: list, create, rename, archive, switch, export, import
+
+Usage: prometheus kanban boards [OPTIONS] <COMMAND>
+
+Commands:
+  list     Every board, archived ones included
+  create   Create a board
+  rename   Rename a board's slug
+  archive  Archive a board (it can no longer be selected)
+  switch   Make a board this profile's current board (`kanban.current_board`)
+  export   Write a board's tasks, links, events, runs and attachments to FILE
+  import   Restore an exported board as a new board
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban boards list`
+
+```text
+Every board, archived ones included
+
+Usage: prometheus kanban boards list [OPTIONS]
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban boards create`
+
+```text
+Create a board
+
+Usage: prometheus kanban boards create [OPTIONS] <SLUG>
+
+Arguments:
+  <SLUG>
+          The slug
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --name <NAME>
+          A display name
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban boards rename`
+
+```text
+Rename a board's slug
+
+Usage: prometheus kanban boards rename [OPTIONS] <FROM> <TO>
+
+Arguments:
+  <FROM>
+          The board
+
+  <TO>
+          The new slug
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban boards archive`
+
+```text
+Archive a board (it can no longer be selected)
+
+Usage: prometheus kanban boards archive [OPTIONS] <SLUG>
+
+Arguments:
+  <SLUG>
+          The board
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban boards switch`
+
+```text
+Make a board this profile's current board (`kanban.current_board`)
+
+Usage: prometheus kanban boards switch [OPTIONS] <SLUG>
+
+Arguments:
+  <SLUG>
+          The board
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban boards export`
+
+```text
+Write a board's tasks, links, events, runs and attachments to FILE
+
+Usage: prometheus kanban boards export [OPTIONS] <SLUG> <FILE>
+
+Arguments:
+  <SLUG>
+          The board
+
+  <FILE>
+          The archive
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban boards import`
+
+```text
+Restore an exported board as a new board
+
+Usage: prometheus kanban boards import [OPTIONS] <FILE>
+
+Arguments:
+  <FILE>
+          The archive
+
+Options:
+      --board <SLUG>
+          The board (default: `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --rename <RENAME>
+          The new board's slug (needed when the exported slug is taken)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban boards help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus kanban boards help [COMMAND]
+
+Commands:
+  list     Every board, archived ones included
+  create   Create a board
+  rename   Rename a board's slug
+  archive  Archive a board (it can no longer be selected)
+  switch   Make a board this profile's current board (`kanban.current_board`)
+  export   Write a board's tasks, links, events, runs and attachments to FILE
+  import   Restore an exported board as a new board
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus kanban boards help list`
+
+```text
+Every board, archived ones included
+
+Usage: prometheus kanban boards help list
+```
+
+## `prometheus kanban boards help create`
+
+```text
+Create a board
+
+Usage: prometheus kanban boards help create
+```
+
+## `prometheus kanban boards help rename`
+
+```text
+Rename a board's slug
+
+Usage: prometheus kanban boards help rename
+```
+
+## `prometheus kanban boards help archive`
+
+```text
+Archive a board (it can no longer be selected)
+
+Usage: prometheus kanban boards help archive
+```
+
+## `prometheus kanban boards help switch`
+
+```text
+Make a board this profile's current board (`kanban.current_board`)
+
+Usage: prometheus kanban boards help switch
+```
+
+## `prometheus kanban boards help export`
+
+```text
+Write a board's tasks, links, events, runs and attachments to FILE
+
+Usage: prometheus kanban boards help export
+```
+
+## `prometheus kanban boards help import`
+
+```text
+Restore an exported board as a new board
+
+Usage: prometheus kanban boards help import
+```
+
+## `prometheus kanban boards help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus kanban boards help help
+```
+
+## `prometheus kanban help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus kanban help [COMMAND]
+
+Commands:
+  create           Create a task (ready, or todo while a parent is open)
+  list             The board's tasks by priority then age
+  show             One task: fields, links, comments, attachments, runs and spend
+  edit             Change a task's title, body, priority, reviewer or review lane
+  assign           Assign tasks to a profile (`none` unassigns)
+  link             Make CHILD depend on PARENT
+  unlink           Remove a dependency
+  comment          Add a comment
+  attach           Attach files (at most `kanban.attachment_max_bytes` each)
+  attachments      A task's attachments
+  block            Block tasks with a typed reason
+  unblock          Lift blocks and schedules
+  schedule         Park tasks until a time (RFC 3339), or until unblocked
+  complete         Complete tasks through the completion gates
+  request-review   Hand tasks to review
+  approve          Approve tasks in review
+  request-changes  Send tasks in review back to todo with a comment
+  archive          Archive tasks (a running task's worker is terminated)
+  restore          Restore archived tasks to triage, todo or ready
+  promote          Promote todo tasks whose parents are settled
+  context          Print exactly the context a worker of the task would receive
+  log              A task's event log
+  runs             A task's runs (attempts) with their sessions and spend
+  tail             The board's latest events; `--follow` keeps printing new ones
+  stats            Counts by status and run outcome
+  diag             The dispatcher lease, the last ticks and the open runs
+  dispatch         Run the dispatcher: one tick (`--once`) or a standalone loop
+  notify           Notification subscriptions
+  gc               Purge old subscriptions, tick summaries and leftover scratch workspaces
+  boards           Boards: list, create, rename, archive, switch, export, import
+  help             Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus kanban help create`
+
+```text
+Create a task (ready, or todo while a parent is open)
+
+Usage: prometheus kanban help create
+```
+
+## `prometheus kanban help list`
+
+```text
+The board's tasks by priority then age
+
+Usage: prometheus kanban help list
+```
+
+## `prometheus kanban help show`
+
+```text
+One task: fields, links, comments, attachments, runs and spend
+
+Usage: prometheus kanban help show
+```
+
+## `prometheus kanban help edit`
+
+```text
+Change a task's title, body, priority, reviewer or review lane
+
+Usage: prometheus kanban help edit
+```
+
+## `prometheus kanban help assign`
+
+```text
+Assign tasks to a profile (`none` unassigns)
+
+Usage: prometheus kanban help assign
+```
+
+## `prometheus kanban help link`
+
+```text
+Make CHILD depend on PARENT
+
+Usage: prometheus kanban help link
+```
+
+## `prometheus kanban help unlink`
+
+```text
+Remove a dependency
+
+Usage: prometheus kanban help unlink
+```
+
+## `prometheus kanban help comment`
+
+```text
+Add a comment
+
+Usage: prometheus kanban help comment
+```
+
+## `prometheus kanban help attach`
+
+```text
+Attach files (at most `kanban.attachment_max_bytes` each)
+
+Usage: prometheus kanban help attach
+```
+
+## `prometheus kanban help attachments`
+
+```text
+A task's attachments
+
+Usage: prometheus kanban help attachments
+```
+
+## `prometheus kanban help block`
+
+```text
+Block tasks with a typed reason
+
+Usage: prometheus kanban help block
+```
+
+## `prometheus kanban help unblock`
+
+```text
+Lift blocks and schedules
+
+Usage: prometheus kanban help unblock
+```
+
+## `prometheus kanban help schedule`
+
+```text
+Park tasks until a time (RFC 3339), or until unblocked
+
+Usage: prometheus kanban help schedule
+```
+
+## `prometheus kanban help complete`
+
+```text
+Complete tasks through the completion gates
+
+Usage: prometheus kanban help complete
+```
+
+## `prometheus kanban help request-review`
+
+```text
+Hand tasks to review
+
+Usage: prometheus kanban help request-review
+```
+
+## `prometheus kanban help approve`
+
+```text
+Approve tasks in review
+
+Usage: prometheus kanban help approve
+```
+
+## `prometheus kanban help request-changes`
+
+```text
+Send tasks in review back to todo with a comment
+
+Usage: prometheus kanban help request-changes
+```
+
+## `prometheus kanban help archive`
+
+```text
+Archive tasks (a running task's worker is terminated)
+
+Usage: prometheus kanban help archive
+```
+
+## `prometheus kanban help restore`
+
+```text
+Restore archived tasks to triage, todo or ready
+
+Usage: prometheus kanban help restore
+```
+
+## `prometheus kanban help promote`
+
+```text
+Promote todo tasks whose parents are settled
+
+Usage: prometheus kanban help promote
+```
+
+## `prometheus kanban help context`
+
+```text
+Print exactly the context a worker of the task would receive
+
+Usage: prometheus kanban help context
+```
+
+## `prometheus kanban help log`
+
+```text
+A task's event log
+
+Usage: prometheus kanban help log
+```
+
+## `prometheus kanban help runs`
+
+```text
+A task's runs (attempts) with their sessions and spend
+
+Usage: prometheus kanban help runs
+```
+
+## `prometheus kanban help tail`
+
+```text
+The board's latest events; `--follow` keeps printing new ones
+
+Usage: prometheus kanban help tail
+```
+
+## `prometheus kanban help stats`
+
+```text
+Counts by status and run outcome
+
+Usage: prometheus kanban help stats
+```
+
+## `prometheus kanban help diag`
+
+```text
+The dispatcher lease, the last ticks and the open runs
+
+Usage: prometheus kanban help diag
+```
+
+## `prometheus kanban help dispatch`
+
+```text
+Run the dispatcher: one tick (`--once`) or a standalone loop
+
+Usage: prometheus kanban help dispatch
+```
+
+## `prometheus kanban help work`
+
+```text
+Run a claimed task (started by the dispatcher with its run ticket on stdin)
+
+Usage: prometheus kanban help work
+```
+
+## `prometheus kanban help notify`
+
+```text
+Notification subscriptions
+
+Usage: prometheus kanban help notify [COMMAND]
+
+Commands:
+  subscribe    Report a task's `completed`, `blocked`, `gave_up` and `review_requested` events to a chat, through the subscriber profile's adapter
+  list         Subscriptions of a task, or of the board
+  unsubscribe  Remove a subscription
+```
+
+## `prometheus kanban help notify subscribe`
+
+```text
+Report a task's `completed`, `blocked`, `gave_up` and `review_requested` events to a chat, through the subscriber profile's adapter
+
+Usage: prometheus kanban help notify subscribe
+```
+
+## `prometheus kanban help notify list`
+
+```text
+Subscriptions of a task, or of the board
+
+Usage: prometheus kanban help notify list
+```
+
+## `prometheus kanban help notify unsubscribe`
+
+```text
+Remove a subscription
+
+Usage: prometheus kanban help notify unsubscribe
+```
+
+## `prometheus kanban help gc`
+
+```text
+Purge old subscriptions, tick summaries and leftover scratch workspaces
+
+Usage: prometheus kanban help gc
+```
+
+## `prometheus kanban help boards`
+
+```text
+Boards: list, create, rename, archive, switch, export, import
+
+Usage: prometheus kanban help boards [COMMAND]
+
+Commands:
+  list     Every board, archived ones included
+  create   Create a board
+  rename   Rename a board's slug
+  archive  Archive a board (it can no longer be selected)
+  switch   Make a board this profile's current board (`kanban.current_board`)
+  export   Write a board's tasks, links, events, runs and attachments to FILE
+  import   Restore an exported board as a new board
+```
+
+## `prometheus kanban help boards list`
+
+```text
+Every board, archived ones included
+
+Usage: prometheus kanban help boards list
+```
+
+## `prometheus kanban help boards create`
+
+```text
+Create a board
+
+Usage: prometheus kanban help boards create
+```
+
+## `prometheus kanban help boards rename`
+
+```text
+Rename a board's slug
+
+Usage: prometheus kanban help boards rename
+```
+
+## `prometheus kanban help boards archive`
+
+```text
+Archive a board (it can no longer be selected)
+
+Usage: prometheus kanban help boards archive
+```
+
+## `prometheus kanban help boards switch`
+
+```text
+Make a board this profile's current board (`kanban.current_board`)
+
+Usage: prometheus kanban help boards switch
+```
+
+## `prometheus kanban help boards export`
+
+```text
+Write a board's tasks, links, events, runs and attachments to FILE
+
+Usage: prometheus kanban help boards export
+```
+
+## `prometheus kanban help boards import`
+
+```text
+Restore an exported board as a new board
+
+Usage: prometheus kanban help boards import
+```
+
+## `prometheus kanban help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus kanban help help
 ```
 
 ## `prometheus worktrees`
@@ -27604,6 +30251,7 @@ Commands:
   browser      Browser sessions: status, and closing the real browser whose profile real-profile browsing copies
   lsp          Language servers behind the diagnostics of file edits: status, registry, installs, restart
   cron         Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and the headless tick
+  kanban       Kanban boards shared by every profile: tasks, dependencies, the dispatcher, workers, review, notifications, export and import
   worktrees    Git worktrees of sessions and subagents: list, sweep and restore archived trees
   projects     Projects: named workspaces spanning folders, the active project, archive and restore
   themes       Themes: list them, use one, set a colour, spinner or branding key of the custom theme, show the one in use
@@ -29110,6 +31758,388 @@ Usage: prometheus help cron doctor
 Run one tick in this process (for OS schedulers); does nothing while a gateway daemon owns scheduling
 
 Usage: prometheus help cron tick
+```
+
+## `prometheus help kanban`
+
+```text
+Kanban boards shared by every profile: tasks, dependencies, the dispatcher, workers, review, notifications, export and import
+
+Usage: prometheus help kanban [COMMAND]
+
+Commands:
+  create           Create a task (ready, or todo while a parent is open)
+  list             The board's tasks by priority then age
+  show             One task: fields, links, comments, attachments, runs and spend
+  edit             Change a task's title, body, priority, reviewer or review lane
+  assign           Assign tasks to a profile (`none` unassigns)
+  link             Make CHILD depend on PARENT
+  unlink           Remove a dependency
+  comment          Add a comment
+  attach           Attach files (at most `kanban.attachment_max_bytes` each)
+  attachments      A task's attachments
+  block            Block tasks with a typed reason
+  unblock          Lift blocks and schedules
+  schedule         Park tasks until a time (RFC 3339), or until unblocked
+  complete         Complete tasks through the completion gates
+  request-review   Hand tasks to review
+  approve          Approve tasks in review
+  request-changes  Send tasks in review back to todo with a comment
+  archive          Archive tasks (a running task's worker is terminated)
+  restore          Restore archived tasks to triage, todo or ready
+  promote          Promote todo tasks whose parents are settled
+  context          Print exactly the context a worker of the task would receive
+  log              A task's event log
+  runs             A task's runs (attempts) with their sessions and spend
+  tail             The board's latest events; `--follow` keeps printing new ones
+  stats            Counts by status and run outcome
+  diag             The dispatcher lease, the last ticks and the open runs
+  dispatch         Run the dispatcher: one tick (`--once`) or a standalone loop
+  notify           Notification subscriptions
+  gc               Purge old subscriptions, tick summaries and leftover scratch workspaces
+  boards           Boards: list, create, rename, archive, switch, export, import
+```
+
+## `prometheus help kanban create`
+
+```text
+Create a task (ready, or todo while a parent is open)
+
+Usage: prometheus help kanban create
+```
+
+## `prometheus help kanban list`
+
+```text
+The board's tasks by priority then age
+
+Usage: prometheus help kanban list
+```
+
+## `prometheus help kanban show`
+
+```text
+One task: fields, links, comments, attachments, runs and spend
+
+Usage: prometheus help kanban show
+```
+
+## `prometheus help kanban edit`
+
+```text
+Change a task's title, body, priority, reviewer or review lane
+
+Usage: prometheus help kanban edit
+```
+
+## `prometheus help kanban assign`
+
+```text
+Assign tasks to a profile (`none` unassigns)
+
+Usage: prometheus help kanban assign
+```
+
+## `prometheus help kanban link`
+
+```text
+Make CHILD depend on PARENT
+
+Usage: prometheus help kanban link
+```
+
+## `prometheus help kanban unlink`
+
+```text
+Remove a dependency
+
+Usage: prometheus help kanban unlink
+```
+
+## `prometheus help kanban comment`
+
+```text
+Add a comment
+
+Usage: prometheus help kanban comment
+```
+
+## `prometheus help kanban attach`
+
+```text
+Attach files (at most `kanban.attachment_max_bytes` each)
+
+Usage: prometheus help kanban attach
+```
+
+## `prometheus help kanban attachments`
+
+```text
+A task's attachments
+
+Usage: prometheus help kanban attachments
+```
+
+## `prometheus help kanban block`
+
+```text
+Block tasks with a typed reason
+
+Usage: prometheus help kanban block
+```
+
+## `prometheus help kanban unblock`
+
+```text
+Lift blocks and schedules
+
+Usage: prometheus help kanban unblock
+```
+
+## `prometheus help kanban schedule`
+
+```text
+Park tasks until a time (RFC 3339), or until unblocked
+
+Usage: prometheus help kanban schedule
+```
+
+## `prometheus help kanban complete`
+
+```text
+Complete tasks through the completion gates
+
+Usage: prometheus help kanban complete
+```
+
+## `prometheus help kanban request-review`
+
+```text
+Hand tasks to review
+
+Usage: prometheus help kanban request-review
+```
+
+## `prometheus help kanban approve`
+
+```text
+Approve tasks in review
+
+Usage: prometheus help kanban approve
+```
+
+## `prometheus help kanban request-changes`
+
+```text
+Send tasks in review back to todo with a comment
+
+Usage: prometheus help kanban request-changes
+```
+
+## `prometheus help kanban archive`
+
+```text
+Archive tasks (a running task's worker is terminated)
+
+Usage: prometheus help kanban archive
+```
+
+## `prometheus help kanban restore`
+
+```text
+Restore archived tasks to triage, todo or ready
+
+Usage: prometheus help kanban restore
+```
+
+## `prometheus help kanban promote`
+
+```text
+Promote todo tasks whose parents are settled
+
+Usage: prometheus help kanban promote
+```
+
+## `prometheus help kanban context`
+
+```text
+Print exactly the context a worker of the task would receive
+
+Usage: prometheus help kanban context
+```
+
+## `prometheus help kanban log`
+
+```text
+A task's event log
+
+Usage: prometheus help kanban log
+```
+
+## `prometheus help kanban runs`
+
+```text
+A task's runs (attempts) with their sessions and spend
+
+Usage: prometheus help kanban runs
+```
+
+## `prometheus help kanban tail`
+
+```text
+The board's latest events; `--follow` keeps printing new ones
+
+Usage: prometheus help kanban tail
+```
+
+## `prometheus help kanban stats`
+
+```text
+Counts by status and run outcome
+
+Usage: prometheus help kanban stats
+```
+
+## `prometheus help kanban diag`
+
+```text
+The dispatcher lease, the last ticks and the open runs
+
+Usage: prometheus help kanban diag
+```
+
+## `prometheus help kanban dispatch`
+
+```text
+Run the dispatcher: one tick (`--once`) or a standalone loop
+
+Usage: prometheus help kanban dispatch
+```
+
+## `prometheus help kanban work`
+
+```text
+Run a claimed task (started by the dispatcher with its run ticket on stdin)
+
+Usage: prometheus help kanban work
+```
+
+## `prometheus help kanban notify`
+
+```text
+Notification subscriptions
+
+Usage: prometheus help kanban notify [COMMAND]
+
+Commands:
+  subscribe    Report a task's `completed`, `blocked`, `gave_up` and `review_requested` events to a chat, through the subscriber profile's adapter
+  list         Subscriptions of a task, or of the board
+  unsubscribe  Remove a subscription
+```
+
+## `prometheus help kanban notify subscribe`
+
+```text
+Report a task's `completed`, `blocked`, `gave_up` and `review_requested` events to a chat, through the subscriber profile's adapter
+
+Usage: prometheus help kanban notify subscribe
+```
+
+## `prometheus help kanban notify list`
+
+```text
+Subscriptions of a task, or of the board
+
+Usage: prometheus help kanban notify list
+```
+
+## `prometheus help kanban notify unsubscribe`
+
+```text
+Remove a subscription
+
+Usage: prometheus help kanban notify unsubscribe
+```
+
+## `prometheus help kanban gc`
+
+```text
+Purge old subscriptions, tick summaries and leftover scratch workspaces
+
+Usage: prometheus help kanban gc
+```
+
+## `prometheus help kanban boards`
+
+```text
+Boards: list, create, rename, archive, switch, export, import
+
+Usage: prometheus help kanban boards [COMMAND]
+
+Commands:
+  list     Every board, archived ones included
+  create   Create a board
+  rename   Rename a board's slug
+  archive  Archive a board (it can no longer be selected)
+  switch   Make a board this profile's current board (`kanban.current_board`)
+  export   Write a board's tasks, links, events, runs and attachments to FILE
+  import   Restore an exported board as a new board
+```
+
+## `prometheus help kanban boards list`
+
+```text
+Every board, archived ones included
+
+Usage: prometheus help kanban boards list
+```
+
+## `prometheus help kanban boards create`
+
+```text
+Create a board
+
+Usage: prometheus help kanban boards create
+```
+
+## `prometheus help kanban boards rename`
+
+```text
+Rename a board's slug
+
+Usage: prometheus help kanban boards rename
+```
+
+## `prometheus help kanban boards archive`
+
+```text
+Archive a board (it can no longer be selected)
+
+Usage: prometheus help kanban boards archive
+```
+
+## `prometheus help kanban boards switch`
+
+```text
+Make a board this profile's current board (`kanban.current_board`)
+
+Usage: prometheus help kanban boards switch
+```
+
+## `prometheus help kanban boards export`
+
+```text
+Write a board's tasks, links, events, runs and attachments to FILE
+
+Usage: prometheus help kanban boards export
+```
+
+## `prometheus help kanban boards import`
+
+```text
+Restore an exported board as a new board
+
+Usage: prometheus help kanban boards import
 ```
 
 ## `prometheus help worktrees`
@@ -32046,6 +35076,19 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.worktrees_list.v1` | `prometheus worktrees list` |
 | `prometheus.projects_list.v1` | `prometheus projects list` |
 | `prometheus.project.v1` | `prometheus projects show` |
+| `prometheus.kanban_list.v1` | `prometheus kanban list` |
+| `prometheus.kanban_task.v1` | `prometheus kanban show` |
+| `prometheus.kanban_created.v1` | `prometheus kanban create` |
+| `prometheus.kanban_results.v1` | `prometheus kanban results` |
+| `prometheus.kanban_log.v1` | `prometheus kanban log` |
+| `prometheus.kanban_runs.v1` | `prometheus kanban runs` |
+| `prometheus.kanban_stats.v1` | `prometheus kanban stats` |
+| `prometheus.kanban_diag.v1` | `prometheus kanban diag` |
+| `prometheus.kanban_tick.v1` | `prometheus kanban dispatch` |
+| `prometheus.kanban_boards.v1` | `prometheus kanban boards list` |
+| `prometheus.kanban_subscriptions.v1` | `prometheus kanban notify list` |
+| `prometheus.kanban_attachments.v1` | `prometheus kanban attachments` |
+| `prometheus.kanban_gc.v1` | `prometheus kanban gc` |
 | `prometheus.cron_list.v1` | `prometheus cron list` |
 | `prometheus.cron_job.v1` | `prometheus cron add` |
 | `prometheus.cron_runs.v1` | `prometheus cron runs` |

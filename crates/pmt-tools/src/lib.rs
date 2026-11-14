@@ -25,6 +25,7 @@ pub mod agent_level;
 pub mod agent_level_cron;
 pub mod agent_level_delegation;
 pub mod agent_level_desktop;
+pub mod agent_level_kanban;
 pub mod approval;
 pub mod args;
 pub mod browser;

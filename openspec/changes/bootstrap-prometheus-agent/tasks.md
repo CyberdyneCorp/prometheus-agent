@@ -603,9 +603,9 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 67. M3 Kanban
 
-- [ ] 67.1 Implement board storage at `<home>/kanban/`, slugs and selection, the typed workflow table, task creation (idempotent) and dependency links; verify with store tests (spec: kanban)
-- [ ] 67.2 Implement ready promotion with atomic claim, typed blocks with the loop breaker, scheduled parking, completion gates, the review lane and archive terminating the worker; verify with concurrency tests (spec: kanban)
-- [ ] 67.3 Implement the single dispatcher per home, its tick, concurrency caps, the fail-closed claim allowlist, the failure circuit breaker, worker spawn by run ticket and liveness heartbeats; verify that a dead worker's task is reclaimed (spec: kanban)
+- [x] 67.1 Implement board storage at `<home>/kanban/`, slugs and selection, the typed workflow table, task creation (idempotent) and dependency links; verify with store tests (spec: kanban)
+- [x] 67.2 Implement ready promotion with atomic claim, typed blocks with the loop breaker, scheduled parking, completion gates, the review lane and archive terminating the worker; verify with concurrency tests (spec: kanban)
+- [x] 67.3 Implement the single dispatcher per home, its tick, concurrency caps, the fail-closed claim allowlist, the failure circuit breaker, worker spawn by run ticket and liveness heartbeats; verify that a dead worker's task is reclaimed (spec: kanban)
 - [ ] 67.4 Implement the kanban toolset and grants, workspaces, attachments, notifications through the owning profile, per-task cost budget, eval/evolution tasks, event log and run history, the CLI and board export/import; verify with CLI tests and document kanban (spec: kanban)
 
 ## 68. M3 Kanban upgrades

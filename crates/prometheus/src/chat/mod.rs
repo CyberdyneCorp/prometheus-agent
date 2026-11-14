@@ -331,6 +331,7 @@ fn session_options(args: &ChatArgs, mode: Mode) -> Result<Options, Error> {
         }),
         egress: args.egress_overrides(),
         cron: None,
+        kanban: None,
         replay: None,
     })
 }

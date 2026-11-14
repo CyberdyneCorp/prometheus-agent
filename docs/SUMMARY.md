@@ -34,6 +34,7 @@
 - [Projects](guide/projects.md)
 - [UI languages](guide/languages.md)
 - [Scheduled jobs](guide/cron.md)
+- [Kanban](guide/kanban.md)
 - [Session automation](guide/session-automation.md)
 - [Skills](guide/skills.md)
 - [Memory](guide/memory.md)
@@ -60,6 +61,7 @@
 - [Client protocol](reference/rpc.md)
 - [Tools](reference/tools.md)
 - [System prompt layers](reference/system-prompt.md)
+- [Kanban workflow](reference/kanban-workflow.md)
 
 # Project
 

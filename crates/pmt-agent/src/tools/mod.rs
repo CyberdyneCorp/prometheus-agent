@@ -8,6 +8,7 @@ pub mod connections;
 pub mod cron;
 pub mod delegation;
 pub mod desktop;
+pub mod kanban;
 pub mod memory;
 pub mod messaging;
 pub mod session_search;
@@ -25,6 +26,7 @@ pub use clarify::Clarifier;
 pub use cron::CronPort;
 pub use delegation::{CodePort, DelegationPort};
 pub use desktop::{DesktopPort, DesktopPorts};
+pub use kanban::KanbanPort;
 pub use memory::{MemoryPort, Recalled};
 pub use messaging::{MessagingPort, MessagingPorts, ReadCheck};
 pub use session_search::SessionSearch;
@@ -43,6 +45,7 @@ pub struct AgentTools {
     delegation: Option<Arc<dyn DelegationPort>>,
     code: Option<Arc<dyn CodePort>>,
     cron: Option<Arc<dyn CronPort>>,
+    kanban: Option<Arc<dyn KanbanPort>>,
     desktop: Option<Arc<dyn DesktopPort>>,
 }
 
@@ -72,6 +75,7 @@ impl AgentTools {
             delegation: None,
             code: None,
             cron: None,
+            kanban: None,
             desktop: None,
         })
     }
@@ -122,6 +126,13 @@ impl AgentTools {
         self
     }
 
+    /// Runs the `kanban_*` tools through `port`.
+    #[must_use]
+    pub fn with_kanban(mut self, port: Arc<dyn KanbanPort>) -> Self {
+        self.kanban = Some(port);
+        self
+    }
+
     /// Runs the desktop UI tools, `setup_beat` and `project` through
     /// `port`.
     #[must_use]
@@ -158,6 +169,10 @@ impl AgentTools {
             "cronjob" => match &self.cron {
                 Some(port) => port.call(self.session, arguments).await,
                 None => ToolResult::error(cron::NO_CRON),
+            },
+            name if kanban::handles(name) => match &self.kanban {
+                Some(port) => port.call(self.session, name, arguments).await,
+                None => ToolResult::error(kanban::NO_KANBAN),
             },
             name if desktop::handles(name) => match &self.desktop {
                 Some(port) => port.call(name, arguments, cancel).await,

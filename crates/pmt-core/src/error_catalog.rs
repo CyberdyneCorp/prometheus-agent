@@ -1210,4 +1210,46 @@ error_codes! {
     /// The command needs a live project.
     PROJECT_ARCHIVED = ("project.archived", Tool,
         "The project is archived: `prometheus projects restore <project>` brings it back before it can be activated or edited.");
+    /// A kanban board slug outside the slug pattern.
+    KANBAN_INVALID_SLUG = ("kanban.invalid_slug", Usage,
+        "A board slug must match `^[a-z0-9][a-z0-9_-]{0,63}$` after lower-casing: 1-64 characters, lowercase alphanumerics, `-` or `_`, not starting with `-` or `_`.");
+    /// No live board has the slug.
+    KANBAN_BOARD_NOT_FOUND = ("kanban.board_not_found", NotFound,
+        "No board with this slug exists, or it is archived; the active board comes from `--board`, then `kanban.current_board`, then `default`, and is never silently replaced. `prometheus kanban boards list` shows the boards.");
+    /// Another board already uses the slug.
+    KANBAN_BOARD_EXISTS = ("kanban.board_exists", InvalidInput,
+        "A board with this slug already exists (archived boards keep theirs); pick another slug, or pass `--rename <new>` to `boards import`.");
+    /// No task of the board has the id.
+    KANBAN_TASK_NOT_FOUND = ("kanban.task_not_found", NotFound,
+        "No task of the board has this id; `prometheus kanban list --all` shows every task, archived ones included.");
+    /// A profile named by a task does not exist.
+    KANBAN_UNKNOWN_PROFILE = ("kanban.unknown_profile", NotFound,
+        "An assignee or reviewer must be an existing profile of this home; `prometheus profile list` shows them.");
+    /// A task field is missing or malformed.
+    KANBAN_INVALID_TASK = ("kanban.invalid_task", InvalidInput,
+        "A task field is missing or malformed (blank title, workspace outside `scratch`, `worktree[:<branch>]` or `dir:<absolute path>`, unknown parents, kind fields); nothing was changed.");
+    /// The workflow table has no such transition.
+    KANBAN_ILLEGAL_TRANSITION = ("kanban.illegal_transition", Conflict,
+        "The typed workflow table defines no transition from the task's status to the requested one for this actor; `docs/reference/kanban-workflow.md` lists every allowed transition.");
+    /// A dependency link was refused.
+    KANBAN_LINK_REFUSED = ("kanban.link_refused", InvalidInput,
+        "A link may not join a task to itself, close a cycle, or attach a running child without that child's current run id; nothing was changed.");
+    /// A completion gate refused the completion.
+    KANBAN_COMPLETION_BLOCKED = ("kanban.completion_blocked", InvalidInput,
+        "A task completes only when every parent is done or archived, the result or summary carries evidence, every declared artifact exists, `created_tasks` names only tasks this run created, and no live worker owns it (pass its run id or `--force`); the refusal is recorded in the task's event log.");
+    /// Another dispatcher holds the lease.
+    KANBAN_LEASE_HELD = ("kanban.lease_held", Conflict,
+        "Exactly one dispatcher runs per home: the gateway daemon (`kanban.dispatch = true`) or one `prometheus kanban dispatch`. Stop the holder named in the message, or wait for its 60 s lease to expire after a crash.");
+    /// A worker's run ticket was missing, reused or did not match.
+    KANBAN_TICKET_REFUSED = ("kanban.ticket_refused", Config,
+        "`prometheus kanban work` starts only with the single-use run ticket the dispatcher wrote to its stdin for an open run; it is not meant to be run by hand.");
+    /// A run-lifecycle tool outside a worker session, or a call outside the worker's grant.
+    KANBAN_NOT_PERMITTED = ("kanban.not_permitted", PermissionDenied,
+        "Run-lifecycle tools work only in a kanban worker session, and a worker's grant covers its own board (and attaching only to its own task); the message names what was refused.");
+    /// An attachment above `kanban.attachment_max_bytes`.
+    KANBAN_ATTACHMENT_TOO_LARGE = ("kanban.attachment_too_large", InvalidInput,
+        "Attachments are limited to `kanban.attachment_max_bytes` (default 25 MiB) on every surface; nothing was stored.");
+    /// A board archive that cannot be imported.
+    KANBAN_INVALID_ARCHIVE = ("kanban.invalid_archive", InvalidInput,
+        "The file is not a board archive written by `prometheus kanban boards export`, or its format version is newer than this build reads.");
 }

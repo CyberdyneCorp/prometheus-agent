@@ -73,6 +73,7 @@ pmt-i18n.workspace = true
 pmt-core.workspace = true
 pmt-automation.workspace = true
 pmt-cron.workspace = true
+pmt-kanban.workspace = true
 pmt-delegation.workspace = true
 pmt-worktrees.workspace = true
 pmt-acp = { workspace = true, optional = true }

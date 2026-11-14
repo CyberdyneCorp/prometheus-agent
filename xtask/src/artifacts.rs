@@ -60,6 +60,12 @@ pub(crate) fn all() -> Vec<Artifact> {
             path: "docs/reference/system-prompt.md",
             contents: system_prompt_reference(),
         },
+        Artifact {
+            // Rendered from the one typed workflow table (spec: kanban,
+            // Typed workflow table).
+            path: "docs/reference/kanban-workflow.md",
+            contents: pmt_kanban::workflow::markdown(),
+        },
     ]
     .into_iter()
     .chain(pmt_i18n::Surface::ALL.map(locale_keys))

@@ -17,6 +17,8 @@ dist = false
 clap.workspace = true
 pmt-agent.workspace = true
 pmt-config.workspace = true
+# The kanban workflow reference page.
+pmt-kanban.workspace = true
 pmt-core.workspace = true
 # The English catalog key sets exported to schema/locales/.
 pmt-i18n.workspace = true

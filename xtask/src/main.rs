@@ -16,6 +16,8 @@
 //!   refer to (`pmt-tools`); links to it from any page under `docs/` must
 //!   name a listed tool (both `gen` and `gen --check` refuse others)
 //!
+//! - `docs/reference/kanban-workflow.md`: every kanban transition, from
+//!   the typed workflow table (`pmt-kanban`)
 //! - `schema/rpc.json` and `schema/rpc.ts`: the client protocol's typed
 //!   catalog (`pmt-rpc`) and its TypeScript bindings for the frontends
 //!

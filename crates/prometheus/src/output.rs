@@ -332,6 +332,58 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "projects show",
     },
     JsonShape {
+        schema: "prometheus.kanban_list.v1",
+        command: "kanban list",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_task.v1",
+        command: "kanban show",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_created.v1",
+        command: "kanban create",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_results.v1",
+        command: "kanban results",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_log.v1",
+        command: "kanban log",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_runs.v1",
+        command: "kanban runs",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_stats.v1",
+        command: "kanban stats",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_diag.v1",
+        command: "kanban diag",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_tick.v1",
+        command: "kanban dispatch",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_boards.v1",
+        command: "kanban boards list",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_subscriptions.v1",
+        command: "kanban notify list",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_attachments.v1",
+        command: "kanban attachments",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_gc.v1",
+        command: "kanban gc",
+    },
+    JsonShape {
         schema: "prometheus.cron_list.v1",
         command: "cron list",
     },

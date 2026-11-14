@@ -48,6 +48,8 @@ pub mod init;
 pub mod insights_cmd;
 pub mod install_receipt_cmd;
 pub mod journey_cmd;
+pub mod kanban_cmd;
+pub mod kanban_host;
 pub mod local_cmd;
 pub mod logs_cmd;
 pub mod lsp_cmd;

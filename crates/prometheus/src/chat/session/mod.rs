@@ -21,6 +21,7 @@ mod ending;
 pub mod env;
 mod guardian;
 pub mod judge;
+pub mod kanban;
 mod lifecycle;
 mod lsp;
 mod mcp;
@@ -109,6 +110,8 @@ pub struct Options {
     pub egress: crate::egress::Overrides,
     /// A scheduled run's session (spec: scheduled-jobs).
     pub cron: Option<cron::CronRun>,
+    /// A kanban worker's session (spec: kanban).
+    pub kanban: Option<kanban::KanbanRun>,
     /// A replay's recorded tool results and prompts.
     pub replay: Option<Arc<crate::replay::Hooks>>,
 }
@@ -742,7 +745,10 @@ impl Factory {
                 &self.scope.config().tools.disabled_toolsets,
                 selection,
             )?,
-            None => self.with_browser_opt_ins(session.id, selection),
+            None => match &self.options.kanban {
+                Some(run) => run.selection(&registry, selection),
+                None => self.with_browser_opt_ins(session.id, selection),
+            },
         };
         Ok((registry, selection, surface))
     }
@@ -894,7 +900,15 @@ impl Factory {
             scratch: Vec::new(),
         });
         let capabilities = &place::with_worktree_git(capabilities, at.cwd, &protected)
-            .union(&cron.map(cron::CronRun::sandbox_grants).unwrap_or_default());
+            .union(&cron.map(cron::CronRun::sandbox_grants).unwrap_or_default())
+            .union(
+                &self
+                    .options
+                    .kanban
+                    .as_ref()
+                    .map(kanban::KanbanRun::sandbox_grants)
+                    .unwrap_or_default(),
+            );
         let processes =
             processes::Wiring::of(self.scope.config(), &self.store, id, &session.origin);
         let environment = env::attach(&env::EnvInputs {
@@ -994,6 +1008,12 @@ impl Factory {
                 &self.options.cwd,
                 self.launch.user_home(),
             ),
+        ));
+        let tools = tools.with_kanban(crate::kanban_host::tool::port(
+            &self.scope,
+            &self.options.cwd,
+            self.read_check(capabilities),
+            self.options.kanban.as_ref().map(|run| run.grant.clone()),
         ));
         let tools = match &self.messaging {
             Some(ports) => tools.with_messaging(ports.port(id, self.read_check(capabilities))),

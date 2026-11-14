@@ -4029,6 +4029,111 @@
         }
       ]
     },
+    "KanbanConfig": {
+      "additionalProperties": false,
+      "description": "The `[kanban]` section.",
+      "properties": {
+        "attachment_max_bytes": {
+          "default": 26214400,
+          "description": "Largest attachment accepted on any surface.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "claim_ttl_secs": {
+          "default": 900,
+          "description": "Seconds a claim lasts without a worker heartbeat before the run is\nreclaimed as a failure.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 60,
+          "type": "integer"
+        },
+        "current_board": {
+          "description": "The board commands use without `--board` (unset: `default`). A\nboard that does not exist is an error, never a silent fallback.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "default_assignee": {
+          "description": "The assignee of ready tasks that name none (unset: such tasks are\nreported `skipped_unassigned`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dispatch": {
+          "default": true,
+          "description": "Run the dispatcher inside the gateway daemon.",
+          "type": "boolean"
+        },
+        "dispatch_interval_secs": {
+          "default": 30,
+          "description": "Seconds between dispatcher ticks.",
+          "format": "uint64",
+          "maximum": 3600,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "dispatch_profiles": {
+          "description": "Claim only tasks assigned to these profiles (`[]` claims nothing;\nunset allows any existing profile).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "done_sub_retention_secs": {
+          "default": 2592000,
+          "description": "Seconds notification subscriptions of done tasks are kept.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failure_limit": {
+          "default": 2,
+          "description": "Consecutive failed runs after which a task without its own\n`max_retries` is blocked (`gave_up`).",
+          "format": "uint32",
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_running": {
+          "description": "Workers running at once across every board of the home (unset:\nphysical memory / 512 MiB clamped to 2-8, or 2 when unknown).",
+          "format": "uint32",
+          "maximum": 256,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "max_running_per_profile": {
+          "default": 2,
+          "description": "Workers running at once per assignee profile.",
+          "format": "uint32",
+          "maximum": 256,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "rate_limit_cooldown_secs": {
+          "default": 300,
+          "description": "Seconds a task waits before it is claimed again after its worker\nwas rate limited (exit 75).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "review_dispatch": {
+          "default": true,
+          "description": "Route `review` tasks to their reviewer profiles, keeping one slot\nfor review work while a ready backlog exists.",
+          "type": "boolean"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
     "KeyChord": {
       "description": "A key chord: `[Ctrl+][Alt+][Shift+]<key>` (spec: tui, Configurable key\nbindings).",
       "type": "string",
@@ -11549,6 +11654,21 @@
         "openai": {}
       },
       "description": "Image generation (`image_generate`)."
+    },
+    "kanban": {
+      "$ref": "#/$defs/KanbanConfig",
+      "default": {
+        "attachment_max_bytes": 26214400,
+        "claim_ttl_secs": 900,
+        "dispatch": true,
+        "dispatch_interval_secs": 30,
+        "done_sub_retention_secs": 2592000,
+        "failure_limit": 2,
+        "max_running_per_profile": 2,
+        "rate_limit_cooldown_secs": 300,
+        "review_dispatch": true
+      },
+      "description": "Kanban: the default board and the dispatcher."
     },
     "logging": {
       "$ref": "#/$defs/LoggingConfig",

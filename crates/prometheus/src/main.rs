@@ -296,6 +296,7 @@ fn workspace(command: &Command, ctx: &Context<'_>) -> Result<u8, Error> {
         Command::Browser { command } => prometheus::browser_cmd::run(command, ctx),
         Command::Lsp { command } => prometheus::lsp_cmd::run(command, ctx),
         Command::Cron { command } => prometheus::cron_cmd::run(command, ctx),
+        Command::Kanban(args) => prometheus::kanban_cmd::run(args, ctx),
         Command::Cache { command } => prometheus::cache_cmd::run(command, ctx),
         Command::Replay { command } => prometheus::replay_cmd::run(command, ctx),
         Command::Worktrees { command } => prometheus::worktrees_cmd::run(command, ctx),

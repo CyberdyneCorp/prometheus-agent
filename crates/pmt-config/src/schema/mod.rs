@@ -32,6 +32,7 @@ mod gateway_policy;
 mod gateway_routes;
 mod hooks;
 mod interface;
+mod kanban;
 mod lsp;
 mod mcp;
 mod media;
@@ -88,6 +89,7 @@ pub use interface::{
     DisplayConfig, Interface, KeyChord, MarkdownMode, QuickCommand, QuickCommandKind,
     ResumeDisplay, ToolProgress, ToolProgressGrouping, TuiConfig, TuiKeys, TuiTheme, UiConfig,
 };
+pub use kanban::KanbanConfig;
 pub use lsp::{
     LSP_SERVER_IDS, LspConfig, LspInstallStrategy, LspPackageManager, LspServerConfig, LspWaitMode,
 };
@@ -216,6 +218,8 @@ pub struct Config {
     pub image_gen: ImageGenConfig,
     /// Shell hooks and outbound webhooks.
     pub hooks: HooksConfig,
+    /// Kanban: the default board and the dispatcher.
+    pub kanban: KanbanConfig,
     /// Structured log files.
     pub logging: LoggingConfig,
     /// `/loop` cadence bounds.
@@ -347,6 +351,7 @@ impl Default for Config {
             heartbeat: HeartbeatConfig::default(),
             image_gen: ImageGenConfig::default(),
             hooks: HooksConfig::default(),
+            kanban: KanbanConfig::default(),
             logging: LoggingConfig::default(),
             loops: LoopsConfig::default(),
             lsp: LspConfig::default(),

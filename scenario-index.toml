@@ -82,6 +82,7 @@ partial = true
 capabilities = [
     "acp-adapter",
     "desktop-app",
+    "kanban",
     "distribution-and-update",
     "messaging-gateway",
     "projects",
@@ -4436,3 +4437,99 @@ capabilities = [
 [acp-adapter."Unattended ACP clients and relay bridges"]
 "Relay bridge auto-approves" = ["crates/prometheus/tests/acp/unattended.rs::an_unattended_bridge_is_never_asked_and_the_command_is_blocked", "crates/prometheus/tests/acp/unattended.rs::an_unattended_session_follows_approvals_unattended_mode"]
 "Default unattended toolset" = ["crates/prometheus/tests/acp/unattended.rs::an_unattended_session_has_no_terminal_or_code_execution"]
+
+# M3 group 67: kanban. crates/pmt-kanban/tests/ are the board's store,
+# flow (concurrency) and dispatcher tests on a temporary home with real
+# `sleep` processes as workers; crates/prometheus/tests/kanban_cli.rs runs
+# the CLI and real workers (`kanban work`) on the mock provider, and
+# kanban_daemon.rs the dispatcher and notifier inside the daemon.
+[kanban."Board storage location"]
+"Default board exists on first use" = ["crates/prometheus/tests/kanban_cli.rs::the_default_board_exists_on_first_use", "crates/pmt-kanban/tests/store.rs::the_default_board_exists_on_first_use"]
+
+[kanban."Board slugs and selection"]
+"Stale selection is reported" = ["crates/prometheus/tests/kanban_cli.rs::a_stale_selection_exits_66", "crates/pmt-kanban/tests/store.rs::a_stale_selection_is_reported_never_replaced"]
+
+[kanban."Typed workflow table"]
+"Request changes lands in todo" = ["crates/pmt-kanban/tests/store.rs::request_changes_lands_in_todo_and_is_promoted"]
+"Manual move outside the table" = { tests = ["crates/pmt-kanban/tests/store.rs::a_manual_move_outside_the_table_is_refused", "crates/pmt-kanban/src/workflow.rs::a_drag_from_triage_to_running_names_the_actor"], note = "the board refuses the move with kanban.illegal_transition (a Conflict: HTTP 409 on the dashboard API, whose /api/kanban routes arrive with task 61.7)" }
+
+[kanban."Task creation"]
+"Child of an open parent waits" = ["crates/pmt-kanban/tests/store.rs::a_child_of_an_open_parent_waits", "crates/prometheus/tests/kanban_cli.rs::creation_from_the_cli_validates_and_gates"]
+"Relative dir workspace rejected at creation" = ["crates/pmt-kanban/tests/store.rs::creation_validates_before_writing_anything", "crates/prometheus/tests/kanban_cli.rs::creation_from_the_cli_validates_and_gates"]
+
+[kanban."Idempotent create"]
+"Retried automation does not duplicate" = ["crates/pmt-kanban/tests/store.rs::a_retried_create_returns_the_same_task"]
+
+[kanban."Dependency links"]
+"Cycle refused" = ["crates/pmt-kanban/tests/store.rs::links_refuse_cycles_self_links_and_running_children"]
+
+[kanban."Ready promotion and atomic claim"]
+"Worker block is sticky" = ["crates/pmt-kanban/tests/flow.rs::a_worker_block_is_sticky", "crates/pmt-kanban/tests/flow.rs::concurrent_claims_have_exactly_one_winner"]
+
+[kanban."Typed blocks and block-loop breaker"]
+"Repeated same-cause block escalates" = ["crates/pmt-kanban/tests/flow.rs::a_repeated_same_cause_block_escalates_to_triage"]
+
+[kanban."Scheduled parking"]
+"Wake at a time" = ["crates/pmt-kanban/tests/flow.rs::a_scheduled_task_wakes_at_its_time_and_is_never_claimed_before"]
+
+[kanban."Completion gates"]
+"Whitespace evidence refused" = ["crates/pmt-kanban/tests/flow.rs::whitespace_evidence_is_refused_and_recorded"]
+"Fabricated child cards refused" = ["crates/pmt-kanban/tests/flow.rs::fabricated_child_cards_are_refused"]
+
+[kanban."Review lane"]
+"Agent reviewer" = ["crates/pmt-kanban/tests/dispatch.rs::an_agent_reviewer_is_spawned_for_review_work"]
+
+[kanban."Archive terminates the worker"]
+"Archived running task leaves no worker" = ["crates/pmt-kanban/tests/flow.rs::archiving_a_running_task_terminates_its_worker"]
+
+[kanban."Single dispatcher per home"]
+"Standalone loop cannot race the daemon" = ["crates/prometheus/tests/kanban_daemon.rs::a_standalone_loop_exits_75_while_the_daemon_dispatches", "crates/pmt-kanban/tests/dispatch.rs::a_second_dispatcher_cannot_race_the_holder"]
+"Lease takeover after crash" = ["crates/pmt-kanban/tests/dispatch.rs::a_dead_holders_lease_is_taken_over_after_it_expires"]
+
+[kanban."Dispatcher tick"]
+"Unassigned task is reported" = ["crates/pmt-kanban/tests/dispatch.rs::a_tick_claims_in_priority_order_and_reports_unassigned_tasks"]
+
+[kanban."Concurrency caps"]
+"Host cap counts other boards" = ["crates/pmt-kanban/tests/dispatch.rs::the_host_cap_counts_other_boards"]
+
+[kanban."Claim allowlist fails closed"]
+"Deleted assignee" = ["crates/pmt-kanban/tests/dispatch.rs::a_deleted_assignee_blocks_the_task_with_kind_capability"]
+
+[kanban."Failure circuit breaker"]
+"Terminal exit blocks immediately" = ["crates/pmt-kanban/tests/dispatch.rs::a_terminal_exit_blocks_after_one_attempt", "crates/prometheus/tests/kanban_cli.rs::a_worker_never_sees_the_dispatchers_secrets"]
+"Rate-limit exit does not count" = ["crates/pmt-kanban/tests/dispatch.rs::a_rate_limited_exit_requeues_without_counting"]
+
+[kanban."Worker spawn by run ticket"]
+"Launch profile secrets do not leak" = { tests = ["crates/prometheus/tests/kanban_cli.rs::a_worker_never_sees_the_dispatchers_secrets", "crates/prometheus/src/kanban_host/spawn.rs::only_path_locale_and_the_home_reach_a_worker"], note = "a dispatcher launched as ops with OPENAI_API_KEY in its environment starts writer's worker, whose openai route then has no credential (exit 78): the key reached neither its environment nor its secrets handle" }
+"Replayed ticket refused" = ["crates/prometheus/tests/kanban_cli.rs::a_replayed_ticket_is_refused", "crates/pmt-kanban/tests/dispatch.rs::a_run_ticket_is_single_use"]
+
+[kanban."Worker liveness and heartbeats"]
+"Recycled PID is not killed" = ["crates/pmt-kanban/tests/dispatch.rs::a_recycled_pid_is_reclaimed_without_being_signalled"]
+
+[kanban."Kanban toolset and grants"]
+"Worker cannot touch another board" = ["crates/prometheus/tests/kanban_cli.rs::a_worker_cannot_touch_another_board"]
+"Delegated child has no board access" = ["crates/prometheus/tests/kanban_cli.rs::a_delegated_child_gets_no_kanban_tools"]
+
+[kanban."Workspaces"]
+"Missing artifact keeps task in flight" = ["crates/pmt-kanban/tests/flow.rs::a_missing_declared_artifact_keeps_the_task_in_flight"]
+
+[kanban."Attachments"]
+"Oversized upload refused" = { tests = ["crates/prometheus/tests/kanban_cli.rs::an_oversized_attachment_is_refused_and_nothing_stored", "crates/pmt-kanban/tests/records.rs::an_oversized_attachment_stores_nothing"], note = "the CLI and the kanban_attach tool share Board::attach_file; the dashboard upload arrives with the /api/kanban routes of task 61.7" }
+
+[kanban."Notifications through the owning profile"]
+"Multi-profile notification" = ["crates/prometheus/tests/kanban_daemon.rs::a_notification_goes_out_through_the_subscribers_own_adapter", "crates/pmt-kanban/tests/records.rs::subscriptions_report_each_event_once_and_drop_on_archive"]
+
+[kanban."Per-task cost budget (upgrade)"]
+"Budget exhausted" = { tests = ["crates/prometheus/tests/kanban_cli.rs::an_exhausted_budget_blocks_the_task"], note = "the mock provider prices nothing, so the test exhausts a budget_tokens limit; budget_usd takes the same path (budgets.root_usd of the worker's lineage, delegated children included)" }
+
+[kanban."Eval and harness-evolution tasks (upgrade)"]
+"Eval task on replayed provider" = ["crates/prometheus/tests/kanban_cli.rs::an_eval_task_runs_the_smoke_suite_offline_and_attaches_its_report"]
+
+[kanban."Event log and run history"]
+"Audit a refusal" = ["crates/prometheus/tests/kanban_cli.rs::a_refused_completion_is_in_the_log"]
+
+[kanban."CLI surface"]
+"Bulk archive with one failure" = ["crates/prometheus/tests/kanban_cli.rs::a_bulk_archive_reports_each_id_and_exits_1"]
+
+[kanban."Board export and import"]
+"Round trip" = ["crates/prometheus/tests/kanban_cli.rs::an_exported_board_imports_as_a_copy", "crates/pmt-kanban/tests/records.rs::a_board_imported_into_another_home_keeps_its_ids"]

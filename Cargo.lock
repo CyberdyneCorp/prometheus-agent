@@ -3390,6 +3390,20 @@ dependencies = [
 [[package]]
 name = "pmt-kanban"
 version = "0.1.0"
+dependencies = [
+ "base64 0.23.1",
+ "getrandom 0.4.3",
+ "pmt-core",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "sysinfo",
+ "tempfile",
+ "toml",
+ "tracing",
+ "ulid",
+]
 
 [[package]]
 name = "pmt-local"
@@ -4101,6 +4115,7 @@ dependencies = [
  "pmt-eval",
  "pmt-gateway",
  "pmt-i18n",
+ "pmt-kanban",
  "pmt-local",
  "pmt-mcp",
  "pmt-media",
@@ -6802,6 +6817,7 @@ dependencies = [
  "pmt-core",
  "pmt-desktop",
  "pmt-i18n",
+ "pmt-kanban",
  "pmt-net",
  "pmt-obs",
  "pmt-rpc",

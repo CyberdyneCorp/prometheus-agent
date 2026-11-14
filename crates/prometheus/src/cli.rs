@@ -163,6 +163,9 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::cron_cmd::CronCommand,
     },
+    /// Kanban boards shared by every profile: tasks, dependencies, the
+    /// dispatcher, workers, review, notifications, export and import.
+    Kanban(crate::kanban_cmd::KanbanArgs),
     /// Git worktrees of sessions and subagents: list, sweep and restore
     /// archived trees.
     Worktrees {

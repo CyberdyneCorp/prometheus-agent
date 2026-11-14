@@ -44,6 +44,9 @@ pub fn tools() -> Vec<RegisteredTool> {
         RegisteredTool::agent_loop(crate::agent_level_delegation::execute_code()),
         RegisteredTool::agent_loop(crate::agent_level_cron::cronjob()),
     ]
+    .into_iter()
+    .chain(crate::agent_level_kanban::tools())
+    .collect()
 }
 
 /// `send_message` (spec: agent-interop, `send_message` tool): one message or

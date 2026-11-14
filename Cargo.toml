@@ -23,6 +23,7 @@ pmt-automation = { path = "crates/pmt-automation" }
 pmt-config = { path = "crates/pmt-config" }
 pmt-core = { path = "crates/pmt-core" }
 pmt-cron = { path = "crates/pmt-cron" }
+pmt-kanban = { path = "crates/pmt-kanban" }
 pmt-delegation = { path = "crates/pmt-delegation" }
 pmt-i18n = { path = "crates/pmt-i18n" }
 pmt-eval = { path = "crates/pmt-eval" }

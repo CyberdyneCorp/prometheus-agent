@@ -146,7 +146,8 @@ fn every_shipped_toolset_expands_to_its_specified_tools() {
         ("messaging", strings(&["send_message"])),
         ("code_execution", strings(&["execute_code"])),
         ("delegation", strings(&["delegate_task"])),
-        ("kanban", Vec::new()),
+        // kanban, Kanban toolset and grants.
+        ("kanban", strings(pmt_tools::agent_level_kanban::TOOLS)),
         // desktop-app, Desktop UI toolset contract; First-run onboarding
         // chat; projects, Project tool for GUI sessions.
         ("project", strings(&["project"])),

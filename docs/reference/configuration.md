@@ -465,6 +465,19 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `image_gen.openai.model` | string | unset | any | `next_session` | The model on this endpoint (wins over `image_gen.model`); an id outside the catalog is sent verbatim, without `quality`. |
 | `image_gen.openai.provider` | string | unset | any | `next_session` | A configured custom provider (`[providers.<id>]`) whose endpoint and key are used instead. |
 | `image_gen.provider` | string | unset | any | `next_session` | The provider generating images: `fal` (default), `openai`, `openai-codex`, `openrouter`, `xai`, `krea`, `meta-ai`, `deepinfra`, `nous` (the subscription tool gateway) or a plugin's; unset picks one by the keys present. |
+| `kanban.attachment_max_bytes` | integer | `26214400` | ≥ 1 | `live` | Largest attachment accepted on any surface. |
+| `kanban.claim_ttl_secs` | integer | `900` | 60 to 86400 | `live` | Seconds a claim lasts without a worker heartbeat before the run is reclaimed as a failure. |
+| `kanban.current_board` | string | unset | any | `live` | The board commands use without `--board` (unset: `default`). A board that does not exist is an error, never a silent fallback. |
+| `kanban.default_assignee` | string | unset | any | `live` | The assignee of ready tasks that name none (unset: such tasks are reported `skipped_unassigned`). |
+| `kanban.dispatch` | boolean | `true` | any | `live` | Run the dispatcher inside the gateway daemon. |
+| `kanban.dispatch_interval_secs` | integer | `30` | 1 to 3600 | `live` | Seconds between dispatcher ticks. |
+| `kanban.dispatch_profiles` | array | unset | any | `live` | Claim only tasks assigned to these profiles (`[]` claims nothing; unset allows any existing profile). |
+| `kanban.done_sub_retention_secs` | integer | `2592000` | ≥ 0 | `live` | Seconds notification subscriptions of done tasks are kept. |
+| `kanban.failure_limit` | integer | `2` | 1 to 100 | `live` | Consecutive failed runs after which a task without its own `max_retries` is blocked (`gave_up`). |
+| `kanban.max_running` | integer | unset | 1 to 256 | `live` | Workers running at once across every board of the home (unset: physical memory / 512 MiB clamped to 2-8, or 2 when unknown). |
+| `kanban.max_running_per_profile` | integer | `2` | 1 to 256 | `live` | Workers running at once per assignee profile. |
+| `kanban.rate_limit_cooldown_secs` | integer | `300` | ≥ 0 | `live` | Seconds a task waits before it is claimed again after its worker was rate limited (exit 75). |
+| `kanban.review_dispatch` | boolean | `true` | any | `live` | Route `review` tasks to their reviewer profiles, keeping one slot for review work while a ready backlog exists. |
 | `logging.level` | one of "error", "warn", "info", "debug", "trace" | `"info"` | `"error"`, `"warn"`, `"info"`, `"debug"`, `"trace"` | `restart` | Log level; `PMT_LOG` or `RUST_LOG` override it. |
 | `loops.max_ticks` | integer | `100` | 0 to 100000 | `live` | Wakeups after which a loop pauses (`0` = unlimited). |
 | `loops.min_interval_secs` | integer | `30` | 1 to 86400 | `live` | Shortest fixed interval a loop may use (seconds). |
