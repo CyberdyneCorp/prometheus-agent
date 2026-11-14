@@ -27,6 +27,7 @@ pub struct Recorder {
     below: Option<WindowBelow>,
     screen: Option<pmt_desktop::below::Screen>,
     save_to: Option<PathBuf>,
+    cli_link: Option<PathBuf>,
 }
 
 impl Recorder {
@@ -62,6 +63,9 @@ pub struct Setup {
     /// chat (otherwise the harness marks onboarding done, as on a machine
     /// that went through it).
     pub first_run: bool,
+    /// What "Install command-line tool" links (none: an install that puts
+    /// the CLI on PATH itself, and Settings offers no action).
+    pub cli_link: Option<PathBuf>,
 }
 
 impl Default for Setup {
@@ -79,6 +83,7 @@ impl Default for Setup {
             env: Vec::new(),
             connections: None,
             first_run: false,
+            cli_link: None,
         }
     }
 }
@@ -132,6 +137,9 @@ impl Native for Recorder {
     }
     fn screen(&self) -> Option<pmt_desktop::below::Screen> {
         self.screen.clone()
+    }
+    fn cli_link_target(&self) -> Option<PathBuf> {
+        self.cli_link.clone()
     }
     fn save_path(&self, name: &str) -> Option<PathBuf> {
         let _ = self.record(format!("save {name}"));
@@ -187,6 +195,7 @@ pub fn start_with(home: &Path, setup: Setup) -> Harness {
         below: setup.below,
         screen: setup.screen,
         save_to: setup.save_to,
+        cli_link: setup.cli_link,
     });
     let shell = Shell::new(
         ShellConfig {

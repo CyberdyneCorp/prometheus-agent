@@ -181,6 +181,12 @@ impl<R: Runtime> Native for TauriNative<R> {
             .and_then(|p| p.into_path().ok())
     }
 
+    fn cli_link_target(&self) -> Option<PathBuf> {
+        let exe = std::env::current_exe().ok()?;
+        let appimage = std::env::var_os("APPIMAGE").map(PathBuf::from);
+        pmt_desktop::cli_link::link_target(&exe, appimage.as_deref(), &crate::app::bundled_binary())
+    }
+
     fn facts(&self) -> pmt_desktop::platform::Facts {
         let x11 = std::env::var("GDK_BACKEND").is_ok_and(|b| b == "x11");
         pmt_desktop::platform::Facts::detect(x11)

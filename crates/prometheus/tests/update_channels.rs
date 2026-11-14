@@ -212,6 +212,9 @@ fn desktop_packages_stamp_their_owner_and_the_cli_is_the_bundled_binary() {
         let f = Fixture::new(None);
         f.publish(&next_patch(f.version), Channel::Stable, b"unused", None);
         let binary = packaged(&f, &format!("{layout}{}", std::env::consts::EXE_SUFFIX));
+        let receipt_path = pmt_update::install::beside(&binary);
+        // An app bundle keeps it in Contents/Resources, which every bundle has.
+        std::fs::create_dir_all(receipt_path.parent().unwrap()).unwrap();
         let user_home = f.dir.path().join("build-home");
         std::fs::create_dir_all(&user_home).unwrap();
         common::ok(&package_step(
@@ -227,8 +230,7 @@ fn desktop_packages_stamp_their_owner_and_the_cli_is_the_bundled_binary() {
         )))
         .unwrap();
         let receipt: serde_json::Value =
-            serde_json::from_slice(&std::fs::read(binary.with_file_name("install.json")).unwrap())
-                .unwrap();
+            serde_json::from_slice(&std::fs::read(&receipt_path).unwrap()).unwrap();
         // `v1.6.0` in the receipt, `1.6.0` in `version --json`.
         let stamped = receipt["version"].as_str().unwrap().trim_start_matches('v');
         assert_eq!(version["version"], stamped, "{owner}");

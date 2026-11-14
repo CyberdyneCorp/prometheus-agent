@@ -97,6 +97,14 @@ with the new bundled binary). Only the `.dmg` and AppImage installs are
 updated this way; MSIX, Microsoft Store, deb and rpm installs are updated
 by App Installer, the Store or the system package manager.
 
+On macOS and in the AppImage, Settings → Command-line tool → Install
+command-line tool links `~/.local/bin/prometheus` to the CLI the app
+bundles (on Linux, to the AppImage, which runs that CLI when started under
+the name `prometheus` or `pmt`) and says when `~/.local/bin` is not on your
+PATH. It replaces only a link of its own and leaves another install of the
+CLI there alone. The MSIX, Store, deb and rpm packages put the CLI on PATH
+themselves ([Desktop packages](distribution.md#desktop-packages)).
+
 Development builds have no updater and make no request: Check for
 updates answers
 `This build doesn't get updates. Install a release build to receive updates.`

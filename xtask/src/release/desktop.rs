@@ -13,6 +13,9 @@ use std::path::Path;
 use pmt_desktop::update::{Archive, FEED_SCHEMA, Feed};
 use pmt_update::{Channel, ReleaseVersion, TrustRoot};
 
+/// The Windows bundle (x64 and arm64), which the App Installer file names.
+pub(super) const WINDOWS_BUNDLE: &str = "prometheus-desktop-x86_64-pc-windows-msvc.msixbundle";
+
 /// The packages of one OS: published together or not at all.
 pub(super) struct Group {
     /// The OS.
@@ -57,10 +60,7 @@ pub(super) const GROUPS: &[Group] = &[
     },
     Group {
         os: "windows",
-        files: &[
-            "prometheus-desktop-x86_64-pc-windows-msvc.msixbundle",
-            "prometheus-desktop.appinstaller",
-        ],
+        files: &[WINDOWS_BUNDLE, "prometheus-desktop.appinstaller"],
         updater: None,
     },
 ];
@@ -135,8 +135,14 @@ fn check_feed(
     }
 }
 
-/// The problems of the desktop packages in `dir` of release `version`.
-pub(super) fn verify(dir: &Path, version: &ReleaseVersion, trust: &TrustRoot) -> Vec<String> {
+/// The problems of the desktop packages in `dir` of release `version`;
+/// with `require_all`, an OS without packages is one.
+pub(super) fn verify(
+    dir: &Path,
+    version: &ReleaseVersion,
+    trust: &TrustRoot,
+    require_all: bool,
+) -> Vec<String> {
     let mut problems = Vec::new();
     let mut updaters = BTreeMap::new();
     for group in GROUPS {
@@ -147,6 +153,9 @@ pub(super) fn verify(dir: &Path, version: &ReleaseVersion, trust: &TrustRoot) ->
             .filter(|f| dir.join(f).is_file())
             .collect();
         if present.is_empty() {
+            if require_all {
+                problems.push(format!("desktop {}: no packages", group.os));
+            }
             continue;
         }
         for file in group.files {
@@ -195,7 +204,7 @@ mod tests {
     }
 
     #[test]
-    fn a_signed_os_group_with_its_feed_verifies_and_a_partial_one_does_not() {
+    fn a_signed_os_group_with_its_feed_verifies_and_a_partial_or_missing_one_does_not() {
         let dir = fresh("desktop-groups");
         let (sign, trust) = signer(&dir);
         let version = ReleaseVersion::parse("v1.6.0").unwrap();
@@ -208,14 +217,24 @@ mod tests {
         }
         write_feed(&dir, "v1.6.0").unwrap();
         sign("desktop-stable.json");
-        assert_eq!(verify(&dir, &version, &trust), Vec::<String>::new());
+        assert_eq!(verify(&dir, &version, &trust, false), Vec::<String>::new());
+        // The dry run insists on every OS.
+        let required = verify(&dir, &version, &trust, true);
+        assert_eq!(
+            required,
+            [
+                "desktop linux-x86_64: no packages",
+                "desktop linux-aarch64: no packages",
+                "desktop windows: no packages",
+            ],
+        );
         let feed = std::fs::read_to_string(dir.join("desktop-stable.json")).unwrap();
         assert!(feed.contains("\"sha256\""), "{feed}");
         // An older signed archive put in place of the listed one.
         let tarball = "prometheus-desktop-universal2-apple-darwin.app.tar.gz";
         std::fs::write(dir.join(tarball), "an older signed build").unwrap();
         sign(tarball);
-        let problems = verify(&dir, &version, &trust);
+        let problems = verify(&dir, &version, &trust, false);
         assert!(
             problems
                 .iter()
@@ -227,7 +246,7 @@ mod tests {
         // Linux published only its AppImage: refused.
         std::fs::write(dir.join("prometheus-desktop-x86_64-linux.AppImage"), "x").unwrap();
         sign("prometheus-desktop-x86_64-linux.AppImage");
-        let problems = verify(&dir, &version, &trust);
+        let problems = verify(&dir, &version, &trust, false);
         assert!(
             problems
                 .iter()
@@ -255,7 +274,7 @@ mod tests {
             sign(file);
         }
         std::fs::write(dir.join("prometheus-desktop.appinstaller"), "changed").unwrap();
-        let problems = verify(&dir, &version, &trust);
+        let problems = verify(&dir, &version, &trust, false);
         assert_eq!(problems.len(), 1, "{problems:?}");
         assert!(
             problems[0].contains("signature verification failed"),

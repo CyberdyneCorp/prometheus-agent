@@ -11,6 +11,13 @@ mod panels;
 mod tray;
 
 fn main() {
+    // Started through the "Install command-line tool" link to the AppImage
+    // (`~/.local/bin/prometheus`): this is the CLI, not a window.
+    if std::env::var_os("APPIMAGE").is_some()
+        && pmt_desktop::cli_link::runs_cli(std::env::var_os("ARGV0").as_deref())
+    {
+        std::process::exit(app::run_bundled_cli());
+    }
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .with_writer(std::io::stderr)

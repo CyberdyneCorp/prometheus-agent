@@ -9,6 +9,7 @@
 pub mod attention;
 pub mod below;
 pub mod catalog;
+pub mod cli_link;
 pub mod connections;
 pub mod deeplink;
 pub mod dial;

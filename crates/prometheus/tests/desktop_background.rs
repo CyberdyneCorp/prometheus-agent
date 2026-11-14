@@ -166,6 +166,7 @@ fn launch_links_install_dialog_shared_preferences_and_platform_support() {
                 sni_host: Some(true),
             },
             links: vec![link],
+            cli_link: Some(home.path().join("Apps/Prometheus.AppImage")),
             ..Setup::default()
         },
     );

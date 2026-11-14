@@ -12,8 +12,16 @@ import { shell } from "./shell";
 
 interface LaunchOptions {
   keep_in_tray: boolean;
+  /** The install (macOS app, AppImage) offers "Install command-line tool". */
+  cli_link?: boolean;
   quick_ask: { hotkey: string };
   hud?: { snap_hotkey: string; tap_to_summon: boolean };
+}
+
+interface CliInstall {
+  ok: boolean;
+  installed?: { link: string; target: string; on_path: boolean };
+  reason?: string;
 }
 
 interface UpdateOutcome {
@@ -59,6 +67,7 @@ export async function desktopSettings(client: DesktopClient, host: HTMLElement):
     status,
     hudSettings(rows, options, (key, value) => save(key, value, status)),
     updates(),
+    ...(options.cli_link ? [cliTool()] : []),
     h("details", { class: "platform" }, h("summary", {}, "Platform support"), h("ul", {}, ...rows.map((r) => h("li", { "data-feature": r.feature, "data-state": r.state }, `${r.feature}: ${r.state} (${r.reason})`)))),
   );
 }
@@ -82,6 +91,25 @@ function hudSettings(rows: FeatureSupport[], options: LaunchOptions, save: (key:
     h("label", {}, tap, " Summon with a tap on the tray icon"),
     belowReason ? h("p", { class: "reason", "data-for": "desktop.hud.window_below" }, `Window context: ${belowReason}`) : "",
   );
+}
+
+/** "Install command-line tool": links ~/.local/bin/prometheus to the CLI
+ *  this app bundles (deb, rpm and MSIX installs put it on PATH themselves). */
+function cliTool(): HTMLElement {
+  const status = h("p", { class: "cli-status", role: "status" });
+  const install = h("button", { type: "button", name: "install-cli" }, "Install command-line tool");
+  install.addEventListener("click", async () => {
+    install.disabled = true;
+    const outcome = await shell<CliInstall>("install_cli");
+    install.disabled = false;
+    if (!outcome.installed) {
+      status.textContent = outcome.reason ?? "The command-line tool was not installed.";
+      return;
+    }
+    const where = outcome.installed.link;
+    status.textContent = outcome.installed.on_path ? `Linked ${where}: run prometheus in a terminal.` : `Linked ${where}. Add ~/.local/bin to your PATH to run prometheus in a terminal.`;
+  });
+  return h("section", { class: "cli-tool", "aria-label": "Command-line tool" }, h("h4", {}, "Command-line tool"), install, status);
 }
 
 function updates(): HTMLElement {

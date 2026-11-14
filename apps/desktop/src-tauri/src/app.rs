@@ -159,6 +159,24 @@ pub(crate) fn bundled_binary() -> PathBuf {
     }
 }
 
+/// Runs the bundled CLI with this process's arguments in its place; the
+/// exit code when it could not start.
+pub(crate) fn run_bundled_cli() -> i32 {
+    let mut command = std::process::Command::new(bundled_binary());
+    command.args(std::env::args_os().skip(1));
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt as _;
+        let error = command.exec();
+        eprintln!("prometheus: cannot run the bundled CLI: {error}");
+        70
+    }
+    #[cfg(not(unix))]
+    {
+        command.status().map_or(70, |s| s.code().unwrap_or(1))
+    }
+}
+
 /// Another app window on `fragment` of the page (spec: desktop-app,
 /// Windows, tabs and panes): the same guards as the main window.
 pub(crate) fn open_extra<R: Runtime>(app: &AppHandle<R>, fragment: &str) -> tauri::Result<()> {

@@ -2,18 +2,8 @@
   "$schema": "https://schema.tauri.app/config/2",
   "bundle": {
     "active": true,
-    "targets": ["app", "dmg", "appimage", "deb", "rpm"],
-    "externalBin": ["binaries/prometheus"],
     "category": "DeveloperTool",
     "shortDescription": "Prometheus agent",
-    "macOS": {
-      "minimumSystemVersion": "12.0",
-      "hardenedRuntime": true
-    },
-    "linux": {
-      "deb": { "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"] },
-      "rpm": { "depends": ["webkit2gtk4.1", "gtk3"] }
-    },
     "windows": {
       "webviewInstallMode": { "type": "downloadBootstrapper" }
     }

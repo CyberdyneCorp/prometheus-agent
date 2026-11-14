@@ -120,6 +120,8 @@ pub enum Request {
     RestartApp,
     /// The shell's platform support rows.
     PlatformSupport,
+    /// Link `~/.local/bin/prometheus` to the bundled CLI (the user asked).
+    InstallCli,
     /// The `[desktop]` options read at launch, with their notices.
     LaunchOptions,
     /// The deep links that arrived before the window was ready; later
@@ -407,6 +409,12 @@ pub trait Native: Send + Sync {
     /// The window system's failure.
     fn drag_hud(&self) -> Result<(), String> {
         Err("this shell has no HUD".to_owned())
+    }
+    /// What the "Install command-line tool" action links
+    /// `~/.local/bin/prometheus` to; `None` when this install puts the CLI
+    /// on PATH itself ([`crate::cli_link::link_target`]).
+    fn cli_link_target(&self) -> Option<PathBuf> {
+        None
     }
     /// The window underneath the HUD bar.
     fn window_below(&self) -> Option<crate::hud::WindowBelow> {

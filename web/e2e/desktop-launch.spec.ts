@@ -4,7 +4,10 @@
 // an arbitrary URL (Install deep links open a consent flow), Theme
 // changed in the webapp (Machine-wide UI preferences), and Wayland
 // without the portal (Honest platform support in settings) with the
-// development build's updater.
+// development build's updater, and the AppImage's "Install command-line
+// tool" action (distribution-and-update, Desktop packages and signing).
+import { readlinkSync } from "node:fs";
+import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { emit, openDesktop } from "./desktop";
 import { env, signIn } from "./helpers";
@@ -63,4 +66,12 @@ test("settings disable the hotkey on Wayland and dev builds get no updates", asy
   await expect(page.locator('.reason[data-for="desktop.quick_ask.hotkey"]')).toHaveText("global shortcuts are not available in this Wayland session");
   await page.getByRole("button", { name: "Check for updates" }).click();
   await expect(page.locator(".update-status")).toHaveText("This build doesn't get updates. Install a release build to receive updates.");
+});
+
+test("the AppImage links the command-line tool from settings", async ({ page }) => {
+  await openDesktop(page);
+  const link = join(env("PMT_USER_HOME"), ".local/bin/prometheus");
+  await page.getByRole("button", { name: "Install command-line tool" }).click();
+  await expect(page.locator(".cli-status")).toContainText(`Linked ${link}`);
+  expect(readlinkSync(link)).toBe(join(env("PMT_HOME"), "Apps/Prometheus.AppImage"));
 });

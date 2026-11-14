@@ -50,6 +50,7 @@ pub(crate) fn owns(request: &Request) -> bool {
             | Request::ApplyUpdate
             | Request::RestartApp
             | Request::PlatformSupport
+            | Request::InstallCli
             | Request::LaunchOptions
             | Request::TakeLinks
             | Request::NotifyApproval(_)
@@ -179,6 +180,7 @@ impl Shell {
                 "features": crate::platform::probe(&self.native.facts()),
             })),
             Request::LaunchOptions => Ok(self.launch_options(window)),
+            Request::InstallCli => Ok(self.install_cli()),
             Request::RestartApp => self.native.restart().map(|()| ok()),
             Request::TakeLinks => {
                 let mut links = self.links.lock().map_err(|e| e.to_string())?;
@@ -244,6 +246,18 @@ impl Shell {
         }
     }
 
+    /// Links `~/.local/bin/prometheus` to this install's CLI.
+    fn install_cli(&self) -> Value {
+        let Some(target) = self.native.cli_link_target() else {
+            return json!({"ok": false, "reason": "this install puts the command-line tool on PATH itself"});
+        };
+        let path = std::env::var_os("PATH");
+        match crate::cli_link::install(&self.config.user_home, &target, path.as_deref()) {
+            Ok(installed) => json!({"ok": true, "installed": installed}),
+            Err(reason) => json!({"ok": false, "reason": reason}),
+        }
+    }
+
     fn launch_options(&self, window: &str) -> Value {
         let o = &self.options.options;
         let hotkey = self
@@ -256,6 +270,8 @@ impl Shell {
             "window": window,
             "notices": self.options.notices,
             "keep_in_tray": o.keep_in_tray,
+            // Whether Settings offers "Install command-line tool".
+            "cli_link": self.native.cli_link_target().is_some(),
             "hotkey": hotkey,
             "quick_ask": {
                 "hotkey": o.quick_ask.hotkey,

@@ -1,0 +1,194 @@
+#!/usr/bin/env bash
+# Builds and checks the desktop packages of a release on macOS and Linux
+# (spec: distribution-and-update, Desktop packages and signing; desktop-app,
+# Signed in-app updates). Run by the release workflow's desktop jobs:
+#
+#   scripts/ci/desktop-package macos <dist> <out>
+#   scripts/ci/desktop-package linux <dist> <out>
+#
+# <dist> holds the release's CLI archives; every package bundles that exact
+# `prometheus` binary (so the CLI and the desktop app cannot skew) with an
+# install receipt naming who updates it. The finished packages land in
+# <out> under the names `cargo xtask release verify` expects, and only after
+# their checks passed: a failed signing, notarization or check leaves <out>
+# empty, so that OS publishes no desktop package.
+#
+# Environment: PLAN (the dist plan), PUBLISHING (true on a tag push), and on
+# a tag the Apple signing and notarization variables Tauri reads
+# (APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
+# APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID). A dry run signs ad hoc.
+set -euo pipefail
+
+cd "$(dirname "$0")/../.."
+readonly TAURI=apps/desktop/src-tauri
+readonly STAGE=target/desktop-package
+
+die() {
+    echo "desktop-package: $*" >&2
+    exit 1
+}
+
+tag=$(jq -r '.announcement_tag' <<<"$PLAN")
+readonly TAG=$tag VERSION=${tag#v}
+case "$TAG" in *-canary.*) CHANNEL=canary ;; *) CHANNEL=stable ;; esac
+readonly CHANNEL
+export PMT_DESKTOP_CHANNEL=$CHANNEL
+
+# Unpacks the CLI of <archive> into the stage and prints its path.
+unpack_cli() {
+    local into=$STAGE/unpacked
+    mkdir -p "$into"
+    tar -xzf "$1" -C "$into"
+    find "$into" -type f -name prometheus | head -n 1
+}
+
+# Writes $STAGE/install-<owner>.json: the receipt the CLI stamps for <owner>.
+stamp() { # <cli> <owner>
+    local dir=$STAGE/receipt-$2
+    mkdir -p "$dir"
+    cp "$1" "$dir/prometheus"
+    "$dir/prometheus" install-receipt --owner "$2" --channel "$CHANNEL" >/dev/null
+    mv "$dir/install.json" "$STAGE/install-$2.json"
+    rm -rf "$dir"
+}
+
+# The Tauri configuration of a release build: the base release file, the
+# given overlays and the release version.
+config() { # <out> <overlay>... ; extra jq filter in $EXTRA
+    local out=$1
+    shift
+    local files=("$TAURI/tauri.release.conf.json")
+    local overlay
+    for overlay in "$@"; do files+=("$TAURI/tauri.release.$overlay.conf.json"); done
+    jq -s --arg v "$VERSION" "reduce .[] as \$c ({}; . * \$c) | .version = \$v ${EXTRA:-}" \
+        "${files[@]}" >"$out"
+}
+
+# Checks the CLI bundled at <binary> (receipt beside it, or in <receipt>):
+# the release's version, owned by <owner>, and `prometheus update` refusing
+# with exit 69 and naming that owner.
+check_cli() { # <binary> <owner> [<receipt>]
+    local binary=$1 owner=$2 receipt=${3:-$(dirname "$1")/install.json}
+    local home
+    home=$(mktemp -d "$RUNNER_TEMP/home.XXXXXX")
+    [ "$(jq -r .owner "$receipt")" = "$owner" ] || die "$receipt: owner is not $owner"
+    local reported
+    reported=$(PROMETHEUS_HOME=$home "$binary" --json version | jq -r .version)
+    [ "$reported" = "$VERSION" ] || die "$binary reports $reported, not $VERSION"
+    local code=0 output
+    output=$(PROMETHEUS_HOME=$home "$binary" update 2>&1) || code=$?
+    [ "$code" = 69 ] || die "prometheus update on the $owner install exited $code: $output"
+    grep -q "owner: $owner" <<<"$output" || die "prometheus update did not name $owner: $output"
+}
+
+macos() { # <dist> <out>
+    local dist=$1 out=$2
+    rm -rf "$STAGE" && mkdir -p "$STAGE" "$out"
+    local cli
+    cli=$(unpack_cli "$dist/prometheus-universal2-apple-darwin.tar.gz")
+    lipo "$cli" -verify_arch arm64 x86_64
+    cp "$cli" "$STAGE/prometheus-universal-apple-darwin"
+    stamp "$cli" desktop
+    if [ "$PUBLISHING" = true ]; then
+        [ -n "${APPLE_SIGNING_IDENTITY:-}" ] && [ -n "${APPLE_ID:-}" ] ||
+            die "a release needs the Developer ID identity and notarization credentials"
+    else
+        # Ad hoc; secrets a pull request cannot read arrive as empty
+        # variables, which Tauri would try to use.
+        unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
+        export APPLE_SIGNING_IDENTITY=-
+    fi
+    config "$RUNNER_TEMP/tauri.json" macos
+    (cd "$TAURI" && cargo tauri build --ci --target universal-apple-darwin \
+        --config "$RUNNER_TEMP/tauri.json" --bundles app,dmg)
+    local bundle=target/desktop/universal-apple-darwin/release/bundle
+    local app=$bundle/macos/Prometheus.app dmg
+    dmg=$(find "$bundle/dmg" -name '*.dmg' | head -n 1)
+    codesign --verify --deep --strict --verbose=2 "$app"
+    if [ "$PUBLISHING" = true ]; then
+        xcrun notarytool submit "$dmg" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" --wait
+        xcrun stapler staple "$dmg"
+        xcrun stapler validate "$app"
+        xcrun stapler validate "$dmg"
+        spctl --assess --type execute --verbose=2 "$app"
+    else
+        codesign --display --verbose=2 "$app" 2>&1 | grep -q 'Signature=adhoc' ||
+            die "the dry run's app is not signed ad hoc"
+    fi
+    check_cli "$app/Contents/MacOS/prometheus" desktop "$app/Contents/Resources/install.json"
+    cp "$dmg" "$out/prometheus-desktop-universal2-apple-darwin.dmg"
+    # The updater archive holds `Prometheus.app/`, without AppleDouble files.
+    COPYFILE_DISABLE=1 tar -czf "$out/prometheus-desktop-universal2-apple-darwin.app.tar.gz" \
+        -C "$(dirname "$app")" Prometheus.app
+}
+
+linux() { # <dist> <out>
+    local dist=$1 out=$2
+    local triple arch
+    triple=$(rustc -vV | sed -n 's/^host: //p')
+    arch=${triple%%-*}
+    rm -rf "$STAGE" && mkdir -p "$STAGE/cli" "$out"
+    local cli
+    cli=$(unpack_cli "$dist/prometheus-$triple.tar.gz")
+    cp "$cli" "$STAGE/prometheus-$triple"
+    cp "$cli" "$STAGE/cli/prometheus"
+    stamp "$cli" desktop
+    stamp "$cli" system-package
+    local bundle=target/desktop/release/bundle
+    # The AppImage: the CLI beside the app, updated by the desktop updater.
+    config "$RUNNER_TEMP/appimage.json" appimage
+    (cd "$TAURI" && cargo tauri build --ci --config "$RUNNER_TEMP/appimage.json" --bundles appimage)
+    # deb and rpm: named prometheus-desktop (Debian's `prometheus` is the
+    # monitoring server), the CLI in /usr/lib/prometheus-desktop.
+    EXTRA='| .productName = "Prometheus Desktop"' config "$RUNNER_TEMP/packages.json" linux-packages
+    (cd "$TAURI" && cargo tauri build --ci --config "$RUNNER_TEMP/packages.json" --bundles deb,rpm)
+    local image deb rpm
+    image=$(find "$bundle/appimage" -name '*.AppImage' | head -n 1)
+    deb=$(find "$bundle/deb" -name '*.deb' | head -n 1)
+    rpm=$(find "$bundle/rpm" -name '*.rpm' | head -n 1)
+    check_appimage "$image"
+    check_deb "$deb"
+    rpm -qpl "$rpm" | grep -qx /usr/lib/prometheus-desktop/install.json ||
+        die "the rpm carries no install receipt"
+    rpm -qp --scripts "$rpm" | grep -q 'ln -sfn' || die "the rpm does not link /usr/bin/prometheus"
+    cp "$image" "$out/prometheus-desktop-$arch-linux.AppImage"
+    cp "$deb" "$out/prometheus-desktop-$arch-linux.deb"
+    cp "$rpm" "$out/prometheus-desktop-$arch-linux.rpm"
+}
+
+# The AppImage's CLI is the release's, owned by the desktop updater, and a
+# `prometheus` link to the AppImage runs that CLI (the "Install
+# command-line tool" action makes that link).
+check_appimage() { # <appimage>
+    local image extracted
+    image=$(realpath "$1")
+    extracted=$(mktemp -d "$RUNNER_TEMP/appimage.XXXXXX")
+    (cd "$extracted" && "$image" --appimage-extract >/dev/null)
+    check_cli "$extracted/squashfs-root/usr/bin/prometheus" desktop
+    local bin
+    bin=$(mktemp -d "$RUNNER_TEMP/bin.XXXXXX")
+    ln -s "$image" "$bin/prometheus"
+    local reported
+    reported=$(PROMETHEUS_HOME=$extracted/home "$bin/prometheus" --json version | jq -r .version)
+    [ "$reported" = "$VERSION" ] || die "the prometheus link to the AppImage reports $reported"
+}
+
+# Installing the deb links /usr/bin/prometheus to the bundled CLI, owned by
+# the system package manager; removing it removes the link.
+check_deb() { # <deb>
+    sudo apt-get install -y --no-install-recommends "$(realpath "$1")"
+    [ "$(readlink /usr/bin/prometheus)" = /usr/lib/prometheus-desktop/prometheus ] ||
+        die "/usr/bin/prometheus is not the bundled CLI"
+    check_cli /usr/bin/prometheus system-package /usr/lib/prometheus-desktop/install.json
+    sudo apt-get remove -y prometheus-desktop
+    [ ! -e /usr/bin/prometheus ] || die "removing the deb left /usr/bin/prometheus"
+}
+
+case "${1:-}" in
+macos | linux)
+    mkdir -p "$3"
+    "$1" "$(cd "$2" && pwd)" "$(cd "$3" && pwd)"
+    ;;
+*) die "usage: desktop-package macos|linux <dist> <out>" ;;
+esac
