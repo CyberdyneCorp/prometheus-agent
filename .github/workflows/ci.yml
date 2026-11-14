@@ -38,7 +38,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     # The Intel macOS runner needs ~35 min for a cold build alone (clippy
     # plus the test build) before ~25 min of tests; 60 min cancelled it.
-    timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 90 || 60 }}
+    # The Apple silicon one reached 60 min in the smoke step after its
+    # tests (desktop gate included), so it gets 75.
+    timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 90 || matrix.os == 'macos-15' && 75 || 60 }}
     strategy:
       fail-fast: false
       matrix:

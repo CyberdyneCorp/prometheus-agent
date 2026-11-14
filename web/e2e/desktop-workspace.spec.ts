@@ -73,12 +73,17 @@ test("a terminal is a shell of the session's workspace", async ({ page }) => {
   await expect(screen).toContainText("e2e-42");
   // The PTY is told the grid the pane shows, and again when it changes.
   await expect(screen).toHaveAttribute("data-grid", /^\d+x\d+$/);
+  // The pane may settle into its size after the first grid was sent (the
+  // layout finishing): ask again until the PTY reports the grid shown.
   const sttySize = async () => {
-    const grid = (await screen.getAttribute("data-grid")) ?? "";
-    const [cols, rows] = grid.split("x");
-    await page.keyboard.type("stty size");
-    await page.keyboard.press("Enter");
-    await expect(screen).toContainText(`${rows} ${cols}`);
+    let grid = "";
+    await expect(async () => {
+      grid = (await screen.getAttribute("data-grid")) ?? "";
+      const [cols, rows] = grid.split("x");
+      await page.keyboard.type("stty size");
+      await page.keyboard.press("Enter");
+      await expect(screen).toContainText(`${rows} ${cols}`, { timeout: 2_000 });
+    }).toPass({ timeout: 20_000 });
     return grid;
   };
   const first = await sttySize();

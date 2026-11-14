@@ -67,7 +67,9 @@ test("a draft of a session deleted elsewhere comes back in a fresh draft and is 
   await page.reload();
   await expect(page.locator(".connection")).toHaveText(/Connected/, { timeout: 60_000 });
   const submitted = sent(sockets, "prompt.submit").length;
-  cli(["sessions", "delete", id, "--yes"]);
+  // The reply can show before the turn releases its lease; a delete
+  // during a live turn is refused (exit 75), so retry until it ends.
+  await expect(() => cli(["sessions", "delete", id, "--yes"])).toPass({ timeout: 15_000 });
   await page.click(`nav.side [data-session="${id}"]`);
   await expect(page.locator(".restore-strip")).toContainText("Restored your unsent message");
   await expect(page.locator("textarea[name=prompt]")).toHaveValue("my unsent words");
