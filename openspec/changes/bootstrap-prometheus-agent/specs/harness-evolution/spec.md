@@ -67,13 +67,18 @@ The system SHALL validate a tree by collecting every error (not stopping at the 
 - **THEN** validation SHALL fail with `unknown hook event 'on_magic'`
 
 ### Requirement: Harness loaded once per session
-The system SHALL resolve `<profile>/harness/ACTIVE` exactly once at session start, record the version id on the session row (`sessions.harness_version`), and inject the always-on files as one harness layer of the system prompt in the fixed order c1, c2, c3, c4 immediately after the built-in base prompt and before identity and context files; harness skills and subagents SHALL be registered for that session only. A harness version adopted, rolled back or edited while a session is open SHALL NOT change that session's system prompt, tools or skills, except through an explicit `--now` which SHALL rebuild the prompt at the next turn boundary and log `prompt cache invalidated by harness change` at WARN.
+The system SHALL resolve `<profile>/harness/ACTIVE` exactly once at session start, record the version id on the session row (`sessions.harness_version`), and inject the always-on files as one harness layer of the system prompt in the fixed order c1, c2, c3, c4, placed as the first layer of the `profile` tier of `agent-turn-loop` (Layered system prompt): immediately after the built-in `static` tier (identity, tool-use guidance, model-family guidance) and before the platform hint, skills index, personality, project context files and memory, so that adopting a harness version never invalidates the cached `static` block; harness skills and subagents SHALL be registered for that session only. A harness version adopted, rolled back or edited while a session is open SHALL NOT change that session's system prompt, tools or skills, except through an explicit `--now` which SHALL rebuild the prompt at the next turn boundary and log `prompt cache invalidated by harness change` at WARN.
 **Milestone:** M3
 
 #### Scenario: Adoption mid-session
 - **GIVEN** an open session started on `h3-aaaa`
 - **WHEN** the user adopts a proposal creating `h4-bbbb` without `--now`
 - **THEN** the open session's next request SHALL carry a byte-identical system prompt and a new session SHALL record `harness_version = "h4-bbbb"`
+
+#### Scenario: Harness layer placement
+- **GIVEN** a profile with a `SOUL.md` and an active harness whose `SYSTEM.md` is not empty
+- **WHEN** a new session builds its system prompt
+- **THEN** the `static` tier SHALL hold the `SOUL.md` identity and no harness text, the `profile` tier SHALL begin with the harness layer, and a session started on another harness version SHALL carry a byte-identical `static` tier
 
 ### Requirement: Harness execution confinement
 The system SHALL run harness scripts and hook commands only inside the session's execution sandbox under the session's existing capability grants; a harness SHALL NOT be able to declare, request or widen any capability grant, network egress rule, secret access or approval mode, and validation SHALL reject any `hooks.toml` key other than `event`, `command`, `timeout_secs` (1–120, default 30) and `matcher`.
@@ -124,7 +129,7 @@ The system SHALL queue an evolution job automatically only when `evolve.auto.ena
 - **THEN** no job SHALL be queued and the decision SHALL be logged at INFO with reason `daily auto-evolve cap reached`
 
 ### Requirement: Evolution task capture
-The system SHALL freeze each job's task into `<profile>/evolve/jobs/<job_id>/task/` containing `task.md` (the task statement: by default the session's first user message, editable via `--edit` before the job starts), `source/` (a snapshot of the workspace files the session read or modified, or, when the workspace is a git repository, `repo.toml` with the HEAD commit plus `uncommitted.patch`), and `task.toml` (`domain`, `toolsets`, `model`, `backend`, `source_session`, `fingerprint`). The snapshot SHALL be capped at `evolve.task.max_source_bytes = 52428800`, SHALL pass the redaction pass of `security-boundaries`, and SHALL exclude files matching leak globs; a task exceeding the cap SHALL fail with exit 65.
+The system SHALL freeze each job's task into `<profile>/evolve/jobs/<job_id>/task/` containing `task.md` (the task statement: by default the session's first user message, editable via `--edit` before the job starts), `source/` (a snapshot of the workspace files the session read or modified, or, when the workspace is a git repository, `repo.toml` with the HEAD commit, an `excluded` list of the paths tracked at that commit that match leak globs, plus `uncommitted.patch`; materialising the workspace SHALL delete every `excluded` path), and `task.toml` (`domain`, `toolsets`, `model`, `backend`, `source_session`, `fingerprint`). The snapshot SHALL be capped at `evolve.task.max_source_bytes = 52428800`, SHALL pass the redaction pass of `security-boundaries`, and SHALL exclude files matching leak globs; a task exceeding the cap SHALL fail with exit 65.
 **Milestone:** M3
 
 #### Scenario: Git workspace
@@ -226,6 +231,11 @@ The system SHALL exclude from task sources and reject in any evidence tree, sele
 - **GIVEN** `evolve.leak_globs = [".answers/**"]`
 - **WHEN** the workspace contains `.answers/q1.txt`
 - **THEN** it SHALL be excluded from the snapshot
+
+#### Scenario: Leak file tracked at HEAD
+- **GIVEN** a git workspace whose HEAD commit tracks `grader/rubric.md`, also modified since
+- **WHEN** a job captures the task
+- **THEN** `uncommitted.patch` SHALL NOT mention it, `repo.toml` SHALL list it under `excluded`, and the workspace rebuilt at the recorded commit with the patch applied SHALL NOT contain it
 
 ### Requirement: Budget ledger and spend cap
 The system SHALL keep a per-mode ledger of rollouts and sessions (`kind`, `label`, `usd`, `cached`, `attempts`), SHALL assert at mode completion that R = 4k, P = 3k and no label repeats within a kind (a violation fails the mode with `budget identity violated`), and SHALL record rollout, improver, selection and reflection costs separately in `ledger.json`. Before starting, the system SHALL print an estimate; it SHALL stop a job with status `budget-exceeded` as soon as total spend reaches `--budget-usd` or `evolve.budget.max_usd = 5.0`, keeping completed artifacts and producing no proposal. All costs SHALL be charged to the job's root in the observability cost ledger.

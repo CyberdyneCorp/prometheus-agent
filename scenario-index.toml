@@ -4665,6 +4665,7 @@ capabilities = [
 
 [harness-evolution."Harness loaded once per session"]
 "Adoption mid-session" = { tests = ["crates/prometheus/tests/harness_cli.rs::an_open_session_keeps_its_harness_until_an_explicit_now", "crates/prometheus/tests/harness_cli.rs::a_now_activation_rebuilds_an_open_session_at_its_next_turn"], note = "the new version is activated with `harness apply`, the activation path an adopted proposal also takes (proposal adoption itself arrives with task 69.6)" }
+"Harness layer placement" = ["crates/pmt-agent/tests/turn/prompt.rs::the_harness_opens_the_profile_tier_after_the_identity"]
 
 [harness-evolution."Harness execution confinement"]
 "Hook asking for network" = ["crates/pmt-evolve/tests/validate.rs::a_hooks_file_cannot_ask_for_network"]
@@ -4691,3 +4692,4 @@ capabilities = [
 
 [harness-evolution."Leak globs and verdict tripwire"]
 "Dot-file glob honoured" = ["crates/pmt-evolve/tests/jobs.rs::a_dot_file_leak_glob_is_excluded_from_the_snapshot"]
+"Leak file tracked at HEAD" = ["crates/pmt-evolve/tests/jobs.rs::a_tracked_leak_file_is_excluded_from_a_git_snapshot"]

@@ -8,6 +8,7 @@ use std::process::Command;
 
 use pmt_config::{Home, Launch, Overrides, ProfileName, ProfileScope};
 use pmt_core::secret::Redactor;
+use pmt_evolve::job::task::RepoSnapshot;
 use pmt_evolve::job::{self, Jobs, Profile, Request, TaskInput, Trigger};
 use pmt_store::{EndReason, NewMessage, NewSession, Role, Source, Store};
 use serde_json::json;
@@ -204,6 +205,57 @@ fn a_dot_file_leak_glob_is_excluded_from_the_snapshot() {
     assert!(source.join("q1.md").is_file());
     assert!(!source.join(".answers").exists());
     assert_eq!(record.domain, "quiz");
+}
+
+/// Leak globs (spec: Leak globs and verdict tripwire, "SHALL exclude from
+/// task sources"): a rubric already committed at HEAD is listed under
+/// `excluded` in `repo.toml`, left out of the patch, and gone from the
+/// workspace rebuilt at the recorded commit.
+#[test]
+fn a_tracked_leak_file_is_excluded_from_a_git_snapshot() {
+    let fixture = Fixture::enabled();
+    let repo = fixture.workspace();
+    git(&repo, &["init", "-q"]);
+    std::fs::create_dir_all(repo.join("grader")).unwrap();
+    std::fs::write(repo.join("ledger.txt"), "10\n").unwrap();
+    std::fs::write(repo.join("grader/rubric.md"), "answer: 30\n").unwrap();
+    git(&repo, &["add", "."]);
+    git(&repo, &["commit", "-q", "-m", "first"]);
+    let head = git(&repo, &["rev-parse", "HEAD"]).trim().to_owned();
+    std::fs::write(repo.join("ledger.txt"), "10\n20\n").unwrap();
+    std::fs::write(repo.join("grader/rubric.md"), "answer: 30, partial: 10\n").unwrap();
+    let task = fixture.task_file("statement = \"sum the ledger\"\nworkspace = \"workspace\"\n");
+    let record = job::queue(
+        &fixture.profile(None),
+        &Request::new(Trigger::Cli, TaskInput::File(task)),
+    )
+    .unwrap();
+    let source = Jobs::of(fixture.scope.dir())
+        .dir(&record.id)
+        .join("task/source");
+    let snapshot = RepoSnapshot::read(&source).unwrap();
+    assert_eq!(snapshot.commit, head);
+    assert_eq!(snapshot.excluded, ["grader/rubric.md"]);
+    let patch = std::fs::read_to_string(source.join("uncommitted.patch")).unwrap();
+    assert!(!patch.contains("rubric"), "{patch}");
+
+    // Materialise as a rollout would: the commit, the patch, the exclusions.
+    let rebuilt = fixture.root.path().join("rebuilt");
+    git(
+        fixture.root.path(),
+        &["clone", "-q", repo.to_str().unwrap(), "rebuilt"],
+    );
+    git(&rebuilt, &["checkout", "-q", "--detach", &snapshot.commit]);
+    git(
+        &rebuilt,
+        &["apply", source.join("uncommitted.patch").to_str().unwrap()],
+    );
+    snapshot.remove_excluded(&rebuilt).unwrap();
+    assert!(!rebuilt.join("grader/rubric.md").exists());
+    assert_eq!(
+        std::fs::read_to_string(rebuilt.join("ledger.txt")).unwrap(),
+        "10\n20\n"
+    );
 }
 
 #[test]

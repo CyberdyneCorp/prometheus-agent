@@ -25,8 +25,11 @@ editable surface, components c1 to c8):
 | `hooks.toml` | c8 hooks |
 
 The four always-on files (c1-c4) are injected, in that order, as the
-harness layer of every new session's system prompt, right after the
-built-in base (see [System prompt layers](../reference/system-prompt.md)).
+harness layer of every new session's system prompt. It opens the
+`profile` tier, right after the built-in `static` tier (identity, tool and
+model guidance) and before skills, project context and memory, so adopting
+a version keeps the cached `static` block (see
+[System prompt layers](../reference/system-prompt.md)).
 Harness skills and subagents are registered for the sessions that start
 on that version. Your memory, `config.toml`, secrets and installed skills
 are never part of a harness.
@@ -102,7 +105,9 @@ budget k (1-8, default `evolve.k = 2`) fixes the search: each mode spends
 shared base rollouts). The job's task is frozen under
 `<profile>/evolve/jobs/<job>/task/`: the statement, a snapshot of the
 workspace (for a git repository its HEAD commit and an
-`uncommitted.patch`), with files matching `evolve.leak_globs` left out,
+`uncommitted.patch`), with files matching `evolve.leak_globs` left out
+(a matching file already committed is listed under `excluded` in
+`repo.toml` and deleted when the workspace is rebuilt),
 secrets redacted and the size capped by `evolve.task.max_source_bytes`.
 
 Jobs are also queued by `/evolve [--k N]` in a chat (it answers at once

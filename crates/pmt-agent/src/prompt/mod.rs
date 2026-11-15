@@ -4,11 +4,13 @@
 //!
 //! The prompt is three tiers, each sent as one system block ending at a
 //! cache breakpoint: `static` (identity, tool-use and model-family
-//! guidance), `profile` (platform hint, skills index, pinned skills) and
-//! `session` (personality, caller system message, project context, memory,
-//! plugin sections, the session line and last the runtime block). Sessions
-//! of one profile and model therefore share the first two blocks
-//! byte-for-byte. A session builds its prompt once ([`frozen`]); later
+//! guidance), `profile` (harness, platform hint, skills index, pinned
+//! skills) and `session` (personality, caller system message, project
+//! context, memory, plugin sections, the session line and last the runtime
+//! block). Sessions of one profile and model therefore share the first two
+//! blocks byte-for-byte (the profile block per harness version: the
+//! harness sits after the static tier so a new version keeps that block
+//! cached, spec: harness-evolution, Harness loaded once per session). A session builds its prompt once ([`frozen`]); later
 //! turns replay the stored bytes.
 
 pub mod blocks;
@@ -138,7 +140,7 @@ impl Layer {
             Self::ToolGuidance => "How to use the tools the session was given.",
             Self::ModelGuidance => "Advice for the model family, when one applies.",
             Self::Harness => {
-                "The harness version the session started on: its non-empty `SYSTEM.md`, `GUARDRAILS.md`, `MEMORY_POLICY.md` and `TOOL_GUIDANCE.md` in that order, right after the built-in base and before every profile, project and memory layer."
+                "The harness version the session started on: its non-empty `SYSTEM.md`, `GUARDRAILS.md`, `MEMORY_POLICY.md` and `TOOL_GUIDANCE.md` in that order. It opens the profile tier, after the built-in static tier, so a new harness version leaves the cached static block intact."
             }
             Self::PlatformHint => {
                 "The surface's hint, changed by `prompt.platform_hints.<platform>`."

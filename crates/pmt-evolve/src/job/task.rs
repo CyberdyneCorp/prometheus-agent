@@ -7,6 +7,11 @@
 //! private index so the user's own index is never touched; any other
 //! workspace as a copy of the files the session read or modified. Leak
 //! globs are excluded, text is redacted, and the whole snapshot is capped.
+//!
+//! A leak-glob file already tracked at HEAD cannot be left out of a commit
+//! id, and a deletion hunk in the patch would carry its content. So
+//! `repo.toml` lists such paths under `excluded` and whoever materialises
+//! the workspace removes them ([`RepoSnapshot::remove_excluded`]).
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -58,6 +63,48 @@ pub struct Capture {
     pub max_source_bytes: u64,
     /// The profile's redactor.
     pub redactor: Redactor,
+}
+
+/// `source/repo.toml` of a git workspace.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RepoSnapshot {
+    /// The HEAD commit the rollout workspace is checked out at.
+    pub commit: String,
+    /// Paths tracked at `commit` that match a leak glob: they are not in
+    /// `uncommitted.patch` and must be deleted from the materialised
+    /// workspace.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub excluded: Vec<String>,
+}
+
+impl RepoSnapshot {
+    /// Reads `repo.toml` from a task's `source/` directory.
+    ///
+    /// # Errors
+    ///
+    /// `harness.io` when the file is missing or not valid.
+    pub fn read(source: &Path) -> Result<Self, Error> {
+        let path = source.join("repo.toml");
+        let text = std::fs::read_to_string(&path).map_err(|e| io(&path, &e))?;
+        toml::from_str(&text).map_err(|e| Error::new(&codes::HARNESS_IO, e.message().to_owned()))
+    }
+
+    /// Deletes every `excluded` path from `workspace` (a checkout of
+    /// `commit` with the patch applied). A path already gone is fine.
+    ///
+    /// # Errors
+    ///
+    /// `harness.io` when a file cannot be removed.
+    pub fn remove_excluded(&self, workspace: &Path) -> Result<(), Error> {
+        for relative in &self.excluded {
+            let path = workspace.join(relative);
+            match std::fs::remove_file(&path) {
+                Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(io(&path, &e)),
+                _ => {}
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Matches leak globs against full relative paths, leading dots included.
@@ -204,8 +251,18 @@ impl Snapshot {
         let patch = self.redacted(patch?.into_bytes());
         self.charge(patch.len())?;
         write(&self.root.join("uncommitted.patch"), &patch)?;
-        let repo = format!("commit = {:?}\n", head.trim());
-        write(&self.root.join("repo.toml"), repo.as_bytes())
+        let tracked = git(root, &["ls-tree", "-r", "-z", "--name-only", "HEAD"], None)?;
+        let repo = RepoSnapshot {
+            commit: head.trim().to_owned(),
+            excluded: tracked
+                .split('\0')
+                .filter(|path| !path.is_empty() && self.leaks.matches(path))
+                .map(str::to_owned)
+                .collect(),
+        };
+        let text =
+            toml::to_string(&repo).map_err(|e| Error::new(&codes::HARNESS_IO, e.to_string()))?;
+        write(&self.root.join("repo.toml"), text.as_bytes())
     }
 
     /// Copies `files` (or the whole workspace) under `workspace`.
