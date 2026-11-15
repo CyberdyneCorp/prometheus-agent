@@ -33,7 +33,7 @@ Every tool name the shipped toolsets refer to, and every shipped toolset. Pages 
 | `messaging` | `send_message` |  |  | Send messages and reactions to messaging chats (needs the gateway daemon) |
 | `code_execution` | `execute_code` |  |  | Run code in a sandbox |
 | `delegation` | `delegate_task` |  |  | Delegate work to subagents |
-| `kanban` | `kanban_show`, `kanban_list`, `kanban_create`, `kanban_comment`, `kanban_attach`, `kanban_link`, `kanban_complete`, `kanban_block`, `kanban_schedule`, `kanban_heartbeat`, `kanban_request_review`, `kanban_request_changes`, `kanban_unblock`, `kanban_attachments` |  | default-off | Kanban boards |
+| `kanban` | `kanban_show`, `kanban_list`, `kanban_create`, `kanban_comment`, `kanban_attach`, `kanban_link`, `kanban_complete`, `kanban_block`, `kanban_schedule`, `kanban_heartbeat`, `kanban_request_review`, `kanban_request_changes`, `kanban_unblock`, `kanban_attach_url`, `kanban_attachments` |  | default-off | Kanban boards |
 | `debugging` | `terminal`, `process` | `web`, `file` |  | Terminal, processes, web and files |
 | `safe` |  | `web`, `vision`, `image_gen` |  | Web, vision and image generation; nothing that executes |
 | `webhook-safe` | `web_search`, `web_extract`, `vision_analyze`, `clarify` |  |  | Read-only web and vision tools for webhook-triggered runs; nothing that executes or writes |
@@ -232,6 +232,10 @@ Toolsets: `kanban`.
 Toolsets: `kanban`.
 
 ### `kanban_unblock`
+
+Toolsets: `kanban`.
+
+### `kanban_attach_url`
 
 Toolsets: `kanban`.
 

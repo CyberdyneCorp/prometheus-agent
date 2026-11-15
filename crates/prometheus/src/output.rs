@@ -384,6 +384,30 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "kanban gc",
     },
     JsonShape {
+        schema: "prometheus.kanban_plan.v1",
+        command: "kanban dispatch dry-run",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_claim.v1",
+        command: "kanban claim",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_swarm.v1",
+        command: "kanban swarm",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_graph.v1",
+        command: "kanban decompose",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_assignees.v1",
+        command: "kanban assignees",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_init.v1",
+        command: "kanban init",
+    },
+    JsonShape {
         schema: "prometheus.cron_list.v1",
         command: "cron list",
     },
@@ -581,12 +605,29 @@ pub fn render_error(err: &Error, json: bool) -> String {
 ///
 /// When `command` has no registered shape (a programming error).
 pub fn document(command: &str, body: &impl Serialize) -> Result<u8, Error> {
+    document_to(&mut io::stdout().lock(), command, body)?;
+    Ok(0)
+}
+
+/// Writes the JSON document of `command` (its registered shape) to `out`.
+///
+/// # Errors
+///
+/// `output.io`.
+///
+/// # Panics
+///
+/// When `command` has no registered shape (a programming error).
+pub fn document_to(
+    out: &mut impl Write,
+    command: &str,
+    body: &impl Serialize,
+) -> Result<(), Error> {
     let shape = JSON_SHAPES
         .iter()
         .find(|s| s.command == command)
         .expect("every JSON shape is registered");
-    write_document(&mut io::stdout().lock(), shape, body).map_err(|e| stdout_error(&e))?;
-    Ok(0)
+    write_document(out, shape, body).map_err(|e| stdout_error(&e))
 }
 
 /// Prints one plain JSON value on stdout; returns exit 0.

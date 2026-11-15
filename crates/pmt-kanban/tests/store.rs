@@ -3,7 +3,7 @@
 
 mod support;
 
-use pmt_kanban::{Actor, NewTask, Status, Workspace};
+use pmt_kanban::{Actor, Handoff, NewTask, Status, Workspace};
 use support::{Home, T0, create, kinds, profiles, user};
 
 #[test]
@@ -86,7 +86,15 @@ fn request_changes_lands_in_todo_and_is_promoted() {
         .unwrap();
     board.promote_all(&Actor::dispatcher(), T0).unwrap();
     board
-        .request_review(&user(), &id, Some("look"), T0)
+        .request_review(
+            &user(),
+            &id,
+            &Handoff {
+                summary: Some("look".into()),
+                ..Handoff::default()
+            },
+            T0,
+        )
         .unwrap();
     board
         .request_changes(&Actor::reviewer("qa"), &id, "rename the module", T0)

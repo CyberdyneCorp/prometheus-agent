@@ -301,6 +301,31 @@ impl Store {
         })
     }
 
+    /// Every route of `platform` chat `chat_id` (threads included), most
+    /// recently active first.
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`.
+    pub fn chat_routes(&self, platform: &str, chat_id: &str) -> Result<Vec<Route>, Error> {
+        self.read(|conn| {
+            let mut stmt = conn
+                .prepare(&format!(
+                    "SELECT {ROUTE_COLUMNS} FROM gateway_routes WHERE platform = ?1 \
+                     AND chat_id = ?2 ORDER BY last_activity_at DESC, key"
+                ))
+                .map_err(sql)?;
+            let rows = stmt
+                .query_map([platform, chat_id], |row| Ok(route_from_row(row)))
+                .map_err(sql)?;
+            let mut found = Vec::new();
+            for row in rows {
+                found.push(row.map_err(sql)??);
+            }
+            Ok(found)
+        })
+    }
+
     /// Records human activity on `key` (internal events never call it).
     ///
     /// # Errors

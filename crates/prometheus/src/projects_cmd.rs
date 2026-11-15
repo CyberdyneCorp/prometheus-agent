@@ -128,7 +128,16 @@ pub struct CreateArgs {
 /// `project.not_found` (66), `project.folder_claimed` (1) and the other
 /// `project.*` errors, store errors.
 pub fn run(command: &ProjectsCommand, ctx: &Context<'_>) -> Result<u8, Error> {
-    let store = Store::open(&ctx.scope()?)?;
+    let scope = ctx.scope()?;
+    let board = match command {
+        ProjectsCommand::Create(args) => args.board.as_deref(),
+        ProjectsCommand::BindBoard { board, .. } => board.as_deref(),
+        _ => None,
+    };
+    if let Some(board) = board {
+        known_board(scope.home(), board)?;
+    }
+    let store = Store::open(&scope)?;
     let out = Out { ctx, store: &store };
     match command {
         ProjectsCommand::Create(args) => create(&out, args),
@@ -170,6 +179,14 @@ pub fn run(command: &ProjectsCommand, ctx: &Context<'_>) -> Result<u8, Error> {
             out.changed(&project, verb)
         }
     }
+}
+
+/// Refuses binding a kanban board that does not exist (spec: projects,
+/// Kanban board binding): `board '<b>' not found`, exit 66.
+fn known_board(home: &std::path::Path, board: &str) -> Result<(), Error> {
+    pmt_kanban::Boards::open(home)?
+        .resolve(Some(board), None)
+        .map(|_| ())
 }
 
 fn create(out: &Out<'_>, args: &CreateArgs) -> Result<u8, Error> {

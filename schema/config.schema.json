@@ -588,6 +588,17 @@
           ],
           "description": "Goal judging (defaults to the main model)."
         },
+        "kanban": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuxiliaryTask"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Kanban `specify` and `decompose` (defaults to the main model)."
+        },
         "max_concurrency": {
           "default": 8,
           "description": "Auxiliary calls in flight at once across the profile's sessions;\nfurther calls wait.",
@@ -4040,6 +4051,16 @@
           "minimum": 1,
           "type": "integer"
         },
+        "auto_decompose": {
+          "default": false,
+          "description": "Let the dispatcher run `specify` on triage tasks and `decompose` on\ntasks assigned to an orchestrator profile before dispatching them\n(the dashboard's Orchestration Auto/Manual control).",
+          "type": "boolean"
+        },
+        "auto_promote_children": {
+          "default": true,
+          "description": "Promote decomposed children that wait for nothing straight to\n`ready` (else they stay in `todo`).",
+          "type": "boolean"
+        },
         "claim_ttl_secs": {
           "default": 900,
           "description": "Seconds a claim lasts without a worker heartbeat before the run is\nreclaimed as a failure.",
@@ -4100,6 +4121,11 @@
           "minimum": 1,
           "type": "integer"
         },
+        "github_api_url": {
+          "default": "https://api.github.com",
+          "description": "The GitHub API that PR completion contracts read (GitHub Enterprise:\n`https://<host>/api/v3`).",
+          "type": "string"
+        },
         "max_running": {
           "description": "Workers running at once across every board of the home (unset:\nphysical memory / 512 MiB clamped to 2-8, or 2 when unknown).",
           "format": "uint32",
@@ -4125,14 +4151,49 @@
           "minimum": 0,
           "type": "integer"
         },
+        "respawn_pr_window_secs": {
+          "default": 86400,
+          "description": "Seconds after a comment linking a GitHub pull request during which\nits task is not spawned again.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "respawn_success_window_secs": {
+          "default": 3600,
+          "description": "Seconds after a finished run during which its task is not spawned\nagain unless deliberately re-queued.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
         "review_dispatch": {
           "default": true,
           "description": "Route `review` tasks to their reviewer profiles, keeping one slot\nfor review work while a ready backlog exists.",
           "type": "boolean"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KanbanRole"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`orchestrator` makes this profile's worker sessions decompose goals\ninto linked tasks for existing profiles instead of implementing\nthem (unset: an ordinary worker)."
         }
       },
       "type": "object",
       "x-apply": "live"
+    },
+    "KanbanRole": {
+      "description": "A profile's kanban role.",
+      "oneOf": [
+        {
+          "const": "orchestrator",
+          "description": "Decomposes goals into tasks for other profiles.",
+          "type": "string"
+        }
+      ]
     },
     "KeyChord": {
       "description": "A key chord: `[Ctrl+][Alt+][Shift+]<key>` (spec: tui, Configurable key\nbindings).",
@@ -11659,13 +11720,18 @@
       "$ref": "#/$defs/KanbanConfig",
       "default": {
         "attachment_max_bytes": 26214400,
+        "auto_decompose": false,
+        "auto_promote_children": true,
         "claim_ttl_secs": 900,
         "dispatch": true,
         "dispatch_interval_secs": 30,
         "done_sub_retention_secs": 2592000,
         "failure_limit": 2,
+        "github_api_url": "https://api.github.com",
         "max_running_per_profile": 2,
         "rate_limit_cooldown_secs": 300,
+        "respawn_pr_window_secs": 86400,
+        "respawn_success_window_secs": 3600,
         "review_dispatch": true
       },
       "description": "Kanban: the default board and the dispatcher."

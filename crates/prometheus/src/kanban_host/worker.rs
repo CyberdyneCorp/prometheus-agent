@@ -9,7 +9,7 @@
 //! exit code recorded: 75 (rate limited), 78 (credential, model or
 //! capability gone) or 0/1.
 
-use std::io::Read as _;
+use std::io::{Read as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -54,10 +54,9 @@ pub fn work(ctx: &Context<'_>, run: &str) -> Result<u8, Error> {
         .read_to_string(&mut input);
     let ticket = Ticket::parse(&input, run)?;
     let home = ctx.home()?;
-    let boards = Boards::open(home.root())?;
-    let mut board = boards.board(&ticket.board)?;
-    let row = board.use_ticket(run, &ticket.secret)?;
-    let task = board.task(&row.task_id)?;
+    let row = Boards::open(home.root())?
+        .board(&ticket.board)?
+        .use_ticket(run, &ticket.secret)?;
     let name = ProfileName::parse(&row.profile)?;
     // The assignee's own secrets store only: a worker never sees the
     // dispatcher's (or the launch environment's) credentials.
@@ -67,15 +66,48 @@ pub fn work(ctx: &Context<'_>, run: &str) -> Result<u8, Error> {
         Launch::Other,
     )?;
     crate::startup::bind_profile(&scope);
-    let workspace = match prepare(&board, &task, &scope) {
+    let hooks = super::hooks::HookQueue::new(&scope);
+    let boards = super::boards(&scope, &hooks)?;
+    let mut board = boards.board(&ticket.board)?;
+    let task = board.task(&row.task_id)?;
+    let code = run_task(ctx, &scope, (&boards, &mut board), &row, &task);
+    hooks.flush(&scope);
+    code
+}
+
+/// Why the task cannot run in this profile: a pinned skill it lacks, or a
+/// workspace that cannot exist (the task is blocked with kind
+/// `capability`).
+fn ready(board: &Board, task: &Task, scope: &ProfileScope) -> Result<PathBuf, String> {
+    if !task.skills.is_empty() {
+        let installed = super::assignees::installed_skills(scope);
+        if let Some(missing) = task.skills.iter().find(|s| !installed.contains(s)) {
+            return Err(format!(
+                "pinned skill '{missing}' is not installed for profile '{}'",
+                scope.name()
+            ));
+        }
+    }
+    prepare(board, task, scope)
+}
+
+fn run_task(
+    ctx: &Context<'_>,
+    scope: &ProfileScope,
+    (boards, board): (&Boards, &mut Board),
+    row: &Run,
+    task: &Task,
+) -> Result<u8, Error> {
+    let workspace = match ready(board, task, scope) {
         Ok(path) => path,
         Err(reason) => {
+            let now = pmt_kanban::now_ms();
             board.block(
-                &worker_actor(&row),
+                &worker_actor(row),
                 &task.id,
                 BlockKind::Capability,
                 &reason,
-                pmt_kanban::now_ms(),
+                now,
             )?;
             return Ok(0);
         }
@@ -83,15 +115,15 @@ pub fn work(ctx: &Context<'_>, run: &str) -> Result<u8, Error> {
     board.set_workspace_path(&task.id, &workspace)?;
     let beating = Heartbeat::start(
         boards.clone(),
-        &ticket.board,
-        &row,
+        board.slug(),
+        row,
         super::ttl_ms(&scope.config().kanban),
     );
     let ending = match &task.kind {
         TaskKind::Agent => {
-            crate::model_cmd::block_on(session(ctx, &scope, &board, &row, &task, &workspace))?
+            crate::model_cmd::block_on(session(ctx, scope, board, row, task, &workspace))?
         }
-        TaskKind::Eval { suite, .. } => eval(&mut board, &row, &task, suite, &workspace),
+        TaskKind::Eval { suite, .. } => eval(board, row, task, suite, &workspace),
         TaskKind::Evolve { .. } => Ending {
             error: Some(Error::new(
                 &codes::KANBAN_NOT_PERMITTED,
@@ -101,7 +133,7 @@ pub fn work(ctx: &Context<'_>, run: &str) -> Result<u8, Error> {
         },
     };
     beating.stop();
-    finish(&mut board, &row, &task, &scope, &ending)
+    finish(board, row, task, scope, &ending)
 }
 
 fn worker_actor(row: &Run) -> Actor {
@@ -114,7 +146,7 @@ fn worker_actor(row: &Run) -> Actor {
 
 /// The task's workspace directory; `Err` names why it cannot exist
 /// (the task is blocked with kind `capability`).
-fn prepare(board: &Board, task: &Task, scope: &ProfileScope) -> Result<PathBuf, String> {
+pub(super) fn prepare(board: &Board, task: &Task, scope: &ProfileScope) -> Result<PathBuf, String> {
     match &task.workspace {
         Workspace::Scratch => {
             let dir = board.scratch_dir(&task.id);
@@ -124,33 +156,33 @@ fn prepare(board: &Board, task: &Task, scope: &ProfileScope) -> Result<PathBuf, 
         }
         Workspace::Dir { path } if path.is_dir() => Ok(path.clone()),
         Workspace::Dir { path } => Err(format!("workspace dir {} does not exist", path.display())),
-        Workspace::Worktree { branch } => worktree(task, branch.as_deref(), scope),
+        Workspace::Worktree { .. } => worktree(task, scope),
     }
 }
 
-/// A git worktree of the repository at the profile's `terminal.cwd`, on
-/// `kanban/<task>` or the given `<prefix>/<name>` branch; an existing
-/// tree (a retried run) is reused.
-fn worktree(task: &Task, branch: Option<&str>, scope: &ProfileScope) -> Result<PathBuf, String> {
-    let repo = scope
-        .config()
-        .terminal
-        .cwd
-        .as_deref()
-        .map(PathBuf::from)
+/// A git worktree on the task's branch ([`Task::branch`]): of the bound
+/// project's primary folder, else of the repository at the profile's
+/// `terminal.cwd`; an existing tree (a retried run) is reused.
+fn worktree(task: &Task, scope: &ProfileScope) -> Result<PathBuf, String> {
+    let repo = task
+        .repo_root
+        .clone()
+        .or_else(|| scope.config().terminal.cwd.as_deref().map(PathBuf::from))
         .ok_or_else(|| {
             format!(
                 "a worktree workspace needs a git repository: set terminal.cwd of profile '{}'",
                 scope.name()
             )
         })?;
-    let (prefix, name) = match branch.and_then(|b| b.rsplit_once('/')) {
-        Some((prefix, name)) => (prefix.to_owned(), name.to_owned()),
-        None => ("kanban".to_owned(), branch.unwrap_or(&task.id).to_owned()),
-    };
+    let branch = task
+        .branch()
+        .unwrap_or_else(|| format!("kanban/{}", task.id));
+    let (prefix, name) = branch
+        .rsplit_once('/')
+        .map_or(("kanban", branch.as_str()), |(p, n)| (p, n));
     let request = pmt_worktrees::create::Request {
-        name: Some(&name),
-        branch_prefix: &prefix,
+        name: Some(name),
+        branch_prefix: prefix,
         sync_remote: false,
         ..pmt_worktrees::create::Request::default()
     };
@@ -158,7 +190,7 @@ fn worktree(task: &Task, branch: Option<&str>, scope: &ProfileScope) -> Result<P
         Ok(created) => Ok(created.tree.path),
         Err(err) => {
             let existing = pmt_worktrees::repo::Repo::discover(&repo)
-                .map(|r| r.trees_dir().join(&name))
+                .map(|r| r.trees_dir().join(name))
                 .ok()
                 .filter(|p| p.is_dir());
             existing.ok_or_else(|| err.message().to_owned())
@@ -234,7 +266,7 @@ const NUDGE: &str = "You ended your turn without finishing the task. Finish it n
 async fn session(
     ctx: &Context<'_>,
     scope: &ProfileScope,
-    board: &Board,
+    board: &mut Board,
     row: &Run,
     task: &Task,
     workspace: &Path,
@@ -243,23 +275,31 @@ async fn session(
         error: None,
         session: None,
     };
-    if let Err(err) = Box::pin(agent(ctx, scope, board, row, task, workspace, &mut ending)).await {
+    if let Err(err) = Box::pin(agent(
+        ctx,
+        scope,
+        board,
+        (row, task),
+        workspace,
+        &mut ending,
+    ))
+    .await
+    {
         ending.error = Some(err);
     }
     ending
 }
 
-async fn agent(
+/// The worker session of `task`: its model override, pinned skills, the
+/// worker (and orchestrator) guidance, and its `kanban_*` grant.
+async fn open_session(
     ctx: &Context<'_>,
     scope: &ProfileScope,
     board: &Board,
-    row: &Run,
-    task: &Task,
+    (row, task): (&Run, &Task),
     workspace: &Path,
-    ending: &mut Ending,
-) -> Result<(), Error> {
-    let scope = worker_scope(scope, task, board.spend(&task.id)?);
-    let store = Arc::new(Store::open(&scope)?);
+) -> Result<(Arc<Store>, Factory, crate::chat::session::Live), Error> {
+    let store = Arc::new(Store::open(scope)?);
     let run = KanbanRun {
         grant: Grant {
             board: board.slug().to_owned(),
@@ -273,17 +313,20 @@ async fn agent(
             },
         },
         blobs: board.blobs().to_path_buf(),
+        orchestrator: scope.config().kanban.role
+            == Some(pmt_config::schema::KanbanRole::Orchestrator),
     };
     let options = Options {
         interactive: false,
         cwd: workspace.to_path_buf(),
         source_tag: Some(run.source_tag()),
+        skills: task.skills.clone(),
         kanban: Some(run),
         ..Options::default()
     };
     let flags = RouteFlags {
-        provider: None,
-        model: None,
+        provider: task.provider.as_deref(),
+        model: task.model.as_deref(),
         mock_script: None,
     };
     let factory = Factory::with_store(
@@ -296,7 +339,6 @@ async fn agent(
     )?;
     let target = factory.models.primary(&flags).await?;
     let id = factory.create_session(None, &target)?;
-    ending.session = Some(id.to_string());
     let clients = Clients {
         events: Arc::new(pmt_agent::turn::events::NoEvents) as Arc<dyn EventSink>,
         secrets: Arc::new(NoPrompt),
@@ -305,15 +347,106 @@ async fn agent(
         delegation: None,
     };
     let live = factory.open_with(id, &target, Some(clients)).await?;
+    Ok((store, factory, live))
+}
+
+/// What to do after a turn that left the run open.
+enum Next {
+    /// Send this as the next turn.
+    Turn(String),
+    /// Stop: the run ends with the worker's exit.
+    Stop,
+}
+
+/// A goal-mode turn's verdict: continue in the same session while judged
+/// turns remain, block on `unachievable` or an exhausted budget, else
+/// nudge for the terminator once.
+async fn judged(
+    judge: &crate::chat::session::judge::RouteJudge,
+    board: &mut Board,
+    (row, task): (&Run, &Task),
+    (turn, nudged): (u32, bool),
+    reply: &str,
+) -> Result<Next, Error> {
+    let max = task.goal_turns();
+    let verdict = super::goal::verdict(judge, task, reply).await;
+    let line = format!(
+        "kanban goal loop: turn {turn}/{max} verdict={}",
+        verdict.name()
+    );
+    let _ = writeln!(std::io::stderr(), "{line}");
+    tracing::info!(component = "kanban", task = task.id.as_str(), "{line}");
+    let actor = worker_actor(row);
+    let now = pmt_kanban::now_ms();
+    board.goal_verdict(
+        &actor,
+        &task.id,
+        (turn, max),
+        verdict.name(),
+        verdict.reason(),
+        now,
+    )?;
+    Ok(match verdict {
+        super::goal::Judged::Continue(reason) if turn < max => {
+            Next::Turn(super::goal::continuation(task, &reason))
+        }
+        super::goal::Judged::Continue(_) => {
+            board.block(
+                &actor,
+                &task.id,
+                BlockKind::NeedsInput,
+                "goal budget exhausted",
+                now,
+            )?;
+            Next::Stop
+        }
+        super::goal::Judged::Unachievable(reason) => {
+            board.block(&actor, &task.id, BlockKind::NeedsInput, &reason, now)?;
+            Next::Stop
+        }
+        super::goal::Judged::Unreachable(err) => {
+            tracing::warn!(
+                component = "kanban",
+                error = err.as_str(),
+                "goal judge unreachable; allowing lifecycle handoff"
+            );
+            if nudged {
+                Next::Stop
+            } else {
+                Next::Turn(NUDGE.to_owned())
+            }
+        }
+        super::goal::Judged::Done(_) if nudged => Next::Stop,
+        super::goal::Judged::Done(_) => Next::Turn(NUDGE.to_owned()),
+    })
+}
+
+async fn agent(
+    ctx: &Context<'_>,
+    scope: &ProfileScope,
+    board: &mut Board,
+    (row, task): (&Run, &Task),
+    workspace: &Path,
+    ending: &mut Ending,
+) -> Result<(), Error> {
+    let scope = worker_scope(scope, task, board.spend(&task.id)?);
+    let (store, factory, live) = open_session(ctx, &scope, board, (row, task), workspace).await?;
+    let id = live.id;
+    ending.session = Some(id.to_string());
+    let judge = factory.models.judge(&live.model, id);
     let mut prompt = pmt_kanban::context::render(board, &task.id)?;
-    for _ in 0..2 {
+    let (mut turn, mut nudged) = (0_u32, false);
+    loop {
+        turn += 1;
         let options = TurnOptions::new(&CancelToken::new());
         let result = live
             .agent
             .run_turn(Some(&live.scope), id, TurnInput::text(&prompt), options)
             .await;
-        match result {
-            Ok(result) if result.exit_reason == ExitReason::Completed => {}
+        let reply = match result {
+            Ok(result) if result.exit_reason == ExitReason::Completed => {
+                result.final_response.unwrap_or_default()
+            }
             Ok(result) => {
                 ending.error = Some(result.error.unwrap_or_else(|| {
                     Error::new(
@@ -327,11 +460,24 @@ async fn agent(
                 ending.error = Some(err);
                 break;
             }
-        }
+        };
         if !open(board, &row.id) {
             break;
         }
-        NUDGE.clone_into(&mut prompt);
+        let next = if task.goal_mode {
+            judged(&judge, board, (row, task), (turn, nudged), &reply).await?
+        } else if nudged {
+            Next::Stop
+        } else {
+            Next::Turn(NUDGE.to_owned())
+        };
+        match next {
+            Next::Turn(text) => {
+                nudged |= text == NUDGE;
+                prompt = text;
+            }
+            Next::Stop => break,
+        }
     }
     let reason = if ending.error.is_none() {
         EndReason::UserExit

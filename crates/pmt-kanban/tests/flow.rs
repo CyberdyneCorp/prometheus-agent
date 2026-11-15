@@ -5,7 +5,7 @@ mod support;
 
 use std::sync::{Arc, Barrier};
 
-use pmt_kanban::{Actor, BlockKind, ClaimOutcome, Completion, NewTask, Role, Status};
+use pmt_kanban::{Actor, BlockKind, ClaimOutcome, Completion, Handoff, NewTask, Role, Status};
 use support::{Home, T0, create, kinds, profiles, sleeper, start_of, user};
 
 fn claim(board: &mut pmt_kanban::Board, id: &str) -> String {
@@ -213,7 +213,9 @@ fn dependency_blocks_wait_for_parents_and_review_blocks_return_to_review() {
         Some(BlockKind::NeedsInput)
     );
     let reviewed = create(&mut board, "reviewed", &[]);
-    board.request_review(&user(), &reviewed, None, T0).unwrap();
+    board
+        .request_review(&user(), &reviewed, &Handoff::default(), T0)
+        .unwrap();
     board
         .block(&user(), &reviewed, BlockKind::NeedsInput, "ask legal", T0)
         .unwrap();

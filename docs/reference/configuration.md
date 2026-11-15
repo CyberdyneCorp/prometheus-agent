@@ -88,6 +88,12 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `auxiliary.goal_judge.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.goal_judge.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.goal_judge.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.kanban.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
+| `auxiliary.kanban.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.kanban.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
+| `auxiliary.kanban.model` | string | unset | any | `next_session` | Model id. |
+| `auxiliary.kanban.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.kanban.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.max_concurrency` | integer | `8` | ≥ 1 | `next_session` | Auxiliary calls in flight at once across the profile's sessions; further calls wait. |
 | `auxiliary.memory.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.memory.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
@@ -466,6 +472,8 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `image_gen.openai.provider` | string | unset | any | `next_session` | A configured custom provider (`[providers.<id>]`) whose endpoint and key are used instead. |
 | `image_gen.provider` | string | unset | any | `next_session` | The provider generating images: `fal` (default), `openai`, `openai-codex`, `openrouter`, `xai`, `krea`, `meta-ai`, `deepinfra`, `nous` (the subscription tool gateway) or a plugin's; unset picks one by the keys present. |
 | `kanban.attachment_max_bytes` | integer | `26214400` | ≥ 1 | `live` | Largest attachment accepted on any surface. |
+| `kanban.auto_decompose` | boolean | `false` | any | `live` | Let the dispatcher run `specify` on triage tasks and `decompose` on tasks assigned to an orchestrator profile before dispatching them (the dashboard's Orchestration Auto/Manual control). |
+| `kanban.auto_promote_children` | boolean | `true` | any | `live` | Promote decomposed children that wait for nothing straight to `ready` (else they stay in `todo`). |
 | `kanban.claim_ttl_secs` | integer | `900` | 60 to 86400 | `live` | Seconds a claim lasts without a worker heartbeat before the run is reclaimed as a failure. |
 | `kanban.current_board` | string | unset | any | `live` | The board commands use without `--board` (unset: `default`). A board that does not exist is an error, never a silent fallback. |
 | `kanban.default_assignee` | string | unset | any | `live` | The assignee of ready tasks that name none (unset: such tasks are reported `skipped_unassigned`). |
@@ -474,10 +482,14 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `kanban.dispatch_profiles` | array | unset | any | `live` | Claim only tasks assigned to these profiles (`[]` claims nothing; unset allows any existing profile). |
 | `kanban.done_sub_retention_secs` | integer | `2592000` | ≥ 0 | `live` | Seconds notification subscriptions of done tasks are kept. |
 | `kanban.failure_limit` | integer | `2` | 1 to 100 | `live` | Consecutive failed runs after which a task without its own `max_retries` is blocked (`gave_up`). |
+| `kanban.github_api_url` | string | `"https://api.github.com"` | any | `live` | The GitHub API that PR completion contracts read (GitHub Enterprise: `https://<host>/api/v3`). |
 | `kanban.max_running` | integer | unset | 1 to 256 | `live` | Workers running at once across every board of the home (unset: physical memory / 512 MiB clamped to 2-8, or 2 when unknown). |
 | `kanban.max_running_per_profile` | integer | `2` | 1 to 256 | `live` | Workers running at once per assignee profile. |
 | `kanban.rate_limit_cooldown_secs` | integer | `300` | ≥ 0 | `live` | Seconds a task waits before it is claimed again after its worker was rate limited (exit 75). |
+| `kanban.respawn_pr_window_secs` | integer | `86400` | ≥ 0 | `live` | Seconds after a comment linking a GitHub pull request during which its task is not spawned again. |
+| `kanban.respawn_success_window_secs` | integer | `3600` | ≥ 0 | `live` | Seconds after a finished run during which its task is not spawned again unless deliberately re-queued. |
 | `kanban.review_dispatch` | boolean | `true` | any | `live` | Route `review` tasks to their reviewer profiles, keeping one slot for review work while a ready backlog exists. |
+| `kanban.role` | one of "orchestrator" | unset | `"orchestrator"` | `live` | `orchestrator` makes this profile's worker sessions decompose goals into linked tasks for existing profiles instead of implementing them (unset: an ordinary worker). |
 | `logging.level` | one of "error", "warn", "info", "debug", "trace" | `"info"` | `"error"`, `"warn"`, `"info"`, `"debug"`, `"trace"` | `restart` | Log level; `PMT_LOG` or `RUST_LOG` override it. |
 | `loops.max_ticks` | integer | `100` | 0 to 100000 | `live` | Wakeups after which a loop pauses (`0` = unlimited). |
 | `loops.min_interval_secs` | integer | `30` | 1 to 86400 | `live` | Shortest fixed interval a loop may use (seconds). |

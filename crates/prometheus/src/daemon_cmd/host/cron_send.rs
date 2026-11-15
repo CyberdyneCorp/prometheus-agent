@@ -183,7 +183,7 @@ impl Sender for GatewaySender {
     fn send<'a>(&'a self, row: &'a DeliveryRow) -> BoxFuture<'a, Result<Sent, SendError>> {
         Box::pin(async move {
             match row.target.strip_prefix(BOT_CHAT) {
-                Some(profile) => self.bot_chat(profile, row).await,
+                Some(profile) => Box::pin(self.bot_chat(profile, row)).await,
                 None => self.messaging(row).await,
             }
         })

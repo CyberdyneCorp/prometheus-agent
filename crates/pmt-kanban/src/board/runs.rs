@@ -11,7 +11,7 @@ use serde_json::json;
 use super::flow::secret_hash;
 use super::{Board, event, load, set_status};
 use crate::db::sql;
-use crate::model::{Actor, Run, Status};
+use crate::model::{Actor, Run, Status, now_ms};
 
 /// The longest stored failure text.
 pub const FAILURE_CHARS: usize = 500;
@@ -242,15 +242,43 @@ impl Board {
         })
     }
 
-    /// Marks a closed run's worker as gone (or reaped).
+    /// Marks a closed run's worker as gone (`signaled`: the dispatcher
+    /// terminated it) and records one `worker_exited` event with how it
+    /// ended: `clean_exit`, `rate_limited`, `nonzero_exit`, `signaled` or
+    /// `unknown`, its exit code and whether the task goes back to work.
     ///
     /// # Errors
     ///
     /// Store errors.
-    pub fn worker_gone(&mut self, run: &str) -> Result<(), Error> {
+    pub fn worker_gone(&mut self, run: &str, signaled: bool) -> Result<(), Error> {
+        let actor = Actor::dispatcher().label();
         self.write(|tx| {
-            tx.execute("UPDATE task_runs SET worker_gone = 1 WHERE id = ?1", [run])
+            let changed = tx
+                .execute(
+                    "UPDATE task_runs SET worker_gone = 1 WHERE id = ?1 AND worker_gone = 0",
+                    [run],
+                )
                 .map_err(sql)?;
+            if changed == 0 {
+                return Ok(());
+            }
+            let (task, pid, code): (String, Option<u32>, Option<i32>) = tx
+                .query_row(
+                    "SELECT task_id, pid, worker_exit FROM task_runs WHERE id = ?1",
+                    [run],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                )
+                .map_err(sql)?;
+            let exit_kind = match (code, signaled) {
+                (_, true) => "signaled",
+                (Some(0), _) => "clean_exit",
+                (Some(EXIT_RATE_LIMITED), _) => "rate_limited",
+                (Some(_), _) => "nonzero_exit",
+                (None, false) => "unknown",
+            };
+            let status = load(tx, &task)?.status;
+            let payload = json!({"pid": pid, "exit_kind": exit_kind, "exit_code": code, "retry": status == Status::Ready, "status": status});
+            event(tx, Some(&task), Some(run), &actor, "worker_exited", &payload, now_ms())?;
             Ok(())
         })
     }

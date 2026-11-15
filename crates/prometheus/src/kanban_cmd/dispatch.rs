@@ -12,7 +12,6 @@ use pmt_kanban::lease::RENEW_MS;
 use serde_json::json;
 
 use super::Env;
-use crate::output::{document, print_raw};
 
 fn render(summaries: &[Summary]) -> String {
     let mut out = String::new();
@@ -32,6 +31,39 @@ fn render(summaries: &[Summary]) -> String {
     out
 }
 
+/// `kanban dispatch --dry-run`: what a tick would do, changing nothing.
+pub(super) fn dry_run(env: &Env<'_>) -> Result<u8, Error> {
+    let plans = crate::kanban_host::plan(&env.scope, env.ctx.launch)?;
+    if env.ctx.json {
+        return env.document("kanban dispatch dry-run", &json!({"boards": plans}));
+    }
+    let mut out = String::new();
+    for plan in &plans {
+        let _ = writeln!(out, "board {}:", plan.board);
+        if let Some(holder) = &plan.locked {
+            let _ = writeln!(out, "Locked (dispatcher lease held by {holder})");
+        }
+        for id in &plan.would_claim {
+            let _ = writeln!(out, "Would claim: {id}");
+        }
+        for (id, reason) in &plan.guarded {
+            let _ = writeln!(out, "Guarded ({reason}): {id}");
+        }
+        for (id, until) in &plan.rate_limited {
+            let at = jiff::Timestamp::from_millisecond(*until)
+                .map_or_else(|_| until.to_string(), |t| t.to_string());
+            let _ = writeln!(out, "Rate-limited until {at}: {id}");
+        }
+        for id in &plan.capped {
+            let _ = writeln!(out, "Capped: {id}");
+        }
+        for id in &plan.skipped {
+            let _ = writeln!(out, "Skipped: {id}");
+        }
+    }
+    env.raw(&out)
+}
+
 /// One tick, or ticks every `kanban.dispatch_interval_secs` until
 /// interrupted, renewing the lease every 20 s in between.
 pub(super) fn dispatch(env: &Env<'_>, looping: bool) -> Result<u8, Error> {
@@ -43,11 +75,11 @@ pub(super) fn dispatch(env: &Env<'_>, looping: bool) -> Result<u8, Error> {
         let interval = Duration::from_secs(config.dispatch_interval_secs.max(1));
         if last_tick.is_none_or(|t| t.elapsed() >= interval) {
             pmt_core::pause::check(&env.home)?;
-            let summaries = crate::kanban_host::tick(&env.home, "cli", &config, env.ctx.launch)?;
+            let summaries = crate::kanban_host::tick(&env.scope, "cli", env.ctx.launch)?;
             if env.ctx.json {
-                document("kanban dispatch", &json!({"boards": summaries}))?;
+                env.document("kanban dispatch", &json!({"boards": summaries}))?;
             } else {
-                print_raw(&render(&summaries))?;
+                env.raw(&render(&summaries))?;
             }
             if !looping {
                 return Ok(0);

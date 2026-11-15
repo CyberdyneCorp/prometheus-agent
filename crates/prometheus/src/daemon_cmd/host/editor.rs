@@ -163,10 +163,11 @@ impl DaemonHost {
             EditorCall::Settings(_) => Ok(EditorReply::Settings(
                 self.settings_of(profile, &session).await,
             )),
-            EditorCall::Configure(params) => self
-                .configure(profile, &session, params, link)
-                .await
-                .map(EditorReply::Configured),
+            EditorCall::Configure(params) => {
+                Box::pin(self.configure(profile, &session, params, link))
+                    .await
+                    .map(EditorReply::Configured)
+            }
         }
     }
 

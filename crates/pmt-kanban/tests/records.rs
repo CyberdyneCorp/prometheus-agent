@@ -4,7 +4,7 @@
 mod support;
 
 use pmt_kanban::attach::Upload;
-use pmt_kanban::notify::NewSubscription;
+use pmt_kanban::notify::{Leg, NewSubscription};
 use pmt_kanban::{Actor, Completion, transfer};
 use support::{Home, T0, create, user};
 
@@ -36,12 +36,7 @@ fn subscriptions_report_each_event_once_and_drop_on_archive() {
         .subscribe(
             &user(),
             &id,
-            &NewSubscription {
-                adapter: "test".into(),
-                chat: "c1".into(),
-                thread: None,
-                profile: "writer".into(),
-            },
+            &NewSubscription::notify("test", "c1", None, "writer"),
             T0,
         )
         .unwrap();
@@ -58,8 +53,10 @@ fn subscriptions_report_each_event_once_and_drop_on_archive() {
         .unwrap();
     let pending = board.pending_notifications().unwrap();
     assert_eq!(pending.len(), 1);
-    assert_eq!(pending[0].1.kind, "completed");
-    board.checkpoint(&sub.id, pending[0].1.id).unwrap();
+    assert_eq!(pending[0].event.kind, "completed");
+    board
+        .checkpoint(&sub.id, Leg::Notify, pending[0].event.id)
+        .unwrap();
     assert!(board.pending_notifications().unwrap().is_empty());
     assert!(board.warn_once(&sub.id).unwrap());
     assert!(
@@ -73,12 +70,7 @@ fn subscriptions_report_each_event_once_and_drop_on_archive() {
         .subscribe(
             &user(),
             &other,
-            &NewSubscription {
-                adapter: "test".into(),
-                chat: "c".into(),
-                thread: None,
-                profile: "writer".into(),
-            },
+            &NewSubscription::notify("test", "c", None, "writer"),
             T0,
         )
         .unwrap();

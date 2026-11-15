@@ -5,6 +5,7 @@
 use std::cell::RefCell;
 use std::process::{Child, Command};
 
+use pmt_kanban::dispatch::guard::Windows;
 use pmt_kanban::dispatch::{Dispatcher, Settings, SpawnRequest, Spawner};
 use pmt_kanban::lease::Holder;
 use pmt_kanban::{Actor, Board, Boards, Breaker, NewTask};
@@ -57,6 +58,10 @@ pub fn settings() -> Settings {
         },
         claim_ttl_ms: 900_000,
         review_dispatch: true,
+        windows: Windows {
+            success_ms: 3_600_000,
+            pr_ms: 86_400_000,
+        },
     }
 }
 

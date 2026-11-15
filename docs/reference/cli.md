@@ -9597,7 +9597,18 @@ Commands:
   unblock          Lift blocks and schedules
   schedule         Park tasks until a time (RFC 3339), or until unblocked
   complete         Complete tasks through the completion gates
-  request-review   Hand tasks to review
+  request-review   Hand tasks to review (from running or ready)
+  reopen-review    Send tasks in review back to ready (or todo while a parent is open)
+  reassign         Reassign tasks to another profile or worker lane
+  set-model        Set (or with `none` clear) a task's model override; it applies from the next dispatch
+  claim            Claim a ready task for an external worker: prints the run id and its ticket (pass it with `--ticket` to report)
+  heartbeat        Renew a claimed task's lease (with `--ticket`, or as the person who claimed it)
+  init             Create the default board and print the dispatcher status
+  swarm            Create a swarm: a root card holding the goal and blackboard, one card per worker profile, a verifier and a synthesizer
+  specify          Expand triage ideas into full bodies with acceptance criteria (the `kanban` auxiliary model) and move them to todo
+  decompose        Decompose a task into a validated child-task graph (the `kanban` auxiliary model), created in one transaction under it
+  watch            Print new board events as they happen
+  assignees        The assignees a task may name: the home's profiles and the worker lanes of enabled plugins
   approve          Approve tasks in review
   request-changes  Send tasks in review back to todo with a comment
   archive          Archive tasks (a running task's worker is terminated)
@@ -9609,7 +9620,7 @@ Commands:
   tail             The board's latest events; `--follow` keeps printing new ones
   stats            Counts by status and run outcome
   diag             The dispatcher lease, the last ticks and the open runs
-  dispatch         Run the dispatcher: one tick (`--once`) or a standalone loop
+  dispatch         Run the dispatcher: one tick (`--once`), a standalone loop, or a dry run that changes nothing
   notify           Notification subscriptions
   gc               Purge old subscriptions, tick summaries and leftover scratch workspaces
   boards           Boards: list, create, rename, archive, switch, export, import
@@ -9617,13 +9628,16 @@ Commands:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -9663,7 +9677,7 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --body <BODY>
           The body (instructions, acceptance criteria)
@@ -9676,6 +9690,9 @@ Options:
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --reviewer <REVIEWER>
           The reviewer profile
@@ -9768,6 +9785,24 @@ Options:
 
           [default: 2]
 
+      --completion-contract <COMPLETION_CONTRACT>
+          `OWNER/REPO`, a pull-request URL or `local-only` (the default)
+
+      --goal
+          Run the worker in the goal loop, judged after each turn
+
+      --goal-max-turns <GOAL_MAX_TURNS>
+          Judged turns of the goal loop (default 20)
+
+      --model <MODEL>
+          The worker's model instead of the assignee's default
+
+      --provider <PROVIDER>
+          The model's provider (needs `--model`)
+
+      --skill <SKILLS>
+          A skill preloaded in the worker session (repeatable)
+
   -h, --help
           Print help
 ```
@@ -9781,7 +9816,7 @@ Usage: prometheus kanban list [OPTIONS]
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
@@ -9794,6 +9829,9 @@ Options:
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --all
           Include archived tasks
@@ -9836,13 +9874,16 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -9882,7 +9923,7 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
@@ -9895,6 +9936,9 @@ Options:
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --priority <PRIORITY>
           New priority
@@ -9948,10 +9992,13 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -9994,7 +10041,7 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
@@ -10004,6 +10051,9 @@ Options:
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -10046,13 +10096,16 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -10095,13 +10148,16 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -10144,13 +10200,16 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -10190,13 +10249,16 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -10236,7 +10298,7 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
@@ -10249,6 +10311,9 @@ Options:
 
       --reason <REASON>
           Why
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -10288,13 +10353,16 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -10337,13 +10405,16 @@ Options:
           When they wake (RFC 3339)
 
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -10383,7 +10454,7 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
@@ -10397,6 +10468,9 @@ Options:
       --summary <SUMMARY>
           The summary
 
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
+
       --run <RUN>
           The open run a live worker owns (completes it for the worker)
 
@@ -10408,6 +10482,9 @@ Options:
 
       --json
           Print one JSON document on stdout; errors go to stderr as JSON
+
+      --metadata <METADATA>
+          Facts as a JSON object (`{"published_pr": "<url>"}` for a PR completion contract)
 
   -v, --verbose...
           More detail; repeatable
@@ -10431,7 +10508,7 @@ Options:
 ## `prometheus kanban request-review`
 
 ```text
-Hand tasks to review
+Hand tasks to review (from running or ready)
 
 Usage: prometheus kanban request-review [OPTIONS] <IDS>...
 
@@ -10441,7 +10518,7 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
@@ -10449,8 +10526,580 @@ Options:
       --summary <SUMMARY>
           The summary
 
+      --metadata <METADATA>
+          Facts as a JSON object (`published_pr` binds a PR contract)
+
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
+
+      --reviewer <REVIEWER>
+          The reviewer profile
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban reopen-review`
+
+```text
+Send tasks in review back to ready (or todo while a parent is open)
+
+Usage: prometheus kanban reopen-review [OPTIONS] <IDS>...
+
+Arguments:
+  <IDS>...
+          The tasks
+
+Options:
+      --board <SLUG>
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --reason <REASON>
+          Why (kept as a comment)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban reassign`
+
+```text
+Reassign tasks to another profile or worker lane
+
+Usage: prometheus kanban reassign <ID>... <PROFILE>
+
+Arguments:
+  <ARGS> <ARGS>...
+          The tasks, then the profile
+
+Options:
+      --board <SLUG>
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban set-model`
+
+```text
+Set (or with `none` clear) a task's model override; it applies from the next dispatch
+
+Usage: prometheus kanban set-model [OPTIONS] <ID> <MODEL>
+
+Arguments:
+  <ID>
+          The task
+
+  <MODEL>
+          The model, or `none`
+
+Options:
+      --board <SLUG>
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --provider <PROVIDER>
+          The model's provider
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban claim`
+
+```text
+Claim a ready task for an external worker: prints the run id and its ticket (pass it with `--ticket` to report)
+
+Usage: prometheus kanban claim [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The task
+
+Options:
+      --board <SLUG>
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --ttl <TTL>
+          Seconds the claim lasts without a heartbeat (default: `kanban.claim_ttl_secs`)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban heartbeat`
+
+```text
+Renew a claimed task's lease (with `--ticket`, or as the person who claimed it)
+
+Usage: prometheus kanban heartbeat [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The task
+
+Options:
+      --board <SLUG>
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --note <NOTE>
+          A short note for the log
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban init`
+
+```text
+Create the default board and print the dispatcher status
+
+Usage: prometheus kanban init [OPTIONS]
+
+Options:
+      --board <SLUG>
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban swarm`
+
+```text
+Create a swarm: a root card holding the goal and blackboard, one card per worker profile, a verifier and a synthesizer
+
+Usage: prometheus kanban swarm [OPTIONS] --workers <WORKERS> --verifier <VERIFIER> --synthesizer <SYNTHESIZER> <GOAL>
+
+Arguments:
+  <GOAL>
+          The goal
+
+Options:
+      --board <SLUG>
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --workers <WORKERS>
+          Worker profiles, comma separated
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
+
+      --verifier <VERIFIER>
+          The verifier profile
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --synthesizer <SYNTHESIZER>
+          The synthesizer profile
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban specify`
+
+```text
+Expand triage ideas into full bodies with acceptance criteria (the `kanban` auxiliary model) and move them to todo
+
+Usage: prometheus kanban specify [OPTIONS] [ID]
+
+Arguments:
+  [ID]
+          The task
+
+Options:
+      --all
+          Every triage task of the board
+
+      --board <SLUG>
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --tenant <TENANT>
+          Only tasks of this assignee (tenant)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban decompose`
+
+```text
+Decompose a task into a validated child-task graph (the `kanban` auxiliary model), created in one transaction under it
+
+Usage: prometheus kanban decompose [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The task
+
+Options:
+      --board <SLUG>
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban watch`
+
+```text
+Print new board events as they happen
+
+Usage: prometheus kanban watch [OPTIONS]
+
+Options:
+      --assignee <ASSIGNEE>
+          Only tasks of this assignee
+
+      --board <SLUG>
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --kinds <KINDS>
+          Only these event kinds, comma separated
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus kanban assignees`
+
+```text
+The assignees a task may name: the home's profiles and the worker lanes of enabled plugins
+
+Usage: prometheus kanban assignees [OPTIONS]
+
+Options:
+      --board <SLUG>
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -10490,7 +11139,7 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --comment <COMMENT>
           A comment
@@ -10500,6 +11149,9 @@ Options:
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -10539,7 +11191,7 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --comment <COMMENT>
           What to change
@@ -10549,6 +11201,9 @@ Options:
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -10588,13 +11243,16 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -10634,7 +11292,7 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
@@ -10646,6 +11304,9 @@ Options:
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -10685,13 +11346,16 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -10731,13 +11395,16 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -10777,13 +11444,16 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -10823,13 +11493,16 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -10865,7 +11538,7 @@ Usage: prometheus kanban tail [OPTIONS]
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
@@ -10880,6 +11553,9 @@ Options:
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -10915,13 +11591,16 @@ Usage: prometheus kanban stats [OPTIONS]
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -10957,13 +11636,16 @@ Usage: prometheus kanban diag [OPTIONS]
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -10993,13 +11675,13 @@ Options:
 ## `prometheus kanban dispatch`
 
 ```text
-Run the dispatcher: one tick (`--once`) or a standalone loop
+Run the dispatcher: one tick (`--once`), a standalone loop, or a dry run that changes nothing
 
 Usage: prometheus kanban dispatch [OPTIONS]
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
@@ -11012,6 +11694,12 @@ Options:
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
+
+      --dry-run
+          Print what a tick would do (`Guarded (<reason>): <id>`...)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -11047,7 +11735,7 @@ Usage: prometheus kanban work [OPTIONS] --run <RUN>
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
@@ -11057,6 +11745,9 @@ Options:
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -11098,13 +11789,16 @@ Commands:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -11147,7 +11841,7 @@ Options:
           The adapter (`telegram`, `slack`...)
 
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
@@ -11158,14 +11852,28 @@ Options:
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
 
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
+
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
 
       --thread <THREAD>
           The thread id
 
+      --delivery-mode <DELIVERY_MODE>
+          `notify` (a message), `notify+wake` (and a turn of the subscriber's agent in that chat) or `wake` (the turn only)
+
+          [default: notify]
+          [possible values: notify, notify+wake, wake]
+
       --json
           Print one JSON document on stdout; errors go to stderr as JSON
+
+      --chat-type <CHAT_TYPE>
+          `dm`, `group`, `channel` or `thread`: how a wake finds the chat's session
+
+          [possible values: dm, group, channel, thread]
 
   -v, --verbose...
           More detail; repeatable
@@ -11199,13 +11907,16 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -11245,13 +11956,16 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -11333,13 +12047,16 @@ Usage: prometheus kanban gc [OPTIONS]
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -11385,13 +12102,16 @@ Commands:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -11427,13 +12147,16 @@ Usage: prometheus kanban boards list [OPTIONS]
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -11473,7 +12196,7 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
@@ -11483,6 +12206,9 @@ Options:
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -11525,13 +12251,16 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -11571,13 +12300,16 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -11617,13 +12349,16 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -11666,13 +12401,16 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -11712,7 +12450,7 @@ Arguments:
 
 Options:
       --board <SLUG>
-          The board (default: `kanban.current_board`, else `default`)
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
 
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
@@ -11722,6 +12460,9 @@ Options:
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -11852,7 +12593,18 @@ Commands:
   unblock          Lift blocks and schedules
   schedule         Park tasks until a time (RFC 3339), or until unblocked
   complete         Complete tasks through the completion gates
-  request-review   Hand tasks to review
+  request-review   Hand tasks to review (from running or ready)
+  reopen-review    Send tasks in review back to ready (or todo while a parent is open)
+  reassign         Reassign tasks to another profile or worker lane
+  set-model        Set (or with `none` clear) a task's model override; it applies from the next dispatch
+  claim            Claim a ready task for an external worker: prints the run id and its ticket (pass it with `--ticket` to report)
+  heartbeat        Renew a claimed task's lease (with `--ticket`, or as the person who claimed it)
+  init             Create the default board and print the dispatcher status
+  swarm            Create a swarm: a root card holding the goal and blackboard, one card per worker profile, a verifier and a synthesizer
+  specify          Expand triage ideas into full bodies with acceptance criteria (the `kanban` auxiliary model) and move them to todo
+  decompose        Decompose a task into a validated child-task graph (the `kanban` auxiliary model), created in one transaction under it
+  watch            Print new board events as they happen
+  assignees        The assignees a task may name: the home's profiles and the worker lanes of enabled plugins
   approve          Approve tasks in review
   request-changes  Send tasks in review back to todo with a comment
   archive          Archive tasks (a running task's worker is terminated)
@@ -11864,7 +12616,7 @@ Commands:
   tail             The board's latest events; `--follow` keeps printing new ones
   stats            Counts by status and run outcome
   diag             The dispatcher lease, the last ticks and the open runs
-  dispatch         Run the dispatcher: one tick (`--once`) or a standalone loop
+  dispatch         Run the dispatcher: one tick (`--once`), a standalone loop, or a dry run that changes nothing
   notify           Notification subscriptions
   gc               Purge old subscriptions, tick summaries and leftover scratch workspaces
   boards           Boards: list, create, rename, archive, switch, export, import
@@ -11986,9 +12738,97 @@ Usage: prometheus kanban help complete
 ## `prometheus kanban help request-review`
 
 ```text
-Hand tasks to review
+Hand tasks to review (from running or ready)
 
 Usage: prometheus kanban help request-review
+```
+
+## `prometheus kanban help reopen-review`
+
+```text
+Send tasks in review back to ready (or todo while a parent is open)
+
+Usage: prometheus kanban help reopen-review
+```
+
+## `prometheus kanban help reassign`
+
+```text
+Reassign tasks to another profile or worker lane
+
+Usage: prometheus kanban help reassign
+```
+
+## `prometheus kanban help set-model`
+
+```text
+Set (or with `none` clear) a task's model override; it applies from the next dispatch
+
+Usage: prometheus kanban help set-model
+```
+
+## `prometheus kanban help claim`
+
+```text
+Claim a ready task for an external worker: prints the run id and its ticket (pass it with `--ticket` to report)
+
+Usage: prometheus kanban help claim
+```
+
+## `prometheus kanban help heartbeat`
+
+```text
+Renew a claimed task's lease (with `--ticket`, or as the person who claimed it)
+
+Usage: prometheus kanban help heartbeat
+```
+
+## `prometheus kanban help init`
+
+```text
+Create the default board and print the dispatcher status
+
+Usage: prometheus kanban help init
+```
+
+## `prometheus kanban help swarm`
+
+```text
+Create a swarm: a root card holding the goal and blackboard, one card per worker profile, a verifier and a synthesizer
+
+Usage: prometheus kanban help swarm
+```
+
+## `prometheus kanban help specify`
+
+```text
+Expand triage ideas into full bodies with acceptance criteria (the `kanban` auxiliary model) and move them to todo
+
+Usage: prometheus kanban help specify
+```
+
+## `prometheus kanban help decompose`
+
+```text
+Decompose a task into a validated child-task graph (the `kanban` auxiliary model), created in one transaction under it
+
+Usage: prometheus kanban help decompose
+```
+
+## `prometheus kanban help watch`
+
+```text
+Print new board events as they happen
+
+Usage: prometheus kanban help watch
+```
+
+## `prometheus kanban help assignees`
+
+```text
+The assignees a task may name: the home's profiles and the worker lanes of enabled plugins
+
+Usage: prometheus kanban help assignees
 ```
 
 ## `prometheus kanban help approve`
@@ -12082,7 +12922,7 @@ Usage: prometheus kanban help diag
 ## `prometheus kanban help dispatch`
 
 ```text
-Run the dispatcher: one tick (`--once`) or a standalone loop
+Run the dispatcher: one tick (`--once`), a standalone loop, or a dry run that changes nothing
 
 Usage: prometheus kanban help dispatch
 ```
@@ -31782,7 +32622,18 @@ Commands:
   unblock          Lift blocks and schedules
   schedule         Park tasks until a time (RFC 3339), or until unblocked
   complete         Complete tasks through the completion gates
-  request-review   Hand tasks to review
+  request-review   Hand tasks to review (from running or ready)
+  reopen-review    Send tasks in review back to ready (or todo while a parent is open)
+  reassign         Reassign tasks to another profile or worker lane
+  set-model        Set (or with `none` clear) a task's model override; it applies from the next dispatch
+  claim            Claim a ready task for an external worker: prints the run id and its ticket (pass it with `--ticket` to report)
+  heartbeat        Renew a claimed task's lease (with `--ticket`, or as the person who claimed it)
+  init             Create the default board and print the dispatcher status
+  swarm            Create a swarm: a root card holding the goal and blackboard, one card per worker profile, a verifier and a synthesizer
+  specify          Expand triage ideas into full bodies with acceptance criteria (the `kanban` auxiliary model) and move them to todo
+  decompose        Decompose a task into a validated child-task graph (the `kanban` auxiliary model), created in one transaction under it
+  watch            Print new board events as they happen
+  assignees        The assignees a task may name: the home's profiles and the worker lanes of enabled plugins
   approve          Approve tasks in review
   request-changes  Send tasks in review back to todo with a comment
   archive          Archive tasks (a running task's worker is terminated)
@@ -31794,7 +32645,7 @@ Commands:
   tail             The board's latest events; `--follow` keeps printing new ones
   stats            Counts by status and run outcome
   diag             The dispatcher lease, the last ticks and the open runs
-  dispatch         Run the dispatcher: one tick (`--once`) or a standalone loop
+  dispatch         Run the dispatcher: one tick (`--once`), a standalone loop, or a dry run that changes nothing
   notify           Notification subscriptions
   gc               Purge old subscriptions, tick summaries and leftover scratch workspaces
   boards           Boards: list, create, rename, archive, switch, export, import
@@ -31915,9 +32766,97 @@ Usage: prometheus help kanban complete
 ## `prometheus help kanban request-review`
 
 ```text
-Hand tasks to review
+Hand tasks to review (from running or ready)
 
 Usage: prometheus help kanban request-review
+```
+
+## `prometheus help kanban reopen-review`
+
+```text
+Send tasks in review back to ready (or todo while a parent is open)
+
+Usage: prometheus help kanban reopen-review
+```
+
+## `prometheus help kanban reassign`
+
+```text
+Reassign tasks to another profile or worker lane
+
+Usage: prometheus help kanban reassign
+```
+
+## `prometheus help kanban set-model`
+
+```text
+Set (or with `none` clear) a task's model override; it applies from the next dispatch
+
+Usage: prometheus help kanban set-model
+```
+
+## `prometheus help kanban claim`
+
+```text
+Claim a ready task for an external worker: prints the run id and its ticket (pass it with `--ticket` to report)
+
+Usage: prometheus help kanban claim
+```
+
+## `prometheus help kanban heartbeat`
+
+```text
+Renew a claimed task's lease (with `--ticket`, or as the person who claimed it)
+
+Usage: prometheus help kanban heartbeat
+```
+
+## `prometheus help kanban init`
+
+```text
+Create the default board and print the dispatcher status
+
+Usage: prometheus help kanban init
+```
+
+## `prometheus help kanban swarm`
+
+```text
+Create a swarm: a root card holding the goal and blackboard, one card per worker profile, a verifier and a synthesizer
+
+Usage: prometheus help kanban swarm
+```
+
+## `prometheus help kanban specify`
+
+```text
+Expand triage ideas into full bodies with acceptance criteria (the `kanban` auxiliary model) and move them to todo
+
+Usage: prometheus help kanban specify
+```
+
+## `prometheus help kanban decompose`
+
+```text
+Decompose a task into a validated child-task graph (the `kanban` auxiliary model), created in one transaction under it
+
+Usage: prometheus help kanban decompose
+```
+
+## `prometheus help kanban watch`
+
+```text
+Print new board events as they happen
+
+Usage: prometheus help kanban watch
+```
+
+## `prometheus help kanban assignees`
+
+```text
+The assignees a task may name: the home's profiles and the worker lanes of enabled plugins
+
+Usage: prometheus help kanban assignees
 ```
 
 ## `prometheus help kanban approve`
@@ -32011,7 +32950,7 @@ Usage: prometheus help kanban diag
 ## `prometheus help kanban dispatch`
 
 ```text
-Run the dispatcher: one tick (`--once`) or a standalone loop
+Run the dispatcher: one tick (`--once`), a standalone loop, or a dry run that changes nothing
 
 Usage: prometheus help kanban dispatch
 ```
@@ -35089,6 +36028,12 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.kanban_subscriptions.v1` | `prometheus kanban notify list` |
 | `prometheus.kanban_attachments.v1` | `prometheus kanban attachments` |
 | `prometheus.kanban_gc.v1` | `prometheus kanban gc` |
+| `prometheus.kanban_plan.v1` | `prometheus kanban dispatch dry-run` |
+| `prometheus.kanban_claim.v1` | `prometheus kanban claim` |
+| `prometheus.kanban_swarm.v1` | `prometheus kanban swarm` |
+| `prometheus.kanban_graph.v1` | `prometheus kanban decompose` |
+| `prometheus.kanban_assignees.v1` | `prometheus kanban assignees` |
+| `prometheus.kanban_init.v1` | `prometheus kanban init` |
 | `prometheus.cron_list.v1` | `prometheus cron list` |
 | `prometheus.cron_job.v1` | `prometheus cron add` |
 | `prometheus.cron_runs.v1` | `prometheus cron runs` |

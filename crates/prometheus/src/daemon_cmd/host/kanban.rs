@@ -1,12 +1,16 @@
 //! The kanban dispatcher and notifier inside the gateway daemon (spec:
 //! kanban, Single dispatcher per home; Notifications through the owning
-//! profile). With `kanban.dispatch = true` (the launch profile's) the
-//! daemon is the home's dispatcher: it ticks every
-//! `kanban.dispatch_interval_secs` and renews its board leases every 20 s
-//! in between; a paused home starts no work. Notifications of every
-//! board go out through the subscriber profile's own adapter under that
-//! profile; a route that profile cannot reach is skipped with one
-//! warning per subscription, never sent through another profile.
+//! profile; Subscription delivery modes and inheritance). With
+//! `kanban.dispatch = true` (the launch profile's) the daemon is the
+//! home's dispatcher: it ticks every `kanban.dispatch_interval_secs` and
+//! renews its board leases every 20 s in between; a paused home starts no
+//! work. Notifications of every board go out through the subscriber
+//! profile's own adapter under that profile; a route that profile cannot
+//! reach is skipped with one warning per subscription, never sent
+//! through another profile. A `wake` leg starts one turn of the
+//! subscriber profile's agent in the chat's session with the event's
+//! summary; a wake the chat cannot take now is retried on later notifier
+//! ticks, its passive message never sent twice.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -14,7 +18,7 @@ use std::time::{Duration, Instant};
 
 use pmt_kanban::Boards;
 use pmt_kanban::lease::RENEW_MS;
-use pmt_kanban::notify::Subscription;
+use pmt_kanban::notify::{Leg, Subscription};
 
 use super::DaemonHost;
 
@@ -44,7 +48,7 @@ pub(in crate::daemon_cmd) async fn schedule(host: Arc<DaemonHost>) {
         if config.dispatch && pmt_core::pause::check(&home).is_ok() {
             let interval = Duration::from_secs(config.dispatch_interval_secs.max(1));
             if last_tick.is_none_or(|t| t.elapsed() >= interval) {
-                tick(&host, &home, config).await;
+                tick(&host, scope.clone()).await;
                 last_tick = Some(Instant::now());
                 last_renew = Instant::now();
             } else if last_renew.elapsed() >= renew_every {
@@ -62,13 +66,11 @@ pub(in crate::daemon_cmd) async fn schedule(host: Arc<DaemonHost>) {
     }
 }
 
-async fn tick(host: &DaemonHost, home: &Path, config: pmt_config::schema::KanbanConfig) {
-    let home = home.to_path_buf();
+async fn tick(host: &DaemonHost, scope: pmt_config::ProfileScope) {
     let launch = host.launch.clone();
-    let result = pmt_core::spawn::blocking(move || {
-        crate::kanban_host::tick(&home, "daemon", &config, &launch)
-    })
-    .await;
+    let result =
+        pmt_core::spawn::blocking(move || crate::kanban_host::tick(&scope, "daemon", &launch))
+            .await;
     match result {
         Ok(Ok(summaries)) => {
             for s in summaries
@@ -83,11 +85,12 @@ async fn tick(host: &DaemonHost, home: &Path, config: pmt_config::schema::Kanban
     }
 }
 
-/// One pending notification.
+/// One pending notification leg.
 struct Pending {
     board: String,
     sub: Subscription,
     event: i64,
+    leg: Leg,
     text: String,
 }
 
@@ -100,15 +103,17 @@ fn pending(home: &Path) -> Vec<Pending> {
         let Ok(board) = boards.board(&slug) else {
             continue;
         };
-        for (sub, event) in board.pending_notifications().unwrap_or_default() {
+        for pending in board.pending_notifications().unwrap_or_default() {
+            let event = pending.event;
             let Some(task) = event.task_id.as_deref().and_then(|id| board.task(id).ok()) else {
                 continue;
             };
             out.push(Pending {
                 text: crate::kanban_host::notice::text(&slug, &task, &event),
                 board: slug.clone(),
-                sub,
+                sub: pending.sub,
                 event: event.id,
+                leg: pending.leg,
             });
         }
     }
@@ -127,10 +132,61 @@ async fn notify(host: &DaemonHost, home: &Path) {
         return;
     };
     for item in items {
-        let outcome = deliver(host, gateway, &item).await;
+        let outcome = match item.leg {
+            Leg::Notify => deliver(host, gateway, &item).await.map(|()| true),
+            Leg::Wake => wake(host, gateway, &item).await,
+        };
         let home = home.to_path_buf();
         let _ = pmt_core::spawn::blocking(move || settle(&home, &item, outcome)).await;
     }
+}
+
+/// Starts the subscriber agent's turn for a wake leg: `Ok(false)` when the
+/// chat cannot take it now (retried on a later tick), `Err` when the
+/// subscriber profile can never reach the chat.
+async fn wake(
+    host: &DaemonHost,
+    gateway: &pmt_gateway::messaging::Gateway,
+    item: &Pending,
+) -> Result<bool, String> {
+    let sub = &item.sub;
+    let profile = sub.profile.as_str();
+    if host.profile(profile).is_err() {
+        return Err(format!(
+            "profile '{profile}' is not served by this daemon; serve it to wake its agent for kanban events"
+        ));
+    }
+    let session = sub.session_id.clone().or_else(|| {
+        gateway.session_of_chat(
+            profile,
+            &sub.adapter,
+            sub.chat_type.as_deref(),
+            &sub.chat,
+            sub.thread.as_deref(),
+        )
+    });
+    let Some(session) = session else {
+        // The chat has no conversation yet: try again later.
+        return Ok(false);
+    };
+    let (started, ran) = tokio::sync::oneshot::channel();
+    let automated = pmt_gateway::messaging::automation::Automated {
+        origin: "kanban".to_owned(),
+        text: format!(
+            "[kanban notification] {}\nReact if it needs you (inspect it with the kanban tools or `prometheus kanban show`), otherwise answer briefly.",
+            item.text
+        ),
+        notice: None,
+        started: Some(started),
+    };
+    if gateway.automate(profile, &session, automated)
+        == pmt_gateway::messaging::adapter::Admission::Dropped
+    {
+        return Ok(false);
+    }
+    Ok(tokio::time::timeout(Duration::from_secs(10), ran)
+        .await
+        .is_ok_and(|r| r.unwrap_or(false)))
 }
 
 /// Sends one notification through its subscriber profile; `Err` names
@@ -167,7 +223,12 @@ async fn deliver(
         .map_err(|err| err.message().to_owned())
 }
 
-fn settle(home: &Path, item: &Pending, outcome: Result<(), String>) {
+/// Checkpoints a delivered (or never deliverable) leg; a wake the chat
+/// could not take yet (`Ok(false)`) stays pending.
+fn settle(home: &Path, item: &Pending, outcome: Result<bool, String>) {
+    if matches!(outcome, Ok(false)) {
+        return;
+    }
     let Ok(mut board) = Boards::open(home).and_then(|b| b.board(&item.board)) else {
         return;
     };
@@ -181,5 +242,5 @@ fn settle(home: &Path, item: &Pending, outcome: Result<(), String>) {
             "kanban notification skipped: {reason}"
         );
     }
-    let _ = board.checkpoint(&item.sub.id, item.event);
+    let _ = board.checkpoint(&item.sub.id, item.leg, item.event);
 }

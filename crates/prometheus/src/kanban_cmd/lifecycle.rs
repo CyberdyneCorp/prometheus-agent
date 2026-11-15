@@ -6,11 +6,10 @@
 use std::fmt::Write as _;
 
 use pmt_core::error::{Error, codes};
-use pmt_kanban::{Actor, BlockKind, Board, Completion, Status};
+use pmt_kanban::{Actor, BlockKind, Board, Completion, Handoff, Status};
 use serde_json::{Value, json};
 
 use super::{Env, KanbanCommand};
-use crate::output::{document, print_raw};
 
 /// What one id came to.
 type Outcome = Result<Option<Status>, Error>;
@@ -33,18 +32,16 @@ pub(super) fn run(env: &Env<'_>, command: &KanbanCommand) -> Result<u8, Error> {
     let (ids, results) = match command {
         KanbanCommand::Assign { profile, ids } => {
             let profile = (profile != "none").then_some(profile.as_str());
-            if let Some(p) = profile
-                && !crate::kanban_host::profile_exists(&env.home, p)
-            {
-                return Err(Error::new(
-                    &codes::KANBAN_UNKNOWN_PROFILE,
-                    format!("unknown profile '{p}'"),
-                ));
+            let profiles = env.profiles();
+            if let Some(p) = profile {
+                pmt_kanban::board::create::assignee_lane(&profiles, p)?;
             }
             (
                 ids,
                 each(ids, |id| {
-                    board.assign(&actor, id, profile, now()).map(|()| None)
+                    board
+                        .assign(&actor, id, profile, &profiles, now())
+                        .map(|()| None)
                 }),
             )
         }
@@ -78,6 +75,7 @@ pub(super) fn run(env: &Env<'_>, command: &KanbanCommand) -> Result<u8, Error> {
             summary,
             run,
             force,
+            metadata,
         } => {
             let completion = Completion {
                 result: result.clone(),
@@ -85,6 +83,7 @@ pub(super) fn run(env: &Env<'_>, command: &KanbanCommand) -> Result<u8, Error> {
                 run_id: run.clone(),
                 force: *force,
                 attachment_limit: env.scope.config().kanban.attachment_max_bytes,
+                metadata: metadata.as_deref().map(parse_metadata).transpose()?,
                 ..Completion::default()
             };
             (
@@ -101,18 +100,43 @@ pub(super) fn run(env: &Env<'_>, command: &KanbanCommand) -> Result<u8, Error> {
 
 /// The review, archive and promotion verbs.
 fn review<'a>(
-    _env: &Env<'_>,
+    env: &Env<'_>,
     board: &mut Board,
     actor: &Actor,
     command: &'a KanbanCommand,
 ) -> Result<(&'a Vec<String>, Vec<Outcome>), Error> {
     Ok(match command {
-        KanbanCommand::RequestReview { ids, summary } => (
+        KanbanCommand::RequestReview {
+            ids,
+            summary,
+            metadata,
+            reviewer,
+        } => {
+            if let Some(r) = reviewer.as_deref()
+                && !crate::kanban_host::profile_exists(&env.home, r)
+            {
+                return Err(pmt_kanban::board::create::unknown_profile(r));
+            }
+            let handoff = Handoff {
+                summary: summary.clone(),
+                metadata: metadata.as_deref().map(parse_metadata).transpose()?,
+                reviewer: reviewer.clone(),
+            };
+            (
+                ids,
+                each(ids, |id| {
+                    board
+                        .request_review(actor, id, &handoff, now())
+                        .map(|()| Some(Status::Review))
+                }),
+            )
+        }
+        KanbanCommand::ReopenReview { ids, reason } => (
             ids,
             each(ids, |id| {
                 board
-                    .request_review(actor, id, summary.as_deref(), now())
-                    .map(|()| Some(Status::Review))
+                    .reopen_review(actor, id, reason.as_deref(), now())
+                    .map(Some)
             }),
         ),
         KanbanCommand::Approve { ids, comment } => (
@@ -171,6 +195,17 @@ fn promote(board: &mut Board, ids: &[String]) -> Result<Vec<Outcome>, Error> {
         .collect())
 }
 
+/// `--metadata`: a JSON object.
+pub(super) fn parse_metadata(text: &str) -> Result<Value, Error> {
+    match serde_json::from_str::<Value>(text) {
+        Ok(value) if value.is_object() => Ok(value),
+        _ => Err(Error::new(
+            &codes::KANBAN_INVALID_TASK,
+            "--metadata must be a JSON object",
+        )),
+    }
+}
+
 fn now() -> i64 {
     pmt_kanban::now_ms()
 }
@@ -201,7 +236,7 @@ fn report(env: &Env<'_>, ids: &[String], results: &[Outcome]) -> Result<u8, Erro
                 }
             })
             .collect();
-        document("kanban results", &json!({"results": rows}))?;
+        env.document("kanban results", &json!({"results": rows}))?;
         return Ok(code);
     }
     let mut out = String::new();
@@ -212,6 +247,6 @@ fn report(env: &Env<'_>, ids: &[String], results: &[Outcome]) -> Result<u8, Erro
             Err(err) => writeln!(out, "failed {id}: {}", reason(err)),
         };
     }
-    print_raw(&out)?;
+    env.raw(&out)?;
     Ok(code)
 }

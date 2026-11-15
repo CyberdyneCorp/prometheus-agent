@@ -8,18 +8,23 @@
 pub mod create;
 pub mod finish;
 pub mod flow;
+mod gates;
 pub mod links;
+pub mod manage;
 pub mod runs;
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use pmt_core::error::{Error, codes};
 use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
 use serde_json::Value;
 
 use crate::boards::{BoardSettings, Boards};
+use crate::contract::PrChecks;
 use crate::db::{self, sql};
 use crate::model::{Actor, BlockKind, Comment, Event, Run, Status, Task, TaskKind, Workspace};
+use crate::observe::Observer;
 
 /// An open board.
 pub struct Board {
@@ -28,6 +33,8 @@ pub struct Board {
     blobs: PathBuf,
     settings: BoardSettings,
     conn: Connection,
+    pr_checks: Option<Arc<dyn PrChecks>>,
+    observer: Option<Arc<dyn Observer>>,
 }
 
 impl std::fmt::Debug for Board {
@@ -41,7 +48,9 @@ impl std::fmt::Debug for Board {
 pub(crate) const TASK_COLUMNS: &str = "id, title, body, status, assignee, reviewer, priority, \
     workspace, workspace_path, kind, review, idempotency_key, block_kind, block_reason, wake_at, \
     not_before, consecutive_failures, last_failure, max_retries, budget_usd, budget_tokens, \
-    artifacts, result, summary, created_by, created_run, created_at, updated_at, completed_at";
+    artifacts, result, summary, created_by, created_run, created_at, updated_at, completed_at, \
+    completion_contract, pr_url, goal_mode, goal_max_turns, model, provider, skills, lane, project, \
+    repo_root";
 
 pub(crate) const RUN_COLUMNS: &str = "id, task_id, profile, role, started_at, ended_at, outcome, \
     exit_code, session_id, trajectory_id, cost_usd, tokens, pid, pid_start, lease_expires_at, \
@@ -57,6 +66,7 @@ pub(crate) fn task_row(row: &Row<'_>) -> rusqlite::Result<Task> {
     let kind: String = row.get(9)?;
     let block_kind: Option<String> = row.get(12)?;
     let artifacts: String = row.get(21)?;
+    let skills: String = row.get(35)?;
     Ok(Task {
         id: row.get(0)?,
         title: row.get(1)?,
@@ -91,6 +101,16 @@ pub(crate) fn task_row(row: &Row<'_>) -> rusqlite::Result<Task> {
         created_at: row.get(26)?,
         updated_at: row.get(27)?,
         completed_at: row.get(28)?,
+        completion_contract: row.get(29)?,
+        pr_url: row.get(30)?,
+        goal_mode: row.get(31)?,
+        goal_max_turns: row.get(32)?,
+        model: row.get(33)?,
+        provider: row.get(34)?,
+        skills: serde_json::from_str(&skills).map_err(text_err)?,
+        lane: row.get(36)?,
+        project: row.get(37)?,
+        repo_root: row.get::<_, Option<String>>(38)?.map(PathBuf::from),
     })
 }
 
@@ -131,6 +151,18 @@ fn event_row(row: &Row<'_>) -> rusqlite::Result<Event> {
         payload: serde_json::from_str(&payload).unwrap_or(Value::Null),
         at: row.get(6)?,
     })
+}
+
+fn events_after(conn: &Connection, after: i64) -> Result<Vec<Event>, Error> {
+    let mut stmt = conn
+        .prepare("SELECT id, task_id, run_id, actor, kind, payload, at FROM events WHERE id > ?1 ORDER BY id")
+        .map_err(sql)?;
+    let rows = stmt
+        .query_map([after], event_row)
+        .map_err(sql)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(sql)?;
+    Ok(rows)
 }
 
 /// The refusal for an unknown task id.
@@ -239,7 +271,27 @@ impl Board {
             blobs: boards.blobs_dir(),
             settings,
             conn,
+            pr_checks: None,
+            observer: None,
         })
+    }
+
+    /// Reads pull-request evidence for completion contracts with `checks`.
+    #[must_use]
+    pub fn with_pr_checks(mut self, checks: Arc<dyn PrChecks>) -> Self {
+        self.pr_checks = Some(checks);
+        self
+    }
+
+    /// Hands every committed transaction's events to `observer`.
+    #[must_use]
+    pub fn with_observer(mut self, observer: Arc<dyn Observer>) -> Self {
+        self.observer = Some(observer);
+        self
+    }
+
+    pub(crate) fn pr_checks(&self) -> Option<&Arc<dyn PrChecks>> {
+        self.pr_checks.as_ref()
     }
 
     /// The board's slug.
@@ -278,7 +330,9 @@ impl Board {
         self.dir.join("logs")
     }
 
-    /// Runs `body` in one immediate transaction.
+    /// Runs `body` in one immediate transaction; an observer then sees
+    /// the events it appended (the transaction is the only writer, so
+    /// every event after the first id is its own).
     pub(crate) fn write<T>(
         &mut self,
         body: impl FnOnce(&Transaction<'_>) -> Result<T, Error>,
@@ -287,8 +341,22 @@ impl Board {
             .conn
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .map_err(sql)?;
+        let before: Option<i64> = match self.observer {
+            Some(_) => Some(
+                tx.query_row("SELECT COALESCE(MAX(id), 0) FROM events", [], |r| r.get(0))
+                    .map_err(sql)?,
+            ),
+            None => None,
+        };
         let out = body(&tx)?;
+        let appended = match before {
+            Some(after) => events_after(&tx, after)?,
+            None => Vec::new(),
+        };
         tx.commit().map_err(sql)?;
+        if let (Some(observer), false) = (self.observer.clone(), appended.is_empty()) {
+            observer.observe(self, &appended);
+        }
         Ok(out)
     }
 
@@ -619,24 +687,29 @@ impl Board {
         })
     }
 
-    /// Assigns (or unassigns) a task.
+    /// Assigns (or unassigns) a task to a profile or worker lane.
     ///
     /// # Errors
     ///
-    /// `kanban.task_not_found`.
+    /// `kanban.task_not_found`, `kanban.unknown_profile`.
     pub fn assign(
         &mut self,
         actor: &Actor,
         id: &str,
         profile: Option<&str>,
+        profiles: &dyn create::Profiles,
         now: i64,
     ) -> Result<(), Error> {
+        let lane = match profile {
+            Some(p) => create::assignee_lane(profiles, p)?,
+            None => false,
+        };
         let label = actor.label();
         self.write(|tx| {
             load(tx, id)?;
             tx.execute(
-                "UPDATE tasks SET assignee = ?2, updated_at = ?3 WHERE id = ?1",
-                params![id, profile, now],
+                "UPDATE tasks SET assignee = ?2, lane = ?3, updated_at = ?4 WHERE id = ?1",
+                params![id, profile, lane, now],
             )
             .map_err(sql)?;
             event(

@@ -36,7 +36,19 @@ impl Ticket {
     ///
     /// `kanban.ticket_refused`.
     pub fn parse(text: &str, run: &str) -> Result<Self, Error> {
-        let refused = |m: &str| Error::new(&codes::KANBAN_TICKET_REFUSED, m.to_owned());
+        let ticket = Self::read(text)?;
+        if ticket.run != run {
+            return Err(refused("run ticket does not match an open run"));
+        }
+        Ok(ticket)
+    }
+
+    /// Parses a ticket line (the first line of `text`).
+    ///
+    /// # Errors
+    ///
+    /// `kanban.ticket_refused`.
+    pub fn read(text: &str) -> Result<Self, Error> {
         let line = text.lines().next().unwrap_or("").trim();
         if line.is_empty() {
             return Err(refused("run ticket missing on stdin"));
@@ -46,9 +58,10 @@ impl Ticket {
         if ticket.v != VERSION {
             return Err(refused("run ticket version not supported"));
         }
-        if ticket.run != run {
-            return Err(refused("run ticket does not match an open run"));
-        }
         Ok(ticket)
     }
+}
+
+fn refused(message: &str) -> Error {
+    Error::new(&codes::KANBAN_TICKET_REFUSED, message.to_owned())
 }

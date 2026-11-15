@@ -437,6 +437,78 @@ pub struct Task {
     pub updated_at: i64,
     /// When it reached `done` (Unix ms).
     pub completed_at: Option<i64>,
+    /// `OWNER/REPO`, a pull-request URL, or `None` for `local-only`.
+    pub completion_contract: Option<String>,
+    /// The pull request a repository contract is bound to.
+    pub pr_url: Option<String>,
+    /// The worker runs in the goal loop, judged after each turn.
+    pub goal_mode: bool,
+    /// Judged turns before the goal is given up (`None`: 20).
+    pub goal_max_turns: Option<u32>,
+    /// The worker's model instead of the assignee's default.
+    pub model: Option<String>,
+    /// The provider of `model`.
+    pub provider: Option<String>,
+    /// Skills preloaded in the worker session.
+    pub skills: Vec<String>,
+    /// The assignee is a plugin's worker lane, not a profile.
+    pub lane: bool,
+    /// The project bound to the board when the task was created.
+    pub project: Option<String>,
+    /// The project's primary folder: the repository of its worktree.
+    pub repo_root: Option<PathBuf>,
+}
+
+/// Default judged turns of a goal-mode task.
+pub const GOAL_MAX_TURNS: u32 = 20;
+
+impl Task {
+    /// The branch of a `worktree` task: the given one, else
+    /// `<project>/<id>[-<title-slug>]` on a board bound to a project,
+    /// else `kanban/<id>`; `None` for other workspaces.
+    #[must_use]
+    pub fn branch(&self) -> Option<String> {
+        let Workspace::Worktree { branch } = &self.workspace else {
+            return None;
+        };
+        if let Some(branch) = branch {
+            return Some(branch.clone());
+        }
+        Some(match &self.project {
+            Some(project) => {
+                let slug = title_slug(&self.title);
+                if slug.is_empty() {
+                    format!("{project}/{}", self.id)
+                } else {
+                    format!("{project}/{}-{slug}", self.id)
+                }
+            }
+            None => format!("kanban/{}", self.id),
+        })
+    }
+
+    /// The judged-turn budget of a goal-mode task.
+    #[must_use]
+    pub fn goal_turns(&self) -> u32 {
+        self.goal_max_turns.unwrap_or(GOAL_MAX_TURNS).max(1)
+    }
+}
+
+/// A title as a branch segment: lower case, every run of characters
+/// outside `[a-z0-9._-]` collapsed to one `-`, trimmed, at most 40
+/// characters.
+#[must_use]
+pub fn title_slug(title: &str) -> String {
+    let mut out = String::new();
+    for c in title.to_lowercase().chars() {
+        if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
+            out.push(c);
+        } else if !out.ends_with('-') {
+            out.push('-');
+        }
+    }
+    let trimmed: String = out.trim_matches('-').chars().take(40).collect();
+    trimmed.trim_end_matches('-').to_owned()
 }
 
 /// One immutable event.
@@ -553,4 +625,20 @@ pub fn prefixed_id(prefix: &str) -> String {
         "{prefix}_{}",
         ulid::Ulid::generate().to_string().to_lowercase()
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_title_becomes_a_short_branch_segment() {
+        assert_eq!(title_slug("Fix Login Bug"), "fix-login-bug");
+        assert_eq!(
+            title_slug("  Ünïcode / spaces!! v1.2_x "),
+            "n-code-spaces-v1.2_x"
+        );
+        assert_eq!(title_slug(&"a".repeat(50)).len(), 40);
+        assert_eq!(title_slug("***"), "");
+    }
 }

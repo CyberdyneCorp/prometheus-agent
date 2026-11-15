@@ -11,7 +11,6 @@ use pmt_kanban::{Filter, Status};
 use serde_json::json;
 
 use super::Env;
-use crate::output::{document, print, print_raw};
 
 fn when(ms: i64) -> String {
     jiff::Timestamp::from_millisecond(ms).map_or_else(|_| ms.to_string(), |t| t.to_string())
@@ -33,13 +32,13 @@ pub(super) fn log(env: &Env<'_>, id: &str) -> Result<u8, Error> {
     board.task(id)?;
     let events = board.events(Some(id))?;
     if env.ctx.json {
-        return document("kanban log", &json!({"task_id": id, "events": events}));
+        return env.document("kanban log", &json!({"task_id": id, "events": events}));
     }
     let mut out = String::new();
     for e in &events {
         let _ = writeln!(out, "{}", event_line(e));
     }
-    print_raw(&out)
+    env.raw(&out)
 }
 
 /// `kanban runs`.
@@ -48,7 +47,7 @@ pub(super) fn runs(env: &Env<'_>, id: &str) -> Result<u8, Error> {
     board.task(id)?;
     let runs = board.runs(id)?;
     if env.ctx.json {
-        return document("kanban runs", &json!({"task_id": id, "runs": runs}));
+        return env.document("kanban runs", &json!({"task_id": id, "runs": runs}));
     }
     let mut out = String::new();
     for r in &runs {
@@ -77,7 +76,7 @@ pub(super) fn runs(env: &Env<'_>, id: &str) -> Result<u8, Error> {
             let _ = writeln!(out, "    {error}");
         }
     }
-    print_raw(&out)
+    env.raw(&out)
 }
 
 /// `kanban tail`.
@@ -87,7 +86,7 @@ pub(super) fn tail(env: &Env<'_>, lines: usize, follow: bool) -> Result<u8, Erro
     let start = events.len().saturating_sub(lines);
     let mut last = 0;
     for e in &events[start..] {
-        print(&event_line(e))?;
+        env.print(&event_line(e))?;
     }
     if let Some(e) = events.last() {
         last = e.id;
@@ -98,7 +97,7 @@ pub(super) fn tail(env: &Env<'_>, lines: usize, follow: bool) -> Result<u8, Erro
     loop {
         std::thread::sleep(Duration::from_secs(1));
         for e in board.events_since(last, &[])? {
-            print(&event_line(&e))?;
+            env.print(&event_line(&e))?;
             last = e.id;
         }
     }
@@ -125,7 +124,7 @@ pub(super) fn stats(env: &Env<'_>) -> Result<u8, Error> {
         }
     }
     if env.ctx.json {
-        return document(
+        return env.document(
             "kanban stats",
             &json!({"board": board.slug(), "statuses": by_status, "run_outcomes": outcomes, "spend_usd": spend}),
         );
@@ -138,7 +137,7 @@ pub(super) fn stats(env: &Env<'_>) -> Result<u8, Error> {
         let _ = writeln!(out, "  runs {outcome}: {n}");
     }
     let _ = writeln!(out, "  spend {spend:.4} USD");
-    print_raw(&out)
+    env.raw(&out)
 }
 
 /// `kanban diag`.
@@ -163,7 +162,7 @@ pub(super) fn diag(env: &Env<'_>) -> Result<u8, Error> {
     let paused = pmt_core::pause::active(&env.home).map(|p| p.reason);
     if env.ctx.json {
         let lease = lease.map(|(holder, expires)| json!({"holder": holder, "expires_at": expires}));
-        return document(
+        return env.document(
             "kanban diag",
             &json!({"board": board.slug(), "lease": lease, "paused": paused, "ticks": ticks, "open_runs": open}),
         );
@@ -184,5 +183,5 @@ pub(super) fn diag(env: &Env<'_>) -> Result<u8, Error> {
     for r in &open {
         let _ = writeln!(out, "open run {r}");
     }
-    print_raw(&out)
+    env.raw(&out)
 }

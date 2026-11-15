@@ -24,6 +24,7 @@
 
 mod capabilities;
 pub mod dashboard;
+pub mod lanes;
 mod locales;
 mod router;
 pub mod ui;
@@ -120,8 +121,8 @@ pub struct Manifest {
     pub capabilities: Declared,
     /// Plugins that must load first.
     pub requires_plugins: Vec<String>,
-    /// `[[kanban_lanes]]`, kept for the kanban worker lanes.
-    pub kanban_lanes: Vec<Table>,
+    /// `[[kanban_lanes]]`: the plugin's kanban worker lanes.
+    pub kanban_lanes: Vec<lanes::Lane>,
     /// `[[automation_blueprints]]`: scheduled-job blueprints the plugin
     /// adds to the catalog (keys become `<plugin>:<key>`), kept as data.
     pub automation_blueprints: Vec<Table>,
@@ -232,7 +233,7 @@ impl Manifest {
             worlds: world_list(&table)?,
             capabilities,
             requires_plugins: strings(&table, "requires_plugins")?,
-            kanban_lanes: tables(&table, "kanban_lanes")?,
+            kanban_lanes: lanes::parse(&tables(&table, "kanban_lanes")?)?,
             automation_blueprints: tables(&table, "automation_blueprints")?,
             delegation_router: router::parse(table.get("delegation_router"))?,
             provides_locales: locales::parse(table.get("provides_locales"))?,

@@ -42,6 +42,18 @@ pub struct NewTask {
     pub budget_tokens: Option<u64>,
     /// Files the worker must leave in its workspace.
     pub artifacts: Vec<String>,
+    /// `OWNER/REPO`, a pull-request URL or `local-only` (`None`).
+    pub completion_contract: Option<String>,
+    /// Run the worker in the goal loop.
+    pub goal_mode: bool,
+    /// Judged turns of the goal loop (`None`: 20).
+    pub goal_max_turns: Option<u32>,
+    /// The worker's model override.
+    pub model: Option<String>,
+    /// The override's provider (needs `model`).
+    pub provider: Option<String>,
+    /// Skills preloaded in the worker session.
+    pub skills: Vec<String>,
 }
 
 impl NewTask {
@@ -64,6 +76,12 @@ impl NewTask {
             budget_usd: None,
             budget_tokens: None,
             artifacts: Vec::new(),
+            completion_contract: None,
+            goal_mode: false,
+            goal_max_turns: None,
+            model: None,
+            provider: None,
+            skills: Vec::new(),
         }
     }
 }
@@ -79,10 +97,32 @@ pub struct Created {
     pub status: Status,
 }
 
-/// Which profiles exist; the binary answers from the home.
+/// Which assignees exist and what a new task may name; the binary
+/// answers from the home, its plugins and the creating profile.
 pub trait Profiles {
     /// Whether `name` is a profile of the home.
     fn exists(&self, name: &str) -> bool;
+
+    /// Whether `name` is a worker lane an enabled plugin declares.
+    fn lane(&self, _name: &str) -> bool {
+        false
+    }
+
+    /// Checks what only the binary knows: the model override against the
+    /// provider registry, pinned skills against the assignee's skills.
+    ///
+    /// # Errors
+    ///
+    /// `kanban.invalid_task` naming the problem.
+    fn validate(&self, _new: &NewTask) -> Result<(), Error> {
+        Ok(())
+    }
+
+    /// The project bound to `board` (slug, primary folder) in the creating
+    /// profile, which gives worktree tasks their branch convention.
+    fn project(&self, _board: &str) -> Option<(String, std::path::PathBuf)> {
+        None
+    }
 }
 
 impl<F: Fn(&str) -> bool> Profiles for F {
@@ -100,18 +140,57 @@ pub(crate) fn task_id() -> String {
     format!("t_{:08x}", u32::from_be_bytes(bytes))
 }
 
+/// The refusal of an assignee or reviewer that is no profile (or lane).
+#[must_use]
+pub fn unknown_profile(name: &str) -> Error {
+    Error::new(
+        &codes::KANBAN_UNKNOWN_PROFILE,
+        format!("unknown profile '{name}'"),
+    )
+}
+
+/// Checks an assignee: a profile, or a worker lane; returns whether it
+/// is a lane.
+///
+/// # Errors
+///
+/// `kanban.unknown_profile`.
+pub fn assignee_lane(profiles: &dyn Profiles, name: &str) -> Result<bool, Error> {
+    if profiles.exists(name) {
+        Ok(false)
+    } else if profiles.lane(name) {
+        Ok(true)
+    } else {
+        Err(unknown_profile(name))
+    }
+}
+
+/// The fields of the upgrades: the completion contract, the goal-loop
+/// budget and the model override.
+fn check_upgrades(new: &NewTask) -> Result<(), Error> {
+    if let Some(contract) = &new.completion_contract {
+        crate::contract::Contract::parse(contract)?;
+    }
+    if new.goal_max_turns == Some(0) {
+        return Err(invalid("goal_max_turns must be at least 1"));
+    }
+    if new.provider.is_some() && new.model.is_none() {
+        return Err(invalid("--provider requires --model"));
+    }
+    Ok(())
+}
+
 fn check(new: &NewTask, profiles: &dyn Profiles) -> Result<(), Error> {
     if new.title.trim().is_empty() {
         return Err(invalid("title is required"));
     }
-    for profile in new.assignee.iter().chain(new.reviewer.iter()) {
-        if !profiles.exists(profile) {
-            return Err(Error::new(
-                &codes::KANBAN_UNKNOWN_PROFILE,
-                format!("unknown profile '{profile}'"),
-            ));
-        }
+    if let Some(assignee) = &new.assignee {
+        assignee_lane(profiles, assignee)?;
     }
+    if let Some(reviewer) = new.reviewer.as_deref().filter(|r| !profiles.exists(r)) {
+        return Err(unknown_profile(reviewer));
+    }
+    check_upgrades(new)?;
     if let Some(status) = new.initial_status
         && !matches!(status, Status::Triage | Status::Todo | Status::Blocked)
     {
@@ -147,7 +226,7 @@ fn check(new: &NewTask, profiles: &dyn Profiles) -> Result<(), Error> {
             )));
         }
     }
-    Ok(())
+    profiles.validate(new)
 }
 
 impl Board {
@@ -167,6 +246,13 @@ impl Board {
     ) -> Result<Created, Error> {
         check(new, profiles)?;
         let label = actor.label();
+        let lane = match &new.assignee {
+            Some(a) => assignee_lane(profiles, a)?,
+            None => false,
+        };
+        let project = matches!(new.workspace, Workspace::Worktree { branch: None })
+            .then(|| profiles.project(self.slug()))
+            .flatten();
         self.write(|tx| {
             if let Some(found) = existing(tx, new.idempotency_key.as_deref())? {
                 return Ok(found);
@@ -177,6 +263,10 @@ impl Board {
                 id = task_id();
             }
             insert(tx, &id, new, &label, actor.run.as_deref(), now)?;
+            extras(tx, &id, new, lane, project.as_ref())?;
+            if let Some(run) = actor.run.as_deref() {
+                crate::notify::inherit(tx, run, &id, now)?;
+            }
             let (status, open) = initial_status(tx, &id, new)?;
             let run = actor.run.as_deref();
             event(
@@ -208,7 +298,7 @@ impl Board {
     }
 }
 
-fn insert(
+pub(crate) fn insert(
     tx: &rusqlite::Transaction<'_>,
     id: &str,
     new: &NewTask,
@@ -242,6 +332,40 @@ fn insert(
                 ],
             )
             .map_err(sql)?;
+    Ok(())
+}
+
+/// The M3 upgrade fields of a new task.
+pub(crate) fn extras(
+    tx: &rusqlite::Transaction<'_>,
+    id: &str,
+    new: &NewTask,
+    lane: bool,
+    project: Option<&(String, std::path::PathBuf)>,
+) -> Result<(), Error> {
+    let contract = new
+        .completion_contract
+        .as_deref()
+        .map(crate::contract::Contract::parse)
+        .transpose()?
+        .and_then(|c| c.stored());
+    tx.execute(
+        "UPDATE tasks SET completion_contract = ?2, goal_mode = ?3, goal_max_turns = ?4, model = ?5, \
+         provider = ?6, skills = ?7, lane = ?8, project = ?9, repo_root = ?10 WHERE id = ?1",
+        params![
+            id,
+            contract,
+            new.goal_mode,
+            new.goal_max_turns,
+            new.model,
+            new.provider,
+            serde_json::to_string(&new.skills).unwrap_or_default(),
+            lane,
+            project.map(|p| p.0.as_str()),
+            project.map(|p| p.1.to_string_lossy().into_owned()),
+        ],
+    )
+    .map_err(sql)?;
     Ok(())
 }
 
@@ -290,7 +414,7 @@ fn known_parents(tx: &rusqlite::Transaction<'_>, parents: &[String]) -> Result<(
 /// Links task `id` to its parents and sets its first status: the given
 /// one, else `todo` while a parent is open, else `ready`. Returns it and
 /// the open parents.
-fn initial_status(
+pub(crate) fn initial_status(
     tx: &rusqlite::Transaction<'_>,
     id: &str,
     new: &NewTask,

@@ -89,7 +89,7 @@ pub use interface::{
     DisplayConfig, Interface, KeyChord, MarkdownMode, QuickCommand, QuickCommandKind,
     ResumeDisplay, ToolProgress, ToolProgressGrouping, TuiConfig, TuiKeys, TuiTheme, UiConfig,
 };
-pub use kanban::KanbanConfig;
+pub use kanban::{KanbanConfig, KanbanRole};
 pub use lsp::{
     LSP_SERVER_IDS, LspConfig, LspInstallStrategy, LspPackageManager, LspServerConfig, LspWaitMode,
 };

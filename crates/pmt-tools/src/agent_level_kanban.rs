@@ -26,6 +26,7 @@ pub const TOOLS: &[&str] = &[
     "kanban_request_review",
     "kanban_request_changes",
     "kanban_unblock",
+    "kanban_attach_url",
     "kanban_attachments",
 ];
 
@@ -111,7 +112,12 @@ fn edits() -> Vec<RegisteredTool> {
                 "assignee": {"type": "string", "description": "An existing profile."},
                 "parents": {"type": "array", "items": {"type": "string"}},
                 "priority": {"type": "integer"},
-                "idempotency_key": {"type": "string"}
+                "idempotency_key": {"type": "string"},
+                "completion_contract": {"type": "string", "description": "OWNER/REPO, a pull-request URL or local-only (default)."},
+                "skills": {"type": "array", "items": {"type": "string"}, "description": "Skills preloaded in the worker session."},
+                "model": {"type": "string", "description": "The worker's model instead of the assignee's default."},
+                "provider": {"type": "string", "description": "The model's provider (needs model)."},
+                "goal_mode": {"type": "boolean", "description": "Judge the worker's progress after each turn against the title and body."}
             }),
             &["title"],
             Effect::External,
@@ -128,6 +134,19 @@ fn edits() -> Vec<RegisteredTool> {
             "Attach a file you can read to a task (a worker may attach only to its own task).",
             &json!({"board": board(), "task_id": task_id(), "path": {"type": "string"}}),
             &["path"],
+            Effect::External,
+        ),
+        tool(
+            "kanban_attach_url",
+            "Fetch an http(s) URL server-side (internal addresses refused) and attach it to a task (a worker may attach only to its own task).",
+            &json!({
+                "board": board(),
+                "task_id": task_id(),
+                "url": {"type": "string"},
+                "filename": {"type": "string", "description": "Default: the URL path's last segment."},
+                "content_type": {"type": "string", "description": "Default: the response's Content-Type."}
+            }),
+            &["url"],
             Effect::External,
         ),
         tool(
@@ -162,7 +181,8 @@ fn lifecycle() -> Vec<RegisteredTool> {
             &json!({
                 "result": {"type": "string"},
                 "summary": {"type": "string"},
-                "created_tasks": {"type": "array", "items": {"type": "string"}}
+                "created_tasks": {"type": "array", "items": {"type": "string"}},
+                "metadata": {"type": "object", "description": "Facts for the completion gates; published_pr names the pull request a completion contract requires."}
             }),
             &[],
             Effect::External,
@@ -194,7 +214,7 @@ fn lifecycle() -> Vec<RegisteredTool> {
         tool(
             "kanban_request_review",
             "Hand your task to a reviewer with a summary.",
-            &json!({"summary": {"type": "string"}}),
+            &json!({"summary": {"type": "string"}, "metadata": {"type": "object", "description": "published_pr binds a completion contract's pull request."}}),
             &[],
             Effect::External,
         ),

@@ -196,7 +196,9 @@ fn a_deleted_assignee_blocks_the_task_with_kind_capability() {
     let mut board = home.board();
     let id = create(&mut board, "ghost's", &[]);
     // The profile was deleted after the task was assigned.
-    board.assign(&user(), &id, Some("ghost"), T0).unwrap();
+    board
+        .assign(&user(), &id, Some("ghost"), &|_: &str| true, T0)
+        .unwrap();
     let spawner = Sleepers::default();
     dispatcher(&home, &spawner, settings()).tick(T0).unwrap();
     let task = board.task(&id).unwrap();

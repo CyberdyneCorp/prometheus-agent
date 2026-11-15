@@ -85,6 +85,7 @@ capabilities = [
     "kanban",
     "distribution-and-update",
     "messaging-gateway",
+    "plugin-system",
     "projects",
     "web-dashboard",
 ]
@@ -4533,3 +4534,55 @@ capabilities = [
 
 [kanban."Board export and import"]
 "Round trip" = ["crates/prometheus/tests/kanban_cli.rs::an_exported_board_imports_as_a_copy", "crates/pmt-kanban/tests/records.rs::a_board_imported_into_another_home_keeps_its_ids"]
+
+# M3 group 68: kanban upgrades. crates/pmt-kanban/tests/upgrades.rs drives
+# the board (a GitHub stand-in behind PrChecks, fake lanes, an observer);
+# crates/prometheus/tests/kanban_upgrades.rs and kanban_orchestration.rs run
+# the CLI, real workers on the mock provider, a wiremock GitHub API and a
+# sandboxed lane plugin; kanban_daemon.rs runs /kanban and wake turns
+# through the daemon's file adapter.
+[kanban."URL attachments and attachment listing tools"]
+"Worker attaches a report by link" = { tests = ["crates/prometheus/tests/kanban_upgrades.rs::a_worker_attaches_a_report_by_link"], note = "the report is served by a loopback stand-in for example.com, so the test profile sets security.egress.allow_private; every other egress rule applies" }
+"Internal address refused" = ["crates/prometheus/tests/kanban_upgrades.rs::an_internal_address_is_refused_and_nothing_is_stored"]
+
+[kanban."PR completion contracts"]
+"Red required check blocks completion" = { tests = ["crates/prometheus/tests/kanban_upgrades.rs::a_red_required_check_blocks_the_workers_completion", "crates/pmt-kanban/tests/upgrades.rs::a_red_required_check_blocks_completion", "crates/pmt-kanban/src/contract.rs::a_red_or_missing_required_check_is_classified_checks"], note = "the worker completes with its run ticket (`kanban claim`, then `kanban complete --ticket -`), the same Board::complete the kanban_complete tool calls; GitHub is a wiremock stand-in at kanban.github_api_url answering only the assignee profile's GITHUB_TOKEN" }
+"Retry cannot substitute a sibling PR" = ["crates/prometheus/tests/kanban_upgrades.rs::a_retry_cannot_substitute_a_sibling_pr", "crates/pmt-kanban/tests/upgrades.rs::a_retry_cannot_substitute_a_sibling_pr"]
+
+[kanban."Goal-mode cards"]
+"Judge keeps the worker going" = ["crates/prometheus/tests/kanban_upgrades.rs::the_goal_judge_keeps_the_worker_going_in_the_same_session"]
+"Impossible card is never done" = ["crates/prometheus/tests/kanban_upgrades.rs::an_impossible_card_is_blocked_and_never_done", "crates/pmt-kanban/tests/upgrades.rs::an_unachievable_goal_refuses_every_handoff"]
+
+[kanban."Per-task model override and pinned skills"]
+"Hard card on a stronger model" = { tests = ["crates/prometheus/tests/kanban_upgrades.rs::a_hard_card_runs_on_its_own_model", "crates/prometheus/tests/kanban_upgrades.rs::pinned_skills_are_checked_at_create_and_at_spawn"], note = "--model big-model --provider mock stands in for the anthropic route (no live provider in tests); the worker session records big-model" }
+
+[kanban."Respawn guard and dispatch dry run"]
+"Fresh PR is not re-worked" = ["crates/prometheus/tests/kanban_upgrades.rs::a_fresh_pr_comment_is_guarded_in_the_dry_run", "crates/pmt-kanban/tests/upgrades.rs::a_fresh_pr_comment_guards_the_task_and_the_dry_run_says_so", "crates/pmt-kanban/tests/upgrades.rs::a_recent_success_holds_until_a_deliberate_requeue"]
+
+[kanban."Swarm topology helper"]
+"Atomic swarm creation" = ["crates/prometheus/tests/kanban_orchestration.rs::a_swarm_is_six_cards_with_the_verifier_gated_on_the_workers", "crates/pmt-kanban/tests/upgrades.rs::a_swarm_is_created_whole_with_the_verifier_gated_on_every_worker"]
+"Unknown worker profile aborts everything" = ["crates/prometheus/tests/kanban_orchestration.rs::an_unknown_swarm_profile_creates_nothing"]
+
+[kanban."/kanban slash command"]
+"Unblock from a phone mid-turn" = { tests = ["crates/prometheus/tests/kanban_daemon.rs::kanban_unblock_runs_mid_turn_without_disturbing_it"], note = "the daemon's file adapter stands in for Telegram: /kanban unblock is answered while a 60 s turn of the same chat still runs, which is neither interrupted nor answered" }
+"Created card reports back" = { tests = ["crates/prometheus/tests/kanban_daemon.rs::a_card_created_from_a_chat_reports_back_and_wakes_it", "crates/prometheus/src/chat/commands/kanban.rs::long_messaging_output_is_cut_with_a_pointer_to_the_terminal"], note = "the file adapter stands in for Slack" }
+
+[kanban."Subscription delivery modes and inheritance"]
+"Review feedback wakes the originating chat" = { tests = ["crates/prometheus/tests/kanban_daemon.rs::review_feedback_wakes_the_subscribed_thread", "crates/pmt-kanban/tests/upgrades.rs::worker_created_tasks_inherit_subscriptions_and_modes_route_legs"], note = "a thread of the file adapter stands in for the Discord thread" }
+
+[kanban."Orchestrator guidance, specify and decompose"]
+"Specify promotes a triage idea" = ["crates/prometheus/tests/kanban_orchestration.rs::specify_expands_a_triage_idea_into_a_todo_task", "crates/prometheus/tests/kanban_orchestration.rs::auto_decompose_specifies_triage_tasks_before_dispatching", "crates/pmt-kanban/tests/upgrades.rs::specify_moves_a_triage_idea_to_todo"]
+"Decompose rejects unknown assignees" = ["crates/prometheus/tests/kanban_orchestration.rs::decompose_refuses_a_graph_naming_an_unknown_assignee", "crates/pmt-kanban/tests/upgrades.rs::a_decomposition_with_an_unknown_assignee_creates_nothing", "crates/prometheus/tests/kanban_orchestration.rs::an_orchestrators_worker_is_told_to_decompose_not_implement"]
+
+[kanban."Additional CLI verbs"]
+"Inspect worker context" = ["crates/prometheus/tests/kanban_cli.rs::context_prints_what_a_worker_receives", "crates/prometheus/tests/kanban_orchestration.rs::the_additional_verbs_go_through_the_board"]
+
+[kanban."Worker lanes"]
+"External CLI lane completes a task" = { tests = ["crates/prometheus/tests/kanban_orchestration.rs::an_external_cli_lane_completes_its_task_under_the_sandbox"], note = "unix: the lane is a shell script of a data-only plugin, run under the local sandbox (its workspace, its plugin directory, its board and the blob store) and reporting with `prometheus kanban complete --ticket -`" }
+"Unknown assignee is surfaced" = ["crates/prometheus/tests/kanban_orchestration.rs::an_external_cli_lane_completes_its_task_under_the_sandbox", "crates/pmt-kanban/tests/upgrades.rs::a_lane_task_spawns_its_lane_and_a_vanished_lane_is_surfaced", "crates/prometheus/tests/kanban_orchestration.rs::a_lane_named_like_a_profile_fails_plugin_load"]
+
+[plugin-system."Kanban lifecycle observer hooks"]
+"Slow observer cannot hold the board" = { tests = ["crates/prometheus/tests/kanban_orchestration.rs::a_slow_dispatch_tick_hook_does_not_hold_the_board", "crates/pmt-kanban/tests/upgrades.rs::an_observer_sees_committed_events_once"], note = "unix: an approved shell hook on on_kanban_dispatch_tick sleeps 20 s; while it runs another writer creates a task at once" }
+
+[projects."Kanban board binding"]
+"Branch convention" = ["crates/prometheus/tests/kanban_upgrades.rs::a_bound_projects_board_is_selected_and_names_the_branch"]

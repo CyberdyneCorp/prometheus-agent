@@ -5,12 +5,15 @@
 //! promotion pass and wake-ups, then claim and start spawnable tasks in
 //! priority then age order, and record a summary event per board.
 
+pub mod guard;
+pub mod plan;
 mod reclaim;
 
 use std::collections::BTreeMap;
 
 use pmt_core::error::Error;
 use serde::Serialize;
+use serde_json::json;
 
 use crate::board::Board;
 use crate::board::create::Profiles;
@@ -44,6 +47,8 @@ pub struct Settings {
     pub claim_ttl_ms: i64,
     /// Route `review` tasks to reviewers.
     pub review_dispatch: bool,
+    /// The respawn guard's windows.
+    pub windows: guard::Windows,
 }
 
 /// `kanban.max_running`'s default: physical memory / 512 MiB clamped to
@@ -76,6 +81,8 @@ pub struct SpawnRequest<'a> {
     pub role: Role,
     /// The ticket to write to the worker's stdin.
     pub ticket: Ticket,
+    /// `profile` names a plugin's worker lane, not a profile.
+    pub lane: bool,
 }
 
 /// Starts workers; the binary spawns `prometheus kanban work --run`.
@@ -107,6 +114,45 @@ pub struct Summary {
     pub blocked: Vec<String>,
     /// Tasks promoted or woken to `ready`.
     pub promoted: Vec<String>,
+    /// Ready tasks the respawn guard holds, with the reason.
+    pub guarded: Vec<(String, String)>,
+    /// Ready tasks whose assignee is neither a profile nor a lane.
+    pub skipped_nonspawnable: Vec<String>,
+}
+
+impl Summary {
+    /// Whether the tick changed nothing on the board.
+    #[must_use]
+    pub fn idle(&self) -> bool {
+        self.claimed.is_empty()
+            && self.reclaimed.is_empty()
+            && self.blocked.is_empty()
+            && self.promoted.is_empty()
+    }
+}
+
+/// What the dispatcher does with one claimable task.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Decision {
+    /// Claim it for this profile (or lane).
+    Claim {
+        /// The assignee.
+        profile: String,
+        /// It is a worker lane.
+        lane: bool,
+    },
+    /// No assignee and no default.
+    Unassigned,
+    /// The assignee profile is gone: block it.
+    Missing(String),
+    /// The assignee was a lane no enabled plugin declares now.
+    Nonspawnable,
+    /// Outside `kanban.dispatch_profiles`.
+    Allowlist,
+    /// A concurrency cap defers it.
+    Capped,
+    /// The respawn guard holds it.
+    Guarded(guard::Guard),
 }
 
 /// One dispatcher.
@@ -123,8 +169,32 @@ pub struct Dispatcher<'a> {
     pub spawner: &'a dyn Spawner,
 }
 
+/// Records `kind` for `task` unless its latest event already says the
+/// same (a held task is not re-logged every tick).
+fn note_once(
+    board: &mut Board,
+    task: &Task,
+    kind: &str,
+    payload: &serde_json::Value,
+    now: i64,
+) -> Result<(), Error> {
+    let last = board.events(Some(&task.id))?.pop();
+    if last.is_some_and(|e| e.kind == kind && &e.payload == payload) {
+        return Ok(());
+    }
+    board.record(
+        Some(&task.id),
+        None,
+        &Actor::dispatcher(),
+        kind,
+        payload,
+        now,
+    )?;
+    Ok(())
+}
+
 /// Open runs across every board, in total and per profile.
-struct Load {
+pub struct Load {
     total: u32,
     per_profile: BTreeMap<String, u32>,
 }
@@ -179,7 +249,7 @@ impl Dispatcher<'_> {
         }
     }
 
-    fn load(boards: &[Board]) -> Result<Load, Error> {
+    pub(crate) fn load(boards: &[Board]) -> Result<Load, Error> {
         let mut load = Load {
             total: 0,
             per_profile: BTreeMap::new(),
@@ -228,7 +298,7 @@ impl Dispatcher<'_> {
         Ok(())
     }
 
-    fn review_candidates(board: &Board) -> Result<Vec<Task>, Error> {
+    pub(crate) fn review_candidates(board: &Board) -> Result<Vec<Task>, Error> {
         let mut out = Vec::new();
         for task in board.tasks(&crate::board::Filter {
             status: Some(Status::Review),
@@ -242,6 +312,57 @@ impl Dispatcher<'_> {
         Ok(out)
     }
 
+    /// What to do with `task` for `role` (no board change).
+    ///
+    /// # Errors
+    ///
+    /// Store errors (the guard's reads).
+    pub fn decide(
+        &self,
+        board: &Board,
+        task: &Task,
+        role: Role,
+        reserve: u32,
+        load: &Load,
+        now: i64,
+    ) -> Result<Decision, Error> {
+        let wanted = match role {
+            Role::Worker => task
+                .assignee
+                .clone()
+                .or_else(|| self.settings.default_assignee.clone()),
+            Role::Reviewer => task.reviewer.clone(),
+        };
+        let Some(profile) = wanted else {
+            return Ok(Decision::Unassigned);
+        };
+        let lane = !self.profiles.exists(&profile);
+        if lane && !(role == Role::Worker && self.profiles.lane(&profile)) {
+            return Ok(match (role, task.lane) {
+                (Role::Worker, true) => Decision::Nonspawnable,
+                (Role::Worker, false) => Decision::Missing(profile),
+                (Role::Reviewer, _) => Decision::Unassigned,
+            });
+        }
+        if self
+            .settings
+            .dispatch_profiles
+            .as_ref()
+            .is_some_and(|allowed| !allowed.contains(&profile))
+        {
+            return Ok(Decision::Allowlist);
+        }
+        if role == Role::Worker
+            && let Some(held) = guard::check(board, task, self.settings.windows, now)?
+        {
+            return Ok(Decision::Guarded(held));
+        }
+        if self.capped(load, &profile, reserve) {
+            return Ok(Decision::Capped);
+        }
+        Ok(Decision::Claim { profile, lane })
+    }
+
     #[allow(clippy::too_many_arguments)] // one claim's whole context
     fn offer(
         &self,
@@ -253,38 +374,53 @@ impl Dispatcher<'_> {
         load: &mut Load,
         now: i64,
     ) -> Result<(), Error> {
-        let wanted = match role {
-            Role::Worker => task
-                .assignee
-                .clone()
-                .or_else(|| self.settings.default_assignee.clone()),
-            Role::Reviewer => task.reviewer.clone(),
-        };
-        let Some(profile) = wanted else {
-            summary.skipped_unassigned.push(task.id.clone());
-            return Ok(());
-        };
-        if !self.profiles.exists(&profile) {
-            if role == Role::Worker {
+        let (profile, lane) = match self.decide(board, task, role, reserve, load, now)? {
+            Decision::Claim { profile, lane } => (profile, lane),
+            Decision::Unassigned => {
+                if role == Role::Worker {
+                    summary.skipped_unassigned.push(task.id.clone());
+                }
+                return Ok(());
+            }
+            Decision::Missing(profile) => {
                 let reason = format!("assignee profile '{profile}' does not exist");
                 board.give_up(&task.id, BlockKind::Capability, &reason, now)?;
                 summary.blocked.push(task.id.clone());
+                return Ok(());
             }
-            return Ok(());
-        }
-        if self
-            .settings
-            .dispatch_profiles
-            .as_ref()
-            .is_some_and(|allowed| !allowed.contains(&profile))
-        {
-            summary.skipped_allowlist.push(task.id.clone());
-            return Ok(());
-        }
-        if self.capped(load, &profile, reserve) {
-            summary.capped.push(task.id.clone());
-            return Ok(());
-        }
+            Decision::Nonspawnable => {
+                note_once(
+                    board,
+                    task,
+                    "skipped_nonspawnable",
+                    &json!({"assignee": task.assignee}),
+                    now,
+                )?;
+                summary.skipped_nonspawnable.push(task.id.clone());
+                return Ok(());
+            }
+            Decision::Allowlist => {
+                summary.skipped_allowlist.push(task.id.clone());
+                return Ok(());
+            }
+            Decision::Capped => {
+                summary.capped.push(task.id.clone());
+                return Ok(());
+            }
+            Decision::Guarded(held) => {
+                note_once(
+                    board,
+                    task,
+                    "respawn_guarded",
+                    &json!({"reason": held.as_str()}),
+                    now,
+                )?;
+                summary
+                    .guarded
+                    .push((task.id.clone(), held.as_str().to_owned()));
+                return Ok(());
+            }
+        };
         let outcome = match board.claim(
             &Actor::dispatcher(),
             &task.id,
@@ -315,6 +451,7 @@ impl Dispatcher<'_> {
                 run: claim.run_id.clone(),
                 secret: claim.secret.clone(),
             },
+            lane,
         };
         match self.spawner.spawn(&request) {
             Ok((pid, start)) => {

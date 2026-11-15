@@ -7,9 +7,15 @@ use clap::{Args, Subcommand};
 /// `prometheus kanban` arguments.
 #[derive(Debug, Clone, Args)]
 pub struct KanbanArgs {
-    /// The board (default: `kanban.current_board`, else `default`).
+    /// The board (default: the board of the project owning the current
+    /// directory or the active project, else `kanban.current_board`, else
+    /// `default`).
     #[arg(long, global = true, value_name = "SLUG")]
     pub board: Option<String>,
+    /// Act as the worker of a run: its ticket line, or `-` to read it from
+    /// stdin (external worker lanes and manual claims).
+    #[arg(long, global = true, value_name = "TICKET")]
+    pub ticket: Option<String>,
     /// The kanban subcommand.
     #[command(subcommand)]
     pub command: KanbanCommand,
@@ -147,8 +153,12 @@ pub enum KanbanCommand {
         /// Complete despite a live worker.
         #[arg(long)]
         force: bool,
+        /// Facts as a JSON object (`{"published_pr": "<url>"}` for a PR
+        /// completion contract).
+        #[arg(long)]
+        metadata: Option<String>,
     },
-    /// Hand tasks to review.
+    /// Hand tasks to review (from running or ready).
     RequestReview {
         /// The tasks.
         #[arg(required = true)]
@@ -156,7 +166,107 @@ pub enum KanbanCommand {
         /// The summary.
         #[arg(long)]
         summary: Option<String>,
+        /// Facts as a JSON object (`published_pr` binds a PR contract).
+        #[arg(long)]
+        metadata: Option<String>,
+        /// The reviewer profile.
+        #[arg(long)]
+        reviewer: Option<String>,
     },
+    /// Send tasks in review back to ready (or todo while a parent is open).
+    ReopenReview {
+        /// The tasks.
+        #[arg(required = true)]
+        ids: Vec<String>,
+        /// Why (kept as a comment).
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Reassign tasks to another profile or worker lane.
+    #[command(override_usage = "prometheus kanban reassign <ID>... <PROFILE>")]
+    Reassign {
+        /// The tasks, then the profile.
+        #[arg(required = true, num_args = 2..)]
+        args: Vec<String>,
+    },
+    /// Set (or with `none` clear) a task's model override; it applies from
+    /// the next dispatch.
+    SetModel {
+        /// The task.
+        id: String,
+        /// The model, or `none`.
+        model: String,
+        /// The model's provider.
+        #[arg(long)]
+        provider: Option<String>,
+    },
+    /// Claim a ready task for an external worker: prints the run id and
+    /// its ticket (pass it with `--ticket` to report).
+    Claim {
+        /// The task.
+        id: String,
+        /// Seconds the claim lasts without a heartbeat (default:
+        /// `kanban.claim_ttl_secs`).
+        #[arg(long)]
+        ttl: Option<u64>,
+    },
+    /// Renew a claimed task's lease (with `--ticket`, or as the person who
+    /// claimed it).
+    Heartbeat {
+        /// The task.
+        id: String,
+        /// A short note for the log.
+        #[arg(long)]
+        note: Option<String>,
+    },
+    /// Create the default board and print the dispatcher status.
+    Init,
+    /// Create a swarm: a root card holding the goal and blackboard, one
+    /// card per worker profile, a verifier and a synthesizer.
+    Swarm {
+        /// The goal.
+        goal: String,
+        /// Worker profiles, comma separated.
+        #[arg(long, value_delimiter = ',', required = true)]
+        workers: Vec<String>,
+        /// The verifier profile.
+        #[arg(long)]
+        verifier: String,
+        /// The synthesizer profile.
+        #[arg(long)]
+        synthesizer: String,
+    },
+    /// Expand triage ideas into full bodies with acceptance criteria (the
+    /// `kanban` auxiliary model) and move them to todo.
+    Specify {
+        /// The task.
+        #[arg(required_unless_present = "all", conflicts_with = "all")]
+        id: Option<String>,
+        /// Every triage task of the board.
+        #[arg(long)]
+        all: bool,
+        /// Only tasks of this assignee (tenant).
+        #[arg(long)]
+        tenant: Option<String>,
+    },
+    /// Decompose a task into a validated child-task graph (the `kanban`
+    /// auxiliary model), created in one transaction under it.
+    Decompose {
+        /// The task.
+        id: String,
+    },
+    /// Print new board events as they happen.
+    Watch {
+        /// Only tasks of this assignee.
+        #[arg(long)]
+        assignee: Option<String>,
+        /// Only these event kinds, comma separated.
+        #[arg(long, value_delimiter = ',')]
+        kinds: Vec<String>,
+    },
+    /// The assignees a task may name: the home's profiles and the worker
+    /// lanes of enabled plugins.
+    Assignees,
     /// Approve tasks in review.
     Approve {
         /// The tasks.
@@ -223,14 +333,18 @@ pub enum KanbanCommand {
     Stats,
     /// The dispatcher lease, the last ticks and the open runs.
     Diag,
-    /// Run the dispatcher: one tick (`--once`) or a standalone loop.
+    /// Run the dispatcher: one tick (`--once`), a standalone loop, or a
+    /// dry run that changes nothing.
     Dispatch {
         /// One tick.
-        #[arg(long, conflicts_with = "looping")]
+        #[arg(long, conflicts_with_all = ["looping", "dry_run"])]
         once: bool,
         /// Tick every `kanban.dispatch_interval_secs` until stopped.
-        #[arg(long = "loop")]
+        #[arg(long = "loop", conflicts_with = "dry_run")]
         looping: bool,
+        /// Print what a tick would do (`Guarded (<reason>): <id>`...).
+        #[arg(long)]
+        dry_run: bool,
     },
     /// Run a claimed task (started by the dispatcher with its run ticket
     /// on stdin).
@@ -322,6 +436,24 @@ pub struct CreateArgs {
     /// Candidates per round (kind evolve).
     #[arg(long, default_value_t = 2)]
     pub budget_k: u32,
+    /// `OWNER/REPO`, a pull-request URL or `local-only` (the default).
+    #[arg(long)]
+    pub completion_contract: Option<String>,
+    /// Run the worker in the goal loop, judged after each turn.
+    #[arg(long)]
+    pub goal: bool,
+    /// Judged turns of the goal loop (default 20).
+    #[arg(long, requires = "goal")]
+    pub goal_max_turns: Option<u32>,
+    /// The worker's model instead of the assignee's default.
+    #[arg(long)]
+    pub model: Option<String>,
+    /// The model's provider (needs `--model`).
+    #[arg(long, requires = "model")]
+    pub provider: Option<String>,
+    /// A skill preloaded in the worker session (repeatable).
+    #[arg(long = "skill")]
+    pub skills: Vec<String>,
 }
 
 /// `kanban notify` subcommands.
@@ -341,6 +473,14 @@ pub enum NotifyCommand {
         /// The thread id.
         #[arg(long)]
         thread: Option<String>,
+        /// `notify` (a message), `notify+wake` (and a turn of the
+        /// subscriber's agent in that chat) or `wake` (the turn only).
+        #[arg(long, default_value = "notify", value_parser = ["notify", "notify+wake", "wake"])]
+        delivery_mode: String,
+        /// `dm`, `group`, `channel` or `thread`: how a wake finds the chat's
+        /// session.
+        #[arg(long, value_parser = ["dm", "group", "channel", "thread"])]
+        chat_type: Option<String>,
     },
     /// Subscriptions of a task, or of the board.
     List {

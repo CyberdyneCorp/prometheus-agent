@@ -7,6 +7,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// The `[kanban]` section.
+#[allow(clippy::struct_excessive_bools)] // independent switches of one section
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 #[schemars(extend("x-apply" = "live"))]
@@ -55,6 +56,35 @@ pub struct KanbanConfig {
     pub attachment_max_bytes: u64,
     /// Seconds notification subscriptions of done tasks are kept.
     pub done_sub_retention_secs: u64,
+    /// `orchestrator` makes this profile's worker sessions decompose goals
+    /// into linked tasks for existing profiles instead of implementing
+    /// them (unset: an ordinary worker).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<KanbanRole>,
+    /// Let the dispatcher run `specify` on triage tasks and `decompose` on
+    /// tasks assigned to an orchestrator profile before dispatching them
+    /// (the dashboard's Orchestration Auto/Manual control).
+    pub auto_decompose: bool,
+    /// Promote decomposed children that wait for nothing straight to
+    /// `ready` (else they stay in `todo`).
+    pub auto_promote_children: bool,
+    /// Seconds after a finished run during which its task is not spawned
+    /// again unless deliberately re-queued.
+    pub respawn_success_window_secs: u64,
+    /// Seconds after a comment linking a GitHub pull request during which
+    /// its task is not spawned again.
+    pub respawn_pr_window_secs: u64,
+    /// The GitHub API that PR completion contracts read (GitHub Enterprise:
+    /// `https://<host>/api/v3`).
+    pub github_api_url: String,
+}
+
+/// A profile's kanban role.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum KanbanRole {
+    /// Decomposes goals into tasks for other profiles.
+    Orchestrator,
 }
 
 impl Default for KanbanConfig {
@@ -73,6 +103,12 @@ impl Default for KanbanConfig {
             review_dispatch: true,
             attachment_max_bytes: 25 * 1024 * 1024,
             done_sub_retention_secs: 2_592_000,
+            role: None,
+            auto_decompose: false,
+            auto_promote_children: true,
+            respawn_success_window_secs: 3600,
+            respawn_pr_window_secs: 86_400,
+            github_api_url: "https://api.github.com".to_owned(),
         }
     }
 }

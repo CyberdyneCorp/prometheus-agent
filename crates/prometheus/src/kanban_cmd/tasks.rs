@@ -9,7 +9,6 @@ use pmt_kanban::{Edit, Filter, NewTask, Status, TaskKind, Workspace};
 use serde_json::json;
 
 use super::{CreateArgs, Env};
-use crate::output::{document, print, print_raw};
 
 fn kind(args: &CreateArgs) -> TaskKind {
     match args.kind.as_str() {
@@ -63,21 +62,36 @@ pub(super) fn create(env: &Env<'_>, args: &CreateArgs) -> Result<u8, Error> {
         budget_usd: args.budget_usd,
         budget_tokens: args.budget_tokens,
         artifacts: args.artifacts.clone(),
+        completion_contract: args.completion_contract.clone(),
+        goal_mode: args.goal,
+        goal_max_turns: args.goal_max_turns,
+        model: args.model.clone(),
+        provider: args.provider.clone(),
+        skills: args.skills.clone(),
     };
     let created = board.create(&env.actor(), &new, &env.profiles(), pmt_kanban::now_ms())?;
     if env.ctx.json {
-        return document(
+        return env.document(
             "kanban create",
             &json!({"board": board.slug(), "id": created.id, "created": created.created, "status": created.status}),
         );
     }
     let verb = if created.created { "created" } else { "exists" };
-    print(&format!(
+    env.print(&format!(
         "{verb} {} ({}) on board {}",
         created.id,
         created.status,
         board.slug()
-    ))
+    ))?;
+    if let Some(origin) = env.origin.as_ref().filter(|_| created.created) {
+        board.subscribe(&env.actor(), &created.id, origin, pmt_kanban::now_ms())?;
+        env.print(&format!(
+            "this chat is subscribed ({}): it hears when {} completes, blocks or needs review",
+            origin.mode.as_str(),
+            created.id
+        ))?;
+    }
+    Ok(0)
 }
 
 /// `kanban list`.
@@ -95,13 +109,13 @@ pub(super) fn list(
     };
     let tasks = board.tasks(&filter)?;
     if env.ctx.json {
-        return document(
+        return env.document(
             "kanban list",
             &json!({"board": board.slug(), "tasks": tasks}),
         );
     }
     if tasks.is_empty() {
-        return print(&format!("board '{}' is empty", board.slug()));
+        return env.print(&format!("board '{}' is empty", board.slug()));
     }
     let mut out = String::new();
     for t in &tasks {
@@ -115,7 +129,7 @@ pub(super) fn list(
             t.title
         );
     }
-    print_raw(&out)
+    env.raw(&out)
 }
 
 /// `kanban show`.
@@ -123,7 +137,7 @@ pub(super) fn show(env: &Env<'_>, id: &str) -> Result<u8, Error> {
     let board = env.board()?;
     let doc = crate::kanban_host::tool::show(&board, id)?;
     if env.ctx.json {
-        return document("kanban show", &doc);
+        return env.document("kanban show", &doc);
     }
     let task = board.task(id)?;
     let (usd, tokens) = board.spend(id)?;
@@ -136,6 +150,27 @@ pub(super) fn show(env: &Env<'_>, id: &str) -> Result<u8, Error> {
         task.workspace.spec(),
         task.priority
     );
+    if let Some(branch) = task.branch() {
+        let _ = writeln!(out, "branch: {branch}");
+    }
+    let contract = task.completion_contract.as_deref().unwrap_or("local-only");
+    let _ = writeln!(out, "completion contract: {contract}");
+    if let Some(pr) = &task.pr_url {
+        let _ = writeln!(out, "bound PR: {pr}");
+    }
+    if let Some(model) = &task.model {
+        let via = task
+            .provider
+            .as_deref()
+            .map_or(String::new(), |p| format!(" via {p}"));
+        let _ = writeln!(out, "model: {model}{via}");
+    }
+    if !task.skills.is_empty() {
+        let _ = writeln!(out, "skills: {}", task.skills.join(", "));
+    }
+    if task.goal_mode {
+        let _ = writeln!(out, "goal mode: up to {} judged turn(s)", task.goal_turns());
+    }
     if let (Some(kind), Some(reason)) = (task.block_kind, &task.block_reason) {
         let _ = writeln!(out, "blocked: {kind}: {reason}");
     }
@@ -160,7 +195,7 @@ pub(super) fn show(env: &Env<'_>, id: &str) -> Result<u8, Error> {
     if !task.body.is_empty() {
         let _ = writeln!(out, "\n{}", task.body);
     }
-    print_raw(&out)
+    env.raw(&out)
 }
 
 fn list_or_dash(ids: &[String]) -> String {
@@ -174,7 +209,7 @@ fn list_or_dash(ids: &[String]) -> String {
 /// `kanban context`.
 pub(super) fn context(env: &Env<'_>, id: &str) -> Result<u8, Error> {
     let board = env.board()?;
-    print_raw(&pmt_kanban::context::render(&board, id)?)
+    env.raw(&pmt_kanban::context::render(&board, id)?)
 }
 
 /// `kanban attachments`.
@@ -186,7 +221,7 @@ pub(super) fn attachments(env: &Env<'_>, id: &str) -> Result<u8, Error> {
             .iter()
             .map(|a| json!({"id": a.id, "filename": a.filename, "content_type": a.content_type, "size": a.size, "uploader": a.uploader, "path": board.attachment_path(a)}))
             .collect();
-        return document(
+        return env.document(
             "kanban attachments",
             &json!({"task_id": id, "attachments": rows}),
         );
@@ -203,7 +238,7 @@ pub(super) fn attachments(env: &Env<'_>, id: &str) -> Result<u8, Error> {
             board.attachment_path(a).display()
         );
     }
-    print_raw(&out)
+    env.raw(&out)
 }
 
 /// `kanban edit`.
@@ -235,7 +270,7 @@ pub(super) fn edit(
     }
     env.board()?
         .edit(&env.actor(), id, &edit, pmt_kanban::now_ms())?;
-    print(&format!("edited {id}"))
+    env.print(&format!("edited {id}"))
 }
 
 /// `kanban link`.
@@ -247,21 +282,21 @@ pub(super) fn link(
 ) -> Result<u8, Error> {
     env.board()?
         .link(&env.actor(), parent, child, run, pmt_kanban::now_ms())?;
-    print(&format!("{child} now depends on {parent}"))
+    env.print(&format!("{child} now depends on {parent}"))
 }
 
 /// `kanban unlink`.
 pub(super) fn unlink(env: &Env<'_>, parent: &str, child: &str) -> Result<u8, Error> {
     env.board()?
         .unlink(&env.actor(), parent, child, pmt_kanban::now_ms())?;
-    print(&format!("{child} no longer depends on {parent}"))
+    env.print(&format!("{child} no longer depends on {parent}"))
 }
 
 /// `kanban comment`.
 pub(super) fn comment(env: &Env<'_>, id: &str, body: &str) -> Result<u8, Error> {
     env.board()?
         .comment(&env.actor(), id, body, pmt_kanban::now_ms())?;
-    print(&format!("commented on {id}"))
+    env.print(&format!("commented on {id}"))
 }
 
 /// `kanban attach`.
@@ -277,5 +312,5 @@ pub(super) fn attach(env: &Env<'_>, id: &str, files: &[PathBuf]) -> Result<u8, E
             a.filename, a.size, a.id
         );
     }
-    print_raw(&out)
+    env.raw(&out)
 }

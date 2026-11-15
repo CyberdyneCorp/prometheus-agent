@@ -5,12 +5,11 @@
 use std::fmt::Write as _;
 
 use pmt_core::error::Error;
-use pmt_kanban::notify::NewSubscription;
+use pmt_kanban::notify::{DeliveryMode, NewSubscription};
 use pmt_kanban::{Filter, Status, Workspace, transfer};
 use serde_json::json;
 
 use super::{BoardsCommand, Env, NotifyCommand};
-use crate::output::{document, print, print_raw};
 
 /// Tick summaries older than this are pruned by `gc`.
 const TICK_RETENTION_MS: i64 = 7 * 24 * 3_600_000;
@@ -22,15 +21,15 @@ pub(super) fn boards(env: &Env<'_>, command: &BoardsCommand) -> Result<u8, Error
         BoardsCommand::List => list(env),
         BoardsCommand::Create { slug, name } => {
             let slug = boards.create(slug, name.as_deref())?;
-            print(&format!("created board {slug}"))
+            env.print(&format!("created board {slug}"))
         }
         BoardsCommand::Rename { from, to } => {
             let to = boards.rename(from, to)?;
-            print(&format!("renamed board {from} to {to}"))
+            env.print(&format!("renamed board {from} to {to}"))
         }
         BoardsCommand::Archive { slug } => {
             boards.set_archived(&pmt_kanban::boards::slug(slug)?, true)?;
-            print(&format!("archived board {slug}"))
+            env.print(&format!("archived board {slug}"))
         }
         BoardsCommand::Switch { slug } => {
             let slug = boards.resolve(Some(slug), None)?;
@@ -38,7 +37,7 @@ pub(super) fn boards(env: &Env<'_>, command: &BoardsCommand) -> Result<u8, Error
                 .profile()
                 .config_file()
                 .set("kanban.current_board", &slug)?;
-            print(&format!(
+            env.print(&format!(
                 "profile {} now uses board {slug}",
                 env.scope.name()
             ))
@@ -46,7 +45,7 @@ pub(super) fn boards(env: &Env<'_>, command: &BoardsCommand) -> Result<u8, Error
         BoardsCommand::Export { slug, file } => {
             let slug = pmt_kanban::boards::slug(slug)?;
             let tasks = transfer::export(boards, &slug, file)?;
-            print(&format!(
+            env.print(&format!(
                 "exported board {slug} ({tasks} task(s)) to {}",
                 file.display()
             ))
@@ -60,7 +59,7 @@ fn list(env: &Env<'_>) -> Result<u8, Error> {
     let list = env.boards.list()?;
     let current = env.slug().ok();
     if env.ctx.json {
-        return document(
+        return env.document(
             "kanban boards list",
             &json!({"boards": list, "current": current}),
         );
@@ -79,7 +78,7 @@ fn list(env: &Env<'_>) -> Result<u8, Error> {
         };
         let _ = writeln!(out, "{mark} {}  {}{state}", b.slug, b.settings.name);
     }
-    print_raw(&out)
+    env.raw(&out)
 }
 
 /// `kanban boards import`.
@@ -95,7 +94,7 @@ fn import(env: &Env<'_>, file: &std::path::Path, rename: Option<&str>) -> Result
     for (old, new) in &imported.remapped {
         let _ = writeln!(out, "  {old} -> {new} (id already used on this home)");
     }
-    print_raw(&out)
+    env.raw(&out)
 }
 
 /// `kanban notify ...`.
@@ -107,23 +106,27 @@ pub(super) fn notify(env: &Env<'_>, command: &NotifyCommand) -> Result<u8, Error
             adapter,
             chat,
             thread,
+            delivery_mode,
+            chat_type,
         } => {
-            let new = NewSubscription {
-                adapter: adapter.clone(),
-                chat: chat.clone(),
-                thread: thread.clone(),
-                profile: env.scope.name().to_string(),
-            };
+            let mut new = NewSubscription::notify(
+                adapter,
+                chat,
+                thread.as_deref(),
+                env.scope.name().as_str(),
+            );
+            new.mode = DeliveryMode::parse(delivery_mode)?;
+            new.chat_type.clone_from(chat_type);
             let sub = board.subscribe(&env.actor(), id, &new, pmt_kanban::now_ms())?;
-            print(&format!(
-                "subscribed {} ({}:{} as profile {})",
-                sub.id, sub.adapter, sub.chat, sub.profile
+            env.print(&format!(
+                "subscribed {} ({}:{} as profile {}, {})",
+                sub.id, sub.adapter, sub.chat, sub.profile, sub.delivery_mode
             ))
         }
         NotifyCommand::List { id } => {
             let subs = board.subscriptions(id.as_deref())?;
             if env.ctx.json {
-                return document("kanban notify list", &json!({"subscriptions": subs}));
+                return env.document("kanban notify list", &json!({"subscriptions": subs}));
             }
             let mut out = String::new();
             for s in &subs {
@@ -134,15 +137,15 @@ pub(super) fn notify(env: &Env<'_>, command: &NotifyCommand) -> Result<u8, Error
                     .unwrap_or_default();
                 let _ = writeln!(
                     out,
-                    "{}  {}  {}:{}{thread}  as {}",
-                    s.id, s.task_id, s.adapter, s.chat, s.profile
+                    "{}  {}  {}:{}{thread}  as {}  {}",
+                    s.id, s.task_id, s.adapter, s.chat, s.profile, s.delivery_mode
                 );
             }
-            print_raw(&out)
+            env.raw(&out)
         }
         NotifyCommand::Unsubscribe { id } => {
             board.unsubscribe(id)?;
-            print(&format!("unsubscribed {id}"))
+            env.print(&format!("unsubscribed {id}"))
         }
     }
 }
@@ -170,12 +173,12 @@ pub(super) fn gc(env: &Env<'_>) -> Result<u8, Error> {
         }
     }
     if env.ctx.json {
-        return document(
+        return env.document(
             "kanban gc",
             &json!({"subscriptions": subscriptions, "ticks": ticks, "workspaces": workspaces}),
         );
     }
-    print(&format!(
+    env.print(&format!(
         "gc: {subscriptions} subscription(s), {ticks} tick summary(ies), {workspaces} scratch workspace(s) removed"
     ))
 }

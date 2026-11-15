@@ -16,6 +16,7 @@ mod delegation;
 mod fast;
 pub mod files;
 pub mod info;
+mod kanban;
 mod local;
 mod mcp;
 mod moa;
@@ -177,16 +178,29 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "mcp" => mcp::mcp(ctx, args).await,
         "browser" => browser::browser(ctx, args).await,
         "worktree" => worktree::worktree(ctx, args).await,
+        other => {
+            if let Some(text) = work_command(ctx, other, args).await {
+                return Some(text.map(Reply::Text));
+            }
+            return state_command(ctx, other, args).map(|r| r.map(Reply::Text));
+        }
+    };
+    Some(text.map(Reply::Text))
+}
+
+/// Commands about scheduled and board work and the session's automation.
+async fn work_command(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<String, Error>> {
+    Some(match name {
         "cron" => cron::cron(ctx, args),
+        "kanban" => kanban::kanban(ctx, args).await,
         "suggestions" => suggestions::suggestions(ctx, args),
         "blueprint" => blueprint::blueprint(ctx, args),
         "goal" => crate::automation::commands::goal(ctx, args).await,
         "subgoal" => crate::automation::commands::subgoal(ctx, args),
         "loop" => crate::automation::commands::looping(ctx, args),
         "heartbeat" => crate::automation::commands::heartbeat(ctx, args),
-        other => return state_command(ctx, other, args).map(|r| r.map(Reply::Text)),
-    };
-    Some(text.map(Reply::Text))
+        _ => return None,
+    })
 }
 
 /// Commands that change the session's skills, memory, personality,

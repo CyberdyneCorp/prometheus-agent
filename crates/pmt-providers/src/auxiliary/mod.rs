@@ -72,6 +72,7 @@ tasks! {
     SideQuestion = "side_question", None;
     VoiceChat = "voice_chat", None;
     CommitMessage = "commit_message", Some(Duration::from_mins(1));
+    Kanban = "kanban", Some(Duration::from_mins(2));
 }
 
 impl AuxTask {
@@ -104,6 +105,7 @@ impl AuxTask {
             Self::SideQuestion => config.side_question.as_ref(),
             Self::VoiceChat => config.voice_chat.as_ref(),
             Self::CommitMessage => config.commit_message.as_ref(),
+            Self::Kanban => config.kanban.as_ref(),
         }
     }
 }

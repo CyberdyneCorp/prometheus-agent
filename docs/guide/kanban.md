@@ -33,7 +33,9 @@ error: invalid board slug '-ops': 1-64 chars, lowercase alphanumerics, '-' or '_
 
 ## Choosing the board
 
-Every verb works on `--board <slug>`, else the profile's
+Every verb works on `--board <slug>`, else the board bound to the project
+owning the current directory (else the active project; `prometheus
+projects bind-board <project> <board>`), else the profile's
 `kanban.current_board` (set with `prometheus kanban boards switch <slug>`),
 else `default`. A board that does not exist, or is archived, is an error
 and never silently replaced by another one:
@@ -68,8 +70,10 @@ Fields: `--body` (the instructions and acceptance criteria), `--assignee`
 and `--reviewer` (existing profiles), `--parent` (repeatable),
 `--priority` (higher is claimed first), `--workspace`, `--review` /
 `--no-review`, `--max-retries`, `--budget-usd`, `--budget-tokens`,
-`--artifact` (a file the worker must leave in its workspace, repeatable)
-and `--kind agent|eval|evolve`.
+`--artifact` (a file the worker must leave in its workspace, repeatable),
+`--kind agent|eval|evolve`, `--completion-contract`, `--goal` /
+`--goal-max-turns`, `--model` / `--provider` and `--skill` (see
+[Upgrades](#completion-contracts-goals-and-model-overrides)).
 
 Dependencies are links within one board: `kanban link <parent> <child>`.
 Self-links and cycles are refused (`linking A → B would create a cycle`);
@@ -161,7 +165,9 @@ ticket is refused (`run ticket already used`, exit 78). The worker loads
 secrets only from its own profile's secrets store, works in the task's
 workspace (`scratch`: `<board>/workspaces/<task>/`, deleted after
 completion once declared artifacts are attached; `worktree`: a git
-worktree of the profile's `terminal.cwd` on `kanban/<task>`; `dir:<path>`)
+worktree of the profile's `terminal.cwd` on `kanban/<task>` — on a board
+bound to a project, of the project's primary folder on
+`<project>/<task>-<title-slug>`; `dir:<path>`)
 and heartbeats every minute. A worker is alive only while its pid runs
 with the start time recorded at spawn, so a recycled pid is never
 signalled; a worker that outlives its run by 120 s is terminated
@@ -169,7 +175,7 @@ signalled; a worker that outlives its run by 120 s is terminated
 
 A worker session gets the `kanban` toolset automatically, scoped to its
 own board: [`kanban_show`](../reference/tools.md#kanban_show), [`kanban_create`](../reference/tools.md#kanban_create), [`kanban_comment`](../reference/tools.md#kanban_comment),
-[`kanban_attach`](../reference/tools.md#kanban_attach), [`kanban_attachments`](../reference/tools.md#kanban_attachments), [`kanban_link`](../reference/tools.md#kanban_link), [`kanban_complete`](../reference/tools.md#kanban_complete),
+[`kanban_attach`](../reference/tools.md#kanban_attach), [`kanban_attach_url`](../reference/tools.md#kanban_attach_url), [`kanban_attachments`](../reference/tools.md#kanban_attachments), [`kanban_link`](../reference/tools.md#kanban_link), [`kanban_complete`](../reference/tools.md#kanban_complete),
 [`kanban_block`](../reference/tools.md#kanban_block), [`kanban_schedule`](../reference/tools.md#kanban_schedule), [`kanban_heartbeat`](../reference/tools.md#kanban_heartbeat),
 [`kanban_request_review`](../reference/tools.md#kanban_request_review) and [`kanban_request_changes`](../reference/tools.md#kanban_request_changes) (not [`kanban_list`](../reference/tools.md#kanban_list)
 or [`kanban_unblock`](../reference/tools.md#kanban_unblock)). Other sessions get the toolset only when `kanban`
@@ -197,7 +203,13 @@ events. `kanban attach <id> <file>...` stores files in the blob store
 `kanban notify subscribe <id> --adapter telegram --chat <chat>` reports
 the task's `completed`, `blocked`, `gave_up` and `review_requested` events
 to that chat, sent by the gateway daemon through the subscribing profile's
-own adapter. A route that profile cannot reach is skipped with one warning
+own adapter. `--delivery-mode notify+wake` (or `wake`) also starts one turn
+of the subscriber's agent in that chat's session with the event's summary
+(for `completed`, `blocked`, `gave_up`, `crashed`, `timed_out`,
+`review_requested` and `block_loop_detected`); `--chat-type
+dm|group|channel|thread` tells it which conversation. A wake the chat
+cannot take now is retried later without sending the message twice.
+Tasks a worker creates inherit its task's subscriptions. A route that profile cannot reach is skipped with one warning
 per subscription, never sent through another profile. `kanban gc` purges
 subscriptions of tasks done for longer than
 `kanban.done_sub_retention_secs`.
@@ -221,3 +233,126 @@ which this build does not have yet, and are blocked with kind
 `review`, never `done`, but its worker needs harness evolution
 (`prometheus evolve`), which is not in this build yet, so it is blocked
 with kind `capability` naming that.
+
+## Completion contracts, goals and model overrides
+
+`--completion-contract OWNER/REPO` (or an exact pull-request URL; the
+default is `local-only`) makes every completion name its pull request in
+`metadata.published_pr` (`kanban complete --metadata
+'{"published_pr": "<url>"}'`, or the `metadata` of `kanban_complete`).
+The first matching PR is bound for good; the task completes only when
+every required status check and ruleset context of the PR's head commit
+passed, read with the assignee profile's own `GITHUB_TOKEN` secret at
+`kanban.github_api_url`. Anything else refuses the completion, keeps the
+task and appends a `pr_acceptance` event (PR, head SHA, required contexts,
+check ids, classification `checks`, `auth`, `infra` or `policy`, the next
+step).
+
+```console
+$ prometheus kanban create "Ship the API change" --completion-contract acme/api
+created <id> (ready) on board default
+$ prometheus kanban create "Ship it" --completion-contract "not a repo" # exits 65
+error: invalid completion contract 'not a repo' (expected OWNER/REPO, a pull-request URL or local-only)
+```
+
+`--goal` runs the worker in the session-automation goal loop: after each
+turn the `goal_judge` route decides `done`, `continue` (another turn in
+the same session, up to `--goal-max-turns`, default 20, then a
+`needs_input` block `goal budget exhausted`) or `unachievable` (blocked
+with the judge's reason; no completion is accepted until a person unblocks
+it). The worker log shows `kanban goal loop: turn <n>/<m> verdict=<v>`.
+
+`--model <m> [--provider <p>]` runs the worker on that model instead of the
+assignee's default (`kanban set-model <id> <model>|none` changes it for the
+next dispatch); `--skill <name>` (repeatable) preloads skills, checked at
+creation against the assignee's installed skills and again at spawn (a
+missing one blocks the task with kind `capability`).
+
+[`kanban_attach_url`](../reference/tools.md#kanban_attach_url) fetches an `http(s)` URL server-side under the
+profile's egress policy (private, loopback, link-local and metadata
+addresses refused) and attaches it, capped at
+`kanban.attachment_max_bytes`.
+
+## The respawn guard and the dry run
+
+The dispatcher holds a ready task instead of starting a worker when its
+last run failed on quota, authentication or HTTP 429 (`blocker_auth`), a
+run finished it within `kanban.respawn_success_window_secs` (3600,
+`recent_success`), or a comment within `kanban.respawn_pr_window_secs`
+(86400) links a GitHub pull request (`active_pr`). Each hold is one
+`respawn_guarded` event, never a failure; an unblock, re-queue or
+re-promotion lifts the first two, a reassignment, request-changes or
+review reopen to another profile lifts `active_pr`.
+`kanban dispatch --dry-run` shows what a tick would do and changes nothing:
+
+```console
+$ prometheus kanban dispatch --dry-run
+board default:
+```
+
+## Swarms, orchestrators and more verbs
+
+```console
+$ prometheus kanban swarm "failover plan" --workers default --verifier default --synthesizer default
+swarm on board default
+$ prometheus kanban swarm "failover plan" --workers ghost --verifier default --synthesizer default # exits 66
+error: unknown profile 'ghost'
+```
+
+A swarm is created in one transaction: a `done` root holding the goal and a
+JSON blackboard (workers read it with [`kanban_show`](../reference/tools.md#kanban_show) and append with
+[`kanban_comment`](../reference/tools.md#kanban_comment) on the root), one card per worker, a verifier gated on
+every worker and a synthesizer gated on the verifier.
+
+`kanban specify <id>|--all` expands a `triage` idea into a full body with
+acceptance criteria on the `kanban` auxiliary route and moves it to
+`todo`; `kanban decompose <id>` asks the same route for a child-task graph,
+checks it (existing assignees, no cycles, else exit 65 and nothing is
+created) and creates it in one transaction, promoting children that wait
+for nothing (`kanban.auto_promote_children`, default true) while the task
+waits for its children. A profile with `kanban.role = "orchestrator"` gets
+orchestrator guidance in its workers' system prompt; with
+`kanban.auto_decompose = true` the dispatcher specifies triage tasks and
+decomposes orchestrator tasks before dispatching.
+
+The other verbs: `init`, `claim <id> [--ttl]` (a manual claim printing a
+run ticket), `heartbeat`, `reopen-review`, `reassign <id>... <profile>`,
+`watch [--assignee] [--kinds]` and `assignees`.
+
+```console
+$ prometheus kanban assignees
+profile default
+```
+
+Every verb also runs as `/kanban <verb> ...` in any chat (CLI, TUI,
+desktop, messaging), at once and without disturbing a running turn;
+`/kanban create` from a messaging chat subscribes that chat in
+`notify+wake` mode, and messaging output above 3800 characters is cut with
+a pointer to the terminal.
+
+## Worker lanes and hooks
+
+An enabled plugin can offer external worker lanes:
+
+```toml
+[[kanban_lanes]]
+name = "codex-cli"              # an assignee; never a profile's name
+command = ["sh", "lane.sh"]     # files of the plugin directory resolve there
+description = "Codex CLI"
+```
+
+A task assigned to `codex-cli` starts the lane under the local sandbox in
+the task's workspace (plus its plugin directory, its board and the blob
+store, and the plugin's approved grants), with the run ticket on stdin and
+`PROMETHEUS_KANBAN_TASK`/`_BOARD`/`_RUN` in its environment. It reports with
+`prometheus kanban <verb> --ticket -` (the ticket line on stdin), which acts
+as the run's worker; the liveness rules reclaim a lane that ends without a
+terminator. A lane task whose plugin is gone stays `ready` with one
+`skipped_nonspawnable` event.
+
+Plugins and shell hooks observe the board through `kanban_task_claimed`,
+`kanban_task_completed`, `kanban_task_blocked`, `on_kanban_worker_spawned`,
+`on_kanban_worker_exited`, `on_kanban_worker_stale_claim`,
+`on_kanban_task_updated` (field names only) and `on_kanban_dispatch_tick`,
+fired after the board commit and outside any board transaction, so a slow
+callback never holds the board.

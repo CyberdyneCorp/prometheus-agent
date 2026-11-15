@@ -31,22 +31,38 @@ pub struct Completion {
     pub force: bool,
     /// Largest artifact accepted into attachments.
     pub attachment_limit: u64,
+    /// `metadata.published_pr` and other facts the completer reports.
+    pub metadata: Option<serde_json::Value>,
+}
+
+/// What handing a task to review names.
+#[derive(Debug, Clone, Default)]
+pub struct Handoff {
+    /// The summary.
+    pub summary: Option<String>,
+    /// `metadata.published_pr` binds a repository contract's PR.
+    pub metadata: Option<serde_json::Value>,
+    /// A reviewer profile to set.
+    pub reviewer: Option<String>,
 }
 
 /// Declared artifacts read from the workspace: (name, bytes).
 type Files = Vec<(String, Vec<u8>)>;
 
-/// A refusal: the message and the event kind it is recorded as.
-struct Refusal {
-    kind: &'static str,
-    message: String,
+/// A refusal: the message and the event kind it is recorded as (with
+/// its payload, when it carries more than the reason).
+pub(super) struct Refusal {
+    pub(super) kind: &'static str,
+    pub(super) message: String,
+    pub(super) payload: Option<serde_json::Value>,
 }
 
 impl Refusal {
-    fn gate(message: String) -> Self {
+    pub(super) fn gate(message: String) -> Self {
         Self {
             kind: "completion_refused",
             message,
+            payload: None,
         }
     }
 }
@@ -91,6 +107,7 @@ fn gates(
                 "completion blocked: created_tasks names task(s) this run did not create: {}",
                 foreign.join(", ")
             ),
+            payload: None,
         }));
     }
     if actor.kind != ActorKind::Worker
@@ -110,16 +127,13 @@ fn gates(
 }
 
 impl Board {
-    fn refuse(&mut self, actor: &Actor, id: &str, refusal: &Refusal, now: i64) -> Error {
+    pub(super) fn refuse(&mut self, actor: &Actor, id: &str, refusal: &Refusal, now: i64) -> Error {
         let run = actor.run.clone();
-        let _ = self.record(
-            Some(id),
-            run.as_deref(),
-            actor,
-            refusal.kind,
-            &json!({"reason": refusal.message}),
-            now,
-        );
+        let payload = refusal
+            .payload
+            .clone()
+            .unwrap_or_else(|| json!({"reason": refusal.message}));
+        let _ = self.record(Some(id), run.as_deref(), actor, refusal.kind, &payload, now);
         Error::new(&codes::KANBAN_COMPLETION_BLOCKED, refusal.message.clone())
     }
 
@@ -159,6 +173,40 @@ impl Board {
         Ok(Ok(out))
     }
 
+    /// Runs the completion gates of `task` moving to `to`; a refusal is
+    /// recorded before it returns.
+    fn admit(
+        &mut self,
+        actor: &Actor,
+        task: &Task,
+        c: &Completion,
+        to: Status,
+        now: i64,
+    ) -> Result<(), Error> {
+        let id = &task.id;
+        let refusal = {
+            let tx = self.conn().unchecked_transaction().map_err(sql)?;
+            own_run(&tx, actor, id)?;
+            gates(&tx, actor, task, c)?
+        };
+        let refusal = match refusal {
+            Some(refusal) => Some(refusal),
+            None => self.goal_gate(task)?,
+        };
+        let refusal = match (refusal, to) {
+            (Some(refusal), _) => Some(refusal),
+            (None, Status::Done) => self.contract_gate(actor, task, c.metadata.as_ref(), now)?,
+            (None, _) => {
+                self.bind_published(actor, task, c.metadata.as_ref(), now)?;
+                None
+            }
+        };
+        match refusal {
+            Some(refusal) => Err(self.refuse(actor, id, &refusal, now)),
+            None => Ok(()),
+        }
+    }
+
     /// Completes a task through the completion gates; returns `done`, or
     /// `review` when the review lane takes a worker's completion.
     ///
@@ -176,14 +224,7 @@ impl Board {
         let task = self.task(id)?;
         let to = self.completion_target(actor, &task);
         workflow::check(Verb::Complete, actor.kind, task.status, to)?;
-        let refusal = {
-            let tx = self.conn().unchecked_transaction().map_err(sql)?;
-            own_run(&tx, actor, id)?;
-            gates(&tx, actor, &task, c)?
-        };
-        if let Some(refusal) = refusal {
-            return Err(self.refuse(actor, id, &refusal, now));
-        }
+        self.admit(actor, &task, c, to, now)?;
         let files = match self.artifacts(&task, c.attachment_limit)? {
             Ok(files) => files,
             Err(refusal) => return Err(self.refuse(actor, id, &refusal, now)),
@@ -248,9 +289,16 @@ impl Board {
         &mut self,
         actor: &Actor,
         id: &str,
-        summary: Option<&str>,
+        handoff: &Handoff,
         now: i64,
     ) -> Result<(), Error> {
+        let task = self.task(id)?;
+        if let Some(refusal) = self.goal_gate(&task)? {
+            return Err(self.refuse(actor, id, &refusal, now));
+        }
+        self.bind_published(actor, &task, handoff.metadata.as_ref(), now)?;
+        let summary = handoff.summary.as_deref();
+        let reviewer = handoff.reviewer.as_deref();
         let label = actor.label();
         self.write(|tx| {
             let task = load(tx, id)?;
@@ -265,13 +313,20 @@ impl Board {
                 )
                 .map_err(sql)?;
             }
+            if let Some(reviewer) = reviewer {
+                tx.execute(
+                    "UPDATE tasks SET reviewer = ?2 WHERE id = ?1",
+                    params![id, reviewer],
+                )
+                .map_err(sql)?;
+            }
             event(
                 tx,
                 Some(id),
                 run.as_deref(),
                 &label,
                 "review_requested",
-                &json!({"summary": summary}),
+                &json!({"summary": summary, "reviewer": reviewer}),
                 now,
             )?;
             Ok(())
@@ -292,6 +347,10 @@ impl Board {
         now: i64,
     ) -> Result<(), Error> {
         let task = self.task(id)?;
+        workflow::check(Verb::Approve, actor.kind, task.status, Status::Done)?;
+        if let Some(refusal) = self.contract_gate(actor, &task, None, now)? {
+            return Err(self.refuse(actor, id, &refusal, now));
+        }
         let label = actor.label();
         self.write(|tx| {
             let current = load(tx, id)?;

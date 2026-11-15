@@ -3,7 +3,8 @@
 //! source tag, no interactive tools, the `kanban` toolset without
 //! `kanban_list` and `kanban_unblock`, a port scoped to its own board and
 //! run, reads of the home's attachment blobs, and the worker guidance in
-//! its frozen system prompt.
+//! its frozen system prompt (with the orchestrator guidance for a profile
+//! whose `kanban.role` is `orchestrator`).
 
 use std::path::PathBuf;
 
@@ -20,6 +21,8 @@ pub struct KanbanRun {
     pub grant: Grant,
     /// `<home>/kanban/blobs`: attachments the session's file tools read.
     pub blobs: PathBuf,
+    /// The profile's `kanban.role` is `orchestrator`.
+    pub orchestrator: bool,
 }
 
 impl KanbanRun {
@@ -50,9 +53,15 @@ impl KanbanRun {
         std::iter::once(Capability::read_under(&dir)).collect()
     }
 
-    /// The worker guidance of the frozen system prompt.
+    /// The worker guidance of the frozen system prompt, and an
+    /// orchestrator's guidance after it.
     #[must_use]
-    pub fn guidance() -> String {
-        pmt_kanban::context::WORKER_GUIDANCE.to_owned()
+    pub fn guidance(&self) -> String {
+        let mut text = pmt_kanban::context::WORKER_GUIDANCE.to_owned();
+        if self.orchestrator {
+            text.push_str("\n\n");
+            text.push_str(crate::kanban_host::orchestrate::ORCHESTRATOR_GUIDANCE);
+        }
+        text
     }
 }

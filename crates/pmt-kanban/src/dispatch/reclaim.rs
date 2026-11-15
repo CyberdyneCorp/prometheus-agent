@@ -55,7 +55,7 @@ pub(super) fn reclaim(board: &mut Board, breaker: Breaker, now: i64) -> Result<V
         if let Some(end) = verdict(board, &run, now)? {
             board.end_run(&run.id, &end, breaker, now)?;
             if alive(&run) != Some(true) {
-                board.worker_gone(&run.id)?;
+                board.worker_gone(&run.id, false)?;
             }
             reclaimed.push(run.task_id.clone());
         }
@@ -76,11 +76,11 @@ pub(super) fn reclaim(board: &mut Board, breaker: Breaker, now: i64) -> Result<V
                     now,
                 )?;
                 if result != Terminated::Failed {
-                    board.worker_gone(&run.id)?;
+                    board.worker_gone(&run.id, true)?;
                 }
             }
             Some(true) => {}
-            _ => board.worker_gone(&run.id)?,
+            _ => board.worker_gone(&run.id, false)?,
         }
     }
     Ok(reclaimed)

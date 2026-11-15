@@ -7,20 +7,34 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use pmt_core::error::{Error, codes};
 use pmt_core::private_fs;
 use serde::{Deserialize, Serialize};
 
 use crate::board::Board;
+use crate::contract::PrChecks;
+use crate::observe::Observer;
 
 /// The board every home has.
 pub const DEFAULT_BOARD: &str = "default";
 
-/// `<home>/kanban`: the boards of one home.
-#[derive(Debug, Clone)]
+/// `<home>/kanban`: the boards of one home. Boards it opens carry its
+/// pull-request checker and lifecycle observer, when it has them.
+#[derive(Clone)]
 pub struct Boards {
     root: PathBuf,
+    pr_checks: Option<Arc<dyn PrChecks>>,
+    observer: Option<Arc<dyn Observer>>,
+}
+
+impl std::fmt::Debug for Boards {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Boards")
+            .field("root", &self.root)
+            .finish_non_exhaustive()
+    }
 }
 
 /// `board.toml`.
@@ -89,6 +103,8 @@ impl Boards {
     pub fn open(home: &Path) -> Result<Self, Error> {
         let boards = Self {
             root: home.join("kanban"),
+            pr_checks: None,
+            observer: None,
         };
         for dir in [boards.root.clone(), boards.boards_dir(), boards.blobs_dir()] {
             private_fs::create_dir(&dir).map_err(|e| Error::io(&codes::HOME_IO, &dir, &e))?;
@@ -196,6 +212,41 @@ impl Boards {
         }
     }
 
+    /// The boards of `home` as they are, creating nothing (an external
+    /// worker's sandbox reaches only its own board and the blob store).
+    #[must_use]
+    pub fn existing(home: &Path) -> Self {
+        Self {
+            root: home.join("kanban"),
+            pr_checks: None,
+            observer: None,
+        }
+    }
+
+    /// Boards opened from here read pull-request evidence with `checks`.
+    #[must_use]
+    pub fn with_pr_checks(mut self, checks: Arc<dyn PrChecks>) -> Self {
+        self.pr_checks = Some(checks);
+        self
+    }
+
+    /// Boards opened from here hand their committed events to `observer`.
+    #[must_use]
+    pub fn with_observer(mut self, observer: Arc<dyn Observer>) -> Self {
+        self.observer = Some(observer);
+        self
+    }
+
+    fn equip(&self, mut board: Board) -> Board {
+        if let Some(checks) = &self.pr_checks {
+            board = board.with_pr_checks(Arc::clone(checks));
+        }
+        if let Some(observer) = &self.observer {
+            board = board.with_observer(Arc::clone(observer));
+        }
+        board
+    }
+
     /// Opens a live board.
     ///
     /// # Errors
@@ -206,7 +257,7 @@ impl Boards {
         if settings.archived {
             return Err(not_found(slug));
         }
-        Board::open(self, slug, settings)
+        Board::open(self, slug, settings).map(|b| self.equip(b))
     }
 
     /// Opens a board whether or not it is archived (export, gc).
@@ -216,7 +267,7 @@ impl Boards {
     /// `kanban.board_not_found`, store errors.
     pub fn board_any(&self, slug: &str) -> Result<Board, Error> {
         let settings = self.settings(slug)?;
-        Board::open(self, slug, settings)
+        Board::open(self, slug, settings).map(|b| self.equip(b))
     }
 
     /// Creates a board.

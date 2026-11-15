@@ -39,3 +39,6 @@ Every status change on a board is one of these transitions. Anything else is ref
 | plan | user | `triage` | `todo` |  |
 | plan | user | `todo` | `triage` |  |
 | requeue | user | `done` | `ready` | all parents done/archived |
+| reopen review | user | `review` | `ready` | all parents done/archived |
+| reopen review | user | `review` | `todo` | a parent is open |
+| specify | user, dispatcher | `triage` | `todo` |  |

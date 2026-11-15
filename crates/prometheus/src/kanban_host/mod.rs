@@ -3,18 +3,26 @@
 //! ([`spawn`]), the worker itself ([`worker`]), the `kanban_*` tool port
 //! ([`tool`]) and notification texts ([`notice`]).
 
+pub mod assignees;
+pub mod fetch;
+pub mod github;
+pub mod goal;
+pub mod hooks;
+pub mod lanes;
 pub mod notice;
+pub mod orchestrate;
 pub mod spawn;
 pub mod tool;
 pub mod worker;
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use std::sync::Arc;
 
-use pmt_config::ProfileName;
 use pmt_config::schema::KanbanConfig;
+use pmt_config::{ProfileName, ProfileScope};
 use pmt_kanban::dispatch::{Dispatcher, Settings};
 use pmt_kanban::lease::Holder;
-use pmt_kanban::{Boards, Breaker, Profiles};
+use pmt_kanban::{Boards, Breaker};
 
 /// Whether `name` is a profile of the home at `home`.
 #[must_use]
@@ -25,14 +33,17 @@ pub fn profile_exists(home: &Path, name: &str) -> bool {
     })
 }
 
-/// The profiles of one home.
-#[derive(Debug, Clone)]
-pub struct HomeProfiles(pub PathBuf);
-
-impl Profiles for HomeProfiles {
-    fn exists(&self, name: &str) -> bool {
-        profile_exists(&self.0, name)
-    }
+/// The board bound to the project owning `cwd`, else to the active
+/// project, in `scope`'s projects (spec: projects, Kanban board binding):
+/// the board kanban commands and tools select by default.
+#[must_use]
+pub fn project_board(scope: &ProfileScope, cwd: &Path) -> Option<String> {
+    let store = pmt_store::Store::open(scope).ok()?;
+    let project = match store.project_owning(cwd).ok()? {
+        Some(project) => project,
+        None => store.active_project().ok()??,
+    };
+    project.board
 }
 
 /// The dispatcher settings of `config`.
@@ -48,7 +59,27 @@ pub fn settings(config: &KanbanConfig) -> Settings {
         breaker: breaker(config),
         claim_ttl_ms: ttl_ms(config),
         review_dispatch: config.review_dispatch,
+        windows: pmt_kanban::dispatch::guard::Windows {
+            success_ms: secs_ms(config.respawn_success_window_secs),
+            pr_ms: secs_ms(config.respawn_pr_window_secs),
+        },
     }
+}
+
+/// The boards of `scope`'s home as this process works them: completion
+/// contracts read GitHub with the assignee's credential, and lifecycle
+/// events queue on `hooks`.
+///
+/// # Errors
+///
+/// `home.io` when the kanban directory cannot be created.
+pub fn boards(
+    scope: &ProfileScope,
+    hooks: &Arc<hooks::HookQueue>,
+) -> Result<Boards, pmt_core::Error> {
+    Ok(Boards::open(scope.home())?
+        .with_pr_checks(Arc::new(github::GitHub::new(scope.home())))
+        .with_observer(Arc::clone(hooks) as Arc<dyn pmt_kanban::observe::Observer>))
 }
 
 /// The failure breaker of `config`.
@@ -72,22 +103,29 @@ pub fn secs_ms(secs: u64) -> i64 {
     i64::try_from(secs.saturating_mul(1000)).unwrap_or(i64::MAX)
 }
 
-/// Runs one dispatcher tick for the home at `home` as `kind` (`daemon`
-/// or `cli`) with `config`'s settings, spawning workers with `launch`'s
-/// locale and `PATH`.
+/// Runs one dispatcher tick for `scope`'s home as `kind` (`daemon` or
+/// `cli`) with its `[kanban]` settings, spawning workers with `launch`'s
+/// locale and `PATH` and lanes from its enabled plugins. With
+/// `kanban.auto_decompose` it first specifies triage tasks and decomposes
+/// orchestrator tasks. Lifecycle hooks fire after the tick, outside it.
 ///
 /// # Errors
 ///
-/// `kanban.lease_held`, store errors.
+/// `kanban.lease_held` (an `on_kanban_dispatch_tick` with outcome
+/// `skipped_locked` still fires), store errors.
 pub fn tick(
-    home: &Path,
+    scope: &ProfileScope,
     kind: &str,
-    config: &KanbanConfig,
     launch: &pmt_core::env::LaunchEnv,
 ) -> Result<Vec<pmt_kanban::dispatch::Summary>, pmt_core::Error> {
-    let boards = Boards::open(home)?;
-    let spawner = spawn::ProcessSpawner::new(home, launch)?;
-    let profiles = HomeProfiles(home.to_path_buf());
+    let config = &scope.config().kanban;
+    let queue = hooks::HookQueue::new(scope);
+    let boards = boards(scope, &queue)?;
+    if config.auto_decompose {
+        orchestrate::auto(scope, &boards, launch);
+    }
+    let spawner = spawn::ProcessSpawner::new(scope, launch)?;
+    let profiles = assignees::Assignees::of(scope);
     let dispatcher = Dispatcher {
         boards: &boards,
         holder: Holder::current(kind),
@@ -95,7 +133,38 @@ pub fn tick(
         profiles: &profiles,
         spawner: &spawner,
     };
-    dispatcher.tick(pmt_kanban::now_ms())
+    let result = dispatcher.tick(pmt_kanban::now_ms());
+    match &result {
+        Ok(summaries) => queue.tick(summaries, &[], false),
+        Err(err) if err.code().code == pmt_core::error::codes::KANBAN_LEASE_HELD.code => {
+            queue.tick(&[], &boards.live().unwrap_or_default(), false);
+        }
+        Err(_) => {}
+    }
+    queue.flush(scope);
+    result
+}
+
+/// The dispatcher's dry run for `scope`'s home: nothing changes.
+///
+/// # Errors
+///
+/// Store errors.
+pub fn plan(
+    scope: &ProfileScope,
+    launch: &pmt_core::env::LaunchEnv,
+) -> Result<Vec<pmt_kanban::dispatch::plan::Plan>, pmt_core::Error> {
+    let boards = Boards::open(scope.home())?;
+    let spawner = spawn::ProcessSpawner::new(scope, launch)?;
+    let profiles = assignees::Assignees::of(scope);
+    let dispatcher = Dispatcher {
+        boards: &boards,
+        holder: Holder::current("cli"),
+        settings: settings(&scope.config().kanban),
+        profiles: &profiles,
+        spawner: &spawner,
+    };
+    dispatcher.plan(pmt_kanban::now_ms())
 }
 
 /// Renews this process's lease on every live board of the home (between

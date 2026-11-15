@@ -49,7 +49,17 @@ CREATE TABLE IF NOT EXISTS tasks (
     created_run TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
-    completed_at INTEGER
+    completed_at INTEGER,
+    completion_contract TEXT,
+    pr_url TEXT,
+    goal_mode INTEGER NOT NULL DEFAULT 0,
+    goal_max_turns INTEGER,
+    model TEXT,
+    provider TEXT,
+    skills TEXT NOT NULL DEFAULT '[]',
+    lane INTEGER NOT NULL DEFAULT 0,
+    project TEXT,
+    repo_root TEXT
 );
 CREATE INDEX IF NOT EXISTS tasks_status ON tasks(status, priority, created_at);
 CREATE INDEX IF NOT EXISTS tasks_idempotency ON tasks(idempotency_key) WHERE idempotency_key IS NOT NULL;
@@ -124,6 +134,8 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     profile TEXT NOT NULL,
     created_at INTEGER NOT NULL,
     checkpoint INTEGER NOT NULL DEFAULT 0,
+    wake_checkpoint INTEGER NOT NULL DEFAULT 0,
+    session_id TEXT,
     warned INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS dispatcher_lease (

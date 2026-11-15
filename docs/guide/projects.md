@@ -50,6 +50,10 @@ $ prometheus projects remove-folder api ~/src/api-docs
 removed a folder from project 'api'
 $ prometheus projects rename api "Public API"
 renamed project 'api'
+$ prometheus projects bind-board api backend # exits 66
+error: board 'backend' not found
+$ prometheus kanban boards create backend
+created board backend
 $ prometheus projects bind-board api backend
 bound project 'api'
 $ prometheus projects add-folder prometheus-agent ~/src/api # exits 1
@@ -57,7 +61,11 @@ error: folder <home>/src/api already belongs to project 'api'
 ```
 
 `add-folder --primary` makes the new folder primary; `rename` keeps the
-slug; `bind-board` without a board unbinds.
+slug; `bind-board` without a board unbinds, and a board that does not
+exist is refused (exit 66). A bound board is the default board of
+`prometheus kanban` in the project's folders, and its `worktree` tasks
+work in the project's primary folder on the branch
+`<project>/<task-id>-<title-slug>` (see [Kanban](kanban.md)).
 
 A folder belongs to at most one non-archived project: adding a folder
 another project holds fails with `folder <path> already belongs to project

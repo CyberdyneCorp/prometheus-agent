@@ -51,9 +51,9 @@
   image_gen  (1 tool)
     Image generation
     tools: image_generate
-  kanban  (14 tools)  [default-off]
+  kanban  (15 tools)  [default-off]
     Kanban boards
-    tools: kanban_show, kanban_list, kanban_create, kanban_comment, kanban_attach, kanban_link, kanban_complete, kanban_block, kanban_schedule, kanban_heartbeat, kanban_request_review, kanban_request_changes, kanban_unblock, kanban_attachments
+    tools: kanban_show, kanban_list, kanban_create, kanban_comment, kanban_attach, kanban_link, kanban_complete, kanban_block, kanban_schedule, kanban_heartbeat, kanban_request_review, kanban_request_changes, kanban_unblock, kanban_attach_url, kanban_attachments
   memory  (1 tool)
     Long-term memory
     tools: memory

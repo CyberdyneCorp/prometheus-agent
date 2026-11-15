@@ -610,10 +610,10 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 68. M3 Kanban upgrades
 
-- [ ] 68.1 Implement URL attachments with attachment listing tools (internal addresses refused), PR completion contracts (red required checks block completion, retries cannot substitute a sibling PR), goal-mode cards, per-task model overrides with pinned skills and the respawn guard with dispatch dry run; verify with board tests (spec: kanban)
-- [ ] 68.2 Implement the swarm topology helper (atomic creation, unknown worker profile aborts everything), the `/kanban` slash command, subscription delivery modes with inheritance, orchestrator guidance with specify and decompose, and the additional CLI verbs; verify with CLI tests (spec: kanban)
-- [ ] 68.3 Implement worker lanes (external CLI lanes declared under `[[kanban_lanes]]`, unknown assignees surfaced) and kanban lifecycle observer hooks that cannot hold the board; verify with a sandboxed lane fixture (spec: kanban, spec: plugin-system)
-- [ ] 68.4 Implement project kanban board binding (branch convention); verify that a project's board is selected by default (spec: projects)
+- [x] 68.1 Implement URL attachments with attachment listing tools (internal addresses refused), PR completion contracts (red required checks block completion, retries cannot substitute a sibling PR), goal-mode cards, per-task model overrides with pinned skills and the respawn guard with dispatch dry run; verify with board tests (spec: kanban)
+- [x] 68.2 Implement the swarm topology helper (atomic creation, unknown worker profile aborts everything), the `/kanban` slash command, subscription delivery modes with inheritance, orchestrator guidance with specify and decompose, and the additional CLI verbs; verify with CLI tests (spec: kanban)
+- [x] 68.3 Implement worker lanes (external CLI lanes declared under `[[kanban_lanes]]`, unknown assignees surfaced) and kanban lifecycle observer hooks that cannot hold the board; verify with a sandboxed lane fixture (spec: kanban, spec: plugin-system)
+- [x] 68.4 Implement project kanban board binding (branch convention); verify that a project's board is selected by default (spec: projects)
 
 ## 69. M3 Harness evolution
 

@@ -615,9 +615,9 @@ impl Factory {
             &memory,
             &environment,
         );
-        let reach = (&selection, &capabilities);
+        let (reach, aux) = ((&selection, &capabilities), (&summarizer, &model));
         let (agent_tools, clarify) =
-            self.agent_tools(id, &memory, &summarizer, reach, cards, &delegation)?;
+            self.agent_tools(id, &memory, aux, reach, cards, &delegation)?;
         let gate = self.gate_for(id, child, &model, &environment)?;
         skills::bind_shell(&inline_shell, environment.commands.as_ref(), &gate.gate);
         let ports = (&gate.gate, &agent_tools, &model);
@@ -972,7 +972,10 @@ impl Factory {
         &self,
         id: SessionId,
         memory: &Arc<MemorySession>,
-        summarizer: &Arc<summarize::RouteSummarizer>,
+        (summarizer, model): (
+            &Arc<summarize::RouteSummarizer>,
+            &Arc<model::SwitchableModel>,
+        ),
         (selection, capabilities): (&Selection, &CapabilitySet),
         cards: bool,
         delegation: &delegation::Wiring,
@@ -1011,9 +1014,15 @@ impl Factory {
         ));
         let tools = tools.with_kanban(crate::kanban_host::tool::port(
             &self.scope,
-            &self.options.cwd,
-            self.read_check(capabilities),
-            self.options.kanban.as_ref().map(|run| run.grant.clone()),
+            crate::kanban_host::tool::PortParts {
+                cwd: self.options.cwd.clone(),
+                may_read: self.read_check(capabilities),
+                grant: self.options.kanban.as_ref().map(|run| run.grant.clone()),
+                judge: self.options.kanban.as_ref().map(|_| {
+                    Arc::new(self.models.judge(model, id))
+                        as Arc<dyn crate::kanban_host::goal::GoalJudge>
+                }),
+            },
         ));
         let tools = match &self.messaging {
             Some(ports) => tools.with_messaging(ports.port(id, self.read_check(capabilities))),

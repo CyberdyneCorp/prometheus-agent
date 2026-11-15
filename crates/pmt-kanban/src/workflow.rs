@@ -51,6 +51,11 @@ pub enum Verb {
     Plan,
     /// A finished task deliberately queued again.
     Requeue,
+    /// A task in review sent back to the queue without a reviewer's
+    /// verdict.
+    ReopenReview,
+    /// A triage idea expanded into a full body.
+    Specify,
 }
 
 impl Verb {
@@ -77,6 +82,8 @@ impl Verb {
             Self::Restore => "restore",
             Self::Plan => "plan",
             Self::Requeue => "requeue",
+            Self::ReopenReview => "reopen review",
+            Self::Specify => "specify",
         }
     }
 }
@@ -276,6 +283,15 @@ pub const TABLE: &[Transition] = &[
     row(Verb::Plan, &[U], &[Triage], Todo, Guard::None),
     row(Verb::Plan, &[U], &[Todo], Triage, Guard::None),
     row(Verb::Requeue, &[U], &[Done], Ready, Guard::ParentsSettled),
+    row(
+        Verb::ReopenReview,
+        &[U],
+        &[Review],
+        Ready,
+        Guard::ParentsSettled,
+    ),
+    row(Verb::ReopenReview, &[U], &[Review], Todo, Guard::ParentOpen),
+    row(Verb::Specify, &[U, D], &[Triage], Todo, Guard::None),
 ];
 
 /// The rows that move `from` to `to` for `actor`.
