@@ -8,6 +8,26 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 
 | Key | Type | Default | Allowed values | Apply | Description |
 |---|---|---|---|---|---|
+| `a2a.agents.<name>.auth_secret` | string | unset | a secret name | `live` | The secret holding the bearer token it expects. |
+| `a2a.agents.<name>.capabilities` | array of string | `[]` | any | `live` | Capabilities `a2a_orchestrate` matches. |
+| `a2a.agents.<name>.timeout_secs` | integer | `120` | 1 to 86400 | `live` | Seconds one call waits for the reply. |
+| `a2a.agents.<name>.url` | string | unset | any | `live` | The agent's base URL (where its Agent Card is served). |
+| `a2a.server.advertised_toolsets` | array | unset | any | `live` | Toolsets the card advertises as skills (unset: every toolset inbound A2A sessions get); a toolset they cannot use is never listed. |
+| `a2a.server.agent_name` | string | unset | any | `live` | The Agent Card's name (unset: `<hostname>-<profile>`). |
+| `a2a.server.allow_all_peers` | boolean | `false` | any | `live` | Admit every authenticated identity (WARN on every start). |
+| `a2a.server.audit_content` | boolean | `false` | any | `live` | Also record message text in the audit log. |
+| `a2a.server.description` | string | unset | any | `live` | The Agent Card's description (unset: a generic one). |
+| `a2a.server.enabled` | boolean | `false` | any | `restart` | Serve this profile on the daemon's A2A listener (`/p/<profile>/`, and `/` for `default`). |
+| `a2a.server.max_pingpong_turns` | integer | `5` | 1 to 20 | `live` | Exchanges per context within 10 minutes. |
+| `a2a.server.peers` | array of table | `[]` | any | `live` | Per-peer bearer tokens; the name drives trust, limits and audit. |
+| `a2a.server.public_url` | string | unset | any | `live` | The URL peers call (a reverse proxy's); unset: the bound address. Its host is also accepted in the `Host` header. |
+| `a2a.server.push_secret` | string | unset | a secret name | `live` | The secret signing push notifications (unset: the authenticating peer's token). |
+| `a2a.server.rate_limit_per_minute` | integer | `60` | 1 to 100000 | `live` | Requests per minute per identity. |
+| `a2a.server.reply_timeout_secs` | integer | `300` | 300 to 86400 | `live` | Seconds a task waits for the agent's reply. |
+| `a2a.server.shared_token_secret` | string | unset | a secret name | `live` | A token shared by every caller, whose identity is the caller's IP. |
+| `a2a.server.toolsets` | array of string | `["api_server"]` | any | `live` | Toolsets of inbound A2A sessions. |
+| `a2a.server.trust_forwarded_headers` | boolean | `false` | any | `live` | Build the card's URL from `X-Forwarded-Host`/`X-Forwarded-Proto` (only behind a proxy that sets them). |
+| `a2a.server.trusted_peers` | array of string | `[]` | any | `live` | Identities admitted to start turns. |
 | `acp.use_editor_terminal` | boolean | `false` | any | `next_session` | Run the terminal commands of a local ACP session in the editor's terminal panel when the editor supports it. The editor terminal is outside the OS sandbox, so it is used only while `security.sandbox.mode = "off"`; otherwise commands run sandboxed in the daemon. |
 | `agent.api_max_retries` | integer | `3` | 1 to 10 | `next_session` | Attempts per model call before the fallback chain is consulted. |
 | `agent.auto_recovery_cycles` | integer | `5` | ≥ 0 | `next_session` | Extra wait-and-retry cycles after retries and fallbacks are spent on a transient failure with nothing streamed; `0` disables. |
@@ -138,6 +158,8 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `auxiliary.web_extract.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.web_extract.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.web_extract.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `bot_mode.envelope_ttl_secs` | integer | `900` | ≥ 0 | `live` | Envelopes still queued (never drained by a courier) after this many seconds fail with `queued_expired` (`0`: never). |
+| `bot_mode.relay_turn_timeout_secs` | integer | `600` | 1 to 86400 | `live` | Seconds a relayed bot message's turn may take on the target before it fails. |
 | `browser.auto_local_for_private_urls` | boolean | `true` | any | `next_session` | With a cloud provider, private and LAN URLs open in a local sidecar browser instead of being refused or sent to the provider. |
 | `browser.cdp_url` | string | unset | any | `next_session` | Explicit CDP endpoint. |
 | `browser.chromium_args` | array of string | unset | any | `next_session` | Extra local browser arguments; ones that disable the Chromium sandbox or web security need the matching `security.sandbox.allow_degraded` entry. |
@@ -629,6 +651,9 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `observability.trajectories.max_bytes_per_session` | integer | `268435456` | ≥ 0 | `next_session` | Stop recording payload bodies of a session beyond this size. |
 | `observability.trajectories.retention_secs` | integer | `7776000` | ≥ 0 | `next_session` | Delete unpinned trajectories older than this; `0` keeps forever. |
 | `openrouter.min_coding_score` | number or string | `0.65` | any | `next_session` | Lowest coding score the `openrouter/pareto-code` router may pick a model below (0.0-1.0); an empty string sends no `pareto-router` plugin block. |
+| `peers.<name>.key_secret` | string | unset | a secret name | `next_session` | The secret holding the peer's API server key. |
+| `peers.<name>.note` | string | unset | any | `next_session` | A note shown by `gateway peer list`. |
+| `peers.<name>.url` | string | unset | any | `next_session` | The peer's API server base URL. |
 | `plugins.approval_transport` | string | `""` | any | `next_session` | The plugin approval transport that presents approval requests, `<plugin_id>:<name>`; empty asks on the session's own surface. |
 | `plugins.approval_transport_fallback` | one of "deny", "builtin" | `"deny"` | `"deny"`, `"builtin"` | `next_session` | What a failing, timed-out, unbound or missing approval transport leads to: `deny` the request, or ask on the session's own surface (`builtin`). |
 | `plugins.catalog_url` | string | `"https://raw.githubusercontent.com/CyberdyneCorp/prometheus-agent/main/crates/pmt-plugins/catalog/catalog.json"` | any | `next_session` | Where the signed live plugin catalog is fetched from (cached 6 hours under the profile's `cache/`); empty uses only the catalog embedded in the binary. |

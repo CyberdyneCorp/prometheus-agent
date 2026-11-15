@@ -327,6 +327,8 @@ pub fn browser_sign_in(cmd: &mut std::process::Command) -> (Option<i32>, String)
     (child.wait().unwrap().code(), seen)
 }
 #[cfg(feature = "gateway")]
+pub mod a2a;
+#[cfg(feature = "gateway")]
 pub mod api;
 #[cfg(all(unix, feature = "dashboard"))]
 pub mod connections;

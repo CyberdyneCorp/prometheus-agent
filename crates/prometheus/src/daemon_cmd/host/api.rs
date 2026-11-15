@@ -144,6 +144,7 @@ impl DaemonHost {
         let factory = self.factory(profile, cwd.clone(), &setup)?;
         let target = factory.models.primary(&super::setup::flags(&setup)).await?;
         let mut row = NewSession::new(Source::Api);
+        row.source_tag.clone_from(&new.source_tag);
         row.provider = Some(target.provider.clone());
         row.model.clone_from(&target.model);
         row.cwd = Some(cwd.to_string_lossy().into_owned());
@@ -455,6 +456,18 @@ impl pmt_api::ApiHost for DaemonHost {
             let profile = self.profile(profile)?;
             Ok(super::api_profile::health(self, &profile).await)
         })
+    }
+
+    fn api_scan(&self, text: &str) -> Vec<String> {
+        super::a2a::scan(text)
+    }
+
+    fn api_push_check<'a>(&'a self, profile: &'a str, url: &'a str) -> HostFuture<'a, ()> {
+        Box::pin(super::a2a::push_check(self, profile, url))
+    }
+
+    fn api_push<'a>(&'a self, push: pmt_api::Push<'a>) -> HostFuture<'a, u16> {
+        Box::pin(super::a2a::push(self, push))
     }
 
     /// Forced redaction (spec: api-server, Run events stream): the

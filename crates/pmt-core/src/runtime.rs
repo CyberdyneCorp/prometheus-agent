@@ -362,6 +362,16 @@ fn held_error(home: &Path) -> Error {
     }
 }
 
+/// This machine's short host name (`spark`, not `spark.lan`); `localhost`
+/// when the OS reports none. Agent names and roster rows show it.
+#[must_use]
+pub fn hostname() -> String {
+    System::host_name()
+        .and_then(|name| name.split('.').next().map(str::to_owned))
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| "localhost".to_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use std::process::Command;

@@ -130,6 +130,7 @@ async fn run(shared: &Arc<Shared>, caller: &Caller, req: &Req) -> Result<Reply, 
         derived_key: None,
         history: history(&body["conversation_history"]).unwrap_or(input.earlier.clone()),
         title: None,
+        source_tag: None,
     };
     let (session_id, additions) =
         match session::continue_or_create(shared, &caller.profile, chained, new).await {

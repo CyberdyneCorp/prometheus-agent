@@ -89,6 +89,9 @@ pmt-adapters-signal = { workspace = true, optional = true }
 pmt-adapters-slack = { workspace = true, optional = true }
 pmt-adapters-webhook = { workspace = true, optional = true }
 pmt-adapters-whatsapp = { workspace = true, optional = true }
+futures-util.workspace = true
+getrandom.workspace = true
+pmt-a2a.workspace = true
 pmt-local.workspace = true
 pmt-mcp.workspace = true
 pmt-media.workspace = true

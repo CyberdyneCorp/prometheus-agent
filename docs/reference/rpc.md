@@ -59,9 +59,9 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `bot.create` | `bot-mode` | 1.0 | not served yet | |
 | `bot.meta.get` | `bot-mode` | 1.0 | not served yet | |
 | `bot.meta.update` | `bot-mode` | 1.0 | not served yet | |
-| `bot.relay.deliver` | `agent-interop` | 1.0 | not served yet | |
-| `bot.relay.drain` | `agent-interop` | 1.0 | not served yet | |
-| `bot.roster.list` | `bot-mode` | 1.0 | not served yet | |
+| `bot.relay.deliver` | `agent-interop` | 1.0 | [`RelayDeliverParams`](#relaydeliverparams) | [`RelayDelivered`](#relaydelivered) |
+| `bot.relay.drain` | `agent-interop` | 1.0 | [`RelayDrainParams`](#relaydrainparams) | [`RelayDrained`](#relaydrained) |
+| `bot.roster.list` | `bot-mode` | 1.0 | [`RosterParams`](#rosterparams) | [`Roster`](#roster) |
 | `center.list` | `desktop-app` | 1.0 | [`CenterParams`](#centerparams) | [`CenterList`](#centerlist) |
 | `command.dispatch` | `workspace-architecture` | 1.0 | [`DispatchParams`](#dispatchparams) | [`Dispatched`](#dispatched) |
 | `commands.catalog` | `tui` | 1.0 | [`SessionRef`](#sessionref) | [`CommandCatalog`](#commandcatalog) |
@@ -1912,6 +1912,78 @@ One reaction on a message.
 | `by` | string | yes | Who reacted (`agent`). |
 | `emoji` | string | yes | The emoji. |
 
+### `RelayConnection`
+
+One connection an attached desktop holds, with its agents.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `agents` | array of [`RosterAgent`](#rosteragent) | yes | Its agents. |
+| `label` | string | yes | The connection's label. |
+
+### `RelayDeliverParams`
+
+`bot.relay.deliver` params: an envelope for its target, or a reply for its sender.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `envelope` | [`RelayEnvelope`](#relayenvelope) or null | no | An envelope to run as the profile's Bot Chat's next turn. |
+| `profile` | string | yes | The profile that runs the envelope, or that sent the replied one. |
+| `reply` | [`RelayReply`](#relayreply) or null | no | A reply to settle in the profile's outbox. |
+
+### `RelayDelivered`
+
+`bot.relay.deliver` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `delivery_id` | string | yes | The delivery id. |
+| `outcome` | string | yes | `delivered`, `failed`, `running` (a retried envelope whose turn still runs), `settled` (a reply recorded) or `ignored` (a reply nobody waits for). |
+| `reason` | string or null | no | The failure reason. |
+| `reply` | string or null | no | The target's reply. |
+
+### `RelayDrainParams`
+
+`bot.relay.drain` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `connections` | array of [`RelayConnection`](#relayconnection) | no | The desktop's other connections and their agents (the roster lists them as `connection` rows). |
+| `profile` | string | yes | The profile whose outbox is drained. |
+
+### `RelayDrained`
+
+`bot.relay.drain` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `deadline_secs` | integer | yes | Seconds the courier has to deliver them before they are offered again. |
+| `envelopes` | array of [`RelayEnvelope`](#relayenvelope) | yes | Envelopes to deliver. |
+
+### `RelayEnvelope`
+
+A bot message bound for an agent on another connection.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `created_at` | string | yes | When it was queued (RFC 3339). |
+| `delivery_id` | string | yes | Never runs twice on the target. |
+| `message` | string | yes | The message. |
+| `sender` | string | yes | The sender's handle. |
+| `signature` | string | yes | The sending daemon's signature over the fields above. |
+| `target` | string | yes | `<handle>@<connection>`. |
+
+### `RelayReply`
+
+The target's answer to an envelope, carried back to the sender.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `delivery_id` | string | yes | The envelope's delivery id. |
+| `reason` | string or null | no | The failure reason otherwise. |
+| `reply` | string or null | no | The reply, when the turn completed. |
+| `signature` | string | yes | The envelope's signature (proves the courier holds the envelope). |
+
 ### `RepoRow`
 
 A repository offered for project creation.
@@ -1971,6 +2043,63 @@ What `session.resolve` looks up.
 | `exclusive` | boolean | no | Become the session's interactive owner; fails with `-32004 session.in_use` naming the owner's pid while another connection is. |
 | `session_id` | string | yes | `ses_<ULID>`. |
 | `setup` | [`SessionSetup`](#sessionsetup) or null | no | How the session runs from now on; a loaded, idle session is reloaded with it. Absent: as it is (or the profile's defaults). |
+
+### `Roster`
+
+`bot.roster.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `rows` | array of [`RosterRow`](#rosterrow) | yes | Every agent. |
+| `sources` | array of [`RosterSource`](#rostersource) | yes | Every source asked. |
+
+### `RosterAgent`
+
+An agent as a source reports it.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `accepts_bot_messages` | boolean | no | Whether it accepts bot messages. |
+| `avatar` | string or null | no | An avatar reference. |
+| `description` | string or null | no | What it does. |
+| `model` | string or null | no | Its model. |
+| `name` | string | yes | The profile name on its machine. |
+| `title` | string or null | no | The bot's title. |
+
+### `RosterParams`
+
+`bot.roster.list` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `include_remote` | boolean | no | Also list registered peers' agents and the agents attached desktops reported for their other connections. |
+| `profile` | string | yes | The window's profile (its peers are the ones listed). |
+| `refresh` | boolean | no | Ask every peer again now instead of using rows younger than 300 s. |
+
+### `RosterRow`
+
+One roster row.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `agent` | [`RosterAgent`](#rosteragent) | yes | The agent. |
+| `device` | string | yes | `local`, the peer's name or the connection's label. |
+| `error` | string or null | no | Why the source could not be reached. |
+| `handle` | string | yes | `@<name>`, or `@<name>-<device>` when several sources serve the name. |
+| `source` | string | yes | `local`, `peer` or `connection`. |
+| `stale` | boolean | yes | The source could not be reached: this is its last-known row. |
+
+### `RosterSource`
+
+One source of the roster.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `device` | string | yes | `local`, the peer's name or the connection's label. |
+| `error` | string or null | no | Why not. |
+| `listed_at` | string or null | no | When it was last listed (RFC 3339). |
+| `ok` | boolean | yes | Whether its last listing succeeded. |
+| `source` | string | yes | `local`, `peer` or `connection`. |
 
 ### `SecretAnswer`
 

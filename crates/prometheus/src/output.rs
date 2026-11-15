@@ -336,6 +336,34 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "kanban list",
     },
     JsonShape {
+        schema: "prometheus.peer.v1",
+        command: "gateway peer add",
+    },
+    JsonShape {
+        schema: "prometheus.peer_list.v1",
+        command: "gateway peer list",
+    },
+    JsonShape {
+        schema: "prometheus.peer_removed.v1",
+        command: "gateway peer remove",
+    },
+    JsonShape {
+        schema: "prometheus.peer_dm.v1",
+        command: "gateway peer dm",
+    },
+    JsonShape {
+        schema: "prometheus.peer_run.v1",
+        command: "gateway peer run",
+    },
+    JsonShape {
+        schema: "prometheus.peer_run_status.v1",
+        command: "gateway peer status",
+    },
+    JsonShape {
+        schema: "prometheus.peer_run_stopped.v1",
+        command: "gateway peer stop",
+    },
+    JsonShape {
         schema: "prometheus.kanban_task.v1",
         command: "kanban show",
     },

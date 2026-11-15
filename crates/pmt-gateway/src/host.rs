@@ -601,6 +601,31 @@ pub trait Host: Send + Sync + 'static {
         Box::pin(async { Err(not_served("this host has no bot chats")) })
     }
 
+    /// The union roster seen from `params.profile` (`bot.roster.list`).
+    fn bot_roster(
+        &self,
+        _params: pmt_rpc::contracts::RosterParams,
+    ) -> HostFuture<'_, pmt_rpc::contracts::Roster> {
+        Box::pin(async { Err(not_served("this host has no bot roster")) })
+    }
+
+    /// The envelopes of `params.profile`'s relay outbox a courier may
+    /// deliver now (`bot.relay.drain`).
+    fn relay_drain(
+        &self,
+        _params: pmt_rpc::contracts::RelayDrainParams,
+    ) -> HostFuture<'_, pmt_rpc::contracts::RelayDrained> {
+        Box::pin(async { Err(not_served("this host relays no bot messages")) })
+    }
+
+    /// Runs a relayed envelope or settles a reply (`bot.relay.deliver`).
+    fn relay_deliver(
+        &self,
+        _params: pmt_rpc::contracts::RelayDeliverParams,
+    ) -> HostFuture<'_, pmt_rpc::contracts::RelayDelivered> {
+        Box::pin(async { Err(not_served("this host relays no bot messages")) })
+    }
+
     /// `profile`'s first-run onboarding chat, created when it has none
     /// (`onboarding.ensure`); `true` when created now.
     fn onboarding_chat<'a>(&'a self, _profile: &'a str) -> HostFuture<'a, (String, bool)> {

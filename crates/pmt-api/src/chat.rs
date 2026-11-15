@@ -215,6 +215,7 @@ async fn target(
         derived_key: Some(derived),
         history: conversation.earlier.clone(),
         title: None,
+        source_tag: None,
     };
     let id = shared
         .host

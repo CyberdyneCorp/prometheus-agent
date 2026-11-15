@@ -30,6 +30,7 @@ use tracing::Instrument as _;
 use super::turn::{SecretsToClients, SudoToClients, ToClients, approvals, clarify};
 
 #[cfg(feature = "dashboard")]
+mod a2a;
 mod adapter_pairing;
 mod api;
 mod api_profile;
@@ -54,6 +55,7 @@ mod editor;
 mod editor_bridge;
 mod gateway;
 mod health_sample;
+mod interop;
 mod kanban;
 mod listing;
 mod model_picker;
@@ -72,6 +74,7 @@ mod setup;
 mod speech;
 mod status_bar;
 mod subagents;
+mod turn_results;
 mod turns;
 mod usage_events;
 mod workspace_fs;
@@ -180,6 +183,8 @@ pub(super) struct DaemonHost {
     gateway: send_tool::GatewayCell,
     /// The API server's view of the profiles' keys.
     api_keys: api::KeyCache,
+    /// The union roster's remote sources, as last listed.
+    roster: interop::RosterCache,
     /// The API server, once started (it is told when the daemon drains).
     api: std::sync::OnceLock<pmt_api::ApiServer>,
     /// The host itself, for work that outlives the request that started it
@@ -273,6 +278,7 @@ impl DaemonHost {
             slots: pmt_gateway::slots::Slots::new(0),
             gateway: Arc::default(),
             api_keys: api::KeyCache::default(),
+            roster: interop::RosterCache::default(),
             api: std::sync::OnceLock::new(),
             me: std::sync::OnceLock::new(),
             #[cfg(feature = "dashboard")]
@@ -1121,6 +1127,27 @@ impl Host for DaemonHost {
                 .await
                 .map_err(|e| Error::new(&pmt_core::error::codes::RPC_INTERNAL, e.to_string()))?
         })
+    }
+
+    fn bot_roster(
+        &self,
+        params: pmt_rpc::contracts::RosterParams,
+    ) -> HostFuture<'_, pmt_rpc::contracts::Roster> {
+        Box::pin(self.roster(params))
+    }
+
+    fn relay_drain(
+        &self,
+        params: pmt_rpc::contracts::RelayDrainParams,
+    ) -> HostFuture<'_, pmt_rpc::contracts::RelayDrained> {
+        Box::pin(async move { self.drain(&params) })
+    }
+
+    fn relay_deliver(
+        &self,
+        params: pmt_rpc::contracts::RelayDeliverParams,
+    ) -> HostFuture<'_, pmt_rpc::contracts::RelayDelivered> {
+        Box::pin(self.deliver(params))
     }
 
     fn bot_chat<'a>(&'a self, profile: &'a str) -> HostFuture<'a, (String, bool)> {

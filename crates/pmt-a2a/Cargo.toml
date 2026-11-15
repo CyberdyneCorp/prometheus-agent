@@ -1,0 +1,22 @@
+[package]
+name = "pmt-a2a"
+description = "Prometheus Agent2Agent (A2A) protocol: v1.0 and pre-1.0 wire shapes, the Agent Card, push-notification signatures and the outbound client"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+jiff.workspace = true
+percent-encoding.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+ulid.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+
+[lints]
+workspace = true

@@ -24,9 +24,11 @@
 //!   jobs, their runs, delivery outbox and tick lease, and [`projects`]
 //!   projects, their folders and the active project.
 
+pub mod a2a;
 pub mod api;
 pub mod automation;
 pub mod blobs;
+pub mod bot_relay;
 pub mod compaction;
 pub mod compression_state;
 mod contention;
@@ -110,7 +112,8 @@ pub use retention::Maintenance;
 pub use rewind::Rewound;
 pub use search::{SearchHit, SearchMode, SearchOptions, SearchResults, SearchSort};
 pub use sessions::{
-    HIDDEN_SOURCE_TAGS, NewSession, ONESHOT_TAG, Session, TreeNode, check_source_tag,
+    A2A_IMPORT_TAG, HIDDEN_SOURCE_TAGS, NewSession, ONESHOT_TAG, Session, TreeNode,
+    check_source_tag,
 };
 pub use skill_usage::{CreatedBy, SkillActivity, SkillState, SkillUsage};
 pub use store::{CHECKPOINT_EVERY, MAX_READERS, Store};
@@ -122,7 +125,7 @@ pub use usage_query::UsageFilter;
 /// The newest `state.db` schema version this build reads and writes
 /// (`store_meta.schema_version`); every embedded migration bumps it, and a
 /// newer store opens read-only. Reported by `prometheus version --json`.
-pub const SCHEMA_VERSION: u32 = 39;
+pub const SCHEMA_VERSION: u32 = 40;
 
 #[cfg(test)]
 mod tests {

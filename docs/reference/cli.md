@@ -25155,6 +25155,7 @@ Commands:
   stop            Stop the daemon that serves this profile's adapters (releasing their platform credentials), after its running turns finish
   outbox          The durable delivery outbox of the selected profile
   send            Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
+  peer            Peer gateways on other machines: register them, message their agents and run tasks there
   list            List every running Prometheus daemon of this OS user, whatever its home
   enroll          Enroll this home with a relay connector using a one-time token
   slack-manifest  Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
@@ -25630,6 +25631,455 @@ Options:
           Print help
 ```
 
+## `prometheus gateway peer`
+
+```text
+Peer gateways on other machines: register them, message their agents and run tasks there
+
+Usage: prometheus gateway peer [OPTIONS] <COMMAND>
+
+Commands:
+  add     Register a peer gateway; its API server key is read from stdin (or a hidden prompt), never from the command line
+  list    List registered peers with their last probe
+  remove  Remove a peer and its stored key
+  dm      Send one message to a remote agent's Bot Chat and print its reply (message from the argument, else stdin read verbatim)
+  run     Submit an asynchronous run in a remote agent's Bot Chat and print its run id (a retried key returns the same run)
+  status  Print a remote run
+  stop    Stop a remote run
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway peer add`
+
+```text
+Register a peer gateway; its API server key is read from stdin (or a hidden prompt), never from the command line
+
+Usage: prometheus gateway peer add [OPTIONS] --url <URL> <NAME>
+
+Arguments:
+  <NAME>
+          The peer's name (`^[a-z][a-z0-9-]{0,31}$`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --url <URL>
+          The peer's API server base URL (`http://spark.lan:8642`)
+
+      --note <NOTE>
+          A note `peer list` shows
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway peer list`
+
+```text
+List registered peers with their last probe
+
+Usage: prometheus gateway peer list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway peer remove`
+
+```text
+Remove a peer and its stored key
+
+Usage: prometheus gateway peer remove [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The peer
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway peer dm`
+
+```text
+Send one message to a remote agent's Bot Chat and print its reply (message from the argument, else stdin read verbatim)
+
+Usage: prometheus gateway peer dm [OPTIONS] <TARGET> [MESSAGE]
+
+Arguments:
+  <TARGET>
+          `<peer>` or `<peer>/<agent>`
+
+  [MESSAGE]
+          The message
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway peer run`
+
+```text
+Submit an asynchronous run in a remote agent's Bot Chat and print its run id (a retried key returns the same run)
+
+Usage: prometheus gateway peer run [OPTIONS] <TARGET> [MESSAGE]
+
+Arguments:
+  <TARGET>
+          `<peer>` or `<peer>/<agent>`
+
+  [MESSAGE]
+          The message (else stdin read verbatim)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --idempotency-key <IDEMPOTENCY_KEY>
+          Makes retries return the first run instead of starting another
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway peer status`
+
+```text
+Print a remote run
+
+Usage: prometheus gateway peer status [OPTIONS] <PEER> <RUN_ID>
+
+Arguments:
+  <PEER>
+          `<peer>` or `<peer>/<agent>`
+
+  <RUN_ID>
+          The run id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway peer stop`
+
+```text
+Stop a remote run
+
+Usage: prometheus gateway peer stop [OPTIONS] <PEER> <RUN_ID>
+
+Arguments:
+  <PEER>
+          `<peer>` or `<peer>/<agent>`
+
+  <RUN_ID>
+          The run id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway peer help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway peer help [COMMAND]
+
+Commands:
+  add     Register a peer gateway; its API server key is read from stdin (or a hidden prompt), never from the command line
+  list    List registered peers with their last probe
+  remove  Remove a peer and its stored key
+  dm      Send one message to a remote agent's Bot Chat and print its reply (message from the argument, else stdin read verbatim)
+  run     Submit an asynchronous run in a remote agent's Bot Chat and print its run id (a retried key returns the same run)
+  status  Print a remote run
+  stop    Stop a remote run
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus gateway peer help add`
+
+```text
+Register a peer gateway; its API server key is read from stdin (or a hidden prompt), never from the command line
+
+Usage: prometheus gateway peer help add
+```
+
+## `prometheus gateway peer help list`
+
+```text
+List registered peers with their last probe
+
+Usage: prometheus gateway peer help list
+```
+
+## `prometheus gateway peer help remove`
+
+```text
+Remove a peer and its stored key
+
+Usage: prometheus gateway peer help remove
+```
+
+## `prometheus gateway peer help dm`
+
+```text
+Send one message to a remote agent's Bot Chat and print its reply (message from the argument, else stdin read verbatim)
+
+Usage: prometheus gateway peer help dm
+```
+
+## `prometheus gateway peer help run`
+
+```text
+Submit an asynchronous run in a remote agent's Bot Chat and print its run id (a retried key returns the same run)
+
+Usage: prometheus gateway peer help run
+```
+
+## `prometheus gateway peer help status`
+
+```text
+Print a remote run
+
+Usage: prometheus gateway peer help status
+```
+
+## `prometheus gateway peer help stop`
+
+```text
+Stop a remote run
+
+Usage: prometheus gateway peer help stop
+```
+
+## `prometheus gateway peer help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway peer help help
+```
+
 ## `prometheus gateway list`
 
 ```text
@@ -25998,6 +26448,7 @@ Commands:
   stop            Stop the daemon that serves this profile's adapters (releasing their platform credentials), after its running turns finish
   outbox          The durable delivery outbox of the selected profile
   send            Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
+  peer            Peer gateways on other machines: register them, message their agents and run tasks there
   list            List every running Prometheus daemon of this OS user, whatever its home
   enroll          Enroll this home with a relay connector using a one-time token
   slack-manifest  Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
@@ -26082,6 +26533,79 @@ Usage: prometheus gateway help outbox drop
 Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
 
 Usage: prometheus gateway help send
+```
+
+## `prometheus gateway help peer`
+
+```text
+Peer gateways on other machines: register them, message their agents and run tasks there
+
+Usage: prometheus gateway help peer [COMMAND]
+
+Commands:
+  add     Register a peer gateway; its API server key is read from stdin (or a hidden prompt), never from the command line
+  list    List registered peers with their last probe
+  remove  Remove a peer and its stored key
+  dm      Send one message to a remote agent's Bot Chat and print its reply (message from the argument, else stdin read verbatim)
+  run     Submit an asynchronous run in a remote agent's Bot Chat and print its run id (a retried key returns the same run)
+  status  Print a remote run
+  stop    Stop a remote run
+```
+
+## `prometheus gateway help peer add`
+
+```text
+Register a peer gateway; its API server key is read from stdin (or a hidden prompt), never from the command line
+
+Usage: prometheus gateway help peer add
+```
+
+## `prometheus gateway help peer list`
+
+```text
+List registered peers with their last probe
+
+Usage: prometheus gateway help peer list
+```
+
+## `prometheus gateway help peer remove`
+
+```text
+Remove a peer and its stored key
+
+Usage: prometheus gateway help peer remove
+```
+
+## `prometheus gateway help peer dm`
+
+```text
+Send one message to a remote agent's Bot Chat and print its reply (message from the argument, else stdin read verbatim)
+
+Usage: prometheus gateway help peer dm
+```
+
+## `prometheus gateway help peer run`
+
+```text
+Submit an asynchronous run in a remote agent's Bot Chat and print its run id (a retried key returns the same run)
+
+Usage: prometheus gateway help peer run
+```
+
+## `prometheus gateway help peer status`
+
+```text
+Print a remote run
+
+Usage: prometheus gateway help peer status
+```
+
+## `prometheus gateway help peer stop`
+
+```text
+Stop a remote run
+
+Usage: prometheus gateway help peer stop
 ```
 
 ## `prometheus gateway help list`
@@ -34994,6 +35518,7 @@ Commands:
   stop            Stop the daemon that serves this profile's adapters (releasing their platform credentials), after its running turns finish
   outbox          The durable delivery outbox of the selected profile
   send            Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
+  peer            Peer gateways on other machines: register them, message their agents and run tasks there
   list            List every running Prometheus daemon of this OS user, whatever its home
   enroll          Enroll this home with a relay connector using a one-time token
   slack-manifest  Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
@@ -35077,6 +35602,79 @@ Usage: prometheus help gateway outbox drop
 Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
 
 Usage: prometheus help gateway send
+```
+
+## `prometheus help gateway peer`
+
+```text
+Peer gateways on other machines: register them, message their agents and run tasks there
+
+Usage: prometheus help gateway peer [COMMAND]
+
+Commands:
+  add     Register a peer gateway; its API server key is read from stdin (or a hidden prompt), never from the command line
+  list    List registered peers with their last probe
+  remove  Remove a peer and its stored key
+  dm      Send one message to a remote agent's Bot Chat and print its reply (message from the argument, else stdin read verbatim)
+  run     Submit an asynchronous run in a remote agent's Bot Chat and print its run id (a retried key returns the same run)
+  status  Print a remote run
+  stop    Stop a remote run
+```
+
+## `prometheus help gateway peer add`
+
+```text
+Register a peer gateway; its API server key is read from stdin (or a hidden prompt), never from the command line
+
+Usage: prometheus help gateway peer add
+```
+
+## `prometheus help gateway peer list`
+
+```text
+List registered peers with their last probe
+
+Usage: prometheus help gateway peer list
+```
+
+## `prometheus help gateway peer remove`
+
+```text
+Remove a peer and its stored key
+
+Usage: prometheus help gateway peer remove
+```
+
+## `prometheus help gateway peer dm`
+
+```text
+Send one message to a remote agent's Bot Chat and print its reply (message from the argument, else stdin read verbatim)
+
+Usage: prometheus help gateway peer dm
+```
+
+## `prometheus help gateway peer run`
+
+```text
+Submit an asynchronous run in a remote agent's Bot Chat and print its run id (a retried key returns the same run)
+
+Usage: prometheus help gateway peer run
+```
+
+## `prometheus help gateway peer status`
+
+```text
+Print a remote run
+
+Usage: prometheus help gateway peer status
+```
+
+## `prometheus help gateway peer stop`
+
+```text
+Stop a remote run
+
+Usage: prometheus help gateway peer stop
 ```
 
 ## `prometheus help gateway list`
@@ -36016,6 +36614,13 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.projects_list.v1` | `prometheus projects list` |
 | `prometheus.project.v1` | `prometheus projects show` |
 | `prometheus.kanban_list.v1` | `prometheus kanban list` |
+| `prometheus.peer.v1` | `prometheus gateway peer add` |
+| `prometheus.peer_list.v1` | `prometheus gateway peer list` |
+| `prometheus.peer_removed.v1` | `prometheus gateway peer remove` |
+| `prometheus.peer_dm.v1` | `prometheus gateway peer dm` |
+| `prometheus.peer_run.v1` | `prometheus gateway peer run` |
+| `prometheus.peer_run_status.v1` | `prometheus gateway peer status` |
+| `prometheus.peer_run_stopped.v1` | `prometheus gateway peer stop` |
 | `prometheus.kanban_task.v1` | `prometheus kanban show` |
 | `prometheus.kanban_created.v1` | `prometheus kanban create` |
 | `prometheus.kanban_results.v1` | `prometheus kanban results` |

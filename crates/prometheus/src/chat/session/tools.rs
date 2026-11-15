@@ -194,6 +194,7 @@ pub fn selection(
     let config = scope.config();
     let mut enabled = match (surface, &config.api_server.toolsets) {
         (SessionSurface::Api, Some(listed)) => api_toolsets(registry, config, listed),
+        (SessionSurface::A2a, _) => api_toolsets(registry, config, &config.a2a.server.toolsets),
         _ => surface.starting_toolsets(registry, &config.tools, &config.toolsets),
     };
     crate::tools_cmd::opt_in(&mut enabled, plugins, surface);
@@ -221,8 +222,8 @@ pub fn selection(
     })
 }
 
-/// `api_server.toolsets`, keeping only toolsets whose tools the profile
-/// enables (`tools.enabled_toolsets`, `core` standing for the API
+/// `api_server.toolsets` (or `a2a.server.toolsets`), keeping only
+/// toolsets whose tools the profile enables (`tools.enabled_toolsets`, `core` standing for the API
 /// surface's own default); the others are dropped with a warning (spec:
 /// api-server, Unattended approvals and the API toolset).
 fn api_toolsets(registry: &ToolRegistry, config: &Config, listed: &[String]) -> Vec<String> {
@@ -271,6 +272,7 @@ pub fn surface_of(session: &pmt_store::Session) -> SessionSurface {
         }
         Source::Desktop => SessionSurface::Desktop,
         Source::Cron => SessionSurface::Cron,
+        Source::Api if session.source_tag.as_deref() == Some(A2A_TAG) => SessionSurface::A2a,
         Source::Api => SessionSurface::Api,
         Source::Acp if session.source_tag.as_deref() == Some(ACP_UNATTENDED_TAG) => {
             SessionSurface::AcpUnattended
@@ -278,6 +280,34 @@ pub fn surface_of(session: &pmt_store::Session) -> SessionSurface {
         Source::Acp => SessionSurface::Acp,
         _ => SessionSurface::Cli,
     }
+}
+
+/// The source tag of inbound A2A sessions (spec: agent-interop, A2A
+/// inbound safety): API sessions with the A2A toolsets.
+pub const A2A_TAG: &str = "a2a";
+
+/// The source tag of Hermes A2A sessions imported without a provable peer
+/// binding (spec: agent-interop, A2A conversation identity).
+pub const A2A_IMPORT_TAG: &str = pmt_store::A2A_IMPORT_TAG;
+
+/// Refuses to run a turn in an imported Hermes A2A session: its peer
+/// binding cannot be proven, so it stays read-only (and `prometheus
+/// doctor` reports it) rather than being attached to a live conversation.
+///
+/// # Errors
+///
+/// `session.read_only`.
+pub fn refuse_unbound_a2a(session: &pmt_store::Session) -> Result<(), Error> {
+    if session.source_tag.as_deref() == Some(A2A_IMPORT_TAG) {
+        return Err(Error::new(
+            &pmt_core::error::codes::SESSION_READ_ONLY,
+            format!(
+                "session {} is an imported Hermes A2A conversation whose peer binding cannot be proven; it is read-only",
+                session.id
+            ),
+        ));
+    }
+    Ok(())
 }
 
 /// The source tag of unattended ACP sessions (spec: acp-adapter).

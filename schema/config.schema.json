@@ -1,5 +1,230 @@
 {
   "$defs": {
+    "A2aAgent": {
+      "additionalProperties": false,
+      "description": "One `[a2a.agents.<name>]` entry.",
+      "properties": {
+        "auth_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The secret holding the bearer token it expects."
+        },
+        "capabilities": {
+          "default": [],
+          "description": "Capabilities `a2a_orchestrate` matches.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "timeout_secs": {
+          "default": 120,
+          "description": "Seconds one call waits for the reply.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "url": {
+          "description": "The agent's base URL (where its Agent Card is served).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object"
+    },
+    "A2aConfig": {
+      "additionalProperties": false,
+      "description": "The `[a2a]` section.",
+      "properties": {
+        "agents": {
+          "additionalProperties": {
+            "$ref": "#/$defs/A2aAgent"
+          },
+          "default": {},
+          "description": "A2A agents the `a2a_*` tools call, keyed by the name the model uses.",
+          "type": "object"
+        },
+        "server": {
+          "$ref": "#/$defs/A2aServerConfig",
+          "default": {
+            "allow_all_peers": false,
+            "audit_content": false,
+            "enabled": false,
+            "max_pingpong_turns": 5,
+            "peers": [],
+            "rate_limit_per_minute": 60,
+            "reply_timeout_secs": 300,
+            "toolsets": [
+              "api_server"
+            ],
+            "trust_forwarded_headers": false,
+            "trusted_peers": []
+          },
+          "description": "The inbound A2A server's view of this profile."
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
+    "A2aPeerToken": {
+      "additionalProperties": false,
+      "description": "One `[[a2a.server.peers]]` entry.",
+      "properties": {
+        "name": {
+          "description": "The peer's identity.",
+          "type": "string"
+        },
+        "token_secret": {
+          "$ref": "#/$defs/SecretName",
+          "description": "The secret holding its bearer token."
+        }
+      },
+      "required": [
+        "name",
+        "token_secret"
+      ],
+      "type": "object"
+    },
+    "A2aServerConfig": {
+      "additionalProperties": false,
+      "description": "`[a2a.server]`.",
+      "properties": {
+        "advertised_toolsets": {
+          "description": "Toolsets the card advertises as skills (unset: every toolset\ninbound A2A sessions get); a toolset they cannot use is never\nlisted.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "agent_name": {
+          "description": "The Agent Card's name (unset: `<hostname>-<profile>`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "allow_all_peers": {
+          "default": false,
+          "description": "Admit every authenticated identity (WARN on every start).",
+          "type": "boolean"
+        },
+        "audit_content": {
+          "default": false,
+          "description": "Also record message text in the audit log.",
+          "type": "boolean"
+        },
+        "description": {
+          "description": "The Agent Card's description (unset: a generic one).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "enabled": {
+          "default": false,
+          "description": "Serve this profile on the daemon's A2A listener (`/p/<profile>/`,\nand `/` for `default`).",
+          "type": "boolean",
+          "x-apply": "restart"
+        },
+        "max_pingpong_turns": {
+          "default": 5,
+          "description": "Exchanges per context within 10 minutes.",
+          "format": "uint32",
+          "maximum": 20,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "peers": {
+          "default": [],
+          "description": "Per-peer bearer tokens; the name drives trust, limits and audit.",
+          "items": {
+            "$ref": "#/$defs/A2aPeerToken"
+          },
+          "type": "array"
+        },
+        "public_url": {
+          "description": "The URL peers call (a reverse proxy's); unset: the bound address.\nIts host is also accepted in the `Host` header.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "push_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The secret signing push notifications (unset: the authenticating\npeer's token)."
+        },
+        "rate_limit_per_minute": {
+          "default": 60,
+          "description": "Requests per minute per identity.",
+          "format": "uint32",
+          "maximum": 100000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "reply_timeout_secs": {
+          "default": 300,
+          "description": "Seconds a task waits for the agent's reply.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 300,
+          "type": "integer"
+        },
+        "shared_token_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A token shared by every caller, whose identity is the caller's IP."
+        },
+        "toolsets": {
+          "default": [
+            "api_server"
+          ],
+          "description": "Toolsets of inbound A2A sessions.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "trust_forwarded_headers": {
+          "default": false,
+          "description": "Build the card's URL from `X-Forwarded-Host`/`X-Forwarded-Proto`\n(only behind a proxy that sets them).",
+          "type": "boolean"
+        },
+        "trusted_peers": {
+          "default": [],
+          "description": "Identities admitted to start turns.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
     "AcpConfig": {
       "additionalProperties": false,
       "description": "The `[acp]` section: how `prometheus acp` sessions use the editor\n(spec: acp-adapter, Editor terminal delegation).",
@@ -816,6 +1041,29 @@
         }
       },
       "type": "object"
+    },
+    "BotModeConfig": {
+      "additionalProperties": false,
+      "description": "The `[bot_mode]` section.",
+      "properties": {
+        "envelope_ttl_secs": {
+          "default": 900,
+          "description": "Envelopes still queued (never drained by a courier) after this many\nseconds fail with `queued_expired` (`0`: never).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "relay_turn_timeout_secs": {
+          "default": 600,
+          "description": "Seconds a relayed bot message's turn may take on the target before\nit fails.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
     },
     "BrowserConfig": {
       "additionalProperties": false,
@@ -6287,6 +6535,32 @@
       },
       "type": "object"
     },
+    "PeerGateway": {
+      "additionalProperties": false,
+      "description": "One `[peers.<name>]` entry: another gateway's API server.",
+      "properties": {
+        "key_secret": {
+          "$ref": "#/$defs/SecretName",
+          "description": "The secret holding the peer's API server key."
+        },
+        "note": {
+          "description": "A note shown by `gateway peer list`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "description": "The peer's API server base URL.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "key_secret"
+      ],
+      "type": "object"
+    },
     "PhraseMode": {
       "description": "How a status phrase file combines with the built-in phrases.",
       "oneOf": [
@@ -11243,6 +11517,27 @@
   "additionalProperties": false,
   "description": "Root of a profile's `config.toml`.",
   "properties": {
+    "a2a": {
+      "$ref": "#/$defs/A2aConfig",
+      "default": {
+        "agents": {},
+        "server": {
+          "allow_all_peers": false,
+          "audit_content": false,
+          "enabled": false,
+          "max_pingpong_turns": 5,
+          "peers": [],
+          "rate_limit_per_minute": 60,
+          "reply_timeout_secs": 300,
+          "toolsets": [
+            "api_server"
+          ],
+          "trust_forwarded_headers": false,
+          "trusted_peers": []
+        }
+      },
+      "description": "The A2A server's view of this profile and the A2A agents it calls\n(boxed: a large, rarely read section, kept out of every future\nthat holds a configuration)."
+    },
     "acp": {
       "$ref": "#/$defs/AcpConfig",
       "default": {
@@ -11330,6 +11625,14 @@
         "transient_retries": 2
       },
       "description": "Side-model (auxiliary) task routing."
+    },
+    "bot_mode": {
+      "$ref": "#/$defs/BotModeConfig",
+      "default": {
+        "envelope_ttl_secs": 900,
+        "relay_turn_timeout_secs": 600
+      },
+      "description": "How bot messages travel between bots (the desktop relay's bounds)."
     },
     "browser": {
       "$ref": "#/$defs/BrowserConfig",
@@ -11901,6 +12204,15 @@
         "min_coding_score": 0.65
       },
       "description": "OpenRouter-only request settings."
+    },
+    "peers": {
+      "additionalProperties": {
+        "$ref": "#/$defs/PeerGateway"
+      },
+      "default": {},
+      "description": "Peer gateways reached over their API server, keyed by name.",
+      "type": "object",
+      "x-apply": "next_session"
     },
     "plugins": {
       "$ref": "#/$defs/PluginsConfig",

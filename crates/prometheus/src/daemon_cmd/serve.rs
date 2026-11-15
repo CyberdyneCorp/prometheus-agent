@@ -192,6 +192,7 @@ fn server_options(
 #[derive(Default)]
 struct Listeners {
     _remote: Option<pmt_gateway::remote::RemoteListener>,
+    _a2a: Option<pmt_api::A2aServer>,
 }
 
 /// The HTTP surfaces: the API server, the dashboard's controller (its
@@ -208,6 +209,7 @@ async fn start_listeners(
     serve: Option<&ServeDashboard>,
 ) -> Result<Listeners, Error> {
     start_api(config, server, host).await;
+    let a2a = start_a2a(config, server, host).await;
     let devices = server
         .devices()
         .cloned()
@@ -227,7 +229,10 @@ async fn start_listeners(
             remote.addr, remote.fingerprint
         );
     }
-    Ok(Listeners { _remote: remote })
+    Ok(Listeners {
+        _remote: remote,
+        _a2a: a2a,
+    })
 }
 
 /// Installs the dashboard's controller, opening its listener at once for
@@ -281,6 +286,32 @@ async fn start_api(config: &DaemonConfig, server: &Arc<Server>, host: &Arc<Daemo
         Ok(Some(api)) => host.set_api(api),
         Ok(None) => {}
         Err(err) => tracing::error!("api server not started: {err}"),
+    }
+}
+
+/// Starts the A2A server when a served profile enables it (spec:
+/// agent-interop, A2A server enablement and binding); a refused bind
+/// (non-loopback without `a2a.public` and peer tokens) or a taken port is
+/// logged and reported `down` as `listener:a2a`, and the daemon keeps
+/// running.
+async fn start_a2a(
+    config: &DaemonConfig,
+    server: &Arc<Server>,
+    host: &Arc<DaemonHost>,
+) -> Option<pmt_api::A2aServer> {
+    let api_host = Arc::clone(host) as Arc<dyn pmt_api::ApiHost>;
+    match pmt_api::A2aServer::start(&config.a2a, Arc::clone(server), api_host).await {
+        Ok(a2a) => a2a,
+        Err(err) => {
+            tracing::error!("a2a server not started: {err}");
+            pmt_obs::health::global().report(
+                None,
+                "listener:a2a",
+                pmt_obs::health::State::Down,
+                err.message(),
+            );
+            None
+        }
     }
 }
 

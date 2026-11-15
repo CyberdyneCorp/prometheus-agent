@@ -112,7 +112,10 @@ pub fn surfaces(config: &Config) -> Vec<SessionSurface> {
 pub fn attended(surface: &SessionSurface) -> bool {
     !matches!(
         surface,
-        SessionSurface::Cron | SessionSurface::Api | SessionSurface::AcpUnattended
+        SessionSurface::Cron
+            | SessionSurface::Api
+            | SessionSurface::A2a
+            | SessionSurface::AcpUnattended
     )
 }
 

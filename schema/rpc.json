@@ -4812,6 +4812,221 @@
       ],
       "type": "object"
     },
+    "RelayConnection": {
+      "additionalProperties": false,
+      "description": "One connection an attached desktop holds, with its agents.",
+      "properties": {
+        "agents": {
+          "description": "Its agents.",
+          "items": {
+            "$ref": "#/$defs/RosterAgent"
+          },
+          "type": "array"
+        },
+        "label": {
+          "description": "The connection's label.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "agents"
+      ],
+      "type": "object"
+    },
+    "RelayDeliverParams": {
+      "additionalProperties": false,
+      "description": "`bot.relay.deliver` params: an envelope for its target, or a reply for\nits sender.",
+      "properties": {
+        "envelope": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RelayEnvelope"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "An envelope to run as the profile's Bot Chat's next turn."
+        },
+        "profile": {
+          "description": "The profile that runs the envelope, or that sent the replied one.",
+          "type": "string"
+        },
+        "reply": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RelayReply"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A reply to settle in the profile's outbox."
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "type": "object"
+    },
+    "RelayDelivered": {
+      "additionalProperties": false,
+      "description": "`bot.relay.deliver` result.",
+      "properties": {
+        "delivery_id": {
+          "description": "The delivery id.",
+          "type": "string"
+        },
+        "outcome": {
+          "description": "`delivered`, `failed`, `running` (a retried envelope whose turn\nstill runs), `settled` (a reply recorded) or `ignored` (a reply\nnobody waits for).",
+          "type": "string"
+        },
+        "reason": {
+          "default": null,
+          "description": "The failure reason.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reply": {
+          "default": null,
+          "description": "The target's reply.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "delivery_id",
+        "outcome"
+      ],
+      "type": "object"
+    },
+    "RelayDrainParams": {
+      "additionalProperties": false,
+      "description": "`bot.relay.drain` params.",
+      "properties": {
+        "connections": {
+          "default": [],
+          "description": "The desktop's other connections and their agents (the roster lists\nthem as `connection` rows).",
+          "items": {
+            "$ref": "#/$defs/RelayConnection"
+          },
+          "type": "array"
+        },
+        "profile": {
+          "description": "The profile whose outbox is drained.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "type": "object"
+    },
+    "RelayDrained": {
+      "additionalProperties": false,
+      "description": "`bot.relay.drain` result.",
+      "properties": {
+        "deadline_secs": {
+          "description": "Seconds the courier has to deliver them before they are offered\nagain.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "envelopes": {
+          "description": "Envelopes to deliver.",
+          "items": {
+            "$ref": "#/$defs/RelayEnvelope"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "envelopes",
+        "deadline_secs"
+      ],
+      "type": "object"
+    },
+    "RelayEnvelope": {
+      "additionalProperties": false,
+      "description": "A bot message bound for an agent on another connection.",
+      "properties": {
+        "created_at": {
+          "description": "When it was queued (RFC 3339).",
+          "type": "string"
+        },
+        "delivery_id": {
+          "description": "Never runs twice on the target.",
+          "type": "string"
+        },
+        "message": {
+          "description": "The message.",
+          "type": "string"
+        },
+        "sender": {
+          "description": "The sender's handle.",
+          "type": "string"
+        },
+        "signature": {
+          "description": "The sending daemon's signature over the fields above.",
+          "type": "string"
+        },
+        "target": {
+          "description": "`<handle>@<connection>`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "delivery_id",
+        "sender",
+        "target",
+        "message",
+        "signature",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "RelayReply": {
+      "additionalProperties": false,
+      "description": "The target's answer to an envelope, carried back to the sender.",
+      "properties": {
+        "delivery_id": {
+          "description": "The envelope's delivery id.",
+          "type": "string"
+        },
+        "reason": {
+          "default": null,
+          "description": "The failure reason otherwise.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reply": {
+          "default": null,
+          "description": "The reply, when the turn completed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "signature": {
+          "description": "The envelope's signature (proves the courier holds the envelope).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "delivery_id",
+        "signature"
+      ],
+      "type": "object"
+    },
     "RepoRow": {
       "additionalProperties": false,
       "description": "A repository offered for project creation.",
@@ -4968,6 +5183,188 @@
       },
       "required": [
         "session_id"
+      ],
+      "type": "object"
+    },
+    "Roster": {
+      "additionalProperties": false,
+      "description": "`bot.roster.list` result.",
+      "properties": {
+        "rows": {
+          "description": "Every agent.",
+          "items": {
+            "$ref": "#/$defs/RosterRow"
+          },
+          "type": "array"
+        },
+        "sources": {
+          "description": "Every source asked.",
+          "items": {
+            "$ref": "#/$defs/RosterSource"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "rows",
+        "sources"
+      ],
+      "type": "object"
+    },
+    "RosterAgent": {
+      "additionalProperties": false,
+      "description": "An agent as a source reports it.",
+      "properties": {
+        "accepts_bot_messages": {
+          "default": true,
+          "description": "Whether it accepts bot messages.",
+          "type": "boolean"
+        },
+        "avatar": {
+          "default": null,
+          "description": "An avatar reference.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "default": null,
+          "description": "What it does.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "default": null,
+          "description": "Its model.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "The profile name on its machine.",
+          "type": "string"
+        },
+        "title": {
+          "default": null,
+          "description": "The bot's title.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "RosterParams": {
+      "additionalProperties": false,
+      "description": "`bot.roster.list` params.",
+      "properties": {
+        "include_remote": {
+          "default": false,
+          "description": "Also list registered peers' agents and the agents attached desktops\nreported for their other connections.",
+          "type": "boolean"
+        },
+        "profile": {
+          "description": "The window's profile (its peers are the ones listed).",
+          "type": "string"
+        },
+        "refresh": {
+          "default": false,
+          "description": "Ask every peer again now instead of using rows younger than 300 s.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "type": "object"
+    },
+    "RosterRow": {
+      "additionalProperties": false,
+      "description": "One roster row.",
+      "properties": {
+        "agent": {
+          "$ref": "#/$defs/RosterAgent",
+          "description": "The agent."
+        },
+        "device": {
+          "description": "`local`, the peer's name or the connection's label.",
+          "type": "string"
+        },
+        "error": {
+          "default": null,
+          "description": "Why the source could not be reached.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "handle": {
+          "description": "`@<name>`, or `@<name>-<device>` when several sources serve the\nname.",
+          "type": "string"
+        },
+        "source": {
+          "description": "`local`, `peer` or `connection`.",
+          "type": "string"
+        },
+        "stale": {
+          "description": "The source could not be reached: this is its last-known row.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "handle",
+        "agent",
+        "source",
+        "device",
+        "stale"
+      ],
+      "type": "object"
+    },
+    "RosterSource": {
+      "additionalProperties": false,
+      "description": "One source of the roster.",
+      "properties": {
+        "device": {
+          "description": "`local`, the peer's name or the connection's label.",
+          "type": "string"
+        },
+        "error": {
+          "default": null,
+          "description": "Why not.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "listed_at": {
+          "default": null,
+          "description": "When it was last listed (RFC 3339).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ok": {
+          "description": "Whether its last listing succeeded.",
+          "type": "boolean"
+        },
+        "source": {
+          "description": "`local`, `peer` or `connection`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "device",
+        "ok"
       ],
       "type": "object"
     },
@@ -7100,18 +7497,33 @@
       "since": "1.0"
     },
     "bot.relay.deliver": {
-      "declared": false,
       "owner": "agent-interop",
+      "params": {
+        "$ref": "#/$defs/RelayDeliverParams"
+      },
+      "result": {
+        "$ref": "#/$defs/RelayDelivered"
+      },
       "since": "1.0"
     },
     "bot.relay.drain": {
-      "declared": false,
       "owner": "agent-interop",
+      "params": {
+        "$ref": "#/$defs/RelayDrainParams"
+      },
+      "result": {
+        "$ref": "#/$defs/RelayDrained"
+      },
       "since": "1.0"
     },
     "bot.roster.list": {
-      "declared": false,
       "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/RosterParams"
+      },
+      "result": {
+        "$ref": "#/$defs/Roster"
+      },
       "since": "1.0"
     },
     "center.list": {

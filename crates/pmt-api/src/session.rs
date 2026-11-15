@@ -42,11 +42,15 @@ fn bad_key() -> Reply {
     )
 }
 
-/// Session `id` of the profile when the API server owns it: 404 when it
-/// does not exist, 409 `permission_denied` when another surface owns it.
+/// Session `id` of the profile when the API server owns it, or when it is
+/// the profile's live canonical Bot Chat (which peer gateways reach over
+/// this API: spec agent-interop, Peer direct messages and remote runs):
+/// 404 when it does not exist, 409 `permission_denied` when another
+/// surface owns it.
 pub(crate) fn owned(store: &Arc<Store>, id: &str) -> Result<pmt_store::Session, Reply> {
     let session = existing(store, id)?;
-    if session.source == Source::Api {
+    let bot_chat = session.bot_chat && session.archived == pmt_store::Archived::None;
+    if session.source == Source::Api || bot_chat {
         Ok(session)
     } else {
         Err(conflict(

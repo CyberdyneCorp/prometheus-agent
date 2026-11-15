@@ -77,6 +77,9 @@ fn source_of(hermes: &str) -> (Source, Option<String>) {
         "dashboard" | "webapp" => Source::Dashboard,
         "api" | "api_server" => Source::Api,
         "tool" => return (Source::Cli, Some("tool".to_owned())),
+        // Hermes matched A2A conversations by title: no peer binding can be
+        // proven, so they stay read-only imports (spec: agent-interop).
+        "a2a" => return (Source::Import, Some(pmt_store::A2A_IMPORT_TAG.to_owned())),
         p if PLATFORMS.contains(&p) => Source::Gateway,
         _ => Source::Import,
     };
@@ -424,6 +427,17 @@ mod tests {
             ended_at: end.map(|_| 200.0),
             ..HermesSession::default()
         }
+    }
+
+    /// Hermes matched A2A conversations by title, so an imported one has
+    /// no provable binding: it is tagged to stay read-only (spec:
+    /// agent-interop, A2A conversation identity).
+    #[test]
+    fn hermes_a2a_sessions_import_as_unbound_read_only() {
+        assert_eq!(
+            source_of("a2a"),
+            (Source::Import, Some(pmt_store::A2A_IMPORT_TAG.to_owned()))
+        );
     }
 
     #[test]

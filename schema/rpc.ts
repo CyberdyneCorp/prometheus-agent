@@ -1703,6 +1703,80 @@ export interface Reaction {
   emoji: string;
 }
 
+/** One connection an attached desktop holds, with its agents. */
+export interface RelayConnection {
+  /** Its agents. */
+  agents: Array<RosterAgent>;
+  /** The connection's label. */
+  label: string;
+}
+
+/** `bot.relay.deliver` params: an envelope for its target, or a reply for its sender. */
+export interface RelayDeliverParams {
+  /** An envelope to run as the profile's Bot Chat's next turn. */
+  envelope?: RelayEnvelope | null;
+  /** The profile that runs the envelope, or that sent the replied one. */
+  profile: string;
+  /** A reply to settle in the profile's outbox. */
+  reply?: RelayReply | null;
+}
+
+/** `bot.relay.deliver` result. */
+export interface RelayDelivered {
+  /** The delivery id. */
+  delivery_id: string;
+  /** `delivered`, `failed`, `running` (a retried envelope whose turn still runs), `settled` (a reply recorded) or `ignored` (a reply nobody waits for). */
+  outcome: string;
+  /** The failure reason. */
+  reason?: string | null;
+  /** The target's reply. */
+  reply?: string | null;
+}
+
+/** `bot.relay.drain` params. */
+export interface RelayDrainParams {
+  /** The desktop's other connections and their agents (the roster lists them as `connection` rows). */
+  connections?: Array<RelayConnection>;
+  /** The profile whose outbox is drained. */
+  profile: string;
+}
+
+/** `bot.relay.drain` result. */
+export interface RelayDrained {
+  /** Seconds the courier has to deliver them before they are offered again. */
+  deadline_secs: number;
+  /** Envelopes to deliver. */
+  envelopes: Array<RelayEnvelope>;
+}
+
+/** A bot message bound for an agent on another connection. */
+export interface RelayEnvelope {
+  /** When it was queued (RFC 3339). */
+  created_at: string;
+  /** Never runs twice on the target. */
+  delivery_id: string;
+  /** The message. */
+  message: string;
+  /** The sender's handle. */
+  sender: string;
+  /** The sending daemon's signature over the fields above. */
+  signature: string;
+  /** `<handle>@<connection>`. */
+  target: string;
+}
+
+/** The target's answer to an envelope, carried back to the sender. */
+export interface RelayReply {
+  /** The envelope's delivery id. */
+  delivery_id: string;
+  /** The failure reason otherwise. */
+  reason?: string | null;
+  /** The reply, when the turn completed. */
+  reply?: string | null;
+  /** The envelope's signature (proves the courier holds the envelope). */
+  signature: string;
+}
+
 /** A repository offered for project creation. */
 export interface RepoRow {
   /** When a scan last saw it (discovered rows; RFC 3339). */
@@ -1754,6 +1828,70 @@ export interface ResumeParams {
   session_id: string;
   /** How the session runs from now on; a loaded, idle session is reloaded with it. Absent: as it is (or the profile's defaults). */
   setup?: SessionSetup | null;
+}
+
+/** `bot.roster.list` result. */
+export interface Roster {
+  /** Every agent. */
+  rows: Array<RosterRow>;
+  /** Every source asked. */
+  sources: Array<RosterSource>;
+}
+
+/** An agent as a source reports it. */
+export interface RosterAgent {
+  /** Whether it accepts bot messages. */
+  accepts_bot_messages?: boolean;
+  /** An avatar reference. */
+  avatar?: string | null;
+  /** What it does. */
+  description?: string | null;
+  /** Its model. */
+  model?: string | null;
+  /** The profile name on its machine. */
+  name: string;
+  /** The bot's title. */
+  title?: string | null;
+}
+
+/** `bot.roster.list` params. */
+export interface RosterParams {
+  /** Also list registered peers' agents and the agents attached desktops reported for their other connections. */
+  include_remote?: boolean;
+  /** The window's profile (its peers are the ones listed). */
+  profile: string;
+  /** Ask every peer again now instead of using rows younger than 300 s. */
+  refresh?: boolean;
+}
+
+/** One roster row. */
+export interface RosterRow {
+  /** The agent. */
+  agent: RosterAgent;
+  /** `local`, the peer's name or the connection's label. */
+  device: string;
+  /** Why the source could not be reached. */
+  error?: string | null;
+  /** `@<name>`, or `@<name>-<device>` when several sources serve the name. */
+  handle: string;
+  /** `local`, `peer` or `connection`. */
+  source: string;
+  /** The source could not be reached: this is its last-known row. */
+  stale: boolean;
+}
+
+/** One source of the roster. */
+export interface RosterSource {
+  /** `local`, the peer's name or the connection's label. */
+  device: string;
+  /** Why not. */
+  error?: string | null;
+  /** When it was last listed (RFC 3339). */
+  listed_at?: string | null;
+  /** Whether its last listing succeeded. */
+  ok: boolean;
+  /** `local`, `peer` or `connection`. */
+  source: string;
 }
 
 /** `secret.request` result. */
@@ -2408,6 +2546,9 @@ export interface Methods {
   "artifacts.list": { params: ArtifactsListParams; result: ArtifactList };
   "autoprune.offer": { params: AutopruneOfferParams; result: AutopruneOffer };
   "bot.chat.ensure": { params: ProfileParams; result: BotChat };
+  "bot.relay.deliver": { params: RelayDeliverParams; result: RelayDelivered };
+  "bot.relay.drain": { params: RelayDrainParams; result: RelayDrained };
+  "bot.roster.list": { params: RosterParams; result: Roster };
   "center.list": { params: CenterParams; result: CenterList };
   "command.dispatch": { params: DispatchParams; result: Dispatched };
   "commands.catalog": { params: SessionRef; result: CommandCatalog };
@@ -2554,9 +2695,6 @@ export const UNDECLARED = [
   "bot.create",
   "bot.meta.get",
   "bot.meta.update",
-  "bot.relay.deliver",
-  "bot.relay.drain",
-  "bot.roster.list",
   "evolve.cancel",
   "evolve.choose",
   "evolve.list",

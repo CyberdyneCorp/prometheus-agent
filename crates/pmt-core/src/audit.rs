@@ -45,6 +45,9 @@ pub enum Kind {
     EgressDenied,
     /// A signature or digest that did not verify.
     Signature,
+    /// An A2A exchange with a peer agent (spec: agent-interop, A2A
+    /// inbound safety).
+    A2a,
 }
 
 impl Kind {
@@ -57,6 +60,7 @@ impl Kind {
             Self::Downgrade => "downgrade",
             Self::EgressDenied => "egress_denied",
             Self::Signature => "signature",
+            Self::A2a => "a2a",
         }
     }
 }

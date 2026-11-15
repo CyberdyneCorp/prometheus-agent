@@ -14,6 +14,7 @@ publish = false
 repository = "https://github.com/CyberdyneCorp/prometheus-agent"
 
 [workspace.dependencies]
+pmt-a2a = { path = "crates/pmt-a2a" }
 pmt-agent = { path = "crates/pmt-agent" }
 pmt-api = { path = "crates/pmt-api" }
 pmt-web = { path = "crates/pmt-web" }

@@ -3,6 +3,7 @@
 //! (generic dispatch refuses them); the turn loop runs them here, where the
 //! session state they need lives.
 
+pub mod a2a;
 pub mod clarify;
 pub mod connections;
 pub mod cron;
@@ -22,6 +23,7 @@ use pmt_store::Store;
 use pmt_tools::ToolResult;
 use serde_json::Value;
 
+pub use a2a::A2aPort;
 pub use clarify::Clarifier;
 pub use cron::CronPort;
 pub use delegation::{CodePort, DelegationPort};
@@ -46,6 +48,7 @@ pub struct AgentTools {
     code: Option<Arc<dyn CodePort>>,
     cron: Option<Arc<dyn CronPort>>,
     kanban: Option<Arc<dyn KanbanPort>>,
+    a2a: Option<Arc<dyn A2aPort>>,
     desktop: Option<Arc<dyn DesktopPort>>,
 }
 
@@ -76,6 +79,7 @@ impl AgentTools {
             code: None,
             cron: None,
             kanban: None,
+            a2a: None,
             desktop: None,
         })
     }
@@ -133,6 +137,13 @@ impl AgentTools {
         self
     }
 
+    /// Runs the `a2a_*` tools through `port`.
+    #[must_use]
+    pub fn with_a2a(mut self, port: Arc<dyn A2aPort>) -> Self {
+        self.a2a = Some(port);
+        self
+    }
+
     /// Runs the desktop UI tools, `setup_beat` and `project` through
     /// `port`.
     #[must_use]
@@ -157,6 +168,38 @@ impl AgentTools {
         arguments: Value,
         cancel: &CancelToken,
     ) -> Option<ToolResult> {
+        if let Some(result) = self.call_port(name, &arguments, cancel).await {
+            return Some(result);
+        }
+        Some(match name {
+            "todo" => self.todo(arguments),
+            "clarify" => self.clarify.call(arguments).await,
+            "session_search" => self.search.call(arguments).await,
+            "memory" => self.memory.as_ref()?.call(arguments).await,
+            "send_message" => match &self.messaging {
+                Some(port) => port.call(self.session, arguments).await,
+                None => ToolResult::error(messaging::NO_GATEWAY),
+            },
+            pmt_tools::connectors::manage::NAME => match &self.connections {
+                Some(manager) => {
+                    let card = connections::ClarifyCard::new(&self.clarify);
+                    manager.call(&arguments, Some(&card)).await
+                }
+                None => pmt_tools::connectors::manage::not_set_up(),
+            },
+            _ => return None,
+        })
+    }
+
+    /// The tools served by a port the binary plugs in (delegation, code,
+    /// cron, kanban, A2A, desktop); `None` for any other tool.
+    async fn call_port(
+        &self,
+        name: &str,
+        arguments: &Value,
+        cancel: &CancelToken,
+    ) -> Option<ToolResult> {
+        let arguments = arguments.clone();
         Some(match name {
             "delegate_task" => match &self.delegation {
                 Some(port) => port.call(arguments, cancel).await,
@@ -174,24 +217,13 @@ impl AgentTools {
                 Some(port) => port.call(self.session, name, arguments).await,
                 None => ToolResult::error(kanban::NO_KANBAN),
             },
+            name if a2a::handles(name) => match &self.a2a {
+                Some(port) => port.call(name, arguments).await,
+                None => ToolResult::error(a2a::NO_A2A),
+            },
             name if desktop::handles(name) => match &self.desktop {
                 Some(port) => port.call(name, arguments, cancel).await,
                 None => desktop::unavailable(name),
-            },
-            "todo" => self.todo(arguments),
-            "clarify" => self.clarify.call(arguments).await,
-            "session_search" => self.search.call(arguments).await,
-            "memory" => self.memory.as_ref()?.call(arguments).await,
-            "send_message" => match &self.messaging {
-                Some(port) => port.call(self.session, arguments).await,
-                None => ToolResult::error(messaging::NO_GATEWAY),
-            },
-            pmt_tools::connectors::manage::NAME => match &self.connections {
-                Some(manager) => {
-                    let card = connections::ClarifyCard::new(&self.clarify);
-                    manager.call(&arguments, Some(&card)).await
-                }
-                None => pmt_tools::connectors::manage::not_set_up(),
             },
             _ => return None,
         })

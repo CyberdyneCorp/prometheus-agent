@@ -1024,6 +1024,13 @@ impl Factory {
                 }),
             },
         ));
+        let tools = tools.with_a2a(crate::a2a_host::tool::port(
+            &self.scope,
+            &self.store,
+            capabilities,
+            Some(Arc::new(self.models.judge(model, id))
+                as Arc<dyn crate::kanban_host::goal::GoalJudge>),
+        ));
         let tools = match &self.messaging {
             Some(ports) => tools.with_messaging(ports.port(id, self.read_check(capabilities))),
             None => tools,
@@ -1063,6 +1070,7 @@ impl Factory {
         target: &pmt_providers::resolve::Target,
     ) -> Result<pmt_store::Session, Error> {
         let mut session = self.store.session(id)?;
+        tools::refuse_unbound_a2a(&session)?;
         session.source = self.store.running_source(&session);
         if let pmt_store::Origin::Gateway {
             user: Some(user), ..

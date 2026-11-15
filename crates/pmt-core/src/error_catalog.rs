@@ -1252,4 +1252,22 @@ error_codes! {
     /// A board archive that cannot be imported.
     KANBAN_INVALID_ARCHIVE = ("kanban.invalid_archive", InvalidInput,
         "The file is not a board archive written by `prometheus kanban boards export`, or its format version is newer than this build reads.");
+    /// A peer gateway name outside the name pattern.
+    PEER_INVALID_NAME = ("peer.invalid_name", Usage,
+        "A peer name must match `^[a-z][a-z0-9-]{0,31}$`: 1-32 characters, lowercase letters, digits or `-`, starting with a letter.");
+    /// No peer gateway (or agent on it) has the name.
+    PEER_NOT_FOUND = ("peer.not_found", NotFound,
+        "No `[peers.<name>]` entry has this name, or the peer serves no such agent; `prometheus gateway peer list` shows the registered peers.");
+    /// The peer gateway could not be reached.
+    PEER_UNREACHABLE = ("peer.unreachable", Unavailable,
+        "The peer's API server did not answer: check that its daemon runs with `api_server.enabled`, that `daemon.toml [api_server] listen` is reachable from this machine and that the URL in `[peers.<name>]` is right.");
+    /// The peer's key is missing here or was refused there.
+    PEER_KEY_REJECTED = ("peer.key_rejected", Auth,
+        "The peer answered 401, or the secret `PEER_<NAME>_KEY` is missing: register the peer again with `prometheus gateway peer add <name> --url <url>` and paste the key of the peer profile's `api_server.key_secret` on stdin.");
+    /// The peer refused the request.
+    PEER_REJECTED = ("peer.rejected", Tool,
+        "The peer's API server refused the request; the message carries its answer (an unknown run, a run that cannot be stopped, a paused home, a busy profile).");
+    /// The session cannot take turns.
+    SESSION_READ_ONLY = ("session.read_only", PermissionDenied,
+        "The session is read-only: an imported Hermes A2A conversation whose peer binding cannot be proven is kept for reading (`prometheus sessions show`) but never attached to a live A2A conversation; `prometheus doctor` lists them.");
 }

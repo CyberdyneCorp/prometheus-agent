@@ -667,9 +667,9 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 74. M3 Agent interop: A2A and peer gateways
 
-- [ ] 74.1 Implement A2A server enablement and binding (off by default, wildcard binds need tokens, browser pages refused), the Agent Card and the A2A JSON-RPC methods with the task lifecycle; verify against the official A2A SDK (spec: agent-interop)
-- [ ] 74.2 Implement A2A conversation identity, authentication, trust and rate limits, inbound safety (no slash commands from peers, ping-pong capped) and push notifications (private addresses refused); verify with peer fixtures (spec: agent-interop)
-- [ ] 74.3 Implement the outbound `a2a_*` tools (unknown agent names refused), the peer gateway registry (keys never on the command line), peer direct messages with idempotent remote runs, the union roster across gateways and the desktop relay for cross-connection bot messages; verify with two daemon fixtures (spec: agent-interop)
+- [x] 74.1 Implement A2A server enablement and binding (off by default, wildcard binds need tokens, browser pages refused), the Agent Card and the A2A JSON-RPC methods with the task lifecycle; verify against the official A2A SDK (spec: agent-interop)
+- [x] 74.2 Implement A2A conversation identity, authentication, trust and rate limits, inbound safety (no slash commands from peers, ping-pong capped) and push notifications (private addresses refused); verify with peer fixtures (spec: agent-interop)
+- [x] 74.3 Implement the outbound `a2a_*` tools (unknown agent names refused), the peer gateway registry (keys never on the command line), peer direct messages with idempotent remote runs, the union roster across gateways and the desktop relay for cross-connection bot messages; verify with two daemon fixtures (spec: agent-interop)
 
 ## 75. M3 Bot Mode
 

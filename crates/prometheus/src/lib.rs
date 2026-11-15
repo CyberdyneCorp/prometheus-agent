@@ -5,6 +5,7 @@
 //! It lives in a library so `cargo xtask gen` renders the CLI reference from
 //! the exact parser the binary uses, and so tests can drive each step.
 
+pub mod a2a_host;
 pub mod accounts;
 #[cfg(feature = "acp")]
 pub mod acp_cmd;

@@ -220,6 +220,20 @@ impl Store {
                 .with_hint("keep the quarantined file until the salvaged sessions are checked"),
             );
         }
+        let unbound = self.unbound_a2a_imports()?;
+        if unbound > 0 {
+            checks.push(
+                Check::new(
+                    DOCTOR_GROUP,
+                    "a2a_imports",
+                    Status::Warn,
+                    format!(
+                        "{unbound} imported Hermes A2A session(s) have no provable peer binding; they stay read-only and are never attached to a live A2A conversation"
+                    ),
+                )
+                .with_hint("read them with `prometheus sessions show <id>`; peers continue in new sessions"),
+            );
+        }
         Ok(checks)
     }
 
