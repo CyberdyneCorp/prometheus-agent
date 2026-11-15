@@ -471,6 +471,11 @@ impl Repl {
         if let Some(live) = self.live.take() {
             self.memory_summary(live.id);
             live.close(&self.factory.store, reason).await;
+            // What the session said as it ended (an automatic evolution
+            // job): the idle loop that shows posts may not run again.
+            while let Ok(text) = self.to_post.try_recv() {
+                self.notice(&text);
+            }
         }
     }
 

@@ -116,6 +116,12 @@ and never adds work to the turn), by a scheduled job created with
 the profile directory), by a kanban task of kind `evolve`, and, with
 `evolve.auto.enabled = true`, after a session that ended in error or
 interruption after a tool call or ran at least `evolve.auto.min_iterations`
-iterations (at most `evolve.auto.max_jobs_per_day` a day). This build
+iterations (at most `evolve.auto.max_jobs_per_day` a day; sessions of a
+job itself never qualify). An automatic job is announced where the session
+ended: `harness evolution job <id> queued after this session` on stderr or
+in the line chat, in the messaging chat, or to the TUI, desktop or
+dashboard still attached to it. A daemon session that ends after its last
+client left (closed when idle) has nobody to tell: the job is in
+`prometheus evolve list` and the daemon log. This build
 queues jobs; running them (rollouts, improver sessions, selection and
 proposals) is the evolution engine's.

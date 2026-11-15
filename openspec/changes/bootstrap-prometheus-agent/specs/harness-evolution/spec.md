@@ -120,13 +120,18 @@ The system SHALL start an evolution job from: `prometheus evolve run (--session 
 - **THEN** an evolution job SHALL be queued with `trigger = "cron"` and the scheduled job's id
 
 ### Requirement: Automatic triggers after failed or long tasks
-The system SHALL queue an evolution job automatically only when `evolve.auto.enabled = true` (default `false`) and a finished session either ended in error or interruption after at least one tool call (`evolve.auto.on_failure = true`), or used at least `evolve.auto.min_iterations = 40` iterations (`evolve.auto.on_long_task = true`); automatic jobs SHALL be limited to `evolve.auto.max_jobs_per_day = 3` per profile, SHALL never be queued from sessions whose `source` is `evolve`, and SHALL notify the user that a job was queued.
+The system SHALL queue an evolution job automatically only when `evolve.auto.enabled = true` (default `false`) and a finished session either ended in error or interruption after at least one tool call (`evolve.auto.on_failure = true`), or used at least `evolve.auto.min_iterations = 40` iterations (`evolve.auto.on_long_task = true`); automatic jobs SHALL be limited to `evolve.auto.max_jobs_per_day = 3` per profile, SHALL never be queued from sessions whose `source` is `harness` (the rollouts and improver sessions of a job, `session-storage`), and SHALL notify the user that a job was queued on the surface of the session that ended: the line interface or stderr, the messaging chat, or the session's attached clients as a `command.notice` session event.
 **Milestone:** M3
 
 #### Scenario: Daily cap
 - **GIVEN** three automatic jobs already queued today
 - **WHEN** a fourth qualifying session ends in error
 - **THEN** no job SHALL be queued and the decision SHALL be logged at INFO with reason `daily auto-evolve cap reached`
+
+#### Scenario: Queued job is announced
+- **GIVEN** `evolve.auto.enabled = true`
+- **WHEN** a session ends in error after a tool call
+- **THEN** one job with trigger `auto` SHALL be queued and the session's surface SHALL show `harness evolution job <id> queued after this session`
 
 ### Requirement: Evolution task capture
 The system SHALL freeze each job's task into `<profile>/evolve/jobs/<job_id>/task/` containing `task.md` (the task statement: by default the session's first user message, editable via `--edit` before the job starts), `source/` (a snapshot of the workspace files the session read or modified, or, when the workspace is a git repository, `repo.toml` with the HEAD commit, an `excluded` list of the paths tracked at that commit that match leak globs, plus `uncommitted.patch`; materialising the workspace SHALL delete every `excluded` path), and `task.toml` (`domain`, `toolsets`, `model`, `backend`, `source_session`, `fingerprint`). The snapshot SHALL be capped at `evolve.task.max_source_bytes = 52428800`, SHALL pass the redaction pass of `security-boundaries`, and SHALL exclude files matching leak globs; a task exceeding the cap SHALL fail with exit 65.
@@ -166,7 +171,7 @@ In sequential mode the system SHALL, for t = 1..k, run `inv<t>` and `dom<t>` aga
 - **THEN** the evidence for `inv2` SHALL contain `pool/c1/rollout.md` and `decisions/c1.md`
 
 ### Requirement: Isolated rollouts
-The system SHALL execute every rollout as a headless, non-interactive session (`source = "evolve"`) with the candidate harness, in a fresh sandbox workspace (a detached git worktree at the recorded commit with the patch applied, or a copy of `task/source/`) on backend `evolve.rollout.backend` (default `local-sandbox`; the unsandboxed host backend SHALL be rejected), with network egress limited to the configured model providers unless `evolve.rollout.network = "session"` reuses the source session's egress rules. Rollouts SHALL auto-deny every approval request, SHALL NOT write memory, SHALL be hidden from session lists, search and memory nudges, and SHALL be bounded by `evolve.rollout.max_iterations = 60` and `evolve.rollout.timeout_secs = 900`. A rollout that errors SHALL be recorded as `ok = false` with the error, never aborting the job; a rollout is `ok` when it ends with a final assistant message.
+The system SHALL execute every rollout as a headless, non-interactive session (session `source = "harness"`, `session-storage`) with the candidate harness, in a fresh sandbox workspace (a detached git worktree at the recorded commit with the patch applied, or a copy of `task/source/`) on backend `evolve.rollout.backend` (default `local-sandbox`; the unsandboxed host backend SHALL be rejected), with network egress limited to the configured model providers unless `evolve.rollout.network = "session"` reuses the source session's egress rules. Rollouts SHALL auto-deny every approval request, SHALL NOT write memory, SHALL be hidden from session lists, search and memory nudges, and SHALL be bounded by `evolve.rollout.max_iterations = 60` and `evolve.rollout.timeout_secs = 900`. A rollout that errors SHALL be recorded as `ok = false` with the error, never aborting the job; a rollout is `ok` when it ends with a final assistant message.
 **Milestone:** M3
 
 #### Scenario: Approval inside a rollout

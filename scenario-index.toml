@@ -4681,7 +4681,8 @@ capabilities = [
 "Cron-triggered evolution" = ["crates/prometheus/tests/evolve_cli.rs::a_scheduled_evolve_job_queues_an_evolution_job_with_its_id", "crates/pmt-evolve/tests/jobs.rs::a_cron_trigger_records_its_trigger_and_job_id"]
 
 [harness-evolution."Automatic triggers after failed or long tasks"]
-"Daily cap" = ["crates/pmt-evolve/tests/jobs.rs::the_fourth_automatic_job_of_a_day_is_not_queued", "crates/pmt-evolve/src/job/auto.rs::a_fourth_qualifying_session_is_stopped_by_the_daily_cap"]
+"Daily cap" = ["crates/pmt-evolve/tests/jobs.rs::the_fourth_automatic_job_of_a_day_is_not_queued", "crates/pmt-evolve/src/job/auto.rs::a_fourth_qualifying_session_is_stopped_by_the_daily_cap", "crates/prometheus/tests/evolve_auto.rs::the_daily_cap_stops_a_second_job_and_its_notice"]
+"Queued job is announced" = ["crates/prometheus/tests/evolve_auto.rs::a_session_that_fails_after_a_tool_call_queues_a_job_and_says_so", "crates/prometheus/tests/evolve_auto.rs::the_line_interface_says_so_as_the_user_leaves", "crates/prometheus/tests/evolve_auto.rs::a_chat_is_told_when_new_ends_a_session_that_queues_a_job"]
 
 [harness-evolution."Evolution task capture"]
 "Git workspace" = ["crates/pmt-evolve/tests/jobs.rs::a_git_session_freezes_head_and_a_patch_that_reproduces_it"]

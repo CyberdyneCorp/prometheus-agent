@@ -426,12 +426,24 @@ impl Agents for DaemonHost {
     fn end_conversation<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()> {
         Box::pin(
             async move {
+                let profile_name = profile;
                 let profile = &self.profile(profile)?;
                 let id = self::session_id(session_id)?;
                 Self::close_loaded(profile, id, EndReason::NewSession).await;
                 // A session that was not loaded (or is held right now) is
-                // ended in the store; the first end wins.
-                profile.store.end_session(id, EndReason::NewSession)?;
+                // ended in the store; the first end wins and runs the
+                // automatic evolution trigger, told in the chat.
+                if profile.store.end_session(id, EndReason::NewSession)?
+                    && let Some(notice) = crate::evolve_cmd::auto::after_end(
+                        &profile.scope(),
+                        &profile.store,
+                        id,
+                        EndReason::NewSession,
+                    )
+                    && let Some(gateway) = self.gateway.get()
+                {
+                    gateway.say_in_session(profile_name, session_id, &notice);
+                }
                 Ok(())
             }
             .instrument(session_span(profile, session_id)),

@@ -117,15 +117,12 @@ impl Live {
             reason: reason.as_str().to_owned(),
         }))
         .await;
-        if let Err(err) = store.end_session(self.id, reason) {
-            tracing::warn!(error = %err, session = %self.id, "could not end the session");
-        }
-        if let Some(notice) =
-            crate::evolve_cmd::auto::after_end(&self.scope, store, self.id, reason)
-        {
-            tracing::info!(session = %self.id, "{notice}");
-            if self.surface() == "cli" {
-                eprintln!("{notice}");
+        match store.end_session(self.id, reason) {
+            // Only the end that ends the row runs the automatic trigger.
+            Ok(true) => self.evolve_after_end(store, reason),
+            Ok(false) => {}
+            Err(err) => {
+                tracing::warn!(error = %err, session = %self.id, "could not end the session");
             }
         }
         // The gateway fires its own sessions' end through its hooks.
@@ -150,5 +147,19 @@ impl Live {
             tracing::info!(session = %self.id, "{text}");
         }
         self.place.release();
+    }
+
+    /// Queues an automatic evolution job when the session qualifies and
+    /// tells the user on the session's own surface (spec:
+    /// harness-evolution, Automatic triggers after failed or long tasks):
+    /// the line interface or stderr, a messaging chat, or the daemon
+    /// session's clients as `command.notice`.
+    fn evolve_after_end(&self, store: &Store, reason: EndReason) {
+        let Some(notice) = crate::evolve_cmd::auto::after_end(&self.scope, store, self.id, reason)
+        else {
+            return;
+        };
+        tracing::info!(session = %self.id, "{notice}");
+        self.memory.setup().notices.say(notice);
     }
 }
