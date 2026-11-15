@@ -437,9 +437,14 @@ const LANE: &str = "read -r TICKET\n\
     printf '%s\\n' \"$TICKET\" | prometheus kanban complete \"$PROMETHEUS_KANBAN_TASK\" --ticket - \
     --result \"lane did it in $(basename \"$PWD\")\"\n";
 
-/// Every lane log of the default board (for a failure message).
+/// Every lane log of the default board and the home's own logs (for a
+/// failure message).
 fn lane_logs(home: &Path) -> String {
-    common::files_under(&home.join("kanban/boards/default/logs"))
+    let mut files = common::files_under(&home.join("kanban/boards/default/logs"));
+    if home.join("logs").is_dir() {
+        files.extend(common::files_under(&home.join("logs")));
+    }
+    files
         .iter()
         .map(|f| std::fs::read_to_string(f).unwrap_or_default())
         .collect::<Vec<_>>()
@@ -510,9 +515,11 @@ fn an_external_cli_lane_completes_its_task_under_the_sandbox() {
 }
 
 /// A lane that tries to open its board's database for writing, then
-/// attaches a report and completes through its broker.
+/// attaches a report and completes through its broker. The probe runs in
+/// a subshell: a failed redirection on the special built-in `:` ends a
+/// POSIX shell such as dash (Linux `/bin/sh`) outright.
 const PROBING_LANE: &str = "read -r TICKET\n\
-    if : >> \"$PROMETHEUS_HOME/kanban/boards/default/board.db\" 2>/dev/null; then W=writable; else W=denied; fi\n\
+    if (: >> \"$PROMETHEUS_HOME/kanban/boards/default/board.db\") 2>/dev/null; then W=writable; else W=denied; fi\n\
     printf 'quarterly' > report.txt\n\
     printf '%s\\n' \"$TICKET\" | prometheus kanban attach \"$PROMETHEUS_KANBAN_TASK\" report.txt --ticket -\n\
     printf '%s\\n' \"$TICKET\" | prometheus kanban complete \"$PROMETHEUS_KANBAN_TASK\" --ticket - --result \"db $W\"\n";
@@ -581,6 +588,44 @@ fn a_lane_cannot_write_the_board_and_reports_through_its_broker() {
             || common::files_under(&home.path().join("kanban/lanes")).is_empty(),
         "the mailbox is removed when the lane ends"
     );
+}
+
+/// A lane that exits without a terminator ends its run with its own exit,
+/// not as a worker that died without recording one.
+#[cfg(unix)]
+#[test]
+fn a_lane_that_exits_without_a_terminator_ends_its_run_with_its_exit() {
+    let home = mock_home();
+    lane_plugin(
+        home.path(),
+        "quitter",
+        "[[kanban_lanes]]\nname = \"quit-cli\"\ncommand = [\"sh\", \"lane.sh\"]\n",
+        &[("lane.sh", "read -r TICKET\nexit 3\n")],
+    );
+    ok(&run(
+        home.path(),
+        &["plugins", "enable", "quitter", "--grant", "all"],
+    ));
+    let id = create(home.path(), &["give up", "--assignee", "quit-cli"]);
+    let deadline = Instant::now() + Duration::from_mins(1);
+    while task(home.path(), &id)["last_failure"].is_null() {
+        assert!(
+            Instant::now() < deadline,
+            "{}\n{:?}\n{}",
+            task(home.path(), &id),
+            kinds(home.path(), &id),
+            lane_logs(home.path())
+        );
+        ok(&run(home.path(), &["kanban", "dispatch", "--once"]));
+        std::thread::sleep(Duration::from_millis(300));
+    }
+    assert_eq!(
+        task(home.path(), &id)["last_failure"],
+        "lane exited with code 3",
+        "{:?}",
+        kinds(home.path(), &id)
+    );
+    assert!(kinds(home.path(), &id).contains(&"failed".to_owned()));
 }
 
 /// A lane named like a profile fails plugin load.

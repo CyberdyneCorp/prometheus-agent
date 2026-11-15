@@ -78,16 +78,41 @@ pub fn serve(ctx: &Context<'_>, run: &str) -> Result<u8, Error> {
         }
     };
     let mut handle = |request: &Request, at: &Path| answer(&home, &ticket, limit, request, at);
-    loop {
+    let status = loop {
         mailbox::serve(&dir, &mut handle);
-        if !matches!(child.try_wait(), Ok(None)) {
-            break;
+        match child.try_wait() {
+            Ok(None) => std::thread::sleep(POLL),
+            Ok(Some(status)) => break Ok(status),
+            Err(err) => break Err(err),
         }
-        std::thread::sleep(POLL);
-    }
+    };
     mailbox::serve(&dir, &mut handle);
     let _ = std::fs::remove_dir_all(&dir);
+    let mut board = Boards::open(&home)?.board(&ticket.board)?;
+    if board.run(run).is_ok_and(|r| r.is_open()) {
+        // The lane ended without a terminator: its exit is the run's, as a
+        // profile worker records its own.
+        let (code, message) = lane_exit(&status);
+        board.worker_exit(run, code, Some(&message))?;
+    }
     Ok(0)
+}
+
+/// The exit code and message a lane that left its run open ends it with.
+fn lane_exit(status: &std::io::Result<std::process::ExitStatus>) -> (i32, String) {
+    let status = match status {
+        Ok(status) => status,
+        Err(err) => return (1, format!("lane exit unknown: {err}")),
+    };
+    if let Some(code) = status.code() {
+        let message = if code == 0 {
+            "lane exited without kanban complete, block or request-review".to_owned()
+        } else {
+            format!("lane exited with code {code}")
+        };
+        return (code, message);
+    }
+    (1, format!("lane ended by {status}"))
 }
 
 /// One lane request: a `prometheus kanban <verb> --ticket` command line

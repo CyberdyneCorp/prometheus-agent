@@ -358,8 +358,11 @@ ticket on stdin and `PROMETHEUS_KANBAN_TASK`/`_BOARD`/`_RUN` in its
 environment. It reports with `prometheus kanban <verb> --ticket -` (the
 ticket line on stdin): the report goes through the mailbox to the broker,
 which checks the ticket and applies it as the run's worker, so the lane
-never writes the board's database itself. The liveness rules reclaim a
-lane that ends without a terminator. A lane task whose plugin is gone stays `ready` with one
+never writes the board's database itself. A lane that exits without a
+terminator ends its run as `failed` with its own exit ("lane exited with
+code 3"), exactly as a profile worker's exit is recorded; a broker that
+dies is reclaimed by the liveness rules. A lane task whose plugin is gone
+stays `ready` with one
 `skipped_nonspawnable` event.
 
 Plugins and shell hooks observe the board through `kanban_task_claimed`,
