@@ -49,7 +49,9 @@ fn a_start_waits_for_a_daemon_that_is_still_starting() {
         process: process.clone(),
         endpoint: endpoint(),
     };
-    std::fs::write(&record, serde_json::to_vec(&published).unwrap()).unwrap();
+    // Atomically, as a daemon publishes: a reader polling mid-write would
+    // see a torn record, take the home for free and spawn a daemon.
+    pmt_core::private_fs::write_atomic(&record, &serde_json::to_vec(&published).unwrap()).unwrap();
     let out = start.wait_with_output().unwrap();
     let _ = std::fs::remove_file(&record);
     let stdout = String::from_utf8_lossy(&out.stdout);
