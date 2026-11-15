@@ -123,7 +123,10 @@ fn run_task(
         TaskKind::Agent => {
             crate::model_cmd::block_on(session(ctx, scope, board, row, task, &workspace))?
         }
-        TaskKind::Eval { suite, .. } => eval(board, row, task, suite, &workspace),
+        TaskKind::Eval { suite, .. } => {
+            let limit = scope.config().kanban.attachment_max_bytes;
+            eval(board, row, task, (suite, limit), &workspace)
+        }
         TaskKind::Evolve { .. } => Ending {
             error: Some(Error::new(
                 &codes::KANBAN_NOT_PERMITTED,
@@ -136,7 +139,7 @@ fn run_task(
     finish(board, row, task, scope, &ending)
 }
 
-fn worker_actor(row: &Run) -> Actor {
+pub(super) fn worker_actor(row: &Run) -> Actor {
     if row.role == Role::Reviewer.as_str() {
         Actor::reviewer(&row.profile)
     } else {
@@ -504,8 +507,15 @@ impl pmt_skills::secrets::SecretPrompt for NoPrompt {
 
 /// An `eval` task: the bundled `smoke` suite, run offline on the mock
 /// provider by this binary (no live provider request in either
-/// provider mode), its report attached and its summary the result.
-fn eval(board: &mut Board, row: &Run, task: &Task, suite: &str, workspace: &Path) -> Ending {
+/// provider mode), its report attached under the assignee's
+/// `kanban.attachment_max_bytes` and its summary the result.
+fn eval(
+    board: &mut Board,
+    row: &Run,
+    task: &Task,
+    (suite, limit): (&str, u64),
+    workspace: &Path,
+) -> Ending {
     let failed = |message: String| Ending {
         error: Some(Error::new(&codes::KANBAN_NOT_PERMITTED, message)),
         session: None,
@@ -541,7 +551,6 @@ fn eval(board: &mut Board, row: &Run, task: &Task, suite: &str, workspace: &Path
         content_type: Some("text/plain"),
         bytes: report.as_bytes(),
     };
-    let limit = u64::MAX;
     if let Err(err) = board.attach(&actor, &task.id, &upload, limit, now) {
         return Ending {
             error: Some(err),

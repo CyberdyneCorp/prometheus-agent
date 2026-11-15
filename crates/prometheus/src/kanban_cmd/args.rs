@@ -354,6 +354,15 @@ pub enum KanbanCommand {
         #[arg(long)]
         run: String,
     },
+    /// Broker a claimed lane task: run its plugin's sandboxed lane and
+    /// apply its reports (started by the dispatcher with the run ticket on
+    /// stdin).
+    #[command(hide = true)]
+    Lane {
+        /// The run.
+        #[arg(long)]
+        run: String,
+    },
     /// Notification subscriptions.
     Notify {
         /// The notify subcommand.

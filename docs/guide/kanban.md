@@ -198,7 +198,10 @@ board default: <n> task(s)
 `kanban runs <id>` its attempts, `kanban tail [-f]` the board's latest
 events. `kanban attach <id> <file>...` stores files in the blob store
 (refused above `kanban.attachment_max_bytes`, default 25 MiB, with
-`attachment too large: <size> > <limit>`).
+`attachment too large: <size> > <limit>`). The dashboard's kanban page
+uploads through `POST /api/kanban/boards/{board}/tasks/{task_id}/attachments`
+under the same limit (the dispatcher profile's), refused by its declared
+length before any byte is read.
 
 `kanban notify subscribe <id> --adapter telegram --chat <chat>` reports
 the task's `completed`, `blocked`, `gave_up` and `review_requested` events
@@ -225,7 +228,8 @@ another board of the home already uses one.
 ## Eval and evolve tasks
 
 `--kind eval --suite smoke` runs the bundled offline smoke suite (the mock
-provider: no live provider request) as the assignee, attaches its report
+provider: no live provider request; `--provider-mode` is not honoured yet)
+as the assignee, attaches its report
 and completes with its summary; other suites need `prometheus eval run`,
 which this build does not have yet, and are blocked with kind
 `capability`. `--kind evolve` records a harness-evolution task
@@ -346,13 +350,16 @@ command = ["sh", "lane.sh"]     # files of the plugin directory resolve there
 description = "Codex CLI"
 ```
 
-A task assigned to `codex-cli` starts the lane under the local sandbox in
-the task's workspace (plus its plugin directory, its board and the blob
-store, and the plugin's approved grants), with the run ticket on stdin and
-`PROMETHEUS_KANBAN_TASK`/`_BOARD`/`_RUN` in its environment. It reports with
-`prometheus kanban <verb> --ticket -` (the ticket line on stdin), which acts
-as the run's worker; the liveness rules reclaim a lane that ends without a
-terminator. A lane task whose plugin is gone stays `ready` with one
+A task assigned to `codex-cli` starts the lane's broker, which starts the
+lane under the local sandbox in the task's workspace (plus read access to
+its plugin directory and the blob store, write access to its own mailbox
+under `kanban/lanes/`, and the plugin's approved grants), with the run
+ticket on stdin and `PROMETHEUS_KANBAN_TASK`/`_BOARD`/`_RUN` in its
+environment. It reports with `prometheus kanban <verb> --ticket -` (the
+ticket line on stdin): the report goes through the mailbox to the broker,
+which checks the ticket and applies it as the run's worker, so the lane
+never writes the board's database itself. The liveness rules reclaim a
+lane that ends without a terminator. A lane task whose plugin is gone stays `ready` with one
 `skipped_nonspawnable` event.
 
 Plugins and shell hooks observe the board through `kanban_task_claimed`,

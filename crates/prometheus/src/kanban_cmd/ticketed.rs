@@ -4,30 +4,75 @@
 //! names. The ticket's secret must match the run's open claim; it is not
 //! consumed, so the worker can heartbeat, comment and attach before its
 //! one terminator. This mode runs before anything touches the home (no
-//! profile, no logs): a lane's sandbox reaches only its own board and the
-//! blob store.
+//! profile, no logs). A lane's sandbox cannot write the board at all: its
+//! report goes through its mailbox ([`relay`]) to the lane's broker, which
+//! answers it with [`answer`] outside the sandbox.
 
 use std::io::BufRead as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use pmt_core::error::{Error, codes};
+use pmt_kanban::attach::Upload;
 use pmt_kanban::ticket::Ticket;
 use pmt_kanban::{Actor, BlockKind, Board, Boards, Completion, Handoff, NewTask, Status};
 use serde_json::{Value, json};
 
 use super::{KanbanArgs, KanbanCommand};
 
-/// The attachment cap of a ticketed worker (the home's configuration is
-/// out of its reach: the default).
+/// The attachment cap of a manual ticketed worker (run before the home's
+/// configuration is read: the default).
 const ATTACHMENT_MAX: u64 = 25 * 1024 * 1024;
 
-fn ticket(text: &str) -> Result<Ticket, Error> {
+/// The ticket line: `text`, or stdin's first line for `-`.
+fn ticket_line(text: &str) -> String {
     if text != "-" {
-        return Ticket::read(text);
+        return text.to_owned();
     }
     let mut line = String::new();
     let _ = std::io::stdin().lock().read_line(&mut line);
-    Ticket::read(&line)
+    line
+}
+
+/// Where `kanban attach`'s bytes come from, and the attachment cap.
+pub enum Files<'a> {
+    /// The named paths (a person's manual claim).
+    Local(u64),
+    /// Copies a lane staged in its mailbox, in order: the broker never
+    /// opens a path the lane names.
+    Staged {
+        /// The mailbox.
+        dir: &'a Path,
+        /// The staged file names.
+        names: &'a [String],
+        /// The cap.
+        limit: u64,
+    },
+}
+
+impl Files<'_> {
+    fn limit(&self) -> u64 {
+        match self {
+            Self::Local(limit) | Self::Staged { limit, .. } => *limit,
+        }
+    }
+
+    /// The display name and bytes of the `n`-th file, `path` as given.
+    fn read(&self, n: usize, path: &Path) -> Result<(String, Vec<u8>), Error> {
+        let name = path
+            .file_name()
+            .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+        let source = match self {
+            Self::Local(_) => path.to_path_buf(),
+            Self::Staged { dir, names, .. } => names
+                .get(n)
+                .map(|staged| dir.join(staged))
+                .ok_or_else(|| denied("a file to attach was not staged"))?,
+        };
+        Ok((
+            name,
+            pmt_kanban::attach::read_limited(&source, self.limit())?,
+        ))
+    }
 }
 
 fn denied(message: impl Into<String>) -> Error {
@@ -38,16 +83,55 @@ fn denied(message: impl Into<String>) -> Error {
 ///
 /// # Errors
 ///
+/// As [`answer`].
+pub fn run(args: &KanbanArgs, home: &Path, json: bool) -> Result<u8, Error> {
+    let ticket = Ticket::read(&ticket_line(args.ticket.as_deref().unwrap_or("-")))?;
+    print(
+        &answer(args, home, &ticket, &Files::Local(ATTACHMENT_MAX))?,
+        json,
+    )
+}
+
+/// A lane's report: sends `args` (this process's command line) with its
+/// ticket and staged files to the lane's broker through `mailbox`, and
+/// prints the answer.
+///
+/// # Errors
+///
+/// The broker's answer's error; the mailbox's.
+pub fn relay(args: &KanbanArgs, mailbox: &Path, json: bool) -> Result<u8, Error> {
+    let ticket = ticket_line(args.ticket.as_deref().unwrap_or("-"));
+    let files: &[PathBuf] = match &args.command {
+        KanbanCommand::Attach { files, .. } => files,
+        _ => &[],
+    };
+    let command_line = std::env::args_os()
+        .skip(1)
+        .map(|a| a.to_string_lossy().into_owned())
+        .collect();
+    let value = crate::kanban_host::mailbox::send(mailbox, command_line, ticket, files)?;
+    print(&value, json)
+}
+
+/// Applies `args` as the worker of `ticket`'s run on the home at `home`;
+/// the command's JSON answer.
+///
+/// # Errors
+///
 /// `kanban.ticket_refused` for a ticket that matches no open run,
 /// `kanban.not_permitted` for a verb or task outside the run, the
 /// operation's own errors.
-pub fn run(args: &KanbanArgs, home: &Path, json: bool) -> Result<u8, Error> {
-    let ticket = ticket(args.ticket.as_deref().unwrap_or("-"))?;
+pub fn answer(
+    args: &KanbanArgs,
+    home: &Path,
+    ticket: &Ticket,
+    files: &Files<'_>,
+) -> Result<Value, Error> {
     if let Some(flag) = args.board.as_deref().filter(|b| *b != ticket.board) {
         return Err(denied(format!("capability denied: kanban board '{flag}'")));
     }
     // PR completion contracts read GitHub with the assignee profile's own
-    // credential (a sandboxed lane cannot reach it: its contract
+    // credential (a lane is no profile and has none: its contract
     // completions are refused as `auth`).
     let boards = Boards::existing(home).with_pr_checks(std::sync::Arc::new(
         crate::kanban_host::github::GitHub::new(home),
@@ -80,17 +164,23 @@ pub fn run(args: &KanbanArgs, home: &Path, json: bool) -> Result<u8, Error> {
             board.heartbeat(&actor, &run.id, note.as_deref(), 900_000, now)?;
             json!({"task_id": id, "renewed": true})
         }
-        KanbanCommand::Attach { id, files } => {
+        KanbanCommand::Attach { id, files: paths } => {
             own(id)?;
             let mut stored = Vec::new();
-            for file in files {
-                stored.push(board.attach_file(&actor, id, file, ATTACHMENT_MAX, now)?);
+            for (n, path) in paths.iter().enumerate() {
+                let (name, bytes) = files.read(n, path)?;
+                let upload = Upload {
+                    name: &name,
+                    content_type: None,
+                    bytes: &bytes,
+                };
+                stored.push(board.attach(&actor, id, &upload, files.limit(), now)?);
             }
             json!({"task_id": id, "attachments": stored})
         }
-        other => terminate(&mut board, &actor, other, &own, now)?,
+        other => terminate(&mut board, &actor, other, &own, (now, files.limit()))?,
     };
-    print(&out, json)
+    Ok(out)
 }
 
 /// The terminators and `create` of a ticketed worker.
@@ -99,7 +189,7 @@ fn terminate(
     actor: &Actor,
     command: &KanbanCommand,
     own: &dyn Fn(&str) -> Result<(), Error>,
-    now: i64,
+    (now, attachment_limit): (i64, u64),
 ) -> Result<Value, Error> {
     let one = |ids: &[String]| -> Result<String, Error> {
         match ids {
@@ -123,7 +213,7 @@ fn terminate(
                     .as_deref()
                     .map(super::lifecycle::parse_metadata)
                     .transpose()?,
-                attachment_limit: ATTACHMENT_MAX,
+                attachment_limit,
                 ..Completion::default()
             };
             json!({"task_id": id, "status": board.complete(actor, &id, &completion, now)?})

@@ -16,13 +16,13 @@ use pmt_core::error::{Error, codes};
 use pmt_kanban::dispatch::{SpawnRequest, Spawner};
 
 /// Spawns workers as child processes of this binary, and worker lanes
-/// as their plugins' sandboxed commands.
+/// as their brokers (which run the plugins' sandboxed commands).
 pub struct ProcessSpawner {
     exe: PathBuf,
     home: PathBuf,
     env: Vec<(String, OsString)>,
-    scope: ProfileScope,
-    user_home: PathBuf,
+    /// The dispatching profile.
+    profile: String,
 }
 
 /// Whether the launch variable `name` reaches a worker: `PATH` and the
@@ -70,8 +70,7 @@ impl ProcessSpawner {
             exe,
             home: home.to_path_buf(),
             env: worker_env(launch, home),
-            scope: scope.clone(),
-            user_home: launch.user_home().cloned().unwrap_or_default(),
+            profile: scope.name().to_string(),
         })
     }
 
@@ -88,36 +87,26 @@ impl ProcessSpawner {
     }
 }
 
-impl ProcessSpawner {
-    /// Prepares a lane task's workspace (as its worker would) and starts
-    /// the lane there.
-    fn lane(&self, request: &SpawnRequest<'_>, log: std::fs::File) -> Result<(u32, u64), String> {
-        let mut board = pmt_kanban::Boards::open(&self.home)
-            .and_then(|b| b.board(request.board))
-            .map_err(|e| e.message().to_owned())?;
-        let workspace = super::worker::prepare(&board, request.task, &self.scope)?;
-        board
-            .set_workspace_path(&request.task.id, &workspace)
-            .map_err(|e| e.message().to_owned())?;
-        super::lanes::spawn(
-            &self.scope,
-            request,
-            (&workspace, &self.env, &self.user_home),
-            log,
-        )
-    }
-}
-
 impl Spawner for ProcessSpawner {
     fn spawn(&self, request: &SpawnRequest<'_>) -> Result<(u32, u64), String> {
         let log = self.log(request)?;
-        if request.lane {
-            return self.lane(request, log);
-        }
         let err = log.try_clone().map_err(|e| e.to_string())?;
         let mut command = Command::new(&self.exe);
+        // A lane task runs under its broker (outside the lane's sandbox),
+        // in the dispatcher's profile, whose plugins declare the lanes.
+        if request.lane {
+            command.args([
+                "-p",
+                self.profile.as_str(),
+                "kanban",
+                "lane",
+                "--run",
+                request.run_id,
+            ]);
+        } else {
+            command.args(["kanban", "work", "--run", request.run_id]);
+        }
         command
-            .args(["kanban", "work", "--run", request.run_id])
             .env_clear()
             .envs(self.env.iter().map(|(k, v)| (k, v)))
             .current_dir(&self.home)

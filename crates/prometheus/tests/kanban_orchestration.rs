@@ -509,6 +509,80 @@ fn an_external_cli_lane_completes_its_task_under_the_sandbox() {
     assert_eq!(skipped, 1);
 }
 
+/// A lane that tries to open its board's database for writing, then
+/// attaches a report and completes through its broker.
+const PROBING_LANE: &str = "read -r TICKET\n\
+    if : >> \"$PROMETHEUS_HOME/kanban/boards/default/board.db\" 2>/dev/null; then W=writable; else W=denied; fi\n\
+    printf 'quarterly' > report.txt\n\
+    printf '%s\\n' \"$TICKET\" | prometheus kanban attach \"$PROMETHEUS_KANBAN_TASK\" report.txt --ticket -\n\
+    printf '%s\\n' \"$TICKET\" | prometheus kanban complete \"$PROMETHEUS_KANBAN_TASK\" --ticket - --result \"db $W\"\n";
+
+/// A lane cannot write its board's database: its sandbox grants only its
+/// mailbox, and its reports (an attachment, the completion) reach the
+/// board through its broker.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn a_lane_cannot_write_the_board_and_reports_through_its_broker() {
+    let home = mock_home();
+    lane_plugin(
+        home.path(),
+        "prober",
+        "[[kanban_lanes]]\nname = \"probe-cli\"\ncommand = [\"sh\", \"lane.sh\"]\n",
+        &[("lane.sh", PROBING_LANE)],
+    );
+    ok(&run(
+        home.path(),
+        &["plugins", "enable", "prober", "--grant", "all"],
+    ));
+    let id = create(home.path(), &["probe the board", "--assignee", "probe-cli"]);
+    let bin = Path::new(env!("CARGO_BIN_EXE_prometheus"))
+        .parent()
+        .unwrap();
+    let path = format!(
+        "{}:{}",
+        bin.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    let deadline = Instant::now() + Duration::from_mins(1);
+    while task(home.path(), &id)["status"] != "done" {
+        assert!(
+            Instant::now() < deadline,
+            "{}\n{:?}\n{}",
+            task(home.path(), &id),
+            kinds(home.path(), &id),
+            lane_logs(home.path())
+        );
+        let out = common::command(home.path())
+            .args(["kanban", "dispatch", "--once"])
+            .env("PATH", &path)
+            .stdin(std::process::Stdio::null())
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{}", stderr(&out));
+        std::thread::sleep(Duration::from_millis(300));
+    }
+    assert_eq!(
+        task(home.path(), &id)["result"],
+        "db denied",
+        "{}",
+        lane_logs(home.path())
+    );
+    let listed = json(home.path(), &["kanban", "attachments", &id]);
+    assert_eq!(
+        listed["attachments"][0]["filename"], "report.txt",
+        "{listed}"
+    );
+    assert_eq!(
+        listed["attachments"][0]["uploader"], "probe-cli",
+        "{listed}"
+    );
+    assert!(
+        !home.path().join("kanban/lanes").exists()
+            || common::files_under(&home.path().join("kanban/lanes")).is_empty(),
+        "the mailbox is removed when the lane ends"
+    );
+}
+
 /// A lane named like a profile fails plugin load.
 #[test]
 fn a_lane_named_like_a_profile_fails_plugin_load() {

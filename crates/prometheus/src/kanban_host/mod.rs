@@ -4,12 +4,14 @@
 //! ([`tool`]) and notification texts ([`notice`]).
 
 pub mod assignees;
+pub mod broker;
 pub mod dashboard;
 pub mod fetch;
 pub mod github;
 pub mod goal;
 pub mod hooks;
 pub mod lanes;
+pub mod mailbox;
 pub mod notice;
 pub mod orchestrate;
 pub mod spawn;

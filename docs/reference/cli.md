@@ -11774,6 +11774,54 @@ Options:
           Print help
 ```
 
+## `prometheus kanban lane`
+
+```text
+Broker a claimed lane task: run its plugin's sandboxed lane and apply its reports (started by the dispatcher with the run ticket on stdin)
+
+Usage: prometheus kanban lane [OPTIONS] --run <RUN>
+
+Options:
+      --board <SLUG>
+          The board (default: the board of the project owning the current directory or the active project, else `kanban.current_board`, else `default`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --run <RUN>
+          The run
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --ticket <TICKET>
+          Act as the worker of a run: its ticket line, or `-` to read it from stdin (external worker lanes and manual claims)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus kanban notify`
 
 ```text
@@ -12933,6 +12981,14 @@ Usage: prometheus kanban help dispatch
 Run a claimed task (started by the dispatcher with its run ticket on stdin)
 
 Usage: prometheus kanban help work
+```
+
+## `prometheus kanban help lane`
+
+```text
+Broker a claimed lane task: run its plugin's sandboxed lane and apply its reports (started by the dispatcher with the run ticket on stdin)
+
+Usage: prometheus kanban help lane
 ```
 
 ## `prometheus kanban help notify`
@@ -33485,6 +33541,14 @@ Usage: prometheus help kanban dispatch
 Run a claimed task (started by the dispatcher with its run ticket on stdin)
 
 Usage: prometheus help kanban work
+```
+
+## `prometheus help kanban lane`
+
+```text
+Broker a claimed lane task: run its plugin's sandboxed lane and apply its reports (started by the dispatcher with the run ticket on stdin)
+
+Usage: prometheus help kanban lane
 ```
 
 ## `prometheus help kanban notify`

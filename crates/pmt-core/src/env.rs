@@ -4,9 +4,10 @@
 //! is secrets-only).
 //!
 //! Only the home override, the log filter, secrets, the OS directories
-//! needed to find the default home and the notepad channel of a scheduled
+//! needed to find the default home, the notepad channel of a scheduled
 //! run (`PMT_CRON_NOTEPAD`, set by the host on the run's terminal, never
-//! by a person) are read. Every other `PMT_*` or
+//! by a person) and the mailbox of a kanban worker lane
+//! (`PMT_KANBAN_MAILBOX`, set by the lane's broker) are read. Every other `PMT_*` or
 //! `PROMETHEUS_*` variable is recorded as ignored so startup can WARN and
 //! `prometheus doctor` can report it; it never changes behaviour, because
 //! behaviour lives in typed configuration.
@@ -85,6 +86,11 @@ const RUST_LOG: &str = "RUST_LOG";
 /// denies the home, so `prometheus cron notepad` edits this file and the
 /// host applies it to the job's notepad when the run ends.
 pub const CRON_NOTEPAD: &str = "PMT_CRON_NOTEPAD";
+/// The mailbox directory of the kanban worker lane that started this
+/// process (spec: kanban, Worker lanes): the lane's sandbox denies the
+/// board, so `prometheus kanban ... --ticket` hands its request to the
+/// lane's broker through this directory.
+pub const KANBAN_MAILBOX: &str = "PMT_KANBAN_MAILBOX";
 const OWNED_PREFIXES: [&str; 2] = ["PMT_", "PROMETHEUS_"];
 
 static READ: AtomicBool = AtomicBool::new(false);
@@ -179,6 +185,7 @@ pub struct LaunchEnv {
     test_paste_url: Option<String>,
     test_skills_hub: Option<String>,
     cron_notepad: Option<PathBuf>,
+    kanban_mailbox: Option<PathBuf>,
 }
 
 impl LaunchEnv {
@@ -235,6 +242,7 @@ impl LaunchEnv {
                 Var::TestPasteUrl => env.test_paste_url = env.unicode(name, value),
                 Var::TestSkillsHub => env.test_skills_hub = env.unicode(name, value),
                 Var::CronNotepad => env.cron_notepad = non_blank(value).map(PathBuf::from),
+                Var::KanbanMailbox => env.kanban_mailbox = non_blank(value).map(PathBuf::from),
                 Var::PmtLog => pmt_log = env.unicode(name, value),
                 Var::RustLog => rust_log = env.unicode(name, value),
                 Var::Visual => visual = env.unicode(name, value).filter(|v| !v.trim().is_empty()),
@@ -358,6 +366,13 @@ impl LaunchEnv {
     #[must_use]
     pub fn cron_notepad(&self) -> Option<&PathBuf> {
         self.cron_notepad.as_ref()
+    }
+
+    /// `PMT_KANBAN_MAILBOX`: the mailbox of the kanban worker lane that
+    /// started this process.
+    #[must_use]
+    pub fn kanban_mailbox(&self) -> Option<&PathBuf> {
+        self.kanban_mailbox.as_ref()
     }
 
     /// `PROMETHEUS_HOME` when set and not blank (`~` is expanded by home
@@ -496,6 +511,7 @@ enum Var {
     TestPasteUrl,
     TestSkillsHub,
     CronNotepad,
+    KanbanMailbox,
     Secret,
     Ignored(Option<String>),
     Other,
@@ -542,6 +558,7 @@ fn classify(name: &str, policy: &EnvPolicy<'_>) -> Var {
         TEST_PASTE_URL if cfg!(debug_assertions) => return Var::TestPasteUrl,
         TEST_SKILLS_HUB if cfg!(debug_assertions) => return Var::TestSkillsHub,
         CRON_NOTEPAD => return Var::CronNotepad,
+        KANBAN_MAILBOX => return Var::KanbanMailbox,
         _ => {}
     }
     if is_user_home_var(name) {

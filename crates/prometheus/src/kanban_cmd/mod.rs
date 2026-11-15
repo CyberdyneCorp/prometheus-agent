@@ -125,6 +125,9 @@ pub fn run(args: &KanbanArgs, ctx: &Context<'_>) -> Result<u8, Error> {
     if let KanbanCommand::Work { run } = &args.command {
         return crate::kanban_host::worker::work(ctx, run);
     }
+    if let KanbanCommand::Lane { run } = &args.command {
+        return crate::kanban_host::broker::serve(ctx, run);
+    }
     if args.ticket.is_some() {
         return ticketed::run(args, ctx.home()?.root(), ctx.json);
     }

@@ -72,9 +72,8 @@ fn main() -> ExitCode {
             Err(err) => failure(&err, cli.json),
         };
     }
-    // An external kanban worker reports with its run ticket; its sandbox
-    // reaches only its own board and the blob store, so nothing below may
-    // run either.
+    // An external kanban worker reports with its run ticket; a lane's
+    // sandbox reaches only its mailbox, so nothing below may run either.
     if let Some(code) = ticketed_kanban(&cli, &launch) {
         return code;
     }
@@ -146,8 +145,11 @@ fn ticketed_kanban(cli: &Cli, launch: &LaunchEnv) -> Option<ExitCode> {
         return None;
     };
     args.ticket.as_ref()?;
-    let ran = pmt_config::home::resolve(cli.home.as_deref(), launch)
-        .and_then(|home| prometheus::kanban_cmd::ticketed::run(args, &home, cli.json));
+    let ran = match launch.kanban_mailbox() {
+        Some(mailbox) => prometheus::kanban_cmd::ticketed::relay(args, mailbox, cli.json),
+        None => pmt_config::home::resolve(cli.home.as_deref(), launch)
+            .and_then(|home| prometheus::kanban_cmd::ticketed::run(args, &home, cli.json)),
+    };
     Some(match ran {
         Ok(code) => ExitCode::from(code),
         Err(err) => failure(&err, cli.json),

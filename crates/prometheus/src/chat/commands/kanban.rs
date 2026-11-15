@@ -96,9 +96,14 @@ pub(super) async fn kanban(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
     }
     let parsed = Slash::try_parse_from(&words).map_err(|e| usage(e.to_string()))?;
     let args = parsed.args;
-    if args.ticket.is_some() || matches!(args.command, KanbanCommand::Work { .. }) {
+    if args.ticket.is_some()
+        || matches!(
+            args.command,
+            KanbanCommand::Work { .. } | KanbanCommand::Lane { .. }
+        )
+    {
         return Err(usage(
-            "/kanban does not take --ticket or work: they are for workers",
+            "/kanban does not take --ticket, work or lane: they are for workers",
         ));
     }
     let origin = (!json).then(|| origin(ctx)).flatten();

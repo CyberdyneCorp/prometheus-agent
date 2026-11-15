@@ -1,26 +1,28 @@
 //! External worker lanes (spec: kanban, Worker lanes). An enabled plugin
-//! declares lanes under `[[kanban_lanes]]`; the dispatcher starts a lane
-//! task's lane `command` under the local sandbox, in the task's workspace,
-//! with the run ticket on stdin (a program or argument naming a file of the
-//! plugin's directory resolves there). The lane reports only through
-//! `prometheus kanban ... --ticket -` (the ticket authenticates it as the
-//! run's worker) and every claim still ends in one terminator or is
-//! reclaimed by the liveness rules, exactly as a profile worker's.
+//! declares lanes under `[[kanban_lanes]]`; the dispatcher starts the
+//! lane's broker (`prometheus kanban lane --run <id>`, [`super::broker`]),
+//! which starts the lane `command` under the local sandbox, in the task's
+//! workspace, with the run ticket on stdin (a program or argument naming a
+//! file of the plugin's directory resolves there). The lane reports only
+//! through `prometheus kanban ... --ticket -`, which hands the report to
+//! the broker through the lane's mailbox; the broker checks the ticket and
+//! applies it. Every claim still ends in one terminator or is reclaimed by
+//! the liveness rules, exactly as a profile worker's.
 //!
 //! The sandbox grants the lane its workspace, its plugin's directory, the
-//! capabilities its plugin was approved for, and its board's directory and
-//! the blob store (so its `prometheus kanban` calls can write the board);
-//! the rest of the Prometheus home stays denied.
+//! capabilities its plugin was approved for, read access to the blob store
+//! (the attachments its task lists) and write access to its mailbox only:
+//! the board's database and the rest of the Prometheus home stay denied,
+//! so a lane cannot touch another task, run or board.
 
 use std::ffi::OsString;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
+use std::process::{Child, Stdio};
 
 use pmt_config::ProfileScope;
 use pmt_config::grants::{GrantsFile, Subject, baseline};
 use pmt_core::capability::{Capability, CapabilitySet};
-use pmt_kanban::dispatch::SpawnRequest;
 use pmt_plugins::load::State;
 use pmt_plugins::manifest::lanes::Lane;
 use pmt_sandbox::{Paths, Policy, Sandbox};
@@ -79,31 +81,50 @@ fn approved(scope: &ProfileScope, lane: &Declared) -> CapabilitySet {
         .unwrap_or_default()
 }
 
-/// Starts `request`'s lane in `workspace`; returns the pid and start time.
+/// What a lane runs for and where.
+pub struct Start<'a> {
+    /// The lane's name (the run's assignee).
+    pub lane: &'a str,
+    /// The board, task and run.
+    pub board: &'a str,
+    /// The task.
+    pub task: &'a str,
+    /// The run.
+    pub run: &'a str,
+    /// The task's workspace (the lane's working directory).
+    pub workspace: &'a Path,
+    /// The lane's mailbox (its only writable home path).
+    pub mailbox: &'a Path,
+    /// A worker's environment (`PATH`, the locale, the home).
+    pub env: &'a [(String, OsString)],
+    /// The user's home directory (for the sandbox's path rules).
+    pub user_home: &'a Path,
+}
+
+/// Starts the lane of `start` under the sandbox with `ticket` on stdin and
+/// the caller's output (the run's log); the child (in the caller's process
+/// group, so stopping the run stops it too).
 ///
 /// # Errors
 ///
 /// Why it could not start (no such lane, the sandbox, the spawn).
-pub fn spawn(
-    scope: &ProfileScope,
-    request: &SpawnRequest<'_>,
-    (workspace, env, user_home): (&Path, &[(String, OsString)], &Path),
-    log: std::fs::File,
-) -> Result<(u32, u64), String> {
+pub fn spawn(scope: &ProfileScope, start: &Start<'_>, ticket: &str) -> Result<Child, String> {
     let lane = declared(scope)
         .into_iter()
-        .find(|l| l.lane.name == request.profile)
-        .ok_or_else(|| format!("no enabled plugin declares lane '{}'", request.profile))?;
+        .find(|l| l.lane.name == start.lane)
+        .ok_or_else(|| format!("no enabled plugin declares lane '{}'", start.lane))?;
     let home = scope.home();
-    let board_dir = home.join("kanban/boards").join(request.board);
     let paths = Paths {
-        user_home: user_home.to_path_buf(),
+        user_home: start.user_home.to_path_buf(),
         prometheus_home: home.to_path_buf(),
-        workspace: workspace.to_path_buf(),
-        scratch: vec![board_dir, home.join("kanban/blobs")],
+        workspace: start.workspace.to_path_buf(),
+        scratch: vec![start.mailbox.to_path_buf()],
     };
     let program = program(&lane);
-    let mut extra = vec![Capability::FsRead(format!("{}/**", lane.dir.display()))];
+    let mut extra = vec![
+        Capability::FsRead(format!("{}/**", lane.dir.display())),
+        Capability::FsRead(format!("{}/**", home.join("kanban/blobs").display())),
+    ];
     if let Some(dir) = std::env::current_exe()
         .ok()
         .as_deref()
@@ -122,34 +143,21 @@ pub fn spawn(
     let mut command = sandbox
         .command(&program)
         .map_err(|e| e.message().to_owned())?;
-    let err = log.try_clone().map_err(|e| e.to_string())?;
     command
         .args(arguments(&lane))
-        .current_dir(workspace)
+        .current_dir(start.workspace)
         .env_clear()
-        .envs(lane_env(env, request))
-        .stdin(Stdio::piped())
-        .stdout(log)
-        .stderr(err);
-    #[cfg(unix)]
-    std::os::unix::process::CommandExt::process_group(&mut command, 0);
+        .envs(lane_env(start))
+        .stdin(Stdio::piped());
     let mut child = command
         .spawn()
         .map_err(|e| format!("cannot start lane '{}': {e}", lane.lane.name))?;
-    let pid = child.id();
     if let Some(mut stdin) = child.stdin.take() {
-        let ticket_line = format!("{}\n", request.ticket.line());
         stdin
-            .write_all(ticket_line.as_bytes())
+            .write_all(format!("{}\n", ticket.trim_end()).as_bytes())
             .map_err(|e| format!("cannot hand the lane its ticket: {e}"))?;
     }
-    let start = super::spawn::start_time(pid);
-    std::thread::spawn(move || {
-        let _ = child.wait();
-    });
-    start
-        .ok_or_else(|| "the lane exited before it could be identified".to_owned())
-        .map(|start| (pid, start))
+    Ok(child)
 }
 
 /// The lane's arguments: one naming a file of its plugin directory (a
@@ -181,15 +189,17 @@ fn program(lane: &Declared) -> PathBuf {
     }
 }
 
-/// The lane's environment: a worker's (`PATH`, the locale, the home) and
-/// which task and run it works (the ticket's secret comes only on stdin).
-fn lane_env(base: &[(String, OsString)], request: &SpawnRequest<'_>) -> Vec<(String, OsString)> {
-    let mut env = base.to_vec();
-    env.push(("PROMETHEUS_KANBAN_BOARD".to_owned(), request.board.into()));
+/// The lane's environment: a worker's (`PATH`, the locale, the home),
+/// which task and run it works (the ticket's secret comes only on stdin)
+/// and its mailbox.
+fn lane_env(start: &Start<'_>) -> Vec<(String, OsString)> {
+    let mut env = start.env.to_vec();
+    env.push(("PROMETHEUS_KANBAN_BOARD".to_owned(), start.board.into()));
+    env.push(("PROMETHEUS_KANBAN_TASK".to_owned(), start.task.into()));
+    env.push(("PROMETHEUS_KANBAN_RUN".to_owned(), start.run.into()));
     env.push((
-        "PROMETHEUS_KANBAN_TASK".to_owned(),
-        request.task.id.clone().into(),
+        pmt_core::env::KANBAN_MAILBOX.to_owned(),
+        start.mailbox.as_os_str().to_owned(),
     ));
-    env.push(("PROMETHEUS_KANBAN_RUN".to_owned(), request.run_id.into()));
     env
 }
