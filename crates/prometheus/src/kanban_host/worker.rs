@@ -448,7 +448,8 @@ async fn agent(
     ending: &mut Ending,
 ) -> Result<(), Error> {
     let scope = worker_scope(scope, task, board.spend(&task.id)?);
-    let (store, factory, live) = open_session(ctx, &scope, board, (row, task), workspace).await?;
+    let (store, factory, live) =
+        Box::pin(open_session(ctx, &scope, board, (row, task), workspace)).await?;
     let id = live.id;
     ending.session = Some(id.to_string());
     let judge = factory.models.judge(&live.model, id);

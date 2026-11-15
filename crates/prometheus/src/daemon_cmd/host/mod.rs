@@ -687,7 +687,7 @@ impl Host for DaemonHost {
         Box::pin(
             async move {
                 let profile = &self.profile(profile)?;
-                self.dispatch_command(profile, params, link).await
+                Box::pin(self.dispatch_command(profile, params, link)).await
             }
             .instrument(span),
         )

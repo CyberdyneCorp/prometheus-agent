@@ -90,6 +90,7 @@ capabilities = [
     "messaging-gateway",
     "plugin-system",
     "projects",
+    "replay-and-evaluation",
     "web-dashboard",
 ]
 
@@ -4576,7 +4577,7 @@ capabilities = [
 "Budget exhausted" = { tests = ["crates/prometheus/tests/kanban_cli.rs::an_exhausted_budget_blocks_the_task"], note = "the mock provider prices nothing, so the test exhausts a budget_tokens limit; budget_usd takes the same path (budgets.root_usd of the worker's lineage, delegated children included)" }
 
 [kanban."Eval and harness-evolution tasks (upgrade)"]
-"Eval task on replayed provider" = { deferred = "71.1 prometheus eval run (provider_mode live|replay for the assignee profile): today an eval task runs the bundled smoke suite on the mock provider and ignores provider_mode (kanban_cli.rs::an_eval_task_runs_the_smoke_suite_offline_and_attaches_its_report covers only that)" }
+"Eval task on replayed provider" = { deferred = "kanban eval-task wiring to `prometheus eval run` (which 71.1 ships) with provider_mode live|replay for the assignee profile: today an eval task runs the bundled smoke suite on the mock provider and ignores provider_mode (kanban_cli.rs::an_eval_task_runs_the_smoke_suite_offline_and_attaches_its_report covers only that)" }
 "Evolve task requires approval" = { deferred = "67.4 kanban evolve-task wiring: the engine and proposal adoption exist (69.4-69.6) and the daemon's runner runs the queued job, but the worker still stops after queueing it (trigger kanban, the task id recorded) instead of following the job to review, and approving the task does not adopt its proposal yet" }
 
 [kanban."Event log and run history"]
@@ -4753,7 +4754,7 @@ capabilities = [
 "Edited cached harness" = ["crates/pmt-evolve/tests/engine/resume.rs::an_edited_cached_workspace_reruns_the_stage_and_its_dependents"]
 
 [harness-evolution."Offline demo pipeline (upgrade)"]
-"Demo resume" = { deferred = "71.5 offline self-improvement demo (`prometheus evolve demo`)" }
+"Demo resume" = ["crates/prometheus/tests/evolve_demo.rs::evolve_demo_reports_no_model_calls_when_run_again"]
 
 [harness-evolution."Human-only evaluation of proposals (upgrade)"]
 "Verdict does not reach the library" = { tests = ["crates/prometheus/tests/evolve_engine.rs::eval_results_reach_the_user_only"], note = "the test reviews with --eval smoke, adopts (the mock reflector's lesson becomes an experience entry), runs the next job of the domain, whose evidence snapshot holds that entry, and finds every stage accepted (no tripwire hit) and no file under <profile>/evolve or <profile>/experience holding the verdict canary" }
@@ -4812,3 +4813,50 @@ capabilities = [
 
 [experience-library."Library events"]
 "Injection observable" = ["crates/prometheus/tests/experience_cli.rs::sessions_of_a_domain_start_with_its_good_lessons_frozen"]
+
+# M3 replay-and-evaluation (task group 71).
+
+[replay-and-evaluation."Offline self-improvement demo"]
+"Resume makes no new work" = ["crates/prometheus/tests/evolve_demo.rs::the_evolve_demo_selects_the_fixed_totals_and_resumes_without_work"]
+
+[replay-and-evaluation."Eval suite format"]
+"Missing prompt" = ["crates/prometheus/tests/eval_cli.rs::a_task_without_a_prompt_fails_validation_naming_its_file"]
+
+[replay-and-evaluation."Eval run"]
+"Budget stops a run" = { tests = ["crates/prometheus/tests/eval_cli.rs::the_budget_refuses_the_third_task_and_skips_the_rest"], note = "a fake chat-completions provider reports usage and a probe run fixes the price so each task costs 0.20 USD; the run budget is the eval root's budgets.root_usd, refused on the call's worst case" }
+
+[replay-and-evaluation."Eval runs are resumable"]
+"Tampered deliverable" = ["crates/prometheus/tests/eval_cli.rs::a_resumed_run_reruns_only_tasks_whose_deliverables_changed"]
+
+[replay-and-evaluation."Answer-free boundary"]
+"Agent searches for the answer" = ["crates/prometheus/tests/eval_cli.rs::a_task_reaching_for_grader_material_is_contaminated", "crates/pmt-eval/src/boundary.rs::grader_paths_and_leak_globs_are_attempts", "crates/pmt-eval/src/run.rs::evolution_sees_only_the_five_fields"]
+
+[replay-and-evaluation."Post-hoc judging"]
+"Judge failure is not a zero" = ["crates/prometheus/tests/eval_judge.rs::judge_failures_are_ungraded_and_a_changed_judge_is_refused", "crates/prometheus/tests/eval_judge.rs::script_graders_score_deliverables_and_unexecuted_tasks_stay_ungraded"]
+
+[replay-and-evaluation."Re-judging and judge identity"]
+"Flaky re-judge keeps the grade" = ["crates/prometheus/tests/eval_judge.rs::judge_failures_are_ungraded_and_a_changed_judge_is_refused", "crates/pmt-eval/src/judge.rs::a_failed_re_judge_keeps_the_graded_row"]
+
+[replay-and-evaluation."Eval reports and comparison (upgrade)"]
+"Harness comparison" = ["crates/prometheus/tests/eval_judge.rs::a_report_of_two_runs_shows_the_score_delta_with_its_interval", "crates/pmt-eval/src/report.rs::a_comparison_within_noise_says_so", "crates/pmt-eval/src/report.rs::repeats_give_pass_at_k_and_task_spread"]
+
+[replay-and-evaluation."Benchmark adapter protocol"]
+"Score not callable during execution" = { tests = ["crates/prometheus/tests/eval_bench.rs::an_adapter_is_never_asked_to_score_during_execution"], note = "subprocess adapters (JSON-RPC over stdio) only; WASM and Python-bridge plugin adapters are a recorded gap (tasks.md 71.3)" }
+
+[replay-and-evaluation."Session-to-task capture (upgrade)"]
+"Bug report becomes a regression task" = ["crates/prometheus/tests/eval_bench.rs::a_mis_summed_session_becomes_a_regression_task"]
+
+[replay-and-evaluation."Batch prompt datasets"]
+"Resume after interruption" = { tests = ["crates/prometheus/tests/eval_batch.rs::a_resumed_batch_runs_only_the_remaining_prompts"], note = "the first invocation stops after part of the dataset (--max-samples), leaving the run as an interrupted one does: completed tasks with their markers" }
+"Ephemeral prompt not recorded" = ["crates/prometheus/tests/eval_batch.rs::the_ephemeral_system_prompt_reaches_the_model_and_no_file"]
+
+[replay-and-evaluation."Batch statistics and quality filtering"]
+"Zero-filled tool stats" = ["crates/prometheus/tests/eval_batch.rs::statistics_zero_fill_tools_and_filtered_tasks_leave_exports", "crates/pmt-eval/src/batch.rs::unused_tools_of_the_enabled_toolsets_are_zero_filled"]
+
+[replay-and-evaluation."Toolset distributions"]
+"Reproducible sampling" = ["crates/pmt-eval/src/distribution.rs::the_same_seed_samples_the_same_toolsets", "crates/prometheus/tests/eval_batch.rs::a_seeded_distribution_samples_the_same_toolsets_in_every_run"]
+"Compound key rolls once" = ["crates/pmt-eval/src/distribution.rs::a_compound_key_enables_all_or_none_of_its_members"]
+
+[replay-and-evaluation."Trajectory compressor"]
+"Head and tail preserved" = ["crates/pmt-eval/src/compress.rs::head_and_tail_survive_and_one_summary_replaces_the_middle", "crates/prometheus/tests/eval_batch.rs::trajectory_compress_summarises_only_long_records"]
+"Short trajectory untouched" = ["crates/pmt-eval/src/compress.rs::a_short_record_is_copied_without_a_model_call", "crates/prometheus/tests/eval_batch.rs::trajectory_compress_summarises_only_long_records"]

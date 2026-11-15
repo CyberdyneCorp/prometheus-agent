@@ -470,6 +470,8 @@ pub struct Agent {
     /// The running turn's route is a request's own (an API request's
     /// model): the session's frozen prompt is kept as it is.
     keep_prompt: std::sync::atomic::AtomicBool,
+    /// A system block sent with every model call and never stored.
+    ephemeral_system: Mutex<Option<String>>,
 }
 
 impl Agent {
@@ -498,6 +500,7 @@ impl Agent {
             fast: Mutex::new(None),
             fast_noticed: std::sync::atomic::AtomicBool::new(false),
             keep_prompt: std::sync::atomic::AtomicBool::new(false),
+            ephemeral_system: Mutex::new(None),
         })
     }
 
@@ -613,6 +616,24 @@ impl Agent {
     pub fn keep_prompt(&self, keep: bool) {
         self.keep_prompt
             .store(keep, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Sends `text` as a last system block with every model call of the
+    /// session (an eval batch's `--ephemeral-system-prompt`): it rides on
+    /// the wire only and is never part of the frozen prompt, the stored
+    /// history or the trajectory.
+    pub fn set_ephemeral_system(&self, text: Option<String>) {
+        *self
+            .ephemeral_system
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = text;
+    }
+
+    fn ephemeral_system(&self) -> Option<String> {
+        self.ephemeral_system
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 
     fn keeps_prompt(&self) -> bool {

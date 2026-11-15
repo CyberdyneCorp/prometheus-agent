@@ -301,7 +301,7 @@ impl Agents for DaemonHost {
         Box::pin(
             async move {
                 let profile = &self.profile(profile)?;
-                self.gateway_command(profile, session_id, input, link).await
+                Box::pin(self.gateway_command(profile, session_id, input, link)).await
             }
             .instrument(span),
         )

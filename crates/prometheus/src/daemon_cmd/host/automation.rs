@@ -423,7 +423,7 @@ impl DaemonHost {
             name,
             args,
         };
-        match self.dispatch_command(profile, params, link.clone()).await? {
+        match Box::pin(self.dispatch_command(profile, params, link.clone())).await? {
             Dispatched::Send { message, .. } => {
                 let session = self.load(profile, id, &link).await?;
                 let input = TurnInput {

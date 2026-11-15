@@ -586,6 +586,12 @@ impl<'a> Turn<'a> {
         if let Some(prefill) = self.agent.prefill_messages() {
             request.messages.splice(0..0, prefill.iter().cloned());
         }
+        if let Some(text) = self.agent.ephemeral_system() {
+            request.system.push(pmt_providers::request::SystemBlock {
+                text,
+                cache_breakpoint: false,
+            });
+        }
         breakpoints::plan(&mut request, route.wire_format);
         Ok(request)
     }

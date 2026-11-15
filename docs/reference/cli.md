@@ -27,6 +27,7 @@ Commands:
   cron         Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and the headless tick
   harness      The profile's harness: validate, history, diff, rollback and manual edits (works without `evolve.enabled`)
   experience   The experience library: entries, domains, pin, forget, restore, export, import and rebuild
+  eval         Evaluation: suites, runs, post-hoc judging, reports, benchmark adapters, session capture and batch datasets
   evolve       Harness evolution jobs (opt-in: `evolve.enabled = true`)
   kanban       Kanban boards shared by every profile: tasks, dependencies, the dispatcher, workers, review, notifications, export and import
   worktrees    Git worktrees of sessions and subagents: list, sweep and restore archived trees
@@ -10635,6 +10636,620 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus experience help help
 ```
 
+## `prometheus eval`
+
+```text
+Evaluation: suites, runs, post-hoc judging, reports, benchmark adapters, session capture and batch datasets
+
+Usage: prometheus eval [OPTIONS] <COMMAND>
+
+Commands:
+  validate       Check a suite's format; exit 65 naming the first invalid file
+  list           The suites under `<profile>/evals/` and the bundled ones
+  run            Run a suite (or `bench:<name>[:<split>]`) in isolated sessions
+  judge          Score a run's executed tasks (the only reader of grader material)
+  report         Scores, costs and comparisons of judged runs
+  capture        Turn a recorded session into a regression task of a suite
+  batch          Run a JSON-lines prompt dataset as ungraded tasks
+  distributions  The built-in toolset distributions and their probabilities
+  help           Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus eval validate`
+
+```text
+Check a suite's format; exit 65 naming the first invalid file
+
+Usage: prometheus eval validate [OPTIONS] <SUITE>
+
+Arguments:
+  <SUITE>
+          The suite: a directory, or a name under `<profile>/evals/`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus eval list`
+
+```text
+The suites under `<profile>/evals/` and the bundled ones
+
+Usage: prometheus eval list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus eval run`
+
+```text
+Run a suite (or `bench:<name>[:<split>]`) in isolated sessions
+
+Usage: prometheus eval run [OPTIONS] <SUITE>
+
+Arguments:
+  <SUITE>
+          The suite: a directory, a name under `<profile>/evals/`, a bundled suite (`smoke`) or `bench:<name>[:<split>]`
+
+Options:
+      --harness <REF>
+          The harness version (`h3` or an id; default: the active one)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --tasks <a,b>
+          Only these tasks
+
+      --repeat <N>
+          Runs per task
+
+          [default: 1]
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --provider <P>
+          The provider of the task sessions
+
+  -m, --model <M>
+          The model
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+      --parallel <N>
+          Concurrent tasks
+
+          [default: 4]
+
+      --cache <CACHE>
+          The model-call cache
+
+          Possible values:
+          - off:        Neither read nor written
+          - read:       Stored responses are served; nothing new is stored
+          - read_write: Both
+
+          [default: read_write]
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --budget-usd <X>
+          Stop the run once its spend would exceed this (exit 3)
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+      --run-id <ID>
+          Resume (or name) this run
+
+      --toolset-distribution <NAME|FILE>
+          Sample each task's toolsets from a distribution (a built-in name or a TOML file)
+
+      --seed <N>
+          The sampling seed
+
+          [default: 0]
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus eval judge`
+
+```text
+Score a run's executed tasks (the only reader of grader material)
+
+Usage: prometheus eval judge [OPTIONS] <RUN_ID>
+
+Arguments:
+  <RUN_ID>
+          The run
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --parallel <N>
+          Tasks scored at once
+
+          [default: 8]
+
+      --judge-namespace <NAME>
+          Score into `judged.<NAME>.json` (another judge or grader version)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus eval report`
+
+```text
+Scores, costs and comparisons of judged runs
+
+Usage: prometheus eval report [OPTIONS] <RUN_IDS>...
+
+Arguments:
+  <RUN_IDS>...
+          The runs; the first is the comparison base
+
+Options:
+      --format <FORMAT>
+          Output format
+
+          Possible values:
+          - text:     Plain text
+          - markdown: Markdown tables
+          - json:     One JSON document
+
+          [default: text]
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --judge-namespace <NAME>
+          Read `judged.<NAME>.json`
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus eval capture`
+
+```text
+Turn a recorded session into a regression task of a suite
+
+Usage: prometheus eval capture [OPTIONS] --suite <DIR> <--expect <TEXT>|--expect-regex <RE>|--grader-script <PATH>> <SESSION>
+
+Arguments:
+  <SESSION>
+          The session (id, prefix or title) or a `.pmtrec` recording
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --suite <DIR>
+          The suite to add the task to (created when it has no suite.toml)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --task-id <ID>
+          The new task's id (default: `session-<id suffix>`)
+
+      --expect <TEXT>
+          An `exact` grader expecting this answer
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --expect-regex <RE>
+          A `regex` grader
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --grader-script <PATH>
+          A `script` grader (copied into the task's grader/)
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus eval batch`
+
+```text
+Run a JSON-lines prompt dataset as ungraded tasks
+
+Usage: prometheus eval batch [OPTIONS] <DATASET>
+
+Arguments:
+  <DATASET>
+          The JSON-lines dataset (`prompt`; optional `id`, `image`, `toolsets`, `files`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --max-turns <N>
+          Model calls per task
+
+          [default: 10]
+
+      --max-samples <N>
+          Only the first N lines
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --reasoning-effort <E>
+          Reasoning effort of the task sessions
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --toolsets <a,b>
+          The toolsets of every task (unless its line names its own)
+
+      --ephemeral-system-prompt <TEXT|@FILE>
+          A system prompt sent with every model call and never stored (TEXT, or @FILE)
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+      --prefill <FILE>
+          A JSON list of messages inserted as few-shot history before each prompt
+
+      --provider <P>
+          The provider of the task sessions
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -m, --model <M>
+          The model
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+      --parallel <N>
+          Concurrent tasks
+
+          [default: 4]
+
+      --cache <CACHE>
+          The model-call cache
+
+          Possible values:
+          - off:        Neither read nor written
+          - read:       Stored responses are served; nothing new is stored
+          - read_write: Both
+
+          [default: read_write]
+
+      --budget-usd <X>
+          Stop the run once its spend would exceed this (exit 3)
+
+      --run-id <ID>
+          Resume (or name) this run
+
+      --toolset-distribution <NAME|FILE>
+          Sample each task's toolsets from a distribution (a built-in name or a TOML file)
+
+      --seed <N>
+          The sampling seed
+
+          [default: 0]
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus eval distributions`
+
+```text
+The built-in toolset distributions and their probabilities
+
+Usage: prometheus eval distributions [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus eval help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus eval help [COMMAND]
+
+Commands:
+  validate       Check a suite's format; exit 65 naming the first invalid file
+  list           The suites under `<profile>/evals/` and the bundled ones
+  run            Run a suite (or `bench:<name>[:<split>]`) in isolated sessions
+  judge          Score a run's executed tasks (the only reader of grader material)
+  report         Scores, costs and comparisons of judged runs
+  capture        Turn a recorded session into a regression task of a suite
+  batch          Run a JSON-lines prompt dataset as ungraded tasks
+  distributions  The built-in toolset distributions and their probabilities
+  help           Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus eval help validate`
+
+```text
+Check a suite's format; exit 65 naming the first invalid file
+
+Usage: prometheus eval help validate
+```
+
+## `prometheus eval help list`
+
+```text
+The suites under `<profile>/evals/` and the bundled ones
+
+Usage: prometheus eval help list
+```
+
+## `prometheus eval help run`
+
+```text
+Run a suite (or `bench:<name>[:<split>]`) in isolated sessions
+
+Usage: prometheus eval help run
+```
+
+## `prometheus eval help judge`
+
+```text
+Score a run's executed tasks (the only reader of grader material)
+
+Usage: prometheus eval help judge
+```
+
+## `prometheus eval help report`
+
+```text
+Scores, costs and comparisons of judged runs
+
+Usage: prometheus eval help report
+```
+
+## `prometheus eval help capture`
+
+```text
+Turn a recorded session into a regression task of a suite
+
+Usage: prometheus eval help capture
+```
+
+## `prometheus eval help batch`
+
+```text
+Run a JSON-lines prompt dataset as ungraded tasks
+
+Usage: prometheus eval help batch
+```
+
+## `prometheus eval help distributions`
+
+```text
+The built-in toolset distributions and their probabilities
+
+Usage: prometheus eval help distributions
+```
+
+## `prometheus eval help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus eval help help
+```
+
 ## `prometheus evolve`
 
 ```text
@@ -10651,6 +11266,7 @@ Commands:
   compare    The anonymised candidates of a job awaiting your selection
   choose     Pick a candidate of a job awaiting your selection and continue it
   proposals  The profile's harness proposals, oldest first
+  demo       The offline evolution demo: two accounting tasks through the whole pipeline on the mock provider, in a profile of its own (needs neither `evolve.enabled` nor credentials)
   review     A proposal's diff against its base version, census, selector reason and lesson
   adopt      Adopt a proposal as a new harness version (from the next session)
   reject     Reject a pending proposal
@@ -11052,6 +11668,63 @@ Options:
           Print help
 ```
 
+## `prometheus evolve demo`
+
+```text
+The offline evolution demo: two accounting tasks through the whole pipeline on the mock provider, in a profile of its own (needs neither `evolve.enabled` nor credentials)
+
+Usage: prometheus evolve demo [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --k <N>
+          Candidates per mode (1 or 2 show the whole pipeline)
+
+          [default: 2]
+
+      --mode <MODE>
+          The evolution modes
+
+          Possible values:
+          - parallel:   Independent proposals, then composition
+          - sequential: One proposal building on the last
+          - both:       Both, one proposal each
+
+          [default: parallel]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --output <DIR>
+          Run in DIR (created when missing; an earlier demo there resumes)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
 ## `prometheus evolve review`
 
 ```text
@@ -11206,6 +11879,7 @@ Commands:
   compare    The anonymised candidates of a job awaiting your selection
   choose     Pick a candidate of a job awaiting your selection and continue it
   proposals  The profile's harness proposals, oldest first
+  demo       The offline evolution demo: two accounting tasks through the whole pipeline on the mock provider, in a profile of its own (needs neither `evolve.enabled` nor credentials)
   review     A proposal's diff against its base version, census, selector reason and lesson
   adopt      Adopt a proposal as a new harness version (from the next session)
   reject     Reject a pending proposal
@@ -11274,6 +11948,14 @@ Usage: prometheus evolve help choose
 The profile's harness proposals, oldest first
 
 Usage: prometheus evolve help proposals
+```
+
+## `prometheus evolve help demo`
+
+```text
+The offline evolution demo: two accounting tasks through the whole pipeline on the mock provider, in a profile of its own (needs neither `evolve.enabled` nor credentials)
+
+Usage: prometheus evolve help demo
 ```
 
 ## `prometheus evolve help review`
@@ -20994,11 +21676,29 @@ Options:
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
 
+      --evolve
+          Run the offline self-improvement demo: two accounting tasks through harness evolution (re-running with the same --output resumes)
+
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
 
       --json
           Print one JSON document on stdout; errors go to stderr as JSON
+
+      --k <N>
+          `--evolve`: candidates per mode
+
+          [default: 2]
+
+      --mode <MODE>
+          `--evolve`: the evolution modes
+
+          Possible values:
+          - parallel:   Independent proposals, then composition
+          - sequential: One proposal building on the last
+          - both:       Both, one proposal each
+
+          [default: parallel]
 
   -v, --verbose...
           More detail; repeatable
@@ -21016,7 +21716,7 @@ Options:
           Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
-          Print help
+          Print help (see a summary with '-h')
 ```
 
 ## `prometheus trajectory`
@@ -21027,9 +21727,10 @@ Render a session's recorded trajectory, or export sessions as `ShareGPT` trainin
 Usage: prometheus trajectory [OPTIONS] <COMMAND>
 
 Commands:
-  show    Render a session's trajectory as canonical text or its JSONL lines
-  export  Write sessions as `ShareGPT` conversations (or their events), one JSON line per session, redacted; sessions that ended in an error are left out unless `--include-failed`
-  help    Print this message or the help of the given subcommand(s)
+  show      Render a session's trajectory as canonical text or its JSONL lines
+  export    Write sessions as `ShareGPT` conversations (or their events), one JSON line per session, redacted; sessions that ended in an error are left out unless `--include-failed`
+  compress  Compress `ShareGPT` records over a token target: head and tail kept, one summary turn in between
+  help      Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -21170,6 +21871,9 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --include-filtered
+          With `--eval-run`: also the batch tasks its statistics filtered out (no reply, `--max-turns` reached, only failed tool calls)
+
       --no-color
           No colour (also when `NO_COLOR` is set or stdout is not a terminal)
 
@@ -21189,6 +21893,80 @@ Options:
           Print help (see a summary with '-h')
 ```
 
+## `prometheus trajectory compress`
+
+```text
+Compress `ShareGPT` records over a token target: head and tail kept, one summary turn in between
+
+Usage: prometheus trajectory compress [OPTIONS] <INPUT>
+
+Arguments:
+  <INPUT>
+          The `ShareGPT` JSON-lines file
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -o, --output <FILE>
+          The output file (default: `<input stem>.compressed.jsonl`)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --target-max-tokens <N>
+          Records over this many tokens are compressed
+
+          [default: 15250]
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --summary-target-tokens <N>
+          The summary's token budget
+
+          [default: 750]
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --protect-last-turns <N>
+          Turns kept verbatim at the end
+
+          [default: 4]
+
+      --sample-percent <P>
+          Process a deterministic sample of this percentage of the records
+
+          [default: 100]
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --model <M>
+          The summary model (`provider/model` or a model)
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+      --parallel <N>
+          Summaries made at once
+
+          [default: 4]
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus trajectory help`
 
 ```text
@@ -21197,9 +21975,10 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus trajectory help [COMMAND]
 
 Commands:
-  show    Render a session's trajectory as canonical text or its JSONL lines
-  export  Write sessions as `ShareGPT` conversations (or their events), one JSON line per session, redacted; sessions that ended in an error are left out unless `--include-failed`
-  help    Print this message or the help of the given subcommand(s)
+  show      Render a session's trajectory as canonical text or its JSONL lines
+  export    Write sessions as `ShareGPT` conversations (or their events), one JSON line per session, redacted; sessions that ended in an error are left out unless `--include-failed`
+  compress  Compress `ShareGPT` records over a token target: head and tail kept, one summary turn in between
+  help      Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus trajectory help show`
@@ -21216,6 +21995,14 @@ Usage: prometheus trajectory help show
 Write sessions as `ShareGPT` conversations (or their events), one JSON line per session, redacted; sessions that ended in an error are left out unless `--include-failed`
 
 Usage: prometheus trajectory help export
+```
+
+## `prometheus trajectory help compress`
+
+```text
+Compress `ShareGPT` records over a token target: head and tail kept, one summary turn in between
+
+Usage: prometheus trajectory help compress
 ```
 
 ## `prometheus trajectory help help`
@@ -33409,6 +34196,7 @@ Commands:
   cron         Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and the headless tick
   harness      The profile's harness: validate, history, diff, rollback and manual edits (works without `evolve.enabled`)
   experience   The experience library: entries, domains, pin, forget, restore, export, import and rebuild
+  eval         Evaluation: suites, runs, post-hoc judging, reports, benchmark adapters, session capture and batch datasets
   evolve       Harness evolution jobs (opt-in: `evolve.enabled = true`)
   kanban       Kanban boards shared by every profile: tasks, dependencies, the dispatcher, workers, review, notifications, export and import
   worktrees    Git worktrees of sessions and subagents: list, sweep and restore archived trees
@@ -35092,6 +35880,88 @@ Re-create missing entries of adopted proposals (no model call)
 Usage: prometheus help experience rebuild
 ```
 
+## `prometheus help eval`
+
+```text
+Evaluation: suites, runs, post-hoc judging, reports, benchmark adapters, session capture and batch datasets
+
+Usage: prometheus help eval [COMMAND]
+
+Commands:
+  validate       Check a suite's format; exit 65 naming the first invalid file
+  list           The suites under `<profile>/evals/` and the bundled ones
+  run            Run a suite (or `bench:<name>[:<split>]`) in isolated sessions
+  judge          Score a run's executed tasks (the only reader of grader material)
+  report         Scores, costs and comparisons of judged runs
+  capture        Turn a recorded session into a regression task of a suite
+  batch          Run a JSON-lines prompt dataset as ungraded tasks
+  distributions  The built-in toolset distributions and their probabilities
+```
+
+## `prometheus help eval validate`
+
+```text
+Check a suite's format; exit 65 naming the first invalid file
+
+Usage: prometheus help eval validate
+```
+
+## `prometheus help eval list`
+
+```text
+The suites under `<profile>/evals/` and the bundled ones
+
+Usage: prometheus help eval list
+```
+
+## `prometheus help eval run`
+
+```text
+Run a suite (or `bench:<name>[:<split>]`) in isolated sessions
+
+Usage: prometheus help eval run
+```
+
+## `prometheus help eval judge`
+
+```text
+Score a run's executed tasks (the only reader of grader material)
+
+Usage: prometheus help eval judge
+```
+
+## `prometheus help eval report`
+
+```text
+Scores, costs and comparisons of judged runs
+
+Usage: prometheus help eval report
+```
+
+## `prometheus help eval capture`
+
+```text
+Turn a recorded session into a regression task of a suite
+
+Usage: prometheus help eval capture
+```
+
+## `prometheus help eval batch`
+
+```text
+Run a JSON-lines prompt dataset as ungraded tasks
+
+Usage: prometheus help eval batch
+```
+
+## `prometheus help eval distributions`
+
+```text
+The built-in toolset distributions and their probabilities
+
+Usage: prometheus help eval distributions
+```
+
 ## `prometheus help evolve`
 
 ```text
@@ -35108,6 +35978,7 @@ Commands:
   compare    The anonymised candidates of a job awaiting your selection
   choose     Pick a candidate of a job awaiting your selection and continue it
   proposals  The profile's harness proposals, oldest first
+  demo       The offline evolution demo: two accounting tasks through the whole pipeline on the mock provider, in a profile of its own (needs neither `evolve.enabled` nor credentials)
   review     A proposal's diff against its base version, census, selector reason and lesson
   adopt      Adopt a proposal as a new harness version (from the next session)
   reject     Reject a pending proposal
@@ -35175,6 +36046,14 @@ Usage: prometheus help evolve choose
 The profile's harness proposals, oldest first
 
 Usage: prometheus help evolve proposals
+```
+
+## `prometheus help evolve demo`
+
+```text
+The offline evolution demo: two accounting tasks through the whole pipeline on the mock provider, in a profile of its own (needs neither `evolve.enabled` nor credentials)
+
+Usage: prometheus help evolve demo
 ```
 
 ## `prometheus help evolve review`
@@ -36650,8 +37529,9 @@ Render a session's recorded trajectory, or export sessions as `ShareGPT` trainin
 Usage: prometheus help trajectory [COMMAND]
 
 Commands:
-  show    Render a session's trajectory as canonical text or its JSONL lines
-  export  Write sessions as `ShareGPT` conversations (or their events), one JSON line per session, redacted; sessions that ended in an error are left out unless `--include-failed`
+  show      Render a session's trajectory as canonical text or its JSONL lines
+  export    Write sessions as `ShareGPT` conversations (or their events), one JSON line per session, redacted; sessions that ended in an error are left out unless `--include-failed`
+  compress  Compress `ShareGPT` records over a token target: head and tail kept, one summary turn in between
 ```
 
 ## `prometheus help trajectory show`
@@ -36668,6 +37548,14 @@ Usage: prometheus help trajectory show
 Write sessions as `ShareGPT` conversations (or their events), one JSON line per session, redacted; sessions that ended in an error are left out unless `--include-failed`
 
 Usage: prometheus help trajectory export
+```
+
+## `prometheus help trajectory compress`
+
+```text
+Compress `ShareGPT` records over a token target: head and tail kept, one summary turn in between
+
+Usage: prometheus help trajectory compress
 ```
 
 ## `prometheus help model`

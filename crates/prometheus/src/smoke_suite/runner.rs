@@ -53,8 +53,16 @@ struct Grader {
 
 /// Harness capabilities this platform has. `interrupt` (stopping a
 /// running child from outside: SIGINT on Unix, Ctrl+Break to the child's
-/// own console process group on Windows) is on every supported target.
+/// own console process group on Windows) is on every supported target;
+/// `memory` (a memory tool writing the profile's memory) is here because
+/// every task runs in a scratch home of its own.
 fn has(capability: &str) -> bool {
+    capability == "memory" || interrupts(capability)
+}
+
+/// Whether `capability` is `interrupt` and this platform can interrupt a
+/// running task.
+pub(crate) fn interrupts(capability: &str) -> bool {
     capability == "interrupt" && cfg!(any(unix, windows))
 }
 

@@ -1312,6 +1312,33 @@ error_codes! {
     /// The experience library could not be read or written.
     EXPERIENCE_IO = ("experience.io", Io,
         "A file under `<profile>/experience/` (or an experience archive) could not be read or written.");
+    /// An eval suite does not validate.
+    EVAL_INVALID_SUITE = ("eval.invalid_suite", InvalidInput,
+        "An eval suite (`suite.toml`, a task's `task.toml`, its `grader/grader.toml` or `run.toml`) does not validate; the message names the first invalid file and the problem (`prometheus eval validate`).");
+    /// No eval suite has that name or path.
+    EVAL_SUITE_NOT_FOUND = ("eval.suite_not_found", NotFound,
+        "No eval suite has that name: suites are directories with a `suite.toml`, given by path or found under `<profile>/evals/` (the bundled `smoke` suite is always there).");
+    /// No eval run has that id.
+    EVAL_RUN_NOT_FOUND = ("eval.run_not_found", NotFound,
+        "No eval run has that id under `<profile>/evals/runs/` (`prometheus eval report`, `eval judge`).");
+    /// A resumed eval run does not match what it resumes.
+    EVAL_RUN_MISMATCH = ("eval.run_mismatch", Usage,
+        "`--run-id` names an existing run whose suite version, model or harness hash differ from this invocation (`run.json`); resume it with the same settings or start another run id.");
+    /// The judge of an eval run changed.
+    EVAL_JUDGE_CHANGED = ("eval.judge_changed", Tool,
+        "`prometheus eval judge` was asked to merge rows scored by another judge model or grader version than the one recorded in `judged.json`; pass `--judge-namespace NAME` to score separately.");
+    /// A batch dataset or toolset distribution does not validate.
+    EVAL_INVALID_DATASET = ("eval.invalid_dataset", InvalidInput,
+        "A batch dataset line (`prometheus eval batch`), a prefill file or a toolset distribution does not validate; the message names the line or the toolset. Nothing ran.");
+    /// A session cannot become an eval task.
+    EVAL_CAPTURE_REFUSED = ("eval.capture_refused", InvalidInput,
+        "`prometheus eval capture` refused: the session's recording has no workspace contents for files the task declares, the task id exists already, or no grader was given.");
+    /// A benchmark adapter failed or broke the protocol.
+    EVAL_BENCH_FAILED = ("eval.bench_failed", Unavailable,
+        "A benchmark adapter (`bench:<name>`) could not be started, answered with an error or broke the adapter protocol; the message names the method.");
+    /// Eval files could not be read or written.
+    EVAL_IO = ("eval.io", Io,
+        "A file of an eval suite or run (`<profile>/evals/`) or a trajectory dataset could not be read or written.");
     /// The session cannot take turns.
     SESSION_READ_ONLY = ("session.read_only", PermissionDenied,
         "The session is read-only: an imported Hermes A2A conversation whose peer binding cannot be proven is kept for reading (`prometheus sessions show`) but never attached to a live A2A conversation; `prometheus doctor` lists them.");

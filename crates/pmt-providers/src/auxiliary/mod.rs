@@ -73,6 +73,8 @@ tasks! {
     VoiceChat = "voice_chat", None;
     CommitMessage = "commit_message", Some(Duration::from_mins(1));
     Kanban = "kanban", Some(Duration::from_mins(2));
+    EvalJudge = "eval_judge", Some(Duration::from_mins(2));
+    TrajectoryCompress = "trajectory_compress", Some(Duration::from_mins(2));
 }
 
 impl AuxTask {
@@ -82,10 +84,17 @@ impl AuxTask {
         Self::ALL.iter().copied().find(|t| t.as_str() == name)
     }
 
-    /// The ledger purpose of its calls: `auxiliary.<task>`.
+    /// The ledger purpose of its calls: `auxiliary.<task>`, except the
+    /// eval judge (`eval.judge`) and the trajectory compressor
+    /// (`trajectory.compress`), which the replay-and-evaluation spec
+    /// names.
     #[must_use]
     pub fn purpose(self) -> String {
-        format!("auxiliary.{}", self.as_str())
+        match self {
+            Self::EvalJudge => "eval.judge".to_owned(),
+            Self::TrajectoryCompress => "trajectory.compress".to_owned(),
+            _ => format!("auxiliary.{}", self.as_str()),
+        }
     }
 
     /// The task's `[auxiliary.<task>]` table, when configured.
@@ -106,6 +115,8 @@ impl AuxTask {
             Self::VoiceChat => config.voice_chat.as_ref(),
             Self::CommitMessage => config.commit_message.as_ref(),
             Self::Kanban => config.kanban.as_ref(),
+            Self::EvalJudge => config.eval_judge.as_ref(),
+            Self::TrajectoryCompress => config.trajectory_compress.as_ref(),
         }
     }
 }

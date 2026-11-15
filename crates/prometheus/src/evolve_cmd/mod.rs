@@ -66,6 +66,10 @@ pub enum EvolveCommand {
     },
     /// The profile's harness proposals, oldest first.
     Proposals,
+    /// The offline evolution demo: two accounting tasks through the whole
+    /// pipeline on the mock provider, in a profile of its own (needs
+    /// neither `evolve.enabled` nor credentials).
+    Demo(DemoArgs),
     /// A proposal's diff against its base version, census, selector
     /// reason and lesson.
     Review(proposals::ReviewArgs),
@@ -153,6 +157,14 @@ impl From<ModeArg> for EvolveMode {
 ///
 /// `evolve.disabled` (78), `cli.usage` (2), `evolve.invalid_task` (65).
 pub fn run(command: &EvolveCommand, ctx: &Context<'_>) -> Result<u8, Error> {
+    if let EvolveCommand::Demo(args) = command {
+        let settings = crate::demo_cmd::evolve::Settings {
+            k: args.k,
+            mode: args.mode.mode(),
+            output: args.output.clone(),
+        };
+        return crate::demo_cmd::evolve::evolve_demo(&settings, ctx.launch);
+    }
     let scope = ctx.scope()?;
     pmt_evolve::gate::require_enabled(scope.config(), scope.name().as_str())?;
     match command {
@@ -171,7 +183,22 @@ pub fn run(command: &EvolveCommand, ctx: &Context<'_>) -> Result<u8, Error> {
             rebase,
         } => proposals::adopt(ctx, &scope, proposal, *now, *rebase),
         EvolveCommand::Reject { proposal } => proposals::reject(ctx, &scope, proposal),
+        EvolveCommand::Demo(_) => unreachable!("run() handles the demo first"),
     }
+}
+
+/// `prometheus evolve demo` flags.
+#[derive(Debug, Clone, Args)]
+pub struct DemoArgs {
+    /// Candidates per mode (1 or 2 show the whole pipeline).
+    #[arg(long, value_name = "N", default_value_t = 2, value_parser = clap::value_parser!(u8).range(1..=8))]
+    pub k: u8,
+    /// The evolution modes.
+    #[arg(long, value_enum, default_value = "parallel")]
+    pub mode: crate::cli::DemoMode,
+    /// Run in DIR (created when missing; an earlier demo there resumes).
+    #[arg(long, value_name = "DIR")]
+    pub output: Option<PathBuf>,
 }
 
 /// The profile handle jobs are queued in.

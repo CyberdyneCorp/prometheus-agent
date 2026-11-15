@@ -41,6 +41,7 @@ pub mod demo_cmd;
 pub mod desktop_cmd;
 pub mod doctor_cmd;
 pub mod egress;
+pub mod eval_cmd;
 pub mod evolve_cmd;
 pub mod evolve_host;
 pub mod experience_cmd;
@@ -101,6 +102,7 @@ pub mod surface;
 pub mod themes_cmd;
 pub mod tools_cmd;
 pub mod trajectory_cmd;
+pub mod trajectory_compress;
 pub mod trajectory_export;
 #[cfg(feature = "tui")]
 pub mod tui_cmd;

@@ -16,6 +16,7 @@
 - [Context compression](guide/compression.md)
 - [Logs, trajectories and telemetry](guide/observability.md)
 - [Session recordings and replay](guide/replay.md)
+- [Evaluation suites](guide/eval.md)
 - [Models and providers](guide/models.md)
 - [Provider credentials and sign-ins](guide/providers.md)
 - [Mixture of Agents](guide/moa.md)

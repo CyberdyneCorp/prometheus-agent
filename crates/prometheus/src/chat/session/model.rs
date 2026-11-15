@@ -670,6 +670,30 @@ impl Models {
         user: &str,
         max_output_tokens: u64,
     ) -> Result<Option<String>, Error> {
+        self.ask_auxiliary_with(
+            task,
+            &AuxArgs::default(),
+            session,
+            (system, user),
+            max_output_tokens,
+        )
+        .await
+    }
+
+    /// Like [`Models::ask_auxiliary`] on the route `args` names (an eval
+    /// grader's `model`, `trajectory compress --model`) when given.
+    ///
+    /// # Errors
+    ///
+    /// As [`Models::ask_auxiliary`].
+    pub async fn ask_auxiliary_with(
+        &self,
+        task: AuxTask,
+        args: &AuxArgs,
+        session: pmt_core::id::SessionId,
+        (system, user): (&str, &str),
+        max_output_tokens: u64,
+    ) -> Result<Option<String>, Error> {
         let main_target = self.primary(&RouteFlags::default()).await?;
         let resolver = self.resolver();
         let main = resolver
@@ -681,7 +705,7 @@ impl Models {
             main: main.as_ref(),
             health: &*self.setup.health,
         };
-        let Some(route) = auxiliary::resolve(task, &AuxArgs::default(), &ctx).await? else {
+        let Some(route) = auxiliary::resolve(task, args, &ctx).await? else {
             return Ok(None);
         };
         let request = Request {

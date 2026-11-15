@@ -634,11 +634,12 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 71. M3 Evaluation suites
 
-- [ ] 71.1 Implement the eval suite format and `prometheus eval run` with resumable runs; verify a suite run against the mock provider (spec: replay-and-evaluation)
-- [ ] 71.2 Implement the answer-free boundary, post-hoc judging, re-judging with judge identity, and reports with comparison; verify that no grader data reaches the agent's context (spec: replay-and-evaluation)
+- [x] 71.1 Implement the eval suite format and `prometheus eval run` with resumable runs; verify a suite run against the mock provider (spec: replay-and-evaluation)
+- [x] 71.2 Implement the answer-free boundary, post-hoc judging, re-judging with judge identity, and reports with comparison; verify that no grader data reaches the agent's context (spec: replay-and-evaluation)
 - [ ] 71.3 Implement the benchmark adapter protocol and session-to-task capture; verify with a sample adapter (spec: replay-and-evaluation)
-- [ ] 71.4 Implement batch prompt datasets (resumable, ephemeral prompts not recorded), batch statistics with quality filtering, toolset distributions (reproducible sampling) and the trajectory compressor (head and tail preserved); verify with dataset fixtures (spec: replay-and-evaluation)
-- [ ] 71.5 Implement the offline self-improvement demo; verify that it runs a full evolution job with the mock provider offline and exits 0 (spec: replay-and-evaluation, spec: harness-evolution)
+  - Known gap: the protocol, judge-only `bench.score`, the `-32002` refusal of pushed scores and session capture are done and verified with a sample subprocess adapter (JSON-RPC over stdio, `crates/prometheus/tests/eval_bench.rs`); adapters shipped as WASM plugins or Python-bridge plugins have no transport yet (no plugin world or bridge registration exposes the `bench.*` methods), so the task stays open.
+- [x] 71.4 Implement batch prompt datasets (resumable, ephemeral prompts not recorded), batch statistics with quality filtering, toolset distributions (reproducible sampling) and the trajectory compressor (head and tail preserved); verify with dataset fixtures (spec: replay-and-evaluation)
+- [x] 71.5 Implement the offline self-improvement demo; verify that it runs a full evolution job with the mock provider offline and exits 0 (spec: replay-and-evaluation, spec: harness-evolution)
 
 ## 72. M3 Remaining upgrades
 

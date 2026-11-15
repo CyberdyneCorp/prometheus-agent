@@ -254,8 +254,7 @@ impl DaemonHost {
             session.live.retarget(&session.factory, &cwd).await?;
         }
         if let Some(effort) = &params.reasoning_effort {
-            self.run_command(profile, session, "reasoning", effort, &link)
-                .await?;
+            Box::pin(self.run_command(profile, session, "reasoning", effort, &link)).await?;
         }
         let mut next_turn = false;
         if let Some(model) = params.model.clone() {
@@ -263,8 +262,7 @@ impl DaemonHost {
                 next_turn = true;
                 self.switch_after_turn(profile, session, model, link.clone());
             } else {
-                self.run_command(profile, session, "model", &model, &link)
-                    .await?;
+                Box::pin(self.run_command(profile, session, "model", &model, &link)).await?;
             }
         }
         let settings = self.settings_of(profile, session).await;
@@ -290,7 +288,7 @@ impl DaemonHost {
             name: name.to_owned(),
             args: args.to_owned(),
         };
-        match self.dispatch_command(profile, params, link.clone()).await? {
+        match Box::pin(self.dispatch_command(profile, params, link.clone())).await? {
             Dispatched::Refused { reason } => Err(refusal(reason)),
             Dispatched::Done { .. } | Dispatched::Send { .. } => Ok(()),
         }
@@ -314,10 +312,7 @@ impl DaemonHost {
             let Ok(profile) = host.profile(&name) else {
                 return;
             };
-            match host
-                .run_command(&profile, &session, "model", &model, &link)
-                .await
-            {
+            match Box::pin(host.run_command(&profile, &session, "model", &model, &link)).await {
                 Ok(()) => {
                     let settings = host.settings_of(&profile, &session).await;
                     publish(&link, &settings);

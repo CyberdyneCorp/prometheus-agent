@@ -811,6 +811,17 @@
           ],
           "description": "Skill curator."
         },
+        "eval_judge": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuxiliaryTask"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`llm` graders of `prometheus eval judge` (defaults to the main\nmodel; a grader's own `model` wins)."
+        },
         "evolution": {
           "anyOf": [
             {
@@ -894,6 +905,17 @@
             }
           ],
           "description": "Session titles."
+        },
+        "trajectory_compress": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuxiliaryTask"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Summaries of `prometheus trajectory compress` (defaults to the main\nmodel; `--model` wins)."
         },
         "transient_retries": {
           "default": 2,
