@@ -42,6 +42,7 @@ pub mod desktop_cmd;
 pub mod doctor_cmd;
 pub mod egress;
 pub mod evolve_cmd;
+pub mod evolve_host;
 pub mod fallback_cmd;
 pub mod files_cmd;
 pub mod grants_cmd;

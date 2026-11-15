@@ -141,7 +141,14 @@ fn a_git_session_freezes_head_and_a_patch_that_reproduces_it() {
         "Reconcile the ledger"
     );
     let repo_toml = std::fs::read_to_string(task.join("source/repo.toml")).unwrap();
-    assert_eq!(repo_toml, format!("commit = \"{head}\"\n"));
+    assert!(
+        repo_toml.starts_with(&format!("commit = \"{head}\"\n")),
+        "{repo_toml}"
+    );
+    assert!(
+        !repo_toml.contains("excluded"),
+        "nothing excluded: {repo_toml}"
+    );
     assert_eq!(
         std::fs::read(repo.join(".git/index")).unwrap(),
         index_before,
@@ -239,23 +246,66 @@ fn a_tracked_leak_file_is_excluded_from_a_git_snapshot() {
     let patch = std::fs::read_to_string(source.join("uncommitted.patch")).unwrap();
     assert!(!patch.contains("rubric"), "{patch}");
 
-    // Materialise as a rollout would: the commit, the patch, the exclusions.
+    // Materialise as a rollout does: the commit, the patch, the exclusions.
     let rebuilt = fixture.root.path().join("rebuilt");
-    git(
-        fixture.root.path(),
-        &["clone", "-q", repo.to_str().unwrap(), "rebuilt"],
-    );
-    git(&rebuilt, &["checkout", "-q", "--detach", &snapshot.commit]);
-    git(
-        &rebuilt,
-        &["apply", source.join("uncommitted.patch").to_str().unwrap()],
-    );
-    snapshot.remove_excluded(&rebuilt).unwrap();
+    pmt_evolve::job::workspace::materialize(source.parent().unwrap(), &rebuilt).unwrap();
     assert!(!rebuilt.join("grader/rubric.md").exists());
     assert_eq!(
         std::fs::read_to_string(rebuilt.join("ledger.txt")).unwrap(),
         "10\n20\n"
     );
+}
+
+/// Scenario: Eval verdict in source (the capture half; evidence trees are
+/// covered by the engine's tripwire tests).
+#[test]
+fn an_eval_verdict_file_is_left_out_of_the_task() {
+    let verdict = "{\"canary\": \"pmt-eval-verdict\", \"suite\": \"smoke\", \"pass_rate\": 1.0}\n";
+    // A plain workspace: the copy leaves it out.
+    let fixture = Fixture::enabled();
+    let workspace = fixture.workspace();
+    std::fs::create_dir_all(workspace.join("results")).unwrap();
+    std::fs::write(workspace.join("results/run.json"), verdict).unwrap();
+    std::fs::write(workspace.join("ledger.txt"), "10\n").unwrap();
+    let task = fixture.task_file("statement = \"sum the ledger\"\nworkspace = \"workspace\"\n");
+    let record = job::queue(
+        &fixture.profile(None),
+        &Request::new(Trigger::Cli, TaskInput::File(task)),
+    )
+    .unwrap();
+    let source = Jobs::of(fixture.scope.dir())
+        .dir(&record.id)
+        .join("task/source");
+    assert!(source.join("ledger.txt").is_file());
+    assert!(!source.join("results/run.json").exists());
+
+    // A git workspace: neither the patch nor the rebuilt workspace has it.
+    let fixture = Fixture::enabled();
+    let repo = fixture.workspace();
+    git(&repo, &["init", "-q"]);
+    std::fs::write(repo.join("ledger.txt"), "10\n").unwrap();
+    git(&repo, &["add", "."]);
+    git(&repo, &["commit", "-q", "-m", "first"]);
+    std::fs::create_dir_all(repo.join("results")).unwrap();
+    std::fs::write(repo.join("results/run.json"), verdict).unwrap();
+    std::fs::write(repo.join("ledger.txt"), "10\n20\n").unwrap();
+    let task = fixture.task_file("statement = \"sum the ledger\"\nworkspace = \"workspace\"\n");
+    let record = job::queue(
+        &fixture.profile(None),
+        &Request::new(Trigger::Cli, TaskInput::File(task)),
+    )
+    .unwrap();
+    let source = Jobs::of(fixture.scope.dir())
+        .dir(&record.id)
+        .join("task/source");
+    let patch = std::fs::read_to_string(source.join("uncommitted.patch")).unwrap();
+    assert!(
+        patch.contains("+20") && !patch.contains("run.json"),
+        "{patch}"
+    );
+    let rebuilt = fixture.root.path().join("rebuilt");
+    pmt_evolve::job::workspace::materialize(source.parent().unwrap(), &rebuilt).unwrap();
+    assert!(!rebuilt.join("results/run.json").exists());
 }
 
 #[test]

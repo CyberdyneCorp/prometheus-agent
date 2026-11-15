@@ -37,6 +37,7 @@ mod plugins;
 pub mod processes;
 pub mod progress;
 pub mod python;
+pub mod rollout;
 pub mod serve;
 pub mod side;
 pub mod skills;
@@ -114,6 +115,8 @@ pub struct Options {
     pub kanban: Option<kanban::KanbanRun>,
     /// A replay's recorded tool results and prompts.
     pub replay: Option<Arc<crate::replay::Hooks>>,
+    /// A harness-evolution rollout (spec: harness-evolution).
+    pub rollout: Option<Arc<rollout::RolloutRun>>,
 }
 
 /// The clients of one daemon session: they see its events and answer its
@@ -745,9 +748,14 @@ impl Factory {
                 &self.scope.config().tools.disabled_toolsets,
                 selection,
             )?,
-            None => match &self.options.kanban {
-                Some(run) => run.selection(&registry, selection),
-                None => self.with_browser_opt_ins(session.id, selection),
+            None => match (&self.options.kanban, &self.options.rollout) {
+                (Some(run), _) => run.selection(&registry, selection),
+                (None, Some(run)) => run.selection(
+                    &registry,
+                    &self.scope.config().tools.disabled_toolsets,
+                    selection,
+                )?,
+                (None, None) => self.with_browser_opt_ins(session.id, selection),
             },
         };
         Ok((registry, selection, surface))
@@ -1124,8 +1132,10 @@ impl Factory {
         setup.user_home = self.launch.user_home().cloned();
         setup.view = skills::view(selection);
         setup.plugins = self.plugins.current().skill_dirs();
-        setup.harness = crate::harness_host::session_version(&self.scope, &self.store, id)
-            .and_then(|version| crate::harness_host::skills_dir(&self.scope, &version));
+        setup.harness = self
+            .harness_dir(id)
+            .map(|dir| dir.join("skills"))
+            .filter(|dir| dir.is_dir());
         let (plugins, call) = (self.plugins.clone(), self.plugin_call(id));
         let announce = announce.clone();
         setup.lifecycle = Some(Arc::new(move |skill: &str, action: &str| {

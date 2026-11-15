@@ -80,7 +80,9 @@ pub use delegation::{
 };
 pub use desktop::{DesktopConfig, HudConfig, QuickAskConfig};
 pub use evolve::{
-    DEFAULT_LEAK_GLOBS, EvolveAutoConfig, EvolveConfig, EvolveMode, EvolveTaskConfig, HarnessConfig,
+    AdoptionPolicy, DEFAULT_LEAK_GLOBS, EvolveAdoptionConfig, EvolveAutoConfig, EvolveBudgetConfig,
+    EvolveConcurrencyConfig, EvolveConfig, EvolveEvidenceConfig, EvolveImproverConfig, EvolveMode,
+    EvolveRolloutConfig, EvolveSelection, EvolveTaskConfig, HarnessConfig, RolloutNetwork,
 };
 pub use gateway::{
     AgentCacheConfig, AllowBots, BackgroundNotifications, Batching, ChatPolicy, ChatToolProgress,

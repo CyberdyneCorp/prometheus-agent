@@ -10036,9 +10036,18 @@ Harness evolution jobs (opt-in: `evolve.enabled = true`)
 Usage: prometheus evolve [OPTIONS] <COMMAND>
 
 Commands:
-  run   Queue an evolution job for a recorded session or a task file
-  list  The profile's evolution jobs, oldest first
-  help  Print this message or the help of the given subcommand(s)
+  run        Run an evolution job for a recorded session or a task file (in the foreground, unless --detach)
+  list       The profile's evolution jobs, oldest first
+  status     A job's status, stages, selection and spend by kind
+  cancel     Stop a job at its next model-call boundary
+  resume     Run an interrupted job again from its caches (in the foreground)
+  compare    The anonymised candidates of a job awaiting your selection
+  choose     Pick a candidate of a job awaiting your selection and continue it
+  proposals  The profile's harness proposals, oldest first
+  review     A proposal's diff against its base version, census, selector reason and lesson
+  adopt      Adopt a proposal as a new harness version (from the next session)
+  reject     Reject a pending proposal
+  help       Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -10075,7 +10084,7 @@ Options:
 ## `prometheus evolve run`
 
 ```text
-Queue an evolution job for a recorded session or a task file
+Run an evolution job for a recorded session or a task file (in the foreground, unless --detach)
 
 Usage: prometheus evolve run [OPTIONS]
 
@@ -10122,7 +10131,7 @@ Options:
           No colour (also when `NO_COLOR` is set or stdout is not a terminal)
 
       --detach
-          Return once the job is queued
+          Return once the job is queued (the daemon runs it)
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
@@ -10179,6 +10188,401 @@ Options:
           Print help
 ```
 
+## `prometheus evolve status`
+
+```text
+A job's status, stages, selection and spend by kind
+
+Usage: prometheus evolve status [OPTIONS] <JOB>
+
+Arguments:
+  <JOB>
+          The job
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus evolve cancel`
+
+```text
+Stop a job at its next model-call boundary
+
+Usage: prometheus evolve cancel [OPTIONS] <JOB>
+
+Arguments:
+  <JOB>
+          The job
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus evolve resume`
+
+```text
+Run an interrupted job again from its caches (in the foreground)
+
+Usage: prometheus evolve resume [OPTIONS] <JOB>
+
+Arguments:
+  <JOB>
+          The job
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus evolve compare`
+
+```text
+The anonymised candidates of a job awaiting your selection
+
+Usage: prometheus evolve compare [OPTIONS] <JOB>
+
+Arguments:
+  <JOB>
+          The job
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus evolve choose`
+
+```text
+Pick a candidate of a job awaiting your selection and continue it
+
+Usage: prometheus evolve choose [OPTIONS] <JOB> <ID>
+
+Arguments:
+  <JOB>
+          The job
+
+  <ID>
+          The candidate's id (`A`, `B`...)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus evolve proposals`
+
+```text
+The profile's harness proposals, oldest first
+
+Usage: prometheus evolve proposals [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus evolve review`
+
+```text
+A proposal's diff against its base version, census, selector reason and lesson
+
+Usage: prometheus evolve review [OPTIONS] <PROPOSAL>
+
+Arguments:
+  <PROPOSAL>
+          The proposal
+
+Options:
+      --eval <SUITE>
+          Also run this eval suite against the base and the proposed harness and show you the results (they never reach evolution)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus evolve adopt`
+
+```text
+Adopt a proposal as a new harness version (from the next session)
+
+Usage: prometheus evolve adopt [OPTIONS] <PROPOSAL>
+
+Arguments:
+  <PROPOSAL>
+          The proposal
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --now
+          Also rebuild the prompt of open sessions at their next turn
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --rebase
+          Apply the proposal onto a changed active harness when its diff applies cleanly
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus evolve reject`
+
+```text
+Reject a pending proposal
+
+Usage: prometheus evolve reject [OPTIONS] <PROPOSAL>
+
+Arguments:
+  <PROPOSAL>
+          The proposal
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus evolve help`
 
 ```text
@@ -10187,15 +10591,24 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus evolve help [COMMAND]
 
 Commands:
-  run   Queue an evolution job for a recorded session or a task file
-  list  The profile's evolution jobs, oldest first
-  help  Print this message or the help of the given subcommand(s)
+  run        Run an evolution job for a recorded session or a task file (in the foreground, unless --detach)
+  list       The profile's evolution jobs, oldest first
+  status     A job's status, stages, selection and spend by kind
+  cancel     Stop a job at its next model-call boundary
+  resume     Run an interrupted job again from its caches (in the foreground)
+  compare    The anonymised candidates of a job awaiting your selection
+  choose     Pick a candidate of a job awaiting your selection and continue it
+  proposals  The profile's harness proposals, oldest first
+  review     A proposal's diff against its base version, census, selector reason and lesson
+  adopt      Adopt a proposal as a new harness version (from the next session)
+  reject     Reject a pending proposal
+  help       Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus evolve help run`
 
 ```text
-Queue an evolution job for a recorded session or a task file
+Run an evolution job for a recorded session or a task file (in the foreground, unless --detach)
 
 Usage: prometheus evolve help run
 ```
@@ -10206,6 +10619,78 @@ Usage: prometheus evolve help run
 The profile's evolution jobs, oldest first
 
 Usage: prometheus evolve help list
+```
+
+## `prometheus evolve help status`
+
+```text
+A job's status, stages, selection and spend by kind
+
+Usage: prometheus evolve help status
+```
+
+## `prometheus evolve help cancel`
+
+```text
+Stop a job at its next model-call boundary
+
+Usage: prometheus evolve help cancel
+```
+
+## `prometheus evolve help resume`
+
+```text
+Run an interrupted job again from its caches (in the foreground)
+
+Usage: prometheus evolve help resume
+```
+
+## `prometheus evolve help compare`
+
+```text
+The anonymised candidates of a job awaiting your selection
+
+Usage: prometheus evolve help compare
+```
+
+## `prometheus evolve help choose`
+
+```text
+Pick a candidate of a job awaiting your selection and continue it
+
+Usage: prometheus evolve help choose
+```
+
+## `prometheus evolve help proposals`
+
+```text
+The profile's harness proposals, oldest first
+
+Usage: prometheus evolve help proposals
+```
+
+## `prometheus evolve help review`
+
+```text
+A proposal's diff against its base version, census, selector reason and lesson
+
+Usage: prometheus evolve help review
+```
+
+## `prometheus evolve help adopt`
+
+```text
+Adopt a proposal as a new harness version (from the next session)
+
+Usage: prometheus evolve help adopt
+```
+
+## `prometheus evolve help reject`
+
+```text
+Reject a pending proposal
+
+Usage: prometheus evolve help reject
 ```
 
 ## `prometheus evolve help help`
@@ -33904,14 +34389,23 @@ Harness evolution jobs (opt-in: `evolve.enabled = true`)
 Usage: prometheus help evolve [COMMAND]
 
 Commands:
-  run   Queue an evolution job for a recorded session or a task file
-  list  The profile's evolution jobs, oldest first
+  run        Run an evolution job for a recorded session or a task file (in the foreground, unless --detach)
+  list       The profile's evolution jobs, oldest first
+  status     A job's status, stages, selection and spend by kind
+  cancel     Stop a job at its next model-call boundary
+  resume     Run an interrupted job again from its caches (in the foreground)
+  compare    The anonymised candidates of a job awaiting your selection
+  choose     Pick a candidate of a job awaiting your selection and continue it
+  proposals  The profile's harness proposals, oldest first
+  review     A proposal's diff against its base version, census, selector reason and lesson
+  adopt      Adopt a proposal as a new harness version (from the next session)
+  reject     Reject a pending proposal
 ```
 
 ## `prometheus help evolve run`
 
 ```text
-Queue an evolution job for a recorded session or a task file
+Run an evolution job for a recorded session or a task file (in the foreground, unless --detach)
 
 Usage: prometheus help evolve run
 ```
@@ -33922,6 +34416,78 @@ Usage: prometheus help evolve run
 The profile's evolution jobs, oldest first
 
 Usage: prometheus help evolve list
+```
+
+## `prometheus help evolve status`
+
+```text
+A job's status, stages, selection and spend by kind
+
+Usage: prometheus help evolve status
+```
+
+## `prometheus help evolve cancel`
+
+```text
+Stop a job at its next model-call boundary
+
+Usage: prometheus help evolve cancel
+```
+
+## `prometheus help evolve resume`
+
+```text
+Run an interrupted job again from its caches (in the foreground)
+
+Usage: prometheus help evolve resume
+```
+
+## `prometheus help evolve compare`
+
+```text
+The anonymised candidates of a job awaiting your selection
+
+Usage: prometheus help evolve compare
+```
+
+## `prometheus help evolve choose`
+
+```text
+Pick a candidate of a job awaiting your selection and continue it
+
+Usage: prometheus help evolve choose
+```
+
+## `prometheus help evolve proposals`
+
+```text
+The profile's harness proposals, oldest first
+
+Usage: prometheus help evolve proposals
+```
+
+## `prometheus help evolve review`
+
+```text
+A proposal's diff against its base version, census, selector reason and lesson
+
+Usage: prometheus help evolve review
+```
+
+## `prometheus help evolve adopt`
+
+```text
+Adopt a proposal as a new harness version (from the next session)
+
+Usage: prometheus help evolve adopt
+```
+
+## `prometheus help evolve reject`
+
+```text
+Reject a pending proposal
+
+Usage: prometheus help evolve reject
 ```
 
 ## `prometheus help kanban`

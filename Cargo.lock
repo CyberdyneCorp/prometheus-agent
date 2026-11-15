@@ -3349,6 +3349,7 @@ dependencies = [
 name = "pmt-evolve"
 version = "0.1.0"
 dependencies = [
+ "futures-util",
  "glob",
  "jiff",
  "pmt-config",
@@ -3363,6 +3364,7 @@ dependencies = [
  "shlex",
  "similar",
  "tempfile",
+ "tokio",
  "toml",
  "tracing",
  "tracing-subscriber",

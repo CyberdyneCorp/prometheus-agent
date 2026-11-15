@@ -70,6 +70,10 @@ pub struct Capture {
 pub struct RepoSnapshot {
     /// The HEAD commit the rollout workspace is checked out at.
     pub commit: String,
+    /// The repository the commit is read from (a rollout clones it
+    /// `--shared`, reading its objects and never writing to it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root: Option<String>,
     /// Paths tracked at `commit` that match a leak glob: they are not in
     /// `uncommitted.patch` and must be deleted from the materialised
     /// workspace.
@@ -197,6 +201,37 @@ pub fn refingerprint(dir: &Path) -> Result<(), Error> {
     write(&path, text.as_bytes())
 }
 
+/// Whether a file carries an eval verdict marker in its name or content
+/// (it is left out like a leak-glob match).
+fn verdict(relative: &str, bytes: &[u8]) -> bool {
+    relative.contains(crate::engine::tripwire::VERDICT_CANARY)
+        || crate::engine::tripwire::check_text(relative, &String::from_utf8_lossy(bytes)).is_err()
+}
+
+/// The files of the repository at `root` (tracked, and untracked but not
+/// ignored) that carry a verdict marker.
+fn verdict_files(root: &Path) -> Result<Vec<String>, Error> {
+    let listed = git(
+        root,
+        &[
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+        ],
+        None,
+    )?;
+    Ok(listed
+        .split('\0')
+        .filter(|relative| !relative.is_empty())
+        .filter(|relative| {
+            std::fs::read(root.join(relative)).is_ok_and(|bytes| verdict(relative, &bytes))
+        })
+        .map(str::to_owned)
+        .collect())
+}
+
 struct Snapshot {
     root: PathBuf,
     leaks: LeakGlobs,
@@ -232,13 +267,18 @@ impl Snapshot {
     /// `repo.toml` and `uncommitted.patch` of the repository at `root`.
     fn git(&mut self, root: &Path, job_task: &Path) -> Result<(), Error> {
         let head = git(root, &["rev-parse", "HEAD"], None)?;
-        let index = job_task.join(".capture-index");
+        // `git -C <root>` resolves a relative index path against the
+        // repository, so it is made absolute first.
+        let index = std::path::absolute(job_task.join(".capture-index"))
+            .unwrap_or_else(|_| job_task.join(".capture-index"));
         let env = Some(index.as_path());
+        let verdicts = verdict_files(root)?;
         let excludes: Vec<String> = self
             .leaks
             .0
             .iter()
             .map(|p| format!(":(exclude,glob){}", p.as_str()))
+            .chain(verdicts.iter().map(|v| format!(":(exclude,literal){v}")))
             .collect();
         let patch = (|| {
             git(root, &["read-tree", "HEAD"], env)?;
@@ -254,9 +294,13 @@ impl Snapshot {
         let tracked = git(root, &["ls-tree", "-r", "-z", "--name-only", "HEAD"], None)?;
         let repo = RepoSnapshot {
             commit: head.trim().to_owned(),
+            root: Some(root.to_string_lossy().into_owned()),
             excluded: tracked
                 .split('\0')
-                .filter(|path| !path.is_empty() && self.leaks.matches(path))
+                .filter(|path| {
+                    !path.is_empty()
+                        && (self.leaks.matches(path) || verdicts.iter().any(|v| v == path))
+                })
                 .map(str::to_owned)
                 .collect(),
         };
@@ -295,16 +339,25 @@ impl Snapshot {
             if !real.is_file() || self.leaks.matches(&relative) || !seen.insert(relative.clone()) {
                 continue;
             }
-            let bytes = std::fs::read(&real).map_err(|e| io(&real, &e))?;
-            let bytes = self.redacted(bytes);
-            self.charge(bytes.len())?;
-            let target = self.root.join(&relative);
-            if let Some(parent) = target.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| io(parent, &e))?;
-            }
-            write(&target, &bytes)?;
+            self.copy(&real, &relative)?;
         }
         Ok(())
+    }
+
+    /// Copies one workspace file to `source/<relative>`, redacted and
+    /// charged; a file carrying a verdict marker is left out.
+    fn copy(&mut self, real: &Path, relative: &str) -> Result<(), Error> {
+        let bytes = std::fs::read(real).map_err(|e| io(real, &e))?;
+        if verdict(relative, &bytes) {
+            return Ok(());
+        }
+        let bytes = self.redacted(bytes);
+        self.charge(bytes.len())?;
+        let target = self.root.join(relative);
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| io(parent, &e))?;
+        }
+        write(&target, &bytes)
     }
 }
 

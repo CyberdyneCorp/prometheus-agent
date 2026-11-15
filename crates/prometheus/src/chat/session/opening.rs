@@ -125,8 +125,11 @@ impl Factory {
         child: Option<&ChildSpec>,
     ) -> (PromptSetup, Arc<Mutex<Vec<String>>>) {
         let (mut prompt, sections) = self.session_prompt(id, skills, memory, notices).await;
-        prompt.harness = crate::harness_host::session_version(&self.scope, &self.store, id)
-            .and_then(|version| crate::harness_host::layer(&self.scope, &version));
+        prompt.harness = self.harness_dir(id).and_then(|dir| {
+            pmt_config::harness::Tree::read(&dir)
+                .ok()
+                .and_then(|(tree, _)| crate::harness_host::layer_of(&tree))
+        });
         if let Some(spec) = child {
             spec.shape_prompt(&mut prompt);
         } else if let Some(run) = &self.options.kanban {
@@ -302,6 +305,8 @@ impl Factory {
         if let Some(replay) = &self.options.replay {
             setup.prompt_pins = Some(Arc::clone(&replay.pins));
             tools.replay_from(Arc::clone(&replay.tools));
+        } else if let Some(run) = &self.options.rollout {
+            tools.replay_from(Arc::clone(&run.recorder) as Arc<dyn crate::replay::ToolReplay>);
         }
     }
 }

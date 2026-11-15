@@ -316,15 +316,30 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `display.tool_progress_grouping` | one of "accumulate", "separate" | `"accumulate"` | `"accumulate"`, `"separate"` | `live` | How consecutive tool calls are grouped. |
 | `display.turn_summary` | boolean | `true` | any | `live` | One line with duration, tool count and tokens after each turn. |
 | `display.vim_mode` | boolean | `false` | any | `next_session` | Vim key bindings in the composer (the line editor is set up when the session starts). |
+| `evolve.adoption.policy` | one of "ask", "auto", "never" | `"ask"` | `"ask"`, `"auto"`, `"never"` | `live` | `ask` (default), `auto` (adopt at once, except proposals touching scripts, hooks or subagents, which always wait for approval) or `never` (proposals are kept for review). |
 | `evolve.auto.enabled` | boolean | `false` | any | `live` | Queue jobs automatically at all. |
 | `evolve.auto.max_jobs_per_day` | integer | `3` | ≥ 0 | `live` | Automatic jobs per profile per day. |
 | `evolve.auto.min_iterations` | integer | `40` | ≥ 1 | `live` | What counts as a long session. |
 | `evolve.auto.on_failure` | boolean | `true` | any | `live` | After a session that ended in error or interruption after at least one tool call. |
 | `evolve.auto.on_long_task` | boolean | `true` | any | `live` | After a session of at least `min_iterations` iterations. |
+| `evolve.budget.max_usd` | number | `5.0` | ≥ 0.0 | `live` | A job stops (`budget-exceeded`) once its spend reaches this many US dollars, unless `--budget-usd` names another cap. |
+| `evolve.concurrency.rollouts` | integer | `2` | ≥ 1 | `live` | Rollouts running at once. |
+| `evolve.concurrency.sessions` | integer | `2` | ≥ 1 | `live` | Improver sessions running at once. |
 | `evolve.enabled` | boolean | `false` | any | `live` | Allow harness evolution in this profile (`prometheus evolve`, `/evolve`, the `evolve.*` RPC methods, scheduled and automatic jobs). |
+| `evolve.evidence.obs_trunc_chars` | integer | `50000` | ≥ 10000 | `live` | A tool observation longer than this is truncated in the rollout trajectories improvers read. |
+| `evolve.improver.max_iterations` | integer | `120` | ≥ 1 | `live` | Model calls one session may make. |
+| `evolve.improver.model` | string | unset | any | `live` | `provider/model` of every improver session; unset uses the `evolution` auxiliary route, else the profile's main model. |
+| `evolve.improver.timeout_secs` | integer | `1800` | ≥ 1 | `live` | Wall-clock limit of one session. |
 | `evolve.k` | integer | `2` | 1 to 8 | `live` | Recursion budget k: each mode spends 4k rollouts and 3k improver sessions. |
 | `evolve.leak_globs` | array of string | `["**/*reference_answer*","**/*rubric*","**/expected/**","**/*.expected.*","**/.pmt-eval/**"]` | any | `live` | Files never captured into a task, evidence or library entry, matched against the full relative path (leading dots included). |
 | `evolve.mode` | one of "parallel", "sequential", "both" | `"parallel"` | `"parallel"`, `"sequential"`, `"both"` | `live` | `parallel` (width), `sequential` (depth) or `both` (one proposal per mode on shared base rollouts). |
+| `evolve.resume_on_start` | boolean | `true` | any | `live` | Interrupted jobs are queued again when the daemon starts. |
+| `evolve.retention_secs` | integer | `2592000` | ≥ 1 | `live` | Job directories older than this are pruned (the summary of a job whose proposal was adopted is kept). |
+| `evolve.rollout.backend` | string | `"local-sandbox"` | any | `live` | Execution backend: `local-sandbox` (the `local` backend with full sandbox enforcement) or another sandboxed backend (`container`, `ssh`, `singularity`, a plugin backend). The unsandboxed host is refused. |
+| `evolve.rollout.max_iterations` | integer | `60` | ≥ 1 | `live` | Model calls one rollout may make. |
+| `evolve.rollout.network` | one of "providers", "session" | `"providers"` | `"providers"`, `"session"` | `live` | `providers`: egress only to the configured model providers; `session`: the source session's egress rules. |
+| `evolve.rollout.timeout_secs` | integer | `900` | ≥ 1 | `live` | Wall-clock limit of one rollout. |
+| `evolve.selection` | one of "model", "user" | `"model"` | `"model"`, `"user"` | `live` | Who picks the final of each mode: `model` (a blind selector session) or `user` (`prometheus evolve choose`). |
 | `evolve.task.max_source_bytes` | integer | `52428800` | ≥ 1 | `live` | Largest workspace snapshot of a task, in bytes. |
 | `fallback.chain` | array of table | `[]` | any | `next_session` | Ordered fallback routes (`[[fallback.chain]]`); empty disables fallback. |
 | `fallback.min_health` | number | `0.2` | 0.0 to 1.0 | `next_session` | Fallback entries with a health score below this are skipped. |

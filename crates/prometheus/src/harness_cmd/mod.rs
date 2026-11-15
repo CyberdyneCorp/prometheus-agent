@@ -290,7 +290,7 @@ fn activate(
 
 /// Appends the `harness.activated` event (the trajectory grammar's line
 /// shape, outside any session) to `<profile>/harness/activations.jsonl`.
-fn record_activation(scope: &ProfileScope, from: &str, written: &VersionInfo) {
+pub(crate) fn record_activation(scope: &ProfileScope, from: &str, written: &VersionInfo) {
     let path = pmt_config::harness::dir(scope.dir()).join("activations.jsonl");
     let line = json!({
         "ts": jiff::Timestamp::now().to_string(),

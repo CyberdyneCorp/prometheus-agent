@@ -777,7 +777,10 @@ async fn replayed(
     journal: Option<Arc<dyn pmt_agent::turn::CallJournal>>,
 ) -> ToolBatch {
     use crate::replay::ToolAnswer;
-    let answers: Vec<ToolAnswer> = calls.iter().map(|call| replay.answer(call)).collect();
+    let answers: Vec<ToolAnswer> = calls
+        .iter()
+        .map(|call| replay.answer(call, tools.declared(&call.name).as_ref()))
+        .collect();
     let live: Vec<RequestedCall> = calls
         .iter()
         .zip(&answers)

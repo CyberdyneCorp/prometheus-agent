@@ -83,34 +83,19 @@ pub fn run(args: &SmokeSuiteArgs) -> Result<u8, Error> {
             .map_err(|e| Error::io(&pmt_core::error::codes::DEMO_IO, path, &e))?,
         None => String::new(),
     };
-    let ids = super::task_ids();
-    let (mut passed, mut failed, mut skipped) = (0, Vec::new(), Vec::new());
-    for id in &ids {
-        if args.skip.iter().any(|s| s == id) {
-            skipped.push(format!("{id} (left out)"));
-            continue;
-        }
-        match run_task(&bin, id, &place.root().join(id), &extra) {
-            Outcome::Passed => {
-                passed += 1;
-                println!("passed: {id}");
-            }
-            Outcome::Failed(why) => {
-                println!("FAILED: {id}: {why}");
-                failed.push(*id);
-            }
-            Outcome::Skipped(needed) => skipped.push(format!("{id} (needs {needed})")),
-        }
-    }
+    let report = suite(&bin, place.root(), &extra, None, &args.skip, |line| {
+        println!("{line}");
+    });
     println!(
-        "smoke: {passed} of {} tasks passed",
-        ids.len() - skipped.len()
+        "smoke: {} of {} tasks passed",
+        report.passed.len(),
+        report.passed.len() + report.failed.len()
     );
-    for task in &skipped {
+    for task in &report.skipped {
         println!("skipped: {task}");
     }
     place.finish(args.keep);
-    Ok(if failed.is_empty() {
+    Ok(if report.failed.is_empty() {
         pmt_core::exit::SUCCESS
     } else {
         pmt_core::exit::FAILURE
@@ -123,7 +108,56 @@ enum Outcome {
     Skipped(String),
 }
 
-fn run_task(bin: &Path, id: &str, scratch: &Path, extra_config: &str) -> Outcome {
+/// What a suite run found.
+#[derive(Debug, Clone, Default)]
+pub struct Report {
+    /// Tasks that met their grade.
+    pub passed: Vec<String>,
+    /// Tasks that missed it, with why.
+    pub failed: Vec<(String, String)>,
+    /// Tasks left out or not runnable here, with why.
+    pub skipped: Vec<String>,
+}
+
+/// Runs every task (but `skip`) under `root`, each profile on `harness`
+/// when given (a harness version written and activated before the task
+/// runs); `progress` hears one line per task.
+pub fn suite(
+    bin: &Path,
+    root: &Path,
+    extra: &str,
+    harness: Option<&pmt_config::harness::Tree>,
+    skip: &[String],
+    progress: impl Fn(&str),
+) -> Report {
+    let mut report = Report::default();
+    for id in super::task_ids() {
+        if skip.iter().any(|s| s == id) {
+            report.skipped.push(format!("{id} (left out)"));
+            continue;
+        }
+        match run_task(bin, id, &root.join(id), extra, harness) {
+            Outcome::Passed => {
+                progress(&format!("passed: {id}"));
+                report.passed.push(id.to_owned());
+            }
+            Outcome::Failed(why) => {
+                progress(&format!("FAILED: {id}: {why}"));
+                report.failed.push((id.to_owned(), why));
+            }
+            Outcome::Skipped(needed) => report.skipped.push(format!("{id} (needs {needed})")),
+        }
+    }
+    report
+}
+
+fn run_task(
+    bin: &Path,
+    id: &str,
+    scratch: &Path,
+    extra_config: &str,
+    harness: Option<&pmt_config::harness::Tree>,
+) -> Outcome {
     let mut run: Run = match parse_optional(id, "run.toml") {
         Ok(run) => run.unwrap_or_default(),
         Err(why) => return Outcome::Failed(why),
@@ -132,7 +166,7 @@ fn run_task(bin: &Path, id: &str, scratch: &Path, extra_config: &str) -> Outcome
     if let Some(needed) = run.requires.as_deref().filter(|c| !has(c)) {
         return Outcome::Skipped(needed.to_owned());
     }
-    match grade(bin, id, &run, scratch) {
+    match grade(bin, id, &run, scratch, harness) {
         Ok(()) => Outcome::Passed,
         Err(why) => Outcome::Failed(why),
     }
@@ -165,7 +199,13 @@ struct Paths<'a> {
 
 /// Runs task `id` in `scratch`; `Err(why)` when it missed its grade or
 /// could not run.
-fn grade(bin: &Path, id: &str, run: &Run, scratch: &Path) -> Result<(), String> {
+fn grade(
+    bin: &Path,
+    id: &str,
+    run: &Run,
+    scratch: &Path,
+    harness: Option<&pmt_config::harness::Tree>,
+) -> Result<(), String> {
     let task: Task = parse(id, "task.toml")?;
     let grader: Grader = parse(id, "grader/grader.toml")?;
     if grader.kind != "exact" {
@@ -182,6 +222,10 @@ fn grade(bin: &Path, id: &str, run: &Run, scratch: &Path) -> Result<(), String> 
         mock: &mock,
     };
     prepare(id, run, &task, &paths).map_err(|e| format!("cannot prepare the task: {e}"))?;
+    if let Some(tree) = harness {
+        seed_harness(&home.join("profiles/default"), tree)
+            .map_err(|e| format!("cannot install the harness: {e}"))?;
+    }
     let mut out = chat(bin, &paths, run, &task.prompt, None)?;
     for prompt in &run.then {
         let session = newest_session(bin, &home)?;
@@ -218,6 +262,16 @@ fn prepare(id: &str, run: &Run, task: &Task, paths: &Paths<'_>) -> Result<(), St
             .map_err(|e| e.to_string())?;
     }
     std::fs::write(paths.mock, read(id, "mock.toml")?).map_err(|e| e.to_string())
+}
+
+/// Writes `tree` as the profile's active harness version.
+fn seed_harness(profile: &Path, tree: &pmt_config::harness::Tree) -> Result<(), String> {
+    let harness = pmt_config::harness::HarnessDir::of(profile);
+    harness.seed().map_err(|e| e.to_string())?;
+    let version = harness
+        .write(tree, pmt_config::harness::Source::Import, None)
+        .map_err(|e| e.to_string())?;
+    harness.activate(&version.id).map_err(|e| e.to_string())
 }
 
 /// This binary on the task's home, with none of the invoking

@@ -848,6 +848,82 @@ export interface EventsSinceParams {
   session_id: string;
 }
 
+/** One job of `evolve.list`. */
+export interface EvolveJobRow {
+  /** The spend cap in US dollars (`null`: `evolve.budget.max_usd`). */
+  budget?: number | null;
+  /** Spend so far. */
+  cost_usd: number;
+  /** RFC 3339. */
+  created_at: string;
+  /** The experience-library domain. */
+  domain: string;
+  /** `evo_<ULID>`. */
+  id: string;
+  /** The recursion budget. */
+  k: number;
+  /** `parallel`, `sequential` or `both`. */
+  mode: string;
+  /** Rollouts the job plans. */
+  rollouts: number;
+  /** The job status. */
+  status: string;
+  /** What queued it. */
+  trigger: string;
+}
+
+/** `evolve.list` result. */
+export interface EvolveJobs {
+  /** Oldest first. */
+  jobs: Array<EvolveJobRow>;
+}
+
+/** Params of every `evolve.*` and `harness.*` method; each uses the fields its command takes. */
+export interface EvolveParams {
+  /** `evolve.start`: the spend cap in US dollars. */
+  budget_usd?: number | null;
+  /** `evolve.choose`: the anonymous candidate id. */
+  candidate?: string | null;
+  /** `evolve.start`: the experience-library domain. */
+  domain?: string | null;
+  /** The job (`evolve.status`, `evolve.cancel`, `evolve.choose`). */
+  job_id?: string | null;
+  /** `evolve.start`: the recursion budget (1-8). */
+  k?: number | null;
+  /** `evolve.start`: `parallel`, `sequential` or `both`. */
+  mode?: string | null;
+  /** `evolve.proposals.adopt`, `harness.rollback`: also rebuild the prompt of open sessions at their next turn. */
+  now?: boolean;
+  /** `harness.diff`: the second version (default: the active one). */
+  other?: string | null;
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+  /** The proposal (`evolve.proposals.adopt`, `evolve.proposals.reject`). */
+  proposal_id?: string | null;
+  /** `evolve.proposals.adopt`: rebase onto a changed active harness. */
+  rebase?: boolean;
+  /** `evolve.start`: the session whose task to evolve for. */
+  session_id?: string | null;
+  /** `evolve.start`: a task file on the daemon's machine. */
+  task_file?: string | null;
+  /** `harness.rollback`: the version to roll back to; `harness.diff`: the first version. */
+  version?: string | null;
+}
+
+/** `evolve.proposals.list` result. */
+export interface EvolveProposals {
+  /** Each proposal's `<id>.toml` as JSON, oldest first. */
+  proposals: Array<unknown>;
+}
+
+/** Result of the methods that act on one job, proposal or version. */
+export interface EvolveReply {
+  /** The matching command's `--json` document, or `null`. */
+  data?: unknown;
+  /** What happened, in one line. */
+  message: string;
+}
+
 /** One row of the platform support matrix. */
 export interface FeatureSupport {
   /** The feature (`sandbox.local`, `containers`...). */
@@ -1064,6 +1140,14 @@ export interface GitReviewParams {
   scope?: string;
   /** The session whose workspace is reviewed. */
   session_id: string;
+}
+
+/** `harness.log` result. */
+export interface HarnessVersions {
+  /** The active version. */
+  active: string;
+  /** Each version's `version.toml` as JSON, newest first. */
+  versions: Array<unknown>;
 }
 
 /** `health.changed` payload. */
@@ -2561,6 +2645,14 @@ export interface Methods {
   "cron.blueprints.list": { params: BlueprintsListParams; result: BlueprintList };
   "daemon.update": { params: DaemonUpdateParams; result: DaemonUpdated };
   "egress.set": { params: EgressSetParams; result: EgressState };
+  "evolve.cancel": { params: EvolveParams; result: EvolveReply };
+  "evolve.choose": { params: EvolveParams; result: EvolveReply };
+  "evolve.list": { params: EvolveParams; result: EvolveJobs };
+  "evolve.proposals.adopt": { params: EvolveParams; result: EvolveReply };
+  "evolve.proposals.list": { params: EvolveParams; result: EvolveProposals };
+  "evolve.proposals.reject": { params: EvolveParams; result: EvolveReply };
+  "evolve.start": { params: EvolveParams; result: EvolveReply };
+  "evolve.status": { params: EvolveParams; result: EvolveReply };
   "files.rollback": { params: FilesRollbackParams; result: FilesRolledBack };
   "files.undo": { params: FilesUndoParams; result: FilesUndone };
   "fs.list": { params: FsListParams; result: FsListing };
@@ -2573,6 +2665,9 @@ export interface Methods {
   "git.review": { params: GitReviewParams; result: GitReview };
   "git.stage": { params: GitPaths; result: Ack };
   "git.unstage": { params: GitPaths; result: Ack };
+  "harness.diff": { params: EvolveParams; result: EvolveReply };
+  "harness.log": { params: EvolveParams; result: HarnessVersions };
+  "harness.rollback": { params: EvolveParams; result: EvolveReply };
   "journey.list": { params: JourneyListParams; result: JourneyList };
   "local.add": { params: LocalParams; result: LocalReply };
   "local.catalog": { params: LocalParams; result: LocalReply };
@@ -2695,14 +2790,6 @@ export const UNDECLARED = [
   "bot.create",
   "bot.meta.get",
   "bot.meta.update",
-  "evolve.cancel",
-  "evolve.choose",
-  "evolve.list",
-  "evolve.proposals.adopt",
-  "evolve.proposals.list",
-  "evolve.proposals.reject",
-  "evolve.start",
-  "evolve.status",
   "experience.domains",
   "experience.forget",
   "experience.list",
@@ -2715,9 +2802,6 @@ export const UNDECLARED = [
   "groups.log",
   "groups.replica_state",
   "groups.replicate",
-  "harness.diff",
-  "harness.log",
-  "harness.rollback",
   "screen.handback",
   "screen.takeover",
   "subagent.subscribe",

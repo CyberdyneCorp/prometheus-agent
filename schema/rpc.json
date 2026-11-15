@@ -2455,6 +2455,241 @@
       ],
       "type": "object"
     },
+    "EvolveJobRow": {
+      "additionalProperties": false,
+      "description": "One job of `evolve.list`.",
+      "properties": {
+        "budget": {
+          "description": "The spend cap in US dollars (`null`: `evolve.budget.max_usd`).",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "cost_usd": {
+          "description": "Spend so far.",
+          "format": "double",
+          "type": "number"
+        },
+        "created_at": {
+          "description": "RFC 3339.",
+          "type": "string"
+        },
+        "domain": {
+          "description": "The experience-library domain.",
+          "type": "string"
+        },
+        "id": {
+          "description": "`evo_<ULID>`.",
+          "type": "string"
+        },
+        "k": {
+          "description": "The recursion budget.",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "mode": {
+          "description": "`parallel`, `sequential` or `both`.",
+          "type": "string"
+        },
+        "rollouts": {
+          "description": "Rollouts the job plans.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "status": {
+          "description": "The job status.",
+          "type": "string"
+        },
+        "trigger": {
+          "description": "What queued it.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "status",
+        "trigger",
+        "mode",
+        "k",
+        "rollouts",
+        "cost_usd",
+        "domain",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "EvolveJobs": {
+      "additionalProperties": false,
+      "description": "`evolve.list` result.",
+      "properties": {
+        "jobs": {
+          "description": "Oldest first.",
+          "items": {
+            "$ref": "#/$defs/EvolveJobRow"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "jobs"
+      ],
+      "type": "object"
+    },
+    "EvolveParams": {
+      "additionalProperties": false,
+      "description": "Params of every `evolve.*` and `harness.*` method; each uses the\nfields its command takes.",
+      "properties": {
+        "budget_usd": {
+          "default": null,
+          "description": "`evolve.start`: the spend cap in US dollars.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "candidate": {
+          "default": null,
+          "description": "`evolve.choose`: the anonymous candidate id.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "domain": {
+          "default": null,
+          "description": "`evolve.start`: the experience-library domain.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "job_id": {
+          "default": null,
+          "description": "The job (`evolve.status`, `evolve.cancel`, `evolve.choose`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "k": {
+          "default": null,
+          "description": "`evolve.start`: the recursion budget (1-8).",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "mode": {
+          "default": null,
+          "description": "`evolve.start`: `parallel`, `sequential` or `both`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "now": {
+          "default": false,
+          "description": "`evolve.proposals.adopt`, `harness.rollback`: also rebuild the\nprompt of open sessions at their next turn.",
+          "type": "boolean"
+        },
+        "other": {
+          "default": null,
+          "description": "`harness.diff`: the second version (default: the active one).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "proposal_id": {
+          "default": null,
+          "description": "The proposal (`evolve.proposals.adopt`, `evolve.proposals.reject`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rebase": {
+          "default": false,
+          "description": "`evolve.proposals.adopt`: rebase onto a changed active harness.",
+          "type": "boolean"
+        },
+        "session_id": {
+          "default": null,
+          "description": "`evolve.start`: the session whose task to evolve for.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "task_file": {
+          "default": null,
+          "description": "`evolve.start`: a task file on the daemon's machine.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "version": {
+          "default": null,
+          "description": "`harness.rollback`: the version to roll back to; `harness.diff`:\nthe first version.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "EvolveProposals": {
+      "additionalProperties": false,
+      "description": "`evolve.proposals.list` result.",
+      "properties": {
+        "proposals": {
+          "description": "Each proposal's `<id>.toml` as JSON, oldest first.",
+          "items": true,
+          "type": "array"
+        }
+      },
+      "required": [
+        "proposals"
+      ],
+      "type": "object"
+    },
+    "EvolveReply": {
+      "additionalProperties": false,
+      "description": "Result of the methods that act on one job, proposal or version.",
+      "properties": {
+        "data": {
+          "default": null,
+          "description": "The matching command's `--json` document, or `null`."
+        },
+        "message": {
+          "description": "What happened, in one line.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "type": "object"
+    },
     "FeatureSupport": {
       "additionalProperties": false,
       "description": "One row of the platform support matrix.",
@@ -3049,6 +3284,26 @@
       },
       "required": [
         "session_id"
+      ],
+      "type": "object"
+    },
+    "HarnessVersions": {
+      "additionalProperties": false,
+      "description": "`harness.log` result.",
+      "properties": {
+        "active": {
+          "description": "The active version.",
+          "type": "string"
+        },
+        "versions": {
+          "description": "Each version's `version.toml` as JSON, newest first.",
+          "items": true,
+          "type": "array"
+        }
+      },
+      "required": [
+        "active",
+        "versions"
       ],
       "type": "object"
     },
@@ -7651,43 +7906,83 @@
       "since": "1.0"
     },
     "evolve.cancel": {
-      "declared": false,
       "owner": "harness-evolution",
+      "params": {
+        "$ref": "#/$defs/EvolveParams"
+      },
+      "result": {
+        "$ref": "#/$defs/EvolveReply"
+      },
       "since": "1.0"
     },
     "evolve.choose": {
-      "declared": false,
       "owner": "harness-evolution",
+      "params": {
+        "$ref": "#/$defs/EvolveParams"
+      },
+      "result": {
+        "$ref": "#/$defs/EvolveReply"
+      },
       "since": "1.0"
     },
     "evolve.list": {
-      "declared": false,
       "owner": "harness-evolution",
+      "params": {
+        "$ref": "#/$defs/EvolveParams"
+      },
+      "result": {
+        "$ref": "#/$defs/EvolveJobs"
+      },
       "since": "1.0"
     },
     "evolve.proposals.adopt": {
-      "declared": false,
       "owner": "harness-evolution",
+      "params": {
+        "$ref": "#/$defs/EvolveParams"
+      },
+      "result": {
+        "$ref": "#/$defs/EvolveReply"
+      },
       "since": "1.0"
     },
     "evolve.proposals.list": {
-      "declared": false,
       "owner": "harness-evolution",
+      "params": {
+        "$ref": "#/$defs/EvolveParams"
+      },
+      "result": {
+        "$ref": "#/$defs/EvolveProposals"
+      },
       "since": "1.0"
     },
     "evolve.proposals.reject": {
-      "declared": false,
       "owner": "harness-evolution",
+      "params": {
+        "$ref": "#/$defs/EvolveParams"
+      },
+      "result": {
+        "$ref": "#/$defs/EvolveReply"
+      },
       "since": "1.0"
     },
     "evolve.start": {
-      "declared": false,
       "owner": "harness-evolution",
+      "params": {
+        "$ref": "#/$defs/EvolveParams"
+      },
+      "result": {
+        "$ref": "#/$defs/EvolveReply"
+      },
       "since": "1.0"
     },
     "evolve.status": {
-      "declared": false,
       "owner": "harness-evolution",
+      "params": {
+        "$ref": "#/$defs/EvolveParams"
+      },
+      "result": {
+        "$ref": "#/$defs/EvolveReply"
+      },
       "since": "1.0"
     },
     "experience.domains": {
@@ -7881,18 +8176,33 @@
       "since": "1.0"
     },
     "harness.diff": {
-      "declared": false,
       "owner": "harness-evolution",
+      "params": {
+        "$ref": "#/$defs/EvolveParams"
+      },
+      "result": {
+        "$ref": "#/$defs/EvolveReply"
+      },
       "since": "1.0"
     },
     "harness.log": {
-      "declared": false,
       "owner": "harness-evolution",
+      "params": {
+        "$ref": "#/$defs/EvolveParams"
+      },
+      "result": {
+        "$ref": "#/$defs/HarnessVersions"
+      },
       "since": "1.0"
     },
     "harness.rollback": {
-      "declared": false,
       "owner": "harness-evolution",
+      "params": {
+        "$ref": "#/$defs/EvolveParams"
+      },
+      "result": {
+        "$ref": "#/$defs/EvolveReply"
+      },
       "since": "1.0"
     },
     "journey.list": {

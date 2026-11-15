@@ -349,13 +349,13 @@ impl pmt_api::ApiHost for DaemonHost {
                     input_id: None,
                     author: None,
                 };
-                self.submit_turn(
+                Box::pin(self.submit_turn(
                     &profile,
                     params,
                     (author, link),
                     Some(BusyInputMode::Queue),
                     Some(setup),
-                )
+                ))
                 .await
             },
             span,

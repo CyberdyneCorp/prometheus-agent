@@ -482,6 +482,10 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `evolve.disabled` | `config` | 78 | Harness evolution is opt-in per profile: set `evolve.enabled = true` in the profile's `config.toml` (`prometheus config set evolve.enabled true`). The `prometheus harness` commands work without it. |
 | `evolve.invalid_task` | `invalid_input` | 65 | The evolution task could not be frozen: its task file is malformed, its session has no user message, or its workspace snapshot exceeds `evolve.task.max_source_bytes`; nothing was queued. |
 | `evolve.job_not_found` | `not_found` | 66 | No evolution job of this profile has this id; `prometheus evolve list` shows the jobs. |
+| `evolve.job_running` | `conflict` | 75 | Another process (the daemon or a foreground `prometheus evolve run`) is running this job; wait for it, or `prometheus evolve cancel <job>` it. |
+| `evolve.job_state` | `invalid_input` | 65 | The job is not in a state that allows this (only a job in `awaiting-selection` takes `evolve choose`; only an unfinished job can be cancelled or resumed); `prometheus evolve status <job>` shows its state. |
+| `evolve.proposal_not_found` | `not_found` | 66 | No harness proposal of this profile has this id; `prometheus evolve proposals` lists them. |
+| `evolve.proposal_refused` | `invalid_input` | 65 | The proposal cannot be adopted: it is not pending, the active harness changed since it was produced (re-run the job, or adopt with `--rebase` when its diff applies cleanly), or its tree no longer validates. |
 | `harness.invalid` | `invalid_input` | 65 | The harness tree failed validation; every error is listed (paths outside the editable surface, size caps, skill and subagent front matter, script syntax and references, `hooks.toml` keys and events, templates, secrets). No version was written. |
 | `harness.version_not_found` | `not_found` | 66 | No harness version has this id (`h<n>` or `h<n>-<fingerprint>`), or the version is not in the tree; `prometheus harness log` lists the versions. |
 | `harness.io` | `io` | 74 | A file under `<profile>/harness/` could not be read or written. |

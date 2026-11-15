@@ -366,7 +366,7 @@ impl DaemonHost {
             notice(&link, text);
         }
         if wakeup.prompt.starts_with('/') {
-            return self.loop_command(profile, id, wakeup, link).await;
+            return Box::pin(self.loop_command(profile, id, wakeup, link)).await;
         }
         let session = self.load(profile, id, &link).await?;
         let input = TurnInput {

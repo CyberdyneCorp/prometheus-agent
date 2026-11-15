@@ -53,6 +53,7 @@ mod desktop_ui;
 mod discovery;
 mod editor;
 mod editor_bridge;
+mod evolve;
 mod gateway;
 mod health_sample;
 mod interop;
@@ -84,6 +85,7 @@ use crate::chat::resume;
 use crate::chat::session::{Clients, Factory, Live};
 pub(super) use automation::schedule as schedule_automation;
 pub(super) use cron::schedule as schedule_cron;
+pub(super) use evolve::schedule as schedule_evolve;
 pub(super) use health_sample::sample as sample_health;
 pub(super) use kanban::schedule as schedule_kanban;
 pub(super) use reload::watch;
@@ -892,6 +894,22 @@ impl Host for DaemonHost {
         })
     }
 
+    fn evolve<'a>(
+        &'a self,
+        profile: &'a str,
+        request: pmt_gateway::evolve::EvolveRequest,
+    ) -> HostFuture<'a, serde_json::Value> {
+        Box::pin(async move {
+            let scope = self.profile(profile)?.scope();
+            let launch = self.launch.clone();
+            pmt_core::spawn::blocking(move || {
+                crate::evolve_host::rpc::handle(&scope, &launch, &request)
+            })
+            .await
+            .map_err(|e| Error::new(&pmt_core::error::codes::TASK_PANICKED, e.to_string()))?
+        })
+    }
+
     fn moa_presets<'a>(
         &'a self,
         profile: &'a str,
@@ -960,8 +978,7 @@ impl Host for DaemonHost {
         Box::pin(
             async move {
                 let profile = &self.profile(profile)?;
-                self.submit_turn(profile, params, (author, link), None, None)
-                    .await
+                Box::pin(self.submit_turn(profile, params, (author, link), None, None)).await
             }
             .instrument(span),
         )

@@ -7,6 +7,7 @@ pub mod auto;
 pub mod budget;
 pub mod record;
 pub mod task;
+pub mod workspace;
 
 use std::path::{Path, PathBuf};
 

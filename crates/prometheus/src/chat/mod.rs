@@ -333,6 +333,7 @@ fn session_options(args: &ChatArgs, mode: Mode) -> Result<Options, Error> {
         cron: None,
         kanban: None,
         replay: None,
+        rollout: None,
     })
 }
 

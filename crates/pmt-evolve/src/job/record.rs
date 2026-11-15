@@ -161,6 +161,122 @@ impl Jobs {
         })
     }
 
+    /// Rewrites the status of job `id` in its `job.toml`.
+    ///
+    /// # Errors
+    ///
+    /// `evolve.job_not_found`; `harness.io`.
+    pub fn set_status(&self, id: &str, status: &str) -> Result<(), Error> {
+        let mut record = self.get(id)?;
+        status.clone_into(&mut record.status);
+        let path = self.dir(id).join(JOB_FILE);
+        let text =
+            toml::to_string(&record).map_err(|e| Error::new(&codes::HARNESS_IO, e.to_string()))?;
+        pmt_core::private_fs::write_atomic(&path, text.as_bytes()).map_err(|e| io(&path, &e))
+    }
+
+    /// Records the user's pick `id` for the first mode of job `job` that
+    /// awaits a selection, and queues the job again.
+    ///
+    /// # Errors
+    ///
+    /// `evolve.job_not_found`; `evolve.job_state` when the job does not
+    /// await a selection or `id` names no candidate.
+    pub fn choose(&self, job: &str, id: &str) -> Result<String, Error> {
+        let record = self.get(job)?;
+        let summary = crate::engine::summary::JobSummary::read(&self.dir(job));
+        let mode = summary
+            .as_ref()
+            .filter(|_| record.status == "awaiting-selection")
+            .and_then(|s| s.modes.iter().find(|m| m.status == "awaiting-selection"))
+            .ok_or_else(|| {
+                state(format!(
+                    "job {job} is {}, not awaiting-selection",
+                    record.status
+                ))
+            })?;
+        if !mode.candidates.iter().any(|(_, c)| c == id) {
+            let ids: Vec<&str> = mode.candidates.iter().map(|(_, c)| c.as_str()).collect();
+            return Err(state(format!(
+                "no candidate '{id}' (candidates: {})",
+                ids.join(", ")
+            )));
+        }
+        let path = self
+            .dir(job)
+            .join("modes")
+            .join(&mode.mode)
+            .join("choice.toml");
+        let text = toml::to_string(&crate::engine::select::UserChoice { id: id.to_owned() })
+            .map_err(|e| Error::new(&codes::HARNESS_IO, e.to_string()))?;
+        pmt_core::private_fs::write_atomic(&path, text.as_bytes()).map_err(|e| io(&path, &e))?;
+        self.set_status(job, "queued")?;
+        Ok(mode.mode.clone())
+    }
+
+    /// Queues an unfinished (or finished) job again so it resumes from
+    /// its caches.
+    ///
+    /// # Errors
+    ///
+    /// `evolve.job_not_found`; `evolve.job_state` while it runs.
+    pub fn resume(&self, job: &str) -> Result<(), Error> {
+        self.get(job)?;
+        if crate::engine::is_running(&self.dir(job)) {
+            return Err(state(format!("job {job} is running")));
+        }
+        self.set_status(job, "queued")
+    }
+
+    /// Cancels job `job`: a running job stops at its next model-call
+    /// boundary; a queued or paused one ends `cancelled` at once. Returns
+    /// whether it was running.
+    ///
+    /// # Errors
+    ///
+    /// `evolve.job_not_found`; `evolve.job_state` when it already ended.
+    pub fn cancel(&self, job: &str) -> Result<bool, Error> {
+        let record = self.get(job)?;
+        let dir = self.dir(job);
+        if crate::engine::is_running(&dir) {
+            let path = dir.join(crate::engine::CANCEL_FILE);
+            std::fs::write(&path, b"").map_err(|e| io(&path, &e))?;
+            return Ok(true);
+        }
+        if !matches!(
+            record.status.as_str(),
+            "queued" | "running" | "awaiting-selection"
+        ) {
+            return Err(state(format!(
+                "job {job} already ended ({})",
+                record.status
+            )));
+        }
+        self.set_status(job, "cancelled")?;
+        if let Some(mut summary) = crate::engine::summary::JobSummary::read(&dir) {
+            "cancelled".clone_into(&mut summary.status);
+            summary.write(&dir)?;
+        }
+        Ok(false)
+    }
+
+    /// Jobs left `running` by a process that died become `queued` again
+    /// (the daemon calls this at start when `evolve.resume_on_start`).
+    ///
+    /// # Errors
+    ///
+    /// `harness.io`.
+    pub fn requeue_interrupted(&self) -> Result<Vec<String>, Error> {
+        let mut requeued = Vec::new();
+        for job in self.list()? {
+            if job.status == "running" && !crate::engine::is_running(&self.dir(&job.id)) {
+                self.set_status(&job.id, "queued")?;
+                requeued.push(job.id);
+            }
+        }
+        Ok(requeued)
+    }
+
     /// Every job, oldest first (ids are ULIDs).
     ///
     /// # Errors
@@ -178,6 +294,10 @@ impl Jobs {
         ids.sort();
         ids.iter().map(|id| self.get(id)).collect()
     }
+}
+
+fn state(message: String) -> Error {
+    Error::new(&codes::EVOLVE_JOB_STATE, message)
 }
 
 fn io(path: &Path, err: &std::io::Error) -> Error {

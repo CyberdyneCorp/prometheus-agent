@@ -122,6 +122,78 @@ ended: `harness evolution job <id> queued after this session` on stderr or
 in the line chat, in the messaging chat, or to the TUI, desktop or
 dashboard still attached to it. A daemon session that ends after its last
 client left (closed when idle) has nobody to tell: the job is in
-`prometheus evolve list` and the daemon log. This build
-queues jobs; running them (rollouts, improver sessions, selection and
-proposals) is the evolution engine's.
+`prometheus evolve list` and the daemon log.
+
+## How a job runs
+
+`prometheus evolve run` runs the job in the foreground after printing a
+spend estimate, and exits 0 when it ends `ok` and 1 otherwise; with
+`--detach` it only queues the job, and the daemon's evolution runner
+starts queued jobs (and, with `evolve.resume_on_start = true`, queues
+again the jobs a stopped process left running). A job:
+
+1. **Rolls out** the active harness `k` times (`base1..basek`): each
+   rollout is a hidden, headless `source = "harness"` session on a fresh
+   copy of the task's workspace (a detached checkout of the recorded
+   commit from a `--shared` clone, the patch applied, `excluded` paths
+   deleted; or a copy of `task/source/`), on `evolve.rollout.backend`
+   (`local-sandbox` by default; the unsandboxed host is refused), with
+   every approval denied, no memory, egress limited to the configured
+   model providers (`evolve.rollout.network = "session"` keeps the
+   profile's rules) and at most `evolve.rollout.max_iterations` model
+   calls in `evolve.rollout.timeout_secs`. A tool that declares `effect =
+   "external"` (sending a message, scheduling a job, writing memory,
+   delegating...) is recorded instead of run and answers `recorded, not
+   executed during harness evolution`; the terminal stays live inside the
+   rollout's sandbox. Your workspace is never touched.
+2. **Proposes**: improver sessions edit a private copy of the evidence
+   (`context/task.md`, `source/`, the rollouts' trajectories and
+   deliverables, the harness to edit, and for later steps a pool of
+   earlier candidates with their diffs, rollouts and decision notes). An
+   improver has only the file tools, confined to its copy: it can read a
+   candidate's script but never run it. Its edit is accepted only when it
+   validates and passes the leak tripwire; a rejected edit is retried
+   once with the errors, then the step falls back to its base tree.
+   `parallel` mode runs `inv<i>`/`dom<i>` stages on identical evidence and
+   composes `agg1..aggk` from all of them; `sequential` mode runs `k`
+   rounds, each composing checkpoint `c<t>` from the whole history.
+3. **Selects** one final per mode blindly: the finals get anonymous ids
+   (`A`, `B`...) and a selector session sees only the task and each
+   candidate's result. With `evolve.selection = "user"` the job pauses in
+   `awaiting-selection`; `prometheus evolve compare <job>` shows the
+   anonymous candidates and `prometheus evolve choose <job> <ID>`
+   continues it.
+4. **Proposes** the chosen tree: `prometheus evolve proposals`,
+   `prometheus evolve review <proposal>` (the diff against its base, the
+   census, the selector's reason and the lesson), `prometheus evolve adopt
+   <proposal> [--now] [--rebase]` and `prometheus evolve reject
+   <proposal>`. `evolve.adoption.policy` is `ask` (default), `auto` (adopt
+   at once, except proposals adding or changing scripts, hooks or
+   subagents, which always wait for you) or `never`. An adopted proposal
+   becomes a new harness version (`source = "evolve"`) from the next
+   session. A proposal whose base is no longer the active version is
+   refused (exit 65) unless `--rebase` applies its diff cleanly.
+
+Every improver session and rollout is cached by content under
+`<profile>/evolve/cache/`, so `prometheus evolve resume <job>` (or the
+daemon after a restart) re-runs only what is missing or changed; resuming
+a finished job makes no model call. A job stops (`budget-exceeded`) once
+its spend reaches `--budget-usd` or `evolve.budget.max_usd`, and
+`prometheus evolve cancel <job>` stops it at the next model-call
+boundary. `prometheus evolve status <job>` shows the stages, the
+selection and the spend by kind; the job's `summary.json`, `ledger.json`
+and `events.jsonl` are in its directory. `evolve.concurrency.sessions` and
+`evolve.concurrency.rollouts` bound the work of every job of one process,
+and one job per profile and domain runs at a time.
+
+Nothing a grader produced may reach evolution: files matching
+`evolve.leak_globs` or holding an eval verdict (the `pmt-eval-verdict`
+canary, or a `"pass_rate"`/`"passed_count"`/`"score"` number) are left
+out of the task and fail any step whose evidence holds them. `prometheus
+evolve review <proposal> --eval smoke` runs the bundled eval suite on the
+base and the proposed harness for you alone: the results go to
+`<profile>/eval-results/` and never into a proposal, a version or an
+improver's evidence.
+
+The same operations are served to the dashboard and the desktop as the
+`evolve.*` and `harness.*` methods of the client protocol.

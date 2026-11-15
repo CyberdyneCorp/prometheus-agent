@@ -74,14 +74,14 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `cron.blueprints.list` | `scheduled-jobs` | 1.0 | [`BlueprintsListParams`](#blueprintslistparams) | [`BlueprintList`](#blueprintlist) |
 | `daemon.update` | `workspace-architecture` | 1.0 | [`DaemonUpdateParams`](#daemonupdateparams) | [`DaemonUpdated`](#daemonupdated) |
 | `egress.set` | `security-boundaries` | 1.0 | [`EgressSetParams`](#egresssetparams) | [`EgressState`](#egressstate) |
-| `evolve.cancel` | `harness-evolution` | 1.0 | not served yet | |
-| `evolve.choose` | `harness-evolution` | 1.0 | not served yet | |
-| `evolve.list` | `harness-evolution` | 1.0 | not served yet | |
-| `evolve.proposals.adopt` | `harness-evolution` | 1.0 | not served yet | |
-| `evolve.proposals.list` | `harness-evolution` | 1.0 | not served yet | |
-| `evolve.proposals.reject` | `harness-evolution` | 1.0 | not served yet | |
-| `evolve.start` | `harness-evolution` | 1.0 | not served yet | |
-| `evolve.status` | `harness-evolution` | 1.0 | not served yet | |
+| `evolve.cancel` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
+| `evolve.choose` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
+| `evolve.list` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveJobs`](#evolvejobs) |
+| `evolve.proposals.adopt` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
+| `evolve.proposals.list` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveProposals`](#evolveproposals) |
+| `evolve.proposals.reject` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
+| `evolve.start` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
+| `evolve.status` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
 | `experience.domains` | `experience-library` | 1.0 | not served yet | |
 | `experience.forget` | `experience-library` | 1.0 | not served yet | |
 | `experience.list` | `experience-library` | 1.0 | not served yet | |
@@ -106,9 +106,9 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `groups.log` | `bot-mode` | 1.0 | not served yet | |
 | `groups.replica_state` | `bot-mode` | 1.0 | not served yet | |
 | `groups.replicate` | `bot-mode` | 1.0 | not served yet | |
-| `harness.diff` | `harness-evolution` | 1.0 | not served yet | |
-| `harness.log` | `harness-evolution` | 1.0 | not served yet | |
-| `harness.rollback` | `harness-evolution` | 1.0 | not served yet | |
+| `harness.diff` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
+| `harness.log` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`HarnessVersions`](#harnessversions) |
+| `harness.rollback` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
 | `journey.list` | `memory` | 1.0 | [`JourneyListParams`](#journeylistparams) | [`JourneyList`](#journeylist) |
 | `local.add` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
 | `local.catalog` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
@@ -1069,6 +1069,69 @@ One event frame: the notification params and the replay item.
 | `last_seen` | integer | yes | The last sequence number the client saw (0 for none). |
 | `session_id` | string | yes | The session. |
 
+### `EvolveJobRow`
+
+One job of `evolve.list`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `budget` | number or null | no | The spend cap in US dollars (`null`: `evolve.budget.max_usd`). |
+| `cost_usd` | number | yes | Spend so far. |
+| `created_at` | string | yes | RFC 3339. |
+| `domain` | string | yes | The experience-library domain. |
+| `id` | string | yes | `evo_<ULID>`. |
+| `k` | integer | yes | The recursion budget. |
+| `mode` | string | yes | `parallel`, `sequential` or `both`. |
+| `rollouts` | integer | yes | Rollouts the job plans. |
+| `status` | string | yes | The job status. |
+| `trigger` | string | yes | What queued it. |
+
+### `EvolveJobs`
+
+`evolve.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `jobs` | array of [`EvolveJobRow`](#evolvejobrow) | yes | Oldest first. |
+
+### `EvolveParams`
+
+Params of every `evolve.*` and `harness.*` method; each uses the fields its command takes.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `budget_usd` | number or null | no | `evolve.start`: the spend cap in US dollars. |
+| `candidate` | string or null | no | `evolve.choose`: the anonymous candidate id. |
+| `domain` | string or null | no | `evolve.start`: the experience-library domain. |
+| `job_id` | string or null | no | The job (`evolve.status`, `evolve.cancel`, `evolve.choose`). |
+| `k` | integer or null | no | `evolve.start`: the recursion budget (1-8). |
+| `mode` | string or null | no | `evolve.start`: `parallel`, `sequential` or `both`. |
+| `now` | boolean | no | `evolve.proposals.adopt`, `harness.rollback`: also rebuild the prompt of open sessions at their next turn. |
+| `other` | string or null | no | `harness.diff`: the second version (default: the active one). |
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
+| `proposal_id` | string or null | no | The proposal (`evolve.proposals.adopt`, `evolve.proposals.reject`). |
+| `rebase` | boolean | no | `evolve.proposals.adopt`: rebase onto a changed active harness. |
+| `session_id` | string or null | no | `evolve.start`: the session whose task to evolve for. |
+| `task_file` | string or null | no | `evolve.start`: a task file on the daemon's machine. |
+| `version` | string or null | no | `harness.rollback`: the version to roll back to; `harness.diff`: the first version. |
+
+### `EvolveProposals`
+
+`evolve.proposals.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `proposals` | array of any | yes | Each proposal's `<id>.toml` as JSON, oldest first. |
+
+### `EvolveReply`
+
+Result of the methods that act on one job, proposal or version.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `data` | any | no | The matching command's `--json` document, or `null`. |
+| `message` | string | yes | What happened, in one line. |
+
 ### `FeatureSupport`
 
 One row of the platform support matrix.
@@ -1277,6 +1340,15 @@ What a command run through the session's terminal backend printed.
 |---|---|---|---|
 | `scope` | string | no | `uncommitted` (default), `branch` or `last-turn`. |
 | `session_id` | string | yes | The session whose workspace is reviewed. |
+
+### `HarnessVersions`
+
+`harness.log` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `active` | string | yes | The active version. |
+| `versions` | array of any | yes | Each version's `version.toml` as JSON, newest first. |
 
 ### `HealthChanged`
 

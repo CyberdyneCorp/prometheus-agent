@@ -1279,6 +1279,18 @@ error_codes! {
     /// No evolution job has the id.
     EVOLVE_JOB_NOT_FOUND = ("evolve.job_not_found", NotFound,
         "No evolution job of this profile has this id; `prometheus evolve list` shows the jobs.");
+    /// The evolution job is already running in another process.
+    EVOLVE_JOB_RUNNING = ("evolve.job_running", Conflict,
+        "Another process (the daemon or a foreground `prometheus evolve run`) is running this job; wait for it, or `prometheus evolve cancel <job>` it.");
+    /// The evolution job is not in a state that allows the operation.
+    EVOLVE_JOB_STATE = ("evolve.job_state", InvalidInput,
+        "The job is not in a state that allows this (only a job in `awaiting-selection` takes `evolve choose`; only an unfinished job can be cancelled or resumed); `prometheus evolve status <job>` shows its state.");
+    /// No proposal has the id.
+    EVOLVE_PROPOSAL_NOT_FOUND = ("evolve.proposal_not_found", NotFound,
+        "No harness proposal of this profile has this id; `prometheus evolve proposals` lists them.");
+    /// The proposal cannot be adopted as it stands.
+    EVOLVE_PROPOSAL_REFUSED = ("evolve.proposal_refused", InvalidInput,
+        "The proposal cannot be adopted: it is not pending, the active harness changed since it was produced (re-run the job, or adopt with `--rebase` when its diff applies cleanly), or its tree no longer validates.");
     /// A harness tree failed validation.
     HARNESS_INVALID = ("harness.invalid", InvalidInput,
         "The harness tree failed validation; every error is listed (paths outside the editable surface, size caps, skill and subagent front matter, script syntax and references, `hooks.toml` keys and events, templates, secrets). No version was written.");

@@ -77,6 +77,7 @@ impl DaemonHost {
             cron: None,
             kanban: None,
             replay: None,
+            rollout: None,
         };
         let ad_hoc = setup
             .base_url

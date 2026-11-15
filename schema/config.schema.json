@@ -238,6 +238,26 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "AdoptionPolicy": {
+      "description": "What happens to a proposal once a job produced it.",
+      "oneOf": [
+        {
+          "const": "ask",
+          "description": "The user adopts or rejects it.",
+          "type": "string"
+        },
+        {
+          "const": "auto",
+          "description": "Adopted at once unless it touches scripts, hooks or subagents.",
+          "type": "string"
+        },
+        {
+          "const": "never",
+          "description": "Kept for review only.",
+          "type": "string"
+        }
+      ]
+    },
     "AgentCacheConfig": {
       "additionalProperties": false,
       "description": "`[gateway.agent_cache]`.",
@@ -3052,6 +3072,18 @@
       },
       "type": "object"
     },
+    "EvolveAdoptionConfig": {
+      "additionalProperties": false,
+      "description": "`[evolve.adoption]`.",
+      "properties": {
+        "policy": {
+          "$ref": "#/$defs/AdoptionPolicy",
+          "default": "ask",
+          "description": "`ask` (default), `auto` (adopt at once, except proposals touching\nscripts, hooks or subagents, which always wait for approval) or\n`never` (proposals are kept for review)."
+        }
+      },
+      "type": "object"
+    },
     "EvolveAutoConfig": {
       "additionalProperties": false,
       "description": "`[evolve.auto]`: jobs queued when a session ends badly or long.",
@@ -3088,10 +3120,52 @@
       },
       "type": "object"
     },
+    "EvolveBudgetConfig": {
+      "additionalProperties": false,
+      "description": "`[evolve.budget]`.",
+      "properties": {
+        "max_usd": {
+          "default": 5.0,
+          "description": "A job stops (`budget-exceeded`) once its spend reaches this many\nUS dollars, unless `--budget-usd` names another cap.",
+          "format": "double",
+          "minimum": 0.0,
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "EvolveConcurrencyConfig": {
+      "additionalProperties": false,
+      "description": "`[evolve.concurrency]`.",
+      "properties": {
+        "rollouts": {
+          "default": 2,
+          "description": "Rollouts running at once.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "sessions": {
+          "default": 2,
+          "description": "Improver sessions running at once.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "EvolveConfig": {
       "additionalProperties": false,
       "description": "The `[evolve]` section.",
       "properties": {
+        "adoption": {
+          "$ref": "#/$defs/EvolveAdoptionConfig",
+          "default": {
+            "policy": "ask"
+          },
+          "description": "What happens to a proposal."
+        },
         "auto": {
           "$ref": "#/$defs/EvolveAutoConfig",
           "default": {
@@ -3103,10 +3177,40 @@
           },
           "description": "Automatic jobs after failed or long sessions."
         },
+        "budget": {
+          "$ref": "#/$defs/EvolveBudgetConfig",
+          "default": {
+            "max_usd": 5.0
+          },
+          "description": "The spend cap of one job."
+        },
+        "concurrency": {
+          "$ref": "#/$defs/EvolveConcurrencyConfig",
+          "default": {
+            "rollouts": 2,
+            "sessions": 2
+          },
+          "description": "Concurrent work across every job of one process."
+        },
         "enabled": {
           "default": false,
           "description": "Allow harness evolution in this profile (`prometheus evolve`,\n`/evolve`, the `evolve.*` RPC methods, scheduled and automatic\njobs).",
           "type": "boolean"
+        },
+        "evidence": {
+          "$ref": "#/$defs/EvolveEvidenceConfig",
+          "default": {
+            "obs_trunc_chars": 50000
+          },
+          "description": "What improvers see of the rollouts."
+        },
+        "improver": {
+          "$ref": "#/$defs/EvolveImproverConfig",
+          "default": {
+            "max_iterations": 120,
+            "timeout_secs": 1800
+          },
+          "description": "How improver sessions run."
         },
         "k": {
           "default": 2,
@@ -3135,6 +3239,33 @@
           "default": "parallel",
           "description": "`parallel` (width), `sequential` (depth) or `both` (one proposal\nper mode on shared base rollouts)."
         },
+        "resume_on_start": {
+          "default": true,
+          "description": "Interrupted jobs are queued again when the daemon starts.",
+          "type": "boolean"
+        },
+        "retention_secs": {
+          "default": 2592000,
+          "description": "Job directories older than this are pruned (the summary of a job\nwhose proposal was adopted is kept).",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "rollout": {
+          "$ref": "#/$defs/EvolveRolloutConfig",
+          "default": {
+            "backend": "local-sandbox",
+            "max_iterations": 60,
+            "network": "providers",
+            "timeout_secs": 900
+          },
+          "description": "How rollouts run."
+        },
+        "selection": {
+          "$ref": "#/$defs/EvolveSelection",
+          "default": "model",
+          "description": "Who picks the final of each mode: `model` (a blind selector\nsession) or `user` (`prometheus evolve choose`)."
+        },
         "task": {
           "$ref": "#/$defs/EvolveTaskConfig",
           "default": {
@@ -3145,6 +3276,48 @@
       },
       "type": "object",
       "x-apply": "live"
+    },
+    "EvolveEvidenceConfig": {
+      "additionalProperties": false,
+      "description": "`[evolve.evidence]`.",
+      "properties": {
+        "obs_trunc_chars": {
+          "default": 50000,
+          "description": "A tool observation longer than this is truncated in the rollout\ntrajectories improvers read.",
+          "format": "uint",
+          "minimum": 10000,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "EvolveImproverConfig": {
+      "additionalProperties": false,
+      "description": "`[evolve.improver]`: the propose, compose, select and reflect\nsessions.",
+      "properties": {
+        "max_iterations": {
+          "default": 120,
+          "description": "Model calls one session may make.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "model": {
+          "description": "`provider/model` of every improver session; unset uses the\n`evolution` auxiliary route, else the profile's main model.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_secs": {
+          "default": 1800,
+          "description": "Wall-clock limit of one session.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
     },
     "EvolveMode": {
       "description": "How an evolution job searches.",
@@ -3162,6 +3335,52 @@
         {
           "const": "both",
           "description": "Both modes on the same base rollouts; at most one is adopted.",
+          "type": "string"
+        }
+      ]
+    },
+    "EvolveRolloutConfig": {
+      "additionalProperties": false,
+      "description": "`[evolve.rollout]`: the headless sessions that try a harness on the\ntask.",
+      "properties": {
+        "backend": {
+          "default": "local-sandbox",
+          "description": "Execution backend: `local-sandbox` (the `local` backend with full\nsandbox enforcement) or another sandboxed backend (`container`,\n`ssh`, `singularity`, a plugin backend). The unsandboxed host is\nrefused.",
+          "type": "string"
+        },
+        "max_iterations": {
+          "default": 60,
+          "description": "Model calls one rollout may make.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "network": {
+          "$ref": "#/$defs/RolloutNetwork",
+          "default": "providers",
+          "description": "`providers`: egress only to the configured model providers;\n`session`: the source session's egress rules."
+        },
+        "timeout_secs": {
+          "default": 900,
+          "description": "Wall-clock limit of one rollout.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "EvolveSelection": {
+      "description": "Who selects a mode's final.",
+      "oneOf": [
+        {
+          "const": "model",
+          "description": "A blind, anonymised selector session.",
+          "type": "string"
+        },
+        {
+          "const": "user",
+          "description": "The user, after comparing the anonymised candidates.",
           "type": "string"
         }
       ]
@@ -8522,6 +8741,21 @@
         }
       ]
     },
+    "RolloutNetwork": {
+      "description": "A rollout's network egress.",
+      "oneOf": [
+        {
+          "const": "providers",
+          "description": "Only the configured model providers.",
+          "type": "string"
+        },
+        {
+          "const": "session",
+          "description": "The source session's rules.",
+          "type": "string"
+        }
+      ]
+    },
     "RoutingConfig": {
       "additionalProperties": false,
       "description": "The `[routing]` section (spec: model-providers, Provider health\nscoring).",
@@ -12029,6 +12263,9 @@
     "evolve": {
       "$ref": "#/$defs/EvolveConfig",
       "default": {
+        "adoption": {
+          "policy": "ask"
+        },
         "auto": {
           "enabled": false,
           "max_jobs_per_day": 3,
@@ -12036,7 +12273,21 @@
           "on_failure": true,
           "on_long_task": true
         },
+        "budget": {
+          "max_usd": 5.0
+        },
+        "concurrency": {
+          "rollouts": 2,
+          "sessions": 2
+        },
         "enabled": false,
+        "evidence": {
+          "obs_trunc_chars": 50000
+        },
+        "improver": {
+          "max_iterations": 120,
+          "timeout_secs": 1800
+        },
         "k": 2,
         "leak_globs": [
           "**/*reference_answer*",
@@ -12046,6 +12297,15 @@
           "**/.pmt-eval/**"
         ],
         "mode": "parallel",
+        "resume_on_start": true,
+        "retention_secs": 2592000,
+        "rollout": {
+          "backend": "local-sandbox",
+          "max_iterations": 60,
+          "network": "providers",
+          "timeout_secs": 900
+        },
+        "selection": "model",
         "task": {
           "max_source_bytes": 52428800
         }

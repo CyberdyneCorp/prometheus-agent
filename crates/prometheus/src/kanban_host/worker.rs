@@ -138,13 +138,16 @@ fn run_task(
 
 /// An `evolve` task queues its evolution job through the same path as
 /// every other trigger (spec: harness-evolution, On-demand and scheduled
-/// triggers). The run then stops with the job named: no evolution engine
-/// runs jobs in this build, so the task cannot reach review yet.
+/// triggers). The run then stops with the job named: the daemon's
+/// evolution runner (or `prometheus evolve resume`) runs the job, but the
+/// task does not follow it to review yet (task 67.4).
 fn evolve(scope: &ProfileScope, task: &Task, workspace: &Path) -> Error {
     match crate::evolve_cmd::kanban::queue(scope, task, workspace) {
         Ok(job) => Error::new(
             &codes::KANBAN_NOT_PERMITTED,
-            format!("evolution job {job} is queued; this build has no evolution engine to run it"),
+            format!(
+                "evolution job {job} is queued; the daemon's evolution runner runs it (prometheus evolve status {job}), and this task does not follow it to review yet"
+            ),
         ),
         Err(err) => err,
     }
