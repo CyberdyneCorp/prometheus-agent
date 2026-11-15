@@ -139,13 +139,17 @@ again the jobs a stopped process left running). A job:
    deleted; or a copy of `task/source/`), on `evolve.rollout.backend`
    (`local-sandbox` by default; the unsandboxed host is refused), with
    every approval denied, no memory, egress limited to the configured
-   model providers (`evolve.rollout.network = "session"` keeps the
-   profile's rules) and at most `evolve.rollout.max_iterations` model
+   model providers (the endpoint host, configured `base_url` or built-in,
+   of every `[providers.<id>]` block and of the main route's provider;
+   `evolve.rollout.network = "session"` keeps the profile's rules) and at most `evolve.rollout.max_iterations` model
    calls in `evolve.rollout.timeout_secs`. A tool that declares `effect =
    "external"` (sending a message, scheduling a job, writing memory,
    delegating...) is recorded instead of run and answers `recorded, not
    executed during harness evolution`; the terminal stays live inside the
-   rollout's sandbox. Your workspace is never touched.
+   rollout's sandbox. A candidate's rollouts run with that candidate's
+   whole harness, its `hooks.toml` included (replacing the active
+   version's hooks for those sessions), so hook edits are tested too.
+   Your workspace is never touched.
 2. **Proposes**: improver sessions edit a private copy of the evidence
    (`context/task.md`, `source/`, the rollouts' trajectories and
    deliverables, the harness to edit, and for later steps a pool of
@@ -169,7 +173,9 @@ again the jobs a stopped process left running). A job:
    <proposal> [--now] [--rebase]` and `prometheus evolve reject
    <proposal>`. `evolve.adoption.policy` is `ask` (default), `auto` (adopt
    at once, except proposals adding or changing scripts, hooks or
-   subagents, which always wait for you) or `never`. An adopted proposal
+   subagents, which always wait for you) or `never`. With mode `both`,
+   at most one proposal is adopted: adopting one supersedes the other,
+   and an automatic adoption that fails leaves its proposal pending. An adopted proposal
    becomes a new harness version (`source = "evolve"`) from the next
    session. A proposal whose base is no longer the active version is
    refused (exit 65) unless `--rebase` applies its diff cleanly.

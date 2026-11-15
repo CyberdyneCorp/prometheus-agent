@@ -275,6 +275,98 @@ fn rollouts_deny_approvals_and_work_on_a_copy_without_leak_files() {
     );
 }
 
+/// The mock script of the hook test: the rollout's terminal call meets a
+/// `pre_tool_call` guard; every improver stage swaps the guard for its own
+/// (a new script, then `hooks.toml` read and rewritten).
+#[cfg(unix)]
+const HOOK_MOCK: &str = r##"
+[[rule]]
+user = "TASK-HOOK"
+step = 0
+[[rule.tool_calls]]
+name = "terminal"
+arguments = { command = "echo from-the-tool" }
+
+[[rule]]
+user = "TASK-"
+text = "Total: 10.00"
+
+[[rule]]
+user = "# Mission: select"
+text = "```choice\nA\n```\n<why>it guards the terminal</why>"
+
+[[rule]]
+user = "# Mission:"
+step = 0
+[[rule.tool_calls]]
+name = "write_file"
+arguments = { path = "context/harness/scripts/candidate.sh", content = "cat > /dev/null\necho 'blocked by the candidate harness' >&2\nexit 2\n" }
+
+[[rule]]
+user = "# Mission:"
+step = 1
+[[rule.tool_calls]]
+name = "read_file"
+arguments = { path = "context/harness/hooks.toml" }
+
+[[rule]]
+user = "# Mission:"
+step = 2
+[[rule.tool_calls]]
+name = "write_file"
+arguments = { path = "context/harness/hooks.toml", content = "[[hooks]]\nevent = \"pre_tool_call\"\ncommand = \"sh scripts/candidate.sh\"\nmatcher = \"^terminal$\"\n" }
+
+[[rule]]
+user = "# Mission:"
+text = "Swapped the terminal guard (rollouts/base1.md, step 1)."
+"##;
+
+/// Scenario: Candidate hooks in a rollout.
+#[cfg(unix)]
+#[test]
+fn a_rollout_runs_its_candidates_hooks_instead_of_the_active_ones() {
+    let s = Setup::new("", &[]);
+    std::fs::write(s.path().join("profiles/default/mock.toml"), HOOK_MOCK).unwrap();
+    let guarded = s.path().join("guarded");
+    std::fs::create_dir_all(guarded.join("scripts")).unwrap();
+    std::fs::write(
+        guarded.join("scripts/active.sh"),
+        "cat > /dev/null\necho 'blocked by the active harness' >&2\nexit 2\n",
+    )
+    .unwrap();
+    std::fs::write(
+        guarded.join("hooks.toml"),
+        "[[hooks]]\nevent = \"pre_tool_call\"\ncommand = \"sh scripts/active.sh\"\nmatcher = \"^terminal$\"\n",
+    )
+    .unwrap();
+    ok(&run(
+        s.path(),
+        &["harness", "apply", guarded.to_str().unwrap()],
+    ));
+    let out = s.evolve(&s.task("TASK-HOOK sum the ledger", ""), &["--k", "1"]);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}{}",
+        stdout(&out),
+        stderr(&out)
+    );
+    let job = s.only_job();
+    let base = s.rollout(&job, "base1")["entries"].to_string();
+    assert!(base.contains("blocked by the active harness"), "{base}");
+    for label in ["inv1", "dom1", "agg1"] {
+        let entries = s.rollout(&job, label)["entries"].to_string();
+        assert!(
+            entries.contains("blocked by the candidate harness"),
+            "{label}: {entries}"
+        );
+        assert!(
+            !entries.contains("blocked by the active harness"),
+            "{label}: {entries}"
+        );
+    }
+}
+
 /// Scenario: Message not sent.
 #[test]
 fn a_rollout_records_send_message_instead_of_sending_it() {

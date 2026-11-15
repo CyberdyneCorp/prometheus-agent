@@ -302,7 +302,11 @@ impl Factory {
         // (spec: execution-environments, Typed backend registry and
         // selection; memory, Context engine selection).
         let user_home = launch.user_home().map(PathBuf::as_path);
-        let plugins = crate::plugins_host::for_session(&scope, &options.cwd);
+        let plugins = rollout::plugins(
+            &scope,
+            crate::plugins_host::for_session(&scope, &options.cwd),
+            options.rollout.as_deref(),
+        );
         crate::context_engine::select(&config.context, &plugins)?;
         backend::registry(&plugins, &pmt_plugins::host::CallInfo::default())
             .select(&config.terminal.backend)?;

@@ -50,15 +50,32 @@ pub fn backend(name: &str) -> Result<&str, Error> {
     Ok(if name == LOCAL_SANDBOX { "local" } else { name })
 }
 
-/// The hosts of the configured model providers' base URLs.
+/// The endpoint hosts of the configured model providers: every
+/// `[providers.<id>]` block and the main route's provider (`model.provider`,
+/// or each of `model.auto_order` under `auto`), at its configured
+/// `base_url` or else its built-in endpoint. Disabled providers add none;
+/// a registry that does not build adds none either (fail closed).
 fn provider_hosts(config: &pmt_config::Config) -> Vec<String> {
-    config
+    let Ok(registry) = pmt_providers::ProviderRegistry::for_profile(config, Vec::new()) else {
+        return Vec::new();
+    };
+    let main: Vec<&str> = match config.model.provider.as_deref() {
+        Some(provider) if provider != "auto" => vec![provider],
+        _ => config.model.auto_order.iter().map(String::as_str).collect(),
+    };
+    let mut hosts: Vec<String> = config
         .providers
-        .values()
-        .filter_map(|p| p.base_url.as_deref())
-        .filter_map(|url| url::Url::parse(url).ok())
-        .filter_map(|url| url.host_str().map(str::to_owned))
-        .collect()
+        .keys()
+        .map(String::as_str)
+        .chain(main)
+        .filter_map(|name| registry.lookup(name).ok())
+        .filter(|provider| provider.enabled())
+        .filter_map(pmt_providers::Provider::base_url)
+        .filter_map(pmt_config::provider_urls::host_of)
+        .collect();
+    hosts.sort();
+    hosts.dedup();
+    hosts
 }
 
 /// The profile as a rollout sees it.
@@ -212,4 +229,35 @@ fn scratch_dir(task: &Path, label: &str) -> PathBuf {
         .unwrap_or(task)
         .join("rollouts-tmp")
         .join(format!("{label}-{}", ulid::Ulid::generate()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Scenario: Rollout egress limited to the configured providers.
+    #[test]
+    fn rollout_egress_lists_configured_providers_at_their_effective_endpoints() {
+        let mut config = pmt_config::Config::default();
+        config.model.provider = Some("anthropic".to_owned());
+        // A block without `base_url`: its built-in endpoint.
+        config.providers.insert(
+            "openai-api".to_owned(),
+            pmt_config::schema::ProviderConfig::default(),
+        );
+        let custom = pmt_config::schema::ProviderConfig {
+            base_url: Some("https://llm.example.com/v1".to_owned()),
+            ..Default::default()
+        };
+        config.providers.insert("office".to_owned(), custom);
+        assert_eq!(
+            provider_hosts(&config),
+            ["api.anthropic.com", "api.openai.com", "llm.example.com"]
+        );
+        // Under `auto`, every provider `auto` may pick.
+        config.model.provider = None;
+        config.providers.clear();
+        config.model.auto_order = vec!["anthropic".to_owned()];
+        assert_eq!(provider_hosts(&config), ["api.anthropic.com"]);
+    }
 }

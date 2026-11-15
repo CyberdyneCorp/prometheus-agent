@@ -171,7 +171,7 @@ In sequential mode the system SHALL, for t = 1..k, run `inv<t>` and `dom<t>` aga
 - **THEN** the evidence for `inv2` SHALL contain `pool/c1/rollout.md` and `decisions/c1.md`
 
 ### Requirement: Isolated rollouts
-The system SHALL execute every rollout as a headless, non-interactive session (session `source = "harness"`, `session-storage`) with the candidate harness, in a fresh sandbox workspace (a detached checkout of the recorded commit from a `--shared` clone that only reads the user's repository, with the patch applied and the `excluded` paths deleted, or a copy of `task/source/`) on backend `evolve.rollout.backend` (default `local-sandbox`, the `local` backend with full sandbox enforcement and no `security.sandbox.allow_degraded` features; the unsandboxed host backend, spelled `local` or `host`, SHALL be rejected), with network egress limited to the configured model providers unless `evolve.rollout.network = "session"` reuses the source session's egress rules. Rollouts SHALL auto-deny every approval request, SHALL NOT write memory, SHALL be hidden from session lists, search and memory nudges, and SHALL be bounded by `evolve.rollout.max_iterations = 60` and `evolve.rollout.timeout_secs = 900`. A rollout that errors SHALL be recorded as `ok = false` with the error, never aborting the job; a rollout is `ok` when it ends with a final assistant message.
+The system SHALL execute every rollout as a headless, non-interactive session (session `source = "harness"`, `session-storage`) with the candidate harness (its prompt layer, skills, subagents and `hooks.toml` hooks, which replace the active version's hooks for that session), in a fresh sandbox workspace (a detached checkout of the recorded commit from a `--shared` clone that only reads the user's repository, with the patch applied and the `excluded` paths deleted, or a copy of `task/source/`) on backend `evolve.rollout.backend` (default `local-sandbox`, the `local` backend with full sandbox enforcement and no `security.sandbox.allow_degraded` features; the unsandboxed host backend, spelled `local` or `host`, SHALL be rejected), with network egress limited to the configured model providers (the endpoint hosts, configured `base_url` or built-in default, of every `[providers.<id>]` block and of the main route's provider, or of each `model.auto_order` provider under `auto`) unless `evolve.rollout.network = "session"` reuses the source session's egress rules. Rollouts SHALL auto-deny every approval request, SHALL NOT write memory, SHALL be hidden from session lists, search and memory nudges, and SHALL be bounded by `evolve.rollout.max_iterations = 60` and `evolve.rollout.timeout_secs = 900`. A rollout that errors SHALL be recorded as `ok = false` with the error, never aborting the job; a rollout is `ok` when it ends with a final assistant message.
 **Milestone:** M3
 
 #### Scenario: Approval inside a rollout
@@ -181,6 +181,16 @@ The system SHALL execute every rollout as a headless, non-interactive session (s
 #### Scenario: Workspace untouched
 - **WHEN** a rollout deletes files in its workspace
 - **THEN** the user's real workspace SHALL be byte-identical before and after the job
+
+#### Scenario: Candidate hooks in a rollout
+- **GIVEN** an active harness whose `hooks.toml` blocks the terminal tool with one message and a candidate whose `hooks.toml` blocks it with another
+- **WHEN** the candidate is rolled out
+- **THEN** the candidate's hook SHALL answer in that rollout's trajectory and the active version's hook SHALL NOT, while base rollouts still run the active version's hook
+
+#### Scenario: Rollout egress limited to the configured providers
+- **GIVEN** `evolve.rollout.network = "providers"`, a main route on a built-in provider without a `[providers]` block and a block without `base_url`
+- **WHEN** a rollout's egress allowlist is built
+- **THEN** it SHALL hold the built-in endpoint hosts of both and the host of every configured `base_url`
 
 ### Requirement: Side-effect dry-run in rollouts (upgrade)
 The system SHALL replace, during rollouts, every tool whose registry entry declares `effect = "external"` (messaging and gateway delivery, email, scheduled-job and kanban mutation, memory writes, delegation outside the rollout sandbox, browser actions on hosts outside the egress allowlist) with a recorder that stores the call arguments in the trajectory and returns `recorded, not executed during harness evolution`; the `terminal` and `process` tools stay live because they run inside the rollout's own sandbox, workspace and egress limit, so their effects never leave the rollout. Rollout deliverables SHALL consist of the final assistant message, the workspace diff, and the list of recorded external calls.
@@ -292,6 +302,11 @@ The system SHALL turn a successful selection into a proposal (`<profile>/evolve/
 #### Scenario: Review before adoption
 - **WHEN** the user runs `prometheus evolve review <proposal>`
 - **THEN** the system SHALL print the diff against the base version, the census, the selector reason and the lesson
+
+#### Scenario: Both modes under the auto policy
+- **GIVEN** `evolve.adoption.policy = "auto"` and a job with mode `both` whose two proposals change prose only
+- **WHEN** the job finishes
+- **THEN** exactly one proposal SHALL be `adopted`, the other SHALL be `superseded`, and the job SHALL still end with its status, ledger and `evolve.job.finished` event; an automatic adoption that fails SHALL leave its proposal `pending` and SHALL NOT fail the job
 
 ### Requirement: Stale proposal protection
 The system SHALL refuse to adopt a proposal whose base version is not the currently active version, exiting 65 with `active harness changed since this proposal was produced (base <A>, active <B>); re-run the job or adopt with --rebase`; `--rebase` SHALL apply the proposal's diff to the active tree only if it applies without conflicts and the result validates. Adopting one proposal SHALL mark other pending proposals with the same base as `superseded`.

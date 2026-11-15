@@ -361,12 +361,26 @@ impl Run<'_> {
         chosen: Vec<(String, Candidate, summary::Selected)>,
         mut ledger: Ledger,
     ) -> Result<Finished, Error> {
+        // Every proposal exists before the policy runs: with mode `both`,
+        // adopting one supersedes its siblings on the same base, so at most
+        // one is ever adopted.
+        let mut created = Vec::new();
+        for (mode, candidate, selected) in chosen {
+            let (proposal, fresh) = self.propose(&mode, &candidate, &selected)?;
+            self.update(|s| s.mode(&mode).proposal_id = Some(proposal.id.clone()));
+            created.push((proposal, fresh));
+        }
         let mut proposals = Vec::new();
         let mut notices = Vec::new();
-        for (mode, candidate, selected) in chosen {
-            let outcome = self.propose(&mode, &candidate, &selected, &mut notices)?;
-            self.update(|s| s.mode(&mode).proposal_id = Some(outcome.proposal.id.clone()));
-            proposals.push(outcome);
+        for (proposal, fresh) in created {
+            proposals.push(if fresh {
+                self.apply_policy(&proposal.id, &mut notices)?
+            } else {
+                ProposalOutcome {
+                    proposal,
+                    adopted: None,
+                }
+            });
         }
         ledger.costs = self.gate.costs();
         ledger.total_usd = ledger.costs.total();
@@ -400,13 +414,14 @@ impl Run<'_> {
         })
     }
 
+    /// The proposal of `mode`: the one a resumed job already made
+    /// (`false`), else a new one (`true`).
     fn propose(
         &self,
         mode: &str,
         candidate: &Candidate,
         selected: &summary::Selected,
-        notices: &mut Vec<String>,
-    ) -> Result<ProposalOutcome, Error> {
+    ) -> Result<(proposal::Proposal, bool), Error> {
         let base_version = self
             .summary
             .lock()
@@ -415,16 +430,12 @@ impl Run<'_> {
             .clone()
             .unwrap_or_default();
         let store = Proposals::of(self.engine.profile_dir);
-        // A resumed job that already proposed keeps its proposal.
         if let Some(existing) = store
             .list()?
             .into_iter()
             .find(|p| p.job_id == self.job.id && p.mode == mode)
         {
-            return Ok(ProposalOutcome {
-                proposal: existing,
-                adopted: None,
-            });
+            return Ok((existing, false));
         }
         let proposal = store.create(&NewProposal {
             job_id: &self.job.id,
@@ -438,54 +449,72 @@ impl Run<'_> {
         })?;
         self.log
             .emit("evolve.proposal.ready", json!({"proposal_id": proposal.id}));
+        Ok((proposal, true))
+    }
+
+    /// Applies the adoption policy to proposal `id`, re-read so that one
+    /// superseded by a sibling's adoption is left alone. A failed adoption
+    /// does not fail the job: the proposal stays pending for the user.
+    fn apply_policy(&self, id: &str, notices: &mut Vec<String>) -> Result<ProposalOutcome, Error> {
+        let store = Proposals::of(self.engine.profile_dir);
+        let proposal = store.get(id)?;
         let adopted = match proposal::verdict(self.engine.config.adoption.policy, &proposal) {
-            Verdict::Adopt => {
-                let adopted = store.adopt(
-                    self.engine.profile_dir,
-                    &proposal.id,
-                    false,
-                    self.engine.rules,
-                )?;
-                self.log.emit(
-                    "evolve.proposal.adopted",
-                    json!({"proposal_id": proposal.id}),
-                );
-                notices.push(format!(
-                    "proposal {} adopted as {}; it applies from the next session",
-                    proposal.id, adopted.version.id
-                ));
-                Some(adopted)
-            }
-            Verdict::Wait(true) => {
-                notices.push(format!(
-                    "proposal {} changes scripts, hooks or subagents: approval is required (prometheus evolve review {}; prometheus evolve adopt {})",
-                    proposal.id, proposal.id, proposal.id
-                ));
-                None
-            }
-            Verdict::Wait(false) => {
-                notices.push(format!(
-                    "proposal {} is ready: prometheus evolve review {}",
-                    proposal.id, proposal.id
-                ));
-                None
-            }
-            Verdict::Nothing => {
-                notices.push(format!(
-                    "job {} found no change to propose ({mode})",
-                    self.job.id
-                ));
+            Verdict::Adopt => self.adopt_now(&store, id, notices),
+            verdict => {
+                notices.push(self.waiting_notice(&proposal, verdict));
                 None
             }
         };
         Ok(ProposalOutcome {
-            proposal: if adopted.is_some() {
-                store.get(&proposal.id)?
-            } else {
-                proposal
-            },
+            proposal: store.get(id)?,
             adopted,
         })
+    }
+
+    fn adopt_now(
+        &self,
+        store: &Proposals,
+        id: &str,
+        notices: &mut Vec<String>,
+    ) -> Option<proposal::Adopted> {
+        match store.adopt(self.engine.profile_dir, id, false, self.engine.rules) {
+            Ok(adopted) => {
+                self.log
+                    .emit("evolve.proposal.adopted", json!({"proposal_id": id}));
+                notices.push(format!(
+                    "proposal {id} adopted as {}; it applies from the next session",
+                    adopted.version.id
+                ));
+                Some(adopted)
+            }
+            Err(e) => {
+                tracing::warn!(job = %self.job.id, proposal = id, "automatic adoption failed: {e}");
+                notices.push(format!(
+                    "proposal {id} could not be adopted automatically ({e}); it stays pending: prometheus evolve review {id}"
+                ));
+                None
+            }
+        }
+    }
+
+    fn waiting_notice(&self, proposal: &proposal::Proposal, verdict: Verdict) -> String {
+        let id = &proposal.id;
+        match (verdict, proposal.status) {
+            (Verdict::Wait(true), _) => format!(
+                "proposal {id} changes scripts, hooks or subagents: approval is required (prometheus evolve review {id}; prometheus evolve adopt {id})"
+            ),
+            (Verdict::Wait(false), _) => {
+                format!("proposal {id} is ready: prometheus evolve review {id}")
+            }
+            (_, proposal::Status::Superseded) => format!(
+                "proposal {id} ({}) is superseded: another proposal of job {} was adopted",
+                proposal.mode, self.job.id
+            ),
+            _ => format!(
+                "job {} found no change to propose ({})",
+                self.job.id, proposal.mode
+            ),
+        }
     }
 }
 

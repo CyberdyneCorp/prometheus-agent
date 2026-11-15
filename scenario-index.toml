@@ -4705,6 +4705,8 @@ capabilities = [
 [harness-evolution."Isolated rollouts"]
 "Approval inside a rollout" = { tests = ["crates/prometheus/tests/evolve_engine.rs::rollouts_deny_approvals_and_work_on_a_copy_without_leak_files"], note = "the rollout's `rm -rf ~/important` is denied (BLOCKED in its trajectory) with stdin closed, so no prompt can reach a surface; the rollout still ends ok" }
 "Workspace untouched" = ["crates/prometheus/tests/evolve_engine.rs::rollouts_deny_approvals_and_work_on_a_copy_without_leak_files", "crates/prometheus/tests/evolve_engine.rs::a_foreground_job_proposes_a_reviewable_adoptable_harness", "crates/pmt-evolve/src/job/workspace.rs::a_copied_task_diffs_its_changes_and_finds_new_images"]
+"Candidate hooks in a rollout" = ["crates/prometheus/tests/evolve_engine.rs::a_rollout_runs_its_candidates_hooks_instead_of_the_active_ones"]
+"Rollout egress limited to the configured providers" = ["crates/prometheus/src/evolve_host/rollout.rs::rollout_egress_lists_configured_providers_at_their_effective_endpoints"]
 
 [harness-evolution."Side-effect dry-run in rollouts (upgrade)"]
 "Message not sent" = ["crates/prometheus/tests/evolve_engine.rs::a_rollout_records_send_message_instead_of_sending_it", "crates/prometheus/src/chat/session/rollout.rs::external_calls_are_recorded_and_confined_ones_run"]
@@ -4737,6 +4739,7 @@ capabilities = [
 [harness-evolution."Proposals and adoption policy"]
 "Auto policy with a new script" = ["crates/pmt-evolve/tests/engine/proposals.rs::auto_policy_waits_for_approval_when_a_script_is_added", "crates/pmt-evolve/src/proposal.rs::scripts_hooks_and_subagents_need_approval_and_prose_does_not"]
 "Review before adoption" = ["crates/prometheus/tests/evolve_engine.rs::a_foreground_job_proposes_a_reviewable_adoptable_harness"]
+"Both modes under the auto policy" = ["crates/pmt-evolve/tests/engine/proposals.rs::auto_policy_with_both_modes_adopts_one_and_supersedes_the_other", "crates/pmt-evolve/tests/engine/proposals.rs::a_refused_automatic_adoption_leaves_the_proposal_pending_and_the_job_ok"]
 
 [harness-evolution."Stale proposal protection"]
 "Manual edit after job" = ["crates/pmt-evolve/tests/engine/proposals.rs::a_stale_proposal_is_refused_unless_it_rebases_cleanly", "crates/prometheus/tests/evolve_engine.rs::adopting_a_stale_proposal_exits_65_and_keeps_the_active_version"]

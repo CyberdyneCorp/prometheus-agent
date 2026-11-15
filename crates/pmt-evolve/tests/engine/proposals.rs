@@ -160,3 +160,68 @@ fn an_unchanged_final_yields_no_change() {
     let done = fx.run(&job, &FakeRollouts::default(), &idle).unwrap();
     assert_eq!(done.proposals[0].proposal.status, Status::NoChange);
 }
+
+/// Scenario: Both modes under the auto policy. One proposal per mode, at
+/// most one adopted; the other is superseded and the job still ends `ok`.
+#[test]
+fn auto_policy_with_both_modes_adopts_one_and_supersedes_the_other() {
+    let fx = Fixture::new(&[r#"evolve.adoption.policy="auto""#]);
+    let job = fx.job(1, EvolveMode::Both);
+    let done = fx
+        .run(&job, &FakeRollouts::default(), &FakeImprover::default())
+        .unwrap();
+    assert_eq!(done.summary.status, "ok");
+    let statuses: Vec<Status> = done.proposals.iter().map(|o| o.proposal.status).collect();
+    assert_eq!(statuses, [Status::Adopted, Status::Superseded]);
+    let adopted = done.adopted().expect("one adopted");
+    assert_eq!(
+        HarnessDir::of(fx.dir()).active_id().unwrap(),
+        adopted.version.id
+    );
+    assert!(fx.job_dir(&job).join("ledger.json").is_file());
+    let events = pmt_evolve::engine::events::JobLog::read(&fx.job_dir(&job));
+    assert!(
+        events
+            .iter()
+            .any(|e| e["type"] == "evolve.job.finished" && e["payload"]["status"] == "ok"),
+        "{events:?}"
+    );
+    assert!(
+        done.notices.iter().any(|n| n.contains("superseded")),
+        "{:?}",
+        done.notices
+    );
+}
+
+/// Scenario: Both modes under the auto policy (a failed automatic
+/// adoption). A manual edit during the job moves `ACTIVE`, so the
+/// automatic adoption is refused: the proposal stays pending and the job
+/// still ends `ok`.
+#[test]
+fn a_refused_automatic_adoption_leaves_the_proposal_pending_and_the_job_ok() {
+    let fx = Fixture::new(&[r#"evolve.adoption.policy="auto""#]);
+    let job = fx.job(1, EvolveMode::Parallel);
+    let profile = fx.dir().to_path_buf();
+    let improver = FakeImprover::with(move |r, _| {
+        if r.label == "agg1" {
+            let harness = HarnessDir::of(&profile);
+            let mut tree = harness.tree(&harness.active_id().unwrap()).unwrap();
+            tree.files.insert("SYSTEM.md".into(), "manual edit".into());
+            let version = harness.write(&tree, Source::Manual, None).unwrap();
+            harness.activate(&version.id).unwrap();
+        }
+        Ok(edit_guardrails(r, "- ok"))
+    });
+    let done = fx.run(&job, &FakeRollouts::default(), &improver).unwrap();
+    assert_eq!(done.summary.status, "ok");
+    assert!(done.adopted().is_none());
+    assert_eq!(done.proposals[0].proposal.status, Status::Pending);
+    assert!(
+        done.notices
+            .iter()
+            .any(|n| n.contains("could not be adopted automatically")),
+        "{:?}",
+        done.notices
+    );
+    assert!(fx.job_dir(&job).join("ledger.json").is_file());
+}

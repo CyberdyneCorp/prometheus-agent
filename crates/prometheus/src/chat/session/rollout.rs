@@ -104,6 +104,24 @@ impl ToolReplay for Recorder {
     }
 }
 
+/// The plugin view of a session: a rollout reads its hooks from its
+/// candidate harness instead of the active version (spec:
+/// harness-evolution, Isolated rollouts).
+pub(super) fn plugins(
+    scope: &pmt_config::ProfileScope,
+    plugins: crate::plugins_host::ProfilePlugins,
+    rollout: Option<&RolloutRun>,
+) -> crate::plugins_host::ProfilePlugins {
+    match rollout {
+        Some(run) => plugins.with_hooks(Arc::new(crate::harness_host::hooks::Rollout::new(
+            scope,
+            plugins.hook_source(),
+            &run.harness,
+        ))),
+        None => plugins,
+    }
+}
+
 impl super::Factory {
     /// The harness tree session `id` runs with: a rollout's candidate,
     /// else the tree of the version recorded on its row.
