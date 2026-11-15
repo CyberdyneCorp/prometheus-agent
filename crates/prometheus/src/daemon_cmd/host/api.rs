@@ -276,16 +276,7 @@ impl DaemonHost {
 }
 
 async fn fetch_image(scope: &ProfileScope, url: &str) -> Result<(Vec<u8>, String), Error> {
-    let config = scope.config();
-    let outbound = pmt_net::OutboundPolicy {
-        force_ipv4: config.network.force_ipv4,
-        extra_ca_file: config.network.extra_ca_file.as_ref().map(Into::into),
-        proxy: config.network.proxy.clone(),
-    };
-    let egress = &config.security.egress;
-    let hosts = crate::egress::host_policy(egress, &crate::egress::Overrides::default());
-    let fetcher = pmt_net::fetch::Fetcher::new(&outbound, crate::egress::destinations(egress)?)?
-        .with_hosts(Arc::new(hosts), "api_server", None);
+    let fetcher = crate::egress::fetcher(scope, "api_server", None)?;
     let failed = |why: String| Error::new(&codes::CHAT_IMAGE, format!("image {url}: {why}"));
     let response = fetcher.get(url).await?;
     if !response.status().is_success() {
@@ -306,31 +297,10 @@ async fn fetch_image(scope: &ProfileScope, url: &str) -> Result<(Vec<u8>, String
             "not a PNG, JPEG, GIF or WebP image ({media_type})"
         )));
     }
-    let bytes = read_capped(response, MAX_IMAGE_BYTES)
+    let bytes = pmt_net::fetch::read_capped(response, MAX_IMAGE_BYTES)
         .await
         .map_err(failed)?;
     Ok((bytes, media_type))
-}
-
-/// The body of `response`, refused as soon as it is known to exceed `cap`
-/// bytes: a server streaming without end never makes the daemon buffer
-/// more than `cap`.
-async fn read_capped(mut response: reqwest::Response, cap: usize) -> Result<Vec<u8>, String> {
-    let too_large = || format!("larger than {} MiB", cap / (1024 * 1024));
-    if response
-        .content_length()
-        .is_some_and(|length| length > cap as u64)
-    {
-        return Err(too_large());
-    }
-    let mut bytes = Vec::new();
-    while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
-        if bytes.len() + chunk.len() > cap {
-            return Err(too_large());
-        }
-        bytes.extend_from_slice(&chunk);
-    }
-    Ok(bytes)
 }
 
 impl pmt_api::ApiHost for DaemonHost {
@@ -552,7 +522,7 @@ mod tests {
         )
         .await;
         let response = fetch(&url).await;
-        let refused = super::read_capped(response, super::MAX_IMAGE_BYTES)
+        let refused = pmt_net::fetch::read_capped(response, super::MAX_IMAGE_BYTES)
             .await
             .unwrap_err();
         assert_eq!(refused, "larger than 20 MiB");
@@ -567,7 +537,7 @@ mod tests {
         )
         .await;
         let response = fetch(&url).await;
-        let refused = super::read_capped(response, super::MAX_IMAGE_BYTES)
+        let refused = pmt_net::fetch::read_capped(response, super::MAX_IMAGE_BYTES)
             .await
             .unwrap_err();
         assert_eq!(refused, "larger than 20 MiB");

@@ -27,21 +27,7 @@ impl NetTransport {
     ///
     /// A bad egress configuration; the client cannot be built.
     pub fn new(scope: &ProfileScope, requester: &str, timeout: Duration) -> Result<Self, Error> {
-        let config = scope.config();
-        let outbound = pmt_net::OutboundPolicy {
-            force_ipv4: config.network.force_ipv4,
-            extra_ca_file: config.network.extra_ca_file.as_ref().map(Into::into),
-            proxy: config.network.proxy.clone(),
-        };
-        let egress = &config.security.egress;
-        let hosts = crate::egress::host_policy(egress, &crate::egress::Overrides::default());
-        let fetcher =
-            pmt_net::fetch::Fetcher::new(&outbound, crate::egress::destinations(egress)?)?
-                .with_hosts(
-                    std::sync::Arc::new(hosts),
-                    requester,
-                    Some(crate::egress::observer(scope, None, None)),
-                );
+        let fetcher = crate::egress::fetcher(scope, requester, None)?;
         Ok(Self { fetcher, timeout })
     }
 
@@ -80,13 +66,9 @@ impl NetTransport {
             .await
             .map_err(|e| e.message().to_owned())?;
         let status = response.status().as_u16();
-        let bytes = response.bytes().await.map_err(|e| e.to_string())?;
-        if bytes.len() > MAX_BODY {
-            return Err(format!(
-                "the answer is larger than {} MiB",
-                MAX_BODY / (1024 * 1024)
-            ));
-        }
+        let bytes = pmt_net::fetch::read_capped(response, MAX_BODY)
+            .await
+            .map_err(|e| format!("the answer: {e}"))?;
         Ok(HttpReply {
             status,
             body: serde_json::from_slice(&bytes).unwrap_or(Value::Null),
@@ -110,5 +92,58 @@ impl Transport for NetTransport {
         body: &'a Value,
     ) -> BoxFuture<'a, Result<HttpReply, String>> {
         Box::pin(self.request(reqwest::Method::POST, url, token, Some(body), &[]))
+    }
+}
+
+/// A local server answering one request with a JSON status line and then
+/// a body that never ends (until the client hangs up); its base URL. Shared
+/// by the A2A transport and peer client tests.
+#[cfg(test)]
+pub(crate) async fn endless_server() -> String {
+    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+    static CHUNK: [u8; 64 * 1024] = [b' '; 64 * 1024];
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    pmt_core::spawn::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let mut request = [0_u8; 4096];
+        let _ = socket.read(&mut request).await;
+        let head = "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\nconnection: close\r\n\r\n";
+        if socket.write_all(head.as_bytes()).await.is_err() {
+            return;
+        }
+        while socket.write_all(&CHUNK).await.is_ok() {}
+    });
+    format!("http://{addr}")
+}
+
+#[cfg(test)]
+mod tests {
+    use pmt_config::{Home, Launch, Overrides, ProfileName};
+
+    use super::*;
+
+    /// A profile whose egress policy lets it reach the loopback stand-in.
+    fn loopback_scope(root: &std::path::Path) -> ProfileScope {
+        let home = Home::open(root).unwrap();
+        std::fs::write(
+            root.join("profiles/default/config.toml"),
+            "[security.egress]\nallow_private = true\n",
+        )
+        .unwrap();
+        let profile = home.profile(&ProfileName::default_profile()).unwrap();
+        ProfileScope::open(profile, &Overrides::default(), Launch::Other).unwrap()
+    }
+
+    /// A hostile agent streaming without end is cut off at the cap: the
+    /// call fails instead of buffering the whole answer.
+    #[tokio::test]
+    async fn an_endless_answer_is_refused_at_the_cap() {
+        let root = tempfile::tempdir().unwrap();
+        let scope = loopback_scope(root.path());
+        let transport = NetTransport::new(&scope, "a2a", Duration::from_secs(30)).unwrap();
+        let url = endless_server().await;
+        let refused = transport.get(&url, None).await.unwrap_err();
+        assert_eq!(refused, "the answer: larger than 8 MiB");
     }
 }

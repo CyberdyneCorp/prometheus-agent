@@ -61,6 +61,38 @@ pub fn destinations(config: &EgressConfig) -> Result<DestinationPolicy, Error> {
     DestinationPolicy::new(config.allow_private, &config.fake_ip_ranges)
 }
 
+/// A fetcher for a profile-level surface outside any session's own policy
+/// (URL attachments, editor links, A2A, cron monitors, API images): the
+/// profile's outbound settings, its egress host and destination policies,
+/// and every refusal recorded in its security audit log under `requester`
+/// (and `session`, when one is known). The one builder for these, so no
+/// surface is left without an audit record.
+///
+/// # Errors
+///
+/// Invalid egress settings; an unbuildable client.
+pub fn fetcher(
+    scope: &ProfileScope,
+    requester: &str,
+    session: Option<String>,
+) -> Result<pmt_net::fetch::Fetcher, Error> {
+    let config = scope.config();
+    let outbound = pmt_net::OutboundPolicy {
+        force_ipv4: config.network.force_ipv4,
+        extra_ca_file: config.network.extra_ca_file.as_ref().map(Into::into),
+        proxy: config.network.proxy.clone(),
+    };
+    let egress = &config.security.egress;
+    let hosts = host_policy(egress, &Overrides::default());
+    Ok(
+        pmt_net::fetch::Fetcher::new(&outbound, destinations(egress)?)?.with_hosts(
+            Arc::new(hosts),
+            requester,
+            Some(observer(scope, session, None)),
+        ),
+    )
+}
+
 /// Receives a refusal after the audit log (a session's trajectory).
 pub type DenialSink = Arc<dyn Fn(&Denial) + Send + Sync>;
 

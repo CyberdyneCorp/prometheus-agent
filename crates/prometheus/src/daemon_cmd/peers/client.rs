@@ -15,6 +15,9 @@ use serde_json::{Value, json};
 /// How long one request to a peer may take.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// The largest peer answer read.
+const MAX_BODY: usize = 8 * 1024 * 1024;
+
 /// Why a peer call failed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum PeerError {
@@ -123,7 +126,10 @@ impl Peer {
             .await
             .map_err(|e| PeerError::Unreachable(e.to_string()))?;
         let status = response.status().as_u16();
-        let body: Value = response.json().await.unwrap_or(Value::Null);
+        let bytes = pmt_net::fetch::read_capped(response, MAX_BODY)
+            .await
+            .map_err(|e| PeerError::Rejected(status, format!("the answer: {e}")))?;
+        let body: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
         let message = || {
             body["error"]["message"]
                 .as_str()
@@ -273,5 +279,34 @@ impl PeerError {
                 format!("peer {name} refused the request (HTTP {status}): {why}"),
             ),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use pmt_config::schema::SecretName;
+    use pmt_config::{Home, Launch, Overrides, ProfileName};
+
+    use super::*;
+
+    /// A peer streaming an endless answer is cut off at the cap instead of
+    /// being buffered whole.
+    #[tokio::test]
+    async fn an_endless_peer_answer_is_refused_at_the_cap() {
+        let root = tempfile::tempdir().unwrap();
+        let home = Home::open(root.path()).unwrap();
+        let profile = home.profile(&ProfileName::default_profile()).unwrap();
+        let scope = ProfileScope::open(profile, &Overrides::default(), Launch::Other).unwrap();
+        let entry = PeerGateway {
+            url: crate::a2a_host::transport::endless_server().await,
+            note: None,
+            key_secret: SecretName("PEER_LAB_KEY".to_owned()),
+        };
+        let peer = Peer::new(&scope, "lab", &entry, SecretString::new("k")).unwrap();
+        let refused = peer.probe().await.unwrap_err();
+        assert_eq!(
+            refused,
+            PeerError::Rejected(200, "the answer: larger than 8 MiB".to_owned())
+        );
     }
 }

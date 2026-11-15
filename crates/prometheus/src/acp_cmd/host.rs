@@ -4,7 +4,6 @@
 //! fetcher, and the managed Chromium install of `--setup-browser`.
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use pmt_config::schema::ProviderAuth;
 use pmt_config::{Overrides, ProfileScope};
@@ -172,18 +171,9 @@ pub(super) struct EgressFetcher {
 
 impl EgressFetcher {
     pub(super) fn new(scope: &ProfileScope) -> Result<Self, Error> {
-        let config = scope.config();
-        let outbound = pmt_net::OutboundPolicy {
-            force_ipv4: config.network.force_ipv4,
-            extra_ca_file: config.network.extra_ca_file.as_ref().map(Into::into),
-            proxy: config.network.proxy.clone(),
-        };
-        let egress = &config.security.egress;
-        let hosts = crate::egress::host_policy(egress, &crate::egress::Overrides::default());
-        let fetcher =
-            pmt_net::fetch::Fetcher::new(&outbound, crate::egress::destinations(egress)?)?
-                .with_hosts(Arc::new(hosts), "acp", None);
-        Ok(Self { fetcher })
+        Ok(Self {
+            fetcher: crate::egress::fetcher(scope, "acp", None)?,
+        })
     }
 
     async fn get(&self, url: &str) -> Option<Vec<u8>> {

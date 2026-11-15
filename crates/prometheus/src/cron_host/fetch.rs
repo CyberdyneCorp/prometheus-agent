@@ -7,12 +7,9 @@
 //! `security.egress.allow_private`), over the profile's proxy, extra CA and
 //! IPv4 preference.
 
-use std::sync::Arc;
-
 use pmt_config::ProfileScope;
 use pmt_core::error::Error;
 use pmt_cron::exec::{MAX_MONITOR_BODY, MONITOR_TIMEOUT};
-use pmt_net::OutboundPolicy;
 use pmt_net::fetch::Fetcher;
 
 /// Who the egress audit names for these fetches.
@@ -20,22 +17,7 @@ const REQUESTER: &str = "cron_monitor";
 
 /// The fetcher of the profile's monitored URLs.
 fn fetcher(scope: &ProfileScope) -> Result<Fetcher, Error> {
-    let config = scope.config();
-    let network = &config.network;
-    let egress = &config.security.egress;
-    let outbound = OutboundPolicy {
-        force_ipv4: network.force_ipv4,
-        extra_ca_file: network.extra_ca_file.as_ref().map(Into::into),
-        proxy: network.proxy.clone(),
-    };
-    let hosts = crate::egress::host_policy(egress, &crate::egress::Overrides::default());
-    Ok(
-        Fetcher::new(&outbound, crate::egress::destinations(egress)?)?.with_hosts(
-            Arc::new(hosts),
-            REQUESTER,
-            None,
-        ),
-    )
+    crate::egress::fetcher(scope, REQUESTER, None)
 }
 
 /// The body of `url`, or why it could not be read.

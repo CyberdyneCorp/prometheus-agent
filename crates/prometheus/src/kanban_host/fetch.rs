@@ -7,11 +7,8 @@
 //! under the attachment cap and a larger one is abandoned with nothing
 //! stored.
 
-use std::sync::Arc;
-
 use pmt_config::ProfileScope;
 use pmt_core::error::{Error, codes};
-use pmt_net::OutboundPolicy;
 use pmt_net::fetch::Fetcher;
 
 /// Who the egress audit names for these fetches.
@@ -33,22 +30,7 @@ pub struct Fetched {
 ///
 /// Invalid egress settings, an unbuildable client.
 pub fn fetcher(scope: &ProfileScope) -> Result<Fetcher, Error> {
-    let config = scope.config();
-    let network = &config.network;
-    let egress = &config.security.egress;
-    let outbound = OutboundPolicy {
-        force_ipv4: network.force_ipv4,
-        extra_ca_file: network.extra_ca_file.as_ref().map(Into::into),
-        proxy: network.proxy.clone(),
-    };
-    let hosts = crate::egress::host_policy(egress, &crate::egress::Overrides::default());
-    Ok(
-        Fetcher::new(&outbound, crate::egress::destinations(egress)?)?.with_hosts(
-            Arc::new(hosts),
-            REQUESTER,
-            None,
-        ),
-    )
+    crate::egress::fetcher(scope, REQUESTER, None)
 }
 
 fn filename(url: &reqwest::Url) -> String {

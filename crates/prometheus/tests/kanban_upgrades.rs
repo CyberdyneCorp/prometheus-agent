@@ -191,6 +191,42 @@ fn an_internal_address_is_refused_and_nothing_is_stored() {
     );
     let blobs = home.path().join("kanban/blobs");
     assert!(common::files_under(&blobs).is_empty(), "nothing stored");
+    assert_denial_audited(home.path(), "169.254.169.254:80");
+}
+
+/// `host_port`'s refusal is in the assignee's audit chain under
+/// `kanban_attach_url`, like every egress denial, and the chain verifies.
+fn assert_denial_audited(home: &Path, host_port: &str) {
+    let audit =
+        std::fs::read_to_string(home.join("profiles/default/logs/security-audit.jsonl")).unwrap();
+    assert!(
+        audit
+            .lines()
+            .any(|line| line.contains("\"kind\":\"egress_denied\"")
+                && line.contains(host_port)
+                && line.contains("kanban_attach_url")),
+        "{audit}"
+    );
+    let verified = ok(&run(home, &["security", "audit", "verify"]));
+    assert!(verified.contains("intact"), "{verified}");
+}
+
+/// A loopback link is refused like any internal address, and audited.
+#[test]
+fn a_loopback_link_is_refused_and_audited() {
+    let rules = "[[rule]]\nuser_regex = 'Kanban task'\n[[rule.tool_calls]]\nname = \"kanban_attach_url\"\n\
+         arguments = { url = \"http://127.0.0.1:9/secret\" }\n\n[[rule]]\n\
+         tool_result_regex = '127.0.0.1'\n[[rule.tool_calls]]\nname = \"kanban_block\"\n\
+         arguments = { kind = \"capability\", reason = \"the link was refused\" }\n\n[[rule]]\n\
+         repeat = true\ntext = \"stopped\"\n";
+    let home = worker_home(rules);
+    let id = create(home.path(), &["fetch loopback", "--assignee", "default"]);
+    assert_eq!(work_until_settled(home.path(), &id), "blocked");
+    assert_eq!(
+        json(home.path(), &["kanban", "attachments", &id])["attachments"],
+        Value::Array(vec![])
+    );
+    assert_denial_audited(home.path(), "127.0.0.1:9");
 }
 
 /// A home whose GitHub stand-in has PR 41 with a red required `ci/test`

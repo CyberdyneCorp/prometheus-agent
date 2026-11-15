@@ -24,22 +24,7 @@ const PUSH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
 ///
 /// A bad egress configuration; the client cannot be built.
 pub(super) fn fetcher(scope: &ProfileScope) -> Result<pmt_net::fetch::Fetcher, Error> {
-    let config = scope.config();
-    let outbound = pmt_net::OutboundPolicy {
-        force_ipv4: config.network.force_ipv4,
-        extra_ca_file: config.network.extra_ca_file.as_ref().map(Into::into),
-        proxy: config.network.proxy.clone(),
-    };
-    let egress = &config.security.egress;
-    let hosts = crate::egress::host_policy(egress, &crate::egress::Overrides::default());
-    let observer = crate::egress::observer(scope, None, None);
-    Ok(
-        pmt_net::fetch::Fetcher::new(&outbound, crate::egress::destinations(egress)?)?.with_hosts(
-            Arc::new(hosts),
-            "a2a",
-            Some(observer),
-        ),
-    )
+    crate::egress::fetcher(scope, "a2a", None)
 }
 
 /// Sends one push notification; the HTTP status.

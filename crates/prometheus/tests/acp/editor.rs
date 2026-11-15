@@ -65,6 +65,42 @@ fn an_svg_is_omitted_with_a_note_and_file_links_are_inlined() {
     assert_eq!(refused["error"]["message"], "too many attachments (max 10)");
 }
 
+/// A remote image on a loopback address is not fetched: the prompt keeps a
+/// text mention and the refusal is audited like every egress denial
+/// (security-boundaries, In-process fetch SSRF protection).
+#[test]
+fn a_loopback_image_link_is_refused_and_audited() {
+    let home = Home::new();
+    let _daemon = daemon::start(home.path(), &[]);
+    let mut acp = Acp::spawn(home.path(), &[], &[], &[]);
+    acp.initialize(&json!({}));
+    let session = acp.new_session(&home.work);
+    let url = "http://127.0.0.1:9/shot.png";
+    let answer = acp.call(
+        "session/prompt",
+        &json!({"sessionId": session, "prompt": [
+            {"type": "text", "text": "look"},
+            {"type": "image", "mimeType": "image/png", "uri": url}
+        ]}),
+    );
+    assert_eq!(answer["result"]["stopReason"], "end_turn");
+    let text = acp.agent_text(&session);
+    assert!(text.contains(&format!("[Image attached: {url}]")), "{text}");
+    let audit = std::fs::read_to_string(
+        home.path()
+            .join("profiles/default/logs/security-audit.jsonl"),
+    )
+    .unwrap();
+    assert!(
+        audit
+            .lines()
+            .any(|line| line.contains("\"kind\":\"egress_denied\"")
+                && line.contains("127.0.0.1:9")
+                && line.contains("acp (")),
+        "{audit}"
+    );
+}
+
 /// Scenario: Same title republished.
 #[test]
 fn a_title_is_shown_once_until_it_changes() {

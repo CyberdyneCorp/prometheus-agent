@@ -367,3 +367,28 @@ fn display(url: &Url) -> String {
     let _ = shown.set_username("");
     shown.to_string()
 }
+
+/// The body of `response`, refused as soon as it is known to exceed `cap`
+/// bytes (a declared length first, then while it streams): a server
+/// sending without end never makes the caller buffer more than `cap`.
+///
+/// # Errors
+///
+/// `larger than <n> MiB`, or the transport failure, as text.
+pub async fn read_capped(mut response: Response, cap: usize) -> Result<Vec<u8>, String> {
+    let too_large = || format!("larger than {} MiB", cap / (1024 * 1024));
+    if response
+        .content_length()
+        .is_some_and(|length| length > cap as u64)
+    {
+        return Err(too_large());
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
+        if bytes.len() + chunk.len() > cap {
+            return Err(too_large());
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(bytes)
+}
