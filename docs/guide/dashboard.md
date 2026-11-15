@@ -160,11 +160,11 @@ configuration, secrets, sessions or the vault. A change over the API gets
 | `/profile-builder` | Creates a profile in steps (name and description, model and provider, `SOUL.md`, toolsets, skills, adapters) with `profile create` and one validated config patch; nothing is created when a step is refused. Cloning copies another profile's configuration without its secrets, sessions or memories. |
 | `/themes` | The built-in themes (`default`, `default-large`, `midnight`, `ember`, `mono`, `cyberpunk`, `rose`) and user themes from `<home>/themes/dashboard/<name>.toml` (palette, typography from local fonts only, layout, `layout_variant`, component colours and at most 32 KiB of `custom_css`). A theme with `@import` or a `url()` to another origin, or too much CSS, is listed with the reason and never applied. The choice is kept by the browser. |
 | `/plugins` | The profile's plugins (with their load state and any problem) and their dashboard contributions: each plugin's tab and slots, overrides that lost to an earlier plugin, and plugins whose frames did not register in time. **Rescan** reloads plugin discovery. See [Dashboard pages and slots](plugin-authoring.md#dashboard-pages-and-slots). |
+| `/kanban` | The home's shared [kanban](kanban.md) boards with their open tasks; the **Orchestration** Auto/Manual control (`kanban.auto_decompose`) and settings panel (orchestrator profile, default assignee, promotion of decomposed children), showing what `config.toml` sets next to what applies, saved to the daemon's launch profile (whose dispatcher runs the workers); the running workers with each run's details and **Terminate**, which stops the worker and puts its task back in `ready` without counting a failure; and the dispatcher's view: backlog by status, tasks in progress against `kanban.max_running`, and recent events. Observers see it read-only. |
 | `/mcp`, `/cron`, `/memory` | The profile's MCP servers, cron jobs (with their state and next run) and memory entries. These pages are read-only for now: change them with `prometheus mcp`, `cron` and `memory`. |
 
 These pages are listed in the navigation, but this build does not
-implement them yet, so each one says so: `/kanban` and
-`/achievements`. The `/evolution` and
+implement them yet, so each one says so: `/achievements`. The `/evolution` and
 `/experience` pages read the harness-evolution and experience-library
 methods of the client protocol, and they report when the daemon does not
 serve those yet.
@@ -322,6 +322,16 @@ from the same table the router serves; any endpoint not in it answers
   overrides), `POST /api/plugins/rescan`, `GET /api/plugin-frames/<id>`
   (a plugin's sandboxed frame document) and `/api/plugins/<id>/<path>`
   (its backend routes, answered by the plugin host).
+- Kanban (machine-wide: boards are shared by the home's profiles):
+  `GET /api/kanban/boards`, `GET|PUT /api/kanban/orchestration`
+  (`{"auto_decompose": true, "orchestrator_profile": "planner"}`; the
+  answer has `configured` and `effective` values; a name that is not a
+  profile of the home gets `400` naming it and nothing is written),
+  `GET /api/kanban/workers/active` (worker id, run, profile, task, start,
+  last heartbeat), `GET /api/kanban/runs/<run_id>` (task, status, start,
+  end, exit code, log name), `POST /api/kanban/runs/<run_id>/terminate`
+  (`409` once the run ended) and `GET /api/kanban/inspect`. Changes need a
+  driver with access to the launch profile.
 - Bulk maintenance: `POST maintenance/<action>` with `prune-sessions`
   (`days`, default `sessions.retention_secs` or 90 days), `vacuum`,
   `rebuild-fts` or `prune-snapshots`. It needs `{"confirm": true}` in the

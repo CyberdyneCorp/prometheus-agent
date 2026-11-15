@@ -313,7 +313,12 @@ for nothing (`kanban.auto_promote_children`, default true) while the task
 waits for its children. A profile with `kanban.role = "orchestrator"` gets
 orchestrator guidance in its workers' system prompt; with
 `kanban.auto_decompose = true` the dispatcher specifies triage tasks and
-decomposes orchestrator tasks before dispatching.
+decomposes orchestrator tasks before dispatching. A specified task that
+names no assignee goes to `kanban.orchestrator_profile` when it is set to
+an existing profile, so an orchestrator decomposes it next. The
+dashboard's [`/kanban` page](dashboard.md#pages) edits these keys
+(Orchestration Auto/Manual) and can terminate a stuck run: its worker is
+stopped and the task returns to `ready` without counting a failure.
 
 The other verbs: `init`, `claim <id> [--ttl]` (a manual claim printing a
 run ticket), `heartbeat`, `reopen-review`, `reassign <id>... <profile>`,

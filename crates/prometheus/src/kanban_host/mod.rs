@@ -4,6 +4,7 @@
 //! ([`tool`]) and notification texts ([`notice`]).
 
 pub mod assignees;
+pub mod dashboard;
 pub mod fetch;
 pub mod github;
 pub mod goal;

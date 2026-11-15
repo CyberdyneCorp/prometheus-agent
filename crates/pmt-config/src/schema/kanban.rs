@@ -65,6 +65,11 @@ pub struct KanbanConfig {
     /// tasks assigned to an orchestrator profile before dispatching them
     /// (the dashboard's Orchestration Auto/Manual control).
     pub auto_decompose: bool,
+    /// The assignee a specified triage task that names none is given, so
+    /// that the orchestrator profile decomposes it (unset: it stays
+    /// unassigned and `default_assignee` applies at dispatch).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub orchestrator_profile: Option<String>,
     /// Promote decomposed children that wait for nothing straight to
     /// `ready` (else they stay in `todo`).
     pub auto_promote_children: bool,
@@ -105,6 +110,7 @@ impl Default for KanbanConfig {
             done_sub_retention_secs: 2_592_000,
             role: None,
             auto_decompose: false,
+            orchestrator_profile: None,
             auto_promote_children: true,
             respawn_success_window_secs: 3600,
             respawn_pr_window_secs: 86_400,

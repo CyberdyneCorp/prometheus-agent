@@ -1222,6 +1222,9 @@ error_codes! {
     /// No task of the board has the id.
     KANBAN_TASK_NOT_FOUND = ("kanban.task_not_found", NotFound,
         "No task of the board has this id; `prometheus kanban list --all` shows every task, archived ones included.");
+    /// No board of the home has a run with this id.
+    KANBAN_RUN_NOT_FOUND = ("kanban.run_not_found", NotFound,
+        "No board of this home has a run with this id; `prometheus kanban runs <task>` lists a task's runs.");
     /// A profile named by a task does not exist.
     KANBAN_UNKNOWN_PROFILE = ("kanban.unknown_profile", NotFound,
         "An assignee or reviewer must be an existing profile of this home; `prometheus profile list` shows them.");

@@ -463,6 +463,7 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `kanban.board_not_found` | `not_found` | 66 | No board with this slug exists, or it is archived; the active board comes from `--board`, then `kanban.current_board`, then `default`, and is never silently replaced. `prometheus kanban boards list` shows the boards. |
 | `kanban.board_exists` | `invalid_input` | 65 | A board with this slug already exists (archived boards keep theirs); pick another slug, or pass `--rename <new>` to `boards import`. |
 | `kanban.task_not_found` | `not_found` | 66 | No task of the board has this id; `prometheus kanban list --all` shows every task, archived ones included. |
+| `kanban.run_not_found` | `not_found` | 66 | No board of this home has a run with this id; `prometheus kanban runs <task>` lists a task's runs. |
 | `kanban.unknown_profile` | `not_found` | 66 | An assignee or reviewer must be an existing profile of this home; `prometheus profile list` shows them. |
 | `kanban.invalid_task` | `invalid_input` | 65 | A task field is missing or malformed (blank title, workspace outside `scratch`, `worktree[:<branch>]` or `dir:<absolute path>`, unknown parents, kind fields); nothing was changed. |
 | `kanban.illegal_transition` | `conflict` | 75 | The typed workflow table defines no transition from the task's status to the requested one for this actor; `docs/reference/kanban-workflow.md` lists every allowed transition. |

@@ -4392,6 +4392,13 @@
           "minimum": 1,
           "type": "integer"
         },
+        "orchestrator_profile": {
+          "description": "The assignee a specified triage task that names none is given, so\nthat the orchestrator profile decomposes it (unset: it stays\nunassigned and `default_assignee` applies at dispatch).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "rate_limit_cooldown_secs": {
           "default": 300,
           "description": "Seconds a task waits before it is claimed again after its worker\nwas rate limited (exit 75).",

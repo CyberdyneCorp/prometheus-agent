@@ -19,7 +19,8 @@ pub enum Verb {
     Demote,
     /// The dispatcher (or a person, for an external worker) claims it.
     Claim,
-    /// A failed run hands the task back.
+    /// A failed run hands the task back, or a person stops its worker
+    /// (the dashboard's Terminate).
     Reclaim,
     /// The failure breaker trips, or the assignee cannot run it.
     GiveUp,
@@ -167,7 +168,7 @@ pub const TABLE: &[Transition] = &[
         Running,
         Guard::ParentsSettled,
     ),
-    row(Verb::Reclaim, &[D], &[Running], Ready, Guard::None),
+    row(Verb::Reclaim, &[D, U], &[Running], Ready, Guard::None),
     row(Verb::GiveUp, &[D], &[Running, Ready], Blocked, Guard::None),
     row(Verb::Block, &[W], &[Running], Blocked, Guard::OwnRun),
     row(

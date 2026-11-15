@@ -12,6 +12,7 @@ mod gates;
 pub mod links;
 pub mod manage;
 pub mod runs;
+pub mod terminate;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -493,6 +494,27 @@ impl Board {
         Ok(rows)
     }
 
+    /// The board's last `limit` events, newest first.
+    ///
+    /// # Errors
+    ///
+    /// Store errors.
+    pub fn recent_events(&self, limit: usize) -> Result<Vec<Event>, Error> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT id, task_id, run_id, actor, kind, payload, at FROM events \
+                 ORDER BY id DESC LIMIT ?1",
+            )
+            .map_err(sql)?;
+        let rows = stmt
+            .query_map([i64::try_from(limit).unwrap_or(i64::MAX)], event_row)
+            .map_err(sql)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(sql)?;
+        Ok(rows)
+    }
+
     /// Events after `after` of the given kinds, oldest first.
     ///
     /// # Errors
@@ -539,7 +561,7 @@ impl Board {
     ///
     /// # Errors
     ///
-    /// `kanban.task_not_found` naming the run.
+    /// `kanban.run_not_found`.
     pub fn run(&self, id: &str) -> Result<Run, Error> {
         self.conn
             .query_row(
@@ -551,7 +573,7 @@ impl Board {
             .map_err(sql)?
             .ok_or_else(|| {
                 Error::new(
-                    &codes::KANBAN_TASK_NOT_FOUND,
+                    &codes::KANBAN_RUN_NOT_FOUND,
                     format!("run '{id}' not found"),
                 )
             })

@@ -507,6 +507,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `kanban.github_api_url` | string | `"https://api.github.com"` | any | `live` | The GitHub API that PR completion contracts read (GitHub Enterprise: `https://<host>/api/v3`). |
 | `kanban.max_running` | integer | unset | 1 to 256 | `live` | Workers running at once across every board of the home (unset: physical memory / 512 MiB clamped to 2-8, or 2 when unknown). |
 | `kanban.max_running_per_profile` | integer | `2` | 1 to 256 | `live` | Workers running at once per assignee profile. |
+| `kanban.orchestrator_profile` | string | unset | any | `live` | The assignee a specified triage task that names none is given, so that the orchestrator profile decomposes it (unset: it stays unassigned and `default_assignee` applies at dispatch). |
 | `kanban.rate_limit_cooldown_secs` | integer | `300` | ≥ 0 | `live` | Seconds a task waits before it is claimed again after its worker was rate limited (exit 75). |
 | `kanban.respawn_pr_window_secs` | integer | `86400` | ≥ 0 | `live` | Seconds after a comment linking a GitHub pull request during which its task is not spawned again. |
 | `kanban.respawn_success_window_secs` | integer | `3600` | ≥ 0 | `live` | Seconds after a finished run during which its task is not spawned again unless deliberately re-queued. |

@@ -9,7 +9,7 @@ Every status change on a board is one of these transitions. Anything else is ref
 | promote | dispatcher, user | `todo` | `ready` | all parents done/archived |
 | demote | dispatcher, user, worker | `ready` | `todo` | a parent is open |
 | claim | dispatcher, user | `ready` | `running` | all parents done/archived |
-| reclaim | dispatcher | `running` | `ready` |  |
+| reclaim | dispatcher, user | `running` | `ready` |  |
 | give up | dispatcher | `running`, `ready` | `blocked` |  |
 | block | worker | `running` | `blocked` | the actor's own open run |
 | block | user | `triage`, `todo`, `ready`, `running`, `review` | `blocked` |  |

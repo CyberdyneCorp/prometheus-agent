@@ -286,7 +286,9 @@ impl DaemonHost {
         let kind = reserved.wakeup.kind;
         if owner.owner(kind) == OWNER_GATEWAY {
             self.fire_in_chat(profile, id, reserved);
-        } else if let Err(err) = self.fire_for_clients(profile, id, &reserved.wakeup).await {
+        } else if let Err(err) =
+            Box::pin(self.fire_for_clients(profile, id, &reserved.wakeup)).await
+        {
             tracing::debug!(session = %id, kind = kind.as_str(), "automated turn not started: {err}");
             boundary::refund(store, id, reserved);
         }

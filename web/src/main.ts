@@ -15,6 +15,7 @@ import { chatPage } from "./pages/chat";
 import { adaptersPage } from "./pages/adapters";
 import { docsPage } from "./pages/docs";
 import { filesPage } from "./pages/files";
+import { kanbanPage } from "./pages/kanban";
 import { profileBuilderPage } from "./pages/profile-builder";
 import { applyTheme, currentLayout, currentTheme, themesPage } from "./pages/themes";
 import { pluginsPage } from "./pages/plugins";
@@ -70,7 +71,6 @@ const NAV: [string, string][] = [
 
 /** Pages whose backends arrive with later capabilities. */
 const PENDING: [string, string, string][] = [
-  ["/kanban", "Kanban", "The kanban board"],
   ["/achievements", "Achievements", "Achievements"],
 ];
 
@@ -94,6 +94,7 @@ function routes(): void {
   route("/config", configPage);
   route("/secrets", secretsPage);
   route("/webhooks", webhooksPage);
+  route("/kanban", kanbanPage);
   route("/files", filesPage);
   route("/docs", docsPage);
   route("/profile-builder", profileBuilderPage);

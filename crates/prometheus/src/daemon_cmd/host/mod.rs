@@ -29,8 +29,8 @@ use tracing::Instrument as _;
 
 use super::turn::{SecretsToClients, SudoToClients, ToClients, approvals, clarify};
 
-#[cfg(feature = "dashboard")]
 mod a2a;
+#[cfg(feature = "dashboard")]
 mod adapter_pairing;
 mod api;
 mod api_profile;

@@ -3,7 +3,8 @@
 //! in a hidden session tagged `kanban-<task>`, so relays see the affinity
 //! key `kanban:<task-id>`. With `kanban.auto_decompose` the dispatcher
 //! runs both before it dispatches: `specify` on triage ideas, `decompose`
-//! on tasks assigned to an orchestrator profile.
+//! on tasks assigned to an orchestrator profile. A specified task that
+//! names no assignee goes to `kanban.orchestrator_profile` when set.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -138,7 +139,30 @@ pub fn specify(
     }
     let body = ask(scope, launch, id, SPECIFY, &task_text(&task))?;
     let body: String = body.trim().chars().take(BODY_CHARS).collect();
-    board.specify(actor, id, &body, pmt_kanban::now_ms())
+    board.specify(actor, id, &body, pmt_kanban::now_ms())?;
+    match orchestrator_profile(scope) {
+        Some(profile) if task.assignee.is_none() => board.assign(
+            actor,
+            id,
+            Some(&profile),
+            &Assignees::of(scope),
+            pmt_kanban::now_ms(),
+        ),
+        _ => Ok(()),
+    }
+}
+
+/// `kanban.orchestrator_profile` when it names an existing profile: the
+/// assignee a specified triage task without one gets. An unknown name is
+/// ignored rather than failing every specify.
+#[must_use]
+pub fn orchestrator_profile(scope: &ProfileScope) -> Option<String> {
+    scope
+        .config()
+        .kanban
+        .orchestrator_profile
+        .clone()
+        .filter(|name| super::profile_exists(scope.home(), name))
 }
 
 /// Decomposes task `id` into a validated child graph created under it.

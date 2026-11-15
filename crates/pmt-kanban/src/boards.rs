@@ -360,6 +360,25 @@ impl Boards {
             .map(|b| b.slug)
             .collect())
     }
+
+    /// The board holding run `id` (run ids are ULIDs, unique across the
+    /// home's boards), archived boards included.
+    ///
+    /// # Errors
+    ///
+    /// `kanban.run_not_found`, store errors.
+    pub fn board_of_run(&self, id: &str) -> Result<Board, Error> {
+        for info in self.list()? {
+            let board = self.board_any(&info.slug)?;
+            if board.run(id).is_ok() {
+                return Ok(board);
+            }
+        }
+        Err(Error::new(
+            &codes::KANBAN_RUN_NOT_FOUND,
+            format!("run '{id}' not found on any board"),
+        ))
+    }
 }
 
 #[cfg(test)]

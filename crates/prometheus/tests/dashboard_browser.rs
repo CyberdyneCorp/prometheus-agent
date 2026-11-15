@@ -124,7 +124,7 @@ fn daemon_with(home: &std::path::Path, env: &[(&str, &str)]) -> Foreground {
         .spawn()
         .unwrap();
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
-    while !common::run(home, &["daemon", "status"]).status.success() {
+    while !common::daemon::running(home) {
         assert!(
             std::time::Instant::now() < deadline,
             "the daemon did not start"
@@ -214,5 +214,53 @@ fn the_pairing_page_approves_a_stranger_with_their_code() {
         home.path(),
         "pairing.spec.ts",
         &[("PMT_PAIRING_CODE", &code)],
+    );
+}
+
+/// Scenario: Terminate a stuck run (and the Orchestration Auto/Manual
+/// control with an unknown orchestrator profile refused): the daemon's
+/// dispatcher claims a task for a worker whose model never answers, and
+/// the Kanban page stops it.
+#[test]
+fn the_kanban_page_terminates_a_stuck_run() {
+    let home = mock_home();
+    std::fs::write(
+        home.path().join("profiles/default/mock.toml"),
+        "[[rule]]\nrepeat = true\nlatency_ms = 600000\ntext = \"too late\"\n",
+    )
+    .unwrap();
+    // One tick when the daemon starts, none during the test: the freed
+    // task must stay `ready` for the page to show it.
+    append_config(
+        home.path(),
+        "\n[providers.mock]\nscript = \"mock.toml\"\n\n[kanban]\ndispatch_interval_secs = 3600\n",
+    );
+    let created = ok(&run(
+        home.path(),
+        &[
+            "--json",
+            "kanban",
+            "create",
+            "stuck work",
+            "--assignee",
+            "default",
+        ],
+    ));
+    let task = serde_json::from_str::<serde_json::Value>(&created).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let _daemon = daemon::start(home.path(), &[]);
+    playwright(home.path(), "kanban.spec.ts", &[("PMT_TASK", &task)]);
+    let shown = ok(&run(home.path(), &["--json", "kanban", "show", &task]));
+    let shown: serde_json::Value = serde_json::from_str(&shown).unwrap();
+    assert_eq!(shown["task"]["status"], "ready", "{shown}");
+    let first = &shown["runs"][0];
+    assert_eq!(first["outcome"], "reclaimed", "{shown}");
+    let pid = u32::try_from(first["pid"].as_u64().unwrap()).unwrap();
+    let start = first["pid_start"].as_u64().unwrap();
+    assert!(
+        !pmt_kanban::process::alive(pid, start),
+        "the terminated worker {pid} still runs"
     );
 }

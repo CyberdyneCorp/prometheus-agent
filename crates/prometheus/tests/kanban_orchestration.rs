@@ -154,6 +154,35 @@ fn specify_expands_a_triage_idea_into_a_todo_task() {
     );
 }
 
+/// `kanban.orchestrator_profile` (the dashboard's orchestration settings):
+/// a specified triage idea with no assignee goes to the orchestrator
+/// profile, and one that names an assignee keeps it.
+#[test]
+fn a_specified_idea_without_an_assignee_goes_to_the_orchestrator_profile() {
+    let rules = "[[rule]]\nrepeat = true\ntext = \"Do it.\\n\\nAcceptance criteria:\\n- done\"\n";
+    let home = worker_home(rules);
+    profile(home.path(), "planner");
+    ok(&run(
+        home.path(),
+        &["config", "set", "kanban.orchestrator_profile", "planner"],
+    ));
+    let open = create(home.path(), &["plan the launch", "--status", "triage"]);
+    let owned = create(
+        home.path(),
+        &[
+            "fix the logo",
+            "--status",
+            "triage",
+            "--assignee",
+            "default",
+        ],
+    );
+    ok(&run(home.path(), &["kanban", "specify", &open]));
+    ok(&run(home.path(), &["kanban", "specify", &owned]));
+    assert_eq!(task(home.path(), &open)["assignee"], "planner");
+    assert_eq!(task(home.path(), &owned)["assignee"], "default");
+}
+
 /// Scenario: Decompose rejects unknown assignees.
 #[test]
 fn decompose_refuses_a_graph_naming_an_unknown_assignee() {
