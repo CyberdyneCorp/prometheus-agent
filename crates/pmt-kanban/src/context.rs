@@ -79,7 +79,9 @@ pub fn render(board: &Board, id: &str) -> Result<String, Error> {
                 a.filename,
                 a.content_type,
                 a.size,
-                board.attachment_path(&a).display()
+                board
+                    .attachment_path(&a)
+                    .map_or_else(|| "(missing)".to_owned(), |p| p.display().to_string())
             );
         }
     }

@@ -116,7 +116,8 @@ pub fn export(boards: &Boards, slug: &str, file: &Path) -> Result<usize, Error> 
     let mut blobs = BTreeMap::new();
     for row in &tables["attachments"] {
         if let Some(sha) = row.get("sha256").and_then(Value::as_str) {
-            let path = attach::blob_path(board.blobs(), sha);
+            let path = attach::blob_path(board.blobs(), sha)
+                .ok_or_else(|| invalid(format!("attachment hash '{sha}' is malformed")))?;
             let bytes = std::fs::read(&path).map_err(|e| Error::io(&codes::HOME_IO, &path, &e))?;
             blobs.insert(sha.to_owned(), STANDARD.encode(bytes));
         }
@@ -234,6 +235,35 @@ fn insert(
     Ok(())
 }
 
+/// Refuses an archive unless every blob key and every attachment row's
+/// `sha256` is a well-formed hash, and every row's blob is in the archive
+/// or already in the store: the hash becomes a path under the blob store,
+/// so an unchecked one could point workers and exports anywhere.
+fn check_attachments(archive: &Archive, blobs: &Path) -> Result<(), Error> {
+    if let Some(sha) = archive.blobs.keys().find(|sha| !attach::is_sha256(sha)) {
+        return Err(invalid(format!("attachment hash '{sha}' is malformed")));
+    }
+    let rows = archive
+        .tables
+        .get("attachments")
+        .map_or(&[][..], Vec::as_slice);
+    for row in rows {
+        let sha = row
+            .get("sha256")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let Some(path) = attach::blob_path(blobs, sha) else {
+            return Err(invalid(format!("attachment hash '{sha}' is malformed")));
+        };
+        if !archive.blobs.contains_key(sha) && !path.is_file() {
+            return Err(invalid(format!(
+                "attachment {sha} has no data in the archive"
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Restores the archive in `file` as a new board named `rename`, else
 /// the archived slug.
 ///
@@ -258,6 +288,7 @@ pub fn import(boards: &Boards, file: &Path, rename: Option<&str>) -> Result<Impo
             format!("board '{wanted}' already exists; pass --rename <new>"),
         ));
     }
+    check_attachments(&archive, &boards.blobs_dir())?;
     for (sha, data) in &archive.blobs {
         let bytes = STANDARD
             .decode(data)

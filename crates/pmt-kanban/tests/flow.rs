@@ -349,7 +349,7 @@ fn a_missing_declared_artifact_keeps_the_task_in_flight() {
     let attachments = board.attachments(&id).unwrap();
     assert_eq!(attachments[0].filename, "report.pdf");
     assert_eq!(
-        std::fs::read(board.attachment_path(&attachments[0])).unwrap(),
+        std::fs::read(board.attachment_path(&attachments[0]).unwrap()).unwrap(),
         b"%PDF-1.7"
     );
     assert!(!scratch.exists(), "a done scratch workspace is deleted");

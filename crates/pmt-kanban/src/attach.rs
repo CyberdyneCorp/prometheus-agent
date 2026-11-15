@@ -85,10 +85,19 @@ pub fn sanitize(name: &str) -> String {
     }
 }
 
-/// `<blobs>/<aa>/<sha256>`.
+/// Whether `text` is a SHA-256 in the blob store's form: exactly 64
+/// lowercase hex characters.
 #[must_use]
-pub fn blob_path(blobs: &Path, sha256: &str) -> PathBuf {
-    blobs.join(&sha256[..2]).join(sha256)
+pub fn is_sha256(text: &str) -> bool {
+    text.len() == 64 && text.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+/// `<blobs>/<aa>/<sha256>`; `None` unless `sha256` passes [`is_sha256`],
+/// so a hash read from a board or an archive can never name a path
+/// outside the store (`/abs/path`, `../..`) or panic on a short string.
+#[must_use]
+pub fn blob_path(blobs: &Path, sha256: &str) -> Option<PathBuf> {
+    is_sha256(sha256).then(|| blobs.join(&sha256[..2]).join(sha256))
 }
 
 /// Stores `bytes` in the blob store (temp file + rename); returns the
@@ -99,7 +108,7 @@ pub fn blob_path(blobs: &Path, sha256: &str) -> PathBuf {
 /// `home.io`.
 pub fn put_blob(blobs: &Path, bytes: &[u8]) -> Result<String, Error> {
     let sha = crate::model::hex(&Sha256::digest(bytes));
-    let path = blob_path(blobs, &sha);
+    let path = blobs.join(&sha[..2]).join(&sha);
     if path.exists() {
         return Ok(sha);
     }
@@ -258,9 +267,9 @@ impl Board {
         Ok(rows)
     }
 
-    /// The blob file of an attachment.
+    /// The blob file of an attachment (`None` for a malformed hash).
     #[must_use]
-    pub fn attachment_path(&self, attachment: &Attachment) -> PathBuf {
+    pub fn attachment_path(&self, attachment: &Attachment) -> Option<PathBuf> {
         blob_path(self.blobs(), &attachment.sha256)
     }
 }

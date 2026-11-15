@@ -235,7 +235,7 @@ pub(super) fn attachments(env: &Env<'_>, id: &str) -> Result<u8, Error> {
             a.filename,
             a.size,
             a.uploader,
-            board.attachment_path(a).display()
+            shown(board.attachment_path(a))
         );
     }
     env.raw(&out)
@@ -313,4 +313,9 @@ pub(super) fn attach(env: &Env<'_>, id: &str, files: &[PathBuf]) -> Result<u8, E
         );
     }
     env.raw(&out)
+}
+
+/// A blob path as text (`(missing)` for a malformed hash).
+fn shown(path: Option<std::path::PathBuf>) -> String {
+    path.map_or_else(|| "(missing)".to_owned(), |p| p.display().to_string())
 }

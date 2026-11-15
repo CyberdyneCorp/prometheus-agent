@@ -112,7 +112,7 @@ fn a_board_imported_into_another_home_keeps_its_ids() {
     assert_eq!(copy.comments(&child).unwrap()[0].body, "note");
     let attachment = &copy.attachments(&child).unwrap()[0];
     assert_eq!(
-        std::fs::read(copy.attachment_path(attachment)).unwrap(),
+        std::fs::read(copy.attachment_path(attachment).unwrap()).unwrap(),
         b"payload"
     );
     assert!(
@@ -121,4 +121,41 @@ fn a_board_imported_into_another_home_keeps_its_ids() {
             .iter()
             .any(|e| e.kind == "created")
     );
+}
+
+/// An archive whose attachment row names a path instead of a hash is
+/// refused before anything is created: no board, no blob.
+#[test]
+fn an_archive_with_a_traversal_hash_is_refused() {
+    let source = Home::new();
+    let mut board = source.board();
+    let task = create(&mut board, "task", &[]);
+    let upload = Upload {
+        name: "a.txt",
+        content_type: None,
+        bytes: b"payload",
+    };
+    board.attach(&user(), &task, &upload, 1 << 20, T0).unwrap();
+    let file = source.root.path().join("board.json");
+    transfer::export(&source.boards, "default", &file).unwrap();
+    let archive: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
+    for forged in ["/home/u/.ssh/id_ed25519", "../../../etc/passwd", "a", "é"] {
+        let mut archive = archive.clone();
+        archive["tables"]["attachments"][0]["sha256"] = forged.into();
+        let forged_file = source.root.path().join("forged.json");
+        std::fs::write(&forged_file, serde_json::to_vec(&archive).unwrap()).unwrap();
+        let target = Home::new();
+        let err = transfer::import(&target.boards, &forged_file, Some("copy")).unwrap_err();
+        assert_eq!(
+            err.code().code,
+            "kanban.invalid_archive",
+            "{forged}: {}",
+            err.message()
+        );
+        assert!(target.boards.board("copy").is_err(), "{forged}: no board");
+        let blobs = target.root.path().join("kanban/blobs");
+        let stored = std::fs::read_dir(&blobs).map_or(0, Iterator::count);
+        assert_eq!(stored, 0, "{forged}: nothing stored");
+    }
 }
