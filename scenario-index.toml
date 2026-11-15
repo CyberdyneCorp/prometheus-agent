@@ -4575,6 +4575,7 @@ capabilities = [
 
 [kanban."Eval and harness-evolution tasks (upgrade)"]
 "Eval task on replayed provider" = { deferred = "71.1 prometheus eval run (provider_mode live|replay for the assignee profile): today an eval task runs the bundled smoke suite on the mock provider and ignores provider_mode (kanban_cli.rs::an_eval_task_runs_the_smoke_suite_offline_and_attaches_its_report covers only that)" }
+"Evolve task requires approval" = { deferred = "69 harness evolution engine (prometheus evolve, harness adoption from the next session): today an evolve task is validated and its completion always lands in review, but the worker blocks it with kind capability because no evolution engine exists in this build" }
 
 [kanban."Event log and run history"]
 "Audit a refusal" = ["crates/prometheus/tests/kanban_cli.rs::a_refused_completion_is_in_the_log"]
