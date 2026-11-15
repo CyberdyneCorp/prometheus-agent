@@ -114,7 +114,7 @@ impl<'a> Client<'a> {
                 } else {
                     Dialect::V1
                 };
-                (card.url.unwrap_or_else(|| base.to_owned()), dialect)
+                (endpoint(base, card.url.as_deref()), dialect)
             }
             Err(_) => (base.to_owned(), Dialect::V1),
         };
@@ -189,28 +189,64 @@ impl<'a> Client<'a> {
     }
 }
 
+/// The JSON-RPC endpoint for the agent at `base`: the card's `url` only
+/// when it is on the same origin (scheme, host and port) as `base`, else
+/// `base` itself. The card is the remote's data, and the caller's grant and
+/// bearer token are for `base`'s origin: a card naming another host must
+/// not redirect the message and the token there.
+fn endpoint(base: &str, card_url: Option<&str>) -> String {
+    let origin = |text: &str| url::Url::parse(text).ok().map(|u| u.origin());
+    match (card_url, origin(base)) {
+        (Some(url), Some(base_origin))
+            if base_origin.is_tuple() && origin(url).as_ref() == Some(&base_origin) =>
+        {
+            url.to_owned()
+        }
+        _ => base.to_owned(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Mutex;
 
     use super::*;
 
-    /// Answers the card, then a working task, then the completed task.
+    /// Answers the card (whose endpoint is `card_url`), then a working
+    /// task, then the completed task; records each request and its token.
     struct Fake {
         calls: Mutex<Vec<String>>,
+        card_url: &'static str,
+    }
+
+    impl Fake {
+        fn new(card_url: &'static str) -> Self {
+            Self {
+                calls: Mutex::new(Vec::new()),
+                card_url,
+            }
+        }
+
+        fn calls(&self) -> Vec<String> {
+            self.calls.lock().unwrap().clone()
+        }
     }
 
     impl Transport for Fake {
         fn get<'a>(
             &'a self,
             url: &'a str,
-            _token: Option<&'a str>,
+            token: Option<&'a str>,
         ) -> BoxFuture<'a, Result<HttpReply, String>> {
             Box::pin(async move {
-                self.calls.lock().unwrap().push(format!("GET {url}"));
+                let token = token.unwrap_or("-");
+                self.calls
+                    .lock()
+                    .unwrap()
+                    .push(format!("GET {url} {token}"));
                 Ok(HttpReply {
                     status: 200,
-                    body: json!({"name": "r", "supportedInterfaces": [{"url": "http://r/rpc", "protocolVersion": "1.0"}]}),
+                    body: json!({"name": "r", "supportedInterfaces": [{"url": self.card_url, "protocolVersion": "1.0"}]}),
                 })
             })
         }
@@ -218,15 +254,16 @@ mod tests {
         fn post<'a>(
             &'a self,
             url: &'a str,
-            _token: Option<&'a str>,
+            token: Option<&'a str>,
             body: &'a Value,
         ) -> BoxFuture<'a, Result<HttpReply, String>> {
             Box::pin(async move {
                 let method = body["method"].as_str().unwrap().to_owned();
+                let token = token.unwrap_or("-");
                 self.calls
                     .lock()
                     .unwrap()
-                    .push(format!("POST {url} {method}"));
+                    .push(format!("POST {url} {method} {token}"));
                 let state = if method == "SendMessage" {
                     "TASK_STATE_WORKING"
                 } else {
@@ -246,23 +283,52 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn a_running_task_is_polled_until_it_ends() {
-        let fake = Fake {
-            calls: Mutex::new(Vec::new()),
-        };
+        let fake = Fake::new("http://r/rpc");
         let called = Client::new(&fake, None)
             .call("http://r", "hi", None)
             .await
             .unwrap();
         assert_eq!(called.reply, "done");
         assert_eq!(called.context_id, "c1");
-        let calls = fake.calls.lock().unwrap().clone();
         assert_eq!(
-            calls,
+            fake.calls(),
             [
-                "GET http://r/.well-known/agent-card.json",
-                "POST http://r/rpc SendMessage",
-                "POST http://r/rpc GetTask"
+                "GET http://r/.well-known/agent-card.json -",
+                "POST http://r/rpc SendMessage -",
+                "POST http://r/rpc GetTask -"
             ]
         );
+    }
+
+    /// A card naming another origin cannot redirect the message or the
+    /// bearer token: every call goes to the granted base URL.
+    #[tokio::test(start_paused = true)]
+    async fn a_card_on_another_host_is_not_followed() {
+        for card_url in [
+            "https://attacker.example/x",
+            "http://r:8080/rpc",
+            "https://r/rpc",
+            "not a url",
+        ] {
+            let fake = Fake::new(card_url);
+            Client::new(&fake, Some("sekrit"))
+                .call("http://r", "hi", None)
+                .await
+                .unwrap();
+            let calls = fake.calls();
+            assert!(
+                calls
+                    .iter()
+                    .filter(|c| c.starts_with("POST"))
+                    .all(|c| c.starts_with("POST http://r ")),
+                "{card_url}: {calls:?}"
+            );
+            assert!(
+                calls
+                    .iter()
+                    .all(|c| !c.contains("attacker") && !c.contains(":8080")),
+                "{card_url}: {calls:?}"
+            );
+        }
     }
 }

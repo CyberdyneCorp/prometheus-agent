@@ -409,3 +409,52 @@ fn streams_and_pre_1_0_aliases_work() {
         "a finished task is not cancelable"
     );
 }
+
+/// A non-loopback listener keeps refusing a profile whose peer tokens are
+/// removed after start: a reloaded config cannot turn it into a tokenless
+/// server that trusts any caller sending `Host: 127.0.0.1`.
+#[test]
+fn a_public_listener_refuses_a_profile_that_drops_its_tokens() {
+    let home = mock_home();
+    std::fs::write(
+        home.path().join("daemon.toml"),
+        "[a2a]\nlisten = \"0.0.0.0:0\"\npublic = true\n",
+    )
+    .unwrap();
+    a2a::enable(home.path(), &["alice"], &["alice", "local"], "");
+    let _daemon = daemon::start(home.path(), &[]);
+    let port = a2a::port(home.path());
+    let tokenless = || {
+        Request::new("POST", "/")
+            .header("Host", "127.0.0.1")
+            .json(&json!({"jsonrpc": "2.0", "id": 1, "method": "SendMessage", "params": message("hi", None)}))
+            .send(port)
+    };
+    assert_eq!(tokenless().status, 401);
+    let config = home.path().join("profiles/default/config.toml");
+    let text = std::fs::read_to_string(&config).unwrap();
+    let peer = format!(
+        "[[a2a.server.peers]]\nname = \"alice\"\ntoken_secret = {:?}\n",
+        a2a::secret_of("alice")
+    );
+    assert!(text.contains(&peer), "{text}");
+    std::fs::write(&config, text.replace(&peer, "")).unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    let answer = loop {
+        let answer = tokenless();
+        if answer.status != 401 || std::time::Instant::now() > deadline {
+            break answer;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    };
+    assert_eq!(answer.status, 403, "{}", answer.body);
+    assert!(
+        answer.body.contains("only profiles with peer tokens"),
+        "{}",
+        answer.body
+    );
+    let card = Request::new("GET", "/.well-known/agent-card.json")
+        .header("Host", "localhost")
+        .send(port);
+    assert_eq!(card.status, 403, "{}", card.body);
+}

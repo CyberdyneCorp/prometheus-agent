@@ -38,6 +38,9 @@ use crate::{Shared, auth, guard, turn};
 /// The listener's health component.
 const COMPONENT: &str = "listener:a2a";
 
+/// The refusal of a tokenless profile on a non-loopback listener.
+const TOKENS_REQUIRED: &str = "a non-loopback A2A listener serves only profiles with peer tokens";
+
 /// What every A2A request shares.
 pub(crate) struct A2a {
     api: Arc<Shared>,
@@ -48,6 +51,9 @@ pub(crate) struct A2a {
     keys: turn::SessionLocks,
     /// The bound address (the card's URL without `public_url`).
     bound: SocketAddr,
+    /// Bound to a non-loopback address: only profiles with peer tokens
+    /// are served (checked per request, as config reloads can drop them).
+    public: bool,
 }
 
 /// The running A2A server.
@@ -118,6 +124,7 @@ impl A2aServer {
             pingpong: gate::PingPong::default(),
             keys: turn::SessionLocks::default(),
             bound: addr,
+            public: !addr.ip().is_loopback(),
         });
         let stop = CancelToken::new();
         serve(bound, a2a, stop.clone());
@@ -200,6 +207,12 @@ async fn answer(a2a: &Arc<A2a>, request: Request<Incoming>, caller: IpAddr) -> R
         return status(404, "not found");
     };
     if !config.has_tokens() {
+        if a2a.public {
+            tracing::warn!(
+                "a2a: {profile} has no peer tokens; the non-loopback listener refuses it"
+            );
+            return status(403, TOKENS_REQUIRED);
+        }
         let public = config.public_url.as_deref().and_then(gate::url_host);
         if let Err(refusal) = gate::admit_tokenless(&head, public.as_deref()) {
             return refused(&refusal);
