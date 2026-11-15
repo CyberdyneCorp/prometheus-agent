@@ -110,7 +110,7 @@ fn sessions_stay_within_the_process_bound_and_one_domain_runs_one_job() {
         improver: &improver,
         limits,
         retry_delay: std::time::Duration::ZERO,
-        library: None,
+        experience: &fx.scope.config().experience,
         estimate_usd: 0.0,
     };
     let (a, b) =
@@ -128,8 +128,11 @@ fn sessions_stay_within_the_process_bound_and_one_domain_runs_one_job() {
         .map(|(i, _)| i)
         .collect();
     assert_eq!(selects.len(), 2);
+    // Each job ends with its selection then its reflection.
     assert!(
-        calls[..selects[0]].len() == 6 && calls[selects[0] + 1..selects[1]].len() == 6,
+        calls[..selects[0]].len() == 6
+            && calls[selects[0] + 1].0 == "experience.parallel2"
+            && calls[selects[0] + 2..selects[1]].len() == 6,
         "jobs interleaved: {calls:?}"
     );
     let _ = SessionKind::Select;

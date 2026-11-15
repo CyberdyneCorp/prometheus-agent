@@ -15,6 +15,7 @@ use pmt_config::schema::AdoptionPolicy;
 use pmt_core::error::{Error, codes};
 use serde::{Deserialize, Serialize};
 
+use crate::experience::lesson::{Distilled, Edit, Lesson};
 use crate::harness::{Rules, diff, validate};
 
 /// A proposal's status.
@@ -68,9 +69,25 @@ pub struct Proposal {
     pub reason: String,
     /// `model`, `user` or `single`.
     pub selected_by: String,
-    /// The distilled lesson (the experience library's).
+    /// The job's experience-library domain.
     #[serde(default)]
-    pub lesson: String,
+    pub domain: String,
+    /// The job's task title.
+    #[serde(default)]
+    pub title: String,
+    /// The job's budget k.
+    #[serde(default)]
+    pub k: u8,
+    /// Why the lesson was not written to the library (`leak glob`,
+    /// `verdict tripwire`, `secret scanner`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lesson_rejected: Option<String>,
+    /// The library entry its adoption wrote.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entry_id: Option<String>,
+    /// That entry was forgotten or evicted: a rebuild leaves it out.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub entry_dropped: bool,
     /// Its status.
     pub status: Status,
     /// It adds or changes scripts, hooks or subagents.
@@ -80,6 +97,13 @@ pub struct Proposal {
     /// The version adoption wrote.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub adopted_version: Option<String>,
+    /// The distilled lesson; none when absent (spec: experience-library,
+    /// Experience distillation).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lesson: Option<Lesson>,
+    /// The reflector's rows on what each edit did.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub edits: Vec<Edit>,
 }
 
 /// What a job hands over to make a proposal.
@@ -101,6 +125,14 @@ pub struct NewProposal<'a> {
     pub reason: &'a str,
     /// Who chose.
     pub selected_by: &'a str,
+    /// The job's domain.
+    pub domain: &'a str,
+    /// The task title.
+    pub title: &'a str,
+    /// The job's k.
+    pub k: u8,
+    /// What the reflector distilled.
+    pub distilled: &'a Distilled,
 }
 
 /// An adoption.
@@ -184,7 +216,12 @@ impl Proposals {
             census: Census::of(new.tree),
             reason: new.reason.to_owned(),
             selected_by: new.selected_by.to_owned(),
-            lesson: String::new(),
+            domain: new.domain.to_owned(),
+            title: new.title.to_owned(),
+            k: new.k,
+            lesson_rejected: None,
+            entry_id: None,
+            entry_dropped: false,
             status: if summary.is_empty() {
                 Status::NoChange
             } else {
@@ -193,6 +230,8 @@ impl Proposals {
             approval_required: needs_approval(new.base, new.tree),
             created_at: jiff::Timestamp::now().to_string(),
             adopted_version: None,
+            lesson: new.distilled.lesson.clone(),
+            edits: new.distilled.edits.clone(),
         };
         pmt_core::private_fs::create_dir(&self.root).map_err(|e| io(&self.root, &e))?;
         let dir = self.tree_dir(&proposal.id);

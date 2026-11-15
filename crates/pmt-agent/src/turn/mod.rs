@@ -103,6 +103,9 @@ pub struct PromptSetup {
     /// The harness layer, read once at session start (an explicit
     /// `--now` activation replaces it at the next rebuild).
     pub harness: Option<String>,
+    /// The lessons layer of the session's domain, frozen at its start
+    /// (spec: experience-library, Lessons offered to later sessions).
+    pub lessons: Option<String>,
     /// Skills index text (skills subsystem).
     pub skills_index: Option<String>,
     /// Pinned skills text (skills subsystem).
@@ -128,6 +131,7 @@ impl PromptSetup {
             pass_session_id: false,
             caller_system: None,
             harness: None,
+            lessons: None,
             skills_index: None,
             pinned_skills: None,
             memory: None,

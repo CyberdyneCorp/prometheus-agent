@@ -82,6 +82,7 @@ mod chat;
 mod cron;
 mod desktop;
 mod evolve;
+mod experience;
 mod files;
 mod interop;
 mod journey;
@@ -106,6 +107,7 @@ pub use chat::*;
 pub use cron::*;
 pub use desktop::*;
 pub use evolve::*;
+pub use experience::*;
 pub use files::*;
 pub use interop::*;
 pub use journey::*;
@@ -405,6 +407,9 @@ pub struct SessionSetup {
     /// That endpoint's API key (`--api-key-stdin`), held in memory only.
     #[serde(default)]
     pub api_key: Option<String>,
+    /// The session's experience-library domain (`--domain`).
+    #[serde(default)]
+    pub domain: Option<String>,
 }
 
 impl std::fmt::Debug for SessionSetup {
@@ -422,6 +427,7 @@ impl std::fmt::Debug for SessionSetup {
             .field("mock_script", &self.mock_script)
             .field("base_url", &self.base_url)
             .field("api_key", &self.api_key.as_ref().map(|_| "[REDACTED]"))
+            .field("domain", &self.domain)
             .finish()
     }
 }

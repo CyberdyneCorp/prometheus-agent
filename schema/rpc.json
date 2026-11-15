@@ -2690,6 +2690,121 @@
       ],
       "type": "object"
     },
+    "ExperienceDomain": {
+      "additionalProperties": false,
+      "description": "One domain of `experience.domains`.",
+      "properties": {
+        "entries": {
+          "description": "Its entries (any status).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "description": "The domain name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "entries"
+      ],
+      "type": "object"
+    },
+    "ExperienceDomains": {
+      "additionalProperties": false,
+      "description": "`experience.domains` result.",
+      "properties": {
+        "domains": {
+          "description": "Sorted by name.",
+          "items": {
+            "$ref": "#/$defs/ExperienceDomain"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "domains"
+      ],
+      "type": "object"
+    },
+    "ExperienceEntries": {
+      "additionalProperties": false,
+      "description": "`experience.list` result.",
+      "properties": {
+        "entries": {
+          "description": "Each entry's `entry.toml` as JSON: domains sorted, newest first.",
+          "items": true,
+          "type": "array"
+        }
+      },
+      "required": [
+        "entries"
+      ],
+      "type": "object"
+    },
+    "ExperienceParams": {
+      "additionalProperties": false,
+      "description": "Params of every `experience.*` method; each uses the fields its\ncommand takes.",
+      "properties": {
+        "all": {
+          "default": false,
+          "description": "`experience.list`: also rolled-back entries.",
+          "type": "boolean"
+        },
+        "domain": {
+          "default": null,
+          "description": "`experience.list`: only this domain.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "entry_id": {
+          "default": null,
+          "description": "The entry (`experience.show`, `experience.pin`,\n`experience.forget`, `experience.restore`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pinned": {
+          "default": null,
+          "description": "`experience.pin`: `false` unpins (default `true`).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "ExperienceReply": {
+      "additionalProperties": false,
+      "description": "Result of the methods that act on one entry.",
+      "properties": {
+        "data": {
+          "default": null,
+          "description": "The entry's `entry.toml` as JSON (`experience.show` adds its\n`EXPERIENCE.md` as `document`)."
+        },
+        "message": {
+          "description": "What happened, in one line.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "type": "object"
+    },
     "FeatureSupport": {
       "additionalProperties": false,
       "description": "One row of the platform support matrix.",
@@ -5751,6 +5866,7 @@
           "default": {
             "api_key": null,
             "base_url": null,
+            "domain": null,
             "ignore_rules": false,
             "ignore_user_config": false,
             "mock_script": null,
@@ -6016,6 +6132,14 @@
         "base_url": {
           "default": null,
           "description": "An endpoint for this session only (`--base-url`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "domain": {
+          "default": null,
+          "description": "The session's experience-library domain (`--domain`).",
           "type": [
             "string",
             "null"
@@ -7986,33 +8110,63 @@
       "since": "1.0"
     },
     "experience.domains": {
-      "declared": false,
       "owner": "experience-library",
+      "params": {
+        "$ref": "#/$defs/ExperienceParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ExperienceDomains"
+      },
       "since": "1.0"
     },
     "experience.forget": {
-      "declared": false,
       "owner": "experience-library",
+      "params": {
+        "$ref": "#/$defs/ExperienceParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ExperienceReply"
+      },
       "since": "1.0"
     },
     "experience.list": {
-      "declared": false,
       "owner": "experience-library",
+      "params": {
+        "$ref": "#/$defs/ExperienceParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ExperienceEntries"
+      },
       "since": "1.0"
     },
     "experience.pin": {
-      "declared": false,
       "owner": "experience-library",
+      "params": {
+        "$ref": "#/$defs/ExperienceParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ExperienceReply"
+      },
       "since": "1.0"
     },
     "experience.restore": {
-      "declared": false,
       "owner": "experience-library",
+      "params": {
+        "$ref": "#/$defs/ExperienceParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ExperienceReply"
+      },
       "since": "1.0"
     },
     "experience.show": {
-      "declared": false,
       "owner": "experience-library",
+      "params": {
+        "$ref": "#/$defs/ExperienceParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ExperienceReply"
+      },
       "since": "1.0"
     },
     "files.rollback": {

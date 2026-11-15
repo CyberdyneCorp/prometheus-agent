@@ -378,6 +378,7 @@ blueprint = "Cruthaigh jab sceidealaithe ó ghormchló: /blueprint [ainm] [sliot
 goal = "Sprioc sheasta a leanann an gníomhaire ag obair ina treo: /goal <téacs> | draft <téacs> | status | show | pause | resume | clear | wait <pid> | unwait | gate add|list|remove|clear"
 subgoal = "Critéir bhreise na sprice gníomhaí: /subgoal <téacs> | remove <N> | clear"
 evolve = "Cuir jab éabhlóide úim don seisiún seo sa scuaine: /evolve [--k N]"
+domain = "Taispeáin nó socraigh fearann leabharlann taithí an tseisiúin seo: /domain [AINM]"
 loop = "Athdhéan teachtaireacht nó ordú: /loop [eatramh] <teachtaireacht> [--times N] [--until <coinníoll>] | status | pause | resume | stop"
 heartbeat = "Seiceáil isteach agus é díomhaoin: /heartbeat every <eatramh> <teachtaireacht> | status | pause | resume | clear"
 worktree = "Worktrees Git: taispeáin an ceann gníomhach, new [AINM], list, prune [--dry-run]"

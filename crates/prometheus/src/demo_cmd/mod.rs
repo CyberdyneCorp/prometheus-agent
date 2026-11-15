@@ -150,6 +150,7 @@ fn run_session(place: &Place, launch: &LaunchEnv) -> Result<Session, Error> {
         kanban: None,
         replay: None,
         rollout: None,
+        domain: None,
     };
     let factory = Factory::new(scope, launch, &flags, None, options)?;
     crate::model_cmd::block_on(session(factory, &flags))?

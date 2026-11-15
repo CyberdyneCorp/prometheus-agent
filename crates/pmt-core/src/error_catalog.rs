@@ -1300,6 +1300,18 @@ error_codes! {
     /// A harness version could not be read or written.
     HARNESS_IO = ("harness.io", Io,
         "A file under `<profile>/harness/` could not be read or written.");
+    /// No experience-library entry has the id.
+    EXPERIENCE_ENTRY_NOT_FOUND = ("experience.entry_not_found", Tool,
+        "No entry of this profile's experience library has this id; `prometheus experience list --all` lists every entry with its status.");
+    /// A domain name is not valid after normalisation.
+    EXPERIENCE_INVALID_DOMAIN = ("experience.invalid_domain", Usage,
+        "Experience-library domains are lower-case letters, digits and `-` (`[a-z0-9][a-z0-9-]{0,47}`); input is lower-cased and runs of other characters become `-`, so only an over-long name is refused.");
+    /// An experience archive was refused as a whole.
+    EXPERIENCE_IMPORT_REJECTED = ("experience.import_rejected", InvalidInput,
+        "The experience archive was refused and nothing was written: an entry's harness does not validate, or an entry carries a leak-glob file, an eval verdict marker or a secret; the message names the entry.");
+    /// The experience library could not be read or written.
+    EXPERIENCE_IO = ("experience.io", Io,
+        "A file under `<profile>/experience/` (or an experience archive) could not be read or written.");
     /// The session cannot take turns.
     SESSION_READ_ONLY = ("session.read_only", PermissionDenied,
         "The session is read-only: an imported Hermes A2A conversation whose peer binding cannot be proven is kept for reading (`prometheus sessions show`) but never attached to a live A2A conversation; `prometheus doctor` lists them.");

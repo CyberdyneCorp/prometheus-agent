@@ -82,7 +82,8 @@ pub use desktop::{DesktopConfig, HudConfig, QuickAskConfig};
 pub use evolve::{
     AdoptionPolicy, DEFAULT_LEAK_GLOBS, EvolveAdoptionConfig, EvolveAutoConfig, EvolveBudgetConfig,
     EvolveConcurrencyConfig, EvolveConfig, EvolveEvidenceConfig, EvolveImproverConfig, EvolveMode,
-    EvolveRolloutConfig, EvolveSelection, EvolveTaskConfig, HarnessConfig, RolloutNetwork,
+    EvolveRolloutConfig, EvolveSelection, EvolveTaskConfig, ExperienceConfig, HarnessConfig,
+    RolloutNetwork,
 };
 pub use gateway::{
     AgentCacheConfig, AllowBots, BackgroundNotifications, Batching, ChatPolicy, ChatToolProgress,
@@ -225,6 +226,8 @@ pub struct Config {
     pub display: DisplayConfig,
     /// Harness evolution (opt-in).
     pub evolve: EvolveConfig,
+    /// The experience library of harness evolution.
+    pub experience: ExperienceConfig,
     /// Provider fallback.
     pub fallback: FallbackConfig,
     /// `read_file` limits.
@@ -373,6 +376,7 @@ impl Default for Config {
             debug: DebugConfig::default(),
             display: DisplayConfig::default(),
             evolve: EvolveConfig::default(),
+            experience: ExperienceConfig::default(),
             fallback: FallbackConfig::default(),
             files: FilesConfig::default(),
             gateway: GatewayConfig::default(),

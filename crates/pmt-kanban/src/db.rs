@@ -59,7 +59,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     skills TEXT NOT NULL DEFAULT '[]',
     lane INTEGER NOT NULL DEFAULT 0,
     project TEXT,
-    repo_root TEXT
+    repo_root TEXT,
+    domain TEXT
 );
 CREATE INDEX IF NOT EXISTS tasks_status ON tasks(status, priority, created_at);
 CREATE INDEX IF NOT EXISTS tasks_idempotency ON tasks(idempotency_key) WHERE idempotency_key IS NOT NULL;
@@ -172,12 +173,30 @@ pub(crate) fn open(path: &Path) -> Result<Connection, Error> {
     conn.execute_batch("PRAGMA foreign_keys = ON; PRAGMA synchronous = NORMAL;")
         .map_err(sql)?;
     conn.execute_batch(SCHEMA).map_err(sql)?;
+    add_columns(&conn)?;
     conn.execute(
         "INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', ?1)",
         [SCHEMA_VERSION.to_string()],
     )
     .map_err(sql)?;
     Ok(conn)
+}
+
+/// Columns added after a board's database was created: boards made by an
+/// earlier build gain them on open (the tasks they hold read `NULL`).
+const ADDED_COLUMNS: &[(&str, &str)] = &[("domain", "TEXT")];
+
+fn add_columns(conn: &Connection) -> Result<(), Error> {
+    for (column, kind) in ADDED_COLUMNS {
+        let present = conn
+            .prepare(&format!("SELECT {column} FROM tasks LIMIT 0"))
+            .is_ok();
+        if !present {
+            conn.execute_batch(&format!("ALTER TABLE tasks ADD COLUMN {column} {kind}"))
+                .map_err(sql)?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(unix)]

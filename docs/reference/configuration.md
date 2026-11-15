@@ -341,6 +341,10 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `evolve.rollout.timeout_secs` | integer | `900` | ≥ 1 | `live` | Wall-clock limit of one rollout. |
 | `evolve.selection` | one of "model", "user" | `"model"` | `"model"`, `"user"` | `live` | Who picks the final of each mode: `model` (a blind selector session) or `user` (`prometheus evolve choose`). |
 | `evolve.task.max_source_bytes` | integer | `52428800` | ≥ 1 | `live` | Largest workspace snapshot of a task, in bytes. |
+| `experience.max_entries_in_evidence` | integer | `20` | 1 to 200 | `live` | Newest visible entries of the job's domain copied into its evidence (pinned entries first). |
+| `experience.max_entries_per_domain` | integer | `50` | 1 to 1000 | `live` | Entries kept per domain; the oldest unpinned one is evicted. |
+| `experience.session_lessons` | boolean | `false` | any | `live` | Offer a domain's lessons to new sessions that start with a known domain, as a frozen prompt layer. |
+| `experience.session_lessons_max` | integer | `5` | 1 to 20 | `live` | Lessons in that layer (high or medium confidence only). |
 | `fallback.chain` | array of table | `[]` | any | `next_session` | Ordered fallback routes (`[[fallback.chain]]`); empty disables fallback. |
 | `fallback.min_health` | number | `0.2` | 0.0 to 1.0 | `next_session` | Fallback entries with a health score below this are skipped. |
 | `files.read_max_chars` | integer | `100000` | ≥ 0 | `live` | Formatted characters `read_file` returns per call. |

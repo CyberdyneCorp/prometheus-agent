@@ -229,6 +229,10 @@ pub struct JobFlags {
     /// `""` makes it an agent job again.
     #[arg(long, value_name = "FILE")]
     pub evolve_task: Option<String>,
+    /// The experience-library domain of the job's runs (its sessions'
+    /// domain tag, its evolution jobs' domain); `""` removes it.
+    #[arg(long, value_name = "NAME")]
+    pub domain: Option<String>,
     /// Where output goes (repeatable): `local`, `origin`, `none`,
     /// `<platform>`, `<platform>:<chat_id>[:<thread_id>]`,
     /// `bot_chat[:<profile>]`.
@@ -343,6 +347,11 @@ impl JobFlags {
             script: self.script.clone(),
             no_agent: self.no_agent.then_some(true),
             evolve_task: self.evolve_task.clone(),
+            domain: match self.domain.as_deref() {
+                Some("") => Some(String::new()),
+                Some(name) => Some(pmt_evolve::experience::domain::parse(name)?),
+                None => None,
+            },
             deliver: some(&self.deliver),
             failure_deliver: some(&self.failure_deliver),
             attach_to_session: self.attach_to_session,

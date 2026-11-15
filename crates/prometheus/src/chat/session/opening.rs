@@ -123,8 +123,10 @@ impl Factory {
         (skills, memory): (&Arc<SkillsSession>, &Arc<MemorySession>),
         notices: &mut Vec<String>,
         child: Option<&ChildSpec>,
-    ) -> (PromptSetup, Arc<Mutex<Vec<String>>>) {
+    ) -> (PromptSetup, Arc<Mutex<Vec<String>>>, Vec<String>) {
         let (mut prompt, sections) = self.session_prompt(id, skills, memory, notices).await;
+        let lessons = self.lessons_for(id, child.is_some());
+        prompt.lessons = lessons.layer;
         prompt.harness = self.harness_dir(id).and_then(|dir| {
             pmt_config::harness::Tree::read(&dir)
                 .ok()
@@ -143,7 +145,7 @@ impl Factory {
                 .instructions
                 .map(|text| format!("# Instructions from the API caller\n{text}"));
         }
-        (prompt, sections)
+        (prompt, sections, lessons.injected)
     }
 
     /// The session's model port (spec: model-providers, Scoped fallback

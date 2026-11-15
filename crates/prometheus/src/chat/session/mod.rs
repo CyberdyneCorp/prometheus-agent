@@ -22,6 +22,7 @@ pub mod env;
 mod guardian;
 pub mod judge;
 pub mod kanban;
+mod lessons;
 mod lifecycle;
 mod lsp;
 mod mcp;
@@ -117,6 +118,9 @@ pub struct Options {
     pub replay: Option<Arc<crate::replay::Hooks>>,
     /// A harness-evolution rollout (spec: harness-evolution).
     pub rollout: Option<Arc<rollout::RolloutRun>>,
+    /// `--domain`, or the scheduled job's or kanban task's `domain`: the
+    /// session's experience-library domain (spec: experience-library).
+    pub domain: Option<String>,
 }
 
 /// The clients of one daemon session: they see its events and answer its
@@ -634,7 +638,7 @@ impl Factory {
         delegation.parent_is(&tool_port, &capabilities, &gate.gate);
         let recording = self.recording(&session, child, clients.is_none())?;
         let mut notices = Vec::new();
-        let (prompt, plugin_sections) = self
+        let (prompt, plugin_sections, lessons) = self
             .prompt_for(id, (&skills, &memory), &mut notices, child)
             .await;
         let (agent, progress, mcp) = self.agent_of(opening::AgentInputs {
@@ -690,7 +694,7 @@ impl Factory {
             _skills: attached,
             _conversation: conversation,
         };
-        live.emit_start(&session, target).await;
+        Box::pin(live.emit_start(&session, target, &lessons)).await;
         Ok(live)
     }
 

@@ -2,8 +2,9 @@
 //! cap; Concurrency limits). Each mode lists its rollouts and improver
 //! sessions in the order a serial run would produce them, whatever order
 //! they finished in; at mode completion the budget identity (R = 4k,
-//! P = 3k, no label repeated within a kind) is asserted. Selection and
-//! reflection costs are kept apart from the identity.
+//! P = 3k, no label repeated within a kind) is asserted. Selection,
+//! reflection and domain classification costs are kept apart from the
+//! identity.
 
 use serde::{Deserialize, Serialize};
 
@@ -19,6 +20,8 @@ pub enum Kind {
     Selection,
     /// The reflection session.
     Reflection,
+    /// The domain classification at job start.
+    Classification,
 }
 
 /// One ledger entry.
@@ -113,13 +116,16 @@ pub struct Costs {
     pub selection: f64,
     /// Reflection sessions.
     pub reflection: f64,
+    /// The domain classification (outside the R/P identity).
+    #[serde(default)]
+    pub classification: f64,
 }
 
 impl Costs {
     /// Everything.
     #[must_use]
     pub fn total(&self) -> f64 {
-        self.rollout + self.improver + self.selection + self.reflection
+        self.rollout + self.improver + self.selection + self.reflection + self.classification
     }
 
     /// Adds `usd` under `kind`.
@@ -129,6 +135,7 @@ impl Costs {
             Kind::Session => self.improver += usd,
             Kind::Selection => self.selection += usd,
             Kind::Reflection => self.reflection += usd,
+            Kind::Classification => self.classification += usd,
         }
     }
 }

@@ -99,7 +99,11 @@ prometheus evolve run --task tasks/weekly-report.toml --domain reports --budget-
 ```
 
 A task file is TOML with `statement` (or `statement_file`) and optional
-`domain`, `workspace` (relative to the file), `toolsets` and `model`. The
+`domain`, `workspace` (relative to the file), `toolsets` and `model`. A
+job's domain is `--domain`, else the scheduled job's or kanban task's
+`domain` (or the task file's), else the source session's domain tag,
+else one classification call that picks among the profile's existing
+domains and `general`. The
 budget k (1-8, default `evolve.k = 2`) fixes the search: each mode spends
 4k rollouts and 3k improver sessions (`--mode both` runs both modes on
 shared base rollouts). The job's task is frozen under
@@ -171,7 +175,11 @@ again the jobs a stopped process left running). A job:
    `prometheus evolve review <proposal>` (the diff against its base, the
    census, the selector's reason and the lesson), `prometheus evolve adopt
    <proposal> [--now] [--rebase]` and `prometheus evolve reject
-   <proposal>`. `evolve.adoption.policy` is `ask` (default), `auto` (adopt
+   <proposal>`. Before the proposal is ready, a reflector session reads
+   the whole search and distils at most one transferable lesson; adopting
+   a proposal that carries one files it in the experience library of the
+   job's domain ([The experience library](experience.md)).
+   `evolve.adoption.policy` is `ask` (default), `auto` (adopt
    at once, except proposals adding or changing scripts, hooks or
    subagents, which always wait for you) or `never`. With mode `both`,
    at most one proposal is adopted: adopting one supersedes the other,
@@ -190,7 +198,7 @@ boundary. `prometheus evolve status <job>` shows the stages, the
 selection and the spend by kind; the job's `summary.json`, `ledger.json`
 and `events.jsonl` are in its directory. `evolve.concurrency.sessions` and
 `evolve.concurrency.rollouts` bound the work of every job of one process,
-and one job per profile and domain runs at a time.
+and one job per profile and domain runs at a time, in queue order.
 
 Nothing a grader produced may reach evolution: files matching
 `evolve.leak_globs` or holding an eval verdict (the `pmt-eval-verdict`

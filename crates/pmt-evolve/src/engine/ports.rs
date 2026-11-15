@@ -162,6 +162,8 @@ pub enum SessionKind {
     Select,
     /// The reflection that distils a lesson.
     Reflect,
+    /// The domain classification of a job that names none.
+    Classify,
 }
 
 /// One improver session to run.

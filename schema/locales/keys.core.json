@@ -519,6 +519,7 @@
   "slash.desc.deny",
   "slash.desc.diff",
   "slash.desc.discard",
+  "slash.desc.domain",
   "slash.desc.egress",
   "slash.desc.evolve",
   "slash.desc.exit",

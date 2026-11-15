@@ -3399,6 +3399,43 @@
       },
       "type": "object"
     },
+    "ExperienceConfig": {
+      "additionalProperties": false,
+      "description": "The `[experience]` section (spec: experience-library): what the\nlibrary of adopted harnesses and lessons keeps and shows. The library\nexists only where `evolve.enabled` is on.",
+      "properties": {
+        "max_entries_in_evidence": {
+          "default": 20,
+          "description": "Newest visible entries of the job's domain copied into its\nevidence (pinned entries first).",
+          "format": "uint32",
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_entries_per_domain": {
+          "default": 50,
+          "description": "Entries kept per domain; the oldest unpinned one is evicted.",
+          "format": "uint32",
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "session_lessons": {
+          "default": false,
+          "description": "Offer a domain's lessons to new sessions that start with a known\ndomain, as a frozen prompt layer.",
+          "type": "boolean"
+        },
+        "session_lessons_max": {
+          "default": 5,
+          "description": "Lessons in that layer (high or medium confidence only).",
+          "format": "uint32",
+          "maximum": 20,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
     "FallbackConfig": {
       "additionalProperties": false,
       "description": "The `[fallback]` section.",
@@ -12311,6 +12348,16 @@
         }
       },
       "description": "Harness evolution (opt-in)."
+    },
+    "experience": {
+      "$ref": "#/$defs/ExperienceConfig",
+      "default": {
+        "max_entries_in_evidence": 20,
+        "max_entries_per_domain": 50,
+        "session_lessons": false,
+        "session_lessons_max": 5
+      },
+      "description": "The experience library of harness evolution."
     },
     "fallback": {
       "$ref": "#/$defs/FallbackConfig",

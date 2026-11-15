@@ -139,6 +139,8 @@ pub(crate) fn fields(arguments: &Value, scope: &ProfileScope) -> Result<Fields, 
         // Scheduling harness evolution is the user's call (`cron create
         // --evolve-task`), not the agent's.
         evolve_task: None,
+        // So is filing its runs under an experience domain.
+        domain: None,
     })
 }
 

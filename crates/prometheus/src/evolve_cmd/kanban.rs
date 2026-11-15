@@ -40,6 +40,7 @@ pub fn queue(scope: &ProfileScope, task: &Task, workspace: &Path) -> Result<Stri
             pmt_kanban::model::EvolveMode::Sequential => EvolveMode::Sequential,
         }),
         kanban_task_id: Some(task.id.clone()),
+        trigger_domain: task.domain.clone(),
         ..Request::new(Trigger::Kanban, input)
     };
     job::queue(&super::profile(scope, Some(&store)), &request).map(|j| j.id)

@@ -26,6 +26,7 @@ Commands:
   lsp          Language servers behind the diagnostics of file edits: status, registry, installs, restart
   cron         Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and the headless tick
   harness      The profile's harness: validate, history, diff, rollback and manual edits (works without `evolve.enabled`)
+  experience   The experience library: entries, domains, pin, forget, restore, export, import and rebuild
   evolve       Harness evolution jobs (opt-in: `evolve.enabled = true`)
   kanban       Kanban boards shared by every profile: tasks, dependencies, the dispatcher, workers, review, notifications, export and import
   worktrees    Git worktrees of sessions and subagents: list, sweep and restore archived trees
@@ -193,6 +194,9 @@ Options:
       --source <TAG>
           Integration tag recorded on the session
 
+      --domain <NAME>
+          The session's experience-library domain: evolution jobs of the session file their lessons there, and (with `experience.session_lessons`) the session starts with its lessons
+
       --pass-session-id
           Put the session id in the system prompt
 
@@ -345,6 +349,9 @@ Options:
 
       --source <TAG>
           Integration tag recorded on the session
+
+      --domain <NAME>
+          The session's experience-library domain: evolution jobs of the session file their lessons there, and (with `experience.session_lessons`) the session starts with its lessons
 
       --pass-session-id
           Put the session id in the system prompt
@@ -7929,20 +7936,23 @@ Options:
       --no-color
           No colour (also when `NO_COLOR` is set or stdout is not a terminal)
 
-      --deliver <TARGET>
-          Where output goes (repeatable): `local`, `origin`, `none`, `<platform>`, `<platform>:<chat_id>[:<thread_id>]`, `bot_chat[:<profile>]`
+      --domain <NAME>
+          The experience-library domain of the job's runs (its sessions' domain tag, its evolution jobs' domain); `""` removes it
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --deliver <TARGET>
+          Where output goes (repeatable): `local`, `origin`, `none`, `<platform>`, `<platform>:<chat_id>[:<thread_id>]`, `bot_chat[:<profile>]`
+
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
-      --toolsets <TOOLSETS>
-          Toolsets of each run (comma-separated; `none` for no tools)
-
       --accept-hooks
           Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+      --toolsets <TOOLSETS>
+          Toolsets of each run (comma-separated; `none` for no tools)
 
       --memory <MEMORY>
           `read_only` (default), `read_write` or `off`
@@ -8082,14 +8092,17 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
-      --deliver <TARGET>
-          Where output goes (repeatable): `local`, `origin`, `none`, `<platform>`, `<platform>:<chat_id>[:<thread_id>]`, `bot_chat[:<profile>]`
+      --domain <NAME>
+          The experience-library domain of the job's runs (its sessions' domain tag, its evolution jobs' domain); `""` removes it
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
       --accept-hooks
           Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+      --deliver <TARGET>
+          Where output goes (repeatable): `local`, `origin`, `none`, `<platform>`, `<platform>:<chat_id>[:<thread_id>]`, `bot_chat[:<profile>]`
 
       --toolsets <TOOLSETS>
           Toolsets of each run (comma-separated; `none` for no tools)
@@ -10028,6 +10041,600 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus harness help help
 ```
 
+## `prometheus experience`
+
+```text
+The experience library: entries, domains, pin, forget, restore, export, import and rebuild
+
+Usage: prometheus experience [OPTIONS] <COMMAND>
+
+Commands:
+  list     The library's entries: id, domain, status, confidence, pinned, times shown and cue
+  show     One entry: its `entry.toml` and `EXPERIENCE.md`
+  domains  The domains, with their entry counts
+  pin      Keep an entry: never evicted, never demoted by a rollback
+  unpin    Let an entry be evicted and demoted again
+  forget   Remove an entry (its harness version stays)
+  restore  Set a rolled-back entry back to active
+  export   Write a domain's entries to an archive another profile can import
+  import   Add an archive's entries (all checked first; any failure refuses the whole archive)
+  rebuild  Re-create missing entries of adopted proposals (no model call)
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus experience list`
+
+```text
+The library's entries: id, domain, status, confidence, pinned, times shown and cue
+
+Usage: prometheus experience list [OPTIONS]
+
+Options:
+      --domain <D>
+          Only this domain
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --all
+          Also rolled-back entries
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus experience show`
+
+```text
+One entry: its `entry.toml` and `EXPERIENCE.md`
+
+Usage: prometheus experience show [OPTIONS] <ENTRY_ID>
+
+Arguments:
+  <ENTRY_ID>
+          The entry
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus experience domains`
+
+```text
+The domains, with their entry counts
+
+Usage: prometheus experience domains [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus experience pin`
+
+```text
+Keep an entry: never evicted, never demoted by a rollback
+
+Usage: prometheus experience pin [OPTIONS] <ENTRY_ID>
+
+Arguments:
+  <ENTRY_ID>
+          The entry
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus experience unpin`
+
+```text
+Let an entry be evicted and demoted again
+
+Usage: prometheus experience unpin [OPTIONS] <ENTRY_ID>
+
+Arguments:
+  <ENTRY_ID>
+          The entry
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus experience forget`
+
+```text
+Remove an entry (its harness version stays)
+
+Usage: prometheus experience forget [OPTIONS] <ENTRY_ID>
+
+Arguments:
+  <ENTRY_ID>
+          The entry
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus experience restore`
+
+```text
+Set a rolled-back entry back to active
+
+Usage: prometheus experience restore [OPTIONS] <ENTRY_ID>
+
+Arguments:
+  <ENTRY_ID>
+          The entry
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus experience export`
+
+```text
+Write a domain's entries to an archive another profile can import
+
+Usage: prometheus experience export [OPTIONS] <DOMAIN> <FILE>
+
+Arguments:
+  <DOMAIN>
+          The domain
+
+  <FILE>
+          The archive to write (`.tar.zst`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus experience import`
+
+```text
+Add an archive's entries (all checked first; any failure refuses the whole archive)
+
+Usage: prometheus experience import [OPTIONS] <FILE>
+
+Arguments:
+  <FILE>
+          The archive
+
+Options:
+      --domain <D>
+          The domain to file them under (default: the archive's)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus experience rebuild`
+
+```text
+Re-create missing entries of adopted proposals (no model call)
+
+Usage: prometheus experience rebuild [OPTIONS]
+
+Options:
+      --domain <D>
+          Only this domain
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus experience help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus experience help [COMMAND]
+
+Commands:
+  list     The library's entries: id, domain, status, confidence, pinned, times shown and cue
+  show     One entry: its `entry.toml` and `EXPERIENCE.md`
+  domains  The domains, with their entry counts
+  pin      Keep an entry: never evicted, never demoted by a rollback
+  unpin    Let an entry be evicted and demoted again
+  forget   Remove an entry (its harness version stays)
+  restore  Set a rolled-back entry back to active
+  export   Write a domain's entries to an archive another profile can import
+  import   Add an archive's entries (all checked first; any failure refuses the whole archive)
+  rebuild  Re-create missing entries of adopted proposals (no model call)
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus experience help list`
+
+```text
+The library's entries: id, domain, status, confidence, pinned, times shown and cue
+
+Usage: prometheus experience help list
+```
+
+## `prometheus experience help show`
+
+```text
+One entry: its `entry.toml` and `EXPERIENCE.md`
+
+Usage: prometheus experience help show
+```
+
+## `prometheus experience help domains`
+
+```text
+The domains, with their entry counts
+
+Usage: prometheus experience help domains
+```
+
+## `prometheus experience help pin`
+
+```text
+Keep an entry: never evicted, never demoted by a rollback
+
+Usage: prometheus experience help pin
+```
+
+## `prometheus experience help unpin`
+
+```text
+Let an entry be evicted and demoted again
+
+Usage: prometheus experience help unpin
+```
+
+## `prometheus experience help forget`
+
+```text
+Remove an entry (its harness version stays)
+
+Usage: prometheus experience help forget
+```
+
+## `prometheus experience help restore`
+
+```text
+Set a rolled-back entry back to active
+
+Usage: prometheus experience help restore
+```
+
+## `prometheus experience help export`
+
+```text
+Write a domain's entries to an archive another profile can import
+
+Usage: prometheus experience help export
+```
+
+## `prometheus experience help import`
+
+```text
+Add an archive's entries (all checked first; any failure refuses the whole archive)
+
+Usage: prometheus experience help import
+```
+
+## `prometheus experience help rebuild`
+
+```text
+Re-create missing entries of adopted proposals (no model call)
+
+Usage: prometheus experience help rebuild
+```
+
+## `prometheus experience help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus experience help help
+```
+
 ## `prometheus evolve`
 
 ```text
@@ -10928,6 +11535,9 @@ Options:
 
       --skill <SKILLS>
           A skill preloaded in the worker session (repeatable)
+
+      --domain <NAME>
+          The experience-library domain of the task's work (the worker session's domain tag; an evolve task's job domain)
 
   -h, --help
           Print help
@@ -32798,6 +33408,7 @@ Commands:
   lsp          Language servers behind the diagnostics of file edits: status, registry, installs, restart
   cron         Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and the headless tick
   harness      The profile's harness: validate, history, diff, rollback and manual edits (works without `evolve.enabled`)
+  experience   The experience library: entries, domains, pin, forget, restore, export, import and rebuild
   evolve       Harness evolution jobs (opt-in: `evolve.enabled = true`)
   kanban       Kanban boards shared by every profile: tasks, dependencies, the dispatcher, workers, review, notifications, export and import
   worktrees    Git worktrees of sessions and subagents: list, sweep and restore archived trees
@@ -34379,6 +34990,106 @@ Usage: prometheus help harness apply
 Edit a copy of the active version in $EDITOR; a valid change becomes a new manual version
 
 Usage: prometheus help harness edit
+```
+
+## `prometheus help experience`
+
+```text
+The experience library: entries, domains, pin, forget, restore, export, import and rebuild
+
+Usage: prometheus help experience [COMMAND]
+
+Commands:
+  list     The library's entries: id, domain, status, confidence, pinned, times shown and cue
+  show     One entry: its `entry.toml` and `EXPERIENCE.md`
+  domains  The domains, with their entry counts
+  pin      Keep an entry: never evicted, never demoted by a rollback
+  unpin    Let an entry be evicted and demoted again
+  forget   Remove an entry (its harness version stays)
+  restore  Set a rolled-back entry back to active
+  export   Write a domain's entries to an archive another profile can import
+  import   Add an archive's entries (all checked first; any failure refuses the whole archive)
+  rebuild  Re-create missing entries of adopted proposals (no model call)
+```
+
+## `prometheus help experience list`
+
+```text
+The library's entries: id, domain, status, confidence, pinned, times shown and cue
+
+Usage: prometheus help experience list
+```
+
+## `prometheus help experience show`
+
+```text
+One entry: its `entry.toml` and `EXPERIENCE.md`
+
+Usage: prometheus help experience show
+```
+
+## `prometheus help experience domains`
+
+```text
+The domains, with their entry counts
+
+Usage: prometheus help experience domains
+```
+
+## `prometheus help experience pin`
+
+```text
+Keep an entry: never evicted, never demoted by a rollback
+
+Usage: prometheus help experience pin
+```
+
+## `prometheus help experience unpin`
+
+```text
+Let an entry be evicted and demoted again
+
+Usage: prometheus help experience unpin
+```
+
+## `prometheus help experience forget`
+
+```text
+Remove an entry (its harness version stays)
+
+Usage: prometheus help experience forget
+```
+
+## `prometheus help experience restore`
+
+```text
+Set a rolled-back entry back to active
+
+Usage: prometheus help experience restore
+```
+
+## `prometheus help experience export`
+
+```text
+Write a domain's entries to an archive another profile can import
+
+Usage: prometheus help experience export
+```
+
+## `prometheus help experience import`
+
+```text
+Add an archive's entries (all checked first; any failure refuses the whole archive)
+
+Usage: prometheus help experience import
+```
+
+## `prometheus help experience rebuild`
+
+```text
+Re-create missing entries of adopted proposals (no model call)
+
+Usage: prometheus help experience rebuild
 ```
 
 ## `prometheus help evolve`

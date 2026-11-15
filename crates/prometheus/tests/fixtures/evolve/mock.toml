@@ -1,5 +1,6 @@
 # The mock script of the evolution end-to-end tests. Rollouts receive the
-# task statement (TASK-...); improver sessions their mission (# Mission:).
+# task statement (TASK-...); improver sessions their mission (# Mission:);
+# the reflector distils one high-confidence lesson.
 
 [[rule]]
 user = "TASK-APPROVAL"
@@ -25,6 +26,14 @@ arguments = { target = "telegram:42", message = "Total: 10.00" }
 [[rule]]
 user = "TASK-"
 text = "Total: 10.00"
+
+[[rule]]
+user = "# Mission: experience."
+text = "<edits>\ncomponent: GUARDRAILS.md\ncandidates: inv1, agg1\nchange: state the total with two decimals\nobserved: base1 step 2 printed the total\nverdict: helped\n</edits>\n<experience>\ncue: ledger totals\nlesson: state the total with two decimals\nevidence: rollouts/base1.md step 2 printed Total: 10.00\nconfidence: high because every rollout agrees\n</experience>"
+
+[[rule]]
+user = "# Mission: classify"
+text = "accounting"
 
 [[rule]]
 user = "# Mission: select"

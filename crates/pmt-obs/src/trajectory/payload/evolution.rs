@@ -85,14 +85,15 @@ pub struct ExperienceEntry {
 }
 
 /// `experience.lesson.distilled`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct LessonDistilled {
     /// The distillation job.
     pub job: String,
     /// The distillation mode.
     pub mode: String,
-    /// Confidence 0 to 1, `null` for none.
-    pub confidence: Option<f64>,
+    /// The lesson's confidence (`high`, `medium`, `low`), or `none` when
+    /// no lesson was distilled.
+    pub confidence: String,
 }
 
 /// `experience.session_lessons.injected`.

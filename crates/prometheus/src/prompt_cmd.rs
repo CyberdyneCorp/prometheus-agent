@@ -120,6 +120,7 @@ async fn measure<'a>(
         tool_names: surface.names().map(str::to_owned).collect(),
         caller_system: None,
         harness: crate::harness_host::active_layer(scope),
+        lessons: None,
         skills_index: None,
         pinned_skills: None,
         memory: None,

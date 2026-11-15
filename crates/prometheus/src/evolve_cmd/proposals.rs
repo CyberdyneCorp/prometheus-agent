@@ -110,7 +110,7 @@ pub fn review(ctx: &Context<'_>, scope: &ProfileScope, args: &ReviewArgs) -> Res
         census.hooks
     );
     let _ = writeln!(text, "selector reason: {}", or_none(&proposal.reason));
-    let _ = writeln!(text, "lesson: {}", or_none(&proposal.lesson));
+    text.push_str(&lesson_lines(&proposal));
     if proposal.approval_required {
         text.push_str("approval required: it adds or changes scripts, hooks or subagents\n");
     }
@@ -118,6 +118,30 @@ pub fn review(ctx: &Context<'_>, scope: &ProfileScope, args: &ReviewArgs) -> Res
         text.push_str(&report.render());
     }
     print_raw(&text)
+}
+
+/// The lesson part of `review`: the lesson, or what adopting will (not)
+/// add to the experience library.
+fn lesson_lines(proposal: &pmt_evolve::proposal::Proposal) -> String {
+    let Some(lesson) = &proposal.lesson else {
+        return "lesson: none\nno transferable lesson; nothing will be added to the experience library\n".to_owned();
+    };
+    let mut text = format!(
+        "lesson ({}): {}\n  cue: {}\n  lesson: {}\n  evidence: {}\n  confidence: {}\n",
+        proposal.domain,
+        lesson.lesson,
+        lesson.cue,
+        lesson.lesson,
+        lesson.evidence,
+        lesson.confidence_line()
+    );
+    if let Some(why) = &proposal.lesson_rejected {
+        let _ = writeln!(
+            text,
+            "lesson rejected ({why}): no experience entry was written"
+        );
+    }
+    text
 }
 
 fn or_none(text: &str) -> &str {
@@ -142,7 +166,9 @@ pub fn adopt(
     rebase: bool,
 ) -> Result<u8, Error> {
     let rules = crate::harness_host::rules(scope, ctx.launch.user_home().map(PathBuf::as_path));
-    let adopted = Proposals::of(scope.dir()).adopt(scope.dir(), id, rebase, &rules)?;
+    let settings = crate::experience_cmd::settings(scope);
+    let (adopted, library) =
+        pmt_evolve::experience::adopt(scope.dir(), id, rebase, &rules, &settings)?;
     crate::harness_cmd::record_activation(scope, &adopted.from, &adopted.version);
     let job_dir = Jobs::of(scope.dir()).dir(&adopted.proposal.job_id);
     if job_dir.is_dir() {
@@ -166,6 +192,7 @@ pub fn adopt(
             "to": adopted.version.id,
             "superseded": adopted.superseded,
             "rebuilt_sessions": marked,
+            "experience": library.message(),
         }));
     }
     let when = match marked {
@@ -179,6 +206,7 @@ pub fn adopt(
     for other in &adopted.superseded {
         let _ = writeln!(text, "superseded {other}");
     }
+    let _ = writeln!(text, "{}", library.message());
     print_raw(&text)
 }
 

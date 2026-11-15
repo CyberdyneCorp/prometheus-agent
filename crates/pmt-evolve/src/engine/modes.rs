@@ -31,6 +31,8 @@ pub(crate) struct Candidate {
 pub(crate) struct ModeRun {
     pub ledger: ModeLedger,
     pub finals: Vec<Candidate>,
+    /// Every non-base candidate, in serial order (the reflection's pool).
+    pub candidates: Vec<Candidate>,
     pub stopped: Option<Stop>,
     pub similarity: Option<Similarity>,
 }
@@ -185,6 +187,7 @@ impl Run<'_> {
         self.record(plan.mode, &mut run.ledger, &composed);
         let trees: Vec<&Tree> = composed.iter().map(|c| &c.stage.tree).collect();
         run.similarity = Some(similarity(&trees));
+        run.candidates = candidates.iter().chain(&composed).cloned().collect();
         run.finals = composed;
         self.halted(&mut run);
         run
@@ -246,6 +249,7 @@ impl Run<'_> {
             checkpoint = composed.stage.tree.clone();
             run.finals.push(composed.clone());
             history.push(composed);
+            run.candidates.clone_from(&history);
             if self.halted(&mut run) {
                 return run;
             }

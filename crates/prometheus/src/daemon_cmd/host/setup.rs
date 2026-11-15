@@ -78,6 +78,7 @@ impl DaemonHost {
             kanban: None,
             replay: None,
             rollout: None,
+            domain: setup.domain.clone(),
         };
         let ad_hoc = setup
             .base_url

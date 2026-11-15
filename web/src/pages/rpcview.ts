@@ -28,7 +28,7 @@ async function listed(title: string, method: string, profile: string, columns: s
 export const evolutionPage = (params: URLSearchParams) =>
   listed("Harness evolution", "evolve.list", profileOf(params), ["id", "mode", "budget", "rollouts", "cost_usd", "status"]);
 export const experiencePage = (params: URLSearchParams) =>
-  listed("Experience library", "experience.list", profileOf(params), ["domain", "lesson", "source", "state"]);
+  listed("Experience library", "experience.list", profileOf(params), ["domain", "entry_id", "cue", "lesson", "confidence", "status", "times_shown"]);
 
 /** Pages whose capability arrives in a later part of this release. */
 export function pendingPage(title: string, what: string): () => HTMLElement {

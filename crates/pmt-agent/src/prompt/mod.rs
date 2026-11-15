@@ -83,6 +83,8 @@ pub enum Layer {
     SkillsIndex,
     /// Skills loaded into every session.
     PinnedSkills,
+    /// Lessons from earlier work in the session's domain.
+    Lessons,
     /// The personality overlay.
     Personality,
     /// The caller's own system message.
@@ -101,7 +103,7 @@ pub enum Layer {
 
 impl Layer {
     /// Every layer in prompt order.
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::Identity,
         Self::ToolGuidance,
         Self::ModelGuidance,
@@ -109,6 +111,7 @@ impl Layer {
         Self::PlatformHint,
         Self::SkillsIndex,
         Self::PinnedSkills,
+        Self::Lessons,
         Self::Personality,
         Self::CallerSystem,
         Self::ProjectContext,
@@ -147,6 +150,9 @@ impl Layer {
             }
             Self::SkillsIndex => "The index of available skills.",
             Self::PinnedSkills => "Skills loaded into every session.",
+            Self::Lessons => {
+                "With `experience.session_lessons`, `## Lessons from earlier work in <domain>`: the `cue → lesson` lines of up to `experience.session_lessons_max` high- or medium-confidence experience entries of the session's domain, frozen at the session's start. It opens the session tier, so sessions of different domains share the profile block."
+            }
             Self::Personality => "The `agent.personality` overlay.",
             Self::CallerSystem => "The caller's own system message.",
             Self::ProjectContext => "Project context files under `# Project Context`.",
@@ -170,6 +176,7 @@ impl Layer {
             Self::PlatformHint => "platform_hint",
             Self::SkillsIndex => "skills_index",
             Self::PinnedSkills => "pinned_skills",
+            Self::Lessons => "lessons",
             Self::Personality => "personality",
             Self::CallerSystem => "caller_system",
             Self::ProjectContext => "project_context",
@@ -283,6 +290,8 @@ pub struct PromptInputs {
     pub caller_system: Option<String>,
     /// The harness layer (the session's harness version).
     pub harness: Option<String>,
+    /// The lessons layer frozen at the session's start.
+    pub lessons: Option<String>,
     /// The skills index (skills subsystem).
     pub skills_index: Option<String>,
     /// Skills pinned into every session (skills subsystem).
@@ -343,6 +352,7 @@ pub fn build(inputs: &PromptInputs) -> Result<Built, Error> {
     ));
     sections.push(section(Layer::SkillsIndex, inputs.skills_index.clone()));
     sections.push(section(Layer::PinnedSkills, inputs.pinned_skills.clone()));
+    sections.push(section(Layer::Lessons, inputs.lessons.clone()));
     let overlay = personality::selected(&config.agent)?;
     sections.push(section(
         Layer::Personality,

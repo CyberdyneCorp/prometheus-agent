@@ -334,6 +334,11 @@ fn session_options(args: &ChatArgs, mode: Mode) -> Result<Options, Error> {
         kanban: None,
         replay: None,
         rollout: None,
+        domain: args
+            .domain
+            .as_deref()
+            .map(pmt_evolve::experience::domain::parse)
+            .transpose()?,
     })
 }
 

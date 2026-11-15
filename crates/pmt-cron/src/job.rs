@@ -93,6 +93,11 @@ pub struct JobSpec {
     /// An `evolve` job's task file, relative to the profile directory.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub task: Option<String>,
+    /// The experience-library domain of its runs: an agent run's session
+    /// is tagged with it, an evolution job files its lesson under it
+    /// (spec: experience-library, Domain resolution for a job).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub domain: Option<String>,
     /// The IANA zone the schedule is pinned to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timezone: Option<String>,
@@ -178,6 +183,7 @@ impl JobSpec {
             schedule,
             kind: JobKind::Agent,
             task: None,
+            domain: None,
             timezone: None,
             prompt: prompt.into(),
             skills: Vec::new(),

@@ -54,6 +54,8 @@ pub struct NewTask {
     pub provider: Option<String>,
     /// Skills preloaded in the worker session.
     pub skills: Vec<String>,
+    /// The experience-library domain (already normalised).
+    pub domain: Option<String>,
 }
 
 impl NewTask {
@@ -82,6 +84,7 @@ impl NewTask {
             model: None,
             provider: None,
             skills: Vec::new(),
+            domain: None,
         }
     }
 }
@@ -351,7 +354,8 @@ pub(crate) fn extras(
         .and_then(|c| c.stored());
     tx.execute(
         "UPDATE tasks SET completion_contract = ?2, goal_mode = ?3, goal_max_turns = ?4, model = ?5, \
-         provider = ?6, skills = ?7, lane = ?8, project = ?9, repo_root = ?10 WHERE id = ?1",
+         provider = ?6, skills = ?7, lane = ?8, project = ?9, repo_root = ?10, domain = ?11 \
+         WHERE id = ?1",
         params![
             id,
             contract,
@@ -363,6 +367,7 @@ pub(crate) fn extras(
             lane,
             project.map(|p| p.0.as_str()),
             project.map(|p| p.1.to_string_lossy().into_owned()),
+            new.domain,
         ],
     )
     .map_err(sql)?;

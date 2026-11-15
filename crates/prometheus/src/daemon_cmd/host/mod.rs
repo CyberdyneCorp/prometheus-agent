@@ -910,6 +910,19 @@ impl Host for DaemonHost {
         })
     }
 
+    fn experience<'a>(
+        &'a self,
+        profile: &'a str,
+        request: pmt_gateway::experience::ExperienceRequest,
+    ) -> HostFuture<'a, serde_json::Value> {
+        Box::pin(async move {
+            let scope = self.profile(profile)?.scope();
+            pmt_core::spawn::blocking(move || crate::experience_cmd::rpc::handle(&scope, &request))
+                .await
+                .map_err(|e| Error::new(&pmt_core::error::codes::TASK_PANICKED, e.to_string()))?
+        })
+    }
+
     fn moa_presets<'a>(
         &'a self,
         profile: &'a str,

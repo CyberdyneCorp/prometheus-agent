@@ -245,6 +245,27 @@ pub trait Host: Send + Sync + 'static {
         })
     }
 
+    /// One `experience.*` method for `profile` (spec: experience-library,
+    /// Library CLI): the JSON of the method's result. Hosts without
+    /// profiles on disk do not serve them.
+    ///
+    /// # Errors
+    ///
+    /// `rpc.not_served`; the matching command's errors.
+    fn experience<'a>(
+        &'a self,
+        profile: &'a str,
+        request: crate::experience::ExperienceRequest,
+    ) -> HostFuture<'a, serde_json::Value> {
+        let _ = (profile, request);
+        Box::pin(async {
+            Err(Error::new(
+                &pmt_core::error::codes::RPC_NOT_SERVED,
+                "this host has no experience library",
+            ))
+        })
+    }
+
     /// The Mixture of Agents presets of `profile` after `change` (`None`
     /// only reads): `moa.presets.*`. Hosts without profiles on disk
     /// refuse.

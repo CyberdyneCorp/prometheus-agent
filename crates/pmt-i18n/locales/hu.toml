@@ -378,6 +378,7 @@ blueprint = "Ütemezett feladat létrehozása tervből: /blueprint [név] [hely=
 goal = "Állandó cél, amelyen az ügynök folyamatosan dolgozik: /goal <szöveg> | draft <szöveg> | status | show | pause | resume | clear | wait <pid> | unwait | gate add|list|remove|clear"
 subgoal = "Az aktív cél további feltételei: /subgoal <szöveg> | remove <N> | clear"
 evolve = "Hám-evolúciós feladat sorba állítása ehhez a munkamenethez: /evolve [--k N]"
+domain = "A munkamenet tapasztalattár-tartományának megjelenítése vagy beállítása: /domain [NÉV]"
 loop = "Üzenet vagy parancs ismétlése: /loop [időköz] <üzenet> [--times N] [--until <feltétel>] | status | pause | resume | stop"
 heartbeat = "Tétlenség alatti ellenőrzés: /heartbeat every <időköz> <üzenet> | status | pause | resume | clear"
 worktree = "Git worktree-k: az aktív megjelenítése, new [NÉV], list, prune [--dry-run]"

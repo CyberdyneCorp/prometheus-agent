@@ -153,7 +153,9 @@ fn adopt(scope: &ProfileScope, launch: &LaunchEnv, p: &EvolveParams) -> Result<V
     let id = needed(p.proposal_id.as_ref(), "proposal_id")?;
     let rules =
         crate::harness_host::rules(scope, launch.user_home().map(std::path::PathBuf::as_path));
-    let adopted = Proposals::of(scope.dir()).adopt(scope.dir(), id, p.rebase, &rules)?;
+    let settings = crate::experience_cmd::settings(scope);
+    let (adopted, library) =
+        pmt_evolve::experience::adopt(scope.dir(), id, p.rebase, &rules, &settings)?;
     crate::harness_cmd::record_activation(scope, &adopted.from, &adopted.version);
     let job_dir = Jobs::of(scope.dir()).dir(&adopted.proposal.job_id);
     if job_dir.is_dir() {
@@ -162,8 +164,12 @@ fn adopt(scope: &ProfileScope, launch: &LaunchEnv, p: &EvolveParams) -> Result<V
     }
     let rebuilt = activate_now(scope, &adopted.version.id, p.now)?;
     Ok(reply(
-        format!("adopted {id} as {}", adopted.version.id),
-        json!({"from": adopted.from, "to": adopted.version.id, "superseded": adopted.superseded, "rebuilt_sessions": rebuilt}),
+        format!(
+            "adopted {id} as {}; {}",
+            adopted.version.id,
+            library.message()
+        ),
+        json!({"from": adopted.from, "to": adopted.version.id, "superseded": adopted.superseded, "rebuilt_sessions": rebuilt, "experience": library.message()}),
     ))
 }
 
@@ -201,10 +207,11 @@ fn harness(scope: &ProfileScope, method: &str, p: &EvolveParams) -> Result<Value
             let written = harness.write(&tree, Source::Rollback, None)?;
             harness.activate(&written.id)?;
             crate::harness_cmd::record_activation(scope, &from, &written);
+            let demoted = crate::harness_cmd::demote_entries(scope);
             let rebuilt = activate_now(scope, &written.id, p.now)?;
             Ok(reply(
                 format!("activated {} (rollback of {})", written.id, target.id),
-                json!({"from": from, "to": written.id, "rebuilt_sessions": rebuilt}),
+                json!({"from": from, "to": written.id, "rebuilt_sessions": rebuilt, "demoted_entries": demoted}),
             ))
         }
         other => Err(Error::new(

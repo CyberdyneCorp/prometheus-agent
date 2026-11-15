@@ -97,7 +97,7 @@ fn sequential_round_two_sees_the_first_checkpoint() {
     let labels: Vec<String> = improver
         .labels()
         .into_iter()
-        .filter(|l| !l.starts_with("select"))
+        .filter(|l| !l.starts_with("select") && !l.starts_with("experience."))
         .collect();
     let at = |l: &str| labels.iter().position(|x| x == l).unwrap();
     assert_eq!(labels.len(), 6, "{labels:?}");

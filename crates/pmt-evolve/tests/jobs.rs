@@ -184,7 +184,12 @@ fn a_git_session_freezes_head_and_a_patch_that_reproduces_it() {
         meta["source_session"].as_str(),
         Some(session.id.to_string().as_str())
     );
-    assert_eq!(meta["domain"].as_str(), Some("general"));
+    assert_eq!(
+        meta["domain"].as_str(),
+        Some(""),
+        "the classifier resolves it at start"
+    );
+    assert_eq!(meta["domain_source"].as_str(), Some("classifier"));
     assert_eq!(meta["fingerprint"].as_str().unwrap().len(), 16);
     assert_eq!(record.status, "queued");
     assert_eq!(record.plan[0].rollouts, 8);

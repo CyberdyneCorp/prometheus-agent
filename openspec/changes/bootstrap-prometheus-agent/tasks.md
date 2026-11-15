@@ -628,9 +628,9 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 70. M3 Experience library
 
-- [ ] 70.1 Implement the library layout, domain names and resolution, the reflection workspace and distillation; verify with a mock-provider job (spec: experience-library)
-- [ ] 70.2 Implement write-on-adoption only, entry contents, answer-free and secret-free entries, the index, exposure to proposers and stream order; verify that a rejected proposal writes no entry (spec: experience-library)
-- [ ] 70.3 Implement lessons offered to later sessions, rollback demotion, the `experience` CLI, the retention cap, export/import between profiles, restore on resume and repair, and library events; verify with CLI tests (spec: experience-library)
+- [x] 70.1 Implement the library layout, domain names and resolution, the reflection workspace and distillation; verify with a mock-provider job (spec: experience-library)
+- [x] 70.2 Implement write-on-adoption only, entry contents, answer-free and secret-free entries, the index, exposure to proposers and stream order; verify that a rejected proposal writes no entry (spec: experience-library)
+- [x] 70.3 Implement lessons offered to later sessions, rollback demotion, the `experience` CLI, the retention cap, export/import between profiles, restore on resume and repair, and library events; verify with CLI tests (spec: experience-library)
 
 ## 71. M3 Evaluation suites
 

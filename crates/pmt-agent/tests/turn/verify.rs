@@ -132,6 +132,7 @@ fn inputs(profile: &Profile, platform: &str, cwd: &Path) -> PromptInputs {
         tool_names: Vec::new(),
         caller_system: None,
         harness: None,
+        lessons: None,
         skills_index: None,
         pinned_skills: None,
         memory: None,

@@ -344,3 +344,36 @@ impl Default for HarnessConfig {
         }
     }
 }
+
+/// The `[experience]` section (spec: experience-library): what the
+/// library of adopted harnesses and lessons keeps and shows. The library
+/// exists only where `evolve.enabled` is on.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+#[schemars(extend("x-apply" = "live"))]
+pub struct ExperienceConfig {
+    /// Newest visible entries of the job's domain copied into its
+    /// evidence (pinned entries first).
+    #[schemars(range(min = 1, max = 200))]
+    pub max_entries_in_evidence: u32,
+    /// Entries kept per domain; the oldest unpinned one is evicted.
+    #[schemars(range(min = 1, max = 1000))]
+    pub max_entries_per_domain: u32,
+    /// Offer a domain's lessons to new sessions that start with a known
+    /// domain, as a frozen prompt layer.
+    pub session_lessons: bool,
+    /// Lessons in that layer (high or medium confidence only).
+    #[schemars(range(min = 1, max = 20))]
+    pub session_lessons_max: u32,
+}
+
+impl Default for ExperienceConfig {
+    fn default() -> Self {
+        Self {
+            max_entries_in_evidence: 20,
+            max_entries_per_domain: 50,
+            session_lessons: false,
+            session_lessons_max: 5,
+        }
+    }
+}

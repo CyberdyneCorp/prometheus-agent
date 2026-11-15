@@ -85,6 +85,9 @@ pub struct Fields {
     /// An evolution task file (relative to the profile directory): the job
     /// becomes `kind = "evolve"`; an empty string makes it an agent job.
     pub evolve_task: Option<String>,
+    /// The experience-library domain (already normalised); an empty string
+    /// removes it.
+    pub domain: Option<String>,
 }
 
 fn invalid(message: String) -> Error {
@@ -210,6 +213,9 @@ impl Fields {
     }
 
     fn apply_payload(&self, spec: &mut JobSpec) {
+        if let Some(domain) = &self.domain {
+            set(&mut spec.domain, Some(domain));
+        }
         if let Some(task) = &self.evolve_task {
             set(&mut spec.task, Some(task));
             spec.kind = if spec.task.is_some() {

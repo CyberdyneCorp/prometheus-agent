@@ -924,6 +924,48 @@ export interface EvolveReply {
   message: string;
 }
 
+/** One domain of `experience.domains`. */
+export interface ExperienceDomain {
+  /** Its entries (any status). */
+  entries: number;
+  /** The domain name. */
+  name: string;
+}
+
+/** `experience.domains` result. */
+export interface ExperienceDomains {
+  /** Sorted by name. */
+  domains: Array<ExperienceDomain>;
+}
+
+/** `experience.list` result. */
+export interface ExperienceEntries {
+  /** Each entry's `entry.toml` as JSON: domains sorted, newest first. */
+  entries: Array<unknown>;
+}
+
+/** Params of every `experience.*` method; each uses the fields its command takes. */
+export interface ExperienceParams {
+  /** `experience.list`: also rolled-back entries. */
+  all?: boolean;
+  /** `experience.list`: only this domain. */
+  domain?: string | null;
+  /** The entry (`experience.show`, `experience.pin`, `experience.forget`, `experience.restore`). */
+  entry_id?: string | null;
+  /** `experience.pin`: `false` unpins (default `true`). */
+  pinned?: boolean | null;
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+}
+
+/** Result of the methods that act on one entry. */
+export interface ExperienceReply {
+  /** The entry's `entry.toml` as JSON (`experience.show` adds its `EXPERIENCE.md` as `document`). */
+  data?: unknown;
+  /** What happened, in one line. */
+  message: string;
+}
+
 /** One row of the platform support matrix. */
 export interface FeatureSupport {
   /** The feature (`sandbox.local`, `containers`...). */
@@ -2102,6 +2144,8 @@ export interface SessionSetup {
   api_key?: string | null;
   /** An endpoint for this session only (`--base-url`). */
   base_url?: string | null;
+  /** The session's experience-library domain (`--domain`). */
+  domain?: string | null;
   /** No rule files, identity file, memory snapshot or preloaded skills (`--ignore-rules`). */
   ignore_rules?: boolean;
   /** Schema defaults instead of the profile's `config.toml` (`--ignore-user-config`). */
@@ -2653,6 +2697,12 @@ export interface Methods {
   "evolve.proposals.reject": { params: EvolveParams; result: EvolveReply };
   "evolve.start": { params: EvolveParams; result: EvolveReply };
   "evolve.status": { params: EvolveParams; result: EvolveReply };
+  "experience.domains": { params: ExperienceParams; result: ExperienceDomains };
+  "experience.forget": { params: ExperienceParams; result: ExperienceReply };
+  "experience.list": { params: ExperienceParams; result: ExperienceEntries };
+  "experience.pin": { params: ExperienceParams; result: ExperienceReply };
+  "experience.restore": { params: ExperienceParams; result: ExperienceReply };
+  "experience.show": { params: ExperienceParams; result: ExperienceReply };
   "files.rollback": { params: FilesRollbackParams; result: FilesRolledBack };
   "files.undo": { params: FilesUndoParams; result: FilesUndone };
   "fs.list": { params: FsListParams; result: FsListing };
@@ -2790,12 +2840,6 @@ export const UNDECLARED = [
   "bot.create",
   "bot.meta.get",
   "bot.meta.update",
-  "experience.domains",
-  "experience.forget",
-  "experience.list",
-  "experience.pin",
-  "experience.restore",
-  "experience.show",
   "grants.list",
   "grants.revoke",
   "groups.capabilities",

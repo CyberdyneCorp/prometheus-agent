@@ -259,6 +259,11 @@ fn activate(
     let from = harness.active_id()?;
     harness.activate(&written.id)?;
     record_activation(scope, &from, written);
+    let demoted = if written.source == Source::Rollback {
+        demote_entries(scope)
+    } else {
+        Vec::new()
+    };
     let marked = if now {
         let store = pmt_store::Store::open(scope)?;
         Some(crate::harness_host::now::activate(
@@ -275,17 +280,33 @@ fn activate(
             "to": written.id,
             "source": written.source.as_str(),
             "rebuilt_sessions": marked,
+            "demoted_entries": demoted,
         }));
     }
     let when = match marked {
         Some(n) => format!("{n} open session(s) rebuild their prompt at their next turn"),
         None => "takes effect from the next session".to_owned(),
     };
-    print_raw(&format!(
+    let mut text = format!(
         "activated {} ({} of {from}); {when}\n",
         written.id,
         written.source.as_str()
-    ))
+    );
+    for entry in &demoted {
+        let _ = writeln!(text, "experience entry {entry} rolled back");
+    }
+    print_raw(&text)
+}
+
+/// After a rollback, hides the experience entries whose harness the
+/// active version no longer descends from (spec: experience-library,
+/// Rollback demotes entries); the ids demoted. A failure is logged: the
+/// rollback itself stands.
+pub(crate) fn demote_entries(scope: &ProfileScope) -> Vec<String> {
+    pmt_evolve::experience::ops::demote_after_rollback(scope.dir()).unwrap_or_else(|err| {
+        tracing::warn!(error = %err, "experience entries not demoted after the rollback");
+        Vec::new()
+    })
 }
 
 /// Appends the `harness.activated` event (the trajectory grammar's line

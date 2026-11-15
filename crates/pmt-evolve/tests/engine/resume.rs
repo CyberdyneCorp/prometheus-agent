@@ -45,7 +45,10 @@ fn a_job_stopped_after_agg1_resumes_with_only_agg2_and_the_selection() {
     let improver = FakeImprover::with(|r, _| Ok(edit_guardrails(r, &format!("- {}", r.label))));
     let done = fx.run(&job, &rollouts, &improver).unwrap();
     assert_eq!(done.summary.status, "ok");
-    assert_eq!(improver.labels(), ["agg2", "select-parallel"]);
+    assert_eq!(
+        improver.labels(),
+        ["agg2", "select-parallel", "experience.parallel2"]
+    );
     assert_eq!(rollouts.calls(), ["agg2"]);
 
     // A fully completed job resumes with zero model calls and rollouts.

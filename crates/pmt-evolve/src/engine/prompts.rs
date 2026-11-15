@@ -11,7 +11,7 @@ use crate::harness::surface;
 use crate::job::budget::StepKind;
 
 /// `evolve.prompt_version`.
-pub const PROMPT_VERSION: &str = "pmt-evolve-1";
+pub const PROMPT_VERSION: &str = "pmt-evolve-2";
 
 /// The answer-free block.
 pub const ANSWER_FREE: &str = "# Answer-free\n\
@@ -34,6 +34,15 @@ summarises each change and cites the trajectory moment behind it.";
 /// The system prompt of the selector.
 pub const SELECTOR_SYSTEM: &str = "You compare anonymous candidate results for one task \
 and choose the one that best accomplishes it. You only read files.";
+
+/// The system prompt of the experience reflector.
+pub const REFLECTOR_SYSTEM: &str = "You review one finished harness search and record what \
+it taught, for later tasks of the same domain. You only read files. You are sceptical: \
+an adoption alone never establishes that an edit helped.";
+
+/// The system prompt of the domain classifier.
+pub const CLASSIFIER_SYSTEM: &str = "You file a task under one of a fixed list of domains. \
+You only read files and reply with one domain name.";
 
 /// The rejection marker of a stage's second attempt.
 pub const REJECTED: &str = "# YOUR PREVIOUS ATTEMPT WAS REJECTED";
@@ -176,6 +185,41 @@ pub fn selection(ids: &[String]) -> String {
     )
 }
 
+/// The reflector's mission (spec: experience-library, Experience
+/// distillation).
+#[must_use]
+pub fn reflection(label: &str, domain: &str) -> String {
+    format!(
+        "# Mission: {label}\n\nA harness search for the task in context/task.md finished and \
+         its selection chose context/harness/ over the base harness context/base_harness/. \
+         context/rollouts/ holds every rollout of the search, context/pool/<label>/ every \
+         candidate with its diff and rollout, context/decisions/ every stage's notes and \
+         context/adoption.json the chosen label, the candidate ids and the selection's reason.\n\n\
+         Reply first with an <edits> block giving, for each component the chosen harness \
+         changed, the lines\n\ncomponent: <path>\ncandidates: <labels that carried it>\n\
+         change: <what changed>\nobserved: <what the rollouts showed>\n\
+         verdict: helped | hurt | no observed effect | confounded\n\n\
+         Prefer `confounded` when several components changed together or only one rollout \
+         supports a difference. Adoption alone never establishes that an edit helped.\n\n\
+         Then write at most one transferable lesson for later tasks in the `{domain}` domain, \
+         as an <experience> block of single lines\n\ncue: <when it applies>\n\
+         lesson: <what to do>\nevidence: <the trajectory moments behind it>\n\
+         confidence: high | medium | low, then the reason\n\n\
+         or, when nothing transfers, the single line NO_ENTRY.\n\n{ANSWER_FREE}\n\n{EVIDENCE_BOUNDARY}\n"
+    )
+}
+
+/// The classifier's mission over `domains` (the profile's plus
+/// `general`).
+#[must_use]
+pub fn classification(domains: &[String]) -> String {
+    format!(
+        "# Mission: classify\n\nRead context/task.md. Reply with exactly one of these domain \
+         names and nothing else: {}. Never answer a name outside the list.\n\n{EVIDENCE_BOUNDARY}\n",
+        domains.join(", ")
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -201,6 +245,15 @@ mod tests {
         assert!(text.contains("`accounting` domain"));
         assert!(text.contains("base6.md (+2 more)"), "{text}");
         assert!(text.contains("cite the trajectory moment"));
+    }
+
+    #[test]
+    fn the_reflection_prompt_prefers_confounded_and_one_lesson() {
+        let text = reflection("experience.parallel2", "accounting");
+        assert!(text.contains("Prefer `confounded`"), "{text}");
+        assert!(text.contains("Adoption alone never establishes"));
+        assert!(text.contains("at most one transferable lesson"));
+        assert!(text.contains(ANSWER_FREE) && text.contains("NO_ENTRY"));
     }
 
     #[test]

@@ -190,16 +190,19 @@ fn a_foreground_job_proposes_a_reviewable_adoptable_harness() {
     }
     // The improver tried to run a candidate's script: no such tool.
     let sessions = json(s.path(), &["sessions", "list", "--all"]);
-    let improver = sessions["sessions"]
+    let export = sessions["sessions"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|x| x["source_tag"] == "evolve-improver")
-        .unwrap()["id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let export = ok(&run(s.path(), &["sessions", "export", &improver]));
+        .filter(|x| x["source_tag"] == "evolve-improver")
+        .map(|x| {
+            ok(&run(
+                s.path(),
+                &["sessions", "export", x["id"].as_str().unwrap()],
+            ))
+        })
+        .find(|e| e.contains("# Mission: inv1"))
+        .unwrap();
     assert!(
         export.contains("unknown tool") || export.contains("not available"),
         "{export}"
@@ -545,7 +548,16 @@ fn eval_results_reach_the_user_only() {
     for stage in status["modes"][0]["stages"].as_array().unwrap() {
         assert_eq!(stage["fell_back"], false, "no tripwire hit: {stage}");
     }
-    for file in walk(&s.path().join("profiles/default/evolve")) {
+    let next = s.job_dir(&s.only_job());
+    assert!(
+        next.join("library/entries").is_dir(),
+        "the next job's evidence holds the adopted entry"
+    );
+    let evolve = walk(&s.path().join("profiles/default/evolve"));
+    for file in evolve
+        .into_iter()
+        .chain(walk(&s.path().join("profiles/default/experience")))
+    {
         let bytes = std::fs::read(&file).unwrap();
         assert!(
             !String::from_utf8_lossy(&bytes).contains("pmt-eval-verdict"),

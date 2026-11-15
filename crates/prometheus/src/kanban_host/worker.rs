@@ -339,6 +339,7 @@ async fn open_session(
         source_tag: Some(run.source_tag()),
         skills: task.skills.clone(),
         kanban: Some(run),
+        domain: task.domain.clone(),
         ..Options::default()
     };
     let flags = RouteFlags {

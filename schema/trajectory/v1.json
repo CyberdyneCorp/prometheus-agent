@@ -2100,12 +2100,8 @@
             "description": "`experience.lesson.distilled`.",
             "properties": {
               "confidence": {
-                "description": "Confidence 0 to 1, `null` for none.",
-                "format": "double",
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "description": "The lesson's confidence (`high`, `medium`, `low`), or `none` when\nno lesson was distilled.",
+                "type": "string"
               },
               "job": {
                 "description": "The distillation job.",
@@ -2118,7 +2114,8 @@
             },
             "required": [
               "job",
-              "mode"
+              "mode",
+              "confidence"
             ],
             "type": "object"
           }

@@ -126,7 +126,7 @@ pub fn build(workspace: &Path, spec: &Spec<'_>) -> Result<Layout, String> {
     Ok(layout)
 }
 
-fn pool_item(root: &Path, item: &PoolItem<'_>, obs_trunc: usize) -> Result<(), String> {
+pub(crate) fn pool_item(root: &Path, item: &PoolItem<'_>, obs_trunc: usize) -> Result<(), String> {
     let dir = root.join("pool").join(item.label);
     item.tree
         .write(&dir.join("harness"))

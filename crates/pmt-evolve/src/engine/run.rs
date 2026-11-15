@@ -72,6 +72,11 @@ pub(crate) struct Run<'e> {
     pub summary: Mutex<JobSummary>,
     pub model_calls: AtomicU32,
     pub rollouts_executed: AtomicU32,
+    /// The job's snapshot of its domain's library (`<job>/library`), when
+    /// the domain had a visible entry at job start.
+    pub library: Option<PathBuf>,
+    /// The task title (proposals, library entries).
+    pub title: String,
 }
 
 impl Run<'_> {
@@ -143,6 +148,7 @@ impl Run<'_> {
         let charge = match call.kind {
             SessionKind::Select => Kind::Selection,
             SessionKind::Reflect => Kind::Reflection,
+            SessionKind::Classify => Kind::Classification,
             SessionKind::Propose | SessionKind::Compose => Kind::Session,
         };
         let mut usd = 0.0;

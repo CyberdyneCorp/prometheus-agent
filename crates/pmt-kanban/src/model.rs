@@ -457,6 +457,9 @@ pub struct Task {
     pub project: Option<String>,
     /// The project's primary folder: the repository of its worktree.
     pub repo_root: Option<PathBuf>,
+    /// The experience-library domain of its work: the worker session's
+    /// domain tag, an evolve task's job domain (spec: experience-library).
+    pub domain: Option<String>,
 }
 
 /// Default judged turns of a goal-mode task.

@@ -126,6 +126,8 @@ fn a_scheduled_evolve_job_queues_an_evolution_job_with_its_id() {
             "tasks/weekly-report.toml",
             "--name",
             "weekly",
+            "--domain",
+            "Weekly Reports",
             "--yes",
         ],
     );
@@ -135,6 +137,18 @@ fn a_scheduled_evolve_job_queues_an_evolution_job_with_its_id() {
     let jobs = json(home.path(), &["evolve", "list"]);
     assert_eq!(jobs[0]["trigger"], "cron");
     assert_eq!(jobs[0]["cron_job_id"], cron_id.as_str());
+    // The scheduled job's domain files the job (spec: experience-library,
+    // Domain resolution for a job).
+    assert_eq!(jobs[0]["domain"], "weekly-reports");
+    let job = jobs[0]["id"].as_str().unwrap();
+    let meta = std::fs::read_to_string(
+        home.path()
+            .join("profiles/default/evolve/jobs")
+            .join(job)
+            .join("task/task.toml"),
+    )
+    .unwrap();
+    assert!(meta.contains("domain_source = \"cron\""), "{meta}");
     // No agent ran: no session was created.
     let sessions = json(home.path(), &["sessions", "list", "--all"]);
     assert_eq!(sessions["sessions"].as_array().unwrap().len(), 0);

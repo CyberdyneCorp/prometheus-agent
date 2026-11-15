@@ -85,6 +85,7 @@ capabilities = [
     "desktop-app",
     "kanban",
     "distribution-and-update",
+    "experience-library",
     "harness-evolution",
     "messaging-gateway",
     "plugin-system",
@@ -4755,4 +4756,59 @@ capabilities = [
 "Demo resume" = { deferred = "71.5 offline self-improvement demo (`prometheus evolve demo`)" }
 
 [harness-evolution."Human-only evaluation of proposals (upgrade)"]
-"Verdict does not reach the library" = { tests = ["crates/prometheus/tests/evolve_engine.rs::eval_results_reach_the_user_only"], note = "the experience library arrives with group 70: the test reviews with --eval smoke, adopts, runs the next job and finds every stage accepted (no tripwire hit) and no file under <profile>/evolve holding the verdict canary" }
+"Verdict does not reach the library" = { tests = ["crates/prometheus/tests/evolve_engine.rs::eval_results_reach_the_user_only"], note = "the test reviews with --eval smoke, adopts (the mock reflector's lesson becomes an experience entry), runs the next job of the domain, whose evidence snapshot holds that entry, and finds every stage accepted (no tripwire hit) and no file under <profile>/evolve or <profile>/experience holding the verdict canary" }
+
+[experience-library."Library layout"]
+"Entry created" = ["crates/pmt-evolve/tests/engine/library.rs::an_adopted_proposal_with_a_lesson_becomes_an_entry", "crates/prometheus/tests/experience_cli.rs::a_mock_job_distils_a_lesson_that_adoption_files_in_its_domain"]
+
+[experience-library."Domain names"]
+"Slash in domain" = ["crates/pmt-evolve/src/experience/domain.rs::slashes_spaces_and_case_are_normalised"]
+
+[experience-library."Domain resolution for a job"]
+"Classifier limited to known domains" = ["crates/pmt-evolve/src/experience/domain.rs::the_classifier_never_invents_a_domain", "crates/pmt-evolve/tests/engine/library.rs::a_job_without_a_domain_is_filed_under_a_known_domain_or_general", "crates/prometheus/tests/experience_cli.rs::a_task_without_a_domain_is_classified_among_existing_domains"]
+
+[experience-library."Reflection workspace"]
+"Failed selection skips reflection" = ["crates/pmt-evolve/tests/engine/library.rs::a_failed_selection_runs_no_reflection"]
+
+[experience-library."Experience distillation"]
+"All edits confounded" = ["crates/pmt-evolve/tests/engine/library.rs::a_no_entry_reflection_adopts_without_an_entry", "crates/pmt-evolve/src/experience/lesson.rs::no_entry_and_incomplete_lessons_yield_none"]
+
+[experience-library."Entries are written on adoption only"]
+"Rejected proposal" = ["crates/pmt-evolve/tests/engine/library.rs::a_rejected_proposal_writes_no_entry", "crates/prometheus/tests/experience_cli.rs::a_rejected_proposal_writes_no_entry"]
+
+[experience-library."Entry contents"]
+"Inventory wording" = ["crates/pmt-evolve/src/experience/entry.rs::a_guardrails_only_change_reads_always_on_edits_only"]
+
+[experience-library."Answer-free and secret-free entries"]
+"Verdict in lesson" = ["crates/pmt-evolve/tests/engine/library.rs::a_verdict_in_the_lesson_rejects_the_entry_but_not_the_adoption"]
+
+[experience-library."Index"]
+"Empty domain" = ["crates/pmt-evolve/tests/engine/library.rs::the_second_job_of_a_domain_sees_exactly_the_first_jobs_entry"]
+
+[experience-library."Exposure to proposers"]
+"Index without entries" = ["crates/pmt-evolve/tests/engine/library.rs::the_second_job_of_a_domain_sees_exactly_the_first_jobs_entry", "crates/pmt-evolve/tests/engine/library.rs::a_job_started_before_an_adoption_never_sees_it_even_on_resume"]
+
+[experience-library."Stream order within a domain"]
+"Second job sees the first" = ["crates/pmt-evolve/tests/engine/library.rs::the_second_job_of_a_domain_sees_exactly_the_first_jobs_entry", "crates/pmt-evolve/tests/engine/budget.rs::sessions_stay_within_the_process_bound_and_one_domain_runs_one_job", "crates/prometheus/src/evolve_host/mod.rs::one_job_per_domain_starts_in_queue_order"]
+
+[experience-library."Lessons offered to later sessions (upgrade)"]
+"Low-confidence lesson excluded" = ["crates/pmt-evolve/tests/experience.rs::only_high_and_medium_lessons_reach_sessions_and_each_showing_counts", "crates/prometheus/tests/experience_cli.rs::sessions_of_a_domain_start_with_its_good_lessons_frozen"]
+"Lesson adopted mid-session" = ["crates/prometheus/tests/experience_cli.rs::sessions_of_a_domain_start_with_its_good_lessons_frozen"]
+
+[experience-library."Rollback demotes entries (upgrade)"]
+"Rolling back an adopted harness" = ["crates/pmt-evolve/tests/experience.rs::a_rollback_demotes_entries_of_versions_the_harness_left", "crates/prometheus/tests/experience_cli.rs::entries_are_pinned_forgotten_demoted_and_restored_from_the_cli"]
+
+[experience-library."Library CLI"]
+"Forget an entry" = ["crates/prometheus/tests/experience_cli.rs::entries_are_pinned_forgotten_demoted_and_restored_from_the_cli", "crates/prometheus/tests/evolve_rpc.rs::a_job_started_over_rpc_runs_in_the_daemon_and_its_proposal_is_adopted"]
+
+[experience-library."Retention cap"]
+"Eviction" = ["crates/pmt-evolve/tests/experience.rs::the_oldest_unpinned_entry_is_evicted_and_a_pinned_one_kept"]
+
+[experience-library."Export and import between profiles (upgrade)"]
+"Archive with a secret" = ["crates/pmt-evolve/tests/experience.rs::an_archive_with_a_secret_is_refused_whole", "crates/prometheus/tests/experience_cli.rs::archives_move_between_profiles_and_a_secret_refuses_the_whole_archive"]
+
+[experience-library."Restore on resume and repair"]
+"Deleted library directory" = ["crates/pmt-evolve/tests/experience.rs::a_deleted_domain_is_rebuilt_from_adopted_proposals", "crates/prometheus/tests/experience_cli.rs::a_deleted_domain_is_rebuilt_without_a_model"]
+
+[experience-library."Library events"]
+"Injection observable" = ["crates/prometheus/tests/experience_cli.rs::sessions_of_a_domain_start_with_its_good_lessons_frozen"]

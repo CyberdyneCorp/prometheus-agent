@@ -215,10 +215,7 @@ mod tests {
         assert!(ts.contains("export interface HelloParams {"), "{ts}");
         assert!(ts.contains("\"prompt.submit\": { params: SubmitParams; result: Submitted };"));
         assert!(ts.contains("\"request.cancel\": RequestCancel;"));
-        assert!(
-            ts.contains("\"experience.list\","),
-            "undeclared names are listed"
-        );
+        assert!(ts.contains("\"wake.feed\","), "undeclared names are listed");
         assert!(ts.contains("export const PROTOCOL = { major: 1, minor: 0 } as const;"));
     }
 

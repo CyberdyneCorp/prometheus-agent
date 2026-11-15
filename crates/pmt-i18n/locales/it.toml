@@ -378,6 +378,7 @@ blueprint = "Crea un job pianificato da un modello: /blueprint [nome] [slot=valo
 goal = "Un obiettivo permanente verso cui l'agente continua a lavorare: /goal <testo> | draft <testo> | status | show | pause | resume | clear | wait <pid> | unwait | gate add|list|remove|clear"
 subgoal = "Criteri aggiuntivi dell'obiettivo attivo: /subgoal <testo> | remove <N> | clear"
 evolve = "Mette in coda un'evoluzione dell'harness per questa sessione: /evolve [--k N]"
+domain = "Mostra o imposta il dominio della libreria di esperienza di questa sessione: /domain [NOME]"
 loop = "Ripete un messaggio o un comando: /loop [intervallo] <messaggio> [--times N] [--until <condizione>] | status | pause | resume | stop"
 heartbeat = "Controlla durante l'inattività: /heartbeat every <intervallo> <messaggio> | status | pause | resume | clear"
 worktree = "Worktree Git: mostra quello attivo, new [NOME], list, prune [--dry-run]"

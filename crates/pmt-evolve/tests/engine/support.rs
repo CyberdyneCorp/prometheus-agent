@@ -53,6 +53,19 @@ impl Fixture {
         budget: Option<f64>,
         files: &[(&str, &str)],
     ) -> String {
+        self.job_in(k, mode, budget, files, Some("accounting"))
+    }
+
+    /// Queues a job whose task file names `domain` (none: the classifier
+    /// resolves it).
+    pub(crate) fn job_in(
+        &self,
+        k: u8,
+        mode: EvolveMode,
+        budget: Option<f64>,
+        files: &[(&str, &str)],
+        domain: Option<&str>,
+    ) -> String {
         let workspace = self
             .root
             .path()
@@ -68,7 +81,10 @@ impl Fixture {
         std::fs::write(
             &task,
             format!(
-                "statement = \"Sum the amounts in ledger.csv\"\ndomain = \"accounting\"\nworkspace = \"{}\"\n",
+                "statement = \"Sum the amounts in ledger.csv\"\n{}workspace = \"{}\"\n",
+                domain
+                    .map(|d| format!("domain = \"{d}\"\n"))
+                    .unwrap_or_default(),
                 workspace.file_name().unwrap().to_string_lossy()
             ),
         )
@@ -123,7 +139,7 @@ impl Fixture {
             improver,
             limits,
             retry_delay: Duration::ZERO,
-            library: None,
+            experience: &self.scope.config().experience,
             estimate_usd: 0.0,
         };
         runtime().block_on(engine.run(job))
@@ -340,6 +356,35 @@ impl Improver for FakeImprover {
     fn model_id(&self) -> String {
         "mock/improver".to_owned()
     }
+}
+
+/// A reflector reply: two edit rows and, with `evidence`, a lesson of
+/// `confidence`; without, `NO_ENTRY`.
+pub(crate) fn reflection_reply(confidence: &str, evidence: Option<&str>) -> String {
+    let edits = "<edits>\ncomponent: GUARDRAILS.md\ncandidates: inv1, agg1\n\
+                 change: a rule line\nobserved: base1 step 4 kept the refund\nverdict: helped\n\
+                 </edits>\n";
+    match evidence {
+        Some(evidence) => format!(
+            "{edits}<experience>\ncue: ledgers with refunds\nlesson: sum signed amounts\n\
+             evidence: {evidence}\nconfidence: {confidence} because two rollouts agree\n</experience>"
+        ),
+        None => format!("{edits}NO_ENTRY"),
+    }
+}
+
+/// An improver whose reflector answers with `reply` and whose other
+/// sessions edit GUARDRAILS.md.
+pub(crate) fn reflecting(reply: String) -> FakeImprover {
+    FakeImprover::with(move |r, _| {
+        if r.kind == SessionKind::Reflect {
+            return Ok(ImproverReply {
+                text: reply.clone(),
+                usd: 0.0,
+            });
+        }
+        Ok(edit_guardrails(r, &format!("- rule from {}", r.label)))
+    })
 }
 
 pub(crate) fn read_json(path: &Path) -> serde_json::Value {

@@ -201,9 +201,7 @@ mod tests {
             assert!(page.contains(&format!("### `{name}`")), "{name} missing");
         }
         assert!(page.contains("| `session.create` | `workspace-architecture` | 1.0 | [`SessionCreateParams`](#sessioncreateparams) | [`SessionRef`](#sessionref) |"));
-        assert!(
-            page.contains("| `experience.list` | `experience-library` | 1.0 | not served yet | |")
-        );
+        assert!(page.contains("| `wake.feed` | `voice-mode` | 1.0 | not served yet | |"));
         assert!(page.contains("| `-32601` | `unknown_method` |"));
         assert!(page.contains("| `4426` | `protocol_unsupported` |"));
     }

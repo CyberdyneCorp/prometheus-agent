@@ -1,6 +1,6 @@
 //! Evolution over the client protocol and the daemon's runner (spec:
 //! harness-evolution, Job lifecycle, events and RPC; Resume and
-//! content-addressed session cache).
+//! content-addressed session cache; experience-library, Library CLI).
 
 #![cfg(all(feature = "evolve", feature = "gateway"))]
 
@@ -101,20 +101,71 @@ fn a_job_started_over_rpc_runs_in_the_daemon_and_its_proposal_is_adopted() {
                 .contains("+Always state the total"),
             "{diff}"
         );
-        let rolled = call(&client, "harness.rollback", json!({"version": "h1"})).await;
-        assert!(
-            rolled["message"]
-                .as_str()
-                .unwrap()
-                .contains("rollback of h1"),
-            "{rolled}"
-        );
+        library_over_rpc(&client, &adopted).await;
         let err = client
             .call("evolve.cancel", json!({"job_id": id}))
             .await
             .unwrap_err();
         assert_eq!(err.data.unwrap().code, "evolve.job_state");
     });
+}
+
+/// The adoption filed the job's lesson; the experience library answers
+/// over RPC, and the rollback demotes the entry (spec:
+/// experience-library, Library CLI: the RPC equivalents).
+async fn library_over_rpc(client: &pmt_rpc::client::Client, adopted: &Value) {
+    assert!(
+        adopted["message"]
+            .as_str()
+            .unwrap()
+            .contains("added to domain accounting"),
+        "{adopted}"
+    );
+    let domains = call(client, "experience.domains", json!({})).await;
+    assert_eq!(
+        domains,
+        json!({"domains": [{"name": "accounting", "entries": 1}]})
+    );
+    let listed = call(client, "experience.list", json!({"domain": "accounting"})).await;
+    let entry = listed["entries"][0]["entry_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let shown = call(client, "experience.show", json!({"entry_id": entry})).await;
+    assert!(
+        shown["data"]["document"]
+            .as_str()
+            .unwrap()
+            .contains("## Transferable lesson"),
+        "{shown}"
+    );
+    let pinned = call(client, "experience.pin", json!({"entry_id": entry})).await;
+    assert_eq!(pinned["data"]["pinned"], true);
+    call(
+        client,
+        "experience.pin",
+        json!({"entry_id": entry, "pinned": false}),
+    )
+    .await;
+    let rolled = call(client, "harness.rollback", json!({"version": "h1"})).await;
+    assert!(
+        rolled["message"]
+            .as_str()
+            .unwrap()
+            .contains("rollback of h1"),
+        "{rolled}"
+    );
+    assert_eq!(rolled["data"]["demoted_entries"], json!([entry]));
+    let hidden = call(client, "experience.list", json!({})).await;
+    assert_eq!(hidden["entries"], json!([]));
+    let restored = call(client, "experience.restore", json!({"entry_id": entry})).await;
+    assert_eq!(restored["data"]["status"], "active");
+    call(client, "experience.forget", json!({"entry_id": entry})).await;
+    let err = client
+        .call("experience.show", json!({"entry_id": entry}))
+        .await
+        .unwrap_err();
+    assert_eq!(err.data.unwrap().code, "experience.entry_not_found");
 }
 
 /// Scenario: Resume after crash (the daemon queues an interrupted job

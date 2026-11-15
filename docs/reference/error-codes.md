@@ -489,4 +489,8 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `harness.invalid` | `invalid_input` | 65 | The harness tree failed validation; every error is listed (paths outside the editable surface, size caps, skill and subagent front matter, script syntax and references, `hooks.toml` keys and events, templates, secrets). No version was written. |
 | `harness.version_not_found` | `not_found` | 66 | No harness version has this id (`h<n>` or `h<n>-<fingerprint>`), or the version is not in the tree; `prometheus harness log` lists the versions. |
 | `harness.io` | `io` | 74 | A file under `<profile>/harness/` could not be read or written. |
+| `experience.entry_not_found` | `tool` | 1 | No entry of this profile's experience library has this id; `prometheus experience list --all` lists every entry with its status. |
+| `experience.invalid_domain` | `usage` | 2 | Experience-library domains are lower-case letters, digits and `-` (`[a-z0-9][a-z0-9-]{0,47}`); input is lower-cased and runs of other characters become `-`, so only an over-long name is refused. |
+| `experience.import_rejected` | `invalid_input` | 65 | The experience archive was refused and nothing was written: an entry's harness does not validate, or an entry carries a leak-glob file, an eval verdict marker or a secret; the message names the entry. |
+| `experience.io` | `io` | 74 | A file under `<profile>/experience/` (or an experience archive) could not be read or written. |
 | `session.read_only` | `permission_denied` | 77 | The session is read-only: an imported Hermes A2A conversation whose peer binding cannot be proven is kept for reading (`prometheus sessions show`) but never attached to a live A2A conversation; `prometheus doctor` lists them. |

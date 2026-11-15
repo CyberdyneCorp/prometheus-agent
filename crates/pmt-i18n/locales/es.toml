@@ -378,6 +378,7 @@ blueprint = "Crea una tarea programada a partir de una plantilla: /blueprint [no
 goal = "Un objetivo permanente hacia el que el agente sigue trabajando: /goal <texto> | draft <texto> | status | show | pause | resume | clear | wait <pid> | unwait | gate add|list|remove|clear"
 subgoal = "Criterios extra del objetivo activo: /subgoal <texto> | remove <N> | clear"
 evolve = "Pone en cola un trabajo de evolución del arnés para esta sesión: /evolve [--k N]"
+domain = "Muestra o fija el dominio de la biblioteca de experiencia de esta sesión: /domain [NOMBRE]"
 loop = "Repite un mensaje o comando: /loop [intervalo] <mensaje> [--times N] [--until <condición>] | status | pause | resume | stop"
 heartbeat = "Comprueba mientras está inactivo: /heartbeat every <intervalo> <mensaje> | status | pause | resume | clear"
 worktree = "Worktrees de Git: muestra el activo, new [NOMBRE], list, prune [--dry-run]"

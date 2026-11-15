@@ -19,9 +19,11 @@ pub mod ledger;
 mod modes;
 pub mod ports;
 pub mod prompts;
+mod reflect;
 mod run;
 pub mod select;
 mod stage;
+mod start;
 pub mod summary;
 pub mod tripwire;
 
@@ -32,7 +34,7 @@ use std::time::Duration;
 
 use futures_util::future::join_all;
 use pmt_config::harness::HarnessDir;
-use pmt_config::schema::{EvolveConfig, EvolveMode};
+use pmt_config::schema::{EvolveConfig, EvolveMode, ExperienceConfig};
 use pmt_core::error::{Error, codes};
 use serde_json::json;
 
@@ -48,6 +50,7 @@ use self::run::{RolloutDone, Run};
 use self::select::Selection;
 use self::summary::{BaseSummary, JobSummary};
 use self::tripwire::Tripwire;
+use crate::experience::lesson::Distilled;
 use crate::harness::Rules;
 use crate::job::budget::{self, ModePlan};
 use crate::job::{JobRecord, Jobs};
@@ -75,8 +78,8 @@ pub struct Engine<'a> {
     pub limits: Arc<Limits>,
     /// The wait before a session's retry (10 s).
     pub retry_delay: Duration,
-    /// The domain's experience library, when it has a visible entry.
-    pub library: Option<PathBuf>,
+    /// `[experience]`.
+    pub experience: &'a ExperienceConfig,
     /// The spend estimate printed before the job starts.
     pub estimate_usd: f64,
 }
@@ -88,6 +91,15 @@ pub struct ProposalOutcome {
     pub proposal: proposal::Proposal,
     /// It was adopted at once (`auto`): the version written.
     pub adopted: Option<proposal::Adopted>,
+}
+
+/// A mode's chosen final, with what its reflection distilled.
+#[derive(Debug, Clone)]
+pub(crate) struct Pick {
+    pub mode: String,
+    pub candidate: Candidate,
+    pub selected: summary::Selected,
+    pub distilled: Distilled,
 }
 
 /// How a job run ended.
@@ -121,10 +133,18 @@ impl Engine<'_> {
         let job = jobs.get(job_id)?;
         let dir = jobs.dir(job_id);
         let _lock = lock(&dir)?;
-        let key = format!("{}|{}", self.profile_dir.display(), job.domain);
-        let _turn = self.limits.domain(&key).await;
         let _ = std::fs::remove_file(dir.join(CANCEL_FILE));
-        let run = self.open(job, dir)?;
+        let mut run = self.open(job, dir)?;
+        if run.job.domain.is_empty() {
+            run.classify().await?;
+        }
+        // One job per domain at a time, in queue order: the library
+        // snapshot of a job then holds exactly what was adopted before it
+        // started (spec: experience-library, Stream order within a domain).
+        let key = format!("{}|{}", self.profile_dir.display(), run.job.domain);
+        let _turn = self.limits.domain(&key).await;
+        let _domain = start::domain_lock(self.profile_dir, &run.job.domain).await?;
+        run.library = run.prepare_library()?;
         let watcher = watch_cancel(run.dir.join(CANCEL_FILE), Arc::clone(&run.gate));
         let finished = run.execute().await;
         watcher.abort();
@@ -152,6 +172,9 @@ impl Engine<'_> {
             ..JobSummary::default()
         };
         let cap = job.budget_usd.unwrap_or(self.config.budget.max_usd);
+        let title = std::fs::read_to_string(dir.join("task").join("task.md"))
+            .map(|t| crate::experience::entry::title_of(&t))
+            .unwrap_or_default();
         Ok(Run {
             engine: self,
             log: JobLog::new(&dir, &job.id),
@@ -165,6 +188,8 @@ impl Engine<'_> {
             summary: Mutex::new(summary),
             model_calls: AtomicU32::new(0),
             rollouts_executed: AtomicU32::new(0),
+            library: None,
+            title,
         })
     }
 }
@@ -293,7 +318,7 @@ impl Run<'_> {
         base: &[RolloutDone],
         shared: bool,
         ledger: &mut Ledger,
-    ) -> (String, Option<(String, Candidate, summary::Selected)>) {
+    ) -> (String, Option<Pick>) {
         let mut run: ModeRun = if plan.mode == "sequential" {
             self.sequential(plan, base, shared).await
         } else {
@@ -311,8 +336,24 @@ impl Run<'_> {
             let (selection, entry) = self.select(plan.mode, &run.finals).await;
             run.ledger.selection = entry;
             let ids = self.eligible(plan.mode, &run.finals);
-            self.update(|s| s.mode(plan.mode).candidates = ids);
-            self.selection_status(plan.mode, selection, &run.finals, &mut pick)
+            self.update(|s| s.mode(plan.mode).candidates.clone_from(&ids));
+            let status = self.selection_status(plan.mode, selection, &run.finals, &mut pick);
+            if let Some(mut chosen) = pick.take() {
+                let (distilled, entry) = self
+                    .reflect(&reflect::Search {
+                        mode: plan.mode,
+                        base,
+                        candidates: &run.candidates,
+                        chosen: &chosen.candidate,
+                        selected: &chosen.selected,
+                        ids: &ids,
+                    })
+                    .await;
+                run.ledger.reflection = entry;
+                chosen.distilled = distilled;
+                pick = Some(chosen);
+            }
+            status
         } else {
             status
         };
@@ -331,7 +372,7 @@ impl Run<'_> {
         mode: &str,
         selection: Selection,
         finals: &[Candidate],
-        pick: &mut Option<(String, Candidate, summary::Selected)>,
+        pick: &mut Option<Pick>,
     ) -> String {
         match selection {
             Selection::Chosen(i, selected) => {
@@ -340,7 +381,12 @@ impl Run<'_> {
                     json!({"selected": selected.label}),
                 );
                 self.update(|s| s.mode(mode).selected = Some(selected.clone()));
-                *pick = Some((mode.to_owned(), finals[i].clone(), selected));
+                *pick = Some(Pick {
+                    mode: mode.to_owned(),
+                    candidate: finals[i].clone(),
+                    selected,
+                    distilled: Distilled::default(),
+                });
                 "ok".to_owned()
             }
             Selection::Awaiting => "awaiting-selection".to_owned(),
@@ -358,16 +404,16 @@ impl Run<'_> {
         &self,
         status: &str,
         error: Option<&str>,
-        chosen: Vec<(String, Candidate, summary::Selected)>,
+        chosen: Vec<Pick>,
         mut ledger: Ledger,
     ) -> Result<Finished, Error> {
         // Every proposal exists before the policy runs: with mode `both`,
         // adopting one supersedes its siblings on the same base, so at most
         // one is ever adopted.
         let mut created = Vec::new();
-        for (mode, candidate, selected) in chosen {
-            let (proposal, fresh) = self.propose(&mode, &candidate, &selected)?;
-            self.update(|s| s.mode(&mode).proposal_id = Some(proposal.id.clone()));
+        for pick in chosen {
+            let (proposal, fresh) = self.propose(&pick)?;
+            self.update(|s| s.mode(&pick.mode).proposal_id = Some(proposal.id.clone()));
             created.push((proposal, fresh));
         }
         let mut proposals = Vec::new();
@@ -416,12 +462,8 @@ impl Run<'_> {
 
     /// The proposal of `mode`: the one a resumed job already made
     /// (`false`), else a new one (`true`).
-    fn propose(
-        &self,
-        mode: &str,
-        candidate: &Candidate,
-        selected: &summary::Selected,
-    ) -> Result<(proposal::Proposal, bool), Error> {
+    fn propose(&self, pick: &Pick) -> Result<(proposal::Proposal, bool), Error> {
+        let (mode, selected) = (pick.mode.as_str(), &pick.selected);
         let base_version = self
             .summary
             .lock()
@@ -443,9 +485,13 @@ impl Run<'_> {
             label: &selected.label,
             base_version: &base_version,
             base: &self.active,
-            tree: &candidate.stage.tree,
+            tree: &pick.candidate.stage.tree,
             reason: &selected.reason,
             selected_by: &selected.selected_by,
+            domain: &self.job.domain,
+            title: &self.title,
+            k: self.job.k,
+            distilled: &pick.distilled,
         })?;
         self.log
             .emit("evolve.proposal.ready", json!({"proposal_id": proposal.id}));
@@ -459,7 +505,7 @@ impl Run<'_> {
         let store = Proposals::of(self.engine.profile_dir);
         let proposal = store.get(id)?;
         let adopted = match proposal::verdict(self.engine.config.adoption.policy, &proposal) {
-            Verdict::Adopt => self.adopt_now(&store, id, notices),
+            Verdict::Adopt => self.adopt_now(id, notices),
             verdict => {
                 notices.push(self.waiting_notice(&proposal, verdict));
                 None
@@ -471,19 +517,22 @@ impl Run<'_> {
         })
     }
 
-    fn adopt_now(
-        &self,
-        store: &Proposals,
-        id: &str,
-        notices: &mut Vec<String>,
-    ) -> Option<proposal::Adopted> {
-        match store.adopt(self.engine.profile_dir, id, false, self.engine.rules) {
-            Ok(adopted) => {
+    fn adopt_now(&self, id: &str, notices: &mut Vec<String>) -> Option<proposal::Adopted> {
+        let settings = self.settings();
+        match crate::experience::adopt(
+            self.engine.profile_dir,
+            id,
+            false,
+            self.engine.rules,
+            &settings,
+        ) {
+            Ok((adopted, library)) => {
                 self.log
                     .emit("evolve.proposal.adopted", json!({"proposal_id": id}));
                 notices.push(format!(
-                    "proposal {id} adopted as {}; it applies from the next session",
-                    adopted.version.id
+                    "proposal {id} adopted as {}; it applies from the next session; {}",
+                    adopted.version.id,
+                    library.message()
                 ));
                 Some(adopted)
             }

@@ -378,6 +378,7 @@ blueprint = "Créer une tâche planifiée à partir d'un modèle : /blueprint [n
 goal = "Un objectif permanent vers lequel l'agent continue de travailler : /goal <texte> | draft <texte> | status | show | pause | resume | clear | wait <pid> | unwait | gate add|list|remove|clear"
 subgoal = "Critères supplémentaires de l'objectif actif : /subgoal <texte> | remove <N> | clear"
 evolve = "Met en file une évolution du harnais pour cette session : /evolve [--k N]"
+domain = "Afficher ou définir le domaine de la bibliothèque d'expérience de cette session : /domain [NOM]"
 loop = "Répéter un message ou une commande : /loop [intervalle] <message> [--times N] [--until <condition>] | status | pause | resume | stop"
 heartbeat = "Faire un point en période d'inactivité : /heartbeat every <intervalle> <message> | status | pause | resume | clear"
 worktree = "Worktrees Git : afficher l'actif, new [NOM], list, prune [--dry-run]"

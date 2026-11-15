@@ -106,9 +106,9 @@ fn a_user_selection_pauses_then_continues_with_the_chosen_id() {
     let done = fx.run(&job, &rollouts, &improver).unwrap();
     assert_eq!(done.summary.status, "ok");
     assert_eq!(
-        improver.labels().len(),
-        before,
-        "everything else was cached"
+        improver.labels()[before..],
+        ["experience.parallel2"],
+        "everything else was cached; the reflection follows the user's choice"
     );
     let selected = done.summary.modes[0].selected.clone().unwrap();
     assert_eq!(

@@ -19,6 +19,7 @@ Commands:
   lsp          Language servers behind the diagnostics of file edits: status, registry, installs, restart
   cron         Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and the headless tick
   harness      The profile's harness: validate, history, diff, rollback and manual edits (works without `evolve.enabled`)
+  experience   The experience library: entries, domains, pin, forget, restore, export, import and rebuild
   evolve       Harness evolution jobs (opt-in: `evolve.enabled = true`)
   kanban       Kanban boards shared by every profile: tasks, dependencies, the dispatcher, workers, review, notifications, export and import
   worktrees    Git worktrees of sessions and subagents: list, sweep and restore archived trees
@@ -185,6 +186,9 @@ Options:
 
       --source <TAG>
           Integration tag recorded on the session
+
+      --domain <NAME>
+          The session's experience-library domain: evolution jobs of the session file their lessons there, and (with `experience.session_lessons`) the session starts with its lessons
 
       --pass-session-id
           Put the session id in the system prompt

@@ -22,8 +22,7 @@ use serde_json::Value;
 
 pub use record::{JobRecord, Jobs, PlanSummary, Trigger};
 
-/// The domain of a job that names none.
-pub const DEFAULT_DOMAIN: &str = "general";
+use crate::experience::domain::{self, Source as DomainSource};
 
 /// Tools whose `path` argument names a workspace file the session read
 /// or modified.
@@ -50,8 +49,11 @@ pub struct Request {
     pub k: Option<u8>,
     /// `--mode` (default `evolve.mode`).
     pub mode: Option<EvolveMode>,
-    /// `--domain` (default: the task file's, else `general`).
+    /// `--domain`.
     pub domain: Option<String>,
+    /// The `domain` field of the scheduled job or kanban task that queued
+    /// it.
+    pub trigger_domain: Option<String>,
     /// `--budget-usd`.
     pub budget_usd: Option<f64>,
     /// The scheduled job that fired it.
@@ -70,6 +72,7 @@ impl Request {
             k: None,
             mode: None,
             domain: None,
+            trigger_domain: None,
             budget_usd: None,
             cron_job_id: None,
             kanban_task_id: None,
@@ -119,11 +122,7 @@ pub fn queue_with(
     let k = budget::check_k(request.k.unwrap_or(evolve.k))?;
     let mode = request.mode.unwrap_or(evolve.mode);
     let (capture, file_domain) = capture_of(profile, &request.task)?;
-    let domain = request
-        .domain
-        .clone()
-        .or(file_domain)
-        .unwrap_or_else(|| DEFAULT_DOMAIN.to_owned());
+    let (domain, domain_source) = resolve_domain(profile, request, file_domain)?;
     let record = JobRecord {
         id: Jobs::new_id(),
         status: "queued".to_owned(),
@@ -147,6 +146,7 @@ pub fn queue_with(
     };
     let mut capture = capture;
     capture.meta.domain = domain;
+    capture.meta.domain_source = domain_source;
     Jobs::of(profile.dir).create(&record, |dir| {
         task::capture(dir, &capture)?;
         before(dir)?;
@@ -154,6 +154,39 @@ pub fn queue_with(
     })?;
     tracing::info!(job = %record.id, trigger = record.trigger.as_str(), "evolution job queued");
     Ok(record)
+}
+
+/// The job's domain and where it came from (spec: experience-library,
+/// Domain resolution for a job): `--domain`; the triggering scheduled
+/// job's or kanban task's `domain` (a task file's own `domain` counts as
+/// its trigger's); the source session's domain tag; else empty, for the
+/// classifier to resolve when the job starts.
+fn resolve_domain(
+    profile: &Profile<'_>,
+    request: &Request,
+    file_domain: Option<String>,
+) -> Result<(String, DomainSource), Error> {
+    let by_trigger = match request.trigger {
+        Trigger::Cron => DomainSource::Cron,
+        Trigger::Kanban => DomainSource::Kanban,
+        _ => DomainSource::Flag,
+    };
+    let session_tag = match (&request.task, profile.store) {
+        (TaskInput::Session(id), Some(store)) => store.session_domain(*id)?,
+        _ => None,
+    };
+    let named = [
+        (request.domain.clone(), DomainSource::Flag),
+        (request.trigger_domain.clone(), by_trigger),
+        (file_domain, by_trigger),
+        (session_tag, DomainSource::Session),
+    ]
+    .into_iter()
+    .find_map(|(name, source)| name.filter(|n| !n.trim().is_empty()).map(|n| (n, source)));
+    match named {
+        Some((name, source)) => Ok((domain::parse(&name)?, source)),
+        None => Ok((String::new(), DomainSource::Classifier)),
+    }
 }
 
 fn invalid(message: impl Into<String>) -> Error {

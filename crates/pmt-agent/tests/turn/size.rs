@@ -38,6 +38,7 @@ async fn the_report_sums_to_the_request_size() {
         tool_names: request.tools.iter().map(|t| t.name.clone()).collect(),
         caller_system: None,
         harness: None,
+        lessons: None,
         skills_index: None,
         pinned_skills: None,
         memory: None,

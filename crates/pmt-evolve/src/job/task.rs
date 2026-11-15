@@ -25,8 +25,11 @@ use sha2::{Digest as _, Sha256};
 /// `task.toml`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TaskMeta {
-    /// The experience-library domain.
+    /// The experience-library domain (empty until the classifier ran).
     pub domain: String,
+    /// Where the domain came from.
+    #[serde(default)]
+    pub domain_source: crate::experience::domain::Source,
     /// Toolsets the rollouts get.
     #[serde(default)]
     pub toolsets: Vec<String>,

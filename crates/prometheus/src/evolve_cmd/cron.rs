@@ -19,6 +19,7 @@ pub fn queue(scope: &ProfileScope, job: &Job) -> Result<String, Error> {
         })?;
     let request = Request {
         cron_job_id: Some(job.id().to_owned()),
+        trigger_domain: job.spec.domain.clone(),
         ..Request::new(Trigger::Cron, TaskInput::File(scope.dir().join(task)))
     };
     job::queue(&super::profile(scope, None), &request).map(|j| j.id)

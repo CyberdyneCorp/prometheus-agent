@@ -320,6 +320,7 @@ fn workspace(command: &Command, ctx: &Context<'_>) -> Result<u8, Error> {
         Command::Lsp { command } => prometheus::lsp_cmd::run(command, ctx),
         Command::Cron { command } => prometheus::cron_cmd::run(command, ctx),
         Command::Harness { command } => prometheus::harness_cmd::run(command, ctx),
+        Command::Experience { command } => prometheus::experience_cmd::run(command, ctx),
         #[cfg(feature = "evolve")]
         Command::Evolve { command } => prometheus::evolve_cmd::run(command, ctx),
         Command::Kanban(args) => prometheus::kanban_cmd::run(args, ctx),

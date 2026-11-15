@@ -167,8 +167,21 @@ impl Jobs {
     ///
     /// `evolve.job_not_found`; `harness.io`.
     pub fn set_status(&self, id: &str, status: &str) -> Result<(), Error> {
+        self.edit(id, |r| status.clone_into(&mut r.status))
+    }
+
+    /// Records the domain classification resolved for job `id`.
+    ///
+    /// # Errors
+    ///
+    /// `evolve.job_not_found`; `harness.io`.
+    pub fn set_domain(&self, id: &str, domain: &str) -> Result<(), Error> {
+        self.edit(id, |r| domain.clone_into(&mut r.domain))
+    }
+
+    fn edit(&self, id: &str, change: impl FnOnce(&mut JobRecord)) -> Result<(), Error> {
         let mut record = self.get(id)?;
-        status.clone_into(&mut record.status);
+        change(&mut record);
         let path = self.dir(id).join(JOB_FILE);
         let text =
             toml::to_string(&record).map_err(|e| Error::new(&codes::HARNESS_IO, e.to_string()))?;

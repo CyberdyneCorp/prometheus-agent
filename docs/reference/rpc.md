@@ -82,12 +82,12 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `evolve.proposals.reject` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
 | `evolve.start` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
 | `evolve.status` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
-| `experience.domains` | `experience-library` | 1.0 | not served yet | |
-| `experience.forget` | `experience-library` | 1.0 | not served yet | |
-| `experience.list` | `experience-library` | 1.0 | not served yet | |
-| `experience.pin` | `experience-library` | 1.0 | not served yet | |
-| `experience.restore` | `experience-library` | 1.0 | not served yet | |
-| `experience.show` | `experience-library` | 1.0 | not served yet | |
+| `experience.domains` | `experience-library` | 1.0 | [`ExperienceParams`](#experienceparams) | [`ExperienceDomains`](#experiencedomains) |
+| `experience.forget` | `experience-library` | 1.0 | [`ExperienceParams`](#experienceparams) | [`ExperienceReply`](#experiencereply) |
+| `experience.list` | `experience-library` | 1.0 | [`ExperienceParams`](#experienceparams) | [`ExperienceEntries`](#experienceentries) |
+| `experience.pin` | `experience-library` | 1.0 | [`ExperienceParams`](#experienceparams) | [`ExperienceReply`](#experiencereply) |
+| `experience.restore` | `experience-library` | 1.0 | [`ExperienceParams`](#experienceparams) | [`ExperienceReply`](#experiencereply) |
+| `experience.show` | `experience-library` | 1.0 | [`ExperienceParams`](#experienceparams) | [`ExperienceReply`](#experiencereply) |
 | `files.rollback` | `execution-environments` | 1.0 | [`FilesRollbackParams`](#filesrollbackparams) | [`FilesRolledBack`](#filesrolledback) |
 | `files.undo` | `execution-environments` | 1.0 | [`FilesUndoParams`](#filesundoparams) | [`FilesUndone`](#filesundone) |
 | `fs.list` | `desktop-app` | 1.0 | [`FsListParams`](#fslistparams) | [`FsListing`](#fslisting) |
@@ -1130,6 +1130,52 @@ Result of the methods that act on one job, proposal or version.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `data` | any | no | The matching command's `--json` document, or `null`. |
+| `message` | string | yes | What happened, in one line. |
+
+### `ExperienceDomain`
+
+One domain of `experience.domains`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `entries` | integer | yes | Its entries (any status). |
+| `name` | string | yes | The domain name. |
+
+### `ExperienceDomains`
+
+`experience.domains` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `domains` | array of [`ExperienceDomain`](#experiencedomain) | yes | Sorted by name. |
+
+### `ExperienceEntries`
+
+`experience.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `entries` | array of any | yes | Each entry's `entry.toml` as JSON: domains sorted, newest first. |
+
+### `ExperienceParams`
+
+Params of every `experience.*` method; each uses the fields its command takes.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `all` | boolean | no | `experience.list`: also rolled-back entries. |
+| `domain` | string or null | no | `experience.list`: only this domain. |
+| `entry_id` | string or null | no | The entry (`experience.show`, `experience.pin`, `experience.forget`, `experience.restore`). |
+| `pinned` | boolean or null | no | `experience.pin`: `false` unpins (default `true`). |
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
+
+### `ExperienceReply`
+
+Result of the methods that act on one entry.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `data` | any | no | The entry's `entry.toml` as JSON (`experience.show` adds its `EXPERIENCE.md` as `document`). |
 | `message` | string | yes | What happened, in one line. |
 
 ### `FeatureSupport`
@@ -2285,6 +2331,7 @@ How a daemon session runs: the session-shaping flags of `prometheus chat`, appli
 |---|---|---|---|
 | `api_key` | string or null | no | That endpoint's API key (`--api-key-stdin`), held in memory only. |
 | `base_url` | string or null | no | An endpoint for this session only (`--base-url`). |
+| `domain` | string or null | no | The session's experience-library domain (`--domain`). |
 | `ignore_rules` | boolean | no | No rule files, identity file, memory snapshot or preloaded skills (`--ignore-rules`). |
 | `ignore_user_config` | boolean | no | Schema defaults instead of the profile's `config.toml` (`--ignore-user-config`). |
 | `mock_script` | string or null | no | A mock provider script on the daemon's machine (`--mock-script`). |

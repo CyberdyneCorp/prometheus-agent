@@ -15,11 +15,13 @@ use super::{Live, lifecycle};
 
 impl Live {
     /// Records `session.start` for `session` on `target`'s route, then
-    /// one `security.downgrade` per allowed hardening downgrade.
+    /// one `security.downgrade` per allowed hardening downgrade and the
+    /// experience lessons injected at this open.
     pub(super) async fn emit_start(
         &self,
         session: &pmt_store::Session,
         target: &pmt_providers::resolve::Target,
+        lessons: &[String],
     ) {
         self.emit(Event::SessionStart(SessionStart {
             source: session.source.as_str().to_owned(),
@@ -32,6 +34,7 @@ impl Live {
         for event in self.downgrades.events() {
             self.emit(event).await;
         }
+        self.emit_lessons(lessons).await;
         // The gateway fires its own sessions' start through its hooks.
         if self.surface() != "gateway" {
             let fields = lifecycle::session_start(&self.id.to_string(), self.surface());

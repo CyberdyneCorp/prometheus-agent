@@ -378,6 +378,7 @@ blueprint = "ブループリントからスケジュールジョブを作成: /b
 goal = "エージェントが取り組み続ける常設の目標: /goal <テキスト> | draft <テキスト> | status | show | pause | resume | clear | wait <pid> | unwait | gate add|list|remove|clear"
 subgoal = "有効な目標の追加条件: /subgoal <テキスト> | remove <N> | clear"
 evolve = "このセッションのハーネス進化ジョブをキューに追加: /evolve [--k N]"
+domain = "このセッションの経験ライブラリのドメインを表示または設定: /domain [NAME]"
 loop = "メッセージやコマンドを繰り返す: /loop [間隔] <メッセージ> [--times N] [--until <条件>] | status | pause | resume | stop"
 heartbeat = "アイドル時に確認する: /heartbeat every <間隔> <メッセージ> | status | pause | resume | clear"
 worktree = "Git worktree: 有効なものを表示、new [名前]、list、prune [--dry-run]"

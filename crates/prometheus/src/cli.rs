@@ -170,6 +170,13 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::harness_cmd::HarnessCommand,
     },
+    /// The experience library: entries, domains, pin, forget, restore,
+    /// export, import and rebuild.
+    Experience {
+        /// The experience subcommand.
+        #[command(subcommand)]
+        command: crate::experience_cmd::ExperienceCommand,
+    },
     /// Harness evolution jobs (opt-in: `evolve.enabled = true`).
     #[cfg(feature = "evolve")]
     Evolve {

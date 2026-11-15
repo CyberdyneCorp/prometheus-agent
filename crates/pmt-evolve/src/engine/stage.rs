@@ -131,7 +131,7 @@ impl Run<'_> {
         result: &mut StageResult,
         workspace: &std::path::Path,
     ) -> Attempt {
-        let library = self.engine.library.as_deref();
+        let library = self.library.as_deref();
         let layout = match evidence::build(
             workspace,
             &Spec {
