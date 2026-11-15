@@ -80,6 +80,33 @@ impl Definitions {
         out
     }
 
+    /// Adds the active harness's definitions, `<dir>/<name>/AGENT.md`
+    /// (spec: harness-evolution, Harness loaded once per session); a name
+    /// already defined keeps its first definition.
+    #[must_use]
+    pub fn with_harness(mut self, dir: &Path) -> Self {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return self;
+        };
+        let mut paths: Vec<PathBuf> = entries
+            .filter_map(Result::ok)
+            .map(|e| e.path().join("AGENT.md"))
+            .filter(|p| p.is_file())
+            .collect();
+        paths.sort();
+        for path in paths {
+            match read(&path) {
+                Ok(def) if self.get(&def.name).is_none() => self.agents.push(def),
+                Ok(_) => {}
+                Err(reason) => {
+                    tracing::warn!(path = %path.display(), %reason, "harness subagent definition not loaded");
+                    self.invalid.push(InvalidDefinition { path, reason });
+                }
+            }
+        }
+        self
+    }
+
     /// The definition named `name`.
     #[must_use]
     pub fn get(&self, name: &str) -> Option<&AgentDefinition> {
@@ -115,8 +142,13 @@ fn read(path: &Path) -> Result<AgentDefinition, String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("unreadable: {e}"))?;
     let doc = pmt_skills::frontmatter::parse(&text)
         .map_err(|e| format!("line {}: {}", e.line, e.reason))?;
-    let stem = path
-        .file_stem()
+    // A harness definition is named by its directory (`<name>/AGENT.md`).
+    let named_by = if path.file_name().is_some_and(|n| n == "AGENT.md") {
+        path.parent().and_then(Path::file_name)
+    } else {
+        path.file_stem()
+    };
+    let stem = named_by
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_default();
     if doc.name != stem {
@@ -194,6 +226,20 @@ mod tests {
             reason.contains("critic") && reason.contains("reviewer"),
             "{reason}"
         );
+    }
+
+    #[test]
+    fn harness_definitions_are_named_by_their_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("critic")).unwrap();
+        std::fs::write(
+            dir.path().join("critic/AGENT.md"),
+            "---\nname: critic\ndescription: Reviews code\n---\nBe strict.\n",
+        )
+        .unwrap();
+        let defs = Definitions::default().with_harness(dir.path());
+        assert_eq!(defs.names(), ["critic"]);
+        assert_eq!(defs.get("critic").unwrap().prompt, "Be strict.");
     }
 
     #[test]

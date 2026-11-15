@@ -208,8 +208,13 @@ fn check_tsx(content: &str) -> Result<(), String> {
 }
 
 /// Parses with a tree-sitter grammar and reports the first error or
-/// missing node in document order.
-fn tree_sitter_check(content: &str, language: &tree_sitter::Language) -> Result<(), String> {
+/// missing node in document order (also the harness validator's script
+/// check, which brings its own shell grammar).
+///
+/// # Errors
+///
+/// `line <l>, column <c>: <what>` for the first syntax error.
+pub fn tree_sitter_check(content: &str, language: &tree_sitter::Language) -> Result<(), String> {
     let mut parser = tree_sitter::Parser::new();
     parser
         .set_language(language)

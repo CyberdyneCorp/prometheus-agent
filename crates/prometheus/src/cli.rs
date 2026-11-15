@@ -163,6 +163,20 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::cron_cmd::CronCommand,
     },
+    /// The profile's harness: validate, history, diff, rollback and
+    /// manual edits (works without `evolve.enabled`).
+    Harness {
+        /// The harness subcommand.
+        #[command(subcommand)]
+        command: crate::harness_cmd::HarnessCommand,
+    },
+    /// Harness evolution jobs (opt-in: `evolve.enabled = true`).
+    #[cfg(feature = "evolve")]
+    Evolve {
+        /// The evolve subcommand.
+        #[command(subcommand)]
+        command: crate::evolve_cmd::EvolveCommand,
+    },
     /// Kanban boards shared by every profile: tasks, dependencies, the
     /// dispatcher, workers, review, notifications, export and import.
     Kanban(crate::kanban_cmd::KanbanArgs),

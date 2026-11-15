@@ -125,6 +125,8 @@ impl Factory {
         child: Option<&ChildSpec>,
     ) -> (PromptSetup, Arc<Mutex<Vec<String>>>) {
         let (mut prompt, sections) = self.session_prompt(id, skills, memory, notices).await;
+        prompt.harness = crate::harness_host::session_version(&self.scope, &self.store, id)
+            .and_then(|version| crate::harness_host::layer(&self.scope, &version));
         if let Some(spec) = child {
             spec.shape_prompt(&mut prompt);
         } else if let Some(run) = &self.options.kanban {

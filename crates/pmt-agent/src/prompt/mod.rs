@@ -73,6 +73,8 @@ pub enum Layer {
     ToolGuidance,
     /// Advice for the model family.
     ModelGuidance,
+    /// The session's harness: its always-on files c1-c4.
+    Harness,
     /// The surface's hint.
     PlatformHint,
     /// The skills index.
@@ -97,10 +99,11 @@ pub enum Layer {
 
 impl Layer {
     /// Every layer in prompt order.
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::Identity,
         Self::ToolGuidance,
         Self::ModelGuidance,
+        Self::Harness,
         Self::PlatformHint,
         Self::SkillsIndex,
         Self::PinnedSkills,
@@ -118,7 +121,9 @@ impl Layer {
     pub const fn tier(self) -> Tier {
         match self {
             Self::Identity | Self::ToolGuidance | Self::ModelGuidance => Tier::Static,
-            Self::PlatformHint | Self::SkillsIndex | Self::PinnedSkills => Tier::Profile,
+            Self::Harness | Self::PlatformHint | Self::SkillsIndex | Self::PinnedSkills => {
+                Tier::Profile
+            }
             _ => Tier::Session,
         }
     }
@@ -132,6 +137,9 @@ impl Layer {
             }
             Self::ToolGuidance => "How to use the tools the session was given.",
             Self::ModelGuidance => "Advice for the model family, when one applies.",
+            Self::Harness => {
+                "The harness version the session started on: its non-empty `SYSTEM.md`, `GUARDRAILS.md`, `MEMORY_POLICY.md` and `TOOL_GUIDANCE.md` in that order, right after the built-in base and before every profile, project and memory layer."
+            }
             Self::PlatformHint => {
                 "The surface's hint, changed by `prompt.platform_hints.<platform>`."
             }
@@ -156,6 +164,7 @@ impl Layer {
             Self::Identity => "identity",
             Self::ToolGuidance => "tool_guidance",
             Self::ModelGuidance => "model_guidance",
+            Self::Harness => "harness",
             Self::PlatformHint => "platform_hint",
             Self::SkillsIndex => "skills_index",
             Self::PinnedSkills => "pinned_skills",
@@ -270,6 +279,8 @@ pub struct PromptInputs {
     pub tool_names: Vec<String>,
     /// The caller's system message.
     pub caller_system: Option<String>,
+    /// The harness layer (the session's harness version).
+    pub harness: Option<String>,
     /// The skills index (skills subsystem).
     pub skills_index: Option<String>,
     /// Skills pinned into every session (skills subsystem).
@@ -319,6 +330,7 @@ pub fn build(inputs: &PromptInputs) -> Result<Built, Error> {
         Layer::ModelGuidance,
         blocks::model_guidance(&inputs.model).map(str::to_owned),
     ));
+    sections.push(section(Layer::Harness, inputs.harness.clone()));
     sections.push(section(
         Layer::PlatformHint,
         platform::hint(

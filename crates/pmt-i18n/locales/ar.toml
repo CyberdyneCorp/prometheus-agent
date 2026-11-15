@@ -377,6 +377,7 @@ suggestions = "أتمتة مقترحة: list, accept <n>, dismiss <n>, catalog, 
 blueprint = "ينشئ مهمة مجدولة من مخطط: /blueprint [اسم] [خانة=قيمة ...]"
 goal = "هدف دائم يواصل الوكيل العمل نحوه: /goal <نص> | draft <نص> | status | show | pause | resume | clear | wait <pid> | unwait | gate add|list|remove|clear"
 subgoal = "معايير إضافية للهدف النشط: /subgoal <نص> | remove <N> | clear"
+evolve = "أضف مهمة تطوير الحزام لهذه الجلسة إلى قائمة الانتظار: /evolve [--k N]"
 loop = "يكرر رسالة أو أمرًا: /loop [فاصل] <رسالة> [--times N] [--until <شرط>] | status | pause | resume | stop"
 heartbeat = "يتفقد أثناء الخمول: /heartbeat every <فاصل> <رسالة> | status | pause | resume | clear"
 worktree = "أشجار عمل Git: يعرض النشطة، new [اسم]، list، prune [--dry-run]"

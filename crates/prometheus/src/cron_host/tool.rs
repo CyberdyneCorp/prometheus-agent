@@ -136,6 +136,9 @@ pub(crate) fn fields(arguments: &Value, scope: &ProfileScope) -> Result<Fields, 
         // The chain is the owner's routing decision: `cron create/edit
         // --fallback`, not the agent's.
         fallback: None,
+        // Scheduling harness evolution is the user's call (`cron create
+        // --evolve-task`), not the agent's.
+        evolve_task: None,
     })
 }
 

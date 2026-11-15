@@ -82,6 +82,9 @@ pub struct Fields {
     /// The fallback chain as `provider/model` entries: `["none"]` declares
     /// `[]` (fallback off), `[""]` removes the declaration.
     pub fallback: Option<Vec<String>>,
+    /// An evolution task file (relative to the profile directory): the job
+    /// becomes `kind = "evolve"`; an empty string makes it an agent job.
+    pub evolve_task: Option<String>,
 }
 
 fn invalid(message: String) -> Error {
@@ -207,6 +210,14 @@ impl Fields {
     }
 
     fn apply_payload(&self, spec: &mut JobSpec) {
+        if let Some(task) = &self.evolve_task {
+            set(&mut spec.task, Some(task));
+            spec.kind = if spec.task.is_some() {
+                crate::job::JobKind::Evolve
+            } else {
+                crate::job::JobKind::Agent
+            };
+        }
         if let Some(prompt) = &self.prompt {
             spec.prompt.clone_from(prompt);
         }

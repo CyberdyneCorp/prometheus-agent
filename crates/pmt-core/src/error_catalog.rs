@@ -1270,6 +1270,24 @@ error_codes! {
     /// The peer refused the request.
     PEER_REJECTED = ("peer.rejected", Tool,
         "The peer's API server refused the request; the message carries its answer (an unknown run, a run that cannot be stopped, a paused home, a busy profile).");
+    /// Harness evolution is turned off for the profile.
+    EVOLVE_DISABLED = ("evolve.disabled", Config,
+        "Harness evolution is opt-in per profile: set `evolve.enabled = true` in the profile's `config.toml` (`prometheus config set evolve.enabled true`). The `prometheus harness` commands work without it.");
+    /// An evolution task could not be captured or is malformed.
+    EVOLVE_INVALID_TASK = ("evolve.invalid_task", InvalidInput,
+        "The evolution task could not be frozen: its task file is malformed, its session has no user message, or its workspace snapshot exceeds `evolve.task.max_source_bytes`; nothing was queued.");
+    /// No evolution job has the id.
+    EVOLVE_JOB_NOT_FOUND = ("evolve.job_not_found", NotFound,
+        "No evolution job of this profile has this id; `prometheus evolve list` shows the jobs.");
+    /// A harness tree failed validation.
+    HARNESS_INVALID = ("harness.invalid", InvalidInput,
+        "The harness tree failed validation; every error is listed (paths outside the editable surface, size caps, skill and subagent front matter, script syntax and references, `hooks.toml` keys and events, templates, secrets). No version was written.");
+    /// No harness version matches the reference.
+    HARNESS_VERSION_NOT_FOUND = ("harness.version_not_found", NotFound,
+        "No harness version has this id (`h<n>` or `h<n>-<fingerprint>`), or the version is not in the tree; `prometheus harness log` lists the versions.");
+    /// A harness version could not be read or written.
+    HARNESS_IO = ("harness.io", Io,
+        "A file under `<profile>/harness/` could not be read or written.");
     /// The session cannot take turns.
     SESSION_READ_ONLY = ("session.read_only", PermissionDenied,
         "The session is read-only: an imported Hermes A2A conversation whose peer binding cannot be proven is kept for reading (`prometheus sessions show`) but never attached to a live A2A conversation; `prometheus doctor` lists them.");

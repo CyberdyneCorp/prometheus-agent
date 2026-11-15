@@ -26,6 +26,7 @@ mod cron;
 mod curator;
 mod delegation;
 mod desktop;
+mod evolve;
 mod gateway;
 mod gateway_display;
 mod gateway_groups;
@@ -78,6 +79,9 @@ pub use delegation::{
     DelegationConfig, GatewayDelegationMode, ReviewConfig,
 };
 pub use desktop::{DesktopConfig, HudConfig, QuickAskConfig};
+pub use evolve::{
+    DEFAULT_LEAK_GLOBS, EvolveAutoConfig, EvolveConfig, EvolveMode, EvolveTaskConfig, HarnessConfig,
+};
 pub use gateway::{
     AgentCacheConfig, AllowBots, BackgroundNotifications, Batching, ChatPolicy, ChatToolProgress,
     DedupConfig, DeliveryConfig, EffectiveBots, EffectiveBusy, EffectiveDisplay, EffectiveGroups,
@@ -217,6 +221,8 @@ pub struct Config {
     pub debug: DebugConfig,
     /// Display preferences of interactive surfaces.
     pub display: DisplayConfig,
+    /// Harness evolution (opt-in).
+    pub evolve: EvolveConfig,
     /// Provider fallback.
     pub fallback: FallbackConfig,
     /// `read_file` limits.
@@ -227,6 +233,8 @@ pub struct Config {
     pub goals: GoalsConfig,
     /// `/heartbeat` bounds.
     pub heartbeat: HeartbeatConfig,
+    /// Harness size caps.
+    pub harness: HarnessConfig,
     /// Image generation (`image_generate`).
     pub image_gen: ImageGenConfig,
     /// Shell hooks and outbound webhooks.
@@ -362,11 +370,13 @@ impl Default for Config {
             projects: ProjectsConfig::default(),
             debug: DebugConfig::default(),
             display: DisplayConfig::default(),
+            evolve: EvolveConfig::default(),
             fallback: FallbackConfig::default(),
             files: FilesConfig::default(),
             gateway: GatewayConfig::default(),
             goals: GoalsConfig::default(),
             heartbeat: HeartbeatConfig::default(),
+            harness: HarnessConfig::default(),
             image_gen: ImageGenConfig::default(),
             hooks: HooksConfig::default(),
             kanban: KanbanConfig::default(),

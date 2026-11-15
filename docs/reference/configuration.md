@@ -316,6 +316,16 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `display.tool_progress_grouping` | one of "accumulate", "separate" | `"accumulate"` | `"accumulate"`, `"separate"` | `live` | How consecutive tool calls are grouped. |
 | `display.turn_summary` | boolean | `true` | any | `live` | One line with duration, tool count and tokens after each turn. |
 | `display.vim_mode` | boolean | `false` | any | `next_session` | Vim key bindings in the composer (the line editor is set up when the session starts). |
+| `evolve.auto.enabled` | boolean | `false` | any | `live` | Queue jobs automatically at all. |
+| `evolve.auto.max_jobs_per_day` | integer | `3` | ≥ 0 | `live` | Automatic jobs per profile per day. |
+| `evolve.auto.min_iterations` | integer | `40` | ≥ 1 | `live` | What counts as a long session. |
+| `evolve.auto.on_failure` | boolean | `true` | any | `live` | After a session that ended in error or interruption after at least one tool call. |
+| `evolve.auto.on_long_task` | boolean | `true` | any | `live` | After a session of at least `min_iterations` iterations. |
+| `evolve.enabled` | boolean | `false` | any | `live` | Allow harness evolution in this profile (`prometheus evolve`, `/evolve`, the `evolve.*` RPC methods, scheduled and automatic jobs). |
+| `evolve.k` | integer | `2` | 1 to 8 | `live` | Recursion budget k: each mode spends 4k rollouts and 3k improver sessions. |
+| `evolve.leak_globs` | array of string | `["**/*reference_answer*","**/*rubric*","**/expected/**","**/*.expected.*","**/.pmt-eval/**"]` | any | `live` | Files never captured into a task, evidence or library entry, matched against the full relative path (leading dots included). |
+| `evolve.mode` | one of "parallel", "sequential", "both" | `"parallel"` | `"parallel"`, `"sequential"`, `"both"` | `live` | `parallel` (width), `sequential` (depth) or `both` (one proposal per mode on shared base rollouts). |
+| `evolve.task.max_source_bytes` | integer | `52428800` | ≥ 1 | `live` | Largest workspace snapshot of a task, in bytes. |
 | `fallback.chain` | array of table | `[]` | any | `next_session` | Ordered fallback routes (`[[fallback.chain]]`); empty disables fallback. |
 | `fallback.min_health` | number | `0.2` | 0.0 to 1.0 | `next_session` | Fallback entries with a health score below this are skipped. |
 | `files.read_max_chars` | integer | `100000` | ≥ 0 | `live` | Formatted characters `read_file` returns per call. |
@@ -483,6 +493,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `goals.gate_timeout_secs` | integer | `300` | 1 to 86400 | `live` | Seconds one quality gate command may run. |
 | `goals.max_turns` | integer | `20` | 1 to 1000 | `live` | Continuation turns a goal may use before it pauses. |
 | `goals.max_wait_secs` | integer | `1800` | 1 to 86400 | `live` | Longest wait of a goal parked on a process (seconds). |
+| `harness.always_on_cap_chars` | integer | `24000` | 4000 to 64000 | `live` | Combined characters of `SYSTEM.md`, `GUARDRAILS.md`, `MEMORY_POLICY.md` and `TOOL_GUIDANCE.md` a harness may hold. |
 | `heartbeat.min_interval_secs` | integer | `60` | 1 to 86400 | `live` | Shortest `/heartbeat every` interval (seconds). |
 | `hooks.auto_accept` | boolean | `false` | any | `next_session` | Run shell hooks nobody approved yet without asking (as `--accept-hooks` does for one run); every hook still runs in the session's sandbox. |
 | `hooks.outbound` | array of table | `[]` | any | `next_session` | Outbound webhooks: hook events sent as HTTPS `POST` requests. |

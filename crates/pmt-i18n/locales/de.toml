@@ -377,6 +377,7 @@ suggestions = "Vorgeschlagene Automatisierungen: list, accept <n>, dismiss <n>, 
 blueprint = "Einen geplanten Job aus einer Vorlage erstellen: /blueprint [name] [slot=wert ...]"
 goal = "Ein dauerhaftes Ziel, auf das der Agent hinarbeitet: /goal <text> | draft <text> | status | show | pause | resume | clear | wait <pid> | unwait | gate add|list|remove|clear"
 subgoal = "Zusätzliche Kriterien des aktiven Ziels: /subgoal <text> | remove <N> | clear"
+evolve = "Eine Harness-Evolution für diese Sitzung einreihen: /evolve [--k N]"
 loop = "Eine Eingabe oder einen Befehl wiederholen: /loop [intervall] <eingabe> [--times N] [--until <bedingung>] | status | pause | resume | stop"
 heartbeat = "Im Leerlauf nachsehen: /heartbeat every <intervall> <eingabe> | status | pause | resume | clear"
 worktree = "Git-Worktrees: den aktiven zeigen, new [NAME], list, prune [--dry-run]"

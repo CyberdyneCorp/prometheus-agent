@@ -37,6 +37,7 @@
 - [Kanban](guide/kanban.md)
 - [Session automation](guide/session-automation.md)
 - [Skills](guide/skills.md)
+- [The harness and its evolution](guide/harness.md)
 - [Memory](guide/memory.md)
 - [Capabilities, grants and redaction](guide/security.md)
 - [Plugins](guide/plugins.md)

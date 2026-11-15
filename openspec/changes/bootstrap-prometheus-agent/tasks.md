@@ -617,9 +617,9 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 69. M3 Harness evolution
 
-- [ ] 69.1 Implement opt-in gating, the harness tree layout, editable surface with component numbering, size caps, validation that collects every error (exit 65) and loading once per session; verify `prometheus harness validate` on fixtures (spec: harness-evolution)
-- [ ] 69.2 Implement execution confinement, history/diff (`harness log|show|diff`), rollback and manual edits; verify that a rollback writes a new version (spec: harness-evolution)
-- [ ] 69.3 Implement task capture, on-demand/scheduled/automatic triggers, modes with budget k → R=4k rollouts and P=3k improver sessions, and labels; verify the budget arithmetic with tests (spec: harness-evolution)
+- [x] 69.1 Implement opt-in gating, the harness tree layout, editable surface with component numbering, size caps, validation that collects every error (exit 65) and loading once per session; verify `prometheus harness validate` on fixtures (spec: harness-evolution)
+- [x] 69.2 Implement execution confinement, history/diff (`harness log|show|diff`), rollback and manual edits; verify that a rollback writes a new version (spec: harness-evolution)
+- [x] 69.3 Implement task capture, on-demand/scheduled/automatic triggers, modes with budget k → R=4k rollouts and P=3k improver sessions, and labels; verify the budget arithmetic with tests (spec: harness-evolution)
 - [ ] 69.4 Implement parallel and sequential modes with isolated rollouts, side-effect recorders for `effect = external` tools, improver sessions, stage acceptance/retry/fallback and the evidence context; verify with the mock provider (spec: harness-evolution)
 - [ ] 69.5 Implement answer-free prompts, leak globs with the verdict tripwire, the budget ledger and spend cap, and concurrency limits; verify that a planted rubric file aborts the job (spec: harness-evolution)
 - [ ] 69.6 Implement blind anonymised selection, user-driven selection, proposals with adoption policy (approval required for scripts, hooks and subagents; never widening capabilities), stale-proposal protection, job lifecycle/events/RPC, resume with the content-addressed session cache and human-only evaluation; verify with end-to-end mock jobs (spec: harness-evolution)

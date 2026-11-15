@@ -120,6 +120,14 @@ impl Live {
         if let Err(err) = store.end_session(self.id, reason) {
             tracing::warn!(error = %err, session = %self.id, "could not end the session");
         }
+        if let Some(notice) =
+            crate::evolve_cmd::auto::after_end(&self.scope, store, self.id, reason)
+        {
+            tracing::info!(session = %self.id, "{notice}");
+            if self.surface() == "cli" {
+                eprintln!("{notice}");
+            }
+        }
         // The gateway fires its own sessions' end through its hooks.
         if self.surface() != "gateway" {
             let fields = serde_json::json!({

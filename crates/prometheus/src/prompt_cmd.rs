@@ -119,6 +119,7 @@ async fn measure<'a>(
         context_window: Some(meta.context_window),
         tool_names: surface.names().map(str::to_owned).collect(),
         caller_system: None,
+        harness: crate::harness_host::active_layer(scope),
         skills_index: None,
         pinned_skills: None,
         memory: None,

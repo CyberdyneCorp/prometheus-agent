@@ -25,6 +25,10 @@ pub enum Tier {
     Project,
     /// `<profile>/skills/`.
     Profile,
+    /// The `skills/` of the session's harness version (registered for
+    /// that session only; never shadows an installed skill, which
+    /// harness validation refuses).
+    Harness,
     /// A `skills.external_dirs` entry.
     External,
     /// A plugin's skills (`<plugin>:<skill>`).
@@ -40,6 +44,7 @@ impl Tier {
         match self {
             Self::Project => "project",
             Self::Profile => "profile",
+            Self::Harness => "harness",
             Self::External => "external",
             Self::Plugin => "plugin",
             Self::Bundled => "bundled",
@@ -86,6 +91,8 @@ pub struct RootInputs<'a> {
     pub user_home: Option<&'a Path>,
     /// Plugin skill directories, `(plugin id, directory)` (M2 plugins).
     pub plugins: &'a [(String, PathBuf)],
+    /// The session's harness `skills/` directory.
+    pub harness: Option<&'a Path>,
     /// The bundled tree.
     pub bundled: Arc<Bundled>,
 }
@@ -160,6 +167,9 @@ impl Roots {
         let mut roots = Self::default();
         roots.project(inputs);
         roots.push(Tier::Profile, profile_skills(inputs.profile_dir), None);
+        if let Some(dir) = inputs.harness.filter(|d| d.is_dir()) {
+            roots.push(Tier::Harness, dir.to_path_buf(), None);
+        }
         for entry in &inputs.config.external_dirs {
             let dir = expand(entry, inputs.user_home);
             if dir.is_dir() {

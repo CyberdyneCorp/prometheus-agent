@@ -18,6 +18,8 @@ Commands:
   browser      Browser sessions: status, and closing the real browser whose profile real-profile browsing copies
   lsp          Language servers behind the diagnostics of file edits: status, registry, installs, restart
   cron         Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and the headless tick
+  harness      The profile's harness: validate, history, diff, rollback and manual edits (works without `evolve.enabled`)
+  evolve       Harness evolution jobs (opt-in: `evolve.enabled = true`)
   kanban       Kanban boards shared by every profile: tasks, dependencies, the dispatcher, workers, review, notifications, export and import
   worktrees    Git worktrees of sessions and subagents: list, sweep and restore archived trees
   projects     Projects: named workspaces spanning folders, the active project, archive and restore

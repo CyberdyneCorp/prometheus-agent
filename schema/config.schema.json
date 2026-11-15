@@ -3052,6 +3052,134 @@
       },
       "type": "object"
     },
+    "EvolveAutoConfig": {
+      "additionalProperties": false,
+      "description": "`[evolve.auto]`: jobs queued when a session ends badly or long.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Queue jobs automatically at all.",
+          "type": "boolean"
+        },
+        "max_jobs_per_day": {
+          "default": 3,
+          "description": "Automatic jobs per profile per day.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "min_iterations": {
+          "default": 40,
+          "description": "What counts as a long session.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "on_failure": {
+          "default": true,
+          "description": "After a session that ended in error or interruption after at\nleast one tool call.",
+          "type": "boolean"
+        },
+        "on_long_task": {
+          "default": true,
+          "description": "After a session of at least `min_iterations` iterations.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "EvolveConfig": {
+      "additionalProperties": false,
+      "description": "The `[evolve]` section.",
+      "properties": {
+        "auto": {
+          "$ref": "#/$defs/EvolveAutoConfig",
+          "default": {
+            "enabled": false,
+            "max_jobs_per_day": 3,
+            "min_iterations": 40,
+            "on_failure": true,
+            "on_long_task": true
+          },
+          "description": "Automatic jobs after failed or long sessions."
+        },
+        "enabled": {
+          "default": false,
+          "description": "Allow harness evolution in this profile (`prometheus evolve`,\n`/evolve`, the `evolve.*` RPC methods, scheduled and automatic\njobs).",
+          "type": "boolean"
+        },
+        "k": {
+          "default": 2,
+          "description": "Recursion budget k: each mode spends 4k rollouts and 3k improver\nsessions.",
+          "format": "uint8",
+          "maximum": 8,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "leak_globs": {
+          "default": [
+            "**/*reference_answer*",
+            "**/*rubric*",
+            "**/expected/**",
+            "**/*.expected.*",
+            "**/.pmt-eval/**"
+          ],
+          "description": "Files never captured into a task, evidence or library entry,\nmatched against the full relative path (leading dots included).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "mode": {
+          "$ref": "#/$defs/EvolveMode",
+          "default": "parallel",
+          "description": "`parallel` (width), `sequential` (depth) or `both` (one proposal\nper mode on shared base rollouts)."
+        },
+        "task": {
+          "$ref": "#/$defs/EvolveTaskConfig",
+          "default": {
+            "max_source_bytes": 52428800
+          },
+          "description": "Task capture."
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
+    "EvolveMode": {
+      "description": "How an evolution job searches.",
+      "oneOf": [
+        {
+          "const": "parallel",
+          "description": "k independent compositions of 2k candidates.",
+          "type": "string"
+        },
+        {
+          "const": "sequential",
+          "description": "k rounds, each composing a checkpoint from the history.",
+          "type": "string"
+        },
+        {
+          "const": "both",
+          "description": "Both modes on the same base rollouts; at most one is adopted.",
+          "type": "string"
+        }
+      ]
+    },
+    "EvolveTaskConfig": {
+      "additionalProperties": false,
+      "description": "`[evolve.task]`: freezing a job's task.",
+      "properties": {
+        "max_source_bytes": {
+          "default": 52428800,
+          "description": "Largest workspace snapshot of a task, in bytes.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "FallbackConfig": {
       "additionalProperties": false,
       "description": "The `[fallback]` section.",
@@ -4046,6 +4174,22 @@
           "type": "string"
         }
       ]
+    },
+    "HarnessConfig": {
+      "additionalProperties": false,
+      "description": "The `[harness]` section.",
+      "properties": {
+        "always_on_cap_chars": {
+          "default": 24000,
+          "description": "Combined characters of `SYSTEM.md`, `GUARDRAILS.md`,\n`MEMORY_POLICY.md` and `TOOL_GUIDANCE.md` a harness may hold.",
+          "format": "uint32",
+          "maximum": 64000,
+          "minimum": 4000,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
     },
     "HealthListenerConfig": {
       "additionalProperties": false,
@@ -11882,6 +12026,32 @@
       },
       "description": "Display preferences of interactive surfaces."
     },
+    "evolve": {
+      "$ref": "#/$defs/EvolveConfig",
+      "default": {
+        "auto": {
+          "enabled": false,
+          "max_jobs_per_day": 3,
+          "min_iterations": 40,
+          "on_failure": true,
+          "on_long_task": true
+        },
+        "enabled": false,
+        "k": 2,
+        "leak_globs": [
+          "**/*reference_answer*",
+          "**/*rubric*",
+          "**/expected/**",
+          "**/*.expected.*",
+          "**/.pmt-eval/**"
+        ],
+        "mode": "parallel",
+        "task": {
+          "max_source_bytes": 52428800
+        }
+      },
+      "description": "Harness evolution (opt-in)."
+    },
     "fallback": {
       "$ref": "#/$defs/FallbackConfig",
       "default": {
@@ -12002,6 +12172,13 @@
         "max_wait_secs": 1800
       },
       "description": "`/goal`: the judge loop's turn budget, quality gates and waits."
+    },
+    "harness": {
+      "$ref": "#/$defs/HarnessConfig",
+      "default": {
+        "always_on_cap_chars": 24000
+      },
+      "description": "Harness size caps."
     },
     "heartbeat": {
       "$ref": "#/$defs/HeartbeatConfig",

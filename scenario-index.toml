@@ -85,6 +85,7 @@ capabilities = [
     "desktop-app",
     "kanban",
     "distribution-and-update",
+    "harness-evolution",
     "messaging-gateway",
     "plugin-system",
     "projects",
@@ -4575,7 +4576,7 @@ capabilities = [
 
 [kanban."Eval and harness-evolution tasks (upgrade)"]
 "Eval task on replayed provider" = { deferred = "71.1 prometheus eval run (provider_mode live|replay for the assignee profile): today an eval task runs the bundled smoke suite on the mock provider and ignores provider_mode (kanban_cli.rs::an_eval_task_runs_the_smoke_suite_offline_and_attaches_its_report covers only that)" }
-"Evolve task requires approval" = { deferred = "69 harness evolution engine (prometheus evolve, harness adoption from the next session): today an evolve task is validated and its completion always lands in review, but the worker blocks it with kind capability because no evolution engine exists in this build" }
+"Evolve task requires approval" = { deferred = "69.4-69.6 harness evolution engine and proposal adoption: today an evolve task is validated, its worker queues the evolution job (trigger kanban, the task id recorded) and stops naming it, because no engine runs jobs yet" }
 
 [kanban."Event log and run history"]
 "Audit a refusal" = ["crates/prometheus/tests/kanban_cli.rs::a_refused_completion_is_in_the_log"]
@@ -4637,3 +4638,56 @@ capabilities = [
 
 [projects."Kanban board binding"]
 "Branch convention" = ["crates/prometheus/tests/kanban_upgrades.rs::a_bound_projects_board_is_selected_and_names_the_branch"]
+
+# M3 group 69 (harness evolution 69.1-69.3): crates/pmt-config/src/harness
+# holds the tree and its on-disk versions, crates/pmt-evolve the surface,
+# validation, budget, task capture and triggers; crates/prometheus/tests
+# harness_cli.rs and evolve_cli.rs run the CLI, sessions and `/evolve` on
+# the mock provider.
+[harness-evolution."Opt-in per profile"]
+"Disabled profile" = ["crates/prometheus/tests/evolve_cli.rs::a_disabled_profile_exits_78_and_writes_nothing", "crates/pmt-evolve/tests/jobs.rs::a_disabled_profile_refuses_with_78_and_creates_nothing", "crates/pmt-evolve/src/gate.rs::a_profile_without_the_section_is_refused_with_exit_78"]
+"Harness inspection without evolution" = ["crates/prometheus/tests/harness_cli.rs::the_log_works_on_a_profile_without_evolution"]
+
+[harness-evolution."Harness tree and on-disk layout"]
+"Fresh profile" = ["crates/prometheus/tests/harness_cli.rs::a_fresh_profile_activates_the_builtin_version_with_empty_always_on_files", "crates/pmt-config/src/harness/versions.rs::a_fresh_profile_gets_the_builtin_version_once"]
+"Traversal rejected" = ["crates/pmt-evolve/tests/validate.rs::a_traversal_key_fails_naming_the_path", "crates/prometheus/tests/harness_cli.rs::an_invalid_apply_writes_no_version"]
+
+[harness-evolution."Editable surface and component numbering"]
+"Off-surface write" = ["crates/pmt-evolve/tests/validate.rs::off_surface_paths_are_listed_and_reject_the_tree", "crates/pmt-evolve/src/harness/surface.rs::each_component_number_names_exactly_one_component"]
+
+[harness-evolution."Harness size caps"]
+"Always-on cap exceeded" = ["crates/pmt-evolve/tests/validate.rs::always_on_text_one_char_over_the_cap_fails"]
+
+[harness-evolution."Harness validation"]
+"Missing referenced script" = ["crates/prometheus/tests/harness_cli.rs::validate_accepts_the_valid_fixture_and_lists_every_error_of_the_others", "crates/pmt-evolve/tests/validate.rs::a_referenced_script_must_exist"]
+"Skill without trigger line is repaired" = ["crates/pmt-evolve/tests/validate.rs::an_unnamed_skill_gets_its_trigger_line", "crates/prometheus/tests/harness_cli.rs::a_harness_subagent_and_skill_are_registered_for_the_session"]
+"Unknown hook event" = ["crates/pmt-evolve/tests/validate.rs::an_unknown_hook_event_is_refused"]
+
+[harness-evolution."Harness loaded once per session"]
+"Adoption mid-session" = { tests = ["crates/prometheus/tests/harness_cli.rs::an_open_session_keeps_its_harness_until_an_explicit_now", "crates/prometheus/tests/harness_cli.rs::a_now_activation_rebuilds_an_open_session_at_its_next_turn"], note = "the new version is activated with `harness apply`, the activation path an adopted proposal also takes (proposal adoption itself arrives with task 69.6)" }
+
+[harness-evolution."Harness execution confinement"]
+"Hook asking for network" = ["crates/pmt-evolve/tests/validate.rs::a_hooks_file_cannot_ask_for_network"]
+
+[harness-evolution."Harness history and diff"]
+"Diff summary" = ["crates/pmt-evolve/src/harness/diff.rs::a_new_skill_and_a_grown_guardrails_file_summarize_as_the_spec_shows", "crates/prometheus/tests/harness_cli.rs::diff_prints_the_unified_diff_and_the_summary"]
+
+[harness-evolution."Rollback and manual edits"]
+"Rollback creates a new version" = ["crates/prometheus/tests/harness_cli.rs::a_rollback_writes_a_new_version_with_the_old_tree"]
+
+[harness-evolution."On-demand and scheduled triggers"]
+"Slash command does not block" = { tests = ["crates/prometheus/tests/evolve_cli.rs::slash_evolve_answers_with_the_job_id_without_a_model_call"], note = "unix: driven through a pseudo-terminal" }
+"Cron-triggered evolution" = ["crates/prometheus/tests/evolve_cli.rs::a_scheduled_evolve_job_queues_an_evolution_job_with_its_id", "crates/pmt-evolve/tests/jobs.rs::a_cron_trigger_records_its_trigger_and_job_id"]
+
+[harness-evolution."Automatic triggers after failed or long tasks"]
+"Daily cap" = ["crates/pmt-evolve/tests/jobs.rs::the_fourth_automatic_job_of_a_day_is_not_queued", "crates/pmt-evolve/src/job/auto.rs::a_fourth_qualifying_session_is_stopped_by_the_daily_cap"]
+
+[harness-evolution."Evolution task capture"]
+"Git workspace" = ["crates/pmt-evolve/tests/jobs.rs::a_git_session_freezes_head_and_a_patch_that_reproduces_it"]
+
+[harness-evolution."Modes, budget and labels"]
+"Parallel k=2 labels" = ["crates/pmt-evolve/src/job/budget.rs::parallel_k2_has_the_spec_stage_and_composition_labels"]
+"Invalid k" = ["crates/prometheus/tests/evolve_cli.rs::k_nine_is_a_usage_error", "crates/pmt-evolve/src/job/budget.rs::k_outside_one_to_eight_is_a_usage_error"]
+
+[harness-evolution."Leak globs and verdict tripwire"]
+"Dot-file glob honoured" = ["crates/pmt-evolve/tests/jobs.rs::a_dot_file_leak_glob_is_excluded_from_the_snapshot"]

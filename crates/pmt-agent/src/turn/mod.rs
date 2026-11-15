@@ -100,6 +100,9 @@ pub struct PromptSetup {
     pub pass_session_id: bool,
     /// The caller's system message.
     pub caller_system: Option<String>,
+    /// The harness layer, read once at session start (an explicit
+    /// `--now` activation replaces it at the next rebuild).
+    pub harness: Option<String>,
     /// Skills index text (skills subsystem).
     pub skills_index: Option<String>,
     /// Pinned skills text (skills subsystem).
@@ -124,6 +127,7 @@ impl PromptSetup {
             no_context_files: false,
             pass_session_id: false,
             caller_system: None,
+            harness: None,
             skills_index: None,
             pinned_skills: None,
             memory: None,

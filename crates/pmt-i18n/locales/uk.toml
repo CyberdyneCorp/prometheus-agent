@@ -377,6 +377,7 @@ suggestions = "Запропоновані автоматизації: list, acce
 blueprint = "Створити завдання за розкладом із шаблону: /blueprint [ім'я] [слот=значення ...]"
 goal = "Постійна мета, до якої агент і далі йде: /goal <текст> | draft <текст> | status | show | pause | resume | clear | wait <pid> | unwait | gate add|list|remove|clear"
 subgoal = "Додаткові критерії активної мети: /subgoal <текст> | remove <N> | clear"
+evolve = "Поставити в чергу еволюцію харнесу для цього сеансу: /evolve [--k N]"
 loop = "Повторювати повідомлення чи команду: /loop [інтервал] <повідомлення> [--times N] [--until <умова>] | status | pause | resume | stop"
 heartbeat = "Перевіряти під час простою: /heartbeat every <інтервал> <повідомлення> | status | pause | resume | clear"
 worktree = "Git worktree: показати активний, new [ІМ'Я], list, prune [--dry-run]"

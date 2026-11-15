@@ -1124,6 +1124,8 @@ impl Factory {
         setup.user_home = self.launch.user_home().cloned();
         setup.view = skills::view(selection);
         setup.plugins = self.plugins.current().skill_dirs();
+        setup.harness = crate::harness_host::session_version(&self.scope, &self.store, id)
+            .and_then(|version| crate::harness_host::skills_dir(&self.scope, &version));
         let (plugins, call) = (self.plugins.clone(), self.plugin_call(id));
         let announce = announce.clone();
         setup.lifecycle = Some(Arc::new(move |skill: &str, action: &str| {
@@ -1203,11 +1205,12 @@ impl Factory {
     ) {
         setup.summarizer = Some(summarizer as _);
         setup.memory = Some(Arc::clone(memory) as _);
-        setup.refresh_prompt = Some(refresher(
-            skills,
-            memory,
-            sections,
-            self.options.ignore_rules,
+        let base = refresher(skills, memory, sections, self.options.ignore_rules);
+        setup.refresh_prompt = Some(crate::harness_host::now::refresher(
+            base,
+            self.scope.clone(),
+            Arc::clone(&self.store),
+            setup.session,
         ));
     }
 

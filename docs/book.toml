@@ -18,7 +18,9 @@ create-missing = false
 # The generated wire reference repeats every contract's field docs, and the
 # generated error-code table repeats each code's message; the search index
 # stays under mdbook's 10 MB warning without them (the guides explain the
-# same methods and errors in prose).
+# same methods and errors in prose). The Hermes parity table is a project
+# page, not user documentation, and stays out of the index too.
 [output.html.search.chapter]
 "reference/rpc.md" = { enable = false }
 "reference/error-codes.md" = { enable = false }
+"hermes-parity.md" = { enable = false }

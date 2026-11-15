@@ -85,7 +85,12 @@ impl Wiring {
             root: session.root_session_id,
             depth: child.map_or(0, |c| c.depth),
             registry: Arc::clone(registry),
-            agents: Definitions::load(&[scope.dir().join("agents")]),
+            agents: harness_agents(
+                Definitions::load(&[scope.dir().join("agents")]),
+                &scope,
+                &factory.store,
+                session.id,
+            ),
             router: super::routers::select(
                 &config.router,
                 &factory.plugins,
@@ -281,5 +286,20 @@ impl EventSink for LateEvents {
             Some(sink) => sink.emit(emit),
             None => Box::pin(async { Ok(()) }),
         }
+    }
+}
+
+/// `agents` plus the subagent definitions of the session's harness.
+fn harness_agents(
+    agents: Definitions,
+    scope: &pmt_config::ProfileScope,
+    store: &pmt_store::Store,
+    session: pmt_core::id::SessionId,
+) -> Definitions {
+    match crate::harness_host::session_version(scope, store, session)
+        .and_then(|version| crate::harness_host::agents_dir(scope, &version))
+    {
+        Some(dir) => agents.with_harness(&dir),
+        None => agents,
     }
 }

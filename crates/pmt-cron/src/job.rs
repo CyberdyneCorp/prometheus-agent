@@ -52,6 +52,25 @@ impl MemoryMode {
     }
 }
 
+/// What a run of the job does.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum JobKind {
+    /// The monitor, script and agent stages.
+    #[default]
+    Agent,
+    /// Queues a harness-evolution job for `task` (spec: harness-evolution,
+    /// On-demand and scheduled triggers); no agent runs.
+    Evolve,
+}
+
+impl JobKind {
+    #[allow(clippy::trivially_copy_pass_by_ref)] // serde's skip_serializing_if passes a reference
+    fn is_agent(&self) -> bool {
+        *self == Self::Agent
+    }
+}
+
 /// Per-job run limits; unset values use the `cron.*` defaults.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Timeout {
@@ -68,6 +87,12 @@ pub struct Timeout {
 pub struct JobSpec {
     /// When it fires.
     pub schedule: Schedule,
+    /// What a run does (`evolve` queues an evolution job).
+    #[serde(default, skip_serializing_if = "JobKind::is_agent")]
+    pub kind: JobKind,
+    /// An `evolve` job's task file, relative to the profile directory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task: Option<String>,
     /// The IANA zone the schedule is pinned to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timezone: Option<String>,
@@ -151,6 +176,8 @@ impl JobSpec {
     pub fn new(schedule: Schedule, prompt: impl Into<String>) -> Self {
         Self {
             schedule,
+            kind: JobKind::Agent,
+            task: None,
             timezone: None,
             prompt: prompt.into(),
             skills: Vec::new(),

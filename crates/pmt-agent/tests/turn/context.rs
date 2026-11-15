@@ -35,6 +35,7 @@ fn inputs(profile: &Profile, cwd: &Path) -> PromptInputs {
         context_window: Some(128_000),
         tool_names: Vec::new(),
         caller_system: None,
+        harness: None,
         skills_index: None,
         pinned_skills: None,
         memory: None,

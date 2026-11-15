@@ -16,6 +16,7 @@ The system prompt is sent as one block per tier, each ending at a prompt-cache b
 
 | Layer | Contents |
 |---|---|
+| `harness` | The harness version the session started on: its non-empty `SYSTEM.md`, `GUARDRAILS.md`, `MEMORY_POLICY.md` and `TOOL_GUIDANCE.md` in that order, right after the built-in base and before every profile, project and memory layer. |
 | `platform_hint` | The surface's hint, changed by `prompt.platform_hints.<platform>`. |
 | `skills_index` | The index of available skills. |
 | `pinned_skills` | Skills loaded into every session. |

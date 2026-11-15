@@ -25,6 +25,8 @@ Commands:
   browser      Browser sessions: status, and closing the real browser whose profile real-profile browsing copies
   lsp          Language servers behind the diagnostics of file edits: status, registry, installs, restart
   cron         Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and the headless tick
+  harness      The profile's harness: validate, history, diff, rollback and manual edits (works without `evolve.enabled`)
+  evolve       Harness evolution jobs (opt-in: `evolve.enabled = true`)
   kanban       Kanban boards shared by every profile: tasks, dependencies, the dispatcher, workers, review, notifications, export and import
   worktrees    Git worktrees of sessions and subagents: list, sweep and restore archived trees
   projects     Projects: named workspaces spanning folders, the active project, archive and restore
@@ -7921,26 +7923,29 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
-      --deliver <TARGET>
-          Where output goes (repeatable): `local`, `origin`, `none`, `<platform>`, `<platform>:<chat_id>[:<thread_id>]`, `bot_chat[:<profile>]`
+      --evolve-task <FILE>
+          Make the job queue a harness-evolution job for this task file (relative to the profile directory) instead of running an agent; `""` makes it an agent job again
 
       --no-color
           No colour (also when `NO_COLOR` is set or stdout is not a terminal)
 
+      --deliver <TARGET>
+          Where output goes (repeatable): `local`, `origin`, `none`, `<platform>`, `<platform>:<chat_id>[:<thread_id>]`, `bot_chat[:<profile>]`
+
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
-
-      --toolsets <TOOLSETS>
-          Toolsets of each run (comma-separated; `none` for no tools)
-
-      --memory <MEMORY>
-          `read_only` (default), `read_write` or `off`
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --toolsets <TOOLSETS>
+          Toolsets of each run (comma-separated; `none` for no tools)
+
       --accept-hooks
           Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+      --memory <MEMORY>
+          `read_only` (default), `read_write` or `off`
 
       --grace <GRACE>
           How late a run may start (`0s` to `24h`)
@@ -8071,20 +8076,23 @@ Options:
       --no-color
           No colour (also when `NO_COLOR` is set or stdout is not a terminal)
 
-      --deliver <TARGET>
-          Where output goes (repeatable): `local`, `origin`, `none`, `<platform>`, `<platform>:<chat_id>[:<thread_id>]`, `bot_chat[:<profile>]`
+      --evolve-task <FILE>
+          Make the job queue a harness-evolution job for this task file (relative to the profile directory) instead of running an agent; `""` makes it an agent job again
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --deliver <TARGET>
+          Where output goes (repeatable): `local`, `origin`, `none`, `<platform>`, `<platform>:<chat_id>[:<thread_id>]`, `bot_chat[:<profile>]`
+
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
-      --toolsets <TOOLSETS>
-          Toolsets of each run (comma-separated; `none` for no tools)
-
       --accept-hooks
           Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+      --toolsets <TOOLSETS>
+          Toolsets of each run (comma-separated; `none` for no tools)
 
       --memory <MEMORY>
           `read_only` (default), `read_write` or `off`
@@ -9573,6 +9581,639 @@ Usage: prometheus cron help tick
 Print this message or the help of the given subcommand(s)
 
 Usage: prometheus cron help help
+```
+
+## `prometheus harness`
+
+```text
+The profile's harness: validate, history, diff, rollback and manual edits (works without `evolve.enabled`)
+
+Usage: prometheus harness [OPTIONS] <COMMAND>
+
+Commands:
+  validate  Validate a harness tree (default: the active version) and print every error; exits 65 when it is invalid
+  log       Harness versions, newest first; `*` marks the active one
+  show      A version's files (default: the active version), or one file
+  diff      The unified diff and summary from version A to B (default: the active version)
+  rollback  Activate a new version with an earlier version's tree (versions are never deleted)
+  apply     Validate an edited tree and activate it as a new manual version
+  edit      Edit a copy of the active version in $EDITOR; a valid change becomes a new manual version
+  help      Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus harness validate`
+
+```text
+Validate a harness tree (default: the active version) and print every error; exits 65 when it is invalid
+
+Usage: prometheus harness validate [OPTIONS] [DIR]
+
+Arguments:
+  [DIR]
+          The tree's directory
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus harness log`
+
+```text
+Harness versions, newest first; `*` marks the active one
+
+Usage: prometheus harness log [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus harness show`
+
+```text
+A version's files (default: the active version), or one file
+
+Usage: prometheus harness show [OPTIONS] [VERSION] [PATH]
+
+Arguments:
+  [VERSION]
+          `h<n>` or the full version id
+
+  [PATH]
+          A file of the tree
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus harness diff`
+
+```text
+The unified diff and summary from version A to B (default: the active version)
+
+Usage: prometheus harness diff [OPTIONS] <A> [B]
+
+Arguments:
+  <A>
+          The older version
+
+  [B]
+          The newer version
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus harness rollback`
+
+```text
+Activate a new version with an earlier version's tree (versions are never deleted)
+
+Usage: prometheus harness rollback [OPTIONS] <VERSION>
+
+Arguments:
+  <VERSION>
+          The version to return to
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --now
+          Rebuild open sessions' prompts at their next turn (breaks their prompt cache) instead of waiting for the next session
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus harness apply`
+
+```text
+Validate an edited tree and activate it as a new manual version
+
+Usage: prometheus harness apply [OPTIONS] <DIR>
+
+Arguments:
+  <DIR>
+          The tree's directory
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --now
+          Rebuild open sessions' prompts at their next turn
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus harness edit`
+
+```text
+Edit a copy of the active version in $EDITOR; a valid change becomes a new manual version
+
+Usage: prometheus harness edit [OPTIONS] [PATH]
+
+Arguments:
+  [PATH]
+          The file to open
+
+          [default: SYSTEM.md]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --now
+          Rebuild open sessions' prompts at their next turn
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus harness help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus harness help [COMMAND]
+
+Commands:
+  validate  Validate a harness tree (default: the active version) and print every error; exits 65 when it is invalid
+  log       Harness versions, newest first; `*` marks the active one
+  show      A version's files (default: the active version), or one file
+  diff      The unified diff and summary from version A to B (default: the active version)
+  rollback  Activate a new version with an earlier version's tree (versions are never deleted)
+  apply     Validate an edited tree and activate it as a new manual version
+  edit      Edit a copy of the active version in $EDITOR; a valid change becomes a new manual version
+  help      Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus harness help validate`
+
+```text
+Validate a harness tree (default: the active version) and print every error; exits 65 when it is invalid
+
+Usage: prometheus harness help validate
+```
+
+## `prometheus harness help log`
+
+```text
+Harness versions, newest first; `*` marks the active one
+
+Usage: prometheus harness help log
+```
+
+## `prometheus harness help show`
+
+```text
+A version's files (default: the active version), or one file
+
+Usage: prometheus harness help show
+```
+
+## `prometheus harness help diff`
+
+```text
+The unified diff and summary from version A to B (default: the active version)
+
+Usage: prometheus harness help diff
+```
+
+## `prometheus harness help rollback`
+
+```text
+Activate a new version with an earlier version's tree (versions are never deleted)
+
+Usage: prometheus harness help rollback
+```
+
+## `prometheus harness help apply`
+
+```text
+Validate an edited tree and activate it as a new manual version
+
+Usage: prometheus harness help apply
+```
+
+## `prometheus harness help edit`
+
+```text
+Edit a copy of the active version in $EDITOR; a valid change becomes a new manual version
+
+Usage: prometheus harness help edit
+```
+
+## `prometheus harness help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus harness help help
+```
+
+## `prometheus evolve`
+
+```text
+Harness evolution jobs (opt-in: `evolve.enabled = true`)
+
+Usage: prometheus evolve [OPTIONS] <COMMAND>
+
+Commands:
+  run   Queue an evolution job for a recorded session or a task file
+  list  The profile's evolution jobs, oldest first
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus evolve run`
+
+```text
+Queue an evolution job for a recorded session or a task file
+
+Usage: prometheus evolve run [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --session <ID>
+          The session whose task to evolve for
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --task <FILE>
+          A task file (TOML: `statement`, optional `domain`, `workspace`, `toolsets`, `model`)
+
+      --k <N>
+          Recursion budget k (1-8): 4k rollouts and 3k improver sessions per mode (default `evolve.k`)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --mode <MODE>
+          Search mode (default `evolve.mode`)
+
+          Possible values:
+          - parallel:   Width: independent compositions
+          - sequential: Depth: rounds of checkpoints
+          - both:       Both, on shared base rollouts
+
+      --domain <D>
+          Experience-library domain (default: the task file's, else `general`)
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --budget-usd <X>
+          Stop the job when its spend reaches this many US dollars
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+      --detach
+          Return once the job is queued
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --edit
+          Edit the task statement (`task.md`) in $EDITOR before the job is queued
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus evolve list`
+
+```text
+The profile's evolution jobs, oldest first
+
+Usage: prometheus evolve list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus evolve help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus evolve help [COMMAND]
+
+Commands:
+  run   Queue an evolution job for a recorded session or a task file
+  list  The profile's evolution jobs, oldest first
+  help  Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus evolve help run`
+
+```text
+Queue an evolution job for a recorded session or a task file
+
+Usage: prometheus evolve help run
+```
+
+## `prometheus evolve help list`
+
+```text
+The profile's evolution jobs, oldest first
+
+Usage: prometheus evolve help list
+```
+
+## `prometheus evolve help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus evolve help help
 ```
 
 ## `prometheus kanban`
@@ -31671,6 +32312,8 @@ Commands:
   browser      Browser sessions: status, and closing the real browser whose profile real-profile browsing copies
   lsp          Language servers behind the diagnostics of file edits: status, registry, installs, restart
   cron         Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and the headless tick
+  harness      The profile's harness: validate, history, diff, rollback and manual edits (works without `evolve.enabled`)
+  evolve       Harness evolution jobs (opt-in: `evolve.enabled = true`)
   kanban       Kanban boards shared by every profile: tasks, dependencies, the dispatcher, workers, review, notifications, export and import
   worktrees    Git worktrees of sessions and subagents: list, sweep and restore archived trees
   projects     Projects: named workspaces spanning folders, the active project, archive and restore
@@ -33178,6 +33821,107 @@ Usage: prometheus help cron doctor
 Run one tick in this process (for OS schedulers); does nothing while a gateway daemon owns scheduling
 
 Usage: prometheus help cron tick
+```
+
+## `prometheus help harness`
+
+```text
+The profile's harness: validate, history, diff, rollback and manual edits (works without `evolve.enabled`)
+
+Usage: prometheus help harness [COMMAND]
+
+Commands:
+  validate  Validate a harness tree (default: the active version) and print every error; exits 65 when it is invalid
+  log       Harness versions, newest first; `*` marks the active one
+  show      A version's files (default: the active version), or one file
+  diff      The unified diff and summary from version A to B (default: the active version)
+  rollback  Activate a new version with an earlier version's tree (versions are never deleted)
+  apply     Validate an edited tree and activate it as a new manual version
+  edit      Edit a copy of the active version in $EDITOR; a valid change becomes a new manual version
+```
+
+## `prometheus help harness validate`
+
+```text
+Validate a harness tree (default: the active version) and print every error; exits 65 when it is invalid
+
+Usage: prometheus help harness validate
+```
+
+## `prometheus help harness log`
+
+```text
+Harness versions, newest first; `*` marks the active one
+
+Usage: prometheus help harness log
+```
+
+## `prometheus help harness show`
+
+```text
+A version's files (default: the active version), or one file
+
+Usage: prometheus help harness show
+```
+
+## `prometheus help harness diff`
+
+```text
+The unified diff and summary from version A to B (default: the active version)
+
+Usage: prometheus help harness diff
+```
+
+## `prometheus help harness rollback`
+
+```text
+Activate a new version with an earlier version's tree (versions are never deleted)
+
+Usage: prometheus help harness rollback
+```
+
+## `prometheus help harness apply`
+
+```text
+Validate an edited tree and activate it as a new manual version
+
+Usage: prometheus help harness apply
+```
+
+## `prometheus help harness edit`
+
+```text
+Edit a copy of the active version in $EDITOR; a valid change becomes a new manual version
+
+Usage: prometheus help harness edit
+```
+
+## `prometheus help evolve`
+
+```text
+Harness evolution jobs (opt-in: `evolve.enabled = true`)
+
+Usage: prometheus help evolve [COMMAND]
+
+Commands:
+  run   Queue an evolution job for a recorded session or a task file
+  list  The profile's evolution jobs, oldest first
+```
+
+## `prometheus help evolve run`
+
+```text
+Queue an evolution job for a recorded session or a task file
+
+Usage: prometheus help evolve run
+```
+
+## `prometheus help evolve list`
+
+```text
+The profile's evolution jobs, oldest first
+
+Usage: prometheus help evolve list
 ```
 
 ## `prometheus help kanban`

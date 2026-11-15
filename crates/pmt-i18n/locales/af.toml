@@ -377,6 +377,7 @@ suggestions = "Voorgestelde outomatisering: list, accept <n>, dismiss <n>, catal
 blueprint = "Skep 'n geskeduleerde taak uit 'n bloudruk: /blueprint [naam] [gleuf=waarde ...]"
 goal = "'n Staande doel waaraan die agent bly werk: /goal <teks> | draft <teks> | status | show | pause | resume | clear | wait <pid> | unwait | gate add|list|remove|clear"
 subgoal = "Ekstra kriteria van die aktiewe doel: /subgoal <teks> | remove <N> | clear"
+evolve = "Plaas 'n harnas-evolusietaak vir hierdie sessie in die tou: /evolve [--k N]"
 loop = "Herhaal 'n boodskap of opdrag: /loop [interval] <boodskap> [--times N] [--until <voorwaarde>] | status | pause | resume | stop"
 heartbeat = "Gaan na wanneer ledig: /heartbeat every <interval> <boodskap> | status | pause | resume | clear"
 worktree = "Git-worktrees: wys die aktiewe een, new [NAAM], list, prune [--dry-run]"

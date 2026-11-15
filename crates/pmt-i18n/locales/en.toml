@@ -379,6 +379,7 @@ suggestions = "Suggested automations: list, accept <n>, dismiss <n>, catalog, cl
 blueprint = "Create a scheduled job from a blueprint: /blueprint [name] [slot=value ...]"
 goal = "A standing goal the agent keeps working toward: /goal <text> | draft <text> | status | show | pause | resume | clear | wait <pid> | unwait | gate add|list|remove|clear"
 subgoal = "Extra criteria of the active goal: /subgoal <text> | remove <N> | clear"
+evolve = "Queue a harness evolution job for this session: /evolve [--k N]"
 loop = "Repeat a prompt or command: /loop [interval] <prompt> [--times N] [--until <condition>] | status | pause | resume | stop"
 heartbeat = "Check in while idle: /heartbeat every <interval> <prompt> | status | pause | resume | clear"
 worktree = "Git worktrees: show the active one, new [NAME], list, prune [--dry-run]"

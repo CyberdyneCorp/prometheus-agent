@@ -372,7 +372,7 @@ fn provenance(tier: Tier, lock: &Contents, name: &str) -> Provenance {
             Ok(Some(entry)) if entry.bundled_path().is_some() => Provenance::Builtin,
             Ok(Some(entry)) => entry.trust.map_or(Provenance::Unreadable, Provenance::Hub),
         },
-        Tier::Project | Tier::External | Tier::Plugin => Provenance::Local,
+        Tier::Project | Tier::Harness | Tier::External | Tier::Plugin => Provenance::Local,
     }
 }
 

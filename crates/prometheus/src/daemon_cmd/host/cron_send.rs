@@ -130,9 +130,7 @@ impl GatewaySender {
             job_id: &row.job_id,
             text: &row.body,
         };
-        let session = self
-            .host
-            .admit_bot_chat(gateway, &delivery)
+        let session = Box::pin(self.host.admit_bot_chat(gateway, &delivery))
             .await
             .map_err(|err| {
                 permanent(format!(
