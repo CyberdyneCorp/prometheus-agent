@@ -42,7 +42,7 @@ impl Daemon {
             .unwrap();
         let daemon = Self(child);
         wait("the daemon runs", Duration::from_secs(30), || {
-            run(home, &["daemon", "status"]).status.success()
+            common::daemon::running(home)
         });
         daemon
     }

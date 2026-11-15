@@ -45,6 +45,13 @@ pub enum GatewayCommand {
     /// Send one message to a chat without an agent turn (through the
     /// daemon's outbox when it runs).
     Send(super::send_cmd::SendArgs),
+    /// Peer gateways on other machines: register them, message their
+    /// agents and run tasks there.
+    Peer {
+        /// The peer subcommand.
+        #[command(subcommand)]
+        command: super::peers::cmd::PeerCommand,
+    },
     /// List every running Prometheus daemon of this OS user, whatever its
     /// home.
     List,
@@ -149,6 +156,7 @@ pub(super) fn run(command: &GatewayCommand, ctx: &Context<'_>) -> Result<u8, Err
         GatewayCommand::Stop => super::stop(ctx.home()?.root(), ctx.json),
         GatewayCommand::Outbox { command } => outbox(command, ctx),
         GatewayCommand::Send(args) => super::send_cmd::run(args, ctx),
+        GatewayCommand::Peer { command } => super::peers::cmd::run(command, ctx),
         GatewayCommand::List => super::inventory::list(ctx),
         GatewayCommand::Enroll(args) => super::enroll_cmd::run(args, ctx),
         GatewayCommand::SlackManifest(args) => super::slack_manifest_cmd::run(args, ctx),

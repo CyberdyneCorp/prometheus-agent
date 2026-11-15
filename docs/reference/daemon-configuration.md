@@ -8,6 +8,8 @@ Every key `<PROMETHEUS_HOME>/daemon.toml` accepts: machine-wide settings shared 
 
 | Key | Type | Default | Allowed values | Apply | Description |
 |---|---|---|---|---|---|
+| `a2a.listen` | string | `"127.0.0.1:9900"` | any | `restart` | Where the A2A server listens (`host:port`, an IPv6 literal bare or bracketed, or a bare address on port 9900). |
+| `a2a.public` | boolean | `false` | any | `restart` | Allow a non-loopback `listen` (every served profile then needs a peer token). |
 | `api_server.cors_origins` | array of string | `[]` | any | `restart` | Exact browser origins (`https://chat.example.com`) allowed to call the API; empty sends no CORS headers and refuses every request carrying an `Origin`. |
 | `api_server.listen` | string | `"127.0.0.1:8642"` | any | `restart` | Where the API server listens. |
 | `api_server.public` | boolean | `false` | any | `restart` | Allow a non-loopback `listen` address (logged at WARN on every start). |

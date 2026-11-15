@@ -18,6 +18,7 @@ Commands:
   browser      Browser sessions: status, and closing the real browser whose profile real-profile browsing copies
   lsp          Language servers behind the diagnostics of file edits: status, registry, installs, restart
   cron         Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and the headless tick
+  kanban       Kanban boards shared by every profile: tasks, dependencies, the dispatcher, workers, review, notifications, export and import
   worktrees    Git worktrees of sessions and subagents: list, sweep and restore archived trees
   projects     Projects: named workspaces spanning folders, the active project, archive and restore
   themes       Themes: list them, use one, set a colour, spinner or branding key of the custom theme, show the one in use
@@ -66,6 +67,7 @@ Commands:
   mcp          MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
   plugins      Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
   tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
+  acp          The Agent Client Protocol server editors launch (Zed, VS Code, JetBrains...): a viewer of the profile's gateway daemon on stdio
   schema       Print the JSON Schema of a published contract (`subagent-result`)
   rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
   completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)

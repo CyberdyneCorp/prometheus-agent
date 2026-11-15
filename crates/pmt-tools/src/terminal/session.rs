@@ -174,6 +174,9 @@ pub struct Terminal {
     before_hooks: std::sync::RwLock<Vec<BeforeCommand>>,
     sudo: std::sync::RwLock<Option<Arc<Sudo>>>,
     inputs: std::sync::RwLock<Option<Arc<Inputs>>>,
+    /// The session whose terminal delegate may run foreground commands
+    /// (an ACP session's editor terminal, [`crate::editor`]).
+    delegate_for: std::sync::RwLock<Option<String>>,
 }
 
 /// Secrets added to every command's environment at spawn time (for
@@ -265,8 +268,59 @@ impl Terminal {
             before_hooks: std::sync::RwLock::new(Vec::new()),
             sudo: std::sync::RwLock::new(None),
             inputs: std::sync::RwLock::new(None),
+            delegate_for: std::sync::RwLock::new(None),
             setup,
         })
+    }
+
+    /// Lets the terminal delegate session `session`'s host binds run this
+    /// terminal's foreground commands ([`crate::editor::bind_terminal`]).
+    pub fn delegate_for(&self, session: &str) {
+        *self
+            .delegate_for
+            .write()
+            .unwrap_or_else(PoisonError::into_inner) = Some(session.to_owned());
+    }
+
+    /// A foreground command run by the bound delegate; `None` when there
+    /// is none or it declined (the command then runs here).
+    async fn delegated(
+        &self,
+        command: &str,
+        cwd: &Path,
+        timeout_secs: u64,
+    ) -> Option<TerminalResult> {
+        let session = self
+            .delegate_for
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()?;
+        let delegate = crate::editor::terminal(&session)?;
+        let max_chars = (self.setup.max_chars)();
+        let call = crate::editor::Delegated {
+            command,
+            cwd,
+            output_bytes: u64::try_from(max_chars.saturating_mul(4)).unwrap_or(u64::MAX),
+            timeout_secs,
+        };
+        let outcome = delegate.run(call).await?;
+        if let Some(error) = outcome.error {
+            return Some(TerminalResult::refused(error));
+        }
+        let clean = self
+            .setup
+            .redactor
+            .redact(&shape::strip_ansi(&outcome.output));
+        let (output, cut) = shape::truncate(&clean, max_chars);
+        let mut result = TerminalResult::new(Status::Ok);
+        result.output = output;
+        result.truncated = cut || outcome.truncated;
+        result.exit_code = outcome.exit_code.or(Some(-1));
+        if let Some(code) = outcome.exit_code {
+            result.status = if code == 0 { Status::Ok } else { Status::Error };
+            result.exit_code_meaning = shape::exit_code_meaning(command, code);
+        }
+        Some(result)
     }
 
     /// Adds `source`'s secrets to the environment of every later command.
@@ -454,6 +508,11 @@ impl Terminal {
         timeout_secs: u64,
         sudo: Option<&SecretString>,
     ) -> TerminalResult {
+        if let (Exec::Foreground(command), None) = (&exec, sudo)
+            && let Some(result) = self.delegated(command, cwd, timeout_secs).await
+        {
+            return result;
+        }
         if let Some(plugin) = self.setup.target.plugin() {
             return match exec {
                 Exec::Foreground(command) => {

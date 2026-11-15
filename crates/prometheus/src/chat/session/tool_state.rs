@@ -11,6 +11,7 @@
 //! array once, before its first prompt is built ([`Deferred`]). Between
 //! those points the session keeps sending the array it froze.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -44,6 +45,17 @@ pub(super) struct Registries {
     store: Arc<Store>,
     cwd: PathBuf,
     cache: Mutex<PluginTools>,
+    /// Per editor (ACP) session with editor MCP servers: its registry,
+    /// the profile registry and binding generation it was built from.
+    editors: Mutex<HashMap<SessionId, EditorRegistry>>,
+}
+
+/// A session's registry with its editor MCP servers' tools on top.
+struct EditorRegistry {
+    base: Arc<ToolRegistry>,
+    generation: u64,
+    registry: Arc<ToolRegistry>,
+    toolsets: Vec<String>,
 }
 
 impl Registries {
@@ -60,6 +72,7 @@ impl Registries {
             store,
             cwd,
             cache: Mutex::new(built),
+            editors: Mutex::default(),
         }
     }
 
@@ -82,6 +95,50 @@ impl Registries {
             *cache = PluginTools::build(&self.scope, &plugins, &mcp, &calls)?;
         }
         Ok(cache.parts())
+    }
+
+    /// [`Self::current`] for session `session`: with its editor MCP
+    /// servers' tools when an editor bound some (spec: acp-adapter, Editor
+    /// MCP servers belong to the daemon session).
+    ///
+    /// # Errors
+    ///
+    /// The core registry could not be built.
+    pub(super) fn current_for(
+        &self,
+        session: SessionId,
+    ) -> Result<(Arc<ToolRegistry>, Vec<String>), Error> {
+        let (base, toolsets) = self.current()?;
+        let Some((editor, generation)) = crate::mcp_host::editor::manager(&session.to_string())
+        else {
+            lock(&self.editors).remove(&session);
+            return Ok((base, toolsets));
+        };
+        let mut editors = lock(&self.editors);
+        if let Some(built) = editors.get(&session)
+            && Arc::ptr_eq(&built.base, &base)
+            && built.generation == generation
+        {
+            return Ok((Arc::clone(&built.registry), built.toolsets.clone()));
+        }
+        let scope = self.extensions.get();
+        let plugins = crate::plugins_host::for_session(&scope, &self.cwd);
+        let mcp = crate::mcp_host::manager(&scope);
+        let calls = session_calls(&self.store, &self.cwd);
+        let (mut registry, mut toolsets) =
+            crate::tools_cmd::extended_registry(&self.scope, &plugins, &mcp, &calls)?;
+        toolsets.extend(editor.register(&mut registry));
+        let registry = Arc::new(registry);
+        editors.insert(
+            session,
+            EditorRegistry {
+                base,
+                generation,
+                registry: Arc::clone(&registry),
+                toolsets: toolsets.clone(),
+            },
+        );
+        Ok((registry, toolsets))
     }
 }
 
@@ -134,6 +191,8 @@ pub(super) struct ToolState {
     selection: Mutex<Selection>,
     route: Mutex<RouteTraits>,
     deferred: tokio::sync::Mutex<Option<Deferred>>,
+    /// The editor MCP binding generation the tools were built with.
+    editor_generation: std::sync::atomic::AtomicU64,
 }
 
 /// The MCP discovery a new session did not wait for at open (so its
@@ -160,6 +219,7 @@ impl ToolState {
         tools: Arc<SwappableTools>,
         (registry, selection, route): (Arc<ToolRegistry>, Selection, RouteTraits),
     ) -> Self {
+        let editor_generation = crate::mcp_host::editor::generation(&inputs.session.to_string());
         Self {
             registries,
             inputs,
@@ -168,7 +228,31 @@ impl ToolState {
             selection: Mutex::new(selection),
             route: Mutex::new(route),
             deferred: tokio::sync::Mutex::new(None),
+            editor_generation: std::sync::atomic::AtomicU64::new(editor_generation),
         }
+    }
+
+    /// At a turn start: when an editor bound other MCP servers since the
+    /// tools were built, connects them and rebuilds the tools with their
+    /// toolsets (the new list applies from this turn). `true` when the
+    /// tools were rebuilt.
+    ///
+    /// # Errors
+    ///
+    /// Registry, selection and store errors.
+    pub(super) async fn refresh_editor(&self) -> Result<bool, Error> {
+        use std::sync::atomic::Ordering;
+        let session = self.inputs.session.to_string();
+        let now = crate::mcp_host::editor::generation(&session);
+        if self.editor_generation.swap(now, Ordering::AcqRel) == now {
+            return Ok(false);
+        }
+        crate::mcp_host::editor::connect(&session).await;
+        let (registry, _) = self.registries.current_for(self.inputs.session)?;
+        let editor = crate::mcp_host::editor::toolsets(&session);
+        let selection = carried(&registry, &self.selection(), &editor)?;
+        self.rebuild(registry, selection).await?;
+        Ok(true)
     }
 
     /// Settles the tools once `deferred`'s discovery ends, before the
@@ -191,7 +275,7 @@ impl ToolState {
             return Ok(false);
         };
         let _ = deferred.discovery.await;
-        let (registry, toolsets) = self.registries.current()?;
+        let (registry, toolsets) = self.registries.current_for(self.inputs.session)?;
         let old = self.selection();
         let mut selection = (deferred.select)(&registry, &toolsets)?;
         selection.tools.retain(|t| !old.disabled.contains(t));
@@ -253,11 +337,11 @@ impl ToolState {
     ///
     /// Registry, selection and store errors.
     pub(super) async fn refresh_if_stale(&self) -> Result<bool, Error> {
-        let (registry, _) = self.registries.current()?;
+        let (registry, _) = self.registries.current_for(self.inputs.session)?;
         if Arc::ptr_eq(&registry, &self.registry()) {
             return Ok(false);
         }
-        let selection = carried(&registry, &self.selection())?;
+        let selection = carried(&registry, &self.selection(), &[])?;
         self.rebuild(registry, selection).await?;
         Ok(true)
     }
@@ -298,15 +382,20 @@ impl CompactionBoundary for ToolState {
 }
 
 /// `old` against a newer `registry`: the same toolsets (those still
-/// registered: a removed MCP server's toolset is gone) minus the tools
-/// the session disabled.
-fn carried(registry: &ToolRegistry, old: &Selection) -> Result<Selection, Error> {
-    let kept: Vec<String> = old
+/// registered: a removed MCP server's toolset is gone) plus `added`, minus
+/// the tools the session disabled.
+fn carried(registry: &ToolRegistry, old: &Selection, added: &[String]) -> Result<Selection, Error> {
+    let mut kept: Vec<String> = old
         .toolsets
         .iter()
         .filter(|name| registry.canonical_toolset(name).is_some())
         .cloned()
         .collect();
+    for name in added {
+        if !kept.contains(name) && registry.canonical_toolset(name).is_some() {
+            kept.push(name.clone());
+        }
+    }
     let mut selection = Selection::resolve(registry, &kept, &[])?;
     selection.tools.retain(|t| !old.disabled.contains(t));
     selection.disabled.extend(old.disabled.iter().cloned());
@@ -331,7 +420,7 @@ mod tests {
         old.tools.retain(|t| *t != off);
         old.disabled.insert(off.clone());
         old.toolsets.push("mcp-gone".to_owned());
-        let carried = carried(&registry, &old).unwrap();
+        let carried = carried(&registry, &old, &[]).unwrap();
         assert_eq!(carried.toolsets, ["core"]);
         assert!(!carried.contains(&off));
         assert!(carried.disabled.contains(&off));

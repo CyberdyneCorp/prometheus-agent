@@ -302,6 +302,51 @@ impl ConfigFile {
         Ok(removed)
     }
 
+    /// Sets `[peers.<name>]` to `peer`, replacing an earlier entry (spec:
+    /// agent-interop, Peer gateway registry).
+    ///
+    /// # Errors
+    ///
+    /// A managed lock on `peers`, the file's own errors and validation of
+    /// the result.
+    pub fn put_peer(&self, name: &str, peer: &crate::schema::PeerGateway) -> Result<(), Error> {
+        crate::managed::check_writable("peers")?;
+        self.modify(|doc| {
+            let peers = doc
+                .entry("peers")
+                .or_insert(toml_edit::table())
+                .as_table_mut()
+                .ok_or_else(|| Error::new(&codes::CONFIG_INVALID, "[peers] is not a table"))?;
+            peers.set_implicit(true);
+            let mut entry = toml_edit::Table::new();
+            entry.insert("url", toml_edit::value(peer.url.clone()));
+            if let Some(note) = &peer.note {
+                entry.insert("note", toml_edit::value(note.clone()));
+            }
+            entry.insert("key_secret", toml_edit::value(peer.key_secret.0.clone()));
+            peers.insert(name, toml_edit::Item::Table(entry));
+            Ok(())
+        })
+    }
+
+    /// Removes `[peers.<name>]`; whether it was defined.
+    ///
+    /// # Errors
+    ///
+    /// A managed lock on `peers`, the file's own errors.
+    pub fn remove_peer(&self, name: &str) -> Result<bool, Error> {
+        crate::managed::check_writable("peers")?;
+        let mut removed = false;
+        self.modify(|doc| {
+            removed = doc
+                .get_mut("peers")
+                .and_then(toml_edit::Item::as_table_like_mut)
+                .is_some_and(|peers| peers.remove(name).is_some());
+            Ok(())
+        })?;
+        Ok(removed)
+    }
+
     /// `config unset`: removes `key` so its default applies; returns
     /// whether it was set.
     ///

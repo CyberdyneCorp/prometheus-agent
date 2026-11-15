@@ -7,8 +7,8 @@ use pmt_i18n::Strings;
 use pmt_rpc::RpcError;
 use pmt_rpc::client::{ServerCall, error_of};
 use pmt_rpc::contracts::{
-    ASSISTANT_DELTA, Admission, Envelope, PromptImage, PromptSubmit, SessionInterrupt, SessionRef,
-    SubmitParams, TurnFinished,
+    ASSISTANT_DELTA, Admission, Envelope, InterruptParams, PromptImage, PromptSubmit,
+    SessionInterrupt, SubmitParams, TurnFinished,
 };
 use pmt_tools::approval::printable;
 use serde_json::{Value, json};
@@ -194,8 +194,9 @@ fn on_event(
 
 /// Interrupts whatever turn the session runs (`session.interrupt`).
 pub(super) async fn interrupt(attached: &Attached) {
-    let params = SessionRef {
+    let params = InterruptParams {
         session_id: attached.session.clone(),
+        turn_id: None,
     };
     let _ = attached
         .client

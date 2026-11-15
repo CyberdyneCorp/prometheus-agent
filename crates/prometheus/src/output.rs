@@ -332,6 +332,110 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "projects show",
     },
     JsonShape {
+        schema: "prometheus.kanban_list.v1",
+        command: "kanban list",
+    },
+    JsonShape {
+        schema: "prometheus.peer.v1",
+        command: "gateway peer add",
+    },
+    JsonShape {
+        schema: "prometheus.peer_list.v1",
+        command: "gateway peer list",
+    },
+    JsonShape {
+        schema: "prometheus.peer_removed.v1",
+        command: "gateway peer remove",
+    },
+    JsonShape {
+        schema: "prometheus.peer_dm.v1",
+        command: "gateway peer dm",
+    },
+    JsonShape {
+        schema: "prometheus.peer_run.v1",
+        command: "gateway peer run",
+    },
+    JsonShape {
+        schema: "prometheus.peer_run_status.v1",
+        command: "gateway peer status",
+    },
+    JsonShape {
+        schema: "prometheus.peer_run_stopped.v1",
+        command: "gateway peer stop",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_task.v1",
+        command: "kanban show",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_created.v1",
+        command: "kanban create",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_results.v1",
+        command: "kanban results",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_log.v1",
+        command: "kanban log",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_runs.v1",
+        command: "kanban runs",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_stats.v1",
+        command: "kanban stats",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_diag.v1",
+        command: "kanban diag",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_tick.v1",
+        command: "kanban dispatch",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_boards.v1",
+        command: "kanban boards list",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_subscriptions.v1",
+        command: "kanban notify list",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_attachments.v1",
+        command: "kanban attachments",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_gc.v1",
+        command: "kanban gc",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_plan.v1",
+        command: "kanban dispatch dry-run",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_claim.v1",
+        command: "kanban claim",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_swarm.v1",
+        command: "kanban swarm",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_graph.v1",
+        command: "kanban decompose",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_assignees.v1",
+        command: "kanban assignees",
+    },
+    JsonShape {
+        schema: "prometheus.kanban_init.v1",
+        command: "kanban init",
+    },
+    JsonShape {
         schema: "prometheus.cron_list.v1",
         command: "cron list",
     },
@@ -529,12 +633,29 @@ pub fn render_error(err: &Error, json: bool) -> String {
 ///
 /// When `command` has no registered shape (a programming error).
 pub fn document(command: &str, body: &impl Serialize) -> Result<u8, Error> {
+    document_to(&mut io::stdout().lock(), command, body)?;
+    Ok(0)
+}
+
+/// Writes the JSON document of `command` (its registered shape) to `out`.
+///
+/// # Errors
+///
+/// `output.io`.
+///
+/// # Panics
+///
+/// When `command` has no registered shape (a programming error).
+pub fn document_to(
+    out: &mut impl Write,
+    command: &str,
+    body: &impl Serialize,
+) -> Result<(), Error> {
     let shape = JSON_SHAPES
         .iter()
         .find(|s| s.command == command)
         .expect("every JSON shape is registered");
-    write_document(&mut io::stdout().lock(), shape, body).map_err(|e| stdout_error(&e))?;
-    Ok(0)
+    write_document(out, shape, body).map_err(|e| stdout_error(&e))
 }
 
 /// Prints one plain JSON value on stdout; returns exit 0.

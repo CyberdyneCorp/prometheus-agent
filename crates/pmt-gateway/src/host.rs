@@ -352,6 +352,42 @@ pub trait Host: Send + Sync + 'static {
     /// when none runs.
     fn interrupt<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()>;
 
+    /// Cancels one admission of the session (`prompt.submit`'s `turn_id`):
+    /// stops the running turn only when it is that one and drops it from
+    /// the queue when it still waits there; any other turn keeps running
+    /// (spec: acp-adapter, Cancel targets only this editor's admission).
+    fn cancel_turn<'a>(
+        &'a self,
+        profile: &'a str,
+        session_id: &'a str,
+        turn_id: &'a str,
+    ) -> HostFuture<'a, ()> {
+        let _ = (profile, session_id, turn_id);
+        Box::pin(async {
+            Err(Error::new(
+                &pmt_core::error::codes::RPC_NOT_SERVED,
+                "this host cannot cancel one admission",
+            ))
+        })
+    }
+
+    /// Serves an editor session request (`session.editor`,
+    /// `session.settings`, `session.configure`; spec: acp-adapter).
+    fn editor<'a>(
+        &'a self,
+        profile: &'a str,
+        request: crate::editor::EditorCall,
+        link: Link,
+    ) -> HostFuture<'a, crate::editor::EditorReply> {
+        let _ = (profile, request, link);
+        Box::pin(async {
+            Err(Error::new(
+                &pmt_core::error::codes::RPC_NOT_SERVED,
+                "this host has no editor sessions",
+            ))
+        })
+    }
+
     /// Steers the session's running turn (spec: agent-turn-loop,
     /// Structured steering); with no turn running the steer opens the next
     /// user message.
@@ -563,6 +599,31 @@ pub trait Host: Send + Sync + 'static {
     /// (`bot.chat.ensure`); `true` when created now.
     fn bot_chat<'a>(&'a self, _profile: &'a str) -> HostFuture<'a, (String, bool)> {
         Box::pin(async { Err(not_served("this host has no bot chats")) })
+    }
+
+    /// The union roster seen from `params.profile` (`bot.roster.list`).
+    fn bot_roster(
+        &self,
+        _params: pmt_rpc::contracts::RosterParams,
+    ) -> HostFuture<'_, pmt_rpc::contracts::Roster> {
+        Box::pin(async { Err(not_served("this host has no bot roster")) })
+    }
+
+    /// The envelopes of `params.profile`'s relay outbox a courier may
+    /// deliver now (`bot.relay.drain`).
+    fn relay_drain(
+        &self,
+        _params: pmt_rpc::contracts::RelayDrainParams,
+    ) -> HostFuture<'_, pmt_rpc::contracts::RelayDrained> {
+        Box::pin(async { Err(not_served("this host relays no bot messages")) })
+    }
+
+    /// Runs a relayed envelope or settles a reply (`bot.relay.deliver`).
+    fn relay_deliver(
+        &self,
+        _params: pmt_rpc::contracts::RelayDeliverParams,
+    ) -> HostFuture<'_, pmt_rpc::contracts::RelayDelivered> {
+        Box::pin(async { Err(not_served("this host relays no bot messages")) })
     }
 
     /// `profile`'s first-run onboarding chat, created when it has none

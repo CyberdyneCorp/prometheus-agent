@@ -54,6 +54,8 @@ pub(crate) fn capabilities(shared: &Shared, caller: &Caller) -> Reply {
                 "sessions_api": true,
                 "jobs_api": true,
                 "session_key_header": true,
+                "bot_chat_api": true,
+                "agents_api": true,
             },
         }),
     )
@@ -63,6 +65,36 @@ pub(crate) fn capabilities(shared: &Shared, caller: &Caller) -> Reply {
 pub(crate) async fn catalog(shared: &Shared, caller: &Caller, what: Catalog) -> Reply {
     match shared.host.api_catalog(&caller.profile, what).await {
         Ok(data) => json_reply(200, &json!({"object": "list", "data": data})),
+        Err(err) => from_error(&err),
+    }
+}
+
+/// `POST /api/bot-chat/ensure`: the profile's canonical Bot Chat, created
+/// when it has none (spec: agent-interop, Peer direct messages and remote
+/// runs). Runs and session chat may continue it although the API did not
+/// create it.
+pub(crate) async fn bot_chat(shared: &Shared, caller: &Caller) -> Reply {
+    match shared.host.bot_chat(&caller.profile).await {
+        Ok((session_id, created)) => json_reply(
+            200,
+            &json!({"object": "bot_chat", "profile": caller.profile, "session_id": session_id, "created": created}),
+        ),
+        Err(err) => from_error(&err),
+    }
+}
+
+/// `GET /api/agents`: every profile this daemon serves, as a bot (spec:
+/// agent-interop, Union roster across gateways).
+pub(crate) async fn agents(shared: &Shared, caller: &Caller) -> Reply {
+    match shared
+        .host
+        .api_catalog(&caller.profile, Catalog::Agents)
+        .await
+    {
+        Ok(data) => json_reply(
+            200,
+            &json!({"object": "list", "host": pmt_core::runtime::hostname(), "data": data}),
+        ),
         Err(err) => from_error(&err),
     }
 }

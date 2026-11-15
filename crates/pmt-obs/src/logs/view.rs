@@ -65,6 +65,8 @@ impl Filter {
 pub fn current_file(home: &Path, profile_dir: &Path, component: &str) -> PathBuf {
     if HOME_COMPONENTS.contains(&component) {
         home_dir(home).join(format!("{component}.log"))
+    } else if super::PROFILE_COMPONENTS.contains(&component) {
+        profile_dir.join("logs").join(format!("{component}.log"))
     } else {
         profile_dir.join("logs").join(FILE_NAME)
     }

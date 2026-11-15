@@ -13,6 +13,7 @@ mod health;
 mod host;
 mod inventory;
 mod messaging;
+pub(crate) mod peers;
 mod platform_cmd;
 mod record;
 pub(crate) mod self_guard;

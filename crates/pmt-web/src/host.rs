@@ -64,6 +64,55 @@ pub enum Change {
     Maintenance,
 }
 
+/// A request of the kanban page (spec: web-dashboard, Kanban dashboard
+/// API and orchestration modes). Boards are shared by every profile of
+/// the home and the orchestration settings are those of the dispatcher's
+/// profile (the daemon's launch profile), so these are machine-wide.
+#[derive(Debug, Clone, PartialEq)]
+pub enum KanbanCall {
+    /// `GET /api/kanban/boards`: the live boards and their open tasks.
+    Boards,
+    /// `GET /api/kanban/orchestration`: configured and effective values.
+    Orchestration,
+    /// `PUT /api/kanban/orchestration` with the settings to change.
+    SetOrchestration(Value),
+    /// `GET /api/kanban/workers/active`.
+    Workers,
+    /// `GET /api/kanban/runs/{run_id}`.
+    Run(String),
+    /// `POST /api/kanban/runs/{run_id}/terminate` by the signed-in `who`.
+    Terminate {
+        /// The run.
+        run: String,
+        /// The caller's subject, for the task's event log.
+        who: String,
+    },
+    /// `GET /api/kanban/inspect`.
+    Inspect,
+    /// The dispatcher profile's `kanban.attachment_max_bytes`, as
+    /// `{"max_bytes": n}` (read before an upload's body is).
+    AttachmentLimit,
+    /// `POST /api/kanban/boards/{board}/tasks/{task}/attachments`.
+    Attach(KanbanUpload),
+}
+
+/// A dashboard attachment upload, already checked against the limit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KanbanUpload {
+    /// The board slug.
+    pub board: String,
+    /// The task id.
+    pub task: String,
+    /// The display name (`?name=`; sanitized by the board).
+    pub name: String,
+    /// The body's `Content-Type`, if any.
+    pub content_type: Option<String>,
+    /// The bytes.
+    pub bytes: Vec<u8>,
+    /// The signed-in subject, recorded as the uploader.
+    pub who: String,
+}
+
 /// A host file of a session, read under its file-access rules.
 #[derive(Debug, Clone)]
 pub struct SessionFile {
@@ -201,6 +250,9 @@ pub trait DashboardHost: Send + Sync {
         id: &'a str,
         request: Value,
     ) -> HostFuture<'a, Value>;
+
+    /// Answers a kanban page request.
+    fn kanban(&self, call: KanbanCall) -> HostFuture<'_, Value>;
 
     /// Applies a change to the profile; its JSON answer.
     fn change<'a>(

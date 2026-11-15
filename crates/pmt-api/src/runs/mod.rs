@@ -235,6 +235,7 @@ async fn create_run(shared: &Arc<Shared>, caller: &Caller, req: &Req) -> Result<
         derived_key: None,
         history: responses::history(&body["conversation_history"]).unwrap_or(input.earlier.clone()),
         title: None,
+        source_tag: None,
     };
     let refused = |err: &pmt_core::Error| {
         finish.release();

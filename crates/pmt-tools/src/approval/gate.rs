@@ -12,6 +12,7 @@ use pmt_core::human::{Channel, Unanswered};
 use serde::Serialize;
 use serde_json::Value;
 
+use super::edits::EditPolicy;
 use super::explain::Previewer;
 use super::guardian::{Breaker, Guardian, GuardianVerdict};
 use super::hooks::{ApprovalHooks, TransportOutcome, TransportRequest, choice_name};
@@ -57,6 +58,22 @@ pub struct ApprovalRequest {
     /// What `explain` showed, when the request is asked again after it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub explanation: Option<String>,
+    /// For a file edit an editor session asks about: the file before and
+    /// after (spec: acp-adapter, Approvals and clarify bridge to editor
+    /// cards with fail-closed semantics).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub diff: Option<EditDiff>,
+}
+
+/// A file edit an approval asks about.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct EditDiff {
+    /// The absolute path.
+    pub path: String,
+    /// The current content (`None`: a new file).
+    pub old_text: Option<String>,
+    /// The content after the edit.
+    pub new_text: String,
 }
 
 impl ApprovalRequest {
@@ -132,6 +149,8 @@ pub struct CommandGate {
     /// The running turn has no answer channel (an API request without
     /// one): its approvals are decided at once this way.
     turn_unattended: Mutex<Option<UnattendedApproval>>,
+    /// How file edits are approved, in an editor (ACP) session.
+    edit_policy: Mutex<Option<EditPolicy>>,
 }
 
 impl CommandGate {
@@ -151,6 +170,7 @@ impl CommandGate {
             previewer: None,
             hosted: None,
             turn_unattended: Mutex::new(None),
+            edit_policy: Mutex::new(None),
         }
     }
 
@@ -243,6 +263,65 @@ impl CommandGate {
         self.yolo() || self.approvals().mode == ApprovalMode::Off
     }
 
+    /// Sets how file edits are approved (`None`: they are not asked
+    /// about, the session is no editor session).
+    pub fn set_edit_policy(&self, policy: Option<EditPolicy>) {
+        *self
+            .edit_policy
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = policy;
+    }
+
+    /// How file edits are approved now.
+    #[must_use]
+    pub fn edit_policy(&self) -> Option<EditPolicy> {
+        *self
+            .edit_policy
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// An editor session's edit policy: each edit it asks about becomes an
+    /// approval request carrying the diff, answered once (never
+    /// remembered).
+    async fn check_edits(&self, request: &GateRequest<'_>) -> GateVerdict {
+        let Some(policy) = self.edit_policy() else {
+            return GateVerdict::Allow;
+        };
+        if self.bypassing() {
+            return GateVerdict::Allow;
+        }
+        let floors = &self.setup.floors;
+        let cwd = Path::new(&floors.cwd);
+        let user_home = floors.user_home.as_deref().map(Path::new);
+        let resolve = |path: &str| absolute(path, cwd, user_home);
+        let diffs = super::edits::previews(request.tool.name(), request.arguments, &resolve);
+        for diff in diffs {
+            if !policy.asks(Path::new(&diff.path), cwd) {
+                continue;
+            }
+            let verdict = self
+                .decide(ApprovalRequest {
+                    tool: request.tool.name().to_owned(),
+                    call_id: request.call_id.to_owned(),
+                    subject: Some(diff.path.clone()),
+                    findings: vec![Finding {
+                        detector: super::edits::FILE_EDIT.to_owned(),
+                        reason: "this editor session asks before file edits".to_owned(),
+                        fragment: diff.path.clone(),
+                    }],
+                    remember: None,
+                    explanation: None,
+                    diff: Some(diff),
+                })
+                .await;
+            if verdict != GateVerdict::Allow {
+                return verdict;
+            }
+        }
+        GateVerdict::Allow
+    }
+
     /// `[approvals].allow` as on disk now, then this session's approvals.
     /// An unreadable `grants.toml` allows nothing (more prompts, never
     /// fewer).
@@ -295,6 +374,7 @@ impl CommandGate {
             findings,
             remember: Some(literal(line.trim())),
             explanation: None,
+            diff: None,
         })
         .await
     }
@@ -321,6 +401,7 @@ impl CommandGate {
             }],
             remember: (!escalation.once_only).then_some(key),
             explanation: None,
+            diff: None,
         })
         .await
     }
@@ -359,6 +440,7 @@ impl CommandGate {
                     }],
                     remember: None,
                     explanation: None,
+                    diff: None,
                 })
                 .await;
             if verdict != GateVerdict::Allow {
@@ -704,7 +786,11 @@ impl ApprovalGate for CommandGate {
                     return verdict;
                 }
             }
-            self.check_protected(&request).await
+            let verdict = self.check_protected(&request).await;
+            if verdict != GateVerdict::Allow {
+                return verdict;
+            }
+            self.check_edits(&request).await
         })
     }
 }

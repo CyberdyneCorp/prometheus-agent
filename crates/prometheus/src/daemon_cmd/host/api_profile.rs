@@ -214,6 +214,8 @@ pub(super) fn catalog(host: &DaemonHost, profile: &Profile, what: Catalog) -> Re
         }
         Catalog::Toolsets => toolsets(&scope),
         Catalog::Models => Ok(model_options(host, profile)),
+        Catalog::A2aSkills => super::a2a::skills(&scope),
+        Catalog::Agents => Ok(super::a2a::agents(host)),
     }
 }
 

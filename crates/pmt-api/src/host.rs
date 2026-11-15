@@ -68,6 +68,49 @@ pub trait ApiHost: Host {
         let _ = profile;
         pmt_core::secret::Redactor::new(std::iter::empty()).redact_all(text)
     }
+
+    /// What the prompt-injection scanner finds in `text` (pattern ids).
+    fn api_scan(&self, text: &str) -> Vec<String> {
+        let _ = text;
+        Vec::new()
+    }
+
+    /// Checks `url` against the profile's outbound egress policy (private,
+    /// loopback and link-local destinations refused unless allowlisted).
+    fn api_push_check<'a>(&'a self, profile: &'a str, url: &'a str) -> HostFuture<'a, ()> {
+        let _ = (profile, url);
+        Box::pin(async {
+            Err(pmt_core::Error::new(
+                &pmt_core::error::codes::NET_DESTINATION_BLOCKED,
+                "this host sends no push notifications",
+            ))
+        })
+    }
+
+    /// POSTs `body` with `headers` to `url` under the profile's egress
+    /// policy; the HTTP status.
+    fn api_push<'a>(&'a self, push: Push<'a>) -> HostFuture<'a, u16> {
+        let _ = push;
+        Box::pin(async {
+            Err(pmt_core::Error::new(
+                &pmt_core::error::codes::NET_DESTINATION_BLOCKED,
+                "this host sends no push notifications",
+            ))
+        })
+    }
+}
+
+/// One push notification to send.
+#[derive(Debug, Clone, Copy)]
+pub struct Push<'a> {
+    /// The profile whose egress policy applies.
+    pub profile: &'a str,
+    /// Where it goes.
+    pub url: &'a str,
+    /// Its headers.
+    pub headers: &'a [(String, String)],
+    /// Its JSON body, as sent (and signed).
+    pub body: &'a [u8],
 }
 
 /// A new API session.
@@ -84,6 +127,9 @@ pub struct NewApiSession {
     pub history: Vec<(String, String)>,
     /// A title.
     pub title: Option<String>,
+    /// A source tag (`a2a` for inbound A2A conversations, whose sessions
+    /// get the A2A toolsets).
+    pub source_tag: Option<String>,
 }
 
 /// One API turn.
@@ -178,4 +224,10 @@ pub enum Catalog {
     /// `GET /api/model/options`: the configured providers and models with
     /// capability hints and pricing.
     Models,
+    /// The toolsets inbound A2A sessions get, filtered by
+    /// `a2a.server.advertised_toolsets` (the Agent Card's skills):
+    /// `[{name, description}]`.
+    A2aSkills,
+    /// The served profiles as bots (`GET /api/agents`).
+    Agents,
 }

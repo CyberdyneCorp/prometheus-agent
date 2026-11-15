@@ -279,6 +279,16 @@ pub static BUILTINS: &[Command] = &[
         Effect::None,
     ),
     command(
+        "kanban",
+        &[],
+        Tools,
+        "slash.desc.kanban",
+        &[text("args")],
+        TERMINALS_AND_CHATS,
+        Immediate,
+        Effect::None,
+    ),
+    command(
         "suggestions",
         &["suggest"],
         Tools,

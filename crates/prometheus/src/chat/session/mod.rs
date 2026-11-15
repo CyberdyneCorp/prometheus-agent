@@ -15,11 +15,13 @@ pub mod delegation;
 pub mod desktop_prefs;
 pub mod documents;
 pub mod downgrades;
+mod editor_tools;
 mod embed;
 mod ending;
 pub mod env;
 mod guardian;
 pub mod judge;
+pub mod kanban;
 mod lifecycle;
 mod lsp;
 mod mcp;
@@ -108,6 +110,8 @@ pub struct Options {
     pub egress: crate::egress::Overrides,
     /// A scheduled run's session (spec: scheduled-jobs).
     pub cron: Option<cron::CronRun>,
+    /// A kanban worker's session (spec: kanban).
+    pub kanban: Option<kanban::KanbanRun>,
     /// A replay's recorded tool results and prompts.
     pub replay: Option<Arc<crate::replay::Hooks>>,
 }
@@ -611,9 +615,9 @@ impl Factory {
             &memory,
             &environment,
         );
-        let reach = (&selection, &capabilities);
+        let (reach, aux) = ((&selection, &capabilities), (&summarizer, &model));
         let (agent_tools, clarify) =
-            self.agent_tools(id, &memory, &summarizer, reach, cards, &delegation)?;
+            self.agent_tools(id, &memory, aux, reach, cards, &delegation)?;
         let gate = self.gate_for(id, child, &model, &environment)?;
         skills::bind_shell(&inline_shell, environment.commands.as_ref(), &gate.gate);
         let ports = (&gate.gate, &agent_tools, &model);
@@ -726,7 +730,7 @@ impl Factory {
     ) -> Result<(Arc<ToolRegistry>, Selection, pmt_tools::SessionSurface), Error> {
         // Plugin and MCP toolsets: enabling a plugin or configuring a
         // server opts its tools in.
-        let (registry, plugin_toolsets) = self.session_registry()?;
+        let (registry, plugin_toolsets) = self.registries.current_for(session.id)?;
         let surface = tools::surface_of(session);
         let selection = tools::selection(
             &registry,
@@ -741,7 +745,10 @@ impl Factory {
                 &self.scope.config().tools.disabled_toolsets,
                 selection,
             )?,
-            None => self.with_browser_opt_ins(session.id, selection),
+            None => match &self.options.kanban {
+                Some(run) => run.selection(&registry, selection),
+                None => self.with_browser_opt_ins(session.id, selection),
+            },
         };
         Ok((registry, selection, surface))
     }
@@ -790,6 +797,9 @@ impl Factory {
             user_home: self.launch.user_home().map(PathBuf::as_path),
             interactive: self.options.interactive,
             cron: self.options.cron.is_some(),
+            unattended: self.store.session(id).is_ok_and(|row| {
+                tools::surface_of(&row) == pmt_tools::SessionSurface::AcpUnattended
+            }),
             yolo: self.options.yolo,
             hooks: Some(Arc::new(hooks)),
             session_id: id.to_string(),
@@ -890,7 +900,15 @@ impl Factory {
             scratch: Vec::new(),
         });
         let capabilities = &place::with_worktree_git(capabilities, at.cwd, &protected)
-            .union(&cron.map(cron::CronRun::sandbox_grants).unwrap_or_default());
+            .union(&cron.map(cron::CronRun::sandbox_grants).unwrap_or_default())
+            .union(
+                &self
+                    .options
+                    .kanban
+                    .as_ref()
+                    .map(kanban::KanbanRun::sandbox_grants)
+                    .unwrap_or_default(),
+            );
         let processes =
             processes::Wiring::of(self.scope.config(), &self.store, id, &session.origin);
         let environment = env::attach(&env::EnvInputs {
@@ -954,7 +972,10 @@ impl Factory {
         &self,
         id: SessionId,
         memory: &Arc<MemorySession>,
-        summarizer: &Arc<summarize::RouteSummarizer>,
+        (summarizer, model): (
+            &Arc<summarize::RouteSummarizer>,
+            &Arc<model::SwitchableModel>,
+        ),
         (selection, capabilities): (&Selection, &CapabilitySet),
         cards: bool,
         delegation: &delegation::Wiring,
@@ -990,6 +1011,25 @@ impl Factory {
                 &self.options.cwd,
                 self.launch.user_home(),
             ),
+        ));
+        let tools = tools.with_kanban(crate::kanban_host::tool::port(
+            &self.scope,
+            crate::kanban_host::tool::PortParts {
+                cwd: self.options.cwd.clone(),
+                may_read: self.read_check(capabilities),
+                grant: self.options.kanban.as_ref().map(|run| run.grant.clone()),
+                judge: self.options.kanban.as_ref().map(|_| {
+                    Arc::new(self.models.judge(model, id))
+                        as Arc<dyn crate::kanban_host::goal::GoalJudge>
+                }),
+            },
+        ));
+        let tools = tools.with_a2a(crate::a2a_host::tool::port(
+            &self.scope,
+            &self.store,
+            capabilities,
+            Some(Arc::new(self.models.judge(model, id))
+                as Arc<dyn crate::kanban_host::goal::GoalJudge>),
         ));
         let tools = match &self.messaging {
             Some(ports) => tools.with_messaging(ports.port(id, self.read_check(capabilities))),
@@ -1030,6 +1070,7 @@ impl Factory {
         target: &pmt_providers::resolve::Target,
     ) -> Result<pmt_store::Session, Error> {
         let mut session = self.store.session(id)?;
+        tools::refuse_unbound_a2a(&session)?;
         session.source = self.store.running_source(&session);
         if let pmt_store::Origin::Gateway {
             user: Some(user), ..

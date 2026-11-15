@@ -83,6 +83,8 @@ async fn endpoint(shared: &Arc<Shared>, caller: &auth::Caller, path: &str, req: 
         (Method::POST, ["v1", "runs", id, action]) => {
             runs::control(shared, caller, id, action, req).await
         }
+        (Method::POST, ["api", "bot-chat", "ensure"]) => discovery::bot_chat(shared, caller).await,
+        (Method::GET, ["api", "agents"]) => discovery::agents(shared, caller).await,
         (_, ["api", "sessions", rest @ ..]) => sessions_api::route(shared, caller, rest, req).await,
         (_, ["api", "jobs", rest @ ..]) => discovery::jobs(shared, caller, rest, req).await,
         _ => not_found("the route"),

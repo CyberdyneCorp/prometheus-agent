@@ -22,9 +22,11 @@
 //! [`environments`] is where their handlers find each session's state.
 
 pub mod agent_level;
+pub mod agent_level_a2a;
 pub mod agent_level_cron;
 pub mod agent_level_delegation;
 pub mod agent_level_desktop;
+pub mod agent_level_kanban;
 pub mod approval;
 pub mod args;
 pub mod browser;
@@ -33,6 +35,7 @@ pub mod code_exec;
 pub mod connectors;
 pub mod descriptor;
 pub mod dispatch;
+pub mod editor;
 pub mod environments;
 pub mod files;
 pub mod grants;

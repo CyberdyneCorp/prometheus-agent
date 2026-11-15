@@ -2,8 +2,9 @@
 # Installs the uv this binary pins (crates/pmt-update/runtimes/index.json),
 # verified against its SHA-256, into DEST (default: target/tools/uv), and
 # installs the CPython the python-bridge tests run on into
-# target/pybridge-python and the OpenAI SDK of the M2 exit test into
-# target/openai-sdk, so no test downloads anything.
+# target/pybridge-python, the OpenAI SDK of the M2 exit test into
+# target/openai-sdk and the A2A SDK of the A2A interop test into
+# target/a2a-sdk, so no test downloads anything.
 #
 # usage: scripts/ci/install-uv [DEST]
 # On GitHub Actions DEST is added to GITHUB_PATH.
@@ -63,4 +64,16 @@ case "$(uname -s)" in
 esac
 "$dest/uv" pip install --quiet --exclude-newer 2026-11-01T00:00:00Z --python "$sdk_python" openai==2.8.0
 touch "$root/target/openai-sdk/.openai-2.8.0"
+# The official A2A Python SDK the A2A interop test drives against the A2A
+# server (crates/prometheus/tests/a2a_sdk.rs: keep the version, the cut-off
+# date and the marker file in step with it).
+rm -rf "$root/target/a2a-sdk"
+UV_PYTHON_INSTALL_DIR="$root/target/pybridge-python" "$dest/uv" venv --quiet \
+    --python-preference only-managed --python 3.12 "$root/target/a2a-sdk"
+case "$(uname -s)" in
+    MINGW* | MSYS* | CYGWIN*) a2a_python="$root/target/a2a-sdk/Scripts/python.exe" ;;
+    *) a2a_python="$root/target/a2a-sdk/bin/python" ;;
+esac
+"$dest/uv" pip install --quiet --exclude-newer 2026-11-01T00:00:00Z --python "$a2a_python" a2a-sdk==1.3.0
+touch "$root/target/a2a-sdk/.a2a-sdk-1.3.0"
 echo "uv $("$dest/uv" --version) at $dest"

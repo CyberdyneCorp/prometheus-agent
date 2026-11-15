@@ -1,7 +1,9 @@
 //! The desktop's profile-scoped methods (spec: desktop-app, Settings write
 //! validated config patches; Profile switching is explicit; Bot chats are
 //! created atomically by the daemon): `config.patch`, `config.reload` and
-//! `bot.chat.ensure`. Each names its profile, which the connection's
+//! `bot.chat.ensure`; and the union roster and desktop relay (spec:
+//! agent-interop): `bot.roster.list`, `bot.relay.drain`,
+//! `bot.relay.deliver`. Each names its profile, which the connection's
 //! ticket must grant.
 
 use pmt_rpc::contracts as c;
@@ -20,7 +22,10 @@ pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
     router
         .register::<c::ConfigPatch, _, _>(catalog, config_patch)?
         .register::<c::ConfigReload, _, _>(catalog, config_reload)?
-        .register::<c::BotChatEnsure, _, _>(catalog, bot_chat_ensure)?;
+        .register::<c::BotChatEnsure, _, _>(catalog, bot_chat_ensure)?
+        .register::<c::BotRosterList, _, _>(catalog, bot_roster)?
+        .register::<c::BotRelayDrain, _, _>(catalog, relay_drain)?
+        .register::<c::BotRelayDeliver, _, _>(catalog, relay_deliver)?;
     Ok(())
 }
 
@@ -62,4 +67,34 @@ async fn bot_chat_ensure(call: Call, params: c::ProfileParams) -> Result<c::BotC
         session_id,
         created,
     })
+}
+
+async fn bot_roster(call: Call, params: c::RosterParams) -> Result<c::Roster, RpcError> {
+    profile_for(&call, Some(&params.profile))?;
+    call.server
+        .host()
+        .bot_roster(params)
+        .await
+        .map_err(|e| rpc(&e))
+}
+
+async fn relay_drain(call: Call, params: c::RelayDrainParams) -> Result<c::RelayDrained, RpcError> {
+    profile_for(&call, Some(&params.profile))?;
+    call.server
+        .host()
+        .relay_drain(params)
+        .await
+        .map_err(|e| rpc(&e))
+}
+
+async fn relay_deliver(
+    call: Call,
+    params: c::RelayDeliverParams,
+) -> Result<c::RelayDelivered, RpcError> {
+    profile_for(&call, Some(&params.profile))?;
+    call.server
+        .host()
+        .relay_deliver(params)
+        .await
+        .map_err(|e| rpc(&e))
 }

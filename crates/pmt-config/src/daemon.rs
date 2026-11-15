@@ -51,6 +51,9 @@ pub struct DaemonConfig {
     /// The OpenAI-compatible API server's listener (spec: api-server).
     #[serde(default)]
     pub api_server: crate::daemon_api::ApiListener,
+    /// The A2A server's listener (spec: agent-interop).
+    #[serde(default)]
+    pub a2a: crate::daemon_a2a::A2aListener,
     /// The web dashboard's listener (spec: web-dashboard).
     #[serde(default)]
     pub dashboard: crate::daemon_dashboard::DashboardConfig,
@@ -522,6 +525,10 @@ impl DaemonConfig {
             .map_err(|message| parse_error(&message))?;
         config
             .api_server
+            .validate()
+            .map_err(|message| parse_error(&message))?;
+        config
+            .a2a
             .validate()
             .map_err(|message| parse_error(&message))?;
         config

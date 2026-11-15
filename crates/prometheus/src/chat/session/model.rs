@@ -319,7 +319,7 @@ impl Models {
     /// `session`'s calls belong to its conversation while the returned
     /// binding lives (spec: model-providers, Session affinity headers and
     /// per-model wire routing): its kanban task for a kanban worker
-    /// (`kanban:<task>` source tag), else its root session, which
+    /// (`kanban-<task>` source tag), else its root session, which
     /// compression continuations and resumes keep.
     #[must_use]
     pub fn bind_conversation(&self, session: &pmt_store::Session) -> Binding {
@@ -327,7 +327,7 @@ impl Models {
             .source_tag
             .as_deref()
             .and_then(|tag| tag.strip_prefix(super::KANBAN_SOURCE_TAG))
-            .and_then(|rest| rest.strip_prefix(':'))
+            .and_then(|rest| rest.strip_prefix('-'))
             .filter(|task| !task.is_empty());
         let conversation = match task {
             Some(task) => format!("kanban:{task}"),

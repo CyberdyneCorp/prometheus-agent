@@ -111,6 +111,7 @@ async fn create(shared: &Shared, caller: &Caller, req: &Req) -> Result<Reply, Re
         instructions: body["instructions"].as_str().map(str::to_owned),
         session_key: session::session_key(req)?,
         title: body["title"].as_str().map(str::to_owned),
+        source_tag: None,
         ..NewApiSession::default()
     };
     let id = shared

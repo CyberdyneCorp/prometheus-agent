@@ -208,6 +208,11 @@ fn folders_names_boards_and_the_active_pointer_are_editable() {
     let one = dir(home.path(), "one");
     let two = dir(home.path(), "two");
     let primary = dir(home.path(), "main");
+    // A bound board must exist (spec: projects, Kanban board binding).
+    ok(&run(
+        home.path(),
+        &["kanban", "boards", "create", "backend"],
+    ));
     ok(&run(
         home.path(),
         &[

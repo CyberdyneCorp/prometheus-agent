@@ -223,6 +223,12 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
     if let Some(terminal) = &terminal {
         inputs.processes.bind(terminal);
     }
+    let editor = remote.is_none() && inputs.session.source == pmt_store::Source::Acp;
+    if let Some(terminal) = terminal.as_ref().filter(|_| editor) {
+        // An ACP session's editor may run its foreground commands (spec:
+        // acp-adapter, Editor terminal delegation); the daemon decides.
+        terminal.delegate_for(inputs.session_id);
+    }
     let (file_backend, sync) = remote
         .as_ref()
         .map(|r| remote_parts(inputs, r, terminal.as_ref()))
@@ -441,9 +447,19 @@ fn files(
 ) -> FileSession {
     let host_cwd = inputs.cwd.to_path_buf();
     let (backend, cwd) = remote.unwrap_or_else(|| {
-        let backend: Arc<dyn pmt_tools::files::FileBackend> =
+        let mut backend: Arc<dyn pmt_tools::files::FileBackend> =
             Arc::new(LocalBackend::new(inputs.capabilities.clone(), places).denying_stores(policy));
-        (backend, Arc::new(move || host_cwd.clone()))
+        let cwd: pmt_tools::files::CwdSource = Arc::new(move || host_cwd.clone());
+        if inputs.session.source == pmt_store::Source::Acp {
+            // Files under the cwd go through the editor when it can
+            // (spec: acp-adapter, Editor-native file access).
+            backend = Arc::new(pmt_tools::editor::EditorBackend::new(
+                backend,
+                inputs.session_id,
+                Arc::clone(&cwd),
+            ));
+        }
+        (backend, cwd)
     });
     let files = FileSession::new(FileSetup {
         backend,

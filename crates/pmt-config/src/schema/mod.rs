@@ -16,9 +16,11 @@
 //! Each capability's spec owns its section; the M1 sections live here so
 //! the whole file validates in one place.
 
+mod a2a;
 mod agent;
 mod api_server;
 mod automation;
+mod bot_mode;
 mod connectors;
 mod cron;
 mod curator;
@@ -32,6 +34,7 @@ mod gateway_policy;
 mod gateway_routes;
 mod hooks;
 mod interface;
+mod kanban;
 mod lsp;
 mod mcp;
 mod media;
@@ -52,6 +55,10 @@ mod webhook;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+pub use a2a::{
+    A2aAgent, A2aConfig, A2aPeerToken, A2aServerConfig, MAX_ORCHESTRATE_AGENTS, MAX_PINGPONG_TURNS,
+    MIN_REPLY_TIMEOUT_SECS, PeerGateway, peer_key_secret, valid_peer_name,
+};
 pub use agent::{
     AgentConfig, AutoMode, CodingContext, CompressionConfig, ContextConfig, ContinuationMode,
     EmptyResponseGuard, GuardrailThresholds, ImageInputMode, IntentContinuation, LoopCaps,
@@ -60,6 +67,7 @@ pub use agent::{
 };
 pub use api_server::{ApiModelRoute, ApiResponsesConfig, ApiServerConfig};
 pub use automation::{GoalsConfig, HeartbeatConfig, LoopsConfig};
+pub use bot_mode::BotModeConfig;
 pub use connectors::{ConnectorsConfig, DEFAULT_CONNECTOR_GATEWAY};
 pub use cron::{ContinuableSurface, CronConfig, CronDeliveryConfig, CronProvider};
 pub use curator::{
@@ -84,10 +92,11 @@ pub use gateway::{
 pub use gateway_routes::{ProfileRoute, RouteFacts, resolve_route};
 pub use hooks::{HooksConfig, OutboundHook, ShellHook};
 pub use interface::{
-    AutoResume, BusyConfig, BusyIndicator, BusyInputMode, CliConfig, ComposerConfig, DisplayConfig,
-    Interface, KeyChord, MarkdownMode, QuickCommand, QuickCommandKind, ResumeDisplay, ToolProgress,
-    ToolProgressGrouping, TuiConfig, TuiKeys, TuiTheme, UiConfig,
+    AcpConfig, AutoResume, BusyConfig, BusyIndicator, BusyInputMode, CliConfig, ComposerConfig,
+    DisplayConfig, Interface, KeyChord, MarkdownMode, QuickCommand, QuickCommandKind,
+    ResumeDisplay, ToolProgress, ToolProgressGrouping, TuiConfig, TuiKeys, TuiTheme, UiConfig,
 };
+pub use kanban::{KanbanConfig, KanbanRole};
 pub use lsp::{
     LSP_SERVER_IDS, LspConfig, LspInstallStrategy, LspPackageManager, LspServerConfig, LspWaitMode,
 };
@@ -160,6 +169,12 @@ pub struct Config {
     /// a newer one is refused.
     #[schemars(extend("x-apply" = "restart"))]
     pub schema_version: u32,
+    /// The A2A server's view of this profile and the A2A agents it calls
+    /// (boxed: a large, rarely read section, kept out of every future
+    /// that holds a configuration).
+    pub a2a: Box<A2aConfig>,
+    /// How ACP editor sessions use the editor.
+    pub acp: AcpConfig,
     /// Turn loop limits, retries and reasoning effort.
     pub agent: AgentConfig,
     /// The OpenAI-compatible API server's view of this profile.
@@ -170,6 +185,8 @@ pub struct Config {
     pub attachments: AttachmentsConfig,
     /// Sign-in behaviour.
     pub auth: AuthConfig,
+    /// How bot messages travel between bots (the desktop relay's bounds).
+    pub bot_mode: BotModeConfig,
     /// Side-model (auxiliary) task routing.
     pub auxiliary: AuxiliaryConfig,
     /// Browser tool sessions.
@@ -214,6 +231,8 @@ pub struct Config {
     pub image_gen: ImageGenConfig,
     /// Shell hooks and outbound webhooks.
     pub hooks: HooksConfig,
+    /// Kanban: the default board and the dispatcher.
+    pub kanban: KanbanConfig,
     /// Structured log files.
     pub logging: LoggingConfig,
     /// `/loop` cadence bounds.
@@ -252,6 +271,9 @@ pub struct Config {
     pub prompt_cache: PromptCacheConfig,
     /// PII redaction.
     pub privacy: PrivacyConfig,
+    /// Peer gateways reached over their API server, keyed by name.
+    #[schemars(extend("x-apply" = "next_session"))]
+    pub peers: std::collections::BTreeMap<String, PeerGateway>,
     /// OpenRouter upstream provider routing preferences.
     pub provider_routing: ProviderRoutingConfig,
     /// Per-provider overrides, keyed by provider id.
@@ -316,11 +338,14 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             schema_version: SCHEMA_VERSION,
+            a2a: Box::default(),
+            acp: AcpConfig::default(),
             agent: AgentConfig::default(),
             api_server: ApiServerConfig::default(),
             approvals: ApprovalsConfig::default(),
             attachments: AttachmentsConfig::default(),
             auth: AuthConfig::default(),
+            bot_mode: BotModeConfig::default(),
             auxiliary: AuxiliaryConfig::default(),
             browser: BrowserConfig::default(),
             budgets: BudgetsConfig::default(),
@@ -344,6 +369,7 @@ impl Default for Config {
             heartbeat: HeartbeatConfig::default(),
             image_gen: ImageGenConfig::default(),
             hooks: HooksConfig::default(),
+            kanban: KanbanConfig::default(),
             logging: LoggingConfig::default(),
             loops: LoopsConfig::default(),
             lsp: LspConfig::default(),
@@ -361,6 +387,7 @@ impl Default for Config {
             python_bridge: PythonBridgeConfig::default(),
             prompt_cache: PromptCacheConfig::default(),
             privacy: PrivacyConfig::default(),
+            peers: std::collections::BTreeMap::new(),
             provider_routing: ProviderRoutingConfig::default(),
             providers: std::collections::BTreeMap::new(),
             quick_commands: std::collections::BTreeMap::new(),

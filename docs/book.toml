@@ -14,3 +14,11 @@ build-dir = "../target/docs"
 # being created empty.
 create-missing = false
 
+
+# The generated wire reference repeats every contract's field docs, and the
+# generated error-code table repeats each code's message; the search index
+# stays under mdbook's 10 MB warning without them (the guides explain the
+# same methods and errors in prose).
+[output.html.search.chapter]
+"reference/rpc.md" = { enable = false }
+"reference/error-codes.md" = { enable = false }

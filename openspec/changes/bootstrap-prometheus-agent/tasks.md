@@ -562,7 +562,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 - [ ] 61.4 Implement the built-in pages, write-only secrets, schema-driven config editing, the honest platform matrix, redacted bounded logs, upload/download limits, and the cost, harness-evolution and experience views; verify with Playwright tests (spec: web-dashboard)
 - [x] 61.5 Implement the REST endpoint inventory (config schema served from the typed config, bulk maintenance needs confirmation), additional dashboard sign-in providers (token mode refused without its secret) and registering a dashboard with the account portal; verify with HTTP tests (spec: web-dashboard)
 - [x] 61.6 Implement paired device credentials for remote clients (revocation, expiring pairing codes), remote desktop clients attaching through the dashboard listener, the gateway's remote client attachment (off by default, revoked devices refused), the desktop workspace in the browser, webapp sign-out across tabs with the insecure-context notice, and webapp file staging and terminals; verify with Playwright tests (spec: web-dashboard, spec: messaging-gateway)
-- [ ] 61.7 Implement the kanban dashboard API with orchestration modes, the webhooks page (secret shown once), channel setup forms, the files page (symlink escapes refused), embedded documentation (offline), the profile builder (clones without secrets), dashboard themes (no remote CSS, size cap) and dashboard plugin contributions (no cookie access from plugin frames); verify with Playwright tests (spec: web-dashboard)
+- [x] 61.7 Implement the kanban dashboard API with orchestration modes, the webhooks page (secret shown once), channel setup forms, the files page (symlink escapes refused), embedded documentation (offline), the profile builder (clones without secrets), dashboard themes (no remote CSS, size cap) and dashboard plugin contributions (no cookie access from plugin frames); verify with Playwright tests (spec: web-dashboard)
 
 ## 62. M3 Desktop app
 
@@ -595,25 +595,25 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 66. M3 ACP adapter
 
-- [ ] 66.1 Implement `prometheus acp` launch flags, stdout-only protocol frames, quiet liveness probes and config from flags/profile only, as a daemon viewer bound to the launch profile; verify with an ACP client test that stdout carries only frames (spec: acp-adapter)
-- [ ] 66.2 Implement initialize, auth reuse, new/load/resume/list/fork sessions and editor MCP servers owned by the daemon session; verify with ACP conformance fixtures (spec: acp-adapter)
-- [ ] 66.3 Implement prompt submission with exactly-once submit, scoped cancel, unknown outcome after a daemon restart, slash commands, edit-approval modes, validated config options, model switching, fail-closed approval/clarify bridging, exactly-once reply projection and terminal tool statuses; verify with fault-injection tests (spec: acp-adapter)
-- [ ] 66.4 Implement content conversion with media staging, metadata projection, editor-native file access and terminal delegation; verify with an editor fixture (spec: acp-adapter)
-- [ ] 66.5 Implement optional browser tools for ACP sessions (runtime missing reported) and unattended ACP clients with relay bridges (auto-approval only through the declared bridge, unattended default toolset); verify with ACP fixtures (spec: acp-adapter)
+- [x] 66.1 Implement `prometheus acp` launch flags, stdout-only protocol frames, quiet liveness probes and config from flags/profile only, as a daemon viewer bound to the launch profile; verify with an ACP client test that stdout carries only frames (spec: acp-adapter)
+- [x] 66.2 Implement initialize, auth reuse, new/load/resume/list/fork sessions and editor MCP servers owned by the daemon session; verify with ACP conformance fixtures (spec: acp-adapter)
+- [x] 66.3 Implement prompt submission with exactly-once submit, scoped cancel, unknown outcome after a daemon restart, slash commands, edit-approval modes, validated config options, model switching, fail-closed approval/clarify bridging, exactly-once reply projection and terminal tool statuses; verify with fault-injection tests (spec: acp-adapter)
+- [x] 66.4 Implement content conversion with media staging, metadata projection, editor-native file access and terminal delegation; verify with an editor fixture (spec: acp-adapter)
+- [x] 66.5 Implement optional browser tools for ACP sessions (runtime missing reported) and unattended ACP clients with relay bridges (auto-approval only through the declared bridge, unattended default toolset); verify with ACP fixtures (spec: acp-adapter)
 
 ## 67. M3 Kanban
 
-- [ ] 67.1 Implement board storage at `<home>/kanban/`, slugs and selection, the typed workflow table, task creation (idempotent) and dependency links; verify with store tests (spec: kanban)
-- [ ] 67.2 Implement ready promotion with atomic claim, typed blocks with the loop breaker, scheduled parking, completion gates, the review lane and archive terminating the worker; verify with concurrency tests (spec: kanban)
-- [ ] 67.3 Implement the single dispatcher per home, its tick, concurrency caps, the fail-closed claim allowlist, the failure circuit breaker, worker spawn by run ticket and liveness heartbeats; verify that a dead worker's task is reclaimed (spec: kanban)
+- [x] 67.1 Implement board storage at `<home>/kanban/`, slugs and selection, the typed workflow table, task creation (idempotent) and dependency links; verify with store tests (spec: kanban)
+- [x] 67.2 Implement ready promotion with atomic claim, typed blocks with the loop breaker, scheduled parking, completion gates, the review lane and archive terminating the worker; verify with concurrency tests (spec: kanban)
+- [x] 67.3 Implement the single dispatcher per home, its tick, concurrency caps, the fail-closed claim allowlist, the failure circuit breaker, worker spawn by run ticket and liveness heartbeats; verify that a dead worker's task is reclaimed (spec: kanban)
 - [ ] 67.4 Implement the kanban toolset and grants, workspaces, attachments, notifications through the owning profile, per-task cost budget, eval/evolution tasks, event log and run history, the CLI and board export/import; verify with CLI tests and document kanban (spec: kanban)
 
 ## 68. M3 Kanban upgrades
 
-- [ ] 68.1 Implement URL attachments with attachment listing tools (internal addresses refused), PR completion contracts (red required checks block completion, retries cannot substitute a sibling PR), goal-mode cards, per-task model overrides with pinned skills and the respawn guard with dispatch dry run; verify with board tests (spec: kanban)
-- [ ] 68.2 Implement the swarm topology helper (atomic creation, unknown worker profile aborts everything), the `/kanban` slash command, subscription delivery modes with inheritance, orchestrator guidance with specify and decompose, and the additional CLI verbs; verify with CLI tests (spec: kanban)
-- [ ] 68.3 Implement worker lanes (external CLI lanes declared under `[[kanban_lanes]]`, unknown assignees surfaced) and kanban lifecycle observer hooks that cannot hold the board; verify with a sandboxed lane fixture (spec: kanban, spec: plugin-system)
-- [ ] 68.4 Implement project kanban board binding (branch convention); verify that a project's board is selected by default (spec: projects)
+- [x] 68.1 Implement URL attachments with attachment listing tools (internal addresses refused), PR completion contracts (red required checks block completion, retries cannot substitute a sibling PR), goal-mode cards, per-task model overrides with pinned skills and the respawn guard with dispatch dry run; verify with board tests (spec: kanban)
+- [x] 68.2 Implement the swarm topology helper (atomic creation, unknown worker profile aborts everything), the `/kanban` slash command, subscription delivery modes with inheritance, orchestrator guidance with specify and decompose, and the additional CLI verbs; verify with CLI tests (spec: kanban)
+- [x] 68.3 Implement worker lanes (external CLI lanes declared under `[[kanban_lanes]]`, unknown assignees surfaced) and kanban lifecycle observer hooks that cannot hold the board; verify with a sandboxed lane fixture (spec: kanban, spec: plugin-system)
+- [x] 68.4 Implement project kanban board binding (branch convention); verify that a project's board is selected by default (spec: projects)
 
 ## 69. M3 Harness evolution
 
@@ -667,9 +667,9 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 74. M3 Agent interop: A2A and peer gateways
 
-- [ ] 74.1 Implement A2A server enablement and binding (off by default, wildcard binds need tokens, browser pages refused), the Agent Card and the A2A JSON-RPC methods with the task lifecycle; verify against the official A2A SDK (spec: agent-interop)
-- [ ] 74.2 Implement A2A conversation identity, authentication, trust and rate limits, inbound safety (no slash commands from peers, ping-pong capped) and push notifications (private addresses refused); verify with peer fixtures (spec: agent-interop)
-- [ ] 74.3 Implement the outbound `a2a_*` tools (unknown agent names refused), the peer gateway registry (keys never on the command line), peer direct messages with idempotent remote runs, the union roster across gateways and the desktop relay for cross-connection bot messages; verify with two daemon fixtures (spec: agent-interop)
+- [x] 74.1 Implement A2A server enablement and binding (off by default, wildcard binds need tokens, browser pages refused), the Agent Card and the A2A JSON-RPC methods with the task lifecycle; verify against the official A2A SDK (spec: agent-interop)
+- [x] 74.2 Implement A2A conversation identity, authentication, trust and rate limits, inbound safety (no slash commands from peers, ping-pong capped) and push notifications (private addresses refused); verify with peer fixtures (spec: agent-interop)
+- [x] 74.3 Implement the outbound `a2a_*` tools (unknown agent names refused), the peer gateway registry (keys never on the command line), peer direct messages with idempotent remote runs, the union roster across gateways and the desktop relay for cross-connection bot messages; verify with two daemon fixtures (spec: agent-interop)
 
 ## 75. M3 Bot Mode
 

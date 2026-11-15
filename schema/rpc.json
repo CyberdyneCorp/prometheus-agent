@@ -293,6 +293,17 @@
             "null"
           ]
         },
+        "diff": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EditDiff"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "For a file edit: the file before and after, for a diff card."
+        },
         "explanation": {
           "description": "What an `explain` answer produced: the parsed command, the rule,\nthe paths it touches and a dry-run preview (the request is asked\nagain with it).",
           "type": [
@@ -1628,6 +1639,75 @@
       ],
       "type": "object"
     },
+    "ConfigureParams": {
+      "additionalProperties": false,
+      "description": "`session.configure` params: the settings to change (absent ones keep).",
+      "properties": {
+        "cwd": {
+          "default": null,
+          "description": "A new working directory; refused while a turn runs.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "edit_mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EditMode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The edit mode; refused while a turn runs."
+        },
+        "model": {
+          "default": null,
+          "description": "`<provider>/<model>`; while a turn runs it applies from the next.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reasoning_effort": {
+          "default": null,
+          "description": "A reasoning effort the model accepts.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "Configured": {
+      "additionalProperties": false,
+      "description": "`session.configure` result.",
+      "properties": {
+        "next_turn": {
+          "description": "The model change waits for the running turn to end.",
+          "type": "boolean"
+        },
+        "settings": {
+          "$ref": "#/$defs/SessionSettings",
+          "description": "The settings now (a deferred model shows once it applied)."
+        }
+      },
+      "required": [
+        "settings",
+        "next_turn"
+      ],
+      "type": "object"
+    },
     "ContextCategory": {
       "additionalProperties": false,
       "description": "One category of `session.context_usage`.",
@@ -1883,6 +1963,324 @@
           "type": "string"
         }
       ]
+    },
+    "EditDiff": {
+      "additionalProperties": false,
+      "description": "A file edit an approval asks about.",
+      "properties": {
+        "new_text": {
+          "description": "The content after the edit.",
+          "type": "string"
+        },
+        "old_text": {
+          "description": "The current content (`null`: a new file).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "The absolute path.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "new_text"
+      ],
+      "type": "object"
+    },
+    "EditMode": {
+      "description": "How file edits of an editor session are approved (ACP session modes).",
+      "oneOf": [
+        {
+          "const": "default",
+          "description": "Ask before every file edit.",
+          "type": "string"
+        },
+        {
+          "const": "accept_edits",
+          "description": "Edits inside the session's workspace run without asking.",
+          "type": "string"
+        },
+        {
+          "const": "dont_ask",
+          "description": "Every edit of this session runs without asking.",
+          "type": "string"
+        }
+      ]
+    },
+    "EditorBindParams": {
+      "additionalProperties": false,
+      "description": "`session.editor` params: the editor MCP servers of a session an\neditor loaded, resumed or forked.",
+      "properties": {
+        "mcp_servers": {
+          "default": [],
+          "description": "The servers: a non-empty list replaces the session's editor\nservers from its next turn, an empty one keeps them.",
+          "items": {
+            "$ref": "#/$defs/EditorMcpServer"
+          },
+          "type": "array"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "EditorBound": {
+      "additionalProperties": false,
+      "description": "`session.editor` result.",
+      "properties": {
+        "changed": {
+          "description": "Whether the list changed (the new tools apply from the next turn).",
+          "type": "boolean"
+        },
+        "servers": {
+          "description": "The names of the session's editor servers now.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "servers",
+        "changed"
+      ],
+      "type": "object"
+    },
+    "EditorFsResult": {
+      "additionalProperties": false,
+      "description": "The answer to `editor.fs.read` and `editor.fs.write`.",
+      "properties": {
+        "content": {
+          "default": null,
+          "description": "The file's content (`editor.fs.read`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "error": {
+          "default": null,
+          "description": "The editor's error, returned to the model as the tool's.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "EditorMcpServer": {
+      "additionalProperties": false,
+      "description": "An MCP server the editor asks the session to use (ACP `mcpServers`):\na local command (`stdio`) or a remote endpoint (`http`, `sse`). The\ndaemon runs it under the session's capability grants.",
+      "properties": {
+        "args": {
+          "default": [],
+          "description": "Its arguments (`stdio`).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "command": {
+          "default": null,
+          "description": "The program (`stdio`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "env": {
+          "default": [],
+          "description": "Its environment (`stdio`).",
+          "items": {
+            "$ref": "#/$defs/NameValue"
+          },
+          "type": "array"
+        },
+        "headers": {
+          "default": [],
+          "description": "Request headers (`http`, `sse`).",
+          "items": {
+            "$ref": "#/$defs/NameValue"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "The server's name (its tools are `mcp_<name>_<tool>`).",
+          "type": "string"
+        },
+        "transport": {
+          "description": "`stdio`, `http` or `sse`.",
+          "type": "string"
+        },
+        "url": {
+          "default": null,
+          "description": "The endpoint (`http`, `sse`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "transport"
+      ],
+      "type": "object"
+    },
+    "EditorReadParams": {
+      "additionalProperties": false,
+      "description": "`editor.fs.read` params: a text file as the editor has it (unsaved\nchanges included).",
+      "properties": {
+        "deadline_ms": {
+          "default": null,
+          "description": "Milliseconds until the request settles unanswered.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "The absolute path, inside the session's working directory.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "path"
+      ],
+      "type": "object"
+    },
+    "EditorTerminalParams": {
+      "additionalProperties": false,
+      "description": "`editor.terminal.run` params: a command the editor runs in its own\nterminal panel.",
+      "properties": {
+        "command": {
+          "description": "The shell command line.",
+          "type": "string"
+        },
+        "cwd": {
+          "description": "Its working directory.",
+          "type": "string"
+        },
+        "deadline_ms": {
+          "default": null,
+          "description": "Milliseconds until the request settles unanswered.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "output_byte_limit": {
+          "description": "The most output bytes the editor keeps (the tool's output budget).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "command",
+        "cwd",
+        "output_byte_limit"
+      ],
+      "type": "object"
+    },
+    "EditorTerminalResult": {
+      "additionalProperties": false,
+      "description": "The answer to `editor.terminal.run`.",
+      "properties": {
+        "error": {
+          "default": null,
+          "description": "The editor could not run it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "exit_code": {
+          "default": null,
+          "description": "The exit status, when it exited.",
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "output": {
+          "default": "",
+          "description": "What the command printed (the editor's retained tail).",
+          "type": "string"
+        },
+        "signal": {
+          "default": null,
+          "description": "The signal that ended it, when one did.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "truncated": {
+          "default": false,
+          "description": "The editor dropped output beyond the limit.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "EditorWriteParams": {
+      "additionalProperties": false,
+      "description": "`editor.fs.write` params: the new content of a text file, written\nthrough the editor (into an open buffer when there is one).",
+      "properties": {
+        "content": {
+          "description": "The whole new content.",
+          "type": "string"
+        },
+        "deadline_ms": {
+          "default": null,
+          "description": "Milliseconds until the request settles unanswered.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "The absolute path, inside the session's working directory.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "path",
+        "content"
+      ],
+      "type": "object"
     },
     "EgressSetParams": {
       "additionalProperties": false,
@@ -2788,6 +3186,28 @@
       ],
       "type": "object"
     },
+    "InterruptParams": {
+      "additionalProperties": false,
+      "description": "`session.interrupt` params.",
+      "properties": {
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        },
+        "turn_id": {
+          "default": null,
+          "description": "Only this admission (`prompt.submit`'s `turn_id`): the running turn\nstops only when it is this one, a queued one leaves the queue (its\n`turn.finished` says `interrupted_by_user`), anything else is left\nalone. Absent: whatever turn runs.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    },
     "JourneyList": {
       "additionalProperties": false,
       "description": "`journey.list` result.",
@@ -3642,6 +4062,25 @@
       },
       "type": "object"
     },
+    "NameValue": {
+      "additionalProperties": false,
+      "description": "One `name=value` pair of an editor MCP server (an environment\nvariable or an HTTP header).",
+      "properties": {
+        "name": {
+          "description": "The name.",
+          "type": "string"
+        },
+        "value": {
+          "description": "The value.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "value"
+      ],
+      "type": "object"
+    },
     "OnboardingChat": {
       "additionalProperties": false,
       "description": "`onboarding.ensure` result.",
@@ -4373,6 +4812,221 @@
       ],
       "type": "object"
     },
+    "RelayConnection": {
+      "additionalProperties": false,
+      "description": "One connection an attached desktop holds, with its agents.",
+      "properties": {
+        "agents": {
+          "description": "Its agents.",
+          "items": {
+            "$ref": "#/$defs/RosterAgent"
+          },
+          "type": "array"
+        },
+        "label": {
+          "description": "The connection's label.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "agents"
+      ],
+      "type": "object"
+    },
+    "RelayDeliverParams": {
+      "additionalProperties": false,
+      "description": "`bot.relay.deliver` params: an envelope for its target, or a reply for\nits sender.",
+      "properties": {
+        "envelope": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RelayEnvelope"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "An envelope to run as the profile's Bot Chat's next turn."
+        },
+        "profile": {
+          "description": "The profile that runs the envelope, or that sent the replied one.",
+          "type": "string"
+        },
+        "reply": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RelayReply"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A reply to settle in the profile's outbox."
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "type": "object"
+    },
+    "RelayDelivered": {
+      "additionalProperties": false,
+      "description": "`bot.relay.deliver` result.",
+      "properties": {
+        "delivery_id": {
+          "description": "The delivery id.",
+          "type": "string"
+        },
+        "outcome": {
+          "description": "`delivered`, `failed`, `running` (a retried envelope whose turn\nstill runs), `settled` (a reply recorded) or `ignored` (a reply\nnobody waits for).",
+          "type": "string"
+        },
+        "reason": {
+          "default": null,
+          "description": "The failure reason.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reply": {
+          "default": null,
+          "description": "The target's reply.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "delivery_id",
+        "outcome"
+      ],
+      "type": "object"
+    },
+    "RelayDrainParams": {
+      "additionalProperties": false,
+      "description": "`bot.relay.drain` params.",
+      "properties": {
+        "connections": {
+          "default": [],
+          "description": "The desktop's other connections and their agents (the roster lists\nthem as `connection` rows).",
+          "items": {
+            "$ref": "#/$defs/RelayConnection"
+          },
+          "type": "array"
+        },
+        "profile": {
+          "description": "The profile whose outbox is drained.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "type": "object"
+    },
+    "RelayDrained": {
+      "additionalProperties": false,
+      "description": "`bot.relay.drain` result.",
+      "properties": {
+        "deadline_secs": {
+          "description": "Seconds the courier has to deliver them before they are offered\nagain.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "envelopes": {
+          "description": "Envelopes to deliver.",
+          "items": {
+            "$ref": "#/$defs/RelayEnvelope"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "envelopes",
+        "deadline_secs"
+      ],
+      "type": "object"
+    },
+    "RelayEnvelope": {
+      "additionalProperties": false,
+      "description": "A bot message bound for an agent on another connection.",
+      "properties": {
+        "created_at": {
+          "description": "When it was queued (RFC 3339).",
+          "type": "string"
+        },
+        "delivery_id": {
+          "description": "Never runs twice on the target.",
+          "type": "string"
+        },
+        "message": {
+          "description": "The message.",
+          "type": "string"
+        },
+        "sender": {
+          "description": "The sender's handle.",
+          "type": "string"
+        },
+        "signature": {
+          "description": "The sending daemon's signature over the fields above.",
+          "type": "string"
+        },
+        "target": {
+          "description": "`<handle>@<connection>`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "delivery_id",
+        "sender",
+        "target",
+        "message",
+        "signature",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "RelayReply": {
+      "additionalProperties": false,
+      "description": "The target's answer to an envelope, carried back to the sender.",
+      "properties": {
+        "delivery_id": {
+          "description": "The envelope's delivery id.",
+          "type": "string"
+        },
+        "reason": {
+          "default": null,
+          "description": "The failure reason otherwise.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reply": {
+          "default": null,
+          "description": "The reply, when the turn completed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "signature": {
+          "description": "The envelope's signature (proves the courier holds the envelope).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "delivery_id",
+        "signature"
+      ],
+      "type": "object"
+    },
     "RepoRow": {
       "additionalProperties": false,
       "description": "A repository offered for project creation.",
@@ -4450,6 +5104,11 @@
           "const": "continue",
           "description": "`-c [<name>]`: the newest CLI session of the directory (empty\nreference) or the newest session of the lineage titled `name`.",
           "type": "string"
+        },
+        {
+          "const": "tip",
+          "description": "The current tip of session id `reference`'s compression chain (the\nsession an editor-held id continues in).",
+          "type": "string"
         }
       ]
     },
@@ -4524,6 +5183,188 @@
       },
       "required": [
         "session_id"
+      ],
+      "type": "object"
+    },
+    "Roster": {
+      "additionalProperties": false,
+      "description": "`bot.roster.list` result.",
+      "properties": {
+        "rows": {
+          "description": "Every agent.",
+          "items": {
+            "$ref": "#/$defs/RosterRow"
+          },
+          "type": "array"
+        },
+        "sources": {
+          "description": "Every source asked.",
+          "items": {
+            "$ref": "#/$defs/RosterSource"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "rows",
+        "sources"
+      ],
+      "type": "object"
+    },
+    "RosterAgent": {
+      "additionalProperties": false,
+      "description": "An agent as a source reports it.",
+      "properties": {
+        "accepts_bot_messages": {
+          "default": true,
+          "description": "Whether it accepts bot messages.",
+          "type": "boolean"
+        },
+        "avatar": {
+          "default": null,
+          "description": "An avatar reference.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "default": null,
+          "description": "What it does.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "default": null,
+          "description": "Its model.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "The profile name on its machine.",
+          "type": "string"
+        },
+        "title": {
+          "default": null,
+          "description": "The bot's title.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "RosterParams": {
+      "additionalProperties": false,
+      "description": "`bot.roster.list` params.",
+      "properties": {
+        "include_remote": {
+          "default": false,
+          "description": "Also list registered peers' agents and the agents attached desktops\nreported for their other connections.",
+          "type": "boolean"
+        },
+        "profile": {
+          "description": "The window's profile (its peers are the ones listed).",
+          "type": "string"
+        },
+        "refresh": {
+          "default": false,
+          "description": "Ask every peer again now instead of using rows younger than 300 s.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "type": "object"
+    },
+    "RosterRow": {
+      "additionalProperties": false,
+      "description": "One roster row.",
+      "properties": {
+        "agent": {
+          "$ref": "#/$defs/RosterAgent",
+          "description": "The agent."
+        },
+        "device": {
+          "description": "`local`, the peer's name or the connection's label.",
+          "type": "string"
+        },
+        "error": {
+          "default": null,
+          "description": "Why the source could not be reached.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "handle": {
+          "description": "`@<name>`, or `@<name>-<device>` when several sources serve the\nname.",
+          "type": "string"
+        },
+        "source": {
+          "description": "`local`, `peer` or `connection`.",
+          "type": "string"
+        },
+        "stale": {
+          "description": "The source could not be reached: this is its last-known row.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "handle",
+        "agent",
+        "source",
+        "device",
+        "stale"
+      ],
+      "type": "object"
+    },
+    "RosterSource": {
+      "additionalProperties": false,
+      "description": "One source of the roster.",
+      "properties": {
+        "device": {
+          "description": "`local`, the peer's name or the connection's label.",
+          "type": "string"
+        },
+        "error": {
+          "default": null,
+          "description": "Why not.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "listed_at": {
+          "default": null,
+          "description": "When it was last listed (RFC 3339).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ok": {
+          "description": "Whether its last listing succeeded.",
+          "type": "boolean"
+        },
+        "source": {
+          "description": "`local`, `peer` or `connection`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "device",
+        "ok"
       ],
       "type": "object"
     },
@@ -4622,6 +5463,13 @@
             "null"
           ]
         },
+        "editor_mcp_servers": {
+          "description": "The MCP servers of the editor creating it (an ACP session): run by\nthe daemon under the session's capability grants.",
+          "items": {
+            "$ref": "#/$defs/EditorMcpServer"
+          },
+          "type": "array"
+        },
         "exclusive": {
           "default": false,
           "description": "Make this connection the session's interactive owner: another\nconnection resuming it exclusively is refused while it is attached.",
@@ -4688,6 +5536,13 @@
       "additionalProperties": false,
       "description": "`session.list` result.",
       "properties": {
+        "next_cursor": {
+          "description": "The cursor of the next page, when there is one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "sessions": {
           "description": "The sessions.",
           "items": {
@@ -4705,6 +5560,22 @@
       "additionalProperties": false,
       "description": "`session.list` params.",
       "properties": {
+        "cursor": {
+          "default": null,
+          "description": "The page after the one whose `next_cursor` this is; an invalid\ncursor is `-32602 invalid cursor`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "default": null,
+          "description": "Only sessions working in this directory.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "include_hidden": {
           "default": false,
           "description": "Also hidden sessions: canonical Bot Chats, archived and hidden\nones.",
@@ -4720,6 +5591,16 @@
             "null"
           ]
         },
+        "min_messages": {
+          "default": null,
+          "description": "Only sessions with at least this many messages.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "profile": {
           "default": null,
           "description": "The profile; required only when the ticket grants several.",
@@ -4727,6 +5608,23 @@
             "string",
             "null"
           ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClientKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Only sessions this kind of client created."
+        },
+        "tips_only": {
+          "default": false,
+          "description": "One row per conversation: a session continued after compression\nis listed as its newest continuation.",
+          "type": "boolean"
         }
       },
       "type": "object"
@@ -4771,6 +5669,80 @@
       },
       "required": [
         "session_id"
+      ],
+      "type": "object"
+    },
+    "SessionSettings": {
+      "additionalProperties": false,
+      "description": "A session's settings as clients show and change them.",
+      "properties": {
+        "busy": {
+          "description": "Whether a turn runs.",
+          "type": "boolean"
+        },
+        "cwd": {
+          "description": "The working directory.",
+          "type": "string"
+        },
+        "edit_mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EditMode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How file edits are approved (`null`: the session has no edit\npolicy, it is not an editor session)."
+        },
+        "model": {
+          "description": "That model (`<provider>/<model>` names it fully).",
+          "type": "string"
+        },
+        "models": {
+          "default": [],
+          "description": "The models a client may switch to (`<provider>/<model>`).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "provider": {
+          "description": "The provider of the model the next turn uses.",
+          "type": "string"
+        },
+        "reasoning_effort": {
+          "description": "The reasoning effort (`none` when the model has none).",
+          "type": "string"
+        },
+        "reasoning_efforts": {
+          "default": [],
+          "description": "The efforts the model accepts.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        },
+        "title": {
+          "default": null,
+          "description": "The session's title, once it has one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "session_id",
+        "provider",
+        "model",
+        "reasoning_effort",
+        "cwd",
+        "busy"
       ],
       "type": "object"
     },
@@ -4866,6 +5838,13 @@
       "additionalProperties": false,
       "description": "One listed session.",
       "properties": {
+        "cwd": {
+          "description": "Its working directory.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "live": {
           "description": "Whether a turn is running in the daemon.",
           "type": "boolean"
@@ -4887,6 +5866,13 @@
         },
         "title": {
           "description": "Its title, when it has one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "updated_at": {
+          "description": "Its last activity (RFC 3339).",
           "type": [
             "string",
             "null"
@@ -6511,18 +7497,33 @@
       "since": "1.0"
     },
     "bot.relay.deliver": {
-      "declared": false,
       "owner": "agent-interop",
+      "params": {
+        "$ref": "#/$defs/RelayDeliverParams"
+      },
+      "result": {
+        "$ref": "#/$defs/RelayDelivered"
+      },
       "since": "1.0"
     },
     "bot.relay.drain": {
-      "declared": false,
       "owner": "agent-interop",
+      "params": {
+        "$ref": "#/$defs/RelayDrainParams"
+      },
+      "result": {
+        "$ref": "#/$defs/RelayDrained"
+      },
       "since": "1.0"
     },
     "bot.roster.list": {
-      "declared": false,
       "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/RosterParams"
+      },
+      "result": {
+        "$ref": "#/$defs/Roster"
+      },
       "since": "1.0"
     },
     "center.list": {
@@ -7367,6 +8368,17 @@
       },
       "since": "1.0"
     },
+    "session.configure": {
+      "long": true,
+      "owner": "acp-adapter",
+      "params": {
+        "$ref": "#/$defs/ConfigureParams"
+      },
+      "result": {
+        "$ref": "#/$defs/Configured"
+      },
+      "since": "1.0"
+    },
     "session.context_usage": {
       "owner": "workspace-architecture",
       "params": {
@@ -7398,6 +8410,16 @@
       },
       "since": "1.0"
     },
+    "session.editor": {
+      "owner": "acp-adapter",
+      "params": {
+        "$ref": "#/$defs/EditorBindParams"
+      },
+      "result": {
+        "$ref": "#/$defs/EditorBound"
+      },
+      "since": "1.0"
+    },
     "session.events.since": {
       "owner": "workspace-architecture",
       "params": {
@@ -7422,7 +8444,7 @@
     "session.interrupt": {
       "owner": "workspace-architecture",
       "params": {
-        "$ref": "#/$defs/SessionRef"
+        "$ref": "#/$defs/InterruptParams"
       },
       "result": {
         "$ref": "#/$defs/Ack"
@@ -7459,6 +8481,16 @@
       },
       "result": {
         "$ref": "#/$defs/Attached"
+      },
+      "since": "1.0"
+    },
+    "session.settings": {
+      "owner": "acp-adapter",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/SessionSettings"
       },
       "since": "1.0"
     },
@@ -7698,6 +8730,36 @@
       },
       "result": {
         "$ref": "#/$defs/ClarifyAnswers"
+      },
+      "since": "1.0"
+    },
+    "editor.fs.read": {
+      "owner": "acp-adapter",
+      "params": {
+        "$ref": "#/$defs/EditorReadParams"
+      },
+      "result": {
+        "$ref": "#/$defs/EditorFsResult"
+      },
+      "since": "1.0"
+    },
+    "editor.fs.write": {
+      "owner": "acp-adapter",
+      "params": {
+        "$ref": "#/$defs/EditorWriteParams"
+      },
+      "result": {
+        "$ref": "#/$defs/EditorFsResult"
+      },
+      "since": "1.0"
+    },
+    "editor.terminal.run": {
+      "owner": "acp-adapter",
+      "params": {
+        "$ref": "#/$defs/EditorTerminalParams"
+      },
+      "result": {
+        "$ref": "#/$defs/EditorTerminalResult"
       },
       "since": "1.0"
     },

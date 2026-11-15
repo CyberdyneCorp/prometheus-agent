@@ -14,6 +14,7 @@ import { Attention, focusCard } from "./attention";
 import { ChatView } from "./chat";
 import { DesktopClient } from "./client";
 import { Background, ConnectionsPanel, Groups, LOCAL, type Listing, listConnections } from "./connections";
+import { Courier } from "./courier";
 import { CommandPalette, type Entry } from "./command-palette";
 import { desktopSettings } from "./desktop-settings";
 import { MemoryGraph } from "./graph";
@@ -138,6 +139,8 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
   const desktopSection = h("section", { class: "desktop-settings", "aria-label": "Desktop settings" });
   const connections = new ConnectionsPanel();
   const background = new Background((id, params, title) => attention.approval(id, params, title));
+  // Bot messages between this desktop's connections travel through it.
+  new Courier().start();
   const switcher = new Switcher(new Groups(), (connection, profile) => void switchConnection(connection, profile));
 
   const refresh = async () => {

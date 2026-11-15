@@ -219,6 +219,10 @@ pub(crate) fn session_from_row(row: &Row<'_>) -> Result<Session, Error> {
 /// hidden from pickers, `-c` and `--resume latest`.
 pub const HIDDEN_SOURCE_TAGS: &[&str] = &["oneshot", "tool"];
 
+/// The tag of Hermes A2A sessions imported without a provable peer
+/// binding (`source = import`): read-only, reported by `doctor`.
+pub const A2A_IMPORT_TAG: &str = "a2a-import";
+
 /// The tag of one-shot runs (`source = cli`).
 pub const ONESHOT_TAG: &str = "oneshot";
 

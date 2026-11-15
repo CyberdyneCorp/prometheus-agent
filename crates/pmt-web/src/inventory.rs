@@ -91,6 +91,46 @@ pub const ENDPOINTS: &[Endpoint] = &[
         "/api/system/platform",
         "The honest platform support matrix",
     ),
+    signed(
+        "GET",
+        "/api/kanban/boards",
+        "The shared kanban boards with their open tasks",
+    ),
+    signed(
+        "GET",
+        "/api/kanban/orchestration",
+        "Orchestration settings: configured and effective values",
+    ),
+    signed(
+        "PUT",
+        "/api/kanban/orchestration",
+        "Change orchestration settings (unknown profiles are refused)",
+    ),
+    signed(
+        "GET",
+        "/api/kanban/workers/active",
+        "Running kanban workers: worker id, profile, task, start, heartbeat",
+    ),
+    signed(
+        "GET",
+        "/api/kanban/runs/{run_id}",
+        "One kanban run: task, status, start, end, exit code, log name",
+    ),
+    signed(
+        "POST",
+        "/api/kanban/runs/{run_id}/terminate",
+        "Stop a run's worker and free its task for dispatch",
+    ),
+    signed(
+        "POST",
+        "/api/kanban/boards/{board}/tasks/{task_id}/attachments",
+        "Attach the body to a task (name=; refused above kanban.attachment_max_bytes)",
+    ),
+    signed(
+        "GET",
+        "/api/kanban/inspect",
+        "Kanban backlog, in-progress against its limit, recent events",
+    ),
     signed("GET", "/api/docs", "The embedded documentation's pages"),
     signed(
         "GET",

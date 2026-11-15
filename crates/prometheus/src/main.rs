@@ -72,6 +72,11 @@ fn main() -> ExitCode {
             Err(err) => failure(&err, cli.json),
         };
     }
+    // An external kanban worker reports with its run ticket; a lane's
+    // sandbox reaches only its mailbox, so nothing below may run either.
+    if let Some(code) = ticketed_kanban(&cli, &launch) {
+        return code;
+    }
     // Commands that need the home report the resolution error themselves.
     // `demo` (and `smoke-suite`) runs in a temporary home of its own and
     // never touches the user's: it writes no log files and keeps no crash reports there.
@@ -128,6 +133,24 @@ fn before_anything(cli: &Cli) -> Option<ExitCode> {
         return None;
     };
     Some(match prometheus::install_receipt_cmd::run(args) {
+        Ok(code) => ExitCode::from(code),
+        Err(err) => failure(&err, cli.json),
+    })
+}
+
+/// `prometheus kanban <verb> --ticket`: an external worker's report, run
+/// before logging or anything else touches the home.
+fn ticketed_kanban(cli: &Cli, launch: &LaunchEnv) -> Option<ExitCode> {
+    let Some(Command::Kanban(args)) = &cli.command else {
+        return None;
+    };
+    args.ticket.as_ref()?;
+    let ran = match launch.kanban_mailbox() {
+        Some(mailbox) => prometheus::kanban_cmd::ticketed::relay(args, mailbox, cli.json),
+        None => pmt_config::home::resolve(cli.home.as_deref(), launch)
+            .and_then(|home| prometheus::kanban_cmd::ticketed::run(args, &home, cli.json)),
+    };
+    Some(match ran {
         Ok(code) => ExitCode::from(code),
         Err(err) => failure(&err, cli.json),
     })
@@ -244,6 +267,8 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
             web(command, &ctx)
         }
         Some(Command::Desktop(args)) => prometheus::desktop_cmd::run(args, &ctx),
+        #[cfg(feature = "acp")]
+        Some(Command::Acp(args)) => prometheus::acp_cmd::run(args, &ctx, cli.safe_mode, cli.json),
         #[cfg(not(feature = "acp"))]
         Some(Command::Acp(_)) => prometheus::surface::require("acp").map(|()| 0),
         #[cfg(not(feature = "mcp"))]
@@ -294,6 +319,7 @@ fn workspace(command: &Command, ctx: &Context<'_>) -> Result<u8, Error> {
         Command::Browser { command } => prometheus::browser_cmd::run(command, ctx),
         Command::Lsp { command } => prometheus::lsp_cmd::run(command, ctx),
         Command::Cron { command } => prometheus::cron_cmd::run(command, ctx),
+        Command::Kanban(args) => prometheus::kanban_cmd::run(args, ctx),
         Command::Cache { command } => prometheus::cache_cmd::run(command, ctx),
         Command::Replay { command } => prometheus::replay_cmd::run(command, ctx),
         Command::Worktrees { command } => prometheus::worktrees_cmd::run(command, ctx),

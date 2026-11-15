@@ -177,6 +177,47 @@ impl pmt_web::DashboardHost for DaemonHost {
             super::dashboard_change::apply(change, target).await
         })
     }
+
+    /// Kanban requests run on a blocking thread (`SQLite`, signals, the
+    /// launch profile's `config.toml`): the dispatcher's profile is the
+    /// launch profile.
+    fn kanban(&self, call: pmt_web::KanbanCall) -> HostFuture<'_, Value> {
+        Box::pin(async move {
+            let scope = self.profile(&self.launch_profile)?.scope();
+            let profile = self.launch_profile.clone();
+            pmt_core::spawn::blocking(move || kanban(&scope, &profile, call))
+                .await
+                .map_err(|e| Error::new(&pmt_core::error::codes::RPC_INTERNAL, e.to_string()))?
+        })
+    }
+}
+
+fn kanban(scope: &ProfileScope, profile: &str, call: pmt_web::KanbanCall) -> Result<Value, Error> {
+    use crate::kanban_host::dashboard;
+    use pmt_web::KanbanCall;
+    let home = scope.home();
+    match call {
+        KanbanCall::Boards => dashboard::boards(home),
+        KanbanCall::Orchestration => dashboard::orchestration(home, profile),
+        KanbanCall::SetOrchestration(body) => dashboard::set_orchestration(home, profile, &body),
+        KanbanCall::Workers => dashboard::active_workers(home),
+        KanbanCall::Run(id) => dashboard::run(home, &id),
+        KanbanCall::Terminate { run, who } => dashboard::terminate(scope, &run, &who),
+        KanbanCall::Inspect => dashboard::inspect(scope),
+        KanbanCall::AttachmentLimit => {
+            Ok(json!({"max_bytes": scope.config().kanban.attachment_max_bytes}))
+        }
+        KanbanCall::Attach(upload) => dashboard::attach(
+            scope,
+            (&upload.board, &upload.task),
+            &upload.who,
+            &pmt_kanban::attach::Upload {
+                name: &upload.name,
+                content_type: upload.content_type.as_deref(),
+                bytes: &upload.bytes,
+            },
+        ),
+    }
 }
 
 /// The profile's plugins as its sessions load them (from its workspace,

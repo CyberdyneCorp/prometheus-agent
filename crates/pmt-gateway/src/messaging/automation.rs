@@ -94,6 +94,34 @@ impl Gateway {
         Admission::Accepted
     }
 
+    /// The session the conversation of `platform` chat `chat` (in
+    /// `thread`, of `chat_type` when given) of `profile` routes to now,
+    /// the most recently active one when several participants have their
+    /// own (spec: kanban, Subscription delivery modes and inheritance).
+    #[must_use]
+    pub fn session_of_chat(
+        &self,
+        profile: &str,
+        platform: &str,
+        chat_type: Option<&str>,
+        chat: &str,
+        thread: Option<&str>,
+    ) -> Option<String> {
+        let store = self.shared.store(profile)?;
+        let routes = store.chat_routes(platform, chat).ok()?;
+        routes
+            .into_iter()
+            .filter(|r| r.thread_id.as_deref() == thread)
+            .find(|r| {
+                let parts = KeyParts::parse(&r.key);
+                parts.is_some_and(|p| {
+                    p.profile == profile
+                        && chat_type.is_none_or(|kind| p.chat_type.as_str() == kind)
+                })
+            })
+            .map(|r| r.session_id.to_string())
+    }
+
     /// Resumes the turn a restart interrupted in the conversation of
     /// `session_id` as its lane's turn, so the answer reaches the chat
     /// (spec: messaging-gateway, Crash recovery and clean shutdown marker).

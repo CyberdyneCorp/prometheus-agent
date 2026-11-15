@@ -265,6 +265,18 @@ pub fn skill_changed(scope: &ProfileScope, skill: &str, action: &str) {
     outside::fire_blocking(&plugins.handle.hooks(), "on_skill_lifecycle", each, &cwd);
 }
 
+/// Fires kanban lifecycle hooks (spec: plugin-system, Kanban lifecycle
+/// observer hooks) queued while a command or tick worked the board, and
+/// waits for the callbacks; the board is no longer in use.
+pub fn kanban_fired(scope: &ProfileScope, fired: Vec<(&'static str, Map<String, Value>)>) {
+    let cwd = std::env::current_dir().unwrap_or_else(|_| scope.dir().to_path_buf());
+    let plugins = for_session(scope, &cwd);
+    let hooks = plugins.handle.hooks();
+    for (hook, payload) in fired {
+        outside::fire_blocking(&hooks, hook, vec![payload], &cwd);
+    }
+}
+
 /// Fires `on_session_delete` for every session a command deleted and
 /// waits for the callbacks.
 pub fn sessions_deleted(scope: &ProfileScope, sessions: &[String]) {

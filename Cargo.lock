@@ -2901,8 +2901,32 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
+name = "pmt-a2a"
+version = "0.1.0"
+dependencies = [
+ "jiff",
+ "percent-encoding",
+ "serde_json",
+ "sha2 0.11.1",
+ "tokio",
+ "ulid",
+ "url",
+]
+
+[[package]]
 name = "pmt-acp"
 version = "0.1.0"
+dependencies = [
+ "base64 0.23.1",
+ "pmt-core",
+ "pmt-rpc",
+ "serde_json",
+ "sha2 0.11.1",
+ "tokio",
+ "tracing",
+ "ulid",
+ "url",
+]
 
 [[package]]
 name = "pmt-adapters-discord"
@@ -3127,6 +3151,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "jiff",
+ "pmt-a2a",
  "pmt-config",
  "pmt-core",
  "pmt-gateway",
@@ -3379,6 +3404,20 @@ dependencies = [
 [[package]]
 name = "pmt-kanban"
 version = "0.1.0"
+dependencies = [
+ "base64 0.23.1",
+ "getrandom 0.4.3",
+ "pmt-core",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "sysinfo",
+ "tempfile",
+ "toml",
+ "tracing",
+ "ulid",
+]
 
 [[package]]
 name = "pmt-local"
@@ -4063,12 +4102,15 @@ dependencies = [
  "expectrl",
  "flate2",
  "futures-util",
+ "getrandom 0.4.3",
  "ignore",
  "image",
  "jiff",
  "minisign",
  "nix 0.31.3",
  "pkcs8",
+ "pmt-a2a",
+ "pmt-acp",
  "pmt-adapters-discord",
  "pmt-adapters-email",
  "pmt-adapters-matrix",
@@ -4089,6 +4131,7 @@ dependencies = [
  "pmt-eval",
  "pmt-gateway",
  "pmt-i18n",
+ "pmt-kanban",
  "pmt-local",
  "pmt-mcp",
  "pmt-media",
@@ -6790,6 +6833,7 @@ dependencies = [
  "pmt-core",
  "pmt-desktop",
  "pmt-i18n",
+ "pmt-kanban",
  "pmt-net",
  "pmt-obs",
  "pmt-rpc",

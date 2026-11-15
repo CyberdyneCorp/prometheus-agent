@@ -555,3 +555,91 @@ async fn detached_sessions_come_least_recently_attended_first() {
         "an unloaded session is no candidate"
     );
 }
+
+/// Scenario (acp-adapter): Dismissed card, editor is the only driver. A
+/// dismissed card is an error answer: with no other recipient the request
+/// settles unanswered at once (the approval is denied), not at its
+/// deadline.
+#[tokio::test]
+async fn a_dismissed_card_of_the_only_driver_settles_the_request_at_once() {
+    let hub = hub();
+    let (editor, mut rx) = peer(true);
+    hub.attach(1, S, editor, None);
+    let asking = {
+        let hub = Arc::clone(&hub);
+        pmt_core::spawn::spawn(async move {
+            hub.ask(
+                S,
+                "sudo.request",
+                json!({"session_id": S, "command": "ls"}),
+                Duration::from_mins(10),
+            )
+            .await
+        })
+    };
+    let id = loop {
+        if let Some(frame) = frames(&mut rx).into_iter().find(|f| f["id"].is_string()) {
+            break frame["id"].as_str().unwrap().to_owned();
+        }
+        tokio::task::yield_now().await;
+    };
+    let dismissed = Err(pmt_rpc::RpcError::invalid_request("dismissed"));
+    assert_eq!(hub.resolve(1, "acp-1", &id, dismissed), Answered::Taken);
+    let asked = tokio::time::timeout(Duration::from_secs(5), asking)
+        .await
+        .expect("settled without waiting for the deadline")
+        .unwrap();
+    assert_eq!(asked, None);
+    let cancel = frames(&mut rx)
+        .into_iter()
+        .find(|f| f["method"] == "request.cancel")
+        .expect("the settlement is announced");
+    assert_eq!(cancel["params"]["data"]["reason"], "no_responder");
+}
+
+/// Scenario (acp-adapter): Dismissed card, desktop also attached. The
+/// editor's dismissal withdraws only its own answer: the request stays
+/// open and the desktop's answer settles it.
+#[tokio::test]
+async fn a_dismissed_card_leaves_the_request_to_another_driver() {
+    let hub = hub();
+    let (editor, mut editor_rx) = peer(true);
+    let (desktop, _desktop_rx) = peer(true);
+    hub.attach(1, S, editor, None);
+    hub.attach(2, S, desktop, None);
+    let asking = {
+        let hub = Arc::clone(&hub);
+        pmt_core::spawn::spawn(async move {
+            hub.ask(
+                S,
+                "sudo.request",
+                json!({"session_id": S, "command": "ls"}),
+                Duration::from_mins(10),
+            )
+            .await
+        })
+    };
+    let id = loop {
+        if let Some(frame) = frames(&mut editor_rx)
+            .into_iter()
+            .find(|f| f["id"].is_string())
+        {
+            break frame["id"].as_str().unwrap().to_owned();
+        }
+        tokio::task::yield_now().await;
+    };
+    let dismissed = Err(pmt_rpc::RpcError::invalid_request("dismissed"));
+    assert_eq!(hub.resolve(1, "acp-1", &id, dismissed), Answered::Taken);
+    assert_eq!(hub.open_requests().len(), 1, "still answerable");
+    // The editor withdrew: a late answer from it is not taken.
+    assert_eq!(
+        hub.resolve(1, "acp-1", &id, Ok(json!({"password": "x"}))),
+        Answered::Unknown
+    );
+    assert_eq!(
+        hub.resolve(2, "desktop-2", &id, Ok(json!({"password": "pw"}))),
+        Answered::Taken
+    );
+    let asked = asking.await.unwrap();
+    assert_eq!(asked, Some(json!({"password": "pw"})));
+}

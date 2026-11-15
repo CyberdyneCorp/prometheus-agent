@@ -59,7 +59,14 @@ impl Factory {
     > {
         let (registry, selection, surface) = self.session_selection(session)?;
         Ok(match child {
-            Some(spec) => (registry, spec.selection(), surface),
+            // Delegated children never get a kanban grant (spec: kanban,
+            // Kanban toolset and grants).
+            Some(spec) => {
+                let selection = spec
+                    .selection()
+                    .without_toolset(&registry, pmt_tools::agent_level_kanban::TOOLSET);
+                (registry, selection, surface)
+            }
             None => (registry, selection, surface),
         })
     }
@@ -120,6 +127,8 @@ impl Factory {
         let (mut prompt, sections) = self.session_prompt(id, skills, memory, notices).await;
         if let Some(spec) = child {
             spec.shape_prompt(&mut prompt);
+        } else if let Some(run) = &self.options.kanban {
+            prompt.caller_system = Some(run.guidance());
         } else if let Ok(Some(api)) = self.store.api_session(id) {
             // An API caller's instructions, fixed when the session was
             // created, come after the profile's own prompt and never

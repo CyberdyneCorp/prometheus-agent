@@ -285,6 +285,7 @@ mod tests {
             findings: Vec::new(),
             remember: None,
             explanation: None,
+            diff: None,
         };
         let text = approval_question(&request, &Strings::english(pmt_i18n::Surface::Core));
         assert!(

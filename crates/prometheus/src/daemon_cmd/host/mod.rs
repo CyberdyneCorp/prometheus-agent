@@ -22,14 +22,14 @@ use pmt_rpc::contracts::{
     BannerInfo, ClientKind, CommandCatalog, CompactParams, Compacted, CompleteParams, Completions,
     ConfigValue, ContextUsage, DispatchParams, Dispatched, ForkParams, ModelOptions, ResolveKind,
     ResolveParams, SessionCreateParams, SessionList, SessionListParams, SessionRef, SessionSetup,
-    SessionSummary, SubmitParams, Submitted, Transcript, TranscriptMessage, TurnError,
-    TurnFinished,
+    SubmitParams, Submitted, Transcript, TranscriptMessage, TurnError, TurnFinished,
 };
 use pmt_store::{NewSession, Source, Store, Visibility};
 use tracing::Instrument as _;
 
 use super::turn::{SecretsToClients, SudoToClients, ToClients, approvals, clarify};
 
+mod a2a;
 #[cfg(feature = "dashboard")]
 mod adapter_pairing;
 mod api;
@@ -51,8 +51,13 @@ mod delegations;
 mod desktop;
 mod desktop_ui;
 mod discovery;
+mod editor;
+mod editor_bridge;
 mod gateway;
 mod health_sample;
+mod interop;
+mod kanban;
+mod listing;
 mod model_picker;
 mod notify;
 mod panes;
@@ -69,6 +74,7 @@ mod setup;
 mod speech;
 mod status_bar;
 mod subagents;
+mod turn_results;
 mod turns;
 mod usage_events;
 mod workspace_fs;
@@ -79,6 +85,7 @@ use crate::chat::session::{Clients, Factory, Live};
 pub(super) use automation::schedule as schedule_automation;
 pub(super) use cron::schedule as schedule_cron;
 pub(super) use health_sample::sample as sample_health;
+pub(super) use kanban::schedule as schedule_kanban;
 pub(super) use reload::watch;
 pub(super) use usage_events::publish as publish_usage;
 pub(super) use worktrees::sweep_worktrees;
@@ -176,6 +183,8 @@ pub(super) struct DaemonHost {
     gateway: send_tool::GatewayCell,
     /// The API server's view of the profiles' keys.
     api_keys: api::KeyCache,
+    /// The union roster's remote sources, as last listed.
+    roster: interop::RosterCache,
     /// The API server, once started (it is told when the daemon drains).
     api: std::sync::OnceLock<pmt_api::ApiServer>,
     /// The host itself, for work that outlives the request that started it
@@ -269,6 +278,7 @@ impl DaemonHost {
             slots: pmt_gateway::slots::Slots::new(0),
             gateway: Arc::default(),
             api_keys: api::KeyCache::default(),
+            roster: interop::RosterCache::default(),
             api: std::sync::OnceLock::new(),
             me: std::sync::OnceLock::new(),
             #[cfg(feature = "dashboard")]
@@ -443,6 +453,7 @@ impl DaemonHost {
             retry: Mutex::default(),
         });
         loaded.insert(id, Arc::clone(&session));
+        editor::on_load(profile, &row, &session, link);
         if let Some(inbox) = &inbox {
             inbox.bind(&session);
         }
@@ -621,6 +632,7 @@ impl Host for DaemonHost {
             }
             new.cwd = Some(cwd.to_string_lossy().into_owned());
             let session = profile.store.create_session(&new)?;
+            editor::created(&profile.store, session.id, &params.editor_mcp_servers)?;
             profile
                 .setups
                 .lock()
@@ -639,31 +651,7 @@ impl Host for DaemonHost {
     ) -> HostFuture<'a, SessionList> {
         Box::pin(async move {
             let profile = &self.profile(profile)?;
-            let options = pmt_store::ListOptions {
-                limit: Some(params.limit.unwrap_or(50)),
-                all: params.include_hidden,
-                ..pmt_store::ListOptions::default()
-            };
-            let loaded = profile.loaded.lock().await;
-            let sessions = profile
-                .store
-                .list_sessions(&options)?
-                .into_iter()
-                // The canonical Bot Chat is reached through its bot, not
-                // the sessions list (spec: desktop-app, Bot chats are
-                // created atomically by the daemon).
-                .filter(|s| params.include_hidden || !s.bot_chat)
-                .map(|s| SessionSummary {
-                    live: loaded
-                        .get(&s.id)
-                        .is_some_and(|l| l.busy.load(Ordering::Acquire)),
-                    session_id: s.id.to_string(),
-                    title: s.title,
-                    started_at: s.started_at.to_string(),
-                    project_id: s.project_id.map(|p| p.to_string()),
-                })
-                .collect();
-            Ok(SessionList { sessions })
+            listing::list(profile, params).await
         })
     }
 
@@ -1141,6 +1129,27 @@ impl Host for DaemonHost {
         })
     }
 
+    fn bot_roster(
+        &self,
+        params: pmt_rpc::contracts::RosterParams,
+    ) -> HostFuture<'_, pmt_rpc::contracts::Roster> {
+        Box::pin(self.roster(params))
+    }
+
+    fn relay_drain(
+        &self,
+        params: pmt_rpc::contracts::RelayDrainParams,
+    ) -> HostFuture<'_, pmt_rpc::contracts::RelayDrained> {
+        Box::pin(async move { self.drain(&params) })
+    }
+
+    fn relay_deliver(
+        &self,
+        params: pmt_rpc::contracts::RelayDeliverParams,
+    ) -> HostFuture<'_, pmt_rpc::contracts::RelayDelivered> {
+        Box::pin(self.deliver(params))
+    }
+
     fn bot_chat<'a>(&'a self, profile: &'a str) -> HostFuture<'a, (String, bool)> {
         Box::pin(async move { self.ensure_bot_chat(&self.profile(profile)?).await })
     }
@@ -1183,6 +1192,35 @@ impl Host for DaemonHost {
                 Ok(Self::close_unused(profile, self::session_id(session_id)?).await)
             }
             .instrument(session_span(profile, session_id)),
+        )
+    }
+
+    fn cancel_turn<'a>(
+        &'a self,
+        profile: &'a str,
+        session_id: &'a str,
+        turn_id: &'a str,
+    ) -> HostFuture<'a, ()> {
+        Box::pin(async move {
+            let profile = &self.profile(profile)?;
+            let id = self::session_id(session_id)?;
+            self.cancel_admission(profile, id, turn_id).await
+        })
+    }
+
+    fn editor<'a>(
+        &'a self,
+        profile: &'a str,
+        request: pmt_gateway::editor::EditorCall,
+        link: Link,
+    ) -> HostFuture<'a, pmt_gateway::editor::EditorReply> {
+        let span = session_span(profile, request.session_id());
+        Box::pin(
+            async move {
+                let profile = &self.profile(profile)?;
+                Box::pin(self.editor_request(profile, request, link)).await
+            }
+            .instrument(span),
         )
     }
 
@@ -1235,6 +1273,13 @@ impl Host for DaemonHost {
             let request = match params.kind {
                 ResolveKind::Resume => resume::Request::Resume(&params.reference),
                 ResolveKind::Continue => resume::Request::Continue(&params.reference),
+                ResolveKind::Tip => {
+                    let id = session_id(&params.reference)?;
+                    let tip = profile.store.compression_tip(id)?;
+                    return Ok(SessionRef {
+                        session_id: tip.to_string(),
+                    });
+                }
             };
             let cwd = params
                 .cwd
@@ -1267,6 +1312,7 @@ impl Host for DaemonHost {
             let fork = profile
                 .store
                 .fork_session(id, at, params.title.as_deref())?;
+            editor::forked(&profile.store, id, fork.id)?;
             Ok(SessionRef {
                 session_id: fork.id.to_string(),
             })

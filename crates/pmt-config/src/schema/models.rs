@@ -513,6 +513,9 @@ pub struct AuxiliaryConfig {
     /// model).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub commit_message: Option<AuxiliaryTask>,
+    /// Kanban `specify` and `decompose` (defaults to the main model).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kanban: Option<AuxiliaryTask>,
 }
 
 impl Default for AuxiliaryConfig {
@@ -533,6 +536,7 @@ impl Default for AuxiliaryConfig {
             side_question: None,
             voice_chat: None,
             commit_message: None,
+            kanban: None,
         }
     }
 }

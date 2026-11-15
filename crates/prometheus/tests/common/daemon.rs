@@ -21,6 +21,18 @@ impl Drop for Daemon<'_> {
     }
 }
 
+/// Whether the daemon of `home` runs and answers its control channel.
+///
+/// `daemon status` exits 0 also when no daemon runs, so a wait on its
+/// exit status returns before a foreground `daemon run` holds the home;
+/// a CLI command run then starts a second daemon of its own (without the
+/// foreground one's test environment) that may win the home lock.
+pub fn running(home: &Path) -> bool {
+    let out = run(home, &["--json", "daemon", "status"]);
+    serde_json::from_slice::<serde_json::Value>(&out.stdout)
+        .is_ok_and(|status| status["running"] == true)
+}
+
 /// Starts the daemon of `home` (`extra` are global flags such as `-p x`).
 pub fn start<'a>(home: &'a Path, extra: &[&str]) -> Daemon<'a> {
     let mut args = extra.to_vec();

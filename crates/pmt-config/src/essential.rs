@@ -51,6 +51,7 @@ pub fn check(config: &Config) -> Result<(), Error> {
 /// The first failing check's error.
 pub fn semantic(config: &Config, profile_dir: &std::path::Path) -> Result<(), Error> {
     crate::provider_urls::check(config)?;
+    crate::a2a_check::check(config)?;
     crate::quick_commands::check(config)?;
     crate::gateway_check::check(config, profile_dir)?;
     crate::hooks_check::check(config)?;

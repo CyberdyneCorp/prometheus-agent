@@ -253,7 +253,11 @@ fn task_timeouts_and_purposes() {
         );
     }
     assert_eq!(AuxTask::Title.purpose(), "auxiliary.title");
-    assert_eq!(AuxTask::ALL.len(), 13);
+    assert_eq!(
+        AuxTask::Kanban.default_timeout(),
+        Some(Duration::from_mins(2))
+    );
+    assert_eq!(AuxTask::ALL.len(), 14);
     for task in AuxTask::ALL {
         assert_eq!(AuxTask::parse(task.as_str()), Some(*task));
     }

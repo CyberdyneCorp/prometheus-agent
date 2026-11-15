@@ -80,9 +80,13 @@ capabilities = [
 [milestones.M3]
 partial = true
 capabilities = [
+    "acp-adapter",
+    "agent-interop",
     "desktop-app",
+    "kanban",
     "distribution-and-update",
     "messaging-gateway",
+    "plugin-system",
     "projects",
     "web-dashboard",
 ]
@@ -1773,6 +1777,51 @@ capabilities = [
 [agent-interop."send_message tool"]
 "Unknown chat refused" = ["crates/prometheus/tests/gateway_send.rs::the_send_tool_refuses_unknown_chats_and_reaches_known_ones", "crates/pmt-gateway/tests/messaging/targets.rs::the_tool_may_reach_only_home_allowed_or_known_chats"]
 "Guard fault fails closed" = ["crates/pmt-gateway/tests/messaging/relay.rs::the_send_tool_asks_the_relay_and_fails_closed"]
+
+# agent-interop, M3: A2A server and client, peer gateways, union roster
+# and the desktop relay (74.1-74.3).
+[agent-interop."A2A server enablement and binding"]
+"Wildcard bind without tokens" = ["crates/prometheus/tests/a2a_server.rs::a_wildcard_bind_without_opt_in_fails_validation", "crates/pmt-config/src/daemon_a2a.rs::a_wildcard_bind_without_tokens_fails"]
+"Browser page refused" = ["crates/prometheus/tests/a2a_server.rs::a_tokenless_server_refuses_browsers_and_cards_name_the_public_url", "crates/pmt-api/src/a2a/gate.rs::a_page_posting_with_an_origin_is_refused"]
+
+[agent-interop."Agent Card"]
+"Card behind a reverse proxy" = ["crates/prometheus/tests/a2a_server.rs::a_tokenless_server_refuses_browsers_and_cards_name_the_public_url"]
+
+[agent-interop."A2A JSON-RPC methods and task lifecycle"]
+"Interoperates with the official SDK" = { tests = ["crates/prometheus/tests/a2a_sdk.rs::the_official_sdk_resolves_the_card_and_gets_completed_tasks"], note = "the official A2A Python SDK (a2a-sdk 1.3.0, pinned in a uv environment under target/a2a-sdk) resolves the card and sends with and without streaming, then reads the task back and lists tasks" }
+"Long task without timeout loss" = { tests = ["crates/pmt-api/src/a2a/tasks.rs::a_long_turn_reports_working_until_its_reply", "crates/pmt-api/src/a2a/tasks.rs::a_turn_past_the_window_fails_only_then"], note = "paused clock: a 400 s turn under reply_timeout_secs = 600 stays working until its reply" }
+
+[agent-interop."A2A conversation identity"]
+"Same context id from two peers" = ["crates/prometheus/tests/a2a_server.rs::peers_get_their_own_sessions_and_untrusted_peers_get_no_turn", "crates/pmt-a2a/src/lib.rs::two_peers_never_share_a_key"]
+
+[agent-interop."A2A authentication, trust and rate limits"]
+"Untrusted identity" = ["crates/prometheus/tests/a2a_server.rs::peers_get_their_own_sessions_and_untrusted_peers_get_no_turn"]
+
+[agent-interop."A2A inbound safety"]
+"Slash command from a peer" = ["crates/prometheus/tests/a2a_server.rs::peer_text_is_never_a_command_and_contexts_are_capped"]
+"Ping-pong capped" = ["crates/prometheus/tests/a2a_server.rs::peer_text_is_never_a_command_and_contexts_are_capped", "crates/pmt-api/src/a2a/gate.rs::the_sixth_exchange_in_a_context_is_capped"]
+
+[agent-interop."A2A push notifications"]
+"Push to a private address" = ["crates/prometheus/tests/a2a_server.rs::push_urls_obey_the_egress_policy_and_rates_are_limited"]
+
+[agent-interop."Outbound A2A tools"]
+"Call a configured researcher" = ["crates/prometheus/tests/agent_interop.rs::a2a_tools_call_a_configured_agent_and_refuse_unknown_names"]
+"Unknown agent name" = ["crates/prometheus/tests/agent_interop.rs::a2a_tools_call_a_configured_agent_and_refuse_unknown_names"]
+
+[agent-interop."Peer gateway registry"]
+"Key never on the command line" = ["crates/prometheus/tests/agent_interop.rs::peers_register_with_stdin_keys_and_refuse_wrong_keys"]
+"Wrong key" = ["crates/prometheus/tests/agent_interop.rs::peers_register_with_stdin_keys_and_refuse_wrong_keys"]
+
+[agent-interop."Peer direct messages and remote runs"]
+"Idempotent remote run" = ["crates/prometheus/tests/agent_interop.rs::remote_runs_are_idempotent_and_dms_print_the_reply"]
+"Peer offline" = ["crates/prometheus/tests/agent_interop.rs::remote_runs_are_idempotent_and_dms_print_the_reply"]
+
+[agent-interop."Union roster across gateways"]
+"Same name on two machines" = ["crates/prometheus/tests/agent_interop.rs::the_roster_unions_peers_and_keeps_stale_rows", "crates/prometheus/src/daemon_cmd/host/interop.rs::a_name_on_two_sources_gets_device_handles"]
+"Peer temporarily down" = ["crates/prometheus/tests/agent_interop.rs::the_roster_unions_peers_and_keeps_stale_rows"]
+
+[agent-interop."Desktop relay for cross-connection bot messages"]
+"Desktop closed mid-delivery" = { tests = ["crates/pmt-store/tests/store/a2a.rs::a_drained_envelope_is_offered_once_more_then_times_out", "crates/prometheus/tests/agent_interop.rs::the_desktop_relay_carries_a_bot_message_once"], note = "the outbox timing runs on explicit clocks (drain at t, again at t+1560 s, timeout at t+3120 s); the two-daemon test carries an envelope and its reply with bot.relay.drain/deliver as the desktop courier does, and a retried delivery does not run twice" }
 
 # platform-adapters, host side of the adapter contract (25.1-25.4) and
 # the telegram and discord adapters (25.5)
@@ -4011,6 +4060,10 @@ capabilities = [
 [web-dashboard."Webapp file staging and terminals"]
 "Oversized drop" = { tests = ["crates/prometheus/tests/dashboard_devices.rs::a_staged_file_over_16_mib_is_refused_with_413", "crates/prometheus/tests/dashboard_browser.rs::the_webapp_opens_from_the_cli_and_signs_out_every_tab", "crates/pmt-gateway/tests/terminals.rs::a_second_driver_attaching_takes_the_terminal_over"], note = "webapp.spec.ts drops a file and a 20 MiB one on the webapp terminal (the desktop's terminal pane over the daemon PTY): 201 then 413 from the staging endpoint; a second tab attaching takes the PTY over (also over the protocol in terminals.rs). Host-file downloads through the session's file-access rules: dashboard_devices.rs::host_files_download_only_through_the_sessions_file_access_rules; sandboxed previews: webapp.spec.ts" }
 
+[web-dashboard."Kanban dashboard API and orchestration modes"]
+"Terminate a stuck run" = ["crates/prometheus/tests/dashboard_browser.rs::the_kanban_page_terminates_a_stuck_run", "crates/pmt-kanban/tests/terminate.rs::terminating_a_running_worker_frees_its_task"]
+"Unknown orchestrator profile" = ["crates/prometheus/tests/dashboard_kanban.rs::an_unknown_orchestrator_profile_is_refused_and_nothing_is_written"]
+
 [web-dashboard."Webhooks page"]
 "Secret shown once" = ["crates/prometheus/tests/dashboard_pages.rs::a_webhook_secret_is_answered_once", "crates/prometheus/tests/dashboard_browser.rs::the_webhooks_and_docs_pages_work_in_the_browser"]
 
@@ -4335,3 +4388,252 @@ capabilities = [
 [desktop-app."First-run onboarding chat"]
 "Regular chats lack the tool" = { tests = ["crates/prometheus/tests/desktop_ui_tools.rs::opt_outs_apply_from_the_next_session_and_only_onboarding_gets_setup_beat", "crates/prometheus/tests/desktop_ui.rs::the_first_launch_opens_the_onboarding_chat"], note = "only the onboarding.ensure session exposes setup_beat; a regular chat's forged setup_beat never reaches the window and shows no card; the onboarding source tag is refused to session.create" }
 "Card deadline" = { tests = ["crates/prometheus/tests/desktop_ui_tools.rs::an_unanswered_setup_card_times_out_and_keeps_the_defaults"], note = "the theme card left unanswered: setup_beat returns that the theme card timed out and the defaults stay in place, recorded as timed out in the session's onboarding record (debug daemons take PMT_TEST_UI_USER_WAIT_SECS = 2 instead of 300 s)" }
+
+# M3 group 66: the ACP adapter. crates/prometheus/tests/acp/ drives
+# `prometheus acp` over stdio as an editor (fixture.rs) against a daemon on
+# a test home with the mock provider.
+[acp-adapter."Launch entry point and pre-server flags"]
+"Check without a model" = ["crates/prometheus/tests/acp/launch.rs::check_names_the_missing_model_and_passes_once_one_is_set"]
+
+[acp-adapter."Stdout carries only protocol frames"]
+"A component logs during a prompt" = { tests = ["crates/prometheus/tests/acp/launch.rs::logs_go_to_stderr_and_acp_log_redacted_while_stdout_carries_frames"], note = "a whole prompt at logging.level = debug; every stdout line is checked to be a JSON-RPC frame; a WARN record carrying a PMT_SECRET_ value is redacted on stderr and in <profile>/logs/acp.log" }
+
+[acp-adapter."Liveness probes are quiet"]
+"Editor probe" = ["crates/prometheus/tests/acp/launch.rs::liveness_probes_answer_method_not_found_without_a_warning"]
+
+[acp-adapter."Configuration comes from flags and the profile only"]
+"Safe mode without a model" = ["crates/prometheus/tests/acp/launch.rs::safe_mode_without_model_and_provider_refuses_new_sessions", "crates/prometheus/tests/acp/launch.rs::a_non_secret_environment_variable_does_not_change_the_session"]
+
+[acp-adapter."ACP process is a daemon viewer"]
+"Editor closes mid-turn" = ["crates/prometheus/tests/acp/launch.rs::a_turn_survives_the_editor_and_shows_on_load", "crates/prometheus/tests/acp/launch.rs::the_daemon_is_started_for_the_first_session_and_outlives_the_editor"]
+
+[acp-adapter."Daemon connection is bound to the launch profile"]
+"Wrong daemon" = { tests = ["crates/prometheus/tests/acp/launch.rs::a_daemon_without_the_launch_profile_is_refused"], note = "the running daemon serves only default (no gateway.multiplex); an editor launched with -p work gets profile_mismatch on session/new" }
+
+[acp-adapter."Initialize handshake"]
+"Version agrees across surfaces" = ["crates/prometheus/tests/acp/sessions.rs::initialize_negotiates_version_capabilities_and_sign_in"]
+
+[acp-adapter."Authentication reuses profile credentials"]
+"No credentials yet" = ["crates/prometheus/tests/acp/sessions.rs::without_a_credential_only_setup_is_offered_and_it_fails"]
+
+[acp-adapter."New session on the daemon"]
+"Successful creation" = ["crates/prometheus/tests/acp/sessions.rs::a_new_session_is_an_acp_daemon_session_in_the_editor_cwd"]
+
+[acp-adapter."Load and resume replay the logical session"]
+"Reopen after compression" = ["crates/prometheus/tests/acp/sessions.rs::loading_a_compressed_session_attaches_its_continuation", "crates/prometheus/tests/acp/sessions.rs::resume_reattaches_and_an_unattached_session_is_not_found"]
+
+[acp-adapter."Editor MCP servers belong to the daemon session"]
+"Second editor with no servers" = ["crates/prometheus/tests/acp/sessions.rs::a_second_editor_with_no_servers_keeps_the_bound_ones", "crates/prometheus/src/mcp_host/editor.rs::placeholders_and_unknown_transports_are_refused"]
+
+[acp-adapter."Session list is a paged read-only catalog"]
+"Forged cursor" = ["crates/prometheus/tests/acp/sessions.rs::the_session_catalog_pages_acp_sessions_and_refuses_a_forged_cursor", "crates/prometheus/src/daemon_cmd/host/listing.rs::a_cursor_round_trips_and_a_forged_one_is_refused"]
+
+[acp-adapter."Fork creates a daemon branch"]
+"Fork without servers" = ["crates/prometheus/tests/acp/sessions.rs::a_fork_without_servers_keeps_the_parents"]
+
+[acp-adapter."Prompt submission and terminal outcome"]
+"Turn fails" = ["crates/prometheus/tests/acp/prompts.rs::a_failed_turn_is_an_error_and_the_next_prompt_runs", "crates/pmt-acp/src/prompting.rs::a_failed_turn_is_an_error_and_budgets_have_their_stop_reasons"]
+
+[acp-adapter."Cancel targets only this editor's admission"]
+"TUI turn running" = { tests = ["crates/prometheus/tests/acp/prompts.rs::cancel_never_stops_another_surfaces_turn", "crates/prometheus/tests/acp/prompts.rs::cancelling_a_running_command_fails_its_tool_call"], note = "another client attached as a driver submits the running turn; the editor's session/cancel leaves it to finish completed, while cancelling the editor's own admission stops it" }
+
+[acp-adapter."Exactly-once submit across lost acknowledgements"]
+"Resend after a lost ack" = { tests = ["crates/prometheus/tests/acp/prompts.rs::a_resent_prompt_after_a_lost_ack_runs_once", "crates/pmt-acp/src/kept.rs::only_the_same_content_reuses_the_identity_and_the_oldest_session_goes_first"], note = "fault injection (debug builds' PMT_TEST_ACP_DROP_ACK) loses the first acknowledgement with the connection; the resent prompt with its PNG yields one user message and one staged blob" }
+
+[acp-adapter."Daemon restart yields an unknown outcome, never a resend"]
+"Restart mid-turn" = { tests = ["crates/prometheus/tests/acp/prompts.rs::a_daemon_restart_fails_the_prompt_and_reattach_shows_the_outcome", "crates/prometheus/tests/acp/prompts.rs::an_unknown_outcome_refuses_new_work_until_discarded"], note = "kill -9 of the daemon mid-turn fails the prompt with the unknown-outcome message; the restarted daemon records the crashed turn, so re-attach shows the outcome and new work runs. With no recorded outcome (the acknowledgement lost with the connection) new work is refused with unknown_execution naming /discard <id>, which clears it" }
+
+[acp-adapter."Slash commands are answered or refused, never failed"]
+"Path at line start" = ["crates/prometheus/tests/acp/prompts.rs::a_path_at_line_start_is_prompt_text", "crates/pmt-acp/src/slash.rs::a_path_or_an_unknown_word_is_prompt_text"]
+"Refused command" = ["crates/prometheus/tests/acp/prompts.rs::a_refused_command_is_shown_and_ends_the_prompt_normally", "crates/prometheus/tests/acp/prompts.rs::a_command_answer_is_an_agent_message"]
+
+[acp-adapter."Edit-approval modes"]
+"Mode changed in the desktop" = ["crates/prometheus/tests/acp/cards.rs::a_mode_change_elsewhere_reaches_the_editor_and_busy_changes_are_refused", "crates/prometheus/tests/acp/cards.rs::edits_ask_with_a_diff_in_default_mode_and_not_in_accept_edits", "crates/pmt-acp/src/adapter.rs::a_mode_change_from_another_surface_is_a_current_mode_update"]
+
+[acp-adapter."Config options are validated"]
+"Unknown option id" = ["crates/prometheus/tests/acp/cards.rs::config_options_are_validated_and_applied", "crates/pmt-acp/src/options.rs::an_unknown_option_or_value_is_refused_naming_what_is_allowed"]
+
+[acp-adapter."Model switching through the daemon"]
+"Switch during a turn" = ["crates/prometheus/tests/acp/cards.rs::a_model_switch_during_a_turn_applies_from_the_next"]
+
+[acp-adapter."Approvals and clarify bridge to editor cards with fail-closed semantics"]
+"Dismissed card, editor is the only driver" = ["crates/prometheus/tests/acp/cards.rs::a_dismissed_card_denies_at_once_when_the_editor_is_the_only_driver", "crates/pmt-gateway/src/hub/tests.rs::a_dismissed_card_of_the_only_driver_settles_the_request_at_once"]
+"Dismissed card, desktop also attached" = ["crates/prometheus/tests/acp/cards.rs::a_dismissed_card_leaves_the_approval_to_the_desktop", "crates/pmt-gateway/src/hub/tests.rs::a_dismissed_card_leaves_the_request_to_another_driver", "crates/prometheus/tests/acp/cards.rs::clarify_questions_become_cards_with_their_choices_and_skip"]
+
+[acp-adapter."Clarify is part of the ACP toolset"]
+"Default ACP session" = ["crates/prometheus/tests/acp/cards.rs::an_acp_session_has_clarify_and_no_messaging_send_tools"]
+
+[acp-adapter."Reply projection is exactly-once"]
+"Final text after streaming" = ["crates/pmt-acp/src/project.rs::only_the_unseen_remainder_of_the_final_text_is_sent", "crates/prometheus/tests/acp/prompts.rs::the_answer_is_shown_exactly_once"]
+
+[acp-adapter."Every tool call reaches a terminal status"]
+"Interrupted tool" = ["crates/prometheus/tests/acp/prompts.rs::cancelling_a_running_command_fails_its_tool_call", "crates/pmt-acp/src/project.rs::calls_still_open_at_the_turn_end_are_failed"]
+
+[acp-adapter."Prompt content conversion and media staging"]
+"Unsupported image type" = ["crates/prometheus/tests/acp/editor.rs::an_svg_is_omitted_with_a_note_and_file_links_are_inlined", "crates/pmt-acp/src/content.rs::an_svg_is_omitted_with_a_note_and_the_text_still_runs"]
+
+[acp-adapter."Session metadata projection"]
+"Same title republished" = ["crates/prometheus/tests/acp/editor.rs::a_title_is_shown_once_until_it_changes", "crates/pmt-acp/src/adapter.rs::an_unchanged_title_is_not_sent_again"]
+
+[acp-adapter."Editor-native file access (upgrade)"]
+"Unsaved buffer" = ["crates/prometheus/tests/acp/editor.rs::file_tools_under_the_editor_cwd_go_through_the_editor", "crates/pmt-tools/src/editor.rs::reads_under_the_workspace_see_the_editor_buffer_and_others_the_disk"]
+
+[acp-adapter."Editor terminal delegation (upgrade)"]
+"Command in the editor terminal" = ["crates/prometheus/tests/acp/editor.rs::an_unsandboxed_session_runs_commands_in_the_editor_terminal"]
+"Sandboxed session ignores the editor terminal" = ["crates/prometheus/tests/acp/editor.rs::a_sandboxed_session_runs_commands_in_the_daemon"]
+
+[acp-adapter."Optional browser tools for ACP sessions"]
+"Runtime not installed" = ["crates/prometheus/tests/acp/unattended.rs::browser_tools_need_the_managed_chromium_at_session_creation"]
+
+[acp-adapter."Unattended ACP clients and relay bridges"]
+"Relay bridge auto-approves" = ["crates/prometheus/tests/acp/unattended.rs::an_unattended_bridge_is_never_asked_and_the_command_is_blocked", "crates/prometheus/tests/acp/unattended.rs::an_unattended_session_follows_approvals_unattended_mode"]
+"Default unattended toolset" = ["crates/prometheus/tests/acp/unattended.rs::an_unattended_session_has_no_terminal_or_code_execution"]
+
+# M3 group 67: kanban. crates/pmt-kanban/tests/ are the board's store,
+# flow (concurrency) and dispatcher tests on a temporary home with real
+# `sleep` processes as workers; crates/prometheus/tests/kanban_cli.rs runs
+# the CLI and real workers (`kanban work`) on the mock provider, and
+# kanban_daemon.rs the dispatcher and notifier inside the daemon.
+[kanban."Board storage location"]
+"Default board exists on first use" = ["crates/prometheus/tests/kanban_cli.rs::the_default_board_exists_on_first_use", "crates/pmt-kanban/tests/store.rs::the_default_board_exists_on_first_use"]
+
+[kanban."Board slugs and selection"]
+"Stale selection is reported" = ["crates/prometheus/tests/kanban_cli.rs::a_stale_selection_exits_66", "crates/pmt-kanban/tests/store.rs::a_stale_selection_is_reported_never_replaced"]
+
+[kanban."Typed workflow table"]
+"Request changes lands in todo" = ["crates/pmt-kanban/tests/store.rs::request_changes_lands_in_todo_and_is_promoted"]
+"Manual move outside the table" = { tests = ["crates/pmt-kanban/tests/store.rs::a_manual_move_outside_the_table_is_refused", "crates/pmt-kanban/src/workflow.rs::a_drag_from_triage_to_running_names_the_actor"], note = "the board refuses the move with kanban.illegal_transition (a Conflict: HTTP 409 on the dashboard API, whose /api/kanban routes arrive with task 61.7)" }
+
+[kanban."Task creation"]
+"Child of an open parent waits" = ["crates/pmt-kanban/tests/store.rs::a_child_of_an_open_parent_waits", "crates/prometheus/tests/kanban_cli.rs::creation_from_the_cli_validates_and_gates"]
+"Relative dir workspace rejected at creation" = ["crates/pmt-kanban/tests/store.rs::creation_validates_before_writing_anything", "crates/prometheus/tests/kanban_cli.rs::creation_from_the_cli_validates_and_gates"]
+
+[kanban."Idempotent create"]
+"Retried automation does not duplicate" = ["crates/pmt-kanban/tests/store.rs::a_retried_create_returns_the_same_task"]
+
+[kanban."Dependency links"]
+"Cycle refused" = ["crates/pmt-kanban/tests/store.rs::links_refuse_cycles_self_links_and_running_children"]
+
+[kanban."Ready promotion and atomic claim"]
+"Worker block is sticky" = ["crates/pmt-kanban/tests/flow.rs::a_worker_block_is_sticky", "crates/pmt-kanban/tests/flow.rs::concurrent_claims_have_exactly_one_winner"]
+
+[kanban."Typed blocks and block-loop breaker"]
+"Repeated same-cause block escalates" = ["crates/pmt-kanban/tests/flow.rs::a_repeated_same_cause_block_escalates_to_triage"]
+
+[kanban."Scheduled parking"]
+"Wake at a time" = ["crates/pmt-kanban/tests/flow.rs::a_scheduled_task_wakes_at_its_time_and_is_never_claimed_before"]
+
+[kanban."Completion gates"]
+"Whitespace evidence refused" = ["crates/pmt-kanban/tests/flow.rs::whitespace_evidence_is_refused_and_recorded"]
+"Fabricated child cards refused" = ["crates/pmt-kanban/tests/flow.rs::fabricated_child_cards_are_refused"]
+
+[kanban."Review lane"]
+"Agent reviewer" = ["crates/pmt-kanban/tests/dispatch.rs::an_agent_reviewer_is_spawned_for_review_work"]
+
+[kanban."Archive terminates the worker"]
+"Archived running task leaves no worker" = ["crates/pmt-kanban/tests/flow.rs::archiving_a_running_task_terminates_its_worker"]
+
+[kanban."Single dispatcher per home"]
+"Standalone loop cannot race the daemon" = ["crates/prometheus/tests/kanban_daemon.rs::a_standalone_loop_exits_75_while_the_daemon_dispatches", "crates/pmt-kanban/tests/dispatch.rs::a_second_dispatcher_cannot_race_the_holder"]
+"Lease takeover after crash" = ["crates/pmt-kanban/tests/dispatch.rs::a_dead_holders_lease_is_taken_over_after_it_expires"]
+
+[kanban."Dispatcher tick"]
+"Unassigned task is reported" = ["crates/pmt-kanban/tests/dispatch.rs::a_tick_claims_in_priority_order_and_reports_unassigned_tasks"]
+
+[kanban."Concurrency caps"]
+"Host cap counts other boards" = ["crates/pmt-kanban/tests/dispatch.rs::the_host_cap_counts_other_boards"]
+
+[kanban."Claim allowlist fails closed"]
+"Deleted assignee" = ["crates/pmt-kanban/tests/dispatch.rs::a_deleted_assignee_blocks_the_task_with_kind_capability"]
+
+[kanban."Failure circuit breaker"]
+"Terminal exit blocks immediately" = ["crates/pmt-kanban/tests/dispatch.rs::a_terminal_exit_blocks_after_one_attempt", "crates/prometheus/tests/kanban_cli.rs::a_worker_never_sees_the_dispatchers_secrets"]
+"Rate-limit exit does not count" = ["crates/pmt-kanban/tests/dispatch.rs::a_rate_limited_exit_requeues_without_counting"]
+
+[kanban."Worker spawn by run ticket"]
+"Launch profile secrets do not leak" = { tests = ["crates/prometheus/tests/kanban_cli.rs::a_worker_never_sees_the_dispatchers_secrets", "crates/prometheus/src/kanban_host/spawn.rs::only_path_locale_and_the_home_reach_a_worker"], note = "a dispatcher launched as ops with OPENAI_API_KEY in its environment starts writer's worker, whose openai route then has no credential (exit 78): the key reached neither its environment nor its secrets handle" }
+"Replayed ticket refused" = ["crates/prometheus/tests/kanban_cli.rs::a_replayed_ticket_is_refused", "crates/pmt-kanban/tests/dispatch.rs::a_run_ticket_is_single_use"]
+
+[kanban."Worker liveness and heartbeats"]
+"Recycled PID is not killed" = ["crates/pmt-kanban/tests/dispatch.rs::a_recycled_pid_is_reclaimed_without_being_signalled"]
+
+[kanban."Kanban toolset and grants"]
+"Worker cannot touch another board" = ["crates/prometheus/tests/kanban_cli.rs::a_worker_cannot_touch_another_board"]
+"Delegated child has no board access" = ["crates/prometheus/tests/kanban_cli.rs::a_delegated_child_gets_no_kanban_tools"]
+
+[kanban."Workspaces"]
+"Missing artifact keeps task in flight" = ["crates/pmt-kanban/tests/flow.rs::a_missing_declared_artifact_keeps_the_task_in_flight"]
+
+[kanban."Attachments"]
+"Oversized upload refused" = { tests = ["crates/prometheus/tests/kanban_cli.rs::an_oversized_attachment_is_refused_and_nothing_stored", "crates/prometheus/tests/dashboard_kanban.rs::an_oversized_dashboard_upload_is_refused_and_nothing_is_stored", "crates/pmt-kanban/tests/records.rs::an_oversized_attachment_stores_nothing"], note = "the CLI and the kanban_attach tool share Board::attach_file; the dashboard's POST /api/kanban/boards/{board}/tasks/{task_id}/attachments refuses by declared length before reading, then Board::attach re-checks" }
+
+[kanban."Notifications through the owning profile"]
+"Multi-profile notification" = ["crates/prometheus/tests/kanban_daemon.rs::a_notification_goes_out_through_the_subscribers_own_adapter", "crates/pmt-kanban/tests/records.rs::subscriptions_report_each_event_once_and_drop_on_archive"]
+
+[kanban."Per-task cost budget (upgrade)"]
+"Budget exhausted" = { tests = ["crates/prometheus/tests/kanban_cli.rs::an_exhausted_budget_blocks_the_task"], note = "the mock provider prices nothing, so the test exhausts a budget_tokens limit; budget_usd takes the same path (budgets.root_usd of the worker's lineage, delegated children included)" }
+
+[kanban."Eval and harness-evolution tasks (upgrade)"]
+"Eval task on replayed provider" = { deferred = "71.1 prometheus eval run (provider_mode live|replay for the assignee profile): today an eval task runs the bundled smoke suite on the mock provider and ignores provider_mode (kanban_cli.rs::an_eval_task_runs_the_smoke_suite_offline_and_attaches_its_report covers only that)" }
+"Evolve task requires approval" = { deferred = "69 harness evolution engine (prometheus evolve, harness adoption from the next session): today an evolve task is validated and its completion always lands in review, but the worker blocks it with kind capability because no evolution engine exists in this build" }
+
+[kanban."Event log and run history"]
+"Audit a refusal" = ["crates/prometheus/tests/kanban_cli.rs::a_refused_completion_is_in_the_log"]
+
+[kanban."CLI surface"]
+"Bulk archive with one failure" = ["crates/prometheus/tests/kanban_cli.rs::a_bulk_archive_reports_each_id_and_exits_1"]
+
+[kanban."Board export and import"]
+"Round trip" = ["crates/prometheus/tests/kanban_cli.rs::an_exported_board_imports_as_a_copy", "crates/pmt-kanban/tests/records.rs::a_board_imported_into_another_home_keeps_its_ids"]
+
+# M3 group 68: kanban upgrades. crates/pmt-kanban/tests/upgrades.rs drives
+# the board (a GitHub stand-in behind PrChecks, fake lanes, an observer);
+# crates/prometheus/tests/kanban_upgrades.rs and kanban_orchestration.rs run
+# the CLI, real workers on the mock provider, a wiremock GitHub API and a
+# sandboxed lane plugin; kanban_daemon.rs runs /kanban and wake turns
+# through the daemon's file adapter.
+[kanban."URL attachments and attachment listing tools"]
+"Worker attaches a report by link" = { tests = ["crates/prometheus/tests/kanban_upgrades.rs::a_worker_attaches_a_report_by_link"], note = "the report is served by a loopback stand-in for example.com, so the test profile sets security.egress.allow_private; every other egress rule applies" }
+"Internal address refused" = ["crates/prometheus/tests/kanban_upgrades.rs::an_internal_address_is_refused_and_nothing_is_stored"]
+
+[kanban."PR completion contracts"]
+"Red required check blocks completion" = { tests = ["crates/prometheus/tests/kanban_upgrades.rs::a_red_required_check_blocks_the_workers_completion", "crates/pmt-kanban/tests/upgrades.rs::a_red_required_check_blocks_completion", "crates/pmt-kanban/src/contract.rs::a_red_or_missing_required_check_is_classified_checks"], note = "the worker completes with its run ticket (`kanban claim`, then `kanban complete --ticket -`), the same Board::complete the kanban_complete tool calls; GitHub is a wiremock stand-in at kanban.github_api_url answering only the assignee profile's GITHUB_TOKEN" }
+"Retry cannot substitute a sibling PR" = ["crates/prometheus/tests/kanban_upgrades.rs::a_retry_cannot_substitute_a_sibling_pr", "crates/pmt-kanban/tests/upgrades.rs::a_retry_cannot_substitute_a_sibling_pr"]
+
+[kanban."Goal-mode cards"]
+"Judge keeps the worker going" = ["crates/prometheus/tests/kanban_upgrades.rs::the_goal_judge_keeps_the_worker_going_in_the_same_session"]
+"Impossible card is never done" = ["crates/prometheus/tests/kanban_upgrades.rs::an_impossible_card_is_blocked_and_never_done", "crates/pmt-kanban/tests/upgrades.rs::an_unachievable_goal_refuses_every_handoff"]
+
+[kanban."Per-task model override and pinned skills"]
+"Hard card on a stronger model" = { tests = ["crates/prometheus/tests/kanban_upgrades.rs::a_hard_card_runs_on_its_own_model", "crates/prometheus/tests/kanban_upgrades.rs::pinned_skills_are_checked_at_create_and_at_spawn"], note = "--model big-model --provider mock stands in for the anthropic route (no live provider in tests); the worker session records big-model" }
+
+[kanban."Respawn guard and dispatch dry run"]
+"Fresh PR is not re-worked" = ["crates/prometheus/tests/kanban_upgrades.rs::a_fresh_pr_comment_is_guarded_in_the_dry_run", "crates/pmt-kanban/tests/upgrades.rs::a_fresh_pr_comment_guards_the_task_and_the_dry_run_says_so", "crates/pmt-kanban/tests/upgrades.rs::a_recent_success_holds_until_a_deliberate_requeue"]
+
+[kanban."Swarm topology helper"]
+"Atomic swarm creation" = ["crates/prometheus/tests/kanban_orchestration.rs::a_swarm_is_six_cards_with_the_verifier_gated_on_the_workers", "crates/pmt-kanban/tests/upgrades.rs::a_swarm_is_created_whole_with_the_verifier_gated_on_every_worker"]
+"Unknown worker profile aborts everything" = ["crates/prometheus/tests/kanban_orchestration.rs::an_unknown_swarm_profile_creates_nothing"]
+
+[kanban."/kanban slash command"]
+"Unblock from a phone mid-turn" = { tests = ["crates/prometheus/tests/kanban_daemon.rs::kanban_unblock_runs_mid_turn_without_disturbing_it"], note = "the daemon's file adapter stands in for Telegram: /kanban unblock is answered while a 60 s turn of the same chat still runs, which is neither interrupted nor answered" }
+"Created card reports back" = { tests = ["crates/prometheus/tests/kanban_daemon.rs::a_card_created_from_a_chat_reports_back_and_wakes_it", "crates/prometheus/src/chat/commands/kanban.rs::long_messaging_output_is_cut_with_a_pointer_to_the_terminal"], note = "the file adapter stands in for Slack" }
+
+[kanban."Subscription delivery modes and inheritance"]
+"Review feedback wakes the originating chat" = { tests = ["crates/prometheus/tests/kanban_daemon.rs::review_feedback_wakes_the_subscribed_thread", "crates/pmt-kanban/tests/upgrades.rs::worker_created_tasks_inherit_subscriptions_and_modes_route_legs"], note = "a thread of the file adapter stands in for the Discord thread" }
+
+[kanban."Orchestrator guidance, specify and decompose"]
+"Specify promotes a triage idea" = ["crates/prometheus/tests/kanban_orchestration.rs::specify_expands_a_triage_idea_into_a_todo_task", "crates/prometheus/tests/kanban_orchestration.rs::auto_decompose_specifies_triage_tasks_before_dispatching", "crates/pmt-kanban/tests/upgrades.rs::specify_moves_a_triage_idea_to_todo"]
+"Decompose rejects unknown assignees" = ["crates/prometheus/tests/kanban_orchestration.rs::decompose_refuses_a_graph_naming_an_unknown_assignee", "crates/pmt-kanban/tests/upgrades.rs::a_decomposition_with_an_unknown_assignee_creates_nothing", "crates/prometheus/tests/kanban_orchestration.rs::an_orchestrators_worker_is_told_to_decompose_not_implement"]
+
+[kanban."Additional CLI verbs"]
+"Inspect worker context" = ["crates/prometheus/tests/kanban_cli.rs::context_prints_what_a_worker_receives", "crates/prometheus/tests/kanban_orchestration.rs::the_additional_verbs_go_through_the_board"]
+
+[kanban."Worker lanes"]
+"External CLI lane completes a task" = { tests = ["crates/prometheus/tests/kanban_orchestration.rs::an_external_cli_lane_completes_its_task_under_the_sandbox"], note = "unix: the lane is a shell script of a data-only plugin, run under the local sandbox (its workspace, its plugin directory, its board and the blob store) and reporting with `prometheus kanban complete --ticket -`" }
+"Unknown assignee is surfaced" = ["crates/prometheus/tests/kanban_orchestration.rs::an_external_cli_lane_completes_its_task_under_the_sandbox", "crates/pmt-kanban/tests/upgrades.rs::a_lane_task_spawns_its_lane_and_a_vanished_lane_is_surfaced", "crates/prometheus/tests/kanban_orchestration.rs::a_lane_named_like_a_profile_fails_plugin_load"]
+
+[plugin-system."Kanban lifecycle observer hooks"]
+"Slow observer cannot hold the board" = { tests = ["crates/prometheus/tests/kanban_orchestration.rs::a_slow_dispatch_tick_hook_does_not_hold_the_board", "crates/pmt-kanban/tests/upgrades.rs::an_observer_sees_committed_events_once"], note = "unix: an approved shell hook on on_kanban_dispatch_tick sleeps 20 s; while it runs another writer creates a task at once" }
+
+[projects."Kanban board binding"]
+"Branch convention" = ["crates/prometheus/tests/kanban_upgrades.rs::a_bound_projects_board_is_selected_and_names_the_branch"]

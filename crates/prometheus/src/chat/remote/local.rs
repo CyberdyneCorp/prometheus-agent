@@ -12,7 +12,7 @@ use std::fmt::Write as _;
 use pmt_core::error::{Error, codes};
 use pmt_rpc::client::error_of;
 use pmt_rpc::contracts::{
-    ForkParams, ResolveKind, ResolveParams, SessionFork, SessionInterrupt, SessionRef,
+    ForkParams, InterruptParams, ResolveKind, ResolveParams, SessionFork, SessionInterrupt,
     SessionResolve,
 };
 
@@ -274,8 +274,9 @@ impl Chat<'_, '_> {
     }
 
     async fn interrupt(&self) {
-        let params = SessionRef {
+        let params = InterruptParams {
             session_id: self.attached.session.clone(),
+            turn_id: None,
         };
         let _ = self
             .attached

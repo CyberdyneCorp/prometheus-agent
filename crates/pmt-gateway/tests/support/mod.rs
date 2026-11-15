@@ -108,6 +108,7 @@ async fn script(text: String, link: Link, turn: String, answers: Answers) {
             remember: None,
             deadline_ms: None,
             explanation: None,
+            diff: None,
         };
         let answer = link.ask::<ApprovalAsk>(&params, Some(deadline)).await;
         let approved = answer.is_some_and(|a| a.decision != Decision::Deny);
@@ -166,9 +167,16 @@ impl Host for FakeHost {
                 started_at: "2026-01-01T00:00:00Z".into(),
                 live: false,
                 project_id: None,
+                cwd: None,
+                updated_at: None,
             })
             .collect();
-        Box::pin(async move { Ok(SessionList { sessions }) })
+        Box::pin(async move {
+            Ok(SessionList {
+                sessions,
+                next_cursor: None,
+            })
+        })
     }
 
     /// A setup with model `slow` takes two seconds to load.

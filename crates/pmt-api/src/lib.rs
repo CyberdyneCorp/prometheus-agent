@@ -19,6 +19,7 @@
 // as is (a hyper response); boxing every refusal would buy nothing.
 #![allow(clippy::result_large_err)]
 
+mod a2a;
 mod admission;
 mod auth;
 mod chat;
@@ -50,8 +51,9 @@ use pmt_gateway::Server;
 use tokio::net::TcpListener;
 use tracing::Instrument as _;
 
+pub use a2a::A2aServer;
 pub use host::{
-    ApiHost, ApiImage, ApiTurn, Catalog, JobsCall, ModelChoice, ModelOptions, NewApiSession,
+    ApiHost, ApiImage, ApiTurn, Catalog, JobsCall, ModelChoice, ModelOptions, NewApiSession, Push,
     image_extension,
 };
 
@@ -70,6 +72,22 @@ pub(crate) struct Shared {
 }
 
 impl Shared {
+    /// The state of one listener, with its own hub connection.
+    fn new(server: Arc<Server>, host: Arc<dyn ApiHost>, guard: guard::Guard) -> Arc<Self> {
+        let peer = peer::Peer::start(&server);
+        Arc::new(Self {
+            guard,
+            runs: runs::Runs::default(),
+            limits: limits::Limits::default(),
+            inflight: admission::InFlight::default(),
+            locks: turn::SessionLocks::default(),
+            draining: Mutex::default(),
+            server,
+            host,
+            peer,
+        })
+    }
+
     /// The routed profile's store.
     fn store(&self, profile: &str) -> Result<Arc<pmt_store::Store>, http::Reply> {
         self.host
@@ -153,20 +171,9 @@ impl ApiServer {
             explicit_address: listener.public,
             authenticated: true,
         };
-        let bound = bind(addr, exposure).await?;
+        let bound = bind(addr, exposure, "api server", LISTENER_COMPONENT).await?;
         let addr = bound.local_addr().unwrap_or(addr);
-        let peer = peer::Peer::start(&server);
-        let shared = Arc::new(Shared {
-            guard: guard::Guard::new(listener, loopback),
-            runs: runs::Runs::default(),
-            limits: limits::Limits::default(),
-            inflight: admission::InFlight::default(),
-            locks: turn::SessionLocks::default(),
-            draining: Mutex::default(),
-            server,
-            host,
-            peer,
-        });
+        let shared = Shared::new(server, host, guard::Guard::new(listener, loopback));
         runs::recover(&shared, &enabled);
         let stop = CancelToken::new();
         serve(bound, Arc::clone(&shared), stop.clone());
@@ -209,11 +216,11 @@ impl ApiServer {
 
 /// Connections served at once; the next waits in the accept queue, so
 /// open connections never grow without bound.
-const MAX_CONNECTIONS: usize = 256;
+pub(crate) const MAX_CONNECTIONS: usize = 256;
 
 /// How long a client may take to send a request's headers (also bounds an
 /// idle keep-alive connection).
-const HEADER_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+pub(crate) const HEADER_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
 fn serve(listener: tokio::net::TcpListener, shared: Arc<Shared>, stop: CancelToken) {
     let slots = Arc::new(tokio::sync::Semaphore::new(MAX_CONNECTIONS));
@@ -251,7 +258,7 @@ fn serve(listener: tokio::net::TcpListener, shared: Arc<Shared>, stop: CancelTok
 }
 
 /// The next connection once a slot is free.
-async fn accept(
+pub(crate) async fn accept(
     listener: &TcpListener,
     slots: &Arc<tokio::sync::Semaphore>,
 ) -> Option<(tokio::net::TcpStream, tokio::sync::OwnedSemaphorePermit)> {
@@ -267,14 +274,19 @@ const LISTENER_COMPONENT: &str = "listener:api_server";
 /// only this listener `down` (`port <n> already in use`), while chats,
 /// adapters and every profile keep running (spec: distribution-and-update,
 /// Multiple profiles in one container).
-async fn bind(addr: SocketAddr, exposure: pmt_net::listen::Exposure) -> Result<TcpListener, Error> {
-    let bound = match pmt_net::listen::check_bind("api server", addr, exposure) {
+pub(crate) async fn bind(
+    addr: SocketAddr,
+    exposure: pmt_net::listen::Exposure,
+    label: &str,
+    component: &str,
+) -> Result<TcpListener, Error> {
+    let bound = match pmt_net::listen::check_bind(label, addr, exposure) {
         Err(err) => Err((err.message().to_owned(), err)),
         Ok(()) => TcpListener::bind(addr).await.map_err(|e| {
             let reason = pmt_net::listen::bind_failure(addr, &e);
             let err = Error::new(
                 &pmt_core::error::codes::NET_LISTEN,
-                format!("api server: {reason}"),
+                format!("{label}: {reason}"),
             )
             .with_source(e);
             (reason, err)
@@ -286,19 +298,14 @@ async fn bind(addr: SocketAddr, exposure: pmt_net::listen::Exposure) -> Result<T
             let at = listener.local_addr().unwrap_or(addr);
             health.report(
                 None,
-                LISTENER_COMPONENT,
+                component,
                 pmt_obs::health::State::Ok,
                 &format!("listening on {at}"),
             );
             Ok(listener)
         }
         Err((reason, err)) => {
-            health.report(
-                None,
-                LISTENER_COMPONENT,
-                pmt_obs::health::State::Down,
-                &reason,
-            );
+            health.report(None, component, pmt_obs::health::State::Down, &reason);
             Err(err)
         }
     }

@@ -226,7 +226,7 @@ impl<'a> Request<'a> {
     }
 }
 
-fn parse(raw: &[u8]) -> Answer {
+pub fn parse(raw: &[u8]) -> Answer {
     let text = String::from_utf8_lossy(raw);
     let (head, body) = text.split_once("\r\n\r\n").unwrap_or((&text, ""));
     let mut lines = head.lines();

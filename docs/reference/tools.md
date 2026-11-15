@@ -33,7 +33,8 @@ Every tool name the shipped toolsets refer to, and every shipped toolset. Pages 
 | `messaging` | `send_message` |  |  | Send messages and reactions to messaging chats (needs the gateway daemon) |
 | `code_execution` | `execute_code` |  |  | Run code in a sandbox |
 | `delegation` | `delegate_task` |  |  | Delegate work to subagents |
-| `kanban` |  |  | default-off | Kanban boards |
+| `kanban` | `kanban_show`, `kanban_list`, `kanban_create`, `kanban_comment`, `kanban_attach`, `kanban_link`, `kanban_complete`, `kanban_block`, `kanban_schedule`, `kanban_heartbeat`, `kanban_request_review`, `kanban_request_changes`, `kanban_unblock`, `kanban_attach_url`, `kanban_attachments` |  | default-off | Kanban boards |
+| `a2a` | `a2a_discover`, `a2a_call`, `a2a_list`, `a2a_history`, `a2a_orchestrate` |  | default-off | Call other agents over the A2A protocol |
 | `debugging` | `terminal`, `process` | `web`, `file` |  | Terminal, processes, web and files |
 | `safe` |  | `web`, `vision`, `image_gen` |  | Web, vision and image generation; nothing that executes |
 | `webhook-safe` | `web_search`, `web_extract`, `vision_analyze`, `clarify` |  |  | Read-only web and vision tools for webhook-triggered runs; nothing that executes or writes |
@@ -182,6 +183,86 @@ Toolsets: `video_gen`.
 ### `send_message`
 
 Toolsets: `messaging`.
+
+### `kanban_show`
+
+Toolsets: `kanban`.
+
+### `kanban_list`
+
+Toolsets: `kanban`.
+
+### `kanban_create`
+
+Toolsets: `kanban`.
+
+### `kanban_comment`
+
+Toolsets: `kanban`.
+
+### `kanban_attach`
+
+Toolsets: `kanban`.
+
+### `kanban_link`
+
+Toolsets: `kanban`.
+
+### `kanban_complete`
+
+Toolsets: `kanban`.
+
+### `kanban_block`
+
+Toolsets: `kanban`.
+
+### `kanban_schedule`
+
+Toolsets: `kanban`.
+
+### `kanban_heartbeat`
+
+Toolsets: `kanban`.
+
+### `kanban_request_review`
+
+Toolsets: `kanban`.
+
+### `kanban_request_changes`
+
+Toolsets: `kanban`.
+
+### `kanban_unblock`
+
+Toolsets: `kanban`.
+
+### `kanban_attach_url`
+
+Toolsets: `kanban`.
+
+### `kanban_attachments`
+
+Toolsets: `kanban`.
+
+### `a2a_discover`
+
+Toolsets: `a2a`.
+
+### `a2a_call`
+
+Toolsets: `a2a`.
+
+### `a2a_list`
+
+Toolsets: `a2a`.
+
+### `a2a_history`
+
+Toolsets: `a2a`.
+
+### `a2a_orchestrate`
+
+Toolsets: `a2a`.
 
 ### `project`
 

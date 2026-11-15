@@ -41,6 +41,7 @@ pub struct Gate {
 }
 
 /// What builds a session's gate.
+#[allow(clippy::struct_excessive_bools)] // independent gate inputs
 pub struct GateInputs<'a> {
     /// The profile.
     pub scope: &'a ProfileScope,
@@ -54,6 +55,10 @@ pub struct GateInputs<'a> {
     pub interactive: bool,
     /// A scheduled run: approvals follow `approvals.cron_mode`.
     pub cron: bool,
+    /// A session whose client cannot answer prompts (an unattended ACP
+    /// session): approvals follow `approvals.unattended_mode` and the
+    /// grants, never a person.
+    pub unattended: bool,
     /// `--yolo`.
     pub yolo: bool,
     /// Plugin approval observers and transport.
@@ -80,7 +85,9 @@ pub struct GateInputs<'a> {
 /// `[security]` protected-file patterns that do not parse.
 pub fn gate(inputs: &GateInputs<'_>) -> Result<Gate, Error> {
     let config = inputs.scope.config();
-    let (channel, prompts, context) = if inputs.interactive {
+    let (channel, prompts, context) = if inputs.unattended {
+        (Channel::unattended(), None, Context::Unattended)
+    } else if inputs.interactive {
         let (channel, surface) =
             Channel::attached(Duration::from_secs(config.approvals.timeout_secs.max(1)));
         (channel, Some(surface), Context::Interactive)
@@ -187,6 +194,7 @@ pub fn selection(
     let config = scope.config();
     let mut enabled = match (surface, &config.api_server.toolsets) {
         (SessionSurface::Api, Some(listed)) => api_toolsets(registry, config, listed),
+        (SessionSurface::A2a, _) => api_toolsets(registry, config, &config.a2a.server.toolsets),
         _ => surface.starting_toolsets(registry, &config.tools, &config.toolsets),
     };
     crate::tools_cmd::opt_in(&mut enabled, plugins, surface);
@@ -198,6 +206,15 @@ pub fn selection(
     };
     let selection = Selection::resolve(registry, &enabled, disabled)?
         .folded_for(registry, surface, disabled, &hidden)?;
+    // An ACP session gets the browser tools only when the managed
+    // Chromium is already installed: absent, never failing at call time
+    // (spec: acp-adapter, Optional browser tools for ACP sessions).
+    let acp = matches!(surface, SessionSurface::Acp | SessionSurface::AcpUnattended);
+    let selection = if acp && !crate::runtimes_cmd::browser::acp_browser_ready(scope) {
+        selection.without_toolset(registry, pmt_tools::browser::TOOLSET)
+    } else {
+        selection
+    };
     Ok(if interactive {
         selection
     } else {
@@ -205,8 +222,8 @@ pub fn selection(
     })
 }
 
-/// `api_server.toolsets`, keeping only toolsets whose tools the profile
-/// enables (`tools.enabled_toolsets`, `core` standing for the API
+/// `api_server.toolsets` (or `a2a.server.toolsets`), keeping only
+/// toolsets whose tools the profile enables (`tools.enabled_toolsets`, `core` standing for the API
 /// surface's own default); the others are dropped with a warning (spec:
 /// api-server, Unattended approvals and the API toolset).
 fn api_toolsets(registry: &ToolRegistry, config: &Config, listed: &[String]) -> Vec<String> {
@@ -255,6 +272,7 @@ pub fn surface_of(session: &pmt_store::Session) -> SessionSurface {
         }
         Source::Desktop => SessionSurface::Desktop,
         Source::Cron => SessionSurface::Cron,
+        Source::Api if session.source_tag.as_deref() == Some(A2A_TAG) => SessionSurface::A2a,
         Source::Api => SessionSurface::Api,
         Source::Acp if session.source_tag.as_deref() == Some(ACP_UNATTENDED_TAG) => {
             SessionSurface::AcpUnattended
@@ -264,8 +282,36 @@ pub fn surface_of(session: &pmt_store::Session) -> SessionSurface {
     }
 }
 
+/// The source tag of inbound A2A sessions (spec: agent-interop, A2A
+/// inbound safety): API sessions with the A2A toolsets.
+pub const A2A_TAG: &str = "a2a";
+
+/// The source tag of Hermes A2A sessions imported without a provable peer
+/// binding (spec: agent-interop, A2A conversation identity).
+pub const A2A_IMPORT_TAG: &str = pmt_store::A2A_IMPORT_TAG;
+
+/// Refuses to run a turn in an imported Hermes A2A session: its peer
+/// binding cannot be proven, so it stays read-only (and `prometheus
+/// doctor` reports it) rather than being attached to a live conversation.
+///
+/// # Errors
+///
+/// `session.read_only`.
+pub fn refuse_unbound_a2a(session: &pmt_store::Session) -> Result<(), Error> {
+    if session.source_tag.as_deref() == Some(A2A_IMPORT_TAG) {
+        return Err(Error::new(
+            &pmt_core::error::codes::SESSION_READ_ONLY,
+            format!(
+                "session {} is an imported Hermes A2A conversation whose peer binding cannot be proven; it is read-only",
+                session.id
+            ),
+        ));
+    }
+    Ok(())
+}
+
 /// The source tag of unattended ACP sessions (spec: acp-adapter).
-const ACP_UNATTENDED_TAG: &str = "acp-unattended";
+pub const ACP_UNATTENDED_TAG: &str = "acp-unattended";
 
 /// The source tag of the desktop's first-run onboarding chat (spec:
 /// desktop-app, First-run onboarding chat).

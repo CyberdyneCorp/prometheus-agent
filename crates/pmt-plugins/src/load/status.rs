@@ -53,11 +53,30 @@ pub(super) fn status_of(plugin: &Discovered, inputs: &LoadInputs<'_>, grants: &G
         (Ok(_), Enablement::Conflict) => {
             (State::Disabled, Some(Enablement::CONFLICT_NOTE.to_owned()))
         }
-        (Ok(manifest), Enablement::Enabled) => runnable(plugin, manifest, inputs, grants),
+        (Ok(manifest), Enablement::Enabled) => match lane_collision(manifest, inputs) {
+            Some(problem) => (State::Error, Some(problem)),
+            None => runnable(plugin, manifest, inputs, grants),
+        },
     };
     status.state = state;
     status.problem = problem;
     status
+}
+
+/// A kanban lane named like a profile of the home cannot load: an
+/// assignee must name one or the other (spec: kanban, Worker lanes).
+fn lane_collision(manifest: &Manifest, inputs: &LoadInputs<'_>) -> Option<String> {
+    let profiles = inputs.profile_dir.parent()?;
+    manifest
+        .kanban_lanes
+        .iter()
+        .find(|lane| lane.name == "default" || profiles.join(&lane.name).is_dir())
+        .map(|lane| {
+            format!(
+                "kanban lane '{}' collides with profile '{}'",
+                lane.name, lane.name
+            )
+        })
 }
 
 fn runnable(

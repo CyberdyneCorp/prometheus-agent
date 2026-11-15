@@ -8,6 +8,27 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 
 | Key | Type | Default | Allowed values | Apply | Description |
 |---|---|---|---|---|---|
+| `a2a.agents.<name>.auth_secret` | string | unset | a secret name | `live` | The secret holding the bearer token it expects. |
+| `a2a.agents.<name>.capabilities` | array of string | `[]` | any | `live` | Capabilities `a2a_orchestrate` matches. |
+| `a2a.agents.<name>.timeout_secs` | integer | `120` | 1 to 86400 | `live` | Seconds one call waits for the reply. |
+| `a2a.agents.<name>.url` | string | unset | any | `live` | The agent's base URL (where its Agent Card is served). |
+| `a2a.server.advertised_toolsets` | array | unset | any | `live` | Toolsets the card advertises as skills (unset: every toolset inbound A2A sessions get); a toolset they cannot use is never listed. |
+| `a2a.server.agent_name` | string | unset | any | `live` | The Agent Card's name (unset: `<hostname>-<profile>`). |
+| `a2a.server.allow_all_peers` | boolean | `false` | any | `live` | Admit every authenticated identity (WARN on every start). |
+| `a2a.server.audit_content` | boolean | `false` | any | `live` | Also record message text in the audit log. |
+| `a2a.server.description` | string | unset | any | `live` | The Agent Card's description (unset: a generic one). |
+| `a2a.server.enabled` | boolean | `false` | any | `restart` | Serve this profile on the daemon's A2A listener (`/p/<profile>/`, and `/` for `default`). |
+| `a2a.server.max_pingpong_turns` | integer | `5` | 1 to 20 | `live` | Exchanges per context within 10 minutes. |
+| `a2a.server.peers` | array of table | `[]` | any | `live` | Per-peer bearer tokens; the name drives trust, limits and audit. |
+| `a2a.server.public_url` | string | unset | any | `live` | The URL peers call (a reverse proxy's); unset: the bound address. Its host is also accepted in the `Host` header. |
+| `a2a.server.push_secret` | string | unset | a secret name | `live` | The secret signing push notifications (unset: the authenticating peer's token). |
+| `a2a.server.rate_limit_per_minute` | integer | `60` | 1 to 100000 | `live` | Requests per minute per identity. |
+| `a2a.server.reply_timeout_secs` | integer | `300` | 300 to 86400 | `live` | Seconds a task waits for the agent's reply. |
+| `a2a.server.shared_token_secret` | string | unset | a secret name | `live` | A token shared by every caller, whose identity is the caller's IP. |
+| `a2a.server.toolsets` | array of string | `["api_server"]` | any | `live` | Toolsets of inbound A2A sessions. |
+| `a2a.server.trust_forwarded_headers` | boolean | `false` | any | `live` | Build the card's URL from `X-Forwarded-Host`/`X-Forwarded-Proto` (only behind a proxy that sets them). |
+| `a2a.server.trusted_peers` | array of string | `[]` | any | `live` | Identities admitted to start turns. |
+| `acp.use_editor_terminal` | boolean | `false` | any | `next_session` | Run the terminal commands of a local ACP session in the editor's terminal panel when the editor supports it. The editor terminal is outside the OS sandbox, so it is used only while `security.sandbox.mode = "off"`; otherwise commands run sandboxed in the daemon. |
 | `agent.api_max_retries` | integer | `3` | 1 to 10 | `next_session` | Attempts per model call before the fallback chain is consulted. |
 | `agent.auto_recovery_cycles` | integer | `5` | ≥ 0 | `next_session` | Extra wait-and-retry cycles after retries and fallbacks are spent on a transient failure with nothing streamed; `0` disables. |
 | `agent.budget_warning_ratio` | number | unset | > 0.0, < 1.0 | `next_session` | Share of the most-constrained budget at which a one-time `[budget checkpoint]` notice rides the newest tool result; unset is off. |
@@ -87,6 +108,12 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `auxiliary.goal_judge.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.goal_judge.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.goal_judge.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.kanban.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
+| `auxiliary.kanban.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.kanban.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
+| `auxiliary.kanban.model` | string | unset | any | `next_session` | Model id. |
+| `auxiliary.kanban.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.kanban.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.max_concurrency` | integer | `8` | ≥ 1 | `next_session` | Auxiliary calls in flight at once across the profile's sessions; further calls wait. |
 | `auxiliary.memory.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.memory.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
@@ -131,6 +158,8 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `auxiliary.web_extract.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.web_extract.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.web_extract.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `bot_mode.envelope_ttl_secs` | integer | `900` | ≥ 0 | `live` | Envelopes still queued (never drained by a courier) after this many seconds fail with `queued_expired` (`0`: never). |
+| `bot_mode.relay_turn_timeout_secs` | integer | `600` | 1 to 86400 | `live` | Seconds a relayed bot message's turn may take on the target before it fails. |
 | `browser.auto_local_for_private_urls` | boolean | `true` | any | `next_session` | With a cloud provider, private and LAN URLs open in a local sidecar browser instead of being refused or sent to the provider. |
 | `browser.cdp_url` | string | unset | any | `next_session` | Explicit CDP endpoint. |
 | `browser.chromium_args` | array of string | unset | any | `next_session` | Extra local browser arguments; ones that disable the Chromium sandbox or web security need the matching `security.sandbox.allow_degraded` entry. |
@@ -464,6 +493,26 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `image_gen.openai.model` | string | unset | any | `next_session` | The model on this endpoint (wins over `image_gen.model`); an id outside the catalog is sent verbatim, without `quality`. |
 | `image_gen.openai.provider` | string | unset | any | `next_session` | A configured custom provider (`[providers.<id>]`) whose endpoint and key are used instead. |
 | `image_gen.provider` | string | unset | any | `next_session` | The provider generating images: `fal` (default), `openai`, `openai-codex`, `openrouter`, `xai`, `krea`, `meta-ai`, `deepinfra`, `nous` (the subscription tool gateway) or a plugin's; unset picks one by the keys present. |
+| `kanban.attachment_max_bytes` | integer | `26214400` | ≥ 1 | `live` | Largest attachment accepted on any surface. |
+| `kanban.auto_decompose` | boolean | `false` | any | `live` | Let the dispatcher run `specify` on triage tasks and `decompose` on tasks assigned to an orchestrator profile before dispatching them (the dashboard's Orchestration Auto/Manual control). |
+| `kanban.auto_promote_children` | boolean | `true` | any | `live` | Promote decomposed children that wait for nothing straight to `ready` (else they stay in `todo`). |
+| `kanban.claim_ttl_secs` | integer | `900` | 60 to 86400 | `live` | Seconds a claim lasts without a worker heartbeat before the run is reclaimed as a failure. |
+| `kanban.current_board` | string | unset | any | `live` | The board commands use without `--board` (unset: `default`). A board that does not exist is an error, never a silent fallback. |
+| `kanban.default_assignee` | string | unset | any | `live` | The assignee of ready tasks that name none (unset: such tasks are reported `skipped_unassigned`). |
+| `kanban.dispatch` | boolean | `true` | any | `live` | Run the dispatcher inside the gateway daemon. |
+| `kanban.dispatch_interval_secs` | integer | `30` | 1 to 3600 | `live` | Seconds between dispatcher ticks. |
+| `kanban.dispatch_profiles` | array | unset | any | `live` | Claim only tasks assigned to these profiles (`[]` claims nothing; unset allows any existing profile). |
+| `kanban.done_sub_retention_secs` | integer | `2592000` | ≥ 0 | `live` | Seconds notification subscriptions of done tasks are kept. |
+| `kanban.failure_limit` | integer | `2` | 1 to 100 | `live` | Consecutive failed runs after which a task without its own `max_retries` is blocked (`gave_up`). |
+| `kanban.github_api_url` | string | `"https://api.github.com"` | any | `live` | The GitHub API that PR completion contracts read (GitHub Enterprise: `https://<host>/api/v3`). |
+| `kanban.max_running` | integer | unset | 1 to 256 | `live` | Workers running at once across every board of the home (unset: physical memory / 512 MiB clamped to 2-8, or 2 when unknown). |
+| `kanban.max_running_per_profile` | integer | `2` | 1 to 256 | `live` | Workers running at once per assignee profile. |
+| `kanban.orchestrator_profile` | string | unset | any | `live` | The assignee a specified triage task that names none is given, so that the orchestrator profile decomposes it (unset: it stays unassigned and `default_assignee` applies at dispatch). |
+| `kanban.rate_limit_cooldown_secs` | integer | `300` | ≥ 0 | `live` | Seconds a task waits before it is claimed again after its worker was rate limited (exit 75). |
+| `kanban.respawn_pr_window_secs` | integer | `86400` | ≥ 0 | `live` | Seconds after a comment linking a GitHub pull request during which its task is not spawned again. |
+| `kanban.respawn_success_window_secs` | integer | `3600` | ≥ 0 | `live` | Seconds after a finished run during which its task is not spawned again unless deliberately re-queued. |
+| `kanban.review_dispatch` | boolean | `true` | any | `live` | Route `review` tasks to their reviewer profiles, keeping one slot for review work while a ready backlog exists. |
+| `kanban.role` | one of "orchestrator" | unset | `"orchestrator"` | `live` | `orchestrator` makes this profile's worker sessions decompose goals into linked tasks for existing profiles instead of implementing them (unset: an ordinary worker). |
 | `logging.level` | one of "error", "warn", "info", "debug", "trace" | `"info"` | `"error"`, `"warn"`, `"info"`, `"debug"`, `"trace"` | `restart` | Log level; `PMT_LOG` or `RUST_LOG` override it. |
 | `loops.max_ticks` | integer | `100` | 0 to 100000 | `live` | Wakeups after which a loop pauses (`0` = unlimited). |
 | `loops.min_interval_secs` | integer | `30` | 1 to 86400 | `live` | Shortest fixed interval a loop may use (seconds). |
@@ -603,6 +652,9 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `observability.trajectories.max_bytes_per_session` | integer | `268435456` | ≥ 0 | `next_session` | Stop recording payload bodies of a session beyond this size. |
 | `observability.trajectories.retention_secs` | integer | `7776000` | ≥ 0 | `next_session` | Delete unpinned trajectories older than this; `0` keeps forever. |
 | `openrouter.min_coding_score` | number or string | `0.65` | any | `next_session` | Lowest coding score the `openrouter/pareto-code` router may pick a model below (0.0-1.0); an empty string sends no `pareto-router` plugin block. |
+| `peers.<name>.key_secret` | string | unset | a secret name | `next_session` | The secret holding the peer's API server key. |
+| `peers.<name>.note` | string | unset | any | `next_session` | A note shown by `gateway peer list`. |
+| `peers.<name>.url` | string | unset | any | `next_session` | The peer's API server base URL. |
 | `plugins.approval_transport` | string | `""` | any | `next_session` | The plugin approval transport that presents approval requests, `<plugin_id>:<name>`; empty asks on the session's own surface. |
 | `plugins.approval_transport_fallback` | one of "deny", "builtin" | `"deny"` | `"deny"`, `"builtin"` | `next_session` | What a failing, timed-out, unbound or missing approval transport leads to: `deny` the request, or ask on the session's own surface (`builtin`). |
 | `plugins.catalog_url` | string | `"https://raw.githubusercontent.com/CyberdyneCorp/prometheus-agent/main/crates/pmt-plugins/catalog/catalog.json"` | any | `next_session` | Where the signed live plugin catalog is fetched from (cached 6 hours under the profile's `cache/`); empty uses only the catalog embedded in the binary. |

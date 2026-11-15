@@ -57,6 +57,12 @@ struct Shared {
     redactor: Redactor,
     profile_redactors: RwLock<HashMap<String, Redactor>>,
     stderr: bool,
+    /// Every record goes to stderr too (the ACP adapter, whose stdout is
+    /// the protocol stream and whose stderr the editor captures).
+    stderr_all: std::sync::atomic::AtomicBool,
+    /// The component and profile of records that name none (a process
+    /// serving one surface for one profile, its tasks included).
+    process: RwLock<Option<(String, String)>>,
     files: Mutex<Rotating>,
 }
 
@@ -70,6 +76,22 @@ impl LogHandle {
                 .write()
                 .unwrap_or_else(PoisonError::into_inner) = level_filter(level);
         }
+    }
+
+    /// A process serving one surface for one profile: records naming no
+    /// component or profile are of `component` and `profile` (its spawned
+    /// tasks carry no span), and with `stderr_all` every record is also
+    /// written to stderr.
+    pub fn serve_process(&self, component: &str, profile: &str, stderr_all: bool) {
+        *self
+            .shared
+            .process
+            .write()
+            .unwrap_or_else(PoisonError::into_inner) =
+            Some((component.to_owned(), profile.to_owned()));
+        self.shared
+            .stderr_all
+            .store(stderr_all, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Records of `profile` are also redacted with `redactor` (the
@@ -140,6 +162,8 @@ pub fn layer(setup: LogSetup) -> (JsonLayer, LogHandle) {
         redactor: setup.redactor,
         profile_redactors: RwLock::default(),
         stderr: setup.stderr && std::io::stderr().is_terminal(),
+        stderr_all: std::sync::atomic::AtomicBool::new(false),
+        process: RwLock::new(None),
         files: Mutex::new(Rotating::new(MAX_BYTES, KEEP)),
     });
     (
@@ -205,7 +229,19 @@ impl JsonLayer {
     }
 
     fn emit(&self, record: &Record, level: Level) {
-        if self.shared.stderr && level <= Level::WARN {
+        if self
+            .shared
+            .stderr_all
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            let _ = writeln!(
+                std::io::stderr(),
+                "{} {}: {}",
+                record.ts,
+                record.level,
+                record.msg
+            );
+        } else if self.shared.stderr && level <= Level::WARN {
             let label = if level == Level::ERROR {
                 "error"
             } else {
@@ -339,6 +375,22 @@ where
         let mut fields = EventFields::default();
         event.record(&mut fields);
         context.0.extend(fields.context.0.drain());
+        if let Some((component, profile)) = self
+            .shared
+            .process
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .as_ref()
+        {
+            context
+                .0
+                .entry("component")
+                .or_insert_with(|| component.clone());
+            context
+                .0
+                .entry("profile")
+                .or_insert_with(|| profile.clone());
+        }
         let record = build(&context, fields, *event.metadata().level());
         let redacted = redact(
             record,

@@ -303,6 +303,7 @@ pub(super) async fn create(client: &Client, launch: &Launch) -> Result<String, E
         idempotency_key: Some(ulid::Ulid::generate().to_string()),
         exclusive: true,
         setup: launch.setup.clone(),
+        editor_mcp_servers: Vec::new(),
     };
     let created = client
         .call_typed::<SessionCreate>(&params)

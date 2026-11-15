@@ -269,7 +269,13 @@ pub fn builtin() -> Vec<Toolset> {
             "Delegate work to subagents",
             &["delegate_task"],
         ),
-        Toolset::new("kanban", "Kanban boards", &[]).default_off(),
+        Toolset::new("kanban", "Kanban boards", crate::agent_level_kanban::TOOLS).default_off(),
+        Toolset::new(
+            "a2a",
+            "Call other agents over the A2A protocol",
+            crate::agent_level_a2a::TOOLS,
+        )
+        .default_off(),
         Toolset::new(
             "debugging",
             "Terminal, processes, web and files",

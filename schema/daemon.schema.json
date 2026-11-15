@@ -1,5 +1,22 @@
 {
   "$defs": {
+    "A2aListener": {
+      "additionalProperties": false,
+      "description": "`daemon.toml [a2a]`.",
+      "properties": {
+        "listen": {
+          "default": "127.0.0.1:9900",
+          "description": "Where the A2A server listens (`host:port`, an IPv6 literal bare or\nbracketed, or a bare address on port 9900).",
+          "type": "string"
+        },
+        "public": {
+          "default": false,
+          "description": "Allow a non-loopback `listen` (every served profile then needs a\npeer token).",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
     "AllAdaptersDown": {
       "description": "`gateway.on_all_adapters_down`.",
       "oneOf": [
@@ -793,6 +810,14 @@
   "additionalProperties": false,
   "description": "Root of `daemon.toml`.",
   "properties": {
+    "a2a": {
+      "$ref": "#/$defs/A2aListener",
+      "default": {
+        "listen": "127.0.0.1:9900",
+        "public": false
+      },
+      "description": "The A2A server's listener (spec: agent-interop)."
+    },
     "api_server": {
       "$ref": "#/$defs/ApiListener",
       "default": {

@@ -176,7 +176,13 @@ later runs of its session wait until then. Each profile runs at most
   `include_children`), create, show, `PATCH` (title, `end_reason`),
   `DELETE`, `/messages` (`inline_images=false` shows `[image]`),
   `/fork`, `/chat` and `/chat/stream`. Every session of the profile is
-  readable; only API sessions take chat, `PATCH` or `DELETE`.
+  readable; only API sessions take chat, `PATCH` or `DELETE` (and the
+  profile's canonical Bot Chat takes runs and chat, for [peer
+  gateways](agent-interop.md)).
+- `POST /api/bot-chat/ensure`: the profile's canonical Bot Chat, created
+  when it has none; `GET /api/agents`: every profile the daemon serves, as
+  a bot (name, title, description, avatar, model, whether it accepts bot
+  messages), which peers merge into their roster.
 - `/api/jobs`: the profile's scheduled jobs with the [`cronjob`](../reference/tools.md#cronjob) tool's
   fields, confirmation and messages; jobs created here record origin `api`.
 - `GET /v1/capabilities`, `/api/model/options`, `/v1/skills`,

@@ -34,6 +34,7 @@
 - [Projects](guide/projects.md)
 - [UI languages](guide/languages.md)
 - [Scheduled jobs](guide/cron.md)
+- [Kanban](guide/kanban.md)
 - [Session automation](guide/session-automation.md)
 - [Skills](guide/skills.md)
 - [Memory](guide/memory.md)
@@ -44,8 +45,10 @@
 - [Connectors](guide/connectors.md)
 - [The python bridge](guide/python-bridge.md)
 - [The daemon and its client protocol](guide/client-protocol.md)
+- [Editors over ACP](guide/acp.md)
 - [The messaging gateway](guide/gateway.md)
 - [The OpenAI-compatible API server](guide/api-server.md)
+- [Agents on other machines: A2A and peers](guide/agent-interop.md)
 - [The web dashboard](guide/dashboard.md)
 - [The desktop app](guide/desktop.md)
 - [Migrating from Hermes and other agents](guide/migration.md)
@@ -59,6 +62,7 @@
 - [Client protocol](reference/rpc.md)
 - [Tools](reference/tools.md)
 - [System prompt layers](reference/system-prompt.md)
+- [Kanban workflow](reference/kanban-workflow.md)
 
 # Project
 

@@ -4,7 +4,7 @@
 //! A session's starting toolsets are `toolsets.surfaces.<surface>` when
 //! set, else `tools.enabled_toolsets` with `core` standing for the
 //! surface's built-in default: `core` for cli, tui, desktop and cron,
-//! `api_server` for the API server, `acp`/`acp_unattended` for ACP and
+//! `api_server` for the API server and inbound A2A, `acp`/`acp_unattended` for ACP and
 //! `platform-<platform>` for a messaging platform. Webhook-triggered runs
 //! never fall back to the profile-wide list: their payload comes from
 //! outside, so they start from `webhook-safe` unless
@@ -37,6 +37,9 @@ pub enum SessionSurface {
     Cron,
     /// The OpenAI-compatible API server.
     Api,
+    /// An inbound A2A conversation (its toolsets come from
+    /// `a2a.server.toolsets`).
+    A2a,
     /// An ACP editor session.
     Acp,
     /// An unattended ACP session.
@@ -59,6 +62,7 @@ impl SessionSurface {
             "desktop" => Self::Desktop,
             "cron" => Self::Cron,
             "api" => Self::Api,
+            "a2a" => Self::A2a,
             "acp" => Self::Acp,
             "acp_unattended" => Self::AcpUnattended,
             _ => return None,
@@ -74,6 +78,7 @@ impl SessionSurface {
             Self::Desktop | Self::Onboarding => "desktop".to_owned(),
             Self::Cron => "cron".to_owned(),
             Self::Api => "api".to_owned(),
+            Self::A2a => "a2a".to_owned(),
             Self::Acp => "acp".to_owned(),
             Self::AcpUnattended => "acp_unattended".to_owned(),
             Self::Gateway(platform) => format!("gateway.{platform}"),
@@ -94,7 +99,7 @@ impl SessionSurface {
             Self::Cli | Self::Tui | Self::Desktop | Self::Onboarding | Self::Cron => {
                 "core".to_owned()
             }
-            Self::Api => "api_server".to_owned(),
+            Self::Api | Self::A2a => "api_server".to_owned(),
             Self::Acp => "acp".to_owned(),
             Self::AcpUnattended => "acp_unattended".to_owned(),
             Self::Gateway(_) if self.is_webhook() => "webhook-safe".to_owned(),

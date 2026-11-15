@@ -1,6 +1,7 @@
 //! Behaviour contracts of the session store (spec: session-storage), one
 //! test binary with a module per area.
 
+mod a2a;
 mod automation;
 mod blobs;
 mod compaction;

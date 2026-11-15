@@ -1,5 +1,243 @@
 {
   "$defs": {
+    "A2aAgent": {
+      "additionalProperties": false,
+      "description": "One `[a2a.agents.<name>]` entry.",
+      "properties": {
+        "auth_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The secret holding the bearer token it expects."
+        },
+        "capabilities": {
+          "default": [],
+          "description": "Capabilities `a2a_orchestrate` matches.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "timeout_secs": {
+          "default": 120,
+          "description": "Seconds one call waits for the reply.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "url": {
+          "description": "The agent's base URL (where its Agent Card is served).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object"
+    },
+    "A2aConfig": {
+      "additionalProperties": false,
+      "description": "The `[a2a]` section.",
+      "properties": {
+        "agents": {
+          "additionalProperties": {
+            "$ref": "#/$defs/A2aAgent"
+          },
+          "default": {},
+          "description": "A2A agents the `a2a_*` tools call, keyed by the name the model uses.",
+          "type": "object"
+        },
+        "server": {
+          "$ref": "#/$defs/A2aServerConfig",
+          "default": {
+            "allow_all_peers": false,
+            "audit_content": false,
+            "enabled": false,
+            "max_pingpong_turns": 5,
+            "peers": [],
+            "rate_limit_per_minute": 60,
+            "reply_timeout_secs": 300,
+            "toolsets": [
+              "api_server"
+            ],
+            "trust_forwarded_headers": false,
+            "trusted_peers": []
+          },
+          "description": "The inbound A2A server's view of this profile."
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
+    "A2aPeerToken": {
+      "additionalProperties": false,
+      "description": "One `[[a2a.server.peers]]` entry.",
+      "properties": {
+        "name": {
+          "description": "The peer's identity.",
+          "type": "string"
+        },
+        "token_secret": {
+          "$ref": "#/$defs/SecretName",
+          "description": "The secret holding its bearer token."
+        }
+      },
+      "required": [
+        "name",
+        "token_secret"
+      ],
+      "type": "object"
+    },
+    "A2aServerConfig": {
+      "additionalProperties": false,
+      "description": "`[a2a.server]`.",
+      "properties": {
+        "advertised_toolsets": {
+          "description": "Toolsets the card advertises as skills (unset: every toolset\ninbound A2A sessions get); a toolset they cannot use is never\nlisted.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "agent_name": {
+          "description": "The Agent Card's name (unset: `<hostname>-<profile>`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "allow_all_peers": {
+          "default": false,
+          "description": "Admit every authenticated identity (WARN on every start).",
+          "type": "boolean"
+        },
+        "audit_content": {
+          "default": false,
+          "description": "Also record message text in the audit log.",
+          "type": "boolean"
+        },
+        "description": {
+          "description": "The Agent Card's description (unset: a generic one).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "enabled": {
+          "default": false,
+          "description": "Serve this profile on the daemon's A2A listener (`/p/<profile>/`,\nand `/` for `default`).",
+          "type": "boolean",
+          "x-apply": "restart"
+        },
+        "max_pingpong_turns": {
+          "default": 5,
+          "description": "Exchanges per context within 10 minutes.",
+          "format": "uint32",
+          "maximum": 20,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "peers": {
+          "default": [],
+          "description": "Per-peer bearer tokens; the name drives trust, limits and audit.",
+          "items": {
+            "$ref": "#/$defs/A2aPeerToken"
+          },
+          "type": "array"
+        },
+        "public_url": {
+          "description": "The URL peers call (a reverse proxy's); unset: the bound address.\nIts host is also accepted in the `Host` header.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "push_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The secret signing push notifications (unset: the authenticating\npeer's token)."
+        },
+        "rate_limit_per_minute": {
+          "default": 60,
+          "description": "Requests per minute per identity.",
+          "format": "uint32",
+          "maximum": 100000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "reply_timeout_secs": {
+          "default": 300,
+          "description": "Seconds a task waits for the agent's reply.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 300,
+          "type": "integer"
+        },
+        "shared_token_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A token shared by every caller, whose identity is the caller's IP."
+        },
+        "toolsets": {
+          "default": [
+            "api_server"
+          ],
+          "description": "Toolsets of inbound A2A sessions.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "trust_forwarded_headers": {
+          "default": false,
+          "description": "Build the card's URL from `X-Forwarded-Host`/`X-Forwarded-Proto`\n(only behind a proxy that sets them).",
+          "type": "boolean"
+        },
+        "trusted_peers": {
+          "default": [],
+          "description": "Identities admitted to start turns.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "AcpConfig": {
+      "additionalProperties": false,
+      "description": "The `[acp]` section: how `prometheus acp` sessions use the editor\n(spec: acp-adapter, Editor terminal delegation).",
+      "properties": {
+        "use_editor_terminal": {
+          "default": false,
+          "description": "Run the terminal commands of a local ACP session in the editor's\nterminal panel when the editor supports it. The editor terminal is\noutside the OS sandbox, so it is used only while\n`security.sandbox.mode = \"off\"`; otherwise commands run sandboxed\nin the daemon.",
+          "type": "boolean"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
     "AgentCacheConfig": {
       "additionalProperties": false,
       "description": "`[gateway.agent_cache]`.",
@@ -575,6 +813,17 @@
           ],
           "description": "Goal judging (defaults to the main model)."
         },
+        "kanban": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuxiliaryTask"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Kanban `specify` and `decompose` (defaults to the main model)."
+        },
         "max_concurrency": {
           "default": 8,
           "description": "Auxiliary calls in flight at once across the profile's sessions;\nfurther calls wait.",
@@ -792,6 +1041,29 @@
         }
       },
       "type": "object"
+    },
+    "BotModeConfig": {
+      "additionalProperties": false,
+      "description": "The `[bot_mode]` section.",
+      "properties": {
+        "envelope_ttl_secs": {
+          "default": 900,
+          "description": "Envelopes still queued (never drained by a courier) after this many\nseconds fail with `queued_expired` (`0`: never).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "relay_turn_timeout_secs": {
+          "default": 600,
+          "description": "Seconds a relayed bot message's turn may take on the target before\nit fails.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
     },
     "BrowserConfig": {
       "additionalProperties": false,
@@ -4016,6 +4288,168 @@
         }
       ]
     },
+    "KanbanConfig": {
+      "additionalProperties": false,
+      "description": "The `[kanban]` section.",
+      "properties": {
+        "attachment_max_bytes": {
+          "default": 26214400,
+          "description": "Largest attachment accepted on any surface.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "auto_decompose": {
+          "default": false,
+          "description": "Let the dispatcher run `specify` on triage tasks and `decompose` on\ntasks assigned to an orchestrator profile before dispatching them\n(the dashboard's Orchestration Auto/Manual control).",
+          "type": "boolean"
+        },
+        "auto_promote_children": {
+          "default": true,
+          "description": "Promote decomposed children that wait for nothing straight to\n`ready` (else they stay in `todo`).",
+          "type": "boolean"
+        },
+        "claim_ttl_secs": {
+          "default": 900,
+          "description": "Seconds a claim lasts without a worker heartbeat before the run is\nreclaimed as a failure.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 60,
+          "type": "integer"
+        },
+        "current_board": {
+          "description": "The board commands use without `--board` (unset: `default`). A\nboard that does not exist is an error, never a silent fallback.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "default_assignee": {
+          "description": "The assignee of ready tasks that name none (unset: such tasks are\nreported `skipped_unassigned`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dispatch": {
+          "default": true,
+          "description": "Run the dispatcher inside the gateway daemon.",
+          "type": "boolean"
+        },
+        "dispatch_interval_secs": {
+          "default": 30,
+          "description": "Seconds between dispatcher ticks.",
+          "format": "uint64",
+          "maximum": 3600,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "dispatch_profiles": {
+          "description": "Claim only tasks assigned to these profiles (`[]` claims nothing;\nunset allows any existing profile).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "done_sub_retention_secs": {
+          "default": 2592000,
+          "description": "Seconds notification subscriptions of done tasks are kept.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failure_limit": {
+          "default": 2,
+          "description": "Consecutive failed runs after which a task without its own\n`max_retries` is blocked (`gave_up`).",
+          "format": "uint32",
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "github_api_url": {
+          "default": "https://api.github.com",
+          "description": "The GitHub API that PR completion contracts read (GitHub Enterprise:\n`https://<host>/api/v3`).",
+          "type": "string"
+        },
+        "max_running": {
+          "description": "Workers running at once across every board of the home (unset:\nphysical memory / 512 MiB clamped to 2-8, or 2 when unknown).",
+          "format": "uint32",
+          "maximum": 256,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "max_running_per_profile": {
+          "default": 2,
+          "description": "Workers running at once per assignee profile.",
+          "format": "uint32",
+          "maximum": 256,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "orchestrator_profile": {
+          "description": "The assignee a specified triage task that names none is given, so\nthat the orchestrator profile decomposes it (unset: it stays\nunassigned and `default_assignee` applies at dispatch).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rate_limit_cooldown_secs": {
+          "default": 300,
+          "description": "Seconds a task waits before it is claimed again after its worker\nwas rate limited (exit 75).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "respawn_pr_window_secs": {
+          "default": 86400,
+          "description": "Seconds after a comment linking a GitHub pull request during which\nits task is not spawned again.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "respawn_success_window_secs": {
+          "default": 3600,
+          "description": "Seconds after a finished run during which its task is not spawned\nagain unless deliberately re-queued.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "review_dispatch": {
+          "default": true,
+          "description": "Route `review` tasks to their reviewer profiles, keeping one slot\nfor review work while a ready backlog exists.",
+          "type": "boolean"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KanbanRole"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`orchestrator` makes this profile's worker sessions decompose goals\ninto linked tasks for existing profiles instead of implementing\nthem (unset: an ordinary worker)."
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
+    "KanbanRole": {
+      "description": "A profile's kanban role.",
+      "oneOf": [
+        {
+          "const": "orchestrator",
+          "description": "Decomposes goals into tasks for other profiles.",
+          "type": "string"
+        }
+      ]
+    },
     "KeyChord": {
       "description": "A key chord: `[Ctrl+][Alt+][Shift+]<key>` (spec: tui, Configurable key\nbindings).",
       "type": "string",
@@ -6106,6 +6540,32 @@
           "type": "integer"
         }
       },
+      "type": "object"
+    },
+    "PeerGateway": {
+      "additionalProperties": false,
+      "description": "One `[peers.<name>]` entry: another gateway's API server.",
+      "properties": {
+        "key_secret": {
+          "$ref": "#/$defs/SecretName",
+          "description": "The secret holding the peer's API server key."
+        },
+        "note": {
+          "description": "A note shown by `gateway peer list`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "description": "The peer's API server base URL.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "key_secret"
+      ],
       "type": "object"
     },
     "PhraseMode": {
@@ -11064,6 +11524,34 @@
   "additionalProperties": false,
   "description": "Root of a profile's `config.toml`.",
   "properties": {
+    "a2a": {
+      "$ref": "#/$defs/A2aConfig",
+      "default": {
+        "agents": {},
+        "server": {
+          "allow_all_peers": false,
+          "audit_content": false,
+          "enabled": false,
+          "max_pingpong_turns": 5,
+          "peers": [],
+          "rate_limit_per_minute": 60,
+          "reply_timeout_secs": 300,
+          "toolsets": [
+            "api_server"
+          ],
+          "trust_forwarded_headers": false,
+          "trusted_peers": []
+        }
+      },
+      "description": "The A2A server's view of this profile and the A2A agents it calls\n(boxed: a large, rarely read section, kept out of every future\nthat holds a configuration)."
+    },
+    "acp": {
+      "$ref": "#/$defs/AcpConfig",
+      "default": {
+        "use_editor_terminal": false
+      },
+      "description": "How ACP editor sessions use the editor."
+    },
     "agent": {
       "$ref": "#/$defs/AgentConfig",
       "default": {
@@ -11144,6 +11632,14 @@
         "transient_retries": 2
       },
       "description": "Side-model (auxiliary) task routing."
+    },
+    "bot_mode": {
+      "$ref": "#/$defs/BotModeConfig",
+      "default": {
+        "envelope_ttl_secs": 900,
+        "relay_turn_timeout_secs": 600
+      },
+      "description": "How bot messages travel between bots (the desktop relay's bounds)."
     },
     "browser": {
       "$ref": "#/$defs/BrowserConfig",
@@ -11530,6 +12026,26 @@
       },
       "description": "Image generation (`image_generate`)."
     },
+    "kanban": {
+      "$ref": "#/$defs/KanbanConfig",
+      "default": {
+        "attachment_max_bytes": 26214400,
+        "auto_decompose": false,
+        "auto_promote_children": true,
+        "claim_ttl_secs": 900,
+        "dispatch": true,
+        "dispatch_interval_secs": 30,
+        "done_sub_retention_secs": 2592000,
+        "failure_limit": 2,
+        "github_api_url": "https://api.github.com",
+        "max_running_per_profile": 2,
+        "rate_limit_cooldown_secs": 300,
+        "respawn_pr_window_secs": 86400,
+        "respawn_success_window_secs": 3600,
+        "review_dispatch": true
+      },
+      "description": "Kanban: the default board and the dispatcher."
+    },
     "logging": {
       "$ref": "#/$defs/LoggingConfig",
       "default": {
@@ -11695,6 +12211,15 @@
         "min_coding_score": 0.65
       },
       "description": "OpenRouter-only request settings."
+    },
+    "peers": {
+      "additionalProperties": {
+        "$ref": "#/$defs/PeerGateway"
+      },
+      "default": {},
+      "description": "Peer gateways reached over their API server, keyed by name.",
+      "type": "object",
+      "x-apply": "next_session"
     },
     "plugins": {
       "$ref": "#/$defs/PluginsConfig",
