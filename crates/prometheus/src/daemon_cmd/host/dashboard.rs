@@ -204,6 +204,19 @@ fn kanban(scope: &ProfileScope, profile: &str, call: pmt_web::KanbanCall) -> Res
         KanbanCall::Run(id) => dashboard::run(home, &id),
         KanbanCall::Terminate { run, who } => dashboard::terminate(scope, &run, &who),
         KanbanCall::Inspect => dashboard::inspect(scope),
+        KanbanCall::AttachmentLimit => {
+            Ok(json!({"max_bytes": scope.config().kanban.attachment_max_bytes}))
+        }
+        KanbanCall::Attach(upload) => dashboard::attach(
+            scope,
+            (&upload.board, &upload.task),
+            &upload.who,
+            &pmt_kanban::attach::Upload {
+                name: &upload.name,
+                content_type: upload.content_type.as_deref(),
+                bytes: &upload.bytes,
+            },
+        ),
     }
 }
 

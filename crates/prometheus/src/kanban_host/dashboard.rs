@@ -369,3 +369,36 @@ pub fn inspect(scope: &ProfileScope) -> Result<Value, Error> {
         "recent_events": events.into_iter().map(|(_, _, row)| row).collect::<Vec<_>>(),
     }))
 }
+
+/// `POST /api/kanban/boards/{board}/tasks/{task}/attachments`: stores the
+/// upload under the dispatcher profile `scope`'s
+/// `kanban.attachment_max_bytes` (re-checked here; nothing is stored when
+/// it is too large).
+///
+/// # Errors
+///
+/// `kanban.attachment_too_large`, `kanban.board_not_found`,
+/// `kanban.task_not_found`, `home.io`.
+pub fn attach(
+    scope: &ProfileScope,
+    (slug, task): (&str, &str),
+    who: &str,
+    upload: &pmt_kanban::attach::Upload<'_>,
+) -> Result<Value, Error> {
+    let queue = super::hooks::HookQueue::new(scope);
+    let boards = super::boards(scope, &queue)?;
+    let mut board = boards.board(slug)?;
+    let limit = scope.config().kanban.attachment_max_bytes;
+    let stored = board.attach(&Actor::user(who), task, upload, limit, pmt_kanban::now_ms());
+    queue.flush(scope);
+    let a = stored?;
+    Ok(json!({
+        "id": a.id,
+        "task_id": a.task_id,
+        "filename": a.filename,
+        "content_type": a.content_type,
+        "size": a.size,
+        "uploader": a.uploader,
+        "path": board.attachment_path(&a),
+    }))
+}

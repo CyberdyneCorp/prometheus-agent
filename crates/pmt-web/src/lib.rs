@@ -44,7 +44,9 @@ use pmt_gateway::{HostFuture, Server};
 use pmt_rpc::control::{DashboardAction, DashboardState, DeviceEntry};
 use tokio_util::sync::CancellationToken;
 
-pub use host::{Catalog, Change, DashboardHost, FileRules, KanbanCall, PairingSink, SessionFile};
+pub use host::{
+    Catalog, Change, DashboardHost, FileRules, KanbanCall, KanbanUpload, PairingSink, SessionFile,
+};
 
 /// What every request handler of a running listener shares.
 pub(crate) struct Shared {

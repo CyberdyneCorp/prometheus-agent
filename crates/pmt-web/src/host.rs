@@ -89,6 +89,28 @@ pub enum KanbanCall {
     },
     /// `GET /api/kanban/inspect`.
     Inspect,
+    /// The dispatcher profile's `kanban.attachment_max_bytes`, as
+    /// `{"max_bytes": n}` (read before an upload's body is).
+    AttachmentLimit,
+    /// `POST /api/kanban/boards/{board}/tasks/{task}/attachments`.
+    Attach(KanbanUpload),
+}
+
+/// A dashboard attachment upload, already checked against the limit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KanbanUpload {
+    /// The board slug.
+    pub board: String,
+    /// The task id.
+    pub task: String,
+    /// The display name (`?name=`; sanitized by the board).
+    pub name: String,
+    /// The body's `Content-Type`, if any.
+    pub content_type: Option<String>,
+    /// The bytes.
+    pub bytes: Vec<u8>,
+    /// The signed-in subject, recorded as the uploader.
+    pub who: String,
 }
 
 /// A host file of a session, read under its file-access rules.

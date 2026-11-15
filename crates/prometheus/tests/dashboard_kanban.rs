@@ -147,6 +147,88 @@ fn the_kanban_read_endpoints_describe_boards_workers_and_the_backlog() {
     assert_eq!(gone.status, 404, "{gone:?}");
 }
 
+/// Sends the head of a POST declaring a `length`-byte body, without the
+/// body: a refusal by declared size answers before any byte is read.
+fn declared_upload(
+    port: u16,
+    path: &str,
+    signed: &dashboard::Signed,
+    length: u64,
+) -> common::api::Answer {
+    use std::io::{Read as _, Write as _};
+    let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+    stream
+        .set_read_timeout(Some(std::time::Duration::from_mins(1)))
+        .unwrap();
+    let head = format!(
+        "POST {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nCookie: {}\r\nX-Prometheus-CSRF: {}\r\n\
+         Content-Type: application/pdf\r\nContent-Length: {length}\r\nConnection: close\r\n\r\n",
+        signed.cookie, signed.csrf
+    );
+    stream.write_all(head.as_bytes()).unwrap();
+    let mut raw = Vec::new();
+    stream.read_to_end(&mut raw).unwrap();
+    common::api::parse(&raw)
+}
+
+/// Scenario: Oversized upload refused (the dashboard surface). A small
+/// upload is stored and listed; a 26 MiB one is refused by its declared
+/// length with the shared message, and nothing is stored.
+#[test]
+fn an_oversized_dashboard_upload_is_refused_and_nothing_is_stored() {
+    let home = mock_home();
+    let created = ok(&run(home.path(), &["--json", "kanban", "create", "report"]));
+    let task = serde_json::from_str::<Value>(&created).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let _daemon = daemon::start(home.path(), &[]);
+    let opened = dashboard::open(home.path(), &[]);
+    let signed = sign_in(&opened);
+    let path = format!("/api/kanban/boards/default/tasks/{task}/attachments?name=notes.txt");
+
+    let mut small = Request::new("POST", &path)
+        .header("Cookie", &signed.cookie)
+        .header("X-Prometheus-CSRF", &signed.csrf);
+    small.body = Some("quarterly numbers".to_owned());
+    let stored = small.send(opened.port);
+    assert_eq!(stored.status, 200, "{stored:?}");
+    assert_eq!(stored.json()["filename"], "notes.txt");
+    assert_eq!(stored.json()["size"], 17);
+    let listed = ok(&run(
+        home.path(),
+        &["--json", "kanban", "attachments", &task],
+    ));
+    let listed: Value = serde_json::from_str(&listed).unwrap();
+    assert_eq!(
+        listed["attachments"].as_array().unwrap().len(),
+        1,
+        "{listed}"
+    );
+    let blobs = home.path().join("kanban/blobs");
+    let before = common::files_under(&blobs).len();
+
+    let size = 26 * 1024 * 1024;
+    let refused = declared_upload(opened.port, &path, &signed, size);
+    assert_eq!(refused.status, 413, "{refused:?}");
+    assert_eq!(refused.json()["error"], "kanban.attachment_too_large");
+    assert_eq!(
+        refused.json()["message"],
+        format!("attachment too large: {size} > {}", 25 * 1024 * 1024)
+    );
+    let listed = ok(&run(
+        home.path(),
+        &["--json", "kanban", "attachments", &task],
+    ));
+    let listed: Value = serde_json::from_str(&listed).unwrap();
+    assert_eq!(
+        listed["attachments"].as_array().unwrap().len(),
+        1,
+        "{listed}"
+    );
+    assert_eq!(common::files_under(&blobs).len(), before, "no blob stored");
+}
+
 /// Every kanban route is behind the dashboard's sign-in, a cookie change
 /// needs the CSRF token, and an observer device may read but not change.
 #[test]
@@ -188,6 +270,7 @@ fn kanban_routes_follow_the_dashboard_auth_rules() {
     for (method, path) in [
         ("PUT", "/api/kanban/orchestration"),
         ("POST", "/api/kanban/runs/r_nothing/terminate"),
+        ("POST", "/api/kanban/boards/default/tasks/t_x/attachments"),
     ] {
         let refused = Request::new(method, path)
             .header("Authorization", &bearer)

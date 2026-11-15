@@ -4565,7 +4565,7 @@ capabilities = [
 "Missing artifact keeps task in flight" = ["crates/pmt-kanban/tests/flow.rs::a_missing_declared_artifact_keeps_the_task_in_flight"]
 
 [kanban."Attachments"]
-"Oversized upload refused" = { tests = ["crates/prometheus/tests/kanban_cli.rs::an_oversized_attachment_is_refused_and_nothing_stored", "crates/pmt-kanban/tests/records.rs::an_oversized_attachment_stores_nothing"], note = "the CLI and the kanban_attach tool share Board::attach_file; the dashboard upload arrives with the /api/kanban routes of task 61.7" }
+"Oversized upload refused" = { tests = ["crates/prometheus/tests/kanban_cli.rs::an_oversized_attachment_is_refused_and_nothing_stored", "crates/prometheus/tests/dashboard_kanban.rs::an_oversized_dashboard_upload_is_refused_and_nothing_is_stored", "crates/pmt-kanban/tests/records.rs::an_oversized_attachment_stores_nothing"], note = "the CLI and the kanban_attach tool share Board::attach_file; the dashboard's POST /api/kanban/boards/{board}/tasks/{task_id}/attachments refuses by declared length before reading, then Board::attach re-checks" }
 
 [kanban."Notifications through the owning profile"]
 "Multi-profile notification" = ["crates/prometheus/tests/kanban_daemon.rs::a_notification_goes_out_through_the_subscribers_own_adapter", "crates/pmt-kanban/tests/records.rs::subscriptions_report_each_event_once_and_drop_on_archive"]
@@ -4574,7 +4574,7 @@ capabilities = [
 "Budget exhausted" = { tests = ["crates/prometheus/tests/kanban_cli.rs::an_exhausted_budget_blocks_the_task"], note = "the mock provider prices nothing, so the test exhausts a budget_tokens limit; budget_usd takes the same path (budgets.root_usd of the worker's lineage, delegated children included)" }
 
 [kanban."Eval and harness-evolution tasks (upgrade)"]
-"Eval task on replayed provider" = ["crates/prometheus/tests/kanban_cli.rs::an_eval_task_runs_the_smoke_suite_offline_and_attaches_its_report"]
+"Eval task on replayed provider" = { deferred = "71.1 prometheus eval run (provider_mode live|replay for the assignee profile): today an eval task runs the bundled smoke suite on the mock provider and ignores provider_mode (kanban_cli.rs::an_eval_task_runs_the_smoke_suite_offline_and_attaches_its_report covers only that)" }
 
 [kanban."Event log and run history"]
 "Audit a refusal" = ["crates/prometheus/tests/kanban_cli.rs::a_refused_completion_is_in_the_log"]

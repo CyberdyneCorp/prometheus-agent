@@ -180,6 +180,40 @@
         "summary": "The shared kanban boards with their open tasks"
       }
     },
+    "/api/kanban/boards/{board}/tasks/{task_id}/attachments": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "board",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {}
+            },
+            "description": "OK"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "summary": "Attach the body to a task (name=; refused above kanban.attachment_max_bytes)"
+      }
+    },
     "/api/kanban/inspect": {
       "get": {
         "parameters": [],

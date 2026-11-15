@@ -3,8 +3,9 @@
 // orchestration controls (./kanban-orchestration), the running workers
 // with each run's details and a Terminate action that stops the worker
 // and returns its task to `ready`, and the dispatcher's inspect view
-// (backlog, in progress against its limit, recent events). Observers see
-// everything read-only.
+// (backlog, in progress against its limit, recent events). Each open task
+// takes an attachment (refused by the server above
+// kanban.attachment_max_bytes). Observers see everything read-only.
 
 import { api, ApiError } from "../lib/api";
 import { h, notice, page, table } from "../lib/dom";
@@ -60,14 +61,35 @@ function message(err: unknown): string {
   return err instanceof ApiError ? err.message : String(err);
 }
 
-function boardsSection(boards: BoardRow[]): HTMLElement {
+/** The Attach control of one task: the chosen file is uploaded as is. */
+function attachControl(board: string, task: string, status: HTMLElement): HTMLElement {
+  const input = h("input", { type: "file", name: "attach", "aria-label": `Attach a file to ${task}`, disabled: !canDrive() });
+  input.addEventListener("change", async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    const path = `/api/kanban/boards/${encodeURIComponent(board)}/tasks/${encodeURIComponent(task)}/attachments?name=${encodeURIComponent(file.name)}`;
+    try {
+      const stored = await api.upload<{ filename: string; size: number }>(path, file);
+      status.replaceChildren(notice(`Attached ${stored.filename} (${stored.size} bytes) to ${task}`));
+    } catch (err) {
+      status.replaceChildren(notice(message(err), "error"));
+    }
+    input.value = "";
+  });
+  return input;
+}
+
+function boardsSection(boards: BoardRow[], status: HTMLElement): HTMLElement {
   const items = boards.map((b) =>
     h(
       "div",
       { class: "kanban-board", "data-board": b.slug },
       h("h3", {}, b.name === b.slug ? b.slug : `${b.name} (${b.slug})`),
       b.tasks.length
-        ? table(["Task", "Title", "Status", "Assignee"], b.tasks.map((t) => [t.id, t.title, h("span", { class: "task-status", "data-task": t.id }, t.status), t.assignee ?? ""]))
+        ? table(
+            ["Task", "Title", "Status", "Assignee", "Attach"],
+            b.tasks.map((t) => [t.id, t.title, h("span", { class: "task-status", "data-task": t.id }, t.status), t.assignee ?? "", attachControl(b.slug, t.id, status)]),
+          )
         : notice("No open tasks."),
     ),
   );
@@ -147,7 +169,7 @@ export async function kanbanPage(): Promise<HTMLElement> {
         api.get<{ workers: Worker[] }>("/api/kanban/workers/active"),
         api.get<Inspect>("/api/kanban/inspect"),
       ]);
-      live.replaceChildren(workersSection(workers.workers, status, reload), boardsSection(boards.boards), inspectSection(inspect));
+      live.replaceChildren(workersSection(workers.workers, status, reload), boardsSection(boards.boards, status), inspectSection(inspect));
     } catch (err) {
       live.replaceChildren(notice(message(err), "error"));
     }

@@ -122,6 +122,11 @@ pub const ENDPOINTS: &[Endpoint] = &[
         "Stop a run's worker and free its task for dispatch",
     ),
     signed(
+        "POST",
+        "/api/kanban/boards/{board}/tasks/{task_id}/attachments",
+        "Attach the body to a task (name=; refused above kanban.attachment_max_bytes)",
+    ),
+    signed(
         "GET",
         "/api/kanban/inspect",
         "Kanban backlog, in-progress against its limit, recent events",
