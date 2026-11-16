@@ -10,6 +10,7 @@
 //! imports: no WASI, so no ambient filesystem, network, clock or
 //! environment.
 
+mod bench;
 #[allow(missing_docs, clippy::all, clippy::pedantic)]
 mod bindings;
 mod credentials;

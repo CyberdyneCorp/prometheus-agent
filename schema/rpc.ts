@@ -866,6 +866,8 @@ export interface EvolveJobRow {
   mode: string;
   /** Rollouts the job plans. */
   rollouts: number;
+  /** Improver sessions the job plans. */
+  sessions?: number;
   /** The job status. */
   status: string;
   /** What queued it. */
@@ -2697,6 +2699,7 @@ export interface Methods {
   "evolve.proposals.reject": { params: EvolveParams; result: EvolveReply };
   "evolve.start": { params: EvolveParams; result: EvolveReply };
   "evolve.status": { params: EvolveParams; result: EvolveReply };
+  "experience.disable": { params: ExperienceParams; result: ExperienceReply };
   "experience.domains": { params: ExperienceParams; result: ExperienceDomains };
   "experience.forget": { params: ExperienceParams; result: ExperienceReply };
   "experience.list": { params: ExperienceParams; result: ExperienceEntries };

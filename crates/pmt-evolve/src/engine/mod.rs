@@ -504,7 +504,7 @@ impl Run<'_> {
     fn apply_policy(&self, id: &str, notices: &mut Vec<String>) -> Result<ProposalOutcome, Error> {
         let store = Proposals::of(self.engine.profile_dir);
         let proposal = store.get(id)?;
-        let adopted = match proposal::verdict(self.engine.config.adoption.policy, &proposal) {
+        let adopted = match proposal::verdict(self.policy(), &proposal) {
             Verdict::Adopt => self.adopt_now(id, notices),
             verdict => {
                 notices.push(self.waiting_notice(&proposal, verdict));
@@ -515,6 +515,17 @@ impl Run<'_> {
             proposal: store.get(id)?,
             adopted,
         })
+    }
+
+    /// The adoption policy of this job: a kanban task's job always waits
+    /// for the person who approves the task (spec: kanban, Eval and
+    /// harness-evolution tasks), whatever `evolve.adoption.policy` says.
+    fn policy(&self) -> pmt_config::schema::AdoptionPolicy {
+        if self.job.trigger == crate::job::Trigger::Kanban {
+            pmt_config::schema::AdoptionPolicy::Ask
+        } else {
+            self.engine.config.adoption.policy
+        }
     }
 
     fn adopt_now(&self, id: &str, notices: &mut Vec<String>) -> Option<proposal::Adopted> {

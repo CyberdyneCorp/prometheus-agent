@@ -53,8 +53,11 @@ pub struct Runner {
     pub provider: Option<String>,
     /// `--model`.
     pub model: Option<String>,
-    /// The harness version the tasks run with.
+    /// The harness version recorded on the task sessions.
     pub harness_version: String,
+    /// A temporary harness tree the tasks run with instead of that
+    /// version's (a proposal under review).
+    pub harness_tree: Option<PathBuf>,
     /// `--ephemeral-system-prompt`: sent, never stored.
     pub ephemeral: Option<String>,
     /// Finds attempts on grader material.
@@ -275,6 +278,7 @@ async fn session(
         cwd: ws.to_path_buf(),
         no_context_files: true,
         source_tag: Some(runner.run_id.clone()),
+        harness_tree: runner.harness_tree.clone(),
         ..Options::default()
     };
     let factory = Factory::with_store(

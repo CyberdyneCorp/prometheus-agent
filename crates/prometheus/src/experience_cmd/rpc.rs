@@ -55,6 +55,10 @@ pub fn handle(scope: &ProfileScope, request: &ExperienceRequest) -> Result<Value
             let meta = ops::forget(dir, entry()?)?;
             Ok(reply(&format!("{} forgotten", meta.entry_id), &meta))
         }
+        "experience.disable" => {
+            let meta = ops::disable(dir, entry()?)?;
+            Ok(reply(&format!("{} disabled", meta.entry_id), &meta))
+        }
         "experience.restore" => {
             let meta = ops::restore(dir, entry()?)?;
             Ok(reply(&format!("{} restored", meta.entry_id), &meta))

@@ -10056,7 +10056,8 @@ Commands:
   pin      Keep an entry: never evicted, never demoted by a rollback
   unpin    Let an entry be evicted and demoted again
   forget   Remove an entry (its harness version stays)
-  restore  Set a rolled-back entry back to active
+  disable  Turn an entry off: hidden from proposers and sessions until restored
+  restore  Set a rolled-back or disabled entry back to active
   export   Write a domain's entries to an archive another profile can import
   import   Add an archive's entries (all checked first; any failure refuses the whole archive)
   rebuild  Re-create missing entries of adopted proposals (no model call)
@@ -10350,10 +10351,53 @@ Options:
           Print help
 ```
 
+## `prometheus experience disable`
+
+```text
+Turn an entry off: hidden from proposers and sessions until restored
+
+Usage: prometheus experience disable [OPTIONS] <ENTRY_ID>
+
+Arguments:
+  <ENTRY_ID>
+          The entry
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus experience restore`
 
 ```text
-Set a rolled-back entry back to active
+Set a rolled-back or disabled entry back to active
 
 Usage: prometheus experience restore [OPTIONS] <ENTRY_ID>
 
@@ -10541,7 +10585,8 @@ Commands:
   pin      Keep an entry: never evicted, never demoted by a rollback
   unpin    Let an entry be evicted and demoted again
   forget   Remove an entry (its harness version stays)
-  restore  Set a rolled-back entry back to active
+  disable  Turn an entry off: hidden from proposers and sessions until restored
+  restore  Set a rolled-back or disabled entry back to active
   export   Write a domain's entries to an archive another profile can import
   import   Add an archive's entries (all checked first; any failure refuses the whole archive)
   rebuild  Re-create missing entries of adopted proposals (no model call)
@@ -10596,10 +10641,18 @@ Remove an entry (its harness version stays)
 Usage: prometheus experience help forget
 ```
 
+## `prometheus experience help disable`
+
+```text
+Turn an entry off: hidden from proposers and sessions until restored
+
+Usage: prometheus experience help disable
+```
+
 ## `prometheus experience help restore`
 
 ```text
-Set a rolled-back entry back to active
+Set a rolled-back or disabled entry back to active
 
 Usage: prometheus experience help restore
 ```
@@ -35794,7 +35847,8 @@ Commands:
   pin      Keep an entry: never evicted, never demoted by a rollback
   unpin    Let an entry be evicted and demoted again
   forget   Remove an entry (its harness version stays)
-  restore  Set a rolled-back entry back to active
+  disable  Turn an entry off: hidden from proposers and sessions until restored
+  restore  Set a rolled-back or disabled entry back to active
   export   Write a domain's entries to an archive another profile can import
   import   Add an archive's entries (all checked first; any failure refuses the whole archive)
   rebuild  Re-create missing entries of adopted proposals (no model call)
@@ -35848,10 +35902,18 @@ Remove an entry (its harness version stays)
 Usage: prometheus help experience forget
 ```
 
+## `prometheus help experience disable`
+
+```text
+Turn an entry off: hidden from proposers and sessions until restored
+
+Usage: prometheus help experience disable
+```
+
 ## `prometheus help experience restore`
 
 ```text
-Set a rolled-back entry back to active
+Set a rolled-back or disabled entry back to active
 
 Usage: prometheus help experience restore
 ```

@@ -4122,6 +4122,12 @@ capabilities = [
 "Delegation cost rolls up" = ["crates/prometheus/tests/dashboard_e2e.rs::the_usage_page_rolls_children_up_and_shows_the_budget"]
 "Budget warning" = ["crates/prometheus/tests/dashboard_e2e.rs::the_usage_page_rolls_children_up_and_shows_the_budget"]
 
+[web-dashboard."Harness-evolution view (upgrade)"]
+"Adopting a harness" = { tests = ["crates/prometheus/tests/dashboard_e2e.rs::a_harness_adopted_from_the_dashboard_applies_to_new_sessions_only"], note = "a chat session is live in the daemon when Adopt is clicked on the finished run's proposal (web/e2e/evolution.spec.ts): the page says it applies from the next session, the live session keeps answering, its frozen prompt lacks the adopted harness text and a session started afterwards has it" }
+
+[web-dashboard."Experience library view (upgrade)"]
+"Removing a bad lesson" = { tests = ["crates/prometheus/tests/dashboard_e2e.rs::a_lesson_deleted_from_the_dashboard_is_not_offered_to_later_sessions"], note = "a session in the domain gets the lessons layer before; web/e2e/experience.spec.ts disables the lesson (a session started then does not raise its times-shown count) and deletes it; a session started afterwards in the domain has no lessons layer" }
+
 [web-dashboard."Logs page is redacted and bounded"]
 "Path traversal" = ["crates/prometheus/tests/dashboard_api.rs::logs_are_named_from_the_registry_bounded_and_redacted", "crates/prometheus/tests/dashboard_e2e.rs::the_logs_page_tails_registry_logs"]
 
@@ -4577,8 +4583,8 @@ capabilities = [
 "Budget exhausted" = { tests = ["crates/prometheus/tests/kanban_cli.rs::an_exhausted_budget_blocks_the_task"], note = "the mock provider prices nothing, so the test exhausts a budget_tokens limit; budget_usd takes the same path (budgets.root_usd of the worker's lineage, delegated children included)" }
 
 [kanban."Eval and harness-evolution tasks (upgrade)"]
-"Eval task on replayed provider" = { deferred = "kanban eval-task wiring to `prometheus eval run` (which 71.1 ships) with provider_mode live|replay for the assignee profile: today an eval task runs the bundled smoke suite on the mock provider and ignores provider_mode (kanban_cli.rs::an_eval_task_runs_the_smoke_suite_offline_and_attaches_its_report covers only that)" }
-"Evolve task requires approval" = { deferred = "67.4 kanban evolve-task wiring: the engine and proposal adoption exist (69.4-69.6) and the daemon's runner runs the queued job, but the worker still stops after queueing it (trigger kanban, the task id recorded) instead of following the job to review, and approving the task does not adopt its proposal yet" }
+"Eval task on replayed provider" = { tests = ["crates/prometheus/tests/kanban_tasks.rs::a_replayed_eval_task_makes_no_live_request_and_attaches_the_report"], note = "the assignee's model route is a live fake chat-completions server that counts requests: the replayed eval task (eval run + judge through the eval engine on the mock provider, cache read-only) completes with the smoke summary and eval-report.txt attached while the server saw zero requests; a_live_eval_task_runs_its_suite_on_the_profile_route shows live mode reaching the route" }
+"Evolve task requires approval" = { tests = ["crates/prometheus/tests/kanban_tasks.rs::an_evolve_task_waits_in_review_until_a_person_approves_it", "crates/pmt-kanban/tests/flow.rs::only_a_person_approves_an_evolve_task"], note = "budget_k = 2 job on the mock provider under adoption policy auto: the task lands in review with harness.diff attached, the proposal stays pending and the active version is unchanged until kanban approve adopts it; a reviewer profile's approval is refused" }
 
 [kanban."Event log and run history"]
 "Audit a refusal" = ["crates/prometheus/tests/kanban_cli.rs::a_refused_completion_is_in_the_log"]
@@ -4757,7 +4763,7 @@ capabilities = [
 "Demo resume" = ["crates/prometheus/tests/evolve_demo.rs::evolve_demo_reports_no_model_calls_when_run_again"]
 
 [harness-evolution."Human-only evaluation of proposals (upgrade)"]
-"Verdict does not reach the library" = { tests = ["crates/prometheus/tests/evolve_engine.rs::eval_results_reach_the_user_only"], note = "the test reviews with --eval smoke, adopts (the mock reflector's lesson becomes an experience entry), runs the next job of the domain, whose evidence snapshot holds that entry, and finds every stage accepted (no tripwire hit) and no file under <profile>/evolve or <profile>/experience holding the verdict canary" }
+"Verdict does not reach the library" = { tests = ["crates/prometheus/tests/evolve_engine.rs::eval_results_reach_the_user_only", "crates/prometheus/tests/evolve_engine.rs::a_user_suite_compares_the_base_and_the_proposed_harness"], note = "a_user_suite_compares_the_base_and_the_proposed_harness runs a user suite through the eval engine on the base version and on the proposal materialised as a temporary harness (scores 0 vs 100, no version written); the test reviews with --eval smoke, adopts (the mock reflector's lesson becomes an experience entry), runs the next job of the domain, whose evidence snapshot holds that entry, and finds every stage accepted (no tripwire hit) and no file under <profile>/evolve or <profile>/experience holding the verdict canary" }
 
 [experience-library."Library layout"]
 "Entry created" = ["crates/pmt-evolve/tests/engine/library.rs::an_adopted_proposal_with_a_lesson_becomes_an_entry", "crates/prometheus/tests/experience_cli.rs::a_mock_job_distils_a_lesson_that_adoption_files_in_its_domain"]
@@ -4841,7 +4847,7 @@ capabilities = [
 "Harness comparison" = ["crates/prometheus/tests/eval_judge.rs::a_report_of_two_runs_shows_the_score_delta_with_its_interval", "crates/pmt-eval/src/report.rs::a_comparison_within_noise_says_so", "crates/pmt-eval/src/report.rs::repeats_give_pass_at_k_and_task_spread"]
 
 [replay-and-evaluation."Benchmark adapter protocol"]
-"Score not callable during execution" = { tests = ["crates/prometheus/tests/eval_bench.rs::an_adapter_is_never_asked_to_score_during_execution"], note = "subprocess adapters (JSON-RPC over stdio) only; WASM and Python-bridge plugin adapters are a recorded gap (tasks.md 71.3)" }
+"Score not callable during execution" = ["crates/prometheus/tests/eval_bench.rs::an_adapter_is_never_asked_to_score_during_execution", "crates/prometheus/tests/eval_bench_plugins.rs::a_wasm_plugin_adapter_is_never_asked_to_score_during_execution", "crates/prometheus/tests/eval_bench_plugins.rs::a_python_plugin_adapter_is_never_asked_to_score_during_execution"]
 
 [replay-and-evaluation."Session-to-task capture (upgrade)"]
 "Bug report becomes a regression task" = ["crates/prometheus/tests/eval_bench.rs::a_mis_summed_session_becomes_a_regression_task"]

@@ -34,7 +34,9 @@ import {
 import { configPage } from "./pages/config";
 import { logsPage } from "./pages/logs";
 import { notFoundPage } from "./pages/notfound";
-import { evolutionPage, experiencePage, pendingPage } from "./pages/rpcview";
+import { evolutionPage } from "./pages/evolution";
+import { experiencePage } from "./pages/experience";
+import { pendingPage } from "./pages/rpcview";
 import { secretsPage } from "./pages/secrets";
 import { sessionsPage } from "./pages/sessions";
 import { statusPage } from "./pages/status";

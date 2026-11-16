@@ -315,6 +315,35 @@ pub trait SubagentsPort: Send + Sync {
     ) -> PortFuture<'a, Result<SubagentAnswer, SubagentFailure>>;
 }
 
+/// The directory and the host answers of one benchmark adapter call
+/// (the `bench` world's `files` and `requests` imports, and the python
+/// bridge's `bench.*` host methods). Set by the caller for the call in
+/// progress only.
+pub trait BenchPort: Send + Sync {
+    /// The bytes of `path` in the call's directory.
+    ///
+    /// # Errors
+    ///
+    /// Why it cannot be read (an escaping path, no directory).
+    fn read(&self, path: &str) -> Result<Vec<u8>, String>;
+    /// Writes `path` in the call's directory.
+    ///
+    /// # Errors
+    ///
+    /// Why it cannot be written.
+    fn write(&self, path: &str, contents: &[u8]) -> Result<(), String>;
+    /// Every file below the call's directory, sorted.
+    ///
+    /// # Errors
+    ///
+    /// Why it cannot be listed.
+    fn list(&self) -> Result<Vec<String>, String>;
+    /// The host's answer to a request the adapter sent: `(code, message)`
+    /// of a JSON-RPC error (the host offers no method; a score pushed
+    /// during execution is refused with -32002).
+    fn request(&self, method: &str, params: &str) -> (i64, String);
+}
+
 /// Every port an instance uses.
 #[derive(Clone)]
 pub struct Ports {

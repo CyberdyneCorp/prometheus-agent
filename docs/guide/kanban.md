@@ -227,16 +227,29 @@ another board of the home already uses one.
 
 ## Eval and evolve tasks
 
-`--kind eval --suite smoke` runs the bundled offline smoke suite (the mock
-provider: no live provider request; `--provider-mode` is not honoured yet)
-as the assignee, attaches its report
-and completes with its summary; other suites need `prometheus eval run`,
-which this build does not have yet, and are blocked with kind
-`capability`. `--kind evolve` records a harness-evolution task
-(`--target-task`, `--mode`, `--budget-k`); its completion always goes to
-`review`, never `done`, but its worker needs harness evolution
-(`prometheus evolve`), which is not in this build yet, so it is blocked
-with kind `capability` naming that.
+`--kind eval --suite <suite>` runs the suite through the eval engine for
+the assignee profile (`prometheus eval run`, then `eval judge`; a suite
+directory, a name under `<profile>/evals/`, the bundled `smoke` or
+`bench:<name>`), attaches the report as `eval-report.txt` and completes
+with the summary (`<suite>: score <n> over <graded> graded of <n> tasks,
+run <id> (<mode> provider)`; `prometheus eval report <id>` shows the run
+again). `--provider-mode live` (the default) uses the profile's model
+route; `--provider-mode replay` plays every task on the deterministic
+mock provider (each task's recorded mock script) with the model-call
+cache read but never written, so no live provider request is made.
+
+`--kind evolve` (`--target-task`, `--mode`, `--budget-k`) runs a
+harness-evolution job for the assignee (`target_task` is a session id,
+else a task file relative to the task's workspace) under the profile's
+evolution budget. The worker follows the job to its end and completes
+the task into `review`, never `done`, with the selected harness's diff
+attached as `harness.diff`; a failed job is a failed run. The job never
+adopts by itself (a kanban job's adoption policy is always `ask`, and
+`evolve.selection = "user"` does not apply: the review is the person's
+choice), reviewer profiles are never dispatched to an evolve task and
+cannot approve it, and `prometheus kanban approve <task>` adopts the
+proposal in the assignee's profile, from its next session (a stale
+proposal is refused and the task stays in review).
 
 ## Completion contracts, goals and model overrides
 

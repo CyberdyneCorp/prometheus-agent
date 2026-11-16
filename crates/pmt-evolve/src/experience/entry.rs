@@ -23,6 +23,8 @@ pub enum Status {
     Active,
     /// Its harness was rolled back: hidden until restored.
     RolledBack,
+    /// Turned off by the user: hidden until restored.
+    Disabled,
 }
 
 impl Status {
@@ -32,6 +34,7 @@ impl Status {
         match self {
             Self::Active => "active",
             Self::RolledBack => "rolled-back",
+            Self::Disabled => "disabled",
         }
     }
 }

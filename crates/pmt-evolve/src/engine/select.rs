@@ -162,7 +162,11 @@ impl Run<'_> {
                 None,
             );
         }
-        if self.engine.config.selection == pmt_config::schema::EvolveSelection::User {
+        // A kanban task's review is the person's choice: its job never
+        // waits for `evolve choose` on top of it.
+        if self.engine.config.selection == pmt_config::schema::EvolveSelection::User
+            && self.job.trigger != crate::job::Trigger::Kanban
+        {
             return (self.user_choice(mode, &ids, finals), None);
         }
         let (outcome, entry) = self.selector(mode, &ids).await;

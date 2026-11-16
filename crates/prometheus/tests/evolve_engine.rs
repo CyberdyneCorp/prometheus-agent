@@ -574,7 +574,70 @@ fn eval_results_reach_the_user_only() {
         );
     }
     let unknown = run(s.path(), &["evolve", "review", &id, "--eval", "swe-bench"]);
-    assert_eq!(unknown.status.code(), Some(2), "{}", stderr(&unknown));
+    assert_eq!(unknown.status.code(), Some(66), "{}", stderr(&unknown));
+}
+
+/// `evolve review --eval` runs any eval suite through the eval engine on
+/// both harnesses: a user suite whose task passes only when the harness
+/// offers skill `ledger-rules` scores 0 on the base and 1 on a proposal
+/// that adds it, and neither side writes a harness version.
+#[test]
+fn a_user_suite_compares_the_base_and_the_proposed_harness() {
+    let s = Setup::new("", &[]);
+    let out = s.evolve(&s.task("TASK-SUM the ledger", ""), &["--k", "1"]);
+    assert_eq!(out.status.code(), Some(0), "{}", stderr(&out));
+    let id = s.proposals()[0]["id"].as_str().unwrap().to_owned();
+    let skill = s
+        .path()
+        .join("profiles/default/evolve/proposals")
+        .join(format!("{id}.tree/skills/ledger-rules/SKILL.md"));
+    std::fs::create_dir_all(skill.parent().unwrap()).unwrap();
+    std::fs::write(
+        &skill,
+        "---\nname: ledger-rules\ndescription: How ledgers are summed\n---\nLEDGER-RULE: the total is 85.15\n",
+    )
+    .unwrap();
+    let suite = s.path().join("profiles/default/evals/ledgers");
+    let task = suite.join("tasks/sum");
+    std::fs::create_dir_all(task.join("grader")).unwrap();
+    std::fs::write(
+        suite.join("suite.toml"),
+        "name = \"ledgers\"\nversion = \"1\"\ndomain = \"accounting\"\ndefault_toolsets = [\"skills\"]\n",
+    )
+    .unwrap();
+    std::fs::write(task.join("task.toml"), "prompt = \"EVAL-SUM the ledger\"\n").unwrap();
+    std::fs::write(
+        task.join("grader/grader.toml"),
+        "type = \"exact\"\nexpect = \"Total: 85.15\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        task.join("mock.toml"),
+        "[[rule]]\nstep = 0\n[[rule.tool_calls]]\nname = \"skill_view\"\narguments = { name = \"ledger-rules\" }\n\n\
+         [[rule]]\ntool_result = \"LEDGER-RULE\"\ntext = \"Total: 85.15\"\n\n\
+         [[rule]]\nrepeat = true\ntext = \"Total: unknown\"\n",
+    )
+    .unwrap();
+    let versions = |s: &Setup| json(s.path(), &["harness", "log"]);
+    let before = versions(&s);
+    let review = json(s.path(), &["evolve", "review", &id, "--eval", "ledgers"]);
+    let eval = &review["eval"];
+    assert_eq!(eval["canary"], "pmt-eval-verdict", "{eval}");
+    assert_eq!(eval["base"]["score"], 0.0, "{eval}");
+    assert_eq!(eval["proposed"]["score"], 100.0, "{eval}");
+    assert_eq!(eval["comparison"]["delta"], 100.0, "{eval}");
+    assert_eq!(
+        eval["proposed"]["harness"],
+        format!("proposal:{id}"),
+        "{eval}"
+    );
+    assert_eq!(versions(&s), before, "no harness version was written");
+    let text = ok(&run(
+        s.path(),
+        &["evolve", "review", &id, "--eval", "ledgers"],
+    ));
+    assert!(text.contains("eval ledgers (for you only"), "{text}");
+    assert!(text.contains("proposed: score 100.00"), "{text}");
 }
 
 fn walk(dir: &Path) -> Vec<PathBuf> {

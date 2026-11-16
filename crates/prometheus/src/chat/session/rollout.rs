@@ -104,19 +104,19 @@ impl ToolReplay for Recorder {
     }
 }
 
-/// The plugin view of a session: a rollout reads its hooks from its
-/// candidate harness instead of the active version (spec:
-/// harness-evolution, Isolated rollouts).
+/// The plugin view of a session: a rollout (or a session on a temporary
+/// harness tree) reads its hooks from that tree instead of the active
+/// version (spec: harness-evolution, Isolated rollouts).
 pub(super) fn plugins(
     scope: &pmt_config::ProfileScope,
     plugins: crate::plugins_host::ProfilePlugins,
-    rollout: Option<&RolloutRun>,
+    harness: Option<&std::path::Path>,
 ) -> crate::plugins_host::ProfilePlugins {
-    match rollout {
-        Some(run) => plugins.with_hooks(Arc::new(crate::harness_host::hooks::Rollout::new(
+    match harness {
+        Some(tree) => plugins.with_hooks(Arc::new(crate::harness_host::hooks::Rollout::new(
             scope,
             plugins.hook_source(),
-            &run.harness,
+            tree,
         ))),
         None => plugins,
     }
@@ -128,6 +128,9 @@ impl super::Factory {
     pub(super) fn harness_dir(&self, id: pmt_core::id::SessionId) -> Option<PathBuf> {
         if let Some(run) = &self.options.rollout {
             return Some(run.harness.clone());
+        }
+        if let Some(tree) = &self.options.harness_tree {
+            return Some(tree.clone());
         }
         crate::harness_host::session_version(&self.scope, &self.store, id)
             .map(|version| pmt_config::harness::HarnessDir::of(self.scope.dir()).tree_dir(&version))

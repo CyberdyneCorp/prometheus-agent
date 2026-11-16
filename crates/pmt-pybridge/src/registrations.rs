@@ -130,6 +130,9 @@ pub struct Registrations {
     /// Skills.
     #[serde(default)]
     pub skills: Vec<Value>,
+    /// Benchmark adapters (`register_bench_adapter`), by name.
+    #[serde(default)]
+    pub bench_adapters: Vec<String>,
     /// Automation blueprints (`register_automation_blueprint`), as data
     /// scheduled-jobs reads.
     #[serde(default)]

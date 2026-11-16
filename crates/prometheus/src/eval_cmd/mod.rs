@@ -9,6 +9,7 @@
 //! wires the judge's script and model sides ([`judge`]).
 
 pub mod batch;
+pub mod bench;
 pub mod capture;
 pub mod exec;
 pub mod judge;

@@ -57,7 +57,13 @@ pub enum ExperienceCommand {
         /// The entry.
         entry_id: String,
     },
-    /// Set a rolled-back entry back to active.
+    /// Turn an entry off: hidden from proposers and sessions until
+    /// restored.
+    Disable {
+        /// The entry.
+        entry_id: String,
+    },
+    /// Set a rolled-back or disabled entry back to active.
     Restore {
         /// The entry.
         entry_id: String,
@@ -119,6 +125,9 @@ pub fn run(command: &ExperienceCommand, ctx: &Context<'_>) -> Result<u8, Error> 
         }
         ExperienceCommand::Forget { entry_id } => {
             changed(ctx, &ops::forget(dir, entry_id)?, "forgotten")
+        }
+        ExperienceCommand::Disable { entry_id } => {
+            changed(ctx, &ops::disable(dir, entry_id)?, "disabled")
         }
         ExperienceCommand::Restore { entry_id } => {
             changed(ctx, &ops::restore(dir, entry_id)?, "restored")

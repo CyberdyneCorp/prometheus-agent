@@ -559,7 +559,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 - [x] 61.1 Implement `prometheus dashboard` on `127.0.0.1:9120` with the SPA embedded in the binary, listener lifecycle within the daemon and a configurable reverse-proxy base path; verify that the binary serves the SPA offline (spec: web-dashboard)
 - [x] 61.2 Implement loopback auth with an HttpOnly session cookie, CSRF protection, fail-closed non-loopback binds, Host validation, same-origin only and the public endpoint list; verify with HTTP security tests (spec: web-dashboard)
 - [x] 61.3 Implement profile-addressed routes, structured chat over the client protocol, observer-by-default remote users and the live event stream; verify with Playwright E2E tests (spec: web-dashboard)
-- [ ] 61.4 Implement the built-in pages, write-only secrets, schema-driven config editing, the honest platform matrix, redacted bounded logs, upload/download limits, and the cost, harness-evolution and experience views; verify with Playwright tests (spec: web-dashboard)
+- [x] 61.4 Implement the built-in pages, write-only secrets, schema-driven config editing, the honest platform matrix, redacted bounded logs, upload/download limits, and the cost, harness-evolution and experience views; verify with Playwright tests (spec: web-dashboard)
 - [x] 61.5 Implement the REST endpoint inventory (config schema served from the typed config, bulk maintenance needs confirmation), additional dashboard sign-in providers (token mode refused without its secret) and registering a dashboard with the account portal; verify with HTTP tests (spec: web-dashboard)
 - [x] 61.6 Implement paired device credentials for remote clients (revocation, expiring pairing codes), remote desktop clients attaching through the dashboard listener, the gateway's remote client attachment (off by default, revoked devices refused), the desktop workspace in the browser, webapp sign-out across tabs with the insecure-context notice, and webapp file staging and terminals; verify with Playwright tests (spec: web-dashboard, spec: messaging-gateway)
 - [x] 61.7 Implement the kanban dashboard API with orchestration modes, the webhooks page (secret shown once), channel setup forms, the files page (symlink escapes refused), embedded documentation (offline), the profile builder (clones without secrets), dashboard themes (no remote CSS, size cap) and dashboard plugin contributions (no cookie access from plugin frames); verify with Playwright tests (spec: web-dashboard)
@@ -606,7 +606,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 - [x] 67.1 Implement board storage at `<home>/kanban/`, slugs and selection, the typed workflow table, task creation (idempotent) and dependency links; verify with store tests (spec: kanban)
 - [x] 67.2 Implement ready promotion with atomic claim, typed blocks with the loop breaker, scheduled parking, completion gates, the review lane and archive terminating the worker; verify with concurrency tests (spec: kanban)
 - [x] 67.3 Implement the single dispatcher per home, its tick, concurrency caps, the fail-closed claim allowlist, the failure circuit breaker, worker spawn by run ticket and liveness heartbeats; verify that a dead worker's task is reclaimed (spec: kanban)
-- [ ] 67.4 Implement the kanban toolset and grants, workspaces, attachments, notifications through the owning profile, per-task cost budget, eval/evolution tasks, event log and run history, the CLI and board export/import; verify with CLI tests and document kanban (spec: kanban)
+- [x] 67.4 Implement the kanban toolset and grants, workspaces, attachments, notifications through the owning profile, per-task cost budget, eval/evolution tasks, event log and run history, the CLI and board export/import; verify with CLI tests and document kanban (spec: kanban)
 
 ## 68. M3 Kanban upgrades
 
@@ -624,7 +624,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 - [x] 69.4 Implement parallel and sequential modes with isolated rollouts, side-effect recorders for `effect = external` tools, improver sessions, stage acceptance/retry/fallback and the evidence context; verify with the mock provider (spec: harness-evolution)
 - [x] 69.5 Implement answer-free prompts, leak globs with the verdict tripwire, the budget ledger and spend cap, and concurrency limits; verify that a planted rubric file aborts the job (spec: harness-evolution)
 - [x] 69.6 Implement blind anonymised selection, user-driven selection, proposals with adoption policy (approval required for scripts, hooks and subagents; never widening capabilities), stale-proposal protection, job lifecycle/events/RPC, resume with the content-addressed session cache and human-only evaluation; verify with end-to-end mock jobs (spec: harness-evolution)
-  - Known gap: `prometheus evolve review --eval <suite>` runs the bundled `smoke` suite only (other names exit 2) until task 71.1 lands the eval suite format; job events go to the job's `events.jsonl` and the log, not to client-protocol event subscribers (clients poll `evolve.status`).
+  - Known gap: job events go to the job's `events.jsonl` and the log, not to client-protocol event subscribers (clients poll `evolve.status`).
 
 ## 70. M3 Experience library
 
@@ -636,8 +636,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 - [x] 71.1 Implement the eval suite format and `prometheus eval run` with resumable runs; verify a suite run against the mock provider (spec: replay-and-evaluation)
 - [x] 71.2 Implement the answer-free boundary, post-hoc judging, re-judging with judge identity, and reports with comparison; verify that no grader data reaches the agent's context (spec: replay-and-evaluation)
-- [ ] 71.3 Implement the benchmark adapter protocol and session-to-task capture; verify with a sample adapter (spec: replay-and-evaluation)
-  - Known gap: the protocol, judge-only `bench.score`, the `-32002` refusal of pushed scores and session capture are done and verified with a sample subprocess adapter (JSON-RPC over stdio, `crates/prometheus/tests/eval_bench.rs`); adapters shipped as WASM plugins or Python-bridge plugins have no transport yet (no plugin world or bridge registration exposes the `bench.*` methods), so the task stays open.
+- [x] 71.3 Implement the benchmark adapter protocol and session-to-task capture; verify with a sample adapter (spec: replay-and-evaluation)
 - [x] 71.4 Implement batch prompt datasets (resumable, ephemeral prompts not recorded), batch statistics with quality filtering, toolset distributions (reproducible sampling) and the trajectory compressor (head and tail preserved); verify with dataset fixtures (spec: replay-and-evaluation)
 - [x] 71.5 Implement the offline self-improvement demo; verify that it runs a full evolution job with the mock provider offline and exits 0 (spec: replay-and-evaluation, spec: harness-evolution)
 

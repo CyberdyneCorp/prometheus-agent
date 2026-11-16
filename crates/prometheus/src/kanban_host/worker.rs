@@ -123,34 +123,40 @@ fn run_task(
         TaskKind::Agent => {
             crate::model_cmd::block_on(session(ctx, scope, board, row, task, &workspace))?
         }
-        TaskKind::Eval { suite, .. } => {
-            let limit = scope.config().kanban.attachment_max_bytes;
-            eval(board, row, task, (suite, limit), &workspace)
-        }
-        TaskKind::Evolve { .. } => Ending {
-            error: Some(evolve(scope, task, &workspace)),
-            session: None,
-        },
+        kind => improve(ctx, scope, board, (row, task), kind, &workspace)?,
     };
     beating.stop();
     finish(board, row, task, scope, &ending)
 }
 
-/// An `evolve` task queues its evolution job through the same path as
-/// every other trigger (spec: harness-evolution, On-demand and scheduled
-/// triggers). The run then stops with the job named: the daemon's
-/// evolution runner (or `prometheus evolve resume`) runs the job, but the
-/// task does not follow it to review yet (task 67.4).
-fn evolve(scope: &ProfileScope, task: &Task, workspace: &Path) -> Error {
-    match crate::evolve_cmd::kanban::queue(scope, task, workspace) {
-        Ok(job) => Error::new(
-            &codes::KANBAN_NOT_PERMITTED,
-            format!(
-                "evolution job {job} is queued; the daemon's evolution runner runs it (prometheus evolve status {job}), and this task does not follow it to review yet"
-            ),
-        ),
-        Err(err) => err,
-    }
+/// An `eval` or `evolve` task (no agent session of the worker's own).
+fn improve(
+    ctx: &Context<'_>,
+    scope: &ProfileScope,
+    board: &mut Board,
+    (row, task): (&Run, &Task),
+    kind: &TaskKind,
+    workspace: &Path,
+) -> Result<Ending, Error> {
+    let limit = scope.config().kanban.attachment_max_bytes;
+    let both = (scope, ctx.launch);
+    let done = match kind {
+        TaskKind::Eval {
+            suite,
+            provider_mode,
+        } => super::improve::eval(both, board, (row, task), (suite, *provider_mode), limit),
+        _ => crate::model_cmd::block_on(super::improve::evolve(
+            both,
+            board,
+            (row, task),
+            workspace,
+            limit,
+        ))?,
+    };
+    Ok(Ending {
+        error: done.err(),
+        session: None,
+    })
 }
 
 pub(super) fn worker_actor(row: &Run) -> Actor {
@@ -518,70 +524,6 @@ struct NoPrompt;
 impl pmt_skills::secrets::SecretPrompt for NoPrompt {
     fn ask(&self, _: &str, _: &str, _: Option<&str>) -> Option<pmt_core::secret::SecretString> {
         None
-    }
-}
-
-/// An `eval` task: the bundled `smoke` suite, run offline on the mock
-/// provider by this binary (no live provider request in either
-/// provider mode), its report attached under the assignee's
-/// `kanban.attachment_max_bytes` and its summary the result.
-fn eval(
-    board: &mut Board,
-    row: &Run,
-    task: &Task,
-    (suite, limit): (&str, u64),
-    workspace: &Path,
-) -> Ending {
-    let failed = |message: String| Ending {
-        error: Some(Error::new(&codes::KANBAN_NOT_PERMITTED, message)),
-        session: None,
-    };
-    if suite != "smoke" {
-        return failed(format!(
-            "eval suite '{suite}' needs `prometheus eval run`, which this build does not have (only the bundled 'smoke' suite runs)"
-        ));
-    }
-    let Ok(exe) = std::env::current_exe() else {
-        return failed("cannot locate this executable".to_owned());
-    };
-    let out = workspace.join("eval");
-    let _ = std::fs::remove_dir_all(&out);
-    let output = std::process::Command::new(exe)
-        .args(["smoke-suite", "--output"])
-        .arg(&out)
-        .output();
-    let output = match output {
-        Ok(output) => output,
-        Err(e) => return failed(format!("cannot run the smoke suite: {e}")),
-    };
-    let report = String::from_utf8_lossy(&output.stdout).into_owned();
-    let summary = report
-        .lines()
-        .find(|l| l.starts_with("smoke:"))
-        .unwrap_or("smoke: no summary")
-        .to_owned();
-    let actor = worker_actor(row);
-    let now = pmt_kanban::now_ms();
-    let upload = pmt_kanban::attach::Upload {
-        name: "eval-report.txt",
-        content_type: Some("text/plain"),
-        bytes: report.as_bytes(),
-    };
-    if let Err(err) = board.attach(&actor, &task.id, &upload, limit, now) {
-        return Ending {
-            error: Some(err),
-            session: None,
-        };
-    }
-    let completion = pmt_kanban::Completion {
-        result: Some(summary),
-        attachment_limit: limit,
-        ..pmt_kanban::Completion::default()
-    };
-    let error = board.complete(&actor, &task.id, &completion, now).err();
-    Ending {
-        error,
-        session: None,
     }
 }
 

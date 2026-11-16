@@ -30,6 +30,16 @@ pub fn forget(profile_dir: &Path, id: &str) -> Result<EntryMeta, Error> {
     Ok(meta)
 }
 
+/// Turns entry `id` off: hidden from proposers and sessions until
+/// restored (spec: web-dashboard, Experience library view).
+///
+/// # Errors
+///
+/// As [`Library::set_status`].
+pub fn disable(profile_dir: &Path, id: &str) -> Result<EntryMeta, Error> {
+    Library::of(profile_dir).set_status(id, Status::Disabled)
+}
+
 /// Sets entry `id` back to `active`.
 ///
 /// # Errors

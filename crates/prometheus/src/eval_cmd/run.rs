@@ -148,7 +148,7 @@ impl Source {
         let Some((name, split)) = pmt_eval::bench::parse_ref(spec) else {
             return super::suites::load(scope, spec).map(Self::Suite);
         };
-        let mut adapter = Adapter::open(scope.dir(), name, Phase::Execute)?;
+        let mut adapter = super::bench::open(scope, name, Phase::Execute)?;
         let describe = adapter.describe()?;
         adapter.preflight()?;
         let tasks = adapter.tasks(split)?;
@@ -465,35 +465,72 @@ pub fn open_run(run: &RunDir, mut info: RunInfo) -> Result<RunInfo, Error> {
     Ok(info)
 }
 
-/// Runs `prometheus eval run`.
+/// A harness tree that is not a version (a proposal under review), run
+/// as a temporary harness: task sessions read their prompt layer, skills,
+/// subagents and hooks from `dir`, and `run.json` names it by `label`.
+#[derive(Debug, Clone)]
+pub struct TempHarness {
+    /// What `run.json` names it (`proposal:<id>`).
+    pub label: String,
+    /// The materialised tree.
+    pub dir: std::path::PathBuf,
+    /// The version recorded on its task sessions (the tree's base).
+    pub base: String,
+}
+
+/// What a run produced.
+pub struct Ran {
+    /// Its directory.
+    pub run: RunDir,
+    /// Its `run.json` (stamped finished).
+    pub info: RunInfo,
+    /// What happened.
+    pub outcome: Outcome,
+}
+
+/// Runs `args` in `scope` (resuming a run of the same id), printing
+/// progress with `say`, and stamps `run.json` finished.
 ///
 /// # Errors
 ///
 /// Suite, adapter, harness, resumption and store errors.
-pub fn run(args: &RunArgs, ctx: &Context<'_>) -> Result<u8, Error> {
-    let scope = ctx.scope()?;
-    let source = Source::open(&scope, &args.suite)?;
+pub fn execute_run(
+    scope: &ProfileScope,
+    launch: &pmt_core::env::LaunchEnv,
+    args: &RunArgs,
+    temp: Option<&TempHarness>,
+    say: &(dyn Fn(&str) + Sync),
+) -> Result<Ran, Error> {
+    let source = Source::open(scope, &args.suite)?;
     let run_id = super::run_id(args.common.run_id.as_deref())?;
     let budget = args.common.budget_usd.or(match &source {
         Source::Suite(s) => s.meta.budget_usd,
         Source::Bench { .. } => None,
     });
-    let mut info = base_info(&scope, &args.common, args.harness.as_deref(), &run_id)?;
+    let mut info = base_info(scope, &args.common, args.harness.as_deref(), &run_id)?;
+    if let Some(temp) = temp {
+        info.harness_ref.clone_from(&temp.label);
+        info.harness_hash = pmt_config::harness::Tree::read(&temp.dir)
+            .map_err(|e| Error::io(&pmt_core::error::codes::HARNESS_IO, &temp.dir, &e))?
+            .0
+            .fingerprint();
+    }
     info.budget_usd = budget;
     let plan = source.plan(args, info)?;
     let run = RunDir::of(scope.dir(), &run_id);
-    let info = open_run(&run, plan.info)?;
-    let store = std::sync::Arc::new(Store::open(&scope)?);
+    let mut info = open_run(&run, plan.info)?;
+    let store = std::sync::Arc::new(Store::open(scope)?);
     let runner = Runner {
-        scope: exec::isolated(&scope, args.common.cache.mode(), budget, None),
-        launch: ctx.launch.clone(),
+        scope: exec::isolated(scope, args.common.cache.mode(), budget, None),
+        launch: launch.clone(),
         root: exec::root(&store, &run, &run_id)?,
         store,
         run: run.clone(),
         run_id: run_id.clone(),
         provider: args.common.provider.clone(),
         model: args.common.model.clone(),
-        harness_version: info.harness_ref.clone(),
+        harness_version: temp.map_or_else(|| info.harness_ref.clone(), |t| t.base.clone()),
+        harness_tree: temp.map(|t| t.dir.clone()),
         ephemeral: None,
         scanner: plan.scanner,
     };
@@ -501,19 +538,13 @@ pub fn run(args: &RunArgs, ctx: &Context<'_>) -> Result<u8, Error> {
         Source::Bench { adapter, .. } => Some(BenchHooks(adapter)),
         Source::Suite(_) => None,
     };
-    let quiet = ctx.json;
-    let say = move |line: &str| {
-        if !quiet {
-            println!("{line}");
-        }
-    };
     let mut outcome = crate::model_cmd::block_on(execute(
         &runner,
         plan.units,
         info.repeat,
         args.common.parallel,
         hooks.as_ref().map(|h| h as &dyn Hooks),
-        &say,
+        say,
     ))??;
     for (unit, why) in &plan.skipped {
         let result = skipped(unit, why);
@@ -521,7 +552,26 @@ pub fn run(args: &RunArgs, ctx: &Context<'_>) -> Result<u8, Error> {
         say(&progress(&result, info.repeat));
         outcome.results.push(result);
     }
-    finish(&run, info, &outcome, ctx)
+    info.finished_at = Some(jiff::Timestamp::now().to_string());
+    run.write_info(&info)?;
+    Ok(Ran { run, info, outcome })
+}
+
+/// Runs `prometheus eval run`.
+///
+/// # Errors
+///
+/// As [`execute_run`].
+pub fn run(args: &RunArgs, ctx: &Context<'_>) -> Result<u8, Error> {
+    let scope = ctx.scope()?;
+    let quiet = ctx.json;
+    let say = move |line: &str| {
+        if !quiet {
+            println!("{line}");
+        }
+    };
+    let ran = execute_run(&scope, ctx.launch, args, None, &say)?;
+    finish(&ran.run, ran.info, &ran.outcome, ctx)
 }
 
 /// Stamps `run.json` and prints the summary; returns the exit status.

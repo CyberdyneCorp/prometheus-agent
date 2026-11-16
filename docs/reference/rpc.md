@@ -82,6 +82,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `evolve.proposals.reject` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
 | `evolve.start` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
 | `evolve.status` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
+| `experience.disable` | `experience-library` | 1.0 | [`ExperienceParams`](#experienceparams) | [`ExperienceReply`](#experiencereply) |
 | `experience.domains` | `experience-library` | 1.0 | [`ExperienceParams`](#experienceparams) | [`ExperienceDomains`](#experiencedomains) |
 | `experience.forget` | `experience-library` | 1.0 | [`ExperienceParams`](#experienceparams) | [`ExperienceReply`](#experiencereply) |
 | `experience.list` | `experience-library` | 1.0 | [`ExperienceParams`](#experienceparams) | [`ExperienceEntries`](#experienceentries) |
@@ -1083,6 +1084,7 @@ One job of `evolve.list`.
 | `k` | integer | yes | The recursion budget. |
 | `mode` | string | yes | `parallel`, `sequential` or `both`. |
 | `rollouts` | integer | yes | Rollouts the job plans. |
+| `sessions` | integer | no | Improver sessions the job plans. |
 | `status` | string | yes | The job status. |
 | `trigger` | string | yes | What queued it. |
 

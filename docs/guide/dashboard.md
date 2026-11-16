@@ -164,10 +164,21 @@ configuration, secrets, sessions or the vault. A change over the API gets
 | `/mcp`, `/cron`, `/memory` | The profile's MCP servers, cron jobs (with their state and next run) and memory entries. These pages are read-only for now: change them with `prometheus mcp`, `cron` and `memory`. |
 
 These pages are listed in the navigation, but this build does not
-implement them yet, so each one says so: `/achievements`. The `/evolution` and
-`/experience` pages read the harness-evolution and experience-library
-methods of the client protocol, and they report when the daemon does not
-serve those yet.
+implement them yet, so each one says so: `/achievements`.
+
+`/evolution` lists the profile's harness-evolution runs (mode, budget,
+rollouts and improver sessions planned, cost, status). A run's page shows
+each stage of each mode, the candidate harnesses as diffs against the
+run's base version, the selector's pick and the proposals; **Adopt** and
+**Discard** act on a pending proposal. An adopted harness applies from the
+next session: sessions already open keep their cached prompt (use
+`prometheus evolve adopt --now` to rebuild them). `/experience` lists each
+domain with its lessons, the harness versions adopted with them and the
+task each lesson came from; **Disable** hides a lesson from new sessions
+and proposers until **Restore**, and **Delete** removes it
+(`prometheus experience forget`). Both pages use the `evolve.*` and
+`experience.*` methods of the client protocol; observers see them
+read-only.
 
 The profile selector in the header picks the profile that each page
 addresses. Every API call names its profile in its path

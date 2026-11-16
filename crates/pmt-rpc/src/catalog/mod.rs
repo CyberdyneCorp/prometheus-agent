@@ -202,6 +202,7 @@ fn declare_evolution(d: &mut Declarations) {
         .method::<c::ExperienceDomainsList>()
         .method::<c::ExperiencePin>()
         .method::<c::ExperienceForget>()
+        .method::<c::ExperienceDisable>()
         .method::<c::ExperienceRestore>();
 }
 

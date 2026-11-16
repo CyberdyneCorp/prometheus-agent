@@ -29,6 +29,7 @@ pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
     add::<c::ExperienceDomainsList>(router, catalog)?;
     add::<c::ExperiencePin>(router, catalog)?;
     add::<c::ExperienceForget>(router, catalog)?;
+    add::<c::ExperienceDisable>(router, catalog)?;
     add::<c::ExperienceRestore>(router, catalog)?;
     Ok(())
 }

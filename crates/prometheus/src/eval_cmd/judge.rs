@@ -247,37 +247,43 @@ fn root_of(run: &RunDir, store: &Store, info: &RunInfo) -> Result<SessionId, Err
     super::exec::root(store, run, &info.run_id)
 }
 
-/// Runs `prometheus eval judge`.
+/// Judges run `run_id` of `scope` (rows merged into `judged.json`, or the
+/// namespace's file); the merged rows and their file.
 ///
 /// # Errors
 ///
 /// `eval.run_not_found` (66), `eval.judge_changed` (1), suite and adapter
 /// errors, `eval.io`.
-pub fn run(args: &JudgeArgs, ctx: &Context<'_>) -> Result<u8, Error> {
-    if let Some(name) = &args.judge_namespace {
+pub fn judge_run(
+    scope: &ProfileScope,
+    launch: &LaunchEnv,
+    run_id: &str,
+    namespace: Option<&str>,
+    parallel: usize,
+) -> Result<(judge::Judged, PathBuf), Error> {
+    if let Some(name) = namespace {
         namespace_ok(name)?;
     }
-    let scope = ctx.scope()?;
-    let run = RunDir::existing(scope.dir(), &args.run_id)?;
+    let run = RunDir::existing(scope.dir(), run_id)?;
     let info = run.info().unwrap_or_default();
     let results = run.results();
-    let store = Arc::new(Store::open(&scope)?);
+    let store = Arc::new(Store::open(scope)?);
     let ports = HostPorts {
         models: Models::open(
-            &scope,
+            scope,
             &store,
-            ctx.launch.user_home().map(PathBuf::as_path),
+            launch.user_home().map(PathBuf::as_path),
             &RouteFlags::default(),
             None,
         )?,
         session: root_of(&run, &store, &info)?,
         scope: scope.clone(),
-        launch: ctx.launch.clone(),
+        launch: launch.clone(),
     };
     let unit_of = |r: &TaskResult| run.unit(&r.task_id, r.repeat);
     let (identity, rows) = if info.kind == "bench" {
         let name = info.suite.trim_start_matches("bench:");
-        let mut adapter = Adapter::open(scope.dir(), name, Phase::Judge)?;
+        let mut adapter = super::bench::open(scope, name, Phase::Judge)?;
         let version = adapter.describe()?.version;
         let scorer = BenchScorer(Mutex::new(adapter));
         let identity = JudgeIdentity {
@@ -286,12 +292,12 @@ pub fn run(args: &JudgeArgs, ctx: &Context<'_>) -> Result<u8, Error> {
         };
         (
             identity,
-            crate::model_cmd::block_on(judge::rows(&results, &unit_of, &scorer, args.parallel))?,
+            crate::model_cmd::block_on(judge::rows(&results, &unit_of, &scorer, parallel))?,
         )
     } else {
         let suite = Suite::load(&info.suite_path)?;
         let identity = JudgeIdentity {
-            model: judge_model(&suite, &scope),
+            model: judge_model(&suite, scope),
             grader_version: grader_version(&suite),
         };
         let scorer = SuiteScorer {
@@ -300,13 +306,30 @@ pub fn run(args: &JudgeArgs, ctx: &Context<'_>) -> Result<u8, Error> {
         };
         (
             identity,
-            crate::model_cmd::block_on(judge::rows(&results, &unit_of, &scorer, args.parallel))?,
+            crate::model_cmd::block_on(judge::rows(&results, &unit_of, &scorer, parallel))?,
         )
     };
-    let path = judge::path(&run.dir, args.judge_namespace.as_deref());
+    let path = judge::path(&run.dir, namespace);
     let merged = judge::merge(read_json(&path), identity, rows)?;
     write_json(&path, &merged)?;
-    report(&merged, &path, ctx)
+    Ok((merged, path))
+}
+
+/// Runs `prometheus eval judge`.
+///
+/// # Errors
+///
+/// As [`judge_run`].
+pub fn run(args: &JudgeArgs, ctx: &Context<'_>) -> Result<u8, Error> {
+    let scope = ctx.scope()?;
+    let (judged, path) = judge_run(
+        &scope,
+        ctx.launch,
+        &args.run_id,
+        args.judge_namespace.as_deref(),
+        args.parallel,
+    )?;
+    report(&judged, &path, ctx)
 }
 
 fn report(judged: &judge::Judged, path: &Path, ctx: &Context<'_>) -> Result<u8, Error> {

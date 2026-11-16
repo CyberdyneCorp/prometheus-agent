@@ -82,6 +82,28 @@ pub fn running(scope: &ProfileScope) -> Vec<Arc<Supervisor>> {
         .collect()
 }
 
+/// The hosted plugin of `scope` that registered benchmark adapter `name`
+/// (`register_bench_adapter`), with its host side.
+#[must_use]
+pub fn bench_adapter(
+    scope: &ProfileScope,
+    name: &str,
+) -> Option<(Arc<Supervisor>, Arc<BridgeHost>)> {
+    supervisors()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .iter()
+        .filter(|((dir, _), _)| dir == scope.dir())
+        .map(|(_, hosted)| hosted)
+        .find(|hosted| {
+            hosted
+                .supervisor
+                .registrations()
+                .is_some_and(|r| r.bench_adapters.iter().any(|a| a == name))
+        })
+        .map(|hosted| (Arc::clone(&hosted.supervisor), Arc::clone(&hosted.host)))
+}
+
 /// The supervisor of `plugin` and its host side, reusing a running one
 /// prepared with the same key.
 fn supervisor(

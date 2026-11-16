@@ -305,7 +305,9 @@ impl Dispatcher<'_> {
             ..Default::default()
         })? {
             let idle = board.runs(&task.id)?.iter().all(|r| !r.is_open());
-            if task.reviewer.is_some() && idle {
+            // An evolve task waits for a person, never a reviewer profile.
+            let evolve = matches!(task.kind, crate::model::TaskKind::Evolve { .. });
+            if task.reviewer.is_some() && idle && !evolve {
                 out.push(task);
             }
         }

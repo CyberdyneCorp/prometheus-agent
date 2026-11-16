@@ -90,6 +90,9 @@ pub struct EvolveJobRow {
     pub budget: Option<f64>,
     /// Rollouts the job plans.
     pub rollouts: usize,
+    /// Improver sessions the job plans.
+    #[serde(default)]
+    pub sessions: usize,
     /// Spend so far.
     pub cost_usd: f64,
     /// The experience-library domain.

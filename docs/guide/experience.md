@@ -65,13 +65,15 @@ error: harness evolution is disabled for profile 'default'; set evolve.enabled =
 
 `prometheus experience list [--domain D] [--all]` shows each entry's id,
 domain, status, confidence, pin and times shown with its cue (`--all`
-adds rolled-back entries); `show <entry>` prints one; `domains` counts
-entries per domain; `pin` and `unpin` keep an entry from eviction and
-rollback; `forget <entry>` removes it (its harness version stays);
-`restore <entry>` makes a rolled-back entry active again. The dashboard
-and desktop use the same operations over the client protocol
-(`experience.list`, `experience.show`, `experience.domains`,
-`experience.pin`, `experience.forget`, `experience.restore`).
+adds rolled-back and disabled entries); `show <entry>` prints one;
+`domains` counts entries per domain; `pin` and `unpin` keep an entry from
+eviction and rollback; `forget <entry>` removes it (its harness version
+stays); `disable <entry>` hides it from jobs and new sessions (status
+`disabled`); `restore <entry>` makes a rolled-back or disabled entry
+active again. The dashboard and desktop use the same operations over the
+client protocol (`experience.list`, `experience.show`,
+`experience.domains`, `experience.pin`, `experience.forget`,
+`experience.disable`, `experience.restore`).
 
 `prometheus harness rollback` demotes every unpinned entry whose harness
 the active version no longer descends from to `rolled-back`, hiding it

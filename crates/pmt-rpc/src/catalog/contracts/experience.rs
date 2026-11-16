@@ -80,5 +80,7 @@ method!(/// `experience.pin`: pins (or, with `pinned = false`, unpins) an entry.
     ExperiencePin = "experience.pin" (ExperienceParams) -> ExperienceReply);
 method!(/// `experience.forget`: removes an entry (its harness version stays).
     ExperienceForget = "experience.forget" (ExperienceParams) -> ExperienceReply);
-method!(/// `experience.restore`: sets a rolled-back entry back to active.
+method!(/// `experience.disable`: turns an entry off (hidden until restored).
+    ExperienceDisable = "experience.disable" (ExperienceParams) -> ExperienceReply);
+method!(/// `experience.restore`: sets a rolled-back or disabled entry back to active.
     ExperienceRestore = "experience.restore" (ExperienceParams) -> ExperienceReply);

@@ -141,6 +141,25 @@ tasks with the same layout. An adapter is a subprocess in
 judge` (a null or failed score is ungraded); a score the adapter pushes
 while tasks execute is refused with error `-32002`.
 
+An adapter can also ship as a plugin (a subprocess adapter of the same
+name wins):
+
+- a WASM plugin exporting the `bench` world (`worlds = ["bench@1.0"]`,
+  `wit/bench/world.wit`) provides `bench:<plugin id>`; `plugin.call(method,
+  params)` answers each method with the same JSON. It has no filesystem:
+  the `files` import (`read`, `write`, `entries`) reaches only the task
+  workspace during `bench.prepare` and the task's run directory during
+  `bench.deliverables` and `bench.score` (no `..`, absolute paths or
+  symbolic links), and `requests.request` is its request to the host
+  (`plugins/samples/bench` is a complete adapter);
+- a Python-bridge plugin calls `ctx.register_bench_adapter(adapter)`;
+  `adapter.name` is the name and its methods `describe`, `tasks`, `task`,
+  `prepare`, `deliverables`, `preflight` and `score` take the protocol's
+  params as keyword arguments, plus `host` when they declare it
+  (`host.read(path)`, `host.write(path, data)`, `host.list()` on the
+  same directory, and `host.request(method, params)`, which raises
+  `HostError` with `rpc == -32002` for a score pushed during execution).
+
 ## Capturing sessions
 
 `prometheus eval capture <session|recording.pmtrec> --suite DIR [--task-id

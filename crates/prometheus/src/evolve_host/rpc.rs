@@ -52,9 +52,11 @@ pub fn handle(
             let id = needed(p.job_id.as_ref(), "job_id")?;
             let record = jobs.get(id)?;
             let summary = JobSummary::read(&jobs.dir(id)).unwrap_or_default();
+            let candidates = candidates(scope, &jobs.dir(id), &summary);
+            let proposals = job_proposals(scope, &proposals, id)?;
             Ok(reply(
                 format!("job {id}: {}", record.status),
-                json!({"job": record, "summary": summary}),
+                json!({"job": record, "summary": summary, "candidates": candidates, "proposals": proposals}),
             ))
         }
         "evolve.list" => list(&jobs),
@@ -140,6 +142,7 @@ fn list(jobs: &Jobs) -> Result<Value, Error> {
                 "k": j.k,
                 "budget": j.budget_usd,
                 "rollouts": j.plan.iter().map(|p| p.rollouts).sum::<usize>(),
+                "sessions": j.plan.iter().map(|p| p.sessions).sum::<usize>(),
                 "cost_usd": cost,
                 "domain": j.domain,
                 "created_at": j.created_at,
@@ -147,6 +150,64 @@ fn list(jobs: &Jobs) -> Result<Value, Error> {
         })
         .collect();
     Ok(json!({"jobs": rows}))
+}
+
+/// Every candidate harness a job's modes produced (`modes/<mode>/<label>/
+/// harness`), with its diff against the job's base version: what the
+/// dashboard's run detail shows.
+fn candidates(scope: &ProfileScope, job_dir: &std::path::Path, summary: &JobSummary) -> Vec<Value> {
+    let harness = HarnessDir::of(scope.dir());
+    let Some(base_id) = summary.base_version.as_deref() else {
+        return Vec::new();
+    };
+    let Ok(base) = harness.tree(base_id) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for mode in &summary.modes {
+        for stage in &mode.stages {
+            let dir = job_dir
+                .join("modes")
+                .join(&mode.mode)
+                .join(&stage.label)
+                .join("harness");
+            let Ok((tree, _)) = pmt_config::harness::Tree::read(&dir) else {
+                continue;
+            };
+            out.push(json!({
+                "mode": mode.mode,
+                "label": stage.label,
+                "summary": diff::summary(&base, &tree).to_string(),
+                "diff": diff::unified(&base, &tree, (base_id, &stage.label)),
+            }));
+        }
+    }
+    out
+}
+
+/// The proposals of job `id`, each with its diff against its base.
+fn job_proposals(
+    scope: &ProfileScope,
+    proposals: &Proposals,
+    id: &str,
+) -> Result<Vec<Value>, Error> {
+    let harness = HarnessDir::of(scope.dir());
+    let mut out = Vec::new();
+    for proposal in proposals.list()?.into_iter().filter(|p| p.job_id == id) {
+        let unified = match (
+            harness.tree(&proposal.base_version),
+            proposals.tree(&proposal.id),
+        ) {
+            (Ok(base), Ok(tree)) => {
+                diff::unified(&base, &tree, (&proposal.base_version, &proposal.id))
+            }
+            _ => String::new(),
+        };
+        let mut row = serde_json::to_value(&proposal).unwrap_or_default();
+        row["diff"] = Value::String(unified);
+        out.push(row);
+    }
+    Ok(out)
 }
 
 fn adopt(scope: &ProfileScope, launch: &LaunchEnv, p: &EvolveParams) -> Result<Value, Error> {

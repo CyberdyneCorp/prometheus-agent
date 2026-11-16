@@ -215,6 +215,7 @@ pub fn run(args: &BatchArgs, ctx: &Context<'_>) -> Result<u8, Error> {
         provider: args.common.provider.clone(),
         model: args.common.model.clone(),
         harness_version: info.harness_ref.clone(),
+        harness_tree: None,
         ephemeral,
         scanner: Scanner::new(&[], &[]),
     };

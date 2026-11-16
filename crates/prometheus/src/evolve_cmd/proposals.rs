@@ -71,13 +71,14 @@ pub fn review(ctx: &Context<'_>, scope: &ProfileScope, args: &ReviewArgs) -> Res
     let base = HarnessDir::of(scope.dir()).tree(&proposal.base_version)?;
     let unified = diff::unified(&base, &tree, (&proposal.base_version, &proposal.id));
     let eval = match &args.eval {
-        Some(suite) => Some(super::review_eval::run(
-            scope,
-            &proposal.id,
-            suite,
-            &base,
-            &tree,
-        )?),
+        Some(suite) => {
+            let sides = super::review_eval::Sides {
+                proposal: &proposal.id,
+                base_version: &proposal.base_version,
+                proposed: &tree,
+            };
+            Some(super::review_eval::run(scope, ctx.launch, &sides, suite)?)
+        }
         None => None,
     };
     if ctx.json {

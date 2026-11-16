@@ -206,10 +206,16 @@ Nothing a grader produced may reach evolution: files matching
 `evolve.leak_globs` or holding an eval verdict (the `pmt-eval-verdict`
 canary, or a `"pass_rate"`/`"passed_count"`/`"score"` number) are left
 out of the task and fail any step whose evidence holds them. `prometheus
-evolve review <proposal> --eval smoke` runs the bundled eval suite on the
-base and the proposed harness for you alone: the results go to
+evolve review <proposal> --eval <suite>` runs any eval suite (a
+directory, a name under `<profile>/evals/`, the bundled `smoke` or
+`bench:<name>`) through the eval engine on the proposal's base version
+and on the proposed harness, judges both runs and shows you the scores
+and the delta with its confidence interval. The proposed tree is not a
+version: it is materialised as a temporary harness for that run only, so
+the review writes no version. The verdict goes to
 `<profile>/eval-results/` and never into a proposal, a version or an
-improver's evidence.
+improver's evidence; the two runs stay under `<profile>/evals/runs/`
+(`prometheus eval report <base> <proposed>` shows them again).
 
 The same operations are served to the dashboard and the desktop as the
 `evolve.*` and `harness.*` methods of the client protocol.

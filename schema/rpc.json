@@ -2501,6 +2501,13 @@
           "minimum": 0,
           "type": "integer"
         },
+        "sessions": {
+          "default": 0,
+          "description": "Improver sessions the job plans.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
         "status": {
           "description": "The job status.",
           "type": "string"
@@ -8106,6 +8113,16 @@
       },
       "result": {
         "$ref": "#/$defs/EvolveReply"
+      },
+      "since": "1.0"
+    },
+    "experience.disable": {
+      "owner": "experience-library",
+      "params": {
+        "$ref": "#/$defs/ExperienceParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ExperienceReply"
       },
       "since": "1.0"
     },

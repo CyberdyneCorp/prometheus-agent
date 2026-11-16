@@ -118,6 +118,10 @@ pub struct Options {
     pub replay: Option<Arc<crate::replay::Hooks>>,
     /// A harness-evolution rollout (spec: harness-evolution).
     pub rollout: Option<Arc<rollout::RolloutRun>>,
+    /// A harness tree that is not a version, run in place of the
+    /// session's version (an eval task of `evolve review --eval` on the
+    /// proposed harness).
+    pub harness_tree: Option<PathBuf>,
     /// `--domain`, or the scheduled job's or kanban task's `domain`: the
     /// session's experience-library domain (spec: experience-library).
     pub domain: Option<String>,
@@ -309,7 +313,11 @@ impl Factory {
         let plugins = rollout::plugins(
             &scope,
             crate::plugins_host::for_session(&scope, &options.cwd),
-            options.rollout.as_deref(),
+            options
+                .rollout
+                .as_ref()
+                .map(|r| r.harness.as_path())
+                .or(options.harness_tree.as_deref()),
         );
         crate::context_engine::select(&config.context, &plugins)?;
         backend::registry(&plugins, &pmt_plugins::host::CallInfo::default())
