@@ -395,3 +395,33 @@ fn trajectory_compress_summarises_only_long_records() {
         "{stats}"
     );
 }
+
+/// Regression: the hidden session's title came from the input path, so a
+/// path over the store's 100-character title cap exited 65 and a second run
+/// over the same file hit `store.title_in_use`.
+#[test]
+fn trajectory_compress_accepts_long_input_paths_and_reruns() {
+    let home = mock_home();
+    script(
+        home.path(),
+        "[[rule]]\nuser = \"Summarise in at most\"\nrepeat = true\ntext = \"the ledgers were summed\"\n",
+    );
+    let dir = home
+        .path()
+        .join("a-directory-name-long-enough-to-matter")
+        .join("another-directory-name-long-enough-to-matter")
+        .join("and-a-third-one-for-good-measure");
+    std::fs::create_dir_all(&dir).unwrap();
+    let input = dir.join("trajectories-with-a-long-file-name.jsonl");
+    assert!(input.to_str().unwrap().chars().count() > 100);
+    std::fs::write(&input, format!("{}\n", sharegpt(40, 3000))).unwrap();
+    for _ in 0..2 {
+        ok(&run(
+            home.path(),
+            &["trajectory", "compress", input.to_str().unwrap()],
+        ));
+    }
+    let out = dir.join("trajectories-with-a-long-file-name.compressed.jsonl");
+    let text = std::fs::read_to_string(&out).unwrap();
+    assert!(text.contains("the ledgers were summed"), "{text}");
+}

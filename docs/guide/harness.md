@@ -56,7 +56,9 @@ version) and prints every error at once, exiting 65 when it is invalid:
 paths and surface, size caps (24,000 always-on characters by default,
 `harness.always_on_cap_chars`, 64 KiB per file, 1 MiB per tree, 200
 files, 32 skills, 8 subagents), skill and subagent front matter, script
-syntax (parsed, never run), script references, `hooks.toml`, template
+syntax (parsed, never run: `.py` by the built-in Python grammar, `.sh` by
+`bash -n`, or `sh -n` without bash, so validating a tree with shell scripts
+needs a shell on `PATH`), script references, `hooks.toml`, template
 syntax in always-on text and secrets. A skill that no always-on file
 names gets a trigger line appended to `GUARDRAILS.md`.
 

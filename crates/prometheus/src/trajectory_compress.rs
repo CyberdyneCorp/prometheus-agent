@@ -139,10 +139,12 @@ pub fn run(args: &CompressArgs, ctx: &Context<'_>) -> Result<u8, Error> {
         .clone()
         .unwrap_or_else(|| beside(&args.input, ".compressed.jsonl"));
     let store = Arc::new(Store::open(&scope)?);
+    // Untitled on purpose: titles are unique and capped at 100 chars, so one
+    // derived from the input path fails on long paths and on a second run
+    // over the same file. The hidden session is found by its source tag.
     let session = store
         .create_session(&NewSession {
             source_tag: Some("trajectory-compress".to_owned()),
-            title: Some(format!("trajectory compress {}", args.input.display())),
             hidden: true,
             ..NewSession::new(Source::Eval)
         })?

@@ -187,7 +187,28 @@ fn scripts_are_parsed_without_running() {
         ("scripts/bad.sh", "if then fi (\n"),
     ]);
     assert!(has(&errors, "scripts/bad.py: line 1"), "{errors:?}");
-    assert!(has(&errors, "scripts/bad.sh: line"), "{errors:?}");
+    assert!(has(&errors, "scripts/bad.sh: line 1"), "{errors:?}");
+}
+
+/// A valid shell script passes its syntax check and is never executed.
+#[cfg(unix)]
+#[test]
+fn a_valid_shell_script_passes_without_running() {
+    let dir = tempfile::tempdir().unwrap();
+    let marker = dir.path().join("ran");
+    let script = format!(
+        "#!/bin/sh\nif [ -n \"$1\" ]; then\n  echo hi\nfi\ntouch '{}'\n",
+        marker.display()
+    );
+    let mut ok = tree(&[
+        (
+            "hooks.toml",
+            "[[hooks]]\nevent = \"pre_tool_call\"\ncommand = \"sh scripts/guard.sh\"\n",
+        ),
+        ("scripts/guard.sh", script.as_str()),
+    ]);
+    assert!(validate(&mut ok, &rules()).is_ok());
+    assert!(!marker.exists(), "the script was run");
 }
 
 #[test]

@@ -213,8 +213,6 @@ tree-sitter-rust = "0.24"
 tree-sitter-python = "0.25"
 tree-sitter-javascript = "0.25"
 tree-sitter-typescript = "0.23"
-# Harness shell scripts are syntax-checked without running them.
-tree-sitter-bash = "0.25"
 saphyr-parser = "0.3"
 # The line interface's editor (history, multi-line, completion, printing
 # above the prompt while a turn runs).

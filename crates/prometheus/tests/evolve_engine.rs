@@ -31,6 +31,12 @@ fn git(dir: &Path, args: &[&str]) {
             "user.email=t@example.com",
             "-c",
             "commit.gpgsign=false",
+            // `git commit` may start a detached auto-maintenance that
+            // rewrites `.git` while the test snapshots it.
+            "-c",
+            "maintenance.auto=false",
+            "-c",
+            "gc.auto=0",
         ])
         .arg("-C")
         .arg(dir)
@@ -237,6 +243,8 @@ fn a_foreground_job_proposes_a_reviewable_adoptable_harness() {
 #[test]
 fn rollouts_deny_approvals_and_work_on_a_copy_without_leak_files() {
     let s = Setup::new("", &[("grader/rubric.md", "full marks for 10.00")]);
+    // Uncommitted work: capturing it must not write into the user's `.git`.
+    std::fs::write(s.workspace.join("notes.txt"), "check the refund\n").unwrap();
     let before = snapshot(&s.workspace);
     let out = s.evolve(&s.task("TASK-APPROVAL sum the ledger", ""), &["--k", "1"]);
     assert_eq!(

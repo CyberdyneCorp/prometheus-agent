@@ -4,7 +4,8 @@
 //! `task/` holds `task.md` (the statement), `source/` (the workspace the
 //! rollouts re-run in) and `task.toml`. A git workspace is captured as its
 //! HEAD commit (`repo.toml`) plus `uncommitted.patch`, built through a
-//! private index so the user's own index is never touched; any other
+//! private index and a private object directory (the user's objects are an
+//! alternate, read only), so nothing under the user's `.git` changes; any other
 //! workspace as a copy of the files the session read or modified. Leak
 //! globs are excluded, text is redacted, and the whole snapshot is capped.
 //!
@@ -270,11 +271,8 @@ impl Snapshot {
     /// `repo.toml` and `uncommitted.patch` of the repository at `root`.
     fn git(&mut self, root: &Path, job_task: &Path) -> Result<(), Error> {
         let head = git(root, &["rev-parse", "HEAD"], None)?;
-        // `git -C <root>` resolves a relative index path against the
-        // repository, so it is made absolute first.
-        let index = std::path::absolute(job_task.join(".capture-index"))
-            .unwrap_or_else(|_| job_task.join(".capture-index"));
-        let env = Some(index.as_path());
+        let private = Private::new(root, job_task)?;
+        let env = Some(&private);
         let verdicts = verdict_files(root)?;
         let excludes: Vec<String> = self
             .leaks
@@ -290,7 +288,7 @@ impl Snapshot {
             git(root, &add, env)?;
             git(root, &["diff", "--cached", "--binary", "HEAD"], env)
         })();
-        let _ = std::fs::remove_file(&index);
+        private.remove();
         let patch = self.redacted(patch?.into_bytes());
         self.charge(patch.len())?;
         write(&self.root.join("uncommitted.patch"), &patch)?;
@@ -390,11 +388,59 @@ fn git_root(dir: &Path) -> Option<PathBuf> {
         .map(|out| PathBuf::from(out.trim()))
 }
 
-fn git(dir: &Path, args: &[&str], index: Option<&Path>) -> Result<String, Error> {
+/// Where the patch capture keeps its index and the blobs `git add` writes:
+/// under the job, so the user's index and object store stay byte-identical.
+struct Private {
+    index: PathBuf,
+    objects: PathBuf,
+    alternate: PathBuf,
+}
+
+impl Private {
+    fn new(root: &Path, job_task: &Path) -> Result<Self, Error> {
+        // `git -C <root>` resolves relative paths against the repository,
+        // so every path is made absolute first.
+        let absolute =
+            |name: &str| std::path::absolute(job_task.join(name)).unwrap_or(job_task.join(name));
+        let objects = absolute(".capture-objects");
+        std::fs::create_dir_all(&objects).map_err(|e| io(&objects, &e))?;
+        let alternate = git(
+            root,
+            &[
+                "rev-parse",
+                "--path-format=absolute",
+                "--git-path",
+                "objects",
+            ],
+            None,
+        )?;
+        Ok(Self {
+            index: absolute(".capture-index"),
+            objects,
+            alternate: PathBuf::from(alternate.trim()),
+        })
+    }
+
+    fn remove(&self) {
+        let _ = std::fs::remove_file(&self.index);
+        let _ = std::fs::remove_dir_all(&self.objects);
+    }
+}
+
+fn git(dir: &Path, args: &[&str], private: Option<&Private>) -> Result<String, Error> {
     let mut command = Command::new("git");
-    command.arg("-C").arg(dir).args(args);
-    if let Some(index) = index {
-        command.env("GIT_INDEX_FILE", index);
+    // No auto gc or maintenance may start in the user's repository because
+    // of us (a detached one would also rewrite `.git` behind our back).
+    command
+        .args(["-c", "gc.auto=0", "-c", "maintenance.auto=false"])
+        .arg("-C")
+        .arg(dir)
+        .args(args);
+    if let Some(private) = private {
+        command
+            .env("GIT_INDEX_FILE", &private.index)
+            .env("GIT_OBJECT_DIRECTORY", &private.objects)
+            .env("GIT_ALTERNATE_OBJECT_DIRECTORIES", &private.alternate);
     }
     let output = command.output().map_err(|e| {
         Error::new(

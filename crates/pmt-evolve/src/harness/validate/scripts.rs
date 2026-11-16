@@ -1,21 +1,24 @@
 //! Scripts: parsed, never run; and every script the harness text names
 //! must be in the tree.
 
+use std::io::Write as _;
 use std::path::Path;
+use std::process::{Command, Stdio};
 use std::sync::LazyLock;
 
 use pmt_config::harness::Tree;
-use pmt_tools::files::lint::{LintStatus, Linter, tree_sitter_check};
+use pmt_tools::files::lint::{LintStatus, Linter};
 use regex::Regex;
 
 use crate::harness::surface;
 
-/// Parses every `.py` (Python grammar) and `.sh` (shell grammar) script.
+/// Parses every `.py` (Python grammar) and `.sh` (the shell's own `-n`
+/// syntax check) script.
 pub(super) fn syntax(tree: &Tree, errors: &mut Vec<String>) {
     let linter = Linter::builtin();
     for (path, text) in tree.files.iter().filter(|(p, _)| surface::is_script(p)) {
         let verdict = if Path::new(path).extension().is_some_and(|e| e == "sh") {
-            tree_sitter_check(text, &tree_sitter_bash::LANGUAGE.into())
+            shell(text)
         } else {
             python(&linter, path, text)
         };
@@ -23,6 +26,52 @@ pub(super) fn syntax(tree: &Tree, errors: &mut Vec<String>) {
             errors.push(format!("{path}: {message}"));
         }
     }
+}
+
+/// `bash -n` (else `sh -n`) over the script on stdin: the shell reads and
+/// parses every command and runs none. The shell is used instead of an
+/// embedded grammar because a bash grammar costs about 1.4 MiB of binary
+/// against the 80 MiB budget (spec: workspace-architecture, Memory and size
+/// budgets), and a harness `.sh` hook needs that shell to run anyway.
+fn shell(text: &str) -> Result<(), String> {
+    let spawned = ["bash", "sh"].into_iter().find_map(|name| {
+        let mut command = Command::new(name);
+        if name == "bash" {
+            command.args(["--norc", "--noprofile"]);
+        }
+        command
+            .arg("-n")
+            // A non-interactive shell sources these before reading stdin.
+            .env_remove("BASH_ENV")
+            .env_remove("ENV")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .ok()
+            .map(|child| (name, child))
+    });
+    let Some((name, mut child)) = spawned else {
+        return Err("could not be checked (no bash or sh on PATH)".to_owned());
+    };
+    if let Some(mut stdin) = child.stdin.take() {
+        // A shell that stops at the first error closes stdin early; its
+        // verdict is in the exit status, not in this write.
+        let _ = stdin.write_all(text.as_bytes());
+    }
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("could not be checked ({name}: {e})"))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let first = stderr.lines().next().unwrap_or("syntax error").trim();
+    // `bash: line 1: syntax error ...` / `sh: 1: Syntax error: ...`.
+    Err(first
+        .strip_prefix(&format!("{name}: "))
+        .unwrap_or(first)
+        .to_owned())
 }
 
 fn python(linter: &Linter, path: &str, text: &str) -> Result<(), String> {

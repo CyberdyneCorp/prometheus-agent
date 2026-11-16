@@ -68,6 +68,11 @@ fn git(dir: &Path, args: &[&str]) -> String {
             "user.email=t@example.com",
             "-c",
             "commit.gpgsign=false",
+            // A detached auto-maintenance would rewrite `.git` mid-test.
+            "-c",
+            "maintenance.auto=false",
+            "-c",
+            "gc.auto=0",
         ])
         .arg("-C")
         .arg(dir)
@@ -80,6 +85,24 @@ fn git(dir: &Path, args: &[&str]) -> String {
         String::from_utf8_lossy(&out.stderr)
     );
     String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+/// Every file under the repository's object store.
+fn objects(repo: &Path) -> Vec<std::path::PathBuf> {
+    fn walk(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                walk(&path, out);
+            } else {
+                out.push(path);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(&repo.join(".git/objects"), &mut out);
+    out.sort();
+    out
 }
 
 /// Scenario: Disabled profile.
@@ -114,6 +137,7 @@ fn a_git_session_freezes_head_and_a_patch_that_reproduces_it() {
     std::fs::write(repo.join("ledger.txt"), "10\n20\n-5\n").unwrap();
     std::fs::write(repo.join("notes.md"), "check the refund\n").unwrap();
     let index_before = std::fs::read(repo.join(".git/index")).unwrap();
+    let objects_before = objects(&repo);
 
     let store = Store::open(&fixture.scope).unwrap();
     let mut new = NewSession::new(Source::Cli);
@@ -153,6 +177,11 @@ fn a_git_session_freezes_head_and_a_patch_that_reproduces_it() {
         std::fs::read(repo.join(".git/index")).unwrap(),
         index_before,
         "user index untouched"
+    );
+    assert_eq!(
+        objects(&repo),
+        objects_before,
+        "no blob of the uncommitted files lands in the user's object store"
     );
 
     // Applying the patch to a checkout of the commit reproduces the state.
