@@ -24,6 +24,21 @@ pub struct SessionsConfig {
     /// Below this many free bytes on the store's volume an interactive
     /// start offers to turn on auto-prune (when `retention_secs = 0`).
     pub low_disk_bytes: u64,
+    /// Hybrid semantic search.
+    pub search: SessionSearchConfig,
+}
+
+/// The `[sessions.search]` section.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct SessionSearchConfig {
+    /// Embed messages in the background and answer hybrid searches with
+    /// the full-text and vector rankings fused.
+    pub semantic: bool,
+    /// The embedding model (`provider/model` or a model on the main
+    /// route's provider); unset uses `memory.recall.embedding_model`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub embedding_model: Option<String>,
 }
 
 impl Default for SessionsConfig {
@@ -35,6 +50,7 @@ impl Default for SessionsConfig {
             max_resume_messages: 20_000,
             max_export_messages: 20_000,
             low_disk_bytes: 1_073_741_824,
+            search: SessionSearchConfig::default(),
         }
     }
 }
@@ -69,6 +85,22 @@ pub struct StorageConfig {
     /// `state.db` journal mode; `delete` only for filesystems without WAL
     /// support.
     pub journal_mode: JournalMode,
+    /// Encryption of `state.db` pages and blob files. An existing store
+    /// is converted only offline: `prometheus sessions encrypt|decrypt`.
+    pub encryption: StorageEncryption,
+}
+
+/// `storage.encryption`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum StorageEncryption {
+    /// Plaintext.
+    #[default]
+    None,
+    /// A random per-profile key held in the OS keychain.
+    Keychain,
+    /// A key derived (Argon2id) from the `STATE_DB_PASSPHRASE` secret.
+    Passphrase,
 }
 
 /// SQLite journal modes.

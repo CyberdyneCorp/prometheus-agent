@@ -92,6 +92,7 @@ capabilities = [
     "plugin-system",
     "projects",
     "replay-and-evaluation",
+    "session-storage",
     "skills",
     "web-dashboard",
 ]
@@ -4886,3 +4887,12 @@ capabilities = [
 
 [skills."Eval-gated skill edits (upgrade)"]
 "Regressing agent edit is rolled back" = ["crates/prometheus/tests/skills_evals.rs::a_regressing_background_review_patch_is_rolled_back", "crates/pmt-skills/tests/skills/eval_gate.rs::a_regressing_background_review_edit_is_rejected_and_the_skill_kept"]
+
+# Group 72.2: hybrid semantic + full-text search and encryption at rest.
+[session-storage."Hybrid semantic and full-text search (upgrade)"]
+"Paraphrase found" = ["crates/prometheus/tests/sessions_hybrid.rs::a_paraphrase_is_found_in_hybrid_mode", "crates/pmt-store/tests/store/search_hybrid.rs::fusion_ranks_agreement_first_and_finds_paraphrases"]
+"Embedding model offline" = ["crates/prometheus/tests/sessions_hybrid.rs::an_offline_embedding_model_degrades_to_full_text", "crates/pmt-store/tests/store/search_hybrid.rs::without_vectors_a_hybrid_search_is_full_text_marked_degraded"]
+
+[session-storage."Encryption at rest option (upgrade)"]
+"Store unreadable without key" = ["crates/pmt-store/tests/store/encryption.rs::an_encrypted_store_is_unreadable_as_sqlite_and_keeps_its_rows", "crates/prometheus/tests/sessions_encryption.rs::an_encrypted_store_is_unreadable_and_a_missing_key_fails_closed"]
+"Missing key fails closed" = ["crates/pmt-store/tests/store/encryption.rs::a_missing_key_fails_closed_without_creating_a_store", "crates/prometheus/tests/sessions_encryption.rs::an_encrypted_store_is_unreadable_and_a_missing_key_fails_closed"]

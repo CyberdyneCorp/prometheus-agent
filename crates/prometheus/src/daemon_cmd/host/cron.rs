@@ -114,6 +114,8 @@ async fn profile_loop(host: Arc<DaemonHost>, name: String, profile: Arc<Profile>
             let _ = crate::curator_cmd::auto::check(&scope, &profile.store, &host.launch);
             // So does a due idle-time memory consolidation pass.
             let _ = crate::memory_cmd::consolidate::check(&scope, &profile.store, &host.launch);
+            // And the background embedding of new messages.
+            let _ = crate::sessions_cmd::semantic::check(&scope, &profile.store, &host.launch);
         }
         // A webhook's queued run wakes the loop early.
         tokio::select! {

@@ -9212,6 +9212,25 @@
       },
       "type": "object"
     },
+    "SessionSearchConfig": {
+      "additionalProperties": false,
+      "description": "The `[sessions.search]` section.",
+      "properties": {
+        "embedding_model": {
+          "description": "The embedding model (`provider/model` or a model on the main\nroute's provider); unset uses `memory.recall.embedding_model`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "semantic": {
+          "default": false,
+          "description": "Embed messages in the background and answer hybrid searches with\nthe full-text and vector rankings fused.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
     "SessionsConfig": {
       "additionalProperties": false,
       "description": "The `[sessions]` section.",
@@ -9250,6 +9269,13 @@
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
+        },
+        "search": {
+          "$ref": "#/$defs/SessionSearchConfig",
+          "default": {
+            "semantic": false
+          },
+          "description": "Hybrid semantic search."
         },
         "terminal_continue": {
           "default": true,
@@ -9671,6 +9697,11 @@
       "additionalProperties": false,
       "description": "The `[storage]` section.",
       "properties": {
+        "encryption": {
+          "$ref": "#/$defs/StorageEncryption",
+          "default": "none",
+          "description": "Encryption of `state.db` pages and blob files. An existing store\nis converted only offline: `prometheus sessions encrypt|decrypt`."
+        },
         "journal_mode": {
           "$ref": "#/$defs/JournalMode",
           "default": "wal",
@@ -9679,6 +9710,26 @@
       },
       "type": "object",
       "x-apply": "restart"
+    },
+    "StorageEncryption": {
+      "description": "`storage.encryption`.",
+      "oneOf": [
+        {
+          "const": "none",
+          "description": "Plaintext.",
+          "type": "string"
+        },
+        {
+          "const": "keychain",
+          "description": "A random per-profile key held in the OS keychain.",
+          "type": "string"
+        },
+        {
+          "const": "passphrase",
+          "description": "A key derived (Argon2id) from the `STATE_DB_PASSPHRASE` secret.",
+          "type": "string"
+        }
+      ]
     },
     "StreamTransport": {
       "description": "How a streamed draft reaches a platform.",
@@ -12983,6 +13034,9 @@
         "max_export_messages": 20000,
         "max_resume_messages": 20000,
         "retention_secs": 0,
+        "search": {
+          "semantic": false
+        },
         "terminal_continue": true
       },
       "description": "Session storage limits and retention."
@@ -13027,6 +13081,7 @@
     "storage": {
       "$ref": "#/$defs/StorageConfig",
       "default": {
+        "encryption": "none",
         "journal_mode": "wal"
       },
       "description": "Session database."

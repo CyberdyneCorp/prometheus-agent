@@ -148,7 +148,8 @@ pub use replay::{CacheMode, DEFAULT_NAMESPACE, ModelCallCacheConfig, ReplayConfi
 pub use state::{
     AttachmentStorage, AttachmentsConfig, JournalMode, MemoryConfig, MemoryConsolidationConfig,
     MemoryDecayConfig, MemoryNotifications, MemoryReviewConfig, MemoryReviewMode, RecallConfig,
-    ReviewDefer, SessionsConfig, SkillsConfig, SnapshotsConfig, StorageConfig,
+    ReviewDefer, SessionSearchConfig, SessionsConfig, SkillsConfig, SnapshotsConfig, StorageConfig,
+    StorageEncryption,
 };
 pub use tool_gateway::{ToolGatewayConfig, ToolProviderConfig};
 pub use tools::{

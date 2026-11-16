@@ -141,7 +141,7 @@ impl Store {
     /// `store.schema_too_new`, `store.blob_missing`, `store.blob_corrupt`,
     /// `store.io`, `store.sqlite`.
     pub fn repair_indexes(&self) -> Result<u64, Error> {
-        let blob_dir = self.location().blobs().to_path_buf();
+        let blob_dir = self.blobs();
         self.write(|tx| {
             tx.execute_batch(&format!(
                 "DROP TABLE IF EXISTS {WORD_INDEX}; DROP TABLE IF EXISTS {TRIGRAM_INDEX}; {INDEX_DDL}"

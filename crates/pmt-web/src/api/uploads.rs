@@ -51,11 +51,14 @@ async fn store(at: &Profile<'_>, req: &Req, body: Incoming, max: u64, what: &str
     let Some(data) = read_body(body, usize::try_from(max).unwrap_or(usize::MAX)).await else {
         return too_large(max, what);
     };
-    match at.store.put_blob(&data) {
-        Ok(blob) => json_reply(
+    let stored = at
+        .store
+        .put_blob(&data)
+        .and_then(|blob| at.store.blob_file(&blob).map(|path| (blob, path)));
+    match stored {
+        Ok((blob, path)) => json_reply(
             201,
-            &json!({"blob": blob.to_string(), "bytes": data.len(),
-                    "path": at.store.blob_path(&blob)}),
+            &json!({"blob": blob.to_string(), "bytes": data.len(), "path": path}),
         ),
         Err(err) => from_error(&err),
     }

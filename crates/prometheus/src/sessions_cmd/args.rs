@@ -114,6 +114,14 @@ pub enum SessionsCommand {
         #[arg(long)]
         yes: bool,
     },
+    /// Encrypt state.db and the blob files offline (needs the store closed); records storage.encryption.
+    Encrypt {
+        /// Where the key comes from.
+        #[arg(long, value_enum)]
+        mode: EncryptModeArg,
+    },
+    /// Decrypt state.db and the blob files offline (needs the store closed); records storage.encryption = none.
+    Decrypt,
     /// Switch state.db's journal mode offline (delete for filesystems without shared memory).
     JournalMode {
         /// The journal mode.
@@ -241,6 +249,21 @@ pub struct SearchArgs {
     /// Include rewound messages.
     #[arg(long)]
     pub include_inactive: bool,
+    /// `hybrid` fuses full-text and semantic rankings; `auto` is hybrid when
+    /// `sessions.search.semantic` is on.
+    #[arg(long, value_enum, default_value_t = SearchModeArg::Auto)]
+    pub mode: SearchModeArg,
+}
+
+/// How `sessions search` ranks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum SearchModeArg {
+    /// Hybrid when semantic search is on, else full text.
+    Auto,
+    /// Full text only.
+    Fts,
+    /// Full text and semantic, fused.
+    Hybrid,
 }
 
 /// `prometheus sessions export` arguments.
@@ -268,6 +291,15 @@ pub struct ExportArgs {
     /// Write to this file instead of stdout.
     #[arg(short, long, value_name = "FILE")]
     pub output: Option<PathBuf>,
+}
+
+/// Where an encrypted store's key comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum EncryptModeArg {
+    /// A random key held in the OS keychain.
+    Keychain,
+    /// A key derived from the `STATE_DB_PASSPHRASE` secret.
+    Passphrase,
 }
 
 /// SQLite journal modes.

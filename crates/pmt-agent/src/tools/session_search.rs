@@ -16,6 +16,7 @@ use std::sync::Arc;
 use jiff::Timestamp;
 use jiff::civil::Date;
 use pmt_core::id::{MessageId, SessionId};
+use pmt_store::search::hybrid::QueryVector;
 use pmt_store::{Message, Role, SearchOptions, SearchSort, Store, Visibility};
 use pmt_tools::ToolResult;
 use pmt_tools::agent_level::{
@@ -46,11 +47,25 @@ pub trait Summarizer: Send + Sync {
     ) -> SummaryFuture<'a>;
 }
 
+/// What a query embedding returns (`None`: not embedded).
+pub type QueryFuture<'a> = Pin<Box<dyn Future<Output = Option<Vec<f32>>> + Send + 'a>>;
+
+/// Embeds a search query for a hybrid search (spec: session-storage,
+/// Hybrid semantic and full-text search); bound by the host when
+/// `sessions.search.semantic` is on.
+pub trait QueryEmbedder: Send + Sync {
+    /// The model whose stored message vectors the query is compared with.
+    fn model(&self) -> String;
+    /// The query's vector, `None` when the model is unreachable.
+    fn embed_query<'a>(&'a self, text: &'a str) -> QueryFuture<'a>;
+}
+
 /// `session_search` for one session.
 pub struct SessionSearch {
     store: Arc<Store>,
     session: SessionId,
     summarizer: Option<Arc<dyn Summarizer>>,
+    queries: Option<Arc<dyn QueryEmbedder>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -81,7 +96,15 @@ impl SessionSearch {
             store,
             session,
             summarizer: None,
+            queries: None,
         }
+    }
+
+    /// Answers searches in hybrid mode with `queries` embedding them.
+    #[must_use]
+    pub fn with_queries(mut self, queries: Arc<dyn QueryEmbedder>) -> Self {
+        self.queries = Some(queries);
+        self
     }
 
     /// Adds the summarizer used by `adaptive` detail.
@@ -131,10 +154,20 @@ impl SessionSearch {
             .ok_or("query is required")?;
         let options = Self::options(args)?;
         let in_context = self.in_context()?;
-        let results = self
-            .store
-            .search(query, &options)
-            .map_err(|err| err.message().to_owned())?;
+        let results = match &self.queries {
+            Some(queries) => {
+                let model = queries.model();
+                let vector = queries.embed_query(query).await;
+                let query_vector = vector.as_deref().map(|vector| QueryVector {
+                    model: &model,
+                    vector,
+                });
+                self.store.hybrid_search(query, &options, query_vector)
+            }
+            None => self.store.search(query, &options),
+        }
+        .map_err(|err| err.message().to_owned())?;
+        let degraded = results.degraded;
         let hits: Vec<_> = results
             .hits
             .into_iter()
@@ -164,7 +197,11 @@ impl SessionSearch {
             }
             groups.push(group);
         }
-        Ok(json!({"query": query, "sessions": groups}))
+        let mut reply = json!({"query": query, "sessions": groups});
+        if let Some(degraded) = degraded {
+            reply["degraded"] = json!(degraded);
+        }
+        Ok(reply)
     }
 
     async fn summary(&self, query: &str, session: SessionId, hits: &Value) -> Option<String> {

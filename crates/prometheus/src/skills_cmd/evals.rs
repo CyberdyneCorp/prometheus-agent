@@ -232,6 +232,8 @@ impl Runner {
     ) -> Result<std::process::Output, String> {
         let bin = std::env::current_exe().map_err(|e| e.to_string())?;
         let mut cmd = crate::smoke_suite::runner::base(&bin, home);
+        // A throwaway home: no keychain entry or passphrase for its store.
+        cmd.args(["--set", "storage.encryption=\"none\""]);
         cmd.args(["chat", "-z", &case.prompt]);
         match self.provider {
             Provider::Mock => {
@@ -314,7 +316,8 @@ fn calls(home: &Path) -> Result<Vec<(String, Value)>, String> {
     let read = || -> Result<Vec<(String, Value)>, Error> {
         let home = Home::open(home)?;
         let dir = home.profile(&ProfileName::parse("default")?)?;
-        let scope = ProfileScope::open(dir, &Overrides::parse::<&str>(&[])?, Launch::Other)?;
+        let overrides = Overrides::parse(&["storage.encryption=\"none\""])?;
+        let scope = ProfileScope::open(dir, &overrides, Launch::Other)?;
         let store = Store::open(&scope)?;
         let sessions = store.list_sessions(&ListOptions {
             all: true,
@@ -345,6 +348,21 @@ pub(crate) struct ProfileGate {
     pub(crate) scope: ProfileScope,
     pub(crate) store: Arc<Store>,
     pub(crate) launch: LaunchEnv,
+}
+
+impl ProfileGate {
+    /// The gate of `scope`'s sessions, as `SessionSetup::eval_gate` holds it.
+    pub(crate) fn shared(
+        scope: &ProfileScope,
+        store: &Arc<Store>,
+        launch: &LaunchEnv,
+    ) -> Arc<dyn Gate> {
+        Arc::new(Self {
+            scope: scope.clone(),
+            store: Arc::clone(store),
+            launch: launch.clone(),
+        })
+    }
 }
 
 impl Gate for ProfileGate {

@@ -20004,6 +20004,8 @@ Commands:
   siblings         List the other children of a session's parent (forks, continuations)
   import           Import a JSONL export (all-or-none; ids must be new unless --remap-ids)
   recover          Copy every readable row of state.db into a new clean store (needs the store closed)
+  encrypt          Encrypt state.db and the blob files offline (needs the store closed); records storage.encryption
+  decrypt          Decrypt state.db and the blob files offline (needs the store closed); records storage.encryption = none
   journal-mode     Switch state.db's journal mode offline (delete for filesystems without shared memory)
   refresh-prompts  Rebuild the stored system prompt of sessions at their next turn
   retitle          Regenerate automatic titles with the title model (user titles are kept)
@@ -20318,6 +20320,16 @@ Options:
 
       --include-inactive
           Include rewound messages
+
+      --mode <MODE>
+          `hybrid` fuses full-text and semantic rankings; `auto` is hybrid when `sessions.search.semantic` is on
+
+          Possible values:
+          - auto:   Hybrid when semantic search is on, else full text
+          - fts:    Full text only
+          - hybrid: Full text and semantic, fused
+
+          [default: auto]
 
   -h, --help
           Print help (see a summary with '-h')
@@ -20741,6 +20753,91 @@ Options:
 
       --yes
           Swap the recovered store in without asking
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions encrypt`
+
+```text
+Encrypt state.db and the blob files offline (needs the store closed); records storage.encryption
+
+Usage: prometheus sessions encrypt [OPTIONS] --mode <MODE>
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --mode <MODE>
+          Where the key comes from
+
+          Possible values:
+          - keychain:   A random key held in the OS keychain
+          - passphrase: A key derived from the `STATE_DB_PASSPHRASE` secret
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus sessions decrypt`
+
+```text
+Decrypt state.db and the blob files offline (needs the store closed); records storage.encryption = none
+
+Usage: prometheus sessions decrypt [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -21275,6 +21372,8 @@ Commands:
   siblings         List the other children of a session's parent (forks, continuations)
   import           Import a JSONL export (all-or-none; ids must be new unless --remap-ids)
   recover          Copy every readable row of state.db into a new clean store (needs the store closed)
+  encrypt          Encrypt state.db and the blob files offline (needs the store closed); records storage.encryption
+  decrypt          Decrypt state.db and the blob files offline (needs the store closed); records storage.encryption = none
   journal-mode     Switch state.db's journal mode offline (delete for filesystems without shared memory)
   refresh-prompts  Rebuild the stored system prompt of sessions at their next turn
   retitle          Regenerate automatic titles with the title model (user titles are kept)
@@ -21406,6 +21505,22 @@ Usage: prometheus sessions help import
 Copy every readable row of state.db into a new clean store (needs the store closed)
 
 Usage: prometheus sessions help recover
+```
+
+## `prometheus sessions help encrypt`
+
+```text
+Encrypt state.db and the blob files offline (needs the store closed); records storage.encryption
+
+Usage: prometheus sessions help encrypt
+```
+
+## `prometheus sessions help decrypt`
+
+```text
+Decrypt state.db and the blob files offline (needs the store closed); records storage.encryption = none
+
+Usage: prometheus sessions help decrypt
 ```
 
 ## `prometheus sessions help journal-mode`
@@ -37521,6 +37636,8 @@ Commands:
   siblings         List the other children of a session's parent (forks, continuations)
   import           Import a JSONL export (all-or-none; ids must be new unless --remap-ids)
   recover          Copy every readable row of state.db into a new clean store (needs the store closed)
+  encrypt          Encrypt state.db and the blob files offline (needs the store closed); records storage.encryption
+  decrypt          Decrypt state.db and the blob files offline (needs the store closed); records storage.encryption = none
   journal-mode     Switch state.db's journal mode offline (delete for filesystems without shared memory)
   refresh-prompts  Rebuild the stored system prompt of sessions at their next turn
   retitle          Regenerate automatic titles with the title model (user titles are kept)
@@ -37651,6 +37768,22 @@ Usage: prometheus help sessions import
 Copy every readable row of state.db into a new clean store (needs the store closed)
 
 Usage: prometheus help sessions recover
+```
+
+## `prometheus help sessions encrypt`
+
+```text
+Encrypt state.db and the blob files offline (needs the store closed); records storage.encryption
+
+Usage: prometheus help sessions encrypt
+```
+
+## `prometheus help sessions decrypt`
+
+```text
+Decrypt state.db and the blob files offline (needs the store closed); records storage.encryption = none
+
+Usage: prometheus help sessions decrypt
 ```
 
 ## `prometheus help sessions journal-mode`

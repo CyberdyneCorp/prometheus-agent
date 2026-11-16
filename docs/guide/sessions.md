@@ -130,6 +130,29 @@ rebuilt the search indexes (0 messages)
 
 `prometheus doctor --fix` runs the same rebuild when it finds stale indexes.
 
+### Semantic search
+
+With `sessions.search.semantic = true`, Prometheus also embeds your
+messages and the agent's replies with an embedding model:
+`sessions.search.embedding_model`, or `memory.recall.embedding_model` when
+that is unset. The embedding runs in the background, never during a turn:
+in the daemon's per-profile loop, in `prometheus cron tick`, and before a
+command-line hybrid search. Text sent to a remote embedding model has
+stored secrets redacted first.
+
+A hybrid search ranks the messages twice, once by full text and once by
+how close their meaning is to the query. It then merges the two rankings
+with reciprocal rank fusion (k = 60). A message that shares no word with
+the query, such as "We moved the database to Postgres 16" for "which DB
+engine did we migrate to", can still be found.
+
+`sessions search --mode hybrid` asks for it, and `--mode fts` turns it off.
+The default `--mode auto` is hybrid when semantic search is on. The
+[`session_search`](../reference/tools.md#session_search) tool is hybrid then too. When the embedding model cannot
+be reached, or nothing is embedded yet, the search returns full-text
+results marked `"degraded": "semantic_unavailable"`. The command line also
+prints a notice.
+
 ## Exporting and saving
 
 `sessions export [<ref>...|--all]` writes sessions to stdout, or to a new
@@ -258,6 +281,54 @@ any size.
   offline, for filesystems without shared-memory support. The choice is
   recorded in the store and applied on every open, over
   `storage.journal_mode`. It also needs the store closed.
+
+- `sessions encrypt --mode keychain|passphrase` and `sessions decrypt`
+  convert the store between plaintext and encrypted, offline (see
+  [Encryption at rest](#encryption-at-rest)).
+
+### Encryption at rest
+
+`storage.encryption` encrypts `state.db` and the blob files with a
+256-bit key of the profile:
+
+- `keychain` keeps a random key in the OS keychain (entry `STATE_DB_KEY`
+  of the profile).
+- `passphrase` derives the key from the `STATE_DB_PASSPHRASE` secret
+  (`prometheus secrets set STATE_DB_PASSPHRASE`) with Argon2id and a salt
+  kept in `state.db.salt`.
+
+Each database page is sealed with XChaCha20-Poly1305 in its own reserved
+space, in the database, its write-ahead log and its rollback journal.
+SQLite's temporary files are encrypted with a random key of their own, so
+no transcript text is written to disk in plaintext. Each blob file is
+sealed whole. A generic SQLite tool cannot read an encrypted `state.db`.
+
+A store is converted only offline, with the store closed:
+
+```text
+$ prometheus sessions encrypt --mode keychain
+state.db and 12 blob file(s) converted; storage.encryption = "keychain"
+$ prometheus sessions decrypt
+state.db and 12 blob file(s) converted; storage.encryption = "none"
+```
+
+The command writes a converted copy, then swaps it in. It also records the
+new `storage.encryption` in `config.toml`.
+
+If the key is unavailable, for example after the keychain entry was
+removed or the passphrase secret was unset, every command that opens the
+store exits 78 with `state.db is encrypted and its key is unavailable`.
+Prometheus never creates a new empty store in its place. A plaintext
+`state.db` under an encryption mode is refused the same way
+(`store.encryption_mismatch`) until you convert it.
+
+Limits:
+
+- A tool or the dashboard that needs a file path for a stored image or
+  upload gets a decrypted copy under the profile's `cache/media/`.
+- Backups and snapshots copy an encrypted store as its sealed files (the
+  database and its write-ahead log). Restoring one needs the same key.
+- Trajectories, recordings and exports are not encrypted by this setting.
 
 Attachments (images you attach, and files received on messaging
 platforms) are stored in the profile's blob store. With

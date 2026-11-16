@@ -102,7 +102,8 @@ pub fn recover(scope: &ProfileScope, output: &Path) -> Result<Recovered, Error> 
         ));
     }
     let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX;
-    let source = Connection::open_with_flags(&original, flags).map_err(sql)?;
+    let crypt = crate::crypt::keys::existing(scope, &original)?;
+    let source = crate::crypt::connect(&original, flags, crypt.as_ref()).map_err(sql)?;
     let store = Store::open_at(scope, output)?;
     let mut report = Recovered {
         path: output.to_path_buf(),
@@ -174,7 +175,8 @@ pub(crate) fn recorded_journal_mode(value: Option<&str>) -> Option<JournalMode> 
 /// `store.sqlite`.
 pub fn set_journal_mode(scope: &ProfileScope, mode: JournalMode) -> Result<(), Error> {
     let database = StoreLocation::of(scope).database().to_path_buf();
-    let conn = Connection::open(&database).map_err(sql)?;
+    let crypt = crate::crypt::keys::existing(scope, &database)?;
+    let conn = crate::crypt::open(&database, crypt.as_ref()).map_err(sql)?;
     let wanted = match mode {
         JournalMode::Wal => "wal",
         JournalMode::Delete => "delete",

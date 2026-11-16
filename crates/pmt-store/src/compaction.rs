@@ -178,7 +178,7 @@ impl Store {
         check_shape(lock, compaction)?;
         self.ensure_writable()?;
         let session = lock.session();
-        let blob_dir = self.location().blobs();
+        let blob_dir = &self.blobs();
         let redactor = self.redactor();
         let rows = compaction
             .replacements

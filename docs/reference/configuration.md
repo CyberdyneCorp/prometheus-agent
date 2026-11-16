@@ -827,6 +827,8 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `sessions.max_export_messages` | integer | `20000` | ≥ 0 | `live` | Refuse in-memory exports with more messages. |
 | `sessions.max_resume_messages` | integer | `20000` | ≥ 0 | `live` | Refuse to resume a lineage with more messages; `0` disables. |
 | `sessions.retention_secs` | integer | `0` | ≥ 0 | `live` | Prune ended sessions inactive for longer than this; `0` never prunes. |
+| `sessions.search.embedding_model` | string | unset | any | `live` | The embedding model (`provider/model` or a model on the main route's provider); unset uses `memory.recall.embedding_model`. |
+| `sessions.search.semantic` | boolean | `false` | any | `live` | Embed messages in the background and answer hybrid searches with the full-text and vector rankings fused. |
 | `sessions.terminal_continue` | boolean | `true` | any | `live` | `-c` prefers the session last used from the same terminal. |
 | `skills.auto_load` | array of string | `[]` | any | `next_session` | Skills loaded into every new session. |
 | `skills.config` | table | `{}` | any | `next_session` | Non-secret per-skill settings: skill to key to value. |
@@ -850,6 +852,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `skills.trusted_sources` | array of string | `["anthropics/skills","openai/skills"]` | any | `next_session` | Hub sources (`owner/repo`) whose skills install with trust `trusted` (`safe` and `caution` verdicts allowed). |
 | `skills.write_approval` | boolean | `false` | any | `next_session` | Stage skill writes as pending for review. |
 | `snapshots.keep` | integer | `20` | ≥ 0 | `live` | Manual snapshots kept per profile. |
+| `storage.encryption` | one of "none", "keychain", "passphrase" | `"none"` | `"none"`, `"keychain"`, `"passphrase"` | `restart` | Encryption of `state.db` pages and blob files. An existing store is converted only offline: `prometheus sessions encrypt\|decrypt`. |
 | `storage.journal_mode` | one of "wal", "delete" | `"wal"` | `"wal"`, `"delete"` | `restart` | `state.db` journal mode; `delete` only for filesystems without WAL support. |
 | `stt.cloud_trim_keep_ms` | integer | `300` | ≥ 0 | `next_session` | Silence kept of each trimmed pause. |
 | `stt.cloud_trim_silence` | boolean | `true` | any | `next_session` | Trim long silences before a cloud upload. |

@@ -8,6 +8,7 @@
 //! ([`SearchMode::Scan`]). Rewound rows are left out unless asked for;
 //! compaction-archived rows are always searchable.
 
+pub mod hybrid;
 mod query;
 
 use jiff::Timestamp;
@@ -134,6 +135,9 @@ pub struct SearchResults {
     pub hits: Vec<SearchHit>,
     /// The index (or scan) used.
     pub mode: SearchMode,
+    /// Set when a hybrid search fell back to full text
+    /// ([`hybrid::SEMANTIC_UNAVAILABLE`]).
+    pub degraded: Option<&'static str>,
 }
 
 /// The SQL filter clause and its parameters.
@@ -253,9 +257,10 @@ impl Store {
             return Ok(SearchResults {
                 hits: Vec::new(),
                 mode: SearchMode::Word,
+                degraded: None,
             });
         }
-        let blob_dir = self.location().blobs().to_path_buf();
+        let blob_dir = self.blobs();
         let filters = Filters::of(options);
         self.read(|conn| {
             if !index::is_stale(conn)? {
@@ -274,7 +279,7 @@ impl Store {
 
 fn search_index(
     conn: &Connection,
-    blob_dir: &std::path::Path,
+    blob_dir: &crate::blobs::Blobs,
     query: &Query,
     filters: &Filters,
     options: &SearchOptions,
@@ -332,7 +337,11 @@ fn search_index(
     while let Some(row) = rows.next().map_err(sql)? {
         hits.push(hit_from_row(row, blob_dir, &terms)?);
     }
-    Ok(SearchResults { hits, mode })
+    Ok(SearchResults {
+        hits,
+        mode,
+        degraded: None,
+    })
 }
 
 fn escape_like(term: &str) -> String {
@@ -344,7 +353,7 @@ fn escape_like(term: &str) -> String {
 /// Canonical-row scan: every term must occur (case-insensitively).
 fn scan(
     conn: &Connection,
-    blob_dir: &std::path::Path,
+    blob_dir: &crate::blobs::Blobs,
     query: &Query,
     filters: &Filters,
     options: &SearchOptions,
@@ -380,10 +389,11 @@ fn scan(
     Ok(SearchResults {
         hits: hits.into_iter().skip(skip).collect(),
         mode: SearchMode::Scan,
+        degraded: None,
     })
 }
 
-fn content(row: &Row<'_>, blob_dir: &std::path::Path) -> Result<String, Error> {
+fn content(row: &Row<'_>, blob_dir: &crate::blobs::Blobs) -> Result<String, Error> {
     if let Some(text) = row.get::<_, Option<String>>(5).map_err(sql)? {
         return Ok(text);
     }
@@ -396,7 +406,7 @@ fn content(row: &Row<'_>, blob_dir: &std::path::Path) -> Result<String, Error> {
 
 fn hit_from_row(
     row: &Row<'_>,
-    blob_dir: &std::path::Path,
+    blob_dir: &crate::blobs::Blobs,
     terms: &[&str],
 ) -> Result<SearchHit, Error> {
     let text = content(row, blob_dir)?;

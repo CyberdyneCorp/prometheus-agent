@@ -116,6 +116,8 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `session.ambiguous` | `usage` | 2 | A session id prefix matches several sessions; give more characters or the full id. |
 | `store.busy` | `conflict` | 75 | Another process held `state.db`'s write lock for longer than the write's time budget (20 s metadata, 60 s transcript, 0.5 s activity); retry later. |
 | `store.replaced` | `conflict` | 75 | `state.db` was replaced (restored or copied over) while it was open; the write was refused and the file left untouched. Restart the process to open the new file. |
+| `store.key_unavailable` | `config` | 78 | `state.db` is encrypted (`storage.encryption`) and its key is unavailable: the OS keychain has no `STATE_DB_KEY` for the profile, or the `STATE_DB_PASSPHRASE` secret is missing or wrong. Nothing was opened or created. |
+| `store.encryption_mismatch` | `config` | 78 | `state.db` is plaintext while `storage.encryption` asks for an encrypted store (or the reverse); convert it offline with `prometheus sessions encrypt` or `prometheus sessions decrypt`. |
 | `store.corrupt` | `io` | 74 | `state.db` reported structural corruption; writes stopped. The next start quarantines the file and salvages every readable row (see `prometheus doctor`). |
 | `store.rewind_target_invalid` | `invalid_input` | 65 | Rewind targets an active user message of the session; the given message is missing, inactive or not a user message. |
 | `import.id_collision` | `conflict` | 75 | A session, message or usage id of the import file already exists in this profile; nothing was imported. Rerun with `--remap-ids` to import under new ids. |

@@ -1025,8 +1025,12 @@ impl Factory {
             Arc::clone(&self.store),
             id,
             clarifier,
-            SessionSearch::new(Arc::clone(&self.store), id)
-                .with_summarizer(Arc::clone(summarizer) as _),
+            crate::sessions_cmd::semantic::tool(
+                SessionSearch::new(Arc::clone(&self.store), id)
+                    .with_summarizer(Arc::clone(summarizer) as _),
+                (&self.scope, &self.store),
+                self.launch.user_home().map(std::path::PathBuf::as_path),
+            ),
         )?
         .with_memory(Arc::clone(memory) as _)
         .with_connections(crate::connectors_host::manager(&self.scope, cards))
@@ -1169,11 +1173,11 @@ impl Factory {
             );
         }));
         setup.inline_shell = Some(Arc::clone(inline_shell) as _);
-        setup.eval_gate = Some(Arc::new(crate::skills_cmd::evals::ProfileGate {
-            scope: self.scope.clone(),
-            store: Arc::clone(&self.store),
-            launch: self.launch.clone(),
-        }));
+        setup.eval_gate = Some(crate::skills_cmd::evals::ProfileGate::shared(
+            &self.scope,
+            &self.store,
+            &self.launch,
+        ));
         setup.secret_prompt = clients
             .map(|c| Arc::clone(&c.secrets))
             .or_else(|| self.secret_prompt.clone());

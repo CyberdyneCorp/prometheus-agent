@@ -630,6 +630,30 @@ impl Models {
         )))
     }
 
+    /// The embedder of semantic session search (spec: session-storage,
+    /// Hybrid semantic and full-text search): `sessions.search.embedding_model`,
+    /// else `memory.recall.embedding_model`; `None` when semantic search is
+    /// off or no model is configured.
+    #[must_use]
+    pub fn session_embedder(&self) -> Option<Arc<dyn pmt_memory::rank::Embedder>> {
+        let config = &self.setup.config;
+        if !config.sessions.search.semantic {
+            return None;
+        }
+        let spec = config
+            .sessions
+            .search
+            .embedding_model
+            .clone()
+            .or_else(|| config.memory.recall.embedding_model.clone())?;
+        Some(Arc::new(super::embed::RouteEmbedder::new(
+            Arc::clone(&self.setup),
+            self.client.clone(),
+            spec,
+            None,
+        )))
+    }
+
     /// A title for `conversation` from the `title` auxiliary route (default:
     /// the profile's main route); `None` when no route answers.
     ///

@@ -188,6 +188,12 @@ error_codes! {
     /// `state.db` was replaced underneath an open store.
     STORE_REPLACED = ("store.replaced", Conflict,
         "`state.db` was replaced (restored or copied over) while it was open; the write was refused and the file left untouched. Restart the process to open the new file.");
+    /// An encrypted store whose key cannot be had.
+    STORE_KEY_UNAVAILABLE = ("store.key_unavailable", Config,
+        "`state.db` is encrypted (`storage.encryption`) and its key is unavailable: the OS keychain has no `STATE_DB_KEY` for the profile, or the `STATE_DB_PASSPHRASE` secret is missing or wrong. Nothing was opened or created.");
+    /// The store's file does not match `storage.encryption`.
+    STORE_ENCRYPTION_MISMATCH = ("store.encryption_mismatch", Config,
+        "`state.db` is plaintext while `storage.encryption` asks for an encrypted store (or the reverse); convert it offline with `prometheus sessions encrypt` or `prometheus sessions decrypt`.");
     /// The store hit structural corruption and stopped writing.
     STORE_CORRUPT = ("store.corrupt", Io,
         "`state.db` reported structural corruption; writes stopped. The next start quarantines the file and salvages every readable row (see `prometheus doctor`).");
