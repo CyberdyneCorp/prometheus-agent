@@ -644,7 +644,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 - [x] 72.1 Implement memory decay/expiry/dormancy and consolidation proposals; verify with fake-clock tests (spec: memory)
 - [x] 72.2 Implement hybrid semantic + full-text session search and the encryption-at-rest option; verify search ranking fixtures and that an encrypted db is unreadable without the key (spec: session-storage)
-- [x] 72.3 Implement TUI split panes, inline diff review, the timeline scrubber and shared live sessions; verify with pty snapshot tests (spec: tui)
+- [ ] 72.3 Implement TUI split panes, inline diff review, the timeline scrubber and shared live sessions; verify with pty snapshot tests (spec: tui)
 - [x] 72.4 Implement skill evals and eval-gated skill edits; verify that a regressing edit is blocked (spec: skills)
 - [ ] 72.5 Implement cost- and latency-aware routing policy; verify with routing table tests (spec: model-providers)
 - [ ] 72.6 Implement surface toolsets from the session and taint-aware escalation; verify that tainted content raises the approval floor (spec: tool-system)
