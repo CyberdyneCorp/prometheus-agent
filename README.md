@@ -6,7 +6,7 @@ One agent core runs behind every surface: CLI, full-screen TUI, messaging gatewa
 
 It ships as one signed binary, `prometheus` (alias `pmt`). Extensions run as sandboxed WebAssembly components with explicit capability grants, as MCP servers, or as existing Hermes Python plugins through an out-of-process bridge.
 
-> **Status: M0 done, M1 next.** The workspace, the repository gates and CI exist; agent behavior starts in M1. The full target behavior is specified in [`openspec/changes/bootstrap-prometheus-agent/`](openspec/changes/bootstrap-prometheus-agent/).
+> **Status: M0–M2 done, M3 in progress.** The core agent (M1) and the multi-surface and extension layer (M2) are merged. M3 has the web dashboard, the desktop app, ACP, A2A and most of kanban in; harness evolution, the experience library, eval suites, bot mode, computer use and the rest of M3 are next (38 of 101 tasks ticked). The full target behavior is specified in [`openspec/changes/bootstrap-prometheus-agent/`](openspec/changes/bootstrap-prometheus-agent/).
 
 ## Why Prometheus
 
@@ -18,6 +18,31 @@ It ships as one signed binary, `prometheus` (alias `pmt`). Extensions run as san
 | **Self-improving** | Memory, skills, an experience library and answer-free harness evolution |
 | **Reproducible** | Every model call can be recorded and replayed; offline mock provider and eval suites |
 | **Hermes-compatible** | Imports a Hermes home and runs Hermes plugins and skills; [every Hermes feature](docs/hermes-parity.md) is mapped |
+
+## Screenshots
+
+Captured from the real `prometheus` binary with the offline `mock` provider and an isolated home: no API key, no network. The scenario is the one [`prometheus demo`](docs/guide/demo.md) runs, where the agent fixes the balance bug in a small ledger repository.
+
+<p align="center">
+  <img src="docs/images/tui-demo.png" width="820" alt="The full-screen TUI: the agent reads the README, runs total.sh, reads the script, patches the debit sign and re-runs it, ending with Total: 85.15; a status bar shows the profile, model, context use and cost">
+  <br><sub>The full-screen TUI (<code>prometheus tui</code>) after the agent fixed the ledger bug.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/dashboard-chat.png" width="820" alt="The web dashboard's chat page with the same task: agent messages interleaved with read_file, terminal and patch tool calls, each marked done">
+  <br><sub>The web dashboard (<code>prometheus dashboard</code>): the same task driven from the browser, with its tool calls.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/dashboard-sessions.png" width="410" alt="The dashboard's sessions page listing six sessions from the dashboard, the TUI and the CLI, with search and delete">
+  <img src="docs/images/dashboard-skills.png" width="410" alt="The dashboard's skills page: the profile's bundled skills with name, category and description">
+  <br><sub>Sessions from every surface in one list, and the profile's skill catalog.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/cli-status.png" width="720" alt="A terminal running prometheus status (daemon running, dashboard listener, scheduler, mock provider health) and prometheus sessions list">
+  <br><sub><code>prometheus status</code> and <code>prometheus sessions list</code> against the running daemon.</sub>
+</p>
 
 ## Features
 
@@ -159,9 +184,9 @@ flowchart LR
 | Milestone | Delivers | Tasks | Status |
 |---|---|---|---|
 | **M0** Scaffolding | Workspace, `scripts/check`, CI on Tier 1/2 targets, health and perf gates, generated references | 12 | Done |
-| **M1** Core agent | Config and profiles, sessions, providers and subscription sign-in, tools, sandbox, turn loop, compression, skills, memory, CLI, self-update; offline `prometheus demo` | 154 | Next |
-| **M2** Multi-surface and extensibility | Daemon and RPC, TUI, messaging gateway and adapters, WASM/MCP/Python plugins, delegation, worktrees, cron, voice, local models, API server, Hermes migration | 204 | Planned |
-| **M3** Desktop, dashboard, self-improvement | Desktop app, dashboard, ACP, kanban, harness evolution, experience library, evals, A2A, bot mode, computer use | 101 | Planned |
+| **M1** Core agent | Config and profiles, sessions, providers and subscription sign-in, tools, sandbox, turn loop, compression, skills, memory, CLI, self-update; offline `prometheus demo` | 154 | Done |
+| **M2** Multi-surface and extensibility | Daemon and RPC, TUI, messaging gateway and adapters, WASM/MCP/Python plugins, delegation, worktrees, cron, voice, local models, API server, Hermes migration | 204 | Done |
+| **M3** Desktop, dashboard, self-improvement | Desktop app, dashboard, ACP, kanban, harness evolution, experience library, evals, A2A, bot mode, computer use | 101 | In progress |
 
 Each milestone ends with exit tests run in CI. Task-level detail is in [`tasks.md`](openspec/changes/bootstrap-prometheus-agent/tasks.md).
 
